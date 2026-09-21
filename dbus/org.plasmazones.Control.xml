@@ -44,5 +44,14 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="quit">
             <annotation name="org.gtk.GDBus.DocString" value="Ask the daemon to shut down cleanly. Quits the event loop, so the daemon runs its ordinary teardown on the main thread rather than tearing down inside the call. This is what `plasmazonesd --replace` calls on the running instance before claiming the bus name. Calling it while a shutdown is already in flight is a no-op."/>
         </method>
+        <method name="getShortcutsJson">
+            <annotation name="org.gtk.GDBus.DocString" value="Every settings-driven PlasmaZones shortcut with the user's effective key bindings, as a JSON array, for the Phosphor shell's keybind cheatsheet (which draws each chord on the placement-map rect it acts on). One object per action, uncompressed: id (the action id, e.g. move_window_left, snap_to_zone_3, scroll_focus_column_right), label, description, category, categoryOrder, rowOrder, triggers (array of key sequences in Qt PortableText spelling, e.g. Meta+Left; empty when unbound), assigned (bool), mode (all | snapping | autotile | scrolling | layouts | managed: which placement mode the action applies in). Sorted by categoryOrder then rowOrder. Answers [] before the daemon has registered its shortcuts and after it has released them. Changes are announced by shortcutsChanged."/>
+            <arg name="shortcuts" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array of shortcut objects."/>
+            </arg>
+        </method>
+        <signal name="shortcutsChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="The catalog behind getShortcutsJson changed: a sequence was rebound (in the settings, or externally through the compositor) or the registration batch settled. Consumers re-read getShortcutsJson."/>
+        </signal>
     </interface>
 </node>

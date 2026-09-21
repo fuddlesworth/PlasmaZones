@@ -61,6 +61,17 @@ bool animationPathInScope(const QString& path, const AnimationPageScope& scope);
 /// safe today; call these only on an EventSubtree scope.
 QStringList animationScopedBuiltInPaths(const AnimationPageScope& scope);
 
+/// @p scope's built-in paths, plus any path in @p storedPaths that falls in
+/// scope without being one of them.
+///
+/// The built-in list is what the pages render, and it is the right base. It is
+/// not the whole universe: the motion tree is one hand-editable config key, so
+/// an entry can sit at a path outside the taxonomy. Driving the scoped walks
+/// off the built-ins alone left such an entry invisible to dirty, Discard and
+/// Reset alike, which means it could never be removed from inside the app.
+/// Same EventSubtree-only precondition as animationScopedBuiltInPaths.
+QStringList animationScopedTimingPaths(const AnimationPageScope& scope, const QStringList& storedPaths);
+
 /// True iff the two shader trees' overrides differ anywhere inside @p scope.
 /// Same EventSubtree-only precondition as animationScopedBuiltInPaths above.
 bool shaderTreeScopeDiffers(const PhosphorAnimationShaders::ShaderProfileTree& current,

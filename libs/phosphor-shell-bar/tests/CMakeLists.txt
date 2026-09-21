@@ -50,6 +50,14 @@ target_link_libraries(test_phosphor_shell_bar
         # their plugin registrars (Phosphor.Widgets pulls Phosphor.Theme).
         PhosphorShellBarQml
         PhosphorShellBarQmlplugin
+        # BarHost is a PanelWindow, so the pane-state cases need
+        # Phosphor.Shell registered too. It is instantiated but never shown:
+        # the pane properties are plain QML state and showing it would want a
+        # live compositor.
+        PhosphorShellQml
+        PhosphorShellQmlplugin
+        # registerQmlTypes() lives in the C++ library, not the QML module.
+        PhosphorShell::PhosphorShell
         PhosphorShellWidgetsQml
         PhosphorShellWidgetsQmlplugin
         PhosphorThemeQml

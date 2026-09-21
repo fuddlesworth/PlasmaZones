@@ -266,6 +266,56 @@
         <translation>ზონის დამატება</translation>
     </message>
     <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="42"/>
+        <source>Focus Workspace Above</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="47"/>
+        <source>Focus Workspace Below</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="52"/>
+        <source>Move Window to Workspace Above</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="57"/>
+        <source>Move Window to Workspace Below</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="62"/>
+        <source>Move Column to Workspace Above</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="67"/>
+        <source>Move Column to Workspace Below</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="72"/>
+        <source>Move Workspace Up</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="77"/>
+        <source>Move Workspace Down</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="83"/>
+        <source>Move Workspace to Monitor on the Left</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="89"/>
+        <source>Move Workspace to Monitor on the Right</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="95"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/KeyboardShortcutOverlay.qml.cpp" line="59"/>
         <source>Open Zone Editor</source>
@@ -537,6 +587,28 @@
         <translation>ჩამატება ან გამოძევება ზოლის ბოლოსკენ</translation>
     </message>
     <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="371"/>
+        <source>Next Tab in Column</source>
+        <translation>შემდეგი ჩანართი სვეტში</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="376"/>
+        <source>Previous Tab in Column</source>
+        <translation>წინა ჩანართი სვეტში</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="702"/>
+        <source>Move Window to Workspace Slot %1</source>
+        <comment>single workspace slot number</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="725"/>
+        <source>Focus Workspace %1</source>
+        <comment>single workspace slot number</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="444"/>
         <source>Maximize to Screen Edges</source>
         <translation>ეკრანის კიდეებამდე გადიდება</translation>
@@ -582,59 +654,15 @@
         <translation>შემდეგი სვეტის ფოკუსირება, შემოვლით</translation>
     </message>
     <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="970"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="777"/>
+        <source>Focus Tab %1</source>
+        <translation>%1 ჩანართზე ფოკუსი</translation>
+    </message>
+    <message>
         <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="402"/>
         <source>Center Column</source>
         <translation>სვეტის ცენტრში მოქცევა</translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="42"/>
-        <source>Focus Workspace Above</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="47"/>
-        <source>Focus Workspace Below</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="52"/>
-        <source>Move Window to Workspace Above</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="57"/>
-        <source>Move Window to Workspace Below</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="62"/>
-        <source>Move Column to Workspace Above</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="67"/>
-        <source>Move Column to Workspace Below</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="72"/>
-        <source>Move Workspace Up</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="77"/>
-        <source>Move Workspace Down</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="83"/>
-        <source>Move Workspace to Monitor on the Left</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="89"/>
-        <source>Move Workspace to Monitor on the Right</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="407"/>
@@ -852,103 +880,6 @@
         <translation>ფოკუსის უკან გადართვა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="271"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="273"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="275"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="277"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="279"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="282"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="285"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="288"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="291"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="295"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="527"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="539"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="120"/>
-        <source>Workspaces</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="272"/>
-        <source>Focus Above</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="274"/>
-        <source>Focus Below</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="276"/>
-        <source>Move Window Above</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="278"/>
-        <source>Move Window Below</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="280"/>
-        <source>Move Column Above</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="281"/>
-        <source>Moves the focused column to the workspace above. Scrolling only.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="283"/>
-        <source>Move Column Below</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="284"/>
-        <source>Moves the focused column to the workspace below. Scrolling only.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="286"/>
-        <source>Move Up</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="287"/>
-        <source>Moves the current workspace earlier in this monitor&apos;s list.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="289"/>
-        <source>Move Down</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="290"/>
-        <source>Moves the current workspace later in this monitor&apos;s list.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="292"/>
-        <source>Move to Left Monitor</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="293"/>
-        <source>Moves the current workspace and its windows to the monitor on the left.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="296"/>
-        <source>Move to Right Monitor</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="297"/>
-        <source>Moves the current workspace and its windows to the monitor on the right.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="300"/>
         <source>Swap Screen Left</source>
         <translation>ეკრანის მარცხნივ გაცვლა</translation>
@@ -1144,6 +1075,11 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="586"/>
+        <source>Shows the numbered tab of the focused column. In a column that is not tabbed it focuses that window in the stack.</source>
+        <translation>აჩვენებს ფოკუსირებული სვეტის დანომრებულ ჩანართს. სვეტში, რომელსაც ჩანართები არ აქვს, ფოკუსდება შესაბამისი ფანჯარა დასტაში.</translation>
+    </message>
+    <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="688"/>
         <source>Apply Layout %1</source>
         <comment>range of layout slots, e.g. 1-9</comment>
@@ -1200,6 +1136,145 @@
         <translation>წინა სვეტის ფოკუსირება (კიდეზე გაჩერება)</translation>
     </message>
     <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="159"/>
+        <source>Focus</source>
+        <comment>scrolling cheatsheet category</comment>
+        <translation>ფოკუსი</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="161"/>
+        <source>Columns</source>
+        <comment>scrolling cheatsheet category</comment>
+        <translation>სვეტები</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="163"/>
+        <source>Tabs</source>
+        <comment>scrolling cheatsheet category</comment>
+        <translation>ჩანართები</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="165"/>
+        <source>Column Width</source>
+        <comment>scrolling cheatsheet category</comment>
+        <translation>სვეტის სიგანე</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="167"/>
+        <source>Window Height</source>
+        <comment>scrolling cheatsheet category</comment>
+        <translation>ფანჯრის სიმაღლე</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="169"/>
+        <source>View</source>
+        <comment>scrolling cheatsheet category</comment>
+        <translation>ხედი</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="171"/>
+        <source>Floating</source>
+        <comment>scrolling cheatsheet category</comment>
+        <translation>მოტივტივე</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="271"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="273"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="275"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="277"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="279"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="282"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="285"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="288"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="291"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="295"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="527"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="539"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="120"/>
+        <source>Workspaces</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="272"/>
+        <source>Focus Above</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="274"/>
+        <source>Focus Below</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="276"/>
+        <source>Move Window Above</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="278"/>
+        <source>Move Window Below</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="280"/>
+        <source>Move Column Above</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="281"/>
+        <source>Moves the focused column to the workspace above. Scrolling only.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="283"/>
+        <source>Move Column Below</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="284"/>
+        <source>Moves the focused column to the workspace below. Scrolling only.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="286"/>
+        <source>Move Up</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="287"/>
+        <source>Moves the current workspace earlier in this monitor&apos;s list.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="289"/>
+        <source>Move Down</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="290"/>
+        <source>Moves the current workspace later in this monitor&apos;s list.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="292"/>
+        <source>Move to Left Monitor</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="293"/>
+        <source>Moves the current workspace and its windows to the monitor on the left.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="296"/>
+        <source>Move to Right Monitor</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="297"/>
+        <source>Moves the current workspace and its windows to the monitor on the right.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="333"/>
         <source>Moves focus one column toward the start of the strip and stops at the edge. The regular focus shortcut continues onto the next monitor instead.</source>
         <translation>ფოკუსს ერთი სვეტით ზოლის დასაწყისისკენ გადაიტანს და კიდეზე გაჩერდება. ჩვეულებრივი ფოკუსის მალსახმობი ნაცვლად ამისა შემდეგ მონიტორზე გადადის.</translation>
@@ -1233,6 +1308,16 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="348"/>
         <source>Moves focus one column toward the end of the strip, wrapping to the first column at the edge.</source>
         <translation>ფოკუსს ერთი სვეტით ზოლის ბოლოსკენ გადაიტანს და კიდეზე პირველ სვეტზე გადახტება.</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="402"/>
+        <source>Shows the next tab of the focused column, wrapping round to the first one at the end. In a column that is not tabbed it focuses the next window down the stack.</source>
+        <translation>აჩვენებს ფოკუსირებული სვეტის შემდეგ ჩანართს და ბოლოს პირველს უბრუნდება. სვეტში, რომელსაც ჩანართები არ აქვს, ფოკუსდება დასტაში შემდეგი ფანჯარა.</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="407"/>
+        <source>Shows the previous tab of the focused column, wrapping round to the last one at the start. In a column that is not tabbed it focuses the previous window up the stack.</source>
+        <translation>აჩვენებს ფოკუსირებული სვეტის წინა ჩანართს და დასაწყისში ბოლოს უბრუნდება. სვეტში, რომელსაც ჩანართები არ აქვს, ფოკუსდება დასტაში წინა ფანჯარა.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="408"/>
@@ -1327,18 +1412,6 @@
         <translation>განლაგების %1 გადატარება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="702"/>
-        <source>Move Window to Workspace Slot %1</source>
-        <comment>single workspace slot number</comment>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="725"/>
-        <source>Focus Workspace %1</source>
-        <comment>single workspace slot number</comment>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="../src/editor/undo/commands/ApplyTemplateCommand.cpp" line="14"/>
         <source>Apply Template: %1</source>
         <comment>@action</comment>
@@ -1410,24 +1483,6 @@
         <source>Change Selection</source>
         <comment>@action</comment>
         <translation>მონიშნულის შეცვლა</translation>
-    </message>
-    <message>
-        <location filename="../src/editor/undo/commands/UpdateShaderIdCommand.cpp" line="15"/>
-        <source>Change Shader Effect</source>
-        <comment>@action</comment>
-        <translation>შეიდერის ეფექტის შეცვლა</translation>
-    </message>
-    <message>
-        <location filename="../src/editor/undo/commands/UpdateShaderParamsCommand.cpp" line="17"/>
-        <source>Change Shader Parameter</source>
-        <comment>@action</comment>
-        <translation>შეიდერის პარამეტრის შეცვლა</translation>
-    </message>
-    <message>
-        <location filename="../src/editor/undo/commands/UpdateShaderParamsCommand.cpp" line="29"/>
-        <source>Change Shader Parameters</source>
-        <comment>@action</comment>
-        <translation>შეიდერის პარამეტრების შეცვლა</translation>
     </message>
     <message>
         <location filename="../src/editor/undo/commands/ChangeZOrderCommand.cpp" line="13"/>
@@ -1565,6 +1620,12 @@
         <location filename="../src/editor/controller/layout.cpp" line="1195"/>
         <source>No layout loaded to export</source>
         <translation>გასატანად განლაგება ჩატვირთული არაა</translation>
+    </message>
+    <message>
+        <location filename="../src/editor/controller/layout.cpp" line="109"/>
+        <source>VS%1</source>
+        <comment>@item fallback name for an unnamed virtual screen</comment>
+        <translation>ვე%1</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/layout.cpp" line="1202"/>
@@ -1731,12 +1792,6 @@
         <translation>ფაილი</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/shader.cpp" line="272"/>
-        <source>Reset Shader Parameters</source>
-        <comment>@action</comment>
-        <translation>შეიდერის პარამეტრების ჩამოყრა</translation>
-    </message>
-    <message>
         <location filename="../src/editor/controller/multiselect.cpp" line="189"/>
         <source>Resize %1 Zones</source>
         <comment>@action</comment>
@@ -1784,12 +1839,6 @@
         <source>Split Zone</source>
         <comment>@action</comment>
         <translation>ზონის გაყოფა</translation>
-    </message>
-    <message>
-        <location filename="../src/editor/controller/shader.cpp" line="288"/>
-        <source>Switch Shader Effect</source>
-        <comment>@action</comment>
-        <translation>შეიდერის ეფექტის გადართვა</translation>
     </message>
     <message>
         <location filename="../src/editor/main.cpp" line="177"/>
@@ -2053,46 +2102,9 @@
         <translation>ალგორითმის ფაილის ჩაწერა ვერ მოხერხდა. გადაამოწმეთ დისკის ადგილი და უფლებები.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="102"/>
-        <source>Cannot modify sets while a discard is in progress.</source>
-        <translation>სიმრავლეების შეცვლა შეუძლებელია, სანამ მიმდინარეობს მოცილება.</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="433"/>
-        <source>Cannot save while a discard is in progress.</source>
-        <translation>შენახვა შეუძლებელია, სანამ მიმდინარეობს მოცილება.</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="670"/>
-        <source>A discard is already in progress. Try again in a moment.</source>
-        <translation>გაუქმება უკვე მიმდინარეობს. სცადეთ ცოტა ხანში.</translation>
-    </message>
-    <message numerus="yes">
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="763"/>
-        <source>Could not restore %n profile file. It remains pending.</source>
-        <translation>
-            <numerusform>%n პროფილის ფაილის აღდგენა ვერ მოხერხდა. ის მოლოდინში რჩება.</numerusform>
-            <numerusform>%n პროფილის ფაილის აღდგენა ვერ მოხერხდა. ისინი მოლოდინში რჩება.</numerusform>
-        </translation>
-    </message>
-    <message numerus="yes">
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="765"/>
-        <source>Could not restore %n profile files. They remain pending.</source>
-        <translation>
-            <numerusform>%n პროფილის ფაილის აღდგენა ვერ მოხერხდა. ის მოლოდინში რჩება.</numerusform>
-            <numerusform>%n პროფილის ფაილის აღდგენა ვერ მოხერხდა. ისინი მოლოდინში რჩება.</numerusform>
-        </translation>
-    </message>
-    <message>
         <location filename="../src/settings/rules/rulecontroller.cpp" line="152"/>
         <source>Discard already in flight.</source>
         <translation>მოცილება უკვე მიმდინარეობს.</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="901"/>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="911"/>
-        <source>Cannot modify presets while a discard is in progress.</source>
-        <translation>შაბლონების შეცვლა შეუძლებელია, სანამ მიმდინარეობს მოცილება.</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_shaders.cpp" line="133"/>
@@ -2781,6 +2793,11 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="111"/>
+        <source>Group name (windows with the same name share one tabbed column)</source>
+        <translation>ჯგუფის სახელი (ერთი და იმავე სახელის მქონე ფანჯრები ერთ ჩანართებიან სვეტს იზიარებენ)</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="111"/>
         <source>Open in fullscreen (off = block the app&apos;s own fullscreen at open)</source>
         <translation>სრულ ეკრანზე გახსნა (გამორთული = აპლიკაციის საკუთარი სრული ეკრანის დაბლოკვა გახსნისას)</translation>
     </message>
@@ -2963,6 +2980,11 @@
         <translation>ტონის ფერი</translation>
     </message>
     <message>
+        <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="340"/>
+        <source>Layout</source>
+        <translation>განლაგება</translation>
+    </message>
+    <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="343"/>
         <source>Inactive zone color</source>
         <translation>არააქტიური ზონის ფერი</translation>
@@ -3006,6 +3028,19 @@
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="410"/>
         <source>If you later remove this workspace, the rule goes dormant instead of failing. It works again as soon as a workspace with that name comes back.</source>
         <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="417"/>
+        <source>Global default changes the shader for every layout in the matched context. Pick a layout to change only that layout, and only while it is the active one there.</source>
+        <translation>გლობალური ნაგულისხმევი ცვლის შეიდერს შესაბამისი კონტექსტის ყველა განლაგებისთვის. აირჩიეთ განლაგება, რომ მხოლოდ ის შეიცვალოს და მხოლოდ მაშინ, როცა ის იქ აქტიურია.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="457"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="169"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="1085"/>
+        <source>None</source>
+        <comment>@item no overlay shader assigned</comment>
+        <translation>არცერთი</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="221"/>
@@ -3135,6 +3170,11 @@
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="311"/>
         <source>Focus when opened</source>
         <translation>ფოკუსირება გახსნისას</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="313"/>
+        <source>Open in a tab group</source>
+        <translation>ჩანართების ჯგუფში გახსნა</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="314"/>
@@ -4821,6 +4861,26 @@
         <translation>%1-ის მრუდი: %2</translation>
     </message>
     <message>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="527"/>
+        <source>%1 overlay shader</source>
+        <translation>%1 გადადების შეიდერი</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="531"/>
+        <source>Block overlay shader</source>
+        <translation>გადადების შეიდერის დაბლოკვა</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="532"/>
+        <source>Block %1 overlay shader</source>
+        <translation>%1 გადადების შეიდერის დაბლოკვა</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="536"/>
+        <source>%1 overlay shader: %2</source>
+        <translation>%1 გადადების შეიდერი: %2</translation>
+    </message>
+    <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="554"/>
         <source>Overlay style (invalid)</source>
         <translation>გადადების სტილი (არასწორი)</translation>
@@ -5052,6 +5112,22 @@
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="763"/>
         <source>Open: %1</source>
         <translation>გახსნა: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="766"/>
+        <source>Tab group</source>
+        <translation>ჩანართების ჯგუფი</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="769"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="773"/>
+        <source>Tab group (invalid)</source>
+        <translation>ჩანართების ჯგუფი (არასწორი)</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="775"/>
+        <source>Tab group: %1</source>
+        <translation>ჩანართების ჯგუფი: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="772"/>
@@ -5668,6 +5744,52 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="44"/>
         <source>Shortcut Cheatsheet</source>
         <translation>მალსახმობების ცნობარი</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="55"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="61"/>
+        <source>OSD Bands</source>
+        <comment>@item the Phosphor shell&apos;s on-screen display bands</comment>
+        <translation>OSD-ის ლენტები</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="74"/>
+        <source>Phosphor Shell</source>
+        <comment>@item breadcrumb level for the Phosphor shell&apos;s own surfaces</comment>
+        <translation>გარსი Phosphor</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="76"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="49"/>
+        <source>Bar</source>
+        <comment>@item the Phosphor shell&apos;s top bar surface, not a progress or menu bar</comment>
+        <translation>ზოლი</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="78"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="55"/>
+        <source>Popouts</source>
+        <comment>@item panels that pop out from the Phosphor shell bar</comment>
+        <translation>გადმოსაშლელი ფანჯრები</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="80"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="67"/>
+        <source>Notifications</source>
+        <comment>@item the Phosphor shell&apos;s notification toasts</comment>
+        <translation>შეტყობინებები</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="82"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="73"/>
+        <source>Wallpaper Picker</source>
+        <translation>ფონის ამრჩევი</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="84"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="79"/>
+        <source>Lock Screen</source>
+        <translation>ჩაკეტვის ეკრანი</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="127"/>
@@ -6585,11 +6707,6 @@
         <translation>პროფილი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="276"/>
-        <source>motion set</source>
-        <translation>მოძრაობის ნაკრები</translation>
-    </message>
-    <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="77"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="232"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="276"/>
@@ -7273,11 +7390,6 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="295"/>
-        <source>decoration set</source>
-        <translation>გაფორმების ნაკრები</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="295"/>
         <source>set</source>
         <translation>ნაკრები</translation>
     </message>
@@ -7379,6 +7491,31 @@
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="93"/>
         <source>system tray</source>
         <translation>სისტემური მართვის არე</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="145"/>
+        <source>overlay set</source>
+        <translation>გადადების ნაკრები</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="233"/>
+        <source>place</source>
+        <translation>განთავსება</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="259"/>
+        <source>kickoff</source>
+        <translation>kickoff</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="276"/>
+        <source>motion set</source>
+        <translation>მოძრაობის ნაკრები</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="293"/>
+        <source>dock</source>
+        <translation>დოკი</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="104"/>
@@ -7493,19 +7630,40 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="233"/>
-        <source>place</source>
-        <translation>განთავსება</translation>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="274"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="283"/>
+        <source>cursor</source>
+        <translation>კურსორი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="259"/>
-        <source>kickoff</source>
-        <translation>kickoff</translation>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="275"/>
+        <source>trail</source>
+        <translation>კვალი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="293"/>
-        <source>dock</source>
-        <translation>დოკი</translation>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="275"/>
+        <source>click</source>
+        <translation>დაწკაპუნება</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="275"/>
+        <source>ripple</source>
+        <translation>ტალღა</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="276"/>
+        <source>halo</source>
+        <translation>შარავანდი</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="276"/>
+        <source>sparks</source>
+        <translation>ნაპერწკლები</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="295"/>
+        <source>decoration set</source>
+        <translation>გაფორმების ნაკრები</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="314"/>
@@ -8037,6 +8195,25 @@
         <translation>gpu</translation>
     </message>
     <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="143"/>
+        <source>override</source>
+        <translation>გადაფარვა</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="146"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="252"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="279"/>
+        <source>bundle</source>
+        <translation>კრებული</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="146"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="252"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="280"/>
+        <source>share</source>
+        <translation>გაზიარება</translation>
+    </message>
+    <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="264"/>
         <source>motion blur</source>
         <translation>მოძრაობის ბუნდოვნება</translation>
@@ -8046,6 +8223,28 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="565"/>
         <source>heat</source>
         <translation>გახურება</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="542"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="702"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="708"/>
+        <source>Stop while a window is fullscreen</source>
+        <translation>შეჩერება, სანამ ფანჯარა სრულეკრანიანია</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="544"/>
+        <source>fullscreen</source>
+        <translation>სრულეკრანიანი</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="544"/>
+        <source>game</source>
+        <translation>თამაში</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="544"/>
+        <source>video</source>
+        <translation>ვიდეო</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="563"/>
@@ -9706,6 +9905,31 @@
         <translation>სწრაფი</translation>
     </message>
     <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="885"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="95"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="52"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="58"/>
+        <source>Group windows of the same application as tabs</source>
+        <translation>ერთი და იმავე აპლიკაციის ფანჯრების ჩანართებად დაჯგუფება</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="886"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="96"/>
+        <source>group</source>
+        <translation>ჯგუფი</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="887"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="96"/>
+        <source>application</source>
+        <translation>აპლიკაცია</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="887"/>
+        <source>same app</source>
+        <translation>იგივე აპლიკაცია</translation>
+    </message>
+    <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="931"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="121"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="209"/>
@@ -10504,11 +10728,6 @@
         <translation>სწრაფი მალსახმობები</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="127"/>
-        <source>Named Workspaces</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="281"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="500"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="547"/>
@@ -10519,6 +10738,11 @@
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="355"/>
         <source>Templates</source>
         <translation>ნიმუშები</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="127"/>
+        <source>Named Workspaces</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="375"/>
@@ -10553,6 +10777,13 @@
         <translation>ფანჯრის გადათრევა</translation>
     </message>
     <message>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="463"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="516"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="561"/>
+        <source>Sets</source>
+        <translation>ნაკრებები</translation>
+    </message>
+    <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="521"/>
         <source>Surfaces</source>
         <translation>ზედაპირები</translation>
@@ -10565,9 +10796,10 @@
         <translation>გარსი</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="544"/>
-        <source>Decoration Sets</source>
-        <translation>დეკორაციის ნაკრებები</translation>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="512"/>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="86"/>
+        <source>Pointer</source>
+        <translation>მაჩვენებელი</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="313"/>
@@ -10624,6 +10856,11 @@
         <translation>მოძრაობის ნაკრებები</translation>
     </message>
     <message>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="544"/>
+        <source>Decoration Sets</source>
+        <translation>დეკორაციის ნაკრებები</translation>
+    </message>
+    <message>
         <location filename="../src/settings/services/shaderpackinstaller.cpp" line="303"/>
         <source>Shader pack installed.</source>
         <translation>შეიდერების პაკეტი დაინსტალირდა.</translation>
@@ -10664,14 +10901,24 @@
         <translation>შეიდერების პაკეტის ინსტალატორის უცნობი შეცდომა.</translation>
     </message>
     <message>
-        <location filename="../src/settings/stores/shadersetstore.cpp" line="169"/>
-        <source>Could not back up the existing set, so it was left untouched.</source>
-        <translation>არსებული ნაკრების სარეზერვო ასლის შექმნა ვერ მოხერხდა, ამიტომ ის ხელუხლებელი დარჩა.</translation>
-    </message>
-    <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="234"/>
         <source>Could not write the set to disk.</source>
         <translation>ნაკრების დისკზე ჩაწერა ვერ მოხერხდა.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/stores/shadersetstore.cpp" line="345"/>
+        <source>“%1” could not be used here. It may be for another page, or it may need packs or entries this version does not have.</source>
+        <translation>„%1“ აქ ვერ გამოიყენება. შესაძლოა სხვა გვერდისთვისაა, ან სჭირდება პაკეტები ან ჩანაწერები, რომლებიც ამ ვერსიაში არ არის.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/stores/shadersetstore.cpp" line="358"/>
+        <source>Could not finish applying “%1”. Some of it may have been applied, and Discard undoes the whole thing.</source>
+        <translation>„%1“-ის გადატარება ბოლომდე ვერ მოხერხდა. მისი ნაწილი შესაძლოა გადატარებულია, და „გაუქმება“ მთლიანად აბრუნებს მას.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/stores/shadersetstore.cpp" line="370"/>
+        <source>“%1” was saved by an older version, so it does not cover everything a set covers now. Anything it leaves out is unchanged.</source>
+        <translation>„%1“ უფრო ძველი ვერსიითაა შენახული, ამიტომ ის ყველაფერს არ ფარავს, რასაც ნაკრები ახლა ფარავს. რასაც ის ტოვებს, უცვლელი რჩება.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="439"/>
@@ -10780,11 +11027,6 @@
         <translation>ეს ნაკრები ცარიელია.</translation>
     </message>
     <message>
-        <location filename="../src/settings/stores/shadersetstore.cpp" line="670"/>
-        <source>That set does not match this page.</source>
-        <translation>ეს ნაკრები არ ემთხვევა ამ გვერდს.</translation>
-    </message>
-    <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="681"/>
         <source>That set has no usable name.</source>
         <translation>ამ ნაკრებს გამოსადეგი სახელი არ აქვს.</translation>
@@ -10795,6 +11037,11 @@
         <location filename="../src/settings/stores/shadersetstore.cpp" line="710"/>
         <source>Could not create the sets folder.</source>
         <translation>ნაკრებების საქაღალდის შექმნა ვერ მოხერხდა.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/stores/shadersetstore.cpp" line="169"/>
+        <source>Could not back up the existing set, so it was left untouched.</source>
+        <translation>არსებული ნაკრების სარეზერვო ასლის შექმნა ვერ მოხერხდა, ამიტომ ის ხელუხლებელი დარჩა.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="355"/>
@@ -10827,10 +11074,25 @@
         <translation>ნაკრები სახელით „%1“ უკვე არსებობს.</translation>
     </message>
     <message>
+        <location filename="../src/settings/stores/shadersetstore.cpp" line="468"/>
+        <source>Could not capture the current settings.</source>
+        <translation>მიმდინარე პარამეტრების დაფიქსირება ვერ მოხერხდა.</translation>
+    </message>
+    <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="500"/>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="508"/>
         <source>Could not delete “%1”.</source>
         <translation>„%1“-ის წაშლა ვერ მოხერხდა.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/stores/shadersetstore.cpp" line="660"/>
+        <source>That set could not be imported here. It may be for another page, or it may need packs or entries this version does not have.</source>
+        <translation>ის ნაკრები აქ ვერ შემოიტანება. შესაძლოა სხვა გვერდისთვისაა, ან სჭირდება პაკეტები ან ჩანაწერები, რომლებიც ამ ვერსიაში არ არის.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/stores/shadersetstore.cpp" line="670"/>
+        <source>That set does not match this page.</source>
+        <translation>ეს ნაკრები არ ემთხვევა ამ გვერდს.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="715"/>
@@ -10867,16 +11129,6 @@
         <translation>შაბლონის „%1“ წაშლა ვერ მოხერხდა.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="473"/>
-        <source>Cannot reset while a discard is in progress.</source>
-        <translation>ჩამოყრა ვერ მოხერხდება, სანამ გაუქმება მიმდინარეობს.</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="535"/>
-        <source>Some animation overrides could not be reset.</source>
-        <translation>ანიმაციის ზოგიერთი გადაფარვის ჩამოყრა ვერ მოხერხდა.</translation>
-    </message>
-    <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="143"/>
         <source>Settings can only be exported to a local file.</source>
         <translation>პარამეტრების გატანა მხოლოდ ლოკალურ ფაილში შეიძლება.</translation>
@@ -10895,6 +11147,11 @@
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="209"/>
         <source>That settings file is no longer there.</source>
         <translation>ის პარამეტრების ფაილი აღარ არსებობს.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="222"/>
+        <source>That file is too large to be a settings file.</source>
+        <translation>ის ფაილი პარამეტრების ფაილისთვის ძალიან დიდია.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="224"/>
@@ -10963,14 +11220,19 @@
         <translation>თქვენი პარამეტრების დაბრუნება ვერ მოხერხდა. ასლი შენახულია %1-ში.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="529"/>
-        <source>Your settings were imported, but the window rules could not be reloaded. Restart PlasmaZones before you change any rules, or the imported ones will be lost.</source>
-        <translation>თქვენი პარამეტრები შემოტანილია, მაგრამ ფანჯრის წესების ხელახლა ჩატვირთვა ვერ მოხერხდა. გადატვირთეთ PlasmaZones წესების შეცვლამდე, თორემ შემოტანილი წესები დაიკარგება.</translation>
+        <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="552"/>
+        <source>Your settings were imported, but PlasmaZones is still running the old ones. Restart PlasmaZones, or the imported settings may be overwritten.</source>
+        <translation>თქვენი პარამეტრები შემოტანილია, მაგრამ PlasmaZones ჯერ კიდევ ძველებით მუშაობს. გადატვირთეთ PlasmaZones, თორემ შემოტანილი პარამეტრები შესაძლოა გადაიწეროს.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="560"/>
         <source>Your settings were imported, but the animation pages still show the old ones. Reopen the settings window to see the imported values.</source>
         <translation>თქვენი პარამეტრები შემოტანილია, მაგრამ ანიმაციის გვერდები კვლავ ძველს აჩვენებს. შემოტანილი მნიშვნელობების სანახავად თავიდან გახსენით პარამეტრების ფანჯარა.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="529"/>
+        <source>Your settings were imported, but the window rules could not be reloaded. Restart PlasmaZones before you change any rules, or the imported ones will be lost.</source>
+        <translation>თქვენი პარამეტრები შემოტანილია, მაგრამ ფანჯრის წესების ხელახლა ჩატვირთვა ვერ მოხერხდა. გადატვირთეთ PlasmaZones წესების შეცვლამდე, თორემ შემოტანილი წესები დაიკარგება.</translation>
     </message>
     <message>
         <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="369"/>
@@ -11715,6 +11977,12 @@
         <source>Exit fullscreen</source>
         <comment>@action:button</comment>
         <translation>სრული ეკრანიდან გასვლა</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="820"/>
+        <source>Exit fullscreen (F11)</source>
+        <comment>@action:button</comment>
+        <translation>სრული ეკრანიდან გასვლა (F11)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="822"/>
@@ -13080,22 +13348,10 @@
         <translation>გადაათრიეთ ზონის ზომის შესაცვლელად</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="347"/>
-        <source>Shader Settings</source>
-        <comment>@title:window</comment>
-        <translation>შეიდერის პარამეტრები</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="468"/>
-        <source>Enable effect:</source>
-        <comment>@label</comment>
-        <translation>ეფექტის ჩართვა:</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="469"/>
-        <source>Enable shader effect</source>
-        <comment>@option:check</comment>
-        <translation>შეიდერის ეფექტის ჩართვა</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="174"/>
+        <source>Missing shader %1</source>
+        <comment>@item the assigned overlay shader pack is not installed</comment>
+        <translation>აკლია შეიდერი %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="484"/>
@@ -13104,17 +13360,16 @@
         <translation>შეიდერი:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="490"/>
-        <source>Select shader…</source>
-        <comment>@action:button</comment>
-        <translation>შეიდერის არჩევა…</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="330"/>
+        <source>Global default overlay shader</source>
+        <comment>@label:listbox</comment>
+        <translation>გლობალური ნაგულისხმევი გადადების შეიდერი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="525"/>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="528"/>
-        <source>No description available</source>
-        <comment>@info:placeholder</comment>
-        <translation>აღწერა ხელმისაწვდომი არაა</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="330"/>
+        <source>Overlay shader for %1</source>
+        <comment>@label:listbox overlay shader for a named layout</comment>
+        <translation>გადადების შეიდერი %1-ისთვის</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="554"/>
@@ -13131,72 +13386,6 @@
         <translation>v%1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="560"/>
-        <source>(User shader)</source>
-        <comment>@info user-installed shader</comment>
-        <translation>(მომხმარებლის შეიდერი)</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="626"/>
-        <source>Apply a built-in preset</source>
-        <comment>@info:tooltip</comment>
-        <translation>ჩაშენებული შაბლონის გადატარება</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="629"/>
-        <source>Presets</source>
-        <comment>@action:button</comment>
-        <translation>შაბლონები</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="709"/>
-        <source>Enable the shader effect to configure visual effects for zone overlays.</source>
-        <comment>@info</comment>
-        <translation>ჩართეთ შეიდერის ეფექტი ზონების გადადებებისთვის ვიზუალური ეფექტების დასაკონფიგურირებლად.</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="730"/>
-        <source>Dismiss</source>
-        <comment>@action:button</comment>
-        <translation>დახურვა</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="742"/>
-        <source>Load Preset</source>
-        <comment>@action:button</comment>
-        <translation>შაბლონის ჩატვირთვა</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="744"/>
-        <source>Load shader settings from a preset file</source>
-        <comment>@info:tooltip</comment>
-        <translation>ჩატვირთეთ შეიდერის პარამეტრები შაბლონის ფაილიდან</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="756"/>
-        <source>Save Preset</source>
-        <comment>@action:button</comment>
-        <translation>შაბლონის შენახვა</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="759"/>
-        <source>Save current shader settings as a preset file</source>
-        <comment>@info:tooltip</comment>
-        <translation>შეინახეთ მიმდინარე შეიდერის პარამეტრები შაბლონის ფაილად</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="775"/>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="777"/>
-        <source>Apply</source>
-        <comment>@action:button</comment>
-        <translation>გადატარება</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="778"/>
-        <source>Apply the shader settings and close the dialog</source>
-        <translation>შეიდერის პარამეტრების გადატარება და დიალოგის დახურვა</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="915"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="954"/>
         <source>No error details available.</source>
@@ -13204,29 +13393,11 @@
         <translation>შეცდომის დეტალები ხელმისაწვდომი არაა.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="921"/>
-        <source>Loading preview…</source>
-        <comment>@info:placeholder</comment>
-        <translation>გადახედვის ჩატვირთვა…</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="939"/>
         <location filename=".qml-stubs/src/shared/ShaderParamsEditor.qml.cpp" line="137"/>
         <source>Choose %1</source>
         <comment>@title:window</comment>
         <translation>აირჩიეთ %1</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="954"/>
-        <source>Choose Image</source>
-        <comment>@title:window</comment>
-        <translation>სურათის არჩევა</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="955"/>
-        <source>Image files (*.png *.jpg *.jpeg *.bmp *.webp *.svg *.svgz)</source>
-        <comment>@item:inlistbox</comment>
-        <translation>სურათის ფაილები (*.png *.jpg *.jpeg *.bmp *.webp *.svg *.svgz)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="974"/>
@@ -13399,16 +13570,16 @@
         <translation>შეიდერის პარამეტრები</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="433"/>
-        <source>Configure visual shader effects for zones</source>
-        <comment>@info</comment>
-        <translation>დააკონფიგურირეთ ზონების ვიზუალური შეიდერის ეფექტები</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="457"/>
         <source>Import layout from file</source>
         <comment>@tooltip</comment>
         <translation>განლაგების შემოტანა ფაილიდან</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="433"/>
+        <source>Configure visual shader effects for zones</source>
+        <comment>@info</comment>
+        <translation>დააკონფიგურირეთ ზონების ვიზუალური შეიდერის ეფექტები</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="459"/>
@@ -13697,6 +13868,13 @@
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="58"/>
         <source>Releases</source>
         <translation>გამოშვებები</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="67"/>
+        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="90"/>
+        <source>What&apos;s New</source>
+        <comment>@action:button opens the release history</comment>
+        <translation>რა არის ახალი</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="67"/>
@@ -14266,11 +14444,6 @@
         <translation>საწყის რიგზე დაბრუნება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="17"/>
-        <source>What&apos;s New in PlasmaZones %1</source>
-        <translation>რა არის ახალი PlasmaZones %1-ში</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/settings/qml/components/ColorButton.qml.cpp" line="28"/>
         <source>Color picker</source>
         <translation>ფერის ამომრჩევი</translation>
@@ -14708,6 +14881,12 @@
         <translation>შევაჩერო დემონი?</translation>
     </message>
     <message>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="182"/>
+        <source>Stopping the PlasmaZones daemon disables window snapping, tiling and scrolling until you start it again.</source>
+        <oldsource>Stopping the PlasmaZones daemon disables window tiling and snapping until you start it again.</oldsource>
+        <translation>PlasmaZones-ის დემონის გაჩერება გამორთავს ფანჯრების მიმაგრებას, ფილებად დაწყობასა და გადახვევას, სანამ მას ხელახლა არ გაუშვებთ.</translation>
+    </message>
+    <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="185"/>
         <source>Stopping the PlasmaZones daemon disables window snapping, tiling, scrolling and dynamic workspaces until you start it again.</source>
         <translation type="unfinished"></translation>
@@ -14901,6 +15080,12 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="74"/>
         <source>Settings here apply to all child events unless individually overridden.</source>
         <translation>აქაური პარამეტრები ვრცელდება ყველა შვილობილ მოვლენაზე, თუ ცალკე არაა გადაფარული.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="89"/>
+        <source>Timing inherits from: %1. The animation is not inherited from outside %2.</source>
+        <comment>%1 is an inheritance chain, %2 an event-path root</comment>
+        <translation>დროზომვა მემკვიდრეობით მიიღება: %1. ანიმაცია %2-ის გარედან მემკვიდრეობით არ მიიღება.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="77"/>
@@ -15271,6 +15456,41 @@
         <translation>ანიმაციის გამოტოვება, როცა გეომეტრია ამაზე ნაკლებად იცვლება</translation>
     </message>
     <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="36"/>
+        <source>A set bundles your per-event animation packs and timing into one shareable JSON file. Applying a set merges into your current overrides. Events it doesn&apos;t cover are left unchanged.</source>
+        <oldsource>Sets bundle your per-event animation packs and timing into one shareable JSON file. Applying a set merges into your current overrides. Events it doesn&apos;t cover are left unchanged.</oldsource>
+        <translation>ნაკრები აერთიანებს თითოეული მოვლენის ანიმაციის პაკეტებსა და დროზომვას ერთ გასაზიარებელ JSON ფაილში. გადატარებისას ნაკრები ერწყმის თქვენს მიმდინარე გადაფარვებს. მისგან დაუფარავი მოვლენები უცვლელი რჩება.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="37"/>
+        <source>Capture every per-event animation pack and its timing as a named set.</source>
+        <oldsource>Capture every per-event animation pack and its timing as a named motion set.</oldsource>
+        <translation>დააფიქსირეთ თითოეული მოვლენის ანიმაციის პაკეტი და მისი დროზომვა სახელდებულ ნაკრებად.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="53"/>
+        <source>Sets are single JSON files under your data directory. Drop a set file here to import it, or use the buttons below.</source>
+        <oldsource>Motion sets are single JSON files under your data directory. Drop a set file here to import it, or use the buttons below.</oldsource>
+        <translation>ნაკრებები ცალკეული JSON ფაილებია თქვენს მონაცემთა საქაღალდეში. ჩააგდეთ ნაკრების ფაილი აქ მის შემოსატანად ან გამოიყენეთ ქვემოთ მოცემული ღილაკები.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="52"/>
+        <source>No sets saved yet.</source>
+        <translation>ჯერ არცერთი ნაკრები არაა შენახული.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="322"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="53"/>
+        <source>Set name</source>
+        <translation>ნაკრების სახელი</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="332"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="54"/>
+        <source>Set description</source>
+        <translation>ნაკრების აღწერა</translation>
+    </message>
+    <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="27"/>
         <source>Motion sets bundle your per-event overrides into one shareable JSON file. Applying a set merges into your current overrides. Paths it doesn&apos;t cover are left unchanged.</source>
         <translation>მოძრაობის ნაკრებები აერთიანებს თითოეული მოვლენის გადაფარვებს ერთ გასაზიარებელ JSON ფაილში. ნაკრების გამოყენება ერწყმის თქვენს მიმდინარე გადაფარვებს. მისგან დაუფარავი გზები უცვლელი რჩება.</translation>
@@ -15378,6 +15598,11 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="69"/>
         <source>“%1” will overwrite every per-event override it covers.</source>
         <translation>„%1“ გადააწერს ყოველ მოვლენის გადაფარვას, რომელსაც მოიცავს.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="74"/>
+        <source>“%1” will replace every per-event override it covers. The change is not saved yet, so Discard still undoes it.</source>
+        <translation>„%1“ ჩაანაცვლებს თითოეული მოვლენის ყველა გადაფარვას, რომელსაც ფარავს. ცვლილება ჯერ შენახული არ არის, ამიტომ „გაუქმება“ მას კვლავ აბრუნებს.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsOsdsPage.qml.cpp" line="15"/>
@@ -15998,8 +16223,20 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="23"/>
+        <source>A set bundles your per-surface pack chains into one shareable JSON file. Applying a set merges into your current decoration. Surfaces it doesn&apos;t cover are left unchanged.</source>
+        <oldsource>Sets bundle your per-surface pack chains into one shareable JSON file. Applying a set merges into your current decoration. Surfaces it doesn&apos;t cover are left unchanged.</oldsource>
+        <translation>ნაკრები აერთიანებს თითოეული ზედაპირის პაკეტების ჯაჭვებს ერთ გასაზიარებელ JSON ფაილში. გადატარებისას ნაკრები ერწყმის თქვენს მიმდინარე მორთულობას. მისგან დაუფარავი ზედაპირები უცვლელი რჩება.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="23"/>
         <source>Decoration sets bundle your per-surface pack chains into one shareable JSON file. Applying a set merges into your current decoration. Surfaces it doesn&apos;t cover are left unchanged.</source>
         <translation>მორთულობის ნაკრებები აერთიანებს თითოეული ზედაპირის პაკეტების ჯაჭვებს ერთ გასაზიარებელ JSON ფაილში. ნაკრების გამოყენება ერწყმის თქვენს მიმდინარე მორთულობას. მისგან დაუფარავი ზედაპირები უცვლელი რჩება.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="24"/>
+        <source>Capture every per-surface override as a named set.</source>
+        <oldsource>Capture every per-surface override as a named decoration set.</oldsource>
+        <translation>დააფიქსირეთ თითოეული ზედაპირის გადაფარვა სახელდებულ ნაკრებად.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="24"/>
@@ -16050,6 +16287,17 @@
         <comment>@label decoration surface group</comment>
         <translation>Plasma-ის გარსი</translation>
     </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="53"/>
+        <source>“%1” will replace the decoration on every surface it covers.</source>
+        <translation>„%1“ ჩაანაცვლებს დეკორაციას ყველა ზედაპირზე, რომელსაც ის მოიცავს.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="41"/>
+        <source>Pointer</source>
+        <comment>@label decoration surface group</comment>
+        <translation>მაჩვენებელი</translation>
+    </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="50"/>
         <source>%n Surface</source>
@@ -16059,14 +16307,31 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="53"/>
-        <source>“%1” will replace the decoration on every surface it covers.</source>
-        <translation>„%1“ ჩაანაცვლებს დეკორაციას ყველა ზედაპირზე, რომელსაც ის მოიცავს.</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="51"/>
+        <source>“%1” will replace the decoration on every surface it covers. The change is not saved yet, so Discard still undoes it.</source>
+        <translation>„%1“ ჩაანაცვლებს მორთულობას ყველა ზედაპირზე, რომელსაც ფარავს. ცვლილება ჯერ შენახული არ არის, ამიტომ „გაუქმება“ მას კვლავ აბრუნებს.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShadersPage.qml.cpp" line="21"/>
         <source>Browse installed decoration packs. Stack packs onto a surface&apos;s chain from the Windows, OSDs, and Popups pages.</source>
         <translation>დათვალიერეთ დაინსტალირებული გაფორმების პაკეტები. პაკეტების დაწყობა ზედაპირის ჯაჭვზე შეგიძლიათ ფანჯრების, OSD-ების და ამომხტარების გვერდებიდან.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShadersPage.qml.cpp" line="24"/>
+        <source>Browse installed decoration packs. Stack packs onto a surface&apos;s chain from the Windows, OSDs, Popups, Shell, and Pointer pages.</source>
+        <translation>დაათვალიერეთ დაინსტალირებული გაფორმების პაკეტები. პაკეტების ზედაპირის ჯაჭვზე დალაგება შეგიძლიათ ფანჯრების, OSD-ების, ამომხტარების, გარსისა და მაჩვენებლის გვერდებიდან.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShadersPage.qml.cpp" line="32"/>
+        <source>Surface</source>
+        <comment>@item decoration pack family (windows, OSDs, popups, shell)</comment>
+        <translation>ზედაპირი</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShadersPage.qml.cpp" line="37"/>
+        <source>Pointer</source>
+        <comment>@item decoration pack family (the mouse pointer)</comment>
+        <translation>მაჩვენებელი</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShadersPage.qml.cpp" line="25"/>
@@ -16354,6 +16619,11 @@
         <source>Other windows keep their decoration but stop moving. Saves graphics card use roughly in proportion to how many windows you have open. Panels and applet popups keep animating, because a panel is never the active window.</source>
         <oldsource>Other windows keep their decoration but stop moving. Saves graphics card use roughly in proportion to how many windows you have open.</oldsource>
         <translation>სხვა ფანჯრები მორთულობას ინარჩუნებენ, მაგრამ მოძრაობას წყვეტენ. ეს ზოგავს ვიდეობარათის დატვირთვას დაახლოებით იმის პროპორციულად, რამდენი ფანჯარა გაქვთ გახსნილი. პანელები და აპლეტების ამომხტომები ანიმაციას აგრძელებენ, რადგან პანელი არასოდეს არის აქტიური ფანჯარა.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="704"/>
+        <source>Drop every decoration on a monitor while a window on it is fullscreen, the mouse pointer included. Other monitors keep theirs. A fullscreen game or video has no frame to decorate, and it is the last place you want to spend graphics work.</source>
+        <translation>მოხსენით ყველა მორთულობა მონიტორზე, სანამ მასზე რომელიმე ფანჯარა სრულეკრანიანია, თაგუნას მაჩვენებლის ჩათვლით. სხვა მონიტორები თავიანთს ინარჩუნებენ. სრულეკრანიან თამაშს ან ვიდეოს ჩარჩო არ აქვს, რომ მოირთოს, და გრაფიკული რესურსის დახარჯვა იქ ყველაზე ნაკლებად ღირს.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="704"/>
@@ -17625,6 +17895,24 @@
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileSwitcherHeader.qml.cpp" line="175"/>
         <source>Active profile</source>
         <translation>აქტიური პროფილი</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileSwitcherHeader.qml.cpp" line="202"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="383"/>
+        <source>Use this profile?</source>
+        <translation>გამოვიყენო ეს პროფილი?</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileSwitcherHeader.qml.cpp" line="203"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="384"/>
+        <source>You have changes you have not saved yet. Switching to “%1” replaces them with that profile&apos;s settings.</source>
+        <translation>გაქვთ ჯერ შეუნახავი ცვლილებები. „%1“-ზე გადართვა მათ იმ პროფილის პარამეტრებით ჩაანაცვლებს.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileSwitcherHeader.qml.cpp" line="207"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="388"/>
+        <source>Use profile</source>
+        <translation>პროფილის გამოყენება</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="129"/>
@@ -19684,18 +19972,6 @@
         <translation>ნაკრების სახელი…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="322"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="53"/>
-        <source>Set name</source>
-        <translation>ნაკრების სახელი</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="332"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="54"/>
-        <source>Set description</source>
-        <translation>ნაკრების აღწერა</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="345"/>
         <source>Export Set</source>
         <translation>ნაკრების გატანა</translation>
@@ -19707,9 +19983,9 @@
         <translation>PlasmaZones ნაკრები (*.json)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="52"/>
-        <source>No sets saved yet.</source>
-        <translation>ჯერ არცერთი ნაკრები არაა შენახული.</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="157"/>
+        <source>This captures your current values, including the changes you have not saved yet.</source>
+        <translation>ეს აფიქსირებს თქვენს მიმდინარე მნიშვნელობებს, ჯერ შეუნახავი ცვლილებების ჩათვლით.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="183"/>
@@ -19984,9 +20260,10 @@
         <translation>მიანიჭეთ ზონის განლაგებები კლავიატურის მალსახმობებს სწრაფი გადართვისთვის.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShadersPage.qml.cpp" line="22"/>
-        <source>Browse installed snapping overlay shaders. Assign a shader to a layout from the layout editor&apos;s appearance section.</source>
-        <translation>დაათვალიერეთ დაინსტალირებული მიმაგრების გადადების შეიდერები. მიანიჭეთ შეიდერი განლაგებას განლაგების რედაქტორის იერსახის განყოფილებიდან.</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaysLibraryPage.qml.cpp" line="24"/>
+        <source>Browse the zone overlay shaders you have installed. To assign one, either as the global default or for a single layout, go to the Layouts page.</source>
+        <comment>@info banner on the overlay shader browser</comment>
+        <translation>დაათვალიერეთ თქვენ მიერ დაინსტალირებული ზონის გადადების შეიდერები. რომელიმეს მისანიჭებლად, გლობალურ ნაგულისხმევად ან ერთი განლაგებისთვის, გადადით განლაგებების გვერდზე.</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShadersPage.qml.cpp" line="28"/>
@@ -20167,9 +20444,29 @@
         <translation>%1-ის ჩართვა</translation>
     </message>
     <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="269"/>
+        <source>Not decorated. Add a pointer pack to style the cursor.</source>
+        <translation>მორთული არ არის. კურსორის გასაფორმებლად დაამატეთ მაჩვენებლის პაკეტი.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="339"/>
+        <source>No pointer packs.</source>
+        <translation>მაჩვენებლის პაკეტები არაა.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="340"/>
+        <source>No pointer packs. Add one below.</source>
+        <translation>მაჩვენებლის პაკეტები არაა. დაამატეთ ქვემოთ.</translation>
+    </message>
+    <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="333"/>
         <source>Add decoration pack</source>
         <translation>გაფორმების პაკეტის დამატება</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="341"/>
+        <source>Add pointer pack</source>
+        <translation>მაჩვენებლის პაკეტის დამატება</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="345"/>
@@ -20177,9 +20474,24 @@
         <translation>დაალაგეთ კიდევ ერთი პაკეტი ამ ზედაპირის ჯაჭვზე</translation>
     </message>
     <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="342"/>
+        <source>Stack another pack onto the pointer&apos;s chain</source>
+        <translation>დაალაგეთ კიდევ ერთი პაკეტი მაჩვენებლის ჯაჭვზე</translation>
+    </message>
+    <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="348"/>
         <source>No decoration packs are installed</source>
         <translation>გაფორმების პაკეტები დაინსტალირებული არაა</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="343"/>
+        <source>No pointer packs are installed</source>
+        <translation>მაჩვენებლის პაკეტები დაინსტალირებული არაა</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="344"/>
+        <source>Add a pointer pack to the pointer&apos;s chain</source>
+        <translation>მაჩვენებლის პაკეტის დამატება მაჩვენებლის ჯაჭვზე</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="350"/>
@@ -20640,6 +20952,11 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="54"/>
+        <source>When a window opens and the strip already holds a window of the same application, the new window joins that window&apos;s column as a tab instead of taking a column of its own. The column it joins is turned into tabs if it is not already. Per-window rules still take precedence.</source>
+        <translation>როცა ფანჯარა იხსნება და ზოლზე უკვე არის იმავე აპლიკაციის ფანჯარა, ახალი ფანჯარა იმ ფანჯრის სვეტს ჩანართის სახით უერთდება, ნაცვლად იმისა, რომ საკუთარი სვეტი დაიკავოს. სვეტი, რომელსაც უერთდება, ჩანართებად გარდაიქმნება, თუ ჯერ ასეთი არ არის. ფანჯრების ცალკეულ წესებს კვლავ უპირატესობა აქვს.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="54"/>
         <source>Remove the outer gaps while the strip holds a single column, so that column sits against the screen edge at its own width</source>
         <translation>გარე დაშორებების მოცილება, სანამ ზოლზე ერთი სვეტია, რომ ეს სვეტი თავისი სიგანით ეკრანის კიდეს მიეკრას</translation>
     </message>
@@ -20913,6 +21230,12 @@
         <source>No configurable parameters.</source>
         <comment>@info</comment>
         <translation>მორგებადი პარამეტრები არაა.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/shared/ParameterEditor.qml.cpp" line="471"/>
+        <source>This pack is not installed, so its settings cannot be shown.</source>
+        <comment>@info</comment>
+        <translation>ეს პაკეტი დაინსტალირებული არ არის, ამიტომ მისი პარამეტრების ჩვენება შეუძლებელია.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/shared/ParameterRow.qml.cpp" line="347"/>
@@ -21496,6 +21819,12 @@
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="481"/>
         <source>Focus on the master window</source>
         <translation>ფოკუსი მთავარ ფანჯარაზე</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="487"/>
+        <source>Focus on the tab</source>
+        <comment>@info:status focus moved to a numbered tab</comment>
+        <translation>ფოკუსი ჩანართზე</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="485"/>
@@ -22292,6 +22621,11 @@
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="156"/>
         <source>Gives matching windows keyboard focus as soon as they open, or keeps focus where it was when set to off.</source>
         <translation>შესაბამის ფანჯრებს კლავიატურის ფოკუსს ანიჭებს გახსნისთანავე, ან გამორთულის დროს ფოკუსს იქ ტოვებს, სადაც იყო.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="155"/>
+        <source>Opens matching windows as tabs of one column, named by the group. A new window joins the column that already holds a window of the same group, turning it into tabs if needed, and opens a column of its own when there is none yet. Windows from different rules share a column when the rules use the same group name.</source>
+        <translation>შესაბამის ფანჯრებს ერთი სვეტის ჩანართებად ხსნის და ამ სვეტს ჯგუფის სახელი ერქმევა. ახალი ფანჯარა უერთდება სვეტს, რომელშიც უკვე არის იმავე ჯგუფის ფანჯარა, და საჭიროების შემთხვევაში მას ჩანართებად გარდაქმნის. თუ ასეთი სვეტი ჯერ არ არსებობს, საკუთარ სვეტს ხსნის. სხვადასხვა წესის ფანჯრები ერთ სვეტს იზიარებენ, როცა წესები ერთსა და იმავე ჯგუფის სახელს იყენებენ.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="161"/>
@@ -23152,6 +23486,17 @@
         <translation>მორთულობა იმ ზედაპირებისთვის, რომლებიც Plasma-ის გარსს ეკუთვნის. ისინი მოურთველი რჩება, სანამ აქ მორთულობა არ ჩაირთვება, ხოლო გლობალური ნაგულისხმევი მორთულობა მათზე არასოდეს ვრცელდება.</translation>
     </message>
     <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="21"/>
+        <source>Decoration for surfaces a shell owns: the Plasma panels and applet popups, and the Phosphor shell chrome. The global default decoration never applies to them. Plasma surfaces stay undecorated until a decoration is enabled here, while the Phosphor surfaces start with the decoration the Phosphor shell ships.</source>
+        <translation>მორთულობა ზედაპირებისთვის, რომლებიც გარსს ეკუთვნის: Plasma-ის პანელები და აპლეტების ამომხტომები, ასევე Phosphor-ის გარსის ზედაპირები. გლობალური ნაგულისხმევი მორთულობა მათზე არასოდეს ვრცელდება. Plasma-ის ზედაპირები მოურთველი რჩება, სანამ აქ მორთულობას არ ჩართავთ, Phosphor-ის ზედაპირები კი იმ მორთულობით იწყება, რომელსაც Phosphor-ის გარსი მოყვება.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="43"/>
+        <source>All Phosphor Shell Surfaces</source>
+        <comment>@item the category root card that every Phosphor shell surface inherits from</comment>
+        <translation>Phosphor-ის გარსის ყველა ზედაპირი</translation>
+    </message>
+    <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="20"/>
         <source>Plasma shell animation events</source>
         <translation>Plasma-ის გარსის ანიმაციის მოვლენები</translation>
@@ -23161,6 +23506,13 @@
         <source>Animations for the surfaces the Plasma shell owns, like the application launcher and the system tray popups. No shader you pick for your own windows reaches them, so every row starts with no shader and picking one is the whole opt-in. Until you pick one, these surfaces animate the way Plasma animates them. “All Shell Surfaces” is the default for both events, and either can override it. Panels have no rows here, because a panel stays on screen for the whole session instead of opening and closing.</source>
         <oldsource>Animations for the surfaces the Plasma shell owns, like the application launcher and the system tray popups. No shader you pick for your own windows reaches them, so every row starts with no shader and picking one is the whole opt-in. Until you pick one, these surfaces animate the way Plasma animates them. &quot;All Shell Surfaces&quot; is the default for both events, and either can override it. Panels have no rows here, because a panel stays on screen for the whole session instead of opening and closing.</oldsource>
         <translation>ანიმაციები იმ ზედაპირებისთვის, რომლებიც Plasma-ის გარსს ეკუთვნის, მაგალითად აპლიკაციების გამშვები და სისტემური მართვის არის ამომხტომები. თქვენი საკუთარი ფანჯრებისთვის არჩეული არცერთი შეიდერი მათ არ სწვდება, ამიტომ თითოეული მწკრივი შეიდერის გარეშე იწყება და მისი არჩევა თავად ჩართვაა. სანამ არ აირჩევთ, ეს ზედაპირები ისე ანიმირდება, როგორც Plasma აანიმირებს მათ. „გარსის ყველა ზედაპირი“ ნაგულისხმევია ორივე მოვლენისთვის და ორივეს შეუძლია მისი გადაფარვა. პანელებს აქ მწკრივები არ აქვს, რადგან პანელი მთელი სესიის განმავლობაში ეკრანზე რჩება და არ იხსნება და იხურება.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="25"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="25"/>
+        <source>All Shell Surfaces</source>
+        <comment>@item the category root card that every shell surface inherits from</comment>
+        <translation>გარსის ყველა ზედაპირი</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="25"/>
@@ -23746,6 +24098,483 @@
         <source>%1 of %2</source>
         <comment>matching shortcuts out of the total</comment>
         <translation>%1 %2-დან</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="96"/>
+        <source>What&apos;s New</source>
+        <comment>@title:window the browsable release history</comment>
+        <translation>რა არის ახალი</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="288"/>
+        <source>All matches</source>
+        <comment>@title the reading pane is showing search results</comment>
+        <translation>ყველა დამთხვევა</translation>
+    </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="289"/>
+        <source>%n highlight</source>
+        <translation>
+            <numerusform>%n ჩანაწერი</numerusform>
+            <numerusform>%n ჩანაწერი</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="305"/>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="678"/>
+        <source>Since %1</source>
+        <comment>@label %1 is a version number, e.g. 3.4.7</comment>
+        <translation>%1-ის შემდეგ</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="313"/>
+        <source>Nothing new since version %1.</source>
+        <comment>@info empty state of the digest view</comment>
+        <translation>%1 ვერსიის შემდეგ ახალი არაფერია.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="338"/>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="716"/>
+        <source>The release history could not be loaded.</source>
+        <comment>@info shown when whatsnew.json is missing or fails validation</comment>
+        <translation>გამოშვებების ისტორიის ჩატვირთვა შეუძლებელია.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="379"/>
+        <source>No release has highlights of this kind.</source>
+        <comment>@info empty state when a kind filter matches nothing and no search text is typed</comment>
+        <translation>არცერთ გამოშვებას ამ ტიპის ჩანაწერი არ აქვს.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="381"/>
+        <source>No new feature matches “%1”.</source>
+        <comment>@info %1 is the user&apos;s search text</comment>
+        <translation>„%1“-ს არცერთი ახალი შესაძლებლობა არ ემთხვევა.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="383"/>
+        <source>No change matches “%1”.</source>
+        <comment>@info %1 is the user&apos;s search text</comment>
+        <translation>„%1“-ს არცერთი ცვლილება არ ემთხვევა.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="385"/>
+        <source>No fix matches “%1”.</source>
+        <comment>@info %1 is the user&apos;s search text</comment>
+        <translation>„%1“-ს არცერთი შესწორება არ ემთხვევა.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="386"/>
+        <source>Nothing matches “%1”.</source>
+        <comment>@info %1 is the user&apos;s search text</comment>
+        <translation>„%1“-ს არაფერი ემთხვევა.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="393"/>
+        <source>Changed</source>
+        <comment>@label a release highlight that changes existing behavior</comment>
+        <translation>შეცვლილი</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="482"/>
+        <source>Search releases…</source>
+        <comment>@info:placeholder</comment>
+        <translation>გამოშვებების ძებნა…</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="483"/>
+        <source>Search release highlights</source>
+        <comment>@info:whatsthis accessible name of the search field</comment>
+        <translation>გამოშვებების ჩანაწერების ძებნა</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="497"/>
+        <source>Show every release highlight</source>
+        <comment>@info:whatsthis accessible name of the All filter chip</comment>
+        <translation>ყველა ჩანაწერის ჩვენება</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="502"/>
+        <source>Show only new features</source>
+        <comment>@info:whatsthis accessible name of the New filter chip</comment>
+        <translation>მხოლოდ ახალი შესაძლებლობების ჩვენება</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="507"/>
+        <source>Show only changed behavior</source>
+        <comment>@info:whatsthis accessible name of the Changed filter chip</comment>
+        <translation>მხოლოდ შეცვლილი ქცევის ჩვენება</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="512"/>
+        <source>Show only bug fixes</source>
+        <comment>@info:whatsthis accessible name of the Fixed filter chip</comment>
+        <translation>მხოლოდ შეცდომების შესწორებების ჩვენება</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="628"/>
+        <source>Everything since version %1</source>
+        <comment>@info:whatsthis %1 is a version number</comment>
+        <translation>ყველაფერი %1 ვერსიიდან</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="630"/>
+        <source>Every matching highlight</source>
+        <comment>@info:whatsthis accessible name of the All matches rail row</comment>
+        <translation>ყველა დამთხვევილი ჩანაწერი</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="632"/>
+        <source>Collapse the %1 releases</source>
+        <comment>@info:whatsthis %1 is a version series, e.g. 3.4</comment>
+        <translation>%1 გამოშვებების ჩაკეცვა</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="632"/>
+        <source>Expand the %1 releases</source>
+        <comment>@info:whatsthis %1 is a version series, e.g. 3.4</comment>
+        <translation>%1 გამოშვებების გაშლა</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="633"/>
+        <source>Version %1, released %2</source>
+        <comment>@info:whatsthis %1 is a version number, %2 a release date</comment>
+        <translation>ვერსია %1, გამოშვებული %2</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="816"/>
+        <source>Show only version %1</source>
+        <comment>@info:whatsthis %1 is a version number</comment>
+        <translation>მხოლოდ %1 ვერსიის ჩვენება</translation>
+    </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="306"/>
+        <source>%n release</source>
+        <translation>
+            <numerusform>%n გამოშვება</numerusform>
+            <numerusform>%n გამოშვება</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="17"/>
+        <source>What&apos;s New in PlasmaZones %1</source>
+        <translation>რა არის ახალი PlasmaZones %1-ში</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="391"/>
+        <source>New</source>
+        <comment>@label a release highlight that adds a feature</comment>
+        <translation>ახალი</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="395"/>
+        <source>Fixed</source>
+        <comment>@label a release highlight that fixes a bug</comment>
+        <translation>შესწორებული</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="496"/>
+        <source>All</source>
+        <comment>@option:radio show every kind of release highlight</comment>
+        <translation>ყველა</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="680"/>
+        <source>All matches</source>
+        <comment>@item the rail row that shows every match</comment>
+        <translation>ყველა დამთხვევა</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="804"/>
+        <source>Other</source>
+        <comment>@title a digest group of highlights with no New, Changed or Fixed kind</comment>
+        <translation>სხვა</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/PointerPreviewPane.qml.cpp" line="111"/>
+        <source>Pause</source>
+        <comment>@option:check pointer preview</comment>
+        <translation>პაუზა</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/PointerPreviewPane.qml.cpp" line="121"/>
+        <source>Show cursor</source>
+        <comment>@option:check pointer preview</comment>
+        <translation>კურსორის ჩვენება</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/PointerPackNotices.qml.cpp" line="48"/>
+        <source>This pack paints over the cursor, so PlasmaZones hides the system cursor and draws it after the pack.</source>
+        <comment>@info pointer preview note</comment>
+        <translation>ეს პაკეტი კურსორის ზემოდან ხატავს, ამიტომ PlasmaZones სისტემურ კურსორს მალავს და მას პაკეტის შემდეგ ხატავს.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/PointerPackNotices.qml.cpp" line="55"/>
+        <source>This pack samples the cursor image. The preview stands a plain arrow in for your cursor theme.</source>
+        <comment>@info pointer preview limitation</comment>
+        <translation>ეს პაკეტი კურსორის გამოსახულებას კითხულობს. გადახედვაში თქვენი კურსორის თემის ნაცვლად ჩვეულებრივი ისარია.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/overlayspagecontroller_sets.cpp" line="129"/>
+        <source>Layout %1 (not on this computer)</source>
+        <translation>განლაგება %1 (ამ კომპიუტერზე არ არის)</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/settings/pages/overlayspagecontroller_sets.cpp" line="294"/>
+        <source>%n layouts in this set are not on this computer, so they were skipped. Everything else was applied.</source>
+        <translation>
+            <numerusform>ამ ნაკრების %n განლაგება ამ კომპიუტერზე არ არის, ამიტომ გამოტოვდა. დანარჩენი ყველაფერი გადატარდა.</numerusform>
+            <numerusform>ამ ნაკრების %n განლაგება ამ კომპიუტერზე არ არის, ამიტომ გამოტოვდა. დანარჩენი ყველაფერი გადატარდა.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPointerPage.qml.cpp" line="10"/>
+        <source>Pointer decoration surface</source>
+        <translation>მაჩვენებლის მორთულობის ზედაპირი</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPointerPage.qml.cpp" line="11"/>
+        <source>Decoration for the mouse pointer.</source>
+        <translation>მორთულობა თაგუნას მაჩვენებლისთვის.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPointerPage.qml.cpp" line="15"/>
+        <source>Mouse Pointer</source>
+        <translation>თაგუნას მაჩვენებელი</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaySetsPage.qml.cpp" line="35"/>
+        <source>A set bundles your zone overlay shader assignments into one shareable JSON file. Applying a set merges into your current assignments. Layouts it doesn&apos;t cover are left unchanged.</source>
+        <oldsource>Sets bundle your zone overlay shader assignments into one shareable JSON file. Applying a set merges into your current assignments. Layouts it doesn&apos;t cover are left unchanged.</oldsource>
+        <translation>ნაკრები აერთიანებს ზონის გადადების შეიდერების მინიჭებებს ერთ გასაზიარებელ JSON ფაილში. გადატარებისას ნაკრები ერწყმის თქვენს მიმდინარე მინიჭებებს. მისგან დაუფარავი განლაგებები უცვლელი რჩება.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaySetsPage.qml.cpp" line="36"/>
+        <source>Capture the global default and every per-layout override as a named set.</source>
+        <oldsource>Capture the global default and every per-layout override as a named overlay set.</oldsource>
+        <translation>დააფიქსირეთ გლობალური ნაგულისხმევი და თითოეული განლაგების გადაფარვა სახელდებულ ნაკრებად.</translation>
+    </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaySetsPage.qml.cpp" line="47"/>
+        <source>%n Assignment</source>
+        <translation>
+            <numerusform>%n მინიჭება</numerusform>
+            <numerusform>%n მინიჭება</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaySetsPage.qml.cpp" line="50"/>
+        <source>“%1” will replace the overlay shader on everything it covers. The change is not saved yet, so Discard still undoes it.</source>
+        <translation>„%1“ ჩაანაცვლებს გადადების შეიდერს ყველაფერზე, რასაც ფარავს. ცვლილება ჯერ შენახული არ არის, ამიტომ „გაუქმება“ მას კვლავ აბრუნებს.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaysAssignmentsPage.qml.cpp" line="99"/>
+        <source>The global default applies to every layout. Each layout card can override it. To install more packs, go to the Library&apos;s Shaders page.</source>
+        <comment>@info banner on the overlay shader assignments page</comment>
+        <translation>გლობალური ნაგულისხმევი ყველა განლაგებაზე ვრცელდება. თითოეული განლაგების ბარათს მისი გადაფარვა შეუძლია. მეტი პაკეტის დასაინსტალირებლად გადადით ბიბლიოთეკის შეიდერების გვერდზე.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/PackPreview.qml.cpp" line="426"/>
+        <source>Loading preview…</source>
+        <comment>@info:placeholder shader preview</comment>
+        <translation>გადახედვის ჩატვირთვა…</translation>
+    </message>
+    <message>
+        <location filename="../src/editor/undo/commands/UpdateShaderIdCommand.cpp" line="15"/>
+        <source>Change Shader Effect</source>
+        <comment>@action</comment>
+        <translation>შეიდერის ეფექტის შეცვლა</translation>
+    </message>
+    <message>
+        <location filename="../src/editor/undo/commands/UpdateShaderParamsCommand.cpp" line="17"/>
+        <source>Change Shader Parameter</source>
+        <comment>@action</comment>
+        <translation>შეიდერის პარამეტრის შეცვლა</translation>
+    </message>
+    <message>
+        <location filename="../src/editor/undo/commands/UpdateShaderParamsCommand.cpp" line="29"/>
+        <source>Change Shader Parameters</source>
+        <comment>@action</comment>
+        <translation>შეიდერის პარამეტრების შეცვლა</translation>
+    </message>
+    <message>
+        <location filename="../src/editor/controller/shader.cpp" line="272"/>
+        <source>Reset Shader Parameters</source>
+        <comment>@action</comment>
+        <translation>შეიდერის პარამეტრების ჩამოყრა</translation>
+    </message>
+    <message>
+        <location filename="../src/editor/controller/shader.cpp" line="288"/>
+        <source>Switch Shader Effect</source>
+        <comment>@action</comment>
+        <translation>შეიდერის ეფექტის გადართვა</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="102"/>
+        <source>Cannot modify sets while a discard is in progress.</source>
+        <translation>სიმრავლეების შეცვლა შეუძლებელია, სანამ მიმდინარეობს მოცილება.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="433"/>
+        <source>Cannot save while a discard is in progress.</source>
+        <translation>შენახვა შეუძლებელია, სანამ მიმდინარეობს მოცილება.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="670"/>
+        <source>A discard is already in progress. Try again in a moment.</source>
+        <translation>გაუქმება უკვე მიმდინარეობს. სცადეთ ცოტა ხანში.</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="763"/>
+        <source>Could not restore %n profile file. It remains pending.</source>
+        <translation>
+            <numerusform>%n პროფილის ფაილის აღდგენა ვერ მოხერხდა. ის მოლოდინში რჩება.</numerusform>
+            <numerusform>%n პროფილის ფაილის აღდგენა ვერ მოხერხდა. ისინი მოლოდინში რჩება.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="765"/>
+        <source>Could not restore %n profile files. They remain pending.</source>
+        <translation>
+            <numerusform>%n პროფილის ფაილის აღდგენა ვერ მოხერხდა. ის მოლოდინში რჩება.</numerusform>
+            <numerusform>%n პროფილის ფაილის აღდგენა ვერ მოხერხდა. ისინი მოლოდინში რჩება.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="901"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="911"/>
+        <source>Cannot modify presets while a discard is in progress.</source>
+        <translation>შაბლონების შეცვლა შეუძლებელია, სანამ მიმდინარეობს მოცილება.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="473"/>
+        <source>Cannot reset while a discard is in progress.</source>
+        <translation>ჩამოყრა ვერ მოხერხდება, სანამ გაუქმება მიმდინარეობს.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="535"/>
+        <source>Some animation overrides could not be reset.</source>
+        <translation>ანიმაციის ზოგიერთი გადაფარვის ჩამოყრა ვერ მოხერხდა.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="347"/>
+        <source>Shader Settings</source>
+        <comment>@title:window</comment>
+        <translation>შეიდერის პარამეტრები</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="468"/>
+        <source>Enable effect:</source>
+        <comment>@label</comment>
+        <translation>ეფექტის ჩართვა:</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="469"/>
+        <source>Enable shader effect</source>
+        <comment>@option:check</comment>
+        <translation>შეიდერის ეფექტის ჩართვა</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="490"/>
+        <source>Select shader…</source>
+        <comment>@action:button</comment>
+        <translation>შეიდერის არჩევა…</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="525"/>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="528"/>
+        <source>No description available</source>
+        <comment>@info:placeholder</comment>
+        <translation>აღწერა ხელმისაწვდომი არაა</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="560"/>
+        <source>(User shader)</source>
+        <comment>@info user-installed shader</comment>
+        <translation>(მომხმარებლის შეიდერი)</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="626"/>
+        <source>Apply a built-in preset</source>
+        <comment>@info:tooltip</comment>
+        <translation>ჩაშენებული შაბლონის გადატარება</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="629"/>
+        <source>Presets</source>
+        <comment>@action:button</comment>
+        <translation>შაბლონები</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="709"/>
+        <source>Enable the shader effect to configure visual effects for zone overlays.</source>
+        <comment>@info</comment>
+        <translation>ჩართეთ შეიდერის ეფექტი ზონების გადადებებისთვის ვიზუალური ეფექტების დასაკონფიგურირებლად.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="730"/>
+        <source>Dismiss</source>
+        <comment>@action:button</comment>
+        <translation>დახურვა</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="742"/>
+        <source>Load Preset</source>
+        <comment>@action:button</comment>
+        <translation>შაბლონის ჩატვირთვა</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="744"/>
+        <source>Load shader settings from a preset file</source>
+        <comment>@info:tooltip</comment>
+        <translation>ჩატვირთეთ შეიდერის პარამეტრები შაბლონის ფაილიდან</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="756"/>
+        <source>Save Preset</source>
+        <comment>@action:button</comment>
+        <translation>შაბლონის შენახვა</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="759"/>
+        <source>Save current shader settings as a preset file</source>
+        <comment>@info:tooltip</comment>
+        <translation>შეინახეთ მიმდინარე შეიდერის პარამეტრები შაბლონის ფაილად</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="775"/>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="777"/>
+        <source>Apply</source>
+        <comment>@action:button</comment>
+        <translation>გადატარება</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="778"/>
+        <source>Apply the shader settings and close the dialog</source>
+        <translation>შეიდერის პარამეტრების გადატარება და დიალოგის დახურვა</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="921"/>
+        <source>Loading preview…</source>
+        <comment>@info:placeholder</comment>
+        <translation>გადახედვის ჩატვირთვა…</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="954"/>
+        <source>Choose Image</source>
+        <comment>@title:window</comment>
+        <translation>სურათის არჩევა</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="955"/>
+        <source>Image files (*.png *.jpg *.jpeg *.bmp *.webp *.svg *.svgz)</source>
+        <comment>@item:inlistbox</comment>
+        <translation>სურათის ფაილები (*.png *.jpg *.jpeg *.bmp *.webp *.svg *.svgz)</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShadersPage.qml.cpp" line="22"/>
+        <source>Browse installed snapping overlay shaders. Assign a shader to a layout from the layout editor&apos;s appearance section.</source>
+        <translation>დაათვალიერეთ დაინსტალირებული მიმაგრების გადადების შეიდერები. მიანიჭეთ შეიდერი განლაგებას განლაგების რედაქტორის იერსახის განყოფილებიდან.</translation>
     </message>
     <message>
         <location filename="../src/daemon/daemon/workspaces.cpp" line="600"/>

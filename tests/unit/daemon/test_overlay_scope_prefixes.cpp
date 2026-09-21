@@ -334,9 +334,9 @@ private Q_SLOTS:
     {
         PhosphorAnimation::PhosphorProfileRegistry registry;
         const auto anim = buildAnimatorMatchingDaemon(registry);
-        // ShaderPreview is not registered with the animator
+        // ScrollDropIndicator is not registered with the animator
         // (setupSurfaceAnimator's documented exclusion list).
-        const auto cfg = anim->configForRole(PhosphorRoles::ShaderPreview);
+        const auto cfg = anim->configForRole(PhosphorRoles::ScrollDropIndicator);
         QVERIFY(cfg.showProfile.isEmpty());
         QVERIFY(cfg.hideProfile.isEmpty());
     }

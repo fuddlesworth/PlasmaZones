@@ -340,8 +340,8 @@ QRect axisRect(const ScrollTabIndicator& indicator, const IndicatorAxes& axes, i
 }
 
 /// The UNCLIPPED tab rects, in draw order. layoutPills clips these to the
-/// indicator for the hit rects; rasterise draws them under a clip to the
-/// same rect, so both derive from the one list.
+/// indicator for the hit rects; rasterisePatch draws them under a clip to
+/// the same rect, so both derive from the one list.
 QVector<QRect> tabRects(const ScrollTabIndicator& indicator, const IndicatorAxes& axes,
                         const ScrollTabIndicatorStyle& style)
 {
@@ -396,17 +396,20 @@ QVector<ScrollTabHitRect> layoutPills(const ScrollTabIndicator& indicator, const
     return out;
 }
 
-QImage rasterise(const QVector<ScrollTabIndicator>& indicators, const ScrollTabIndicatorStyle& style,
-                 const QRect& bounds, qreal devicePixelRatio, const QString& hoveredWindowId)
+QImage rasterisePatch(const QVector<ScrollTabIndicator>& indicators, const ScrollTabIndicatorStyle& style,
+                      const QPointF& logicalOrigin, const QSize& deviceSize, qreal devicePixelRatio,
+                      const QString& hoveredWindowId)
 {
-    if (bounds.isEmpty() || indicators.isEmpty()) {
+    if (deviceSize.isEmpty() || indicators.isEmpty()) {
         return {};
     }
     const qreal dpr = devicePixelRatio > 0.0 ? devicePixelRatio : 1.0;
-    const QSize deviceSize(int(std::ceil(bounds.width() * dpr)), int(std::ceil(bounds.height() * dpr)));
-    if (deviceSize.isEmpty()) {
-        return {};
-    }
+    // The logical window this image is looking through. Derived from the
+    // DEVICE size rather than the other way round, because the caller of the
+    // patch form picks its size in device pixels (that is the space
+    // glTexSubImage2D addresses) and the origin may sit between logical
+    // pixels to land on the device grid.
+    const QRectF bounds(logicalOrigin, QSizeF(deviceSize.width() / dpr, deviceSize.height() / dpr));
     // ARGB32_Premultiplied is not a preference: QPainter's source-over
     // compositing is DEFINED for premultiplied targets, and every colour here
     // is potentially translucent (the pill background at 0.85, the hairline
@@ -447,7 +450,7 @@ QImage rasterise(const QVector<ScrollTabIndicator>& indicators, const ScrollTabI
         }
         // Sub-rect rasters (the hover patch) hand in a `bounds` that covers
         // one indicator; anything outside it is wasted QPainter work.
-        if (!indicator.rect.intersects(bounds)) {
+        if (!QRectF(indicator.rect).intersects(bounds)) {
             continue;
         }
         const QVector<QRect> rects = tabRects(indicator, axes, style);

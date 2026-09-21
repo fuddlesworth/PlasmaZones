@@ -38,6 +38,7 @@ pre-commit:
         - "data/animations/*/metadata.json"
         - "data/overlays/*/metadata.json"
         - "data/surface/*/metadata.json"
+        - "data/pointer/*/metadata.json"
         - "data/schemas/*.json"
         - "data/whatsnew.json"
       # Hard gate: when a schema-governed data file or a schema itself is
@@ -50,6 +51,23 @@ pre-commit:
       # always runs; it only exits non-zero if validation fails or the
       # validator genuinely can't be obtained (e.g. offline first run).
       run: python3 scripts/validate-json-schemas.py
+    conventions:
+      # The CLAUDE.md rules that are decidable by inspection: SPDX headers,
+      # the GPL-3 app / LGPL-2.1 libs/phosphor-* split, the file-size ceiling
+      # (growth-only, against scripts/oversize-baseline.json), i18n() in C++,
+      # inline config paths that should be ConfigDefaults:: accessors, and the
+      # plain-prose rules on user-facing strings. Only the staged files are
+      # checked so the hook stays instant; CI runs the whole tree.
+      #
+      # Stdlib-only, so unlike the schema hook there is no venv to bootstrap
+      # and this is always a hard gate.
+      glob:
+        - "*.{cpp,cc,cxx,h,hpp,qml,luau,py,frag,vert,glsl}"
+        - "data/**/*.json"
+        - "*.desktop*"
+        - "*.metainfo.xml*"
+        - "packaging/**"
+      run: python3 scripts/check-conventions.py {staged_files}
     shader-validate:
       glob: "data/overlays/**/*.{frag,vert,glsl,json}"
       # When any bundled zone-shader file is staged, validate the whole pack set
@@ -82,6 +100,17 @@ pre-commit:
         sh -c 'bin=build/bin/plasmazones-shader-validate;
         if [ -x "$bin" ]; then exec "$bin" --quiet --surface data/surface;
         else echo "plasmazones-shader-validate not built (build/bin/) — skipping surface shader validation; build the target to enable this local gate" >&2; fi'
+    shader-validate-pointer:
+      glob: "data/pointer/**/*.{frag,vert,glsl,json}"
+      # Pointer packs are the fourth authoring model, with their own CI gate
+      # (shader_validate_pointer). Without this hook they would be the only
+      # shader tree with no pre-commit validation, which is the gap the
+      # animation hook above was added to close. Same best-effort skip when the
+      # binary isn't built.
+      run: >
+        sh -c 'bin=build/bin/plasmazones-shader-validate;
+        if [ -x "$bin" ]; then exec "$bin" --quiet --pointer data/pointer;
+        else echo "plasmazones-shader-validate not built (build/bin/) — skipping pointer shader validation; build the target to enable this local gate" >&2; fi'
 
 commit-msg:
   commands:

@@ -25,22 +25,7 @@ class AnimationPresetLibrary : public QObject
 
 public:
     using ProfilesDirFn = std::function<QString()>;
-    /// Capture a file's pre-edit content before it is overwritten or removed.
-    /// False = the capture failed, and the caller must NOT write: proceeding
-    /// would permanently lose content Discard could no longer restore. Same
-    /// contract as ShaderSetStore::FileSnapshotFn.
-    using SnapshotFn = std::function<bool(const QString& /*filePath*/)>;
-    /// Companion to SnapshotFn: drop the capture again when the write it was
-    /// taken for failed, so the page does not report an unsaved change to a
-    /// file nothing touched. Same contract as
-    /// ShaderSetStore::FileSnapshotRollbackFn.
-    /// @return true when the staged entry was really dropped (the callable owns
-    /// the pendingChangesChanged for that transition, so the caller must not
-    /// emit again for it).
-    using SnapshotRollbackFn = std::function<bool(const QString& /*filePath*/)>;
-
-    explicit AnimationPresetLibrary(ProfilesDirFn profilesDirFn, SnapshotFn snapshot, SnapshotRollbackFn rollback,
-                                    QObject* parent = nullptr);
+    explicit AnimationPresetLibrary(ProfilesDirFn profilesDirFn, QObject* parent = nullptr);
 
     QVariantList userPresets() const;
     bool addUserPreset(const QString& name, const QVariantMap& profileJson);
@@ -63,8 +48,6 @@ private:
     QString profilesDir() const;
 
     ProfilesDirFn m_profilesDir;
-    SnapshotFn m_snapshot;
-    SnapshotRollbackFn m_rollback;
 };
 
 } // namespace PlasmaZones

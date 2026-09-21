@@ -498,17 +498,7 @@ PlasmaZonesEffect::compileOrLoadAnimationShader(const QString& effectId,
         // colorDescription, so both blend inputs already live in the blending
         // space and converting again would double-transform. It keeps the
         // identity default.
-        static const QString kFinalizeColorBlock = QStringLiteral(
-            "#include \"colormanagement.glsl\"\n"
-            "vec4 pzFinalizeColor(vec4 c) {\n"
-            "    c = encodingToNits(c, sourceNamedTransferFunction,\n"
-            "                       sourceTransferFunctionParams.x, sourceTransferFunctionParams.y);\n"
-            "    c.rgb = (colorimetryTransform * vec4(c.rgb, 1.0)).rgb;\n"
-            "    c.rgb = doTonemapping(c.rgb);\n"
-            "    return nitsToDestinationEncoding(c);\n"
-            "}\n"
-            "#define PZ_FINALIZE_COLOR(c) pzFinalizeColor(c)\n");
-        expanded = PhosphorShaders::spliceAfterVersion(expanded, kFinalizeColorBlock);
+        expanded = PhosphorShaders::spliceAfterVersion(expanded, ShaderInternal::kwinFinalizeColorBlock());
 
         // Selects the default-block branch in `animation_uniforms.glsl`.
         // KWin's `KWin::GLShader` API addresses default-block uniforms only

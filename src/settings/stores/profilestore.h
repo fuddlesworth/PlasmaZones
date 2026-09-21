@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "settings/utils/animationfileutils.h"
+
 #include <PhosphorRules/Rule.h>
 
 #include <QHash>
@@ -387,7 +389,10 @@ private:
     void removeFromOrder(const QUuid& id);
 
     /// Largest profile file the store will read (a profile is a few kilobytes).
-    static constexpr qint64 kMaxProfileFileBytes = 4 * 1024 * 1024;
+    /// Derived, not re-spelled: animationfileutils names the one cap every
+    /// hand-editable JSON reader in this tree shares, and the sibling stores
+    /// already derive from it.
+    static constexpr qint64 kMaxProfileFileBytes = animfileutil::kMaxJsonFileBytes;
 
     Config m_config;
 };

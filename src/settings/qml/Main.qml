@@ -149,8 +149,7 @@ PhosphorUi.SettingsAppWindow {
             // for unrelated reasons: one could not read the daemon's slot map,
             // the other could not clear an override while a discard still owns
             // it. Naming the daemon on the second would be a false explanation.
-            const resetData = settingsController.app.registry.pageData(page);
-            const title = (resetData && resetData.title) ? resetData.title : "";
+            const title = settingsController.app.titlePathFor(page);
             const named = title.length > 0;
             if (reason === "overrides-not-cleared") {
                 window.showToast(named ? i18n("Some settings on %1 are still being saved, so it was left unchanged. Try again in a moment.", title) : i18n("Some settings on this page are still being saved, so it was left unchanged. Try again in a moment."));
@@ -170,8 +169,7 @@ PhosphorUi.SettingsAppWindow {
         // override file still being written), so there is no daemon-unreachable
         // branch to distinguish here.
         function onPageDiscardFailed(page, reason) {
-            const discardData = settingsController.app.registry.pageData(page);
-            const title = (discardData && discardData.title) ? discardData.title : "";
+            const title = settingsController.app.titlePathFor(page);
             const named = title.length > 0;
             window.showToast(named ? i18n("Some settings on %1 are still being saved, so they were left unchanged. Try again in a moment.", title) : i18n("Some settings on this page are still being saved, so they were left unchanged. Try again in a moment."));
         }
@@ -205,7 +203,7 @@ PhosphorUi.SettingsAppWindow {
     }
 
     Connections {
-        target: settingsController.snappingShadersPage
+        target: settingsController.overlaysPage
 
         function onToastRequested(text) {
             window.showToast(text);
@@ -549,12 +547,11 @@ PhosphorUi.SettingsAppWindow {
         // the ids of pages still dirty after applyAll(); resolve them
         // to titles via the registry for a readable message.
         function onApplyOnCloseFailed(dirtyPageIds, errors) {
-            const reg = settingsController.app.registry;
             const titles = [];
             for (let i = 0; i < dirtyPageIds.length; ++i) {
-                const data = reg.pageData(dirtyPageIds[i]);
-                if (data && data.title)
-                    titles.push(data.title);
+                const path = settingsController.app.titlePathFor(dirtyPageIds[i]);
+                if (path.length > 0)
+                    titles.push(path);
                 else if (dirtyPageIds[i])
                     titles.push(dirtyPageIds[i]);
             }

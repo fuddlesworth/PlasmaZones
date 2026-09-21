@@ -81,6 +81,13 @@ QJsonObject lastEntryFor(QSignalSpy& tiled, const QString& windowId)
     return {};
 }
 
+/// The committed rect a windowsTiled batch entry describes.
+QRect rectOfEntry(const QJsonObject& o)
+{
+    return QRect(o.value(QLatin1String("x")).toInt(), o.value(QLatin1String("y")).toInt(),
+                 o.value(QLatin1String("width")).toInt(), o.value(QLatin1String("height")).toInt());
+}
+
 } // namespace
 
 class TestScrollEngineBoundary : public QObject
@@ -125,10 +132,6 @@ private Q_SLOTS:
         engine->windowOpened(QStringLiteral("app|c"), kS1, 0, 0);
         QVERIFY(tiled.count() > 0);
 
-        const auto rectOfEntry = [](const QJsonObject& o) {
-            return QRect(o.value(QLatin1String("x")).toInt(), o.value(QLatin1String("y")).toInt(),
-                         o.value(QLatin1String("width")).toInt(), o.value(QLatin1String("height")).toInt());
-        };
         const QRect landscapeA = rectOfEntry(lastEntryFor(tiled, QStringLiteral("app|a")));
         QVERIFY2(!landscapeA.isEmpty(), "precondition: a is committed before the rotation");
         QVERIFY2(landscapeA.height() >= landscapeA.width(),
@@ -499,6 +502,56 @@ private Q_SLOTS:
 
         QVERIFY2(!namesB(QJsonDocument::fromJson(strips.last().at(1).toString().toUtf8()).array()),
                  "a fully parked tabbed column must not leave an orphan tab bar at the edge");
+    }
+
+    // A user resize that overshoots the work area ACROSS the strip (the
+    // bottom edge dragged into the outer gap) is clamped straight back by
+    // the relayout, which resolves to the very rect the window held before.
+    // That corrective rect MUST still reach the compositor: the window is
+    // sitting at the overshoot now, so "same rect as last time" is not
+    // "nothing moved". The emit-on-change gate used to swallow exactly this
+    // batch and leave the window stranded over the gap.
+    void crossAxisOvershootResizeIsCommittedBackToTheWorkArea()
+    {
+        QObject owner;
+        auto* settings = makeBoundarySettings(&owner);
+        const QRect screen = defaultScreenRect();
+        // A work area inset ACROSS the strip only, standing in for the
+        // bottom gap the report's user reserves for a panel.
+        const QRect inset = Ax::t(QRect(0, 0, 1200, 700));
+        ScrollEngine* engine = makeProviderEngine(
+            &owner, {kS1},
+            [screen](const QString&) {
+                return screen;
+            },
+            [inset](const QString&) {
+                return inset;
+            });
+        engine->setEngineSettings(settings);
+        engine->refreshConfigFromSettings();
+
+        QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+        engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+        engine->retile(kS1);
+        QCoreApplication::processEvents();
+
+        const QRect applied = rectOfEntry(lastEntryFor(tiled, QStringLiteral("app|a")));
+        QVERIFY2(!applied.isEmpty(), "precondition: a is committed before the resize");
+        QCOMPARE(Ax::crossEnd(applied), Ax::crossEnd(inset));
+
+        // The settled frame: the same rect grown 60px past the work area's
+        // cross edge, in role space and transposed with the arm.
+        QRect overshoot = Ax::t(applied);
+        overshoot.setHeight(overshoot.height() + 60);
+        overshoot = Ax::t(overshoot);
+        const int before = tiled.count();
+        engine->onWindowResized(QStringLiteral("app|a"), applied, overshoot, kS1);
+        QCoreApplication::processEvents();
+
+        QVERIFY2(tiled.count() > before, "the clamped-back rect must be re-emitted, not gated as unchanged");
+        const QRect corrected = rectOfEntry(lastEntryFor(tiled, QStringLiteral("app|a")));
+        QCOMPARE(Ax::crossEnd(corrected), Ax::crossEnd(inset));
+        QCOMPARE(corrected, applied);
     }
 };
 

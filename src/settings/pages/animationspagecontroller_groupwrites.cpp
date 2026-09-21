@@ -31,25 +31,26 @@
 
 namespace PlasmaZones {
 
-// WHY THE SHADER TREE IS NOT MEMOISED, since the cost is real enough that
-// someone will try: a rebuild is a store read, a QVariantMap to QJsonObject
-// conversion, a parse and a prune walk, and one card refresh takes several.
+// HOW THE SHADER TREE IS MEMOISED, and on what. The cost is real: a rebuild is a
+// store read, a QVariantMap to QJsonObject conversion, a parse and a prune walk,
+// and one card refresh takes several. `m_shaderTreeCache` holds the parsed tree
+// and `liveShaderTree()` serves from it, so the writers below read it once per
+// change rather than once per call.
 //
-// Not because the invalidation signal is too narrow. Be careful here, because
-// it looks narrow and is not: grepping for Q_EMIT finds a single site,
-// Settings::setShaderProfileTree, but `shaderProfileTreeJson` is a NOTIFY
-// Q_PROPERTY, so Settings::load() and applyConfigOverlayStaged re-fire
-// shaderProfileTreeChanged through emitChangedNotifyProperties whenever the
-// value moved — a reload and a settings-profile switch both reach it without
-// any explicit emit.
+// Invalidated on shaderProfileTreeChanged, and that signal is broader than it
+// looks: grepping for Q_EMIT finds a single site, Settings::setShaderProfileTree,
+// but `shaderProfileTreeJson` is a NOTIFY Q_PROPERTY, so Settings::load() and
+// applyConfigOverlayStaged re-fire it through emitChangedNotifyProperties
+// whenever the value moved. A reload and a settings-profile switch both reach it
+// with no explicit emit. That enumeration is what the memo rests on, and it is
+// the thing to re-check before adding a new way for the store to move: a stale
+// TREE is shown to the user, where a stale dirty verdict merely self-corrects on
+// the next write (which is why m_treeDirtyCache can memoise on the same signal,
+// helped by also invalidating on baseline capture).
 //
-// What is missing is the ENUMERATION. Nobody has established that the signal
-// covers every path the store can move under a memo, and a stale TREE is shown
-// to the user where a stale dirty verdict merely self-corrects on the next
-// write (which is why m_treeDirtyCache can be memoised on it, helped by also
-// invalidating on baseline capture). Reading fresh is unconditionally correct.
-// Anyone adding the memo owes that enumeration first, not this comment's
-// former claim that one emit site made it impossible.
+// The memo does not make the reads below free, so each still takes its read once
+// for the whole group and passes it down rather than calling the accessor in a
+// loop: the accessor is cheap, a per-path copy is not.
 
 using namespace animations_controller_detail;
 
@@ -103,9 +104,9 @@ QByteArray comparableStateKey(const QVariantMap& profile, const QVariantMap& sha
 // path — the last through `supportsShaderLeg`, whose supported set is built
 // from ProfilePaths constants and so cannot contain one, rather than
 // through an isValidEventPath call — while setOverrideMergedOnPaths
-// forwards it to writeOverrideFileOnly,
-// which rejects it, so that path is absent from the returned count and the
-// call toasts — a caller bug surfaces instead of being silently dropped.
+// checks isValidEventPath itself before staging the edit, so that path is
+// absent from the returned count and the call toasts — a caller bug surfaces
+// instead of being silently dropped.
 // allPathsHoldShaderEffect is the one that neither skips nor counts: it
 // RETURNS FALSE on an invalid path, because "every path holds this id"
 // cannot be true of a path that cannot hold anything. Either way the WORK is
@@ -139,15 +140,6 @@ int AnimationsPageController::setOverrideMergedOnPaths(const QStringList& rawPat
                                                        const QVariant& curveFromCommit)
 {
     const QStringList paths = distinctPaths(rawPaths);
-    if (m_asyncRevertInFlight) {
-        // Refused as a whole, like every sibling group writer. Without this the
-        // per-path `setOverride` calls refuse individually, `allWritten` goes
-        // false, and a duration drag mid-discard silently does nothing — the
-        // slider just snaps back on the next refresh with no explanation.
-        qCWarning(lcConfig) << "setOverrideMergedOnPaths: refusing while an async discard is in flight";
-        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot change this while a discard is in progress."));
-        return -1;
-    }
 
     // An invalid QVariant is QML's `undefined` arriving here, and it is the
     // signal for "the user did not touch the curve". Distinguished from a valid
@@ -169,13 +161,13 @@ int AnimationsPageController::setOverrideMergedOnPaths(const QStringList& rawPat
     const bool curveEdited = curveIsString && !curveFromCommit.isNull();
     const QString editedCurve = curveEdited ? curveFromCommit.toString() : QString();
 
-    // Only the fields a Profile actually has. `writeOverrideFileOnly` persists
-    // `profileJson` RAW — it strips and re-stamps `name` and nothing else — so
-    // a stray key here lands in the user's profile file and stays there until
-    // some later write happens to rewrite the object. Inert (rawProfile drops
-    // it on read) but it accumulates on disk, and both sibling writers guard
-    // their input for exactly this reason: clearFieldOnPaths allowlists its
-    // field, setShaderOverrideOnPaths validates its effect id.
+    // Only the fields a Profile actually has. `writeOverrideOnly` persists
+    // `profileJson` RAW — it strips `name` and nothing else — so a stray key
+    // here lands in the user's timing tree and stays there until some later
+    // write happens to rewrite the entry. Inert (rawProfile drops it on read)
+    // but it accumulates in config, and both sibling writers guard their input
+    // for exactly this reason: clearFieldOnPaths allowlists its field,
+    // setShaderOverrideOnPaths validates its effect id.
     static const QSet<QString> knownFields{
         QLatin1String(PhosphorAnimation::Profile::JsonFieldCurve),
         QLatin1String(PhosphorAnimation::Profile::JsonFieldDuration),
@@ -219,29 +211,31 @@ int AnimationsPageController::setOverrideMergedOnPaths(const QStringList& rawPat
     // `hasOverride` still reported true, until some later write repaired it.
     acceptedFields = boundedWrittenMap(acceptedFields, QLatin1String("setOverrideMergedOnPaths"));
 
-    // Every path's stored profile is read BEFORE the first write. `setOverride`
-    // invalidates the whole disk memo, so reading inside the write loop would
-    // miss the memo on every iteration after the first and cost one real file
-    // open per path per call — and this runs at drag rate. The paths are
-    // distinct files and none of the writes can affect another's stored
-    // content, so reading them all up front is equivalent.
+    // Every path's stored profile is read from ONE tree snapshot taken before
+    // the first write. `rawProfile` copies the whole override tree out of
+    // Settings on every call, and this runs at drag rate, so reading it once is
+    // both cheaper and the correct base: each edit touches only its own entry,
+    // so no write can change another path's stored content.
+    const QVariantMap baseTree = motionTree();
     QList<QVariantMap> bases;
     bases.reserve(paths.size());
     for (const QString& path : paths)
-        bases.append(rawProfile(path));
+        bases.append(sanitizedProfileMap(treeProfileForPath(baseTree, path)));
 
-    // Batched: write every path through the signal-free core, invalidate the
-    // disk memo ONCE, then emit. Going through per-path setOverride instead
-    // dropped the whole memo AND synchronously emitted overrideChanged on every
-    // iteration, so each sibling card re-walked resolvedProfile uncached mid-
-    // batch — O(paths x cards x depth) file opens per drag tick. Here the memo
-    // is invalidated once after all writes land, so a sibling's re-walk on the
-    // first emit reads settled state and re-warms the memo for the rest.
-    const bool wasPending = hasPendingChanges();
+    // ONE write for the whole group, not a loop of per-path writes. Each
+    // `setMotionProfileTree` refreshes the backend, writes the store and emits
+    // `motionProfileTreeChanged` synchronously, which this controller turns
+    // into `pendingChangesChanged`. Writing per path therefore let every card
+    // observe the group HALF-WRITTEN, N times per slider tick — the exact
+    // atomicity the shader side buys with its single write. Classification
+    // happens here rather than from the writer's return value, because
+    // `writeOverridesBatch` reports one bool for the whole batch.
     const QLatin1String curveKey(PhosphorAnimation::Profile::JsonFieldCurve);
     bool allWritten = true;
     QStringList written;
     QStringList unchanged;
+    QList<QPair<QString, QVariantMap>> edits;
+    edits.reserve(paths.size());
     for (int i = 0; i < paths.size(); ++i) {
         const QVariantMap& base = bases.at(i);
         QVariantMap merged = base;
@@ -276,55 +270,43 @@ int AnimationsPageController::setOverrideMergedOnPaths(const QStringList& rawPat
             }
         }
 
-        const OverrideFileWrite result = writeOverrideFileOnly(paths.at(i), merged);
-        if (result == OverrideFileWrite::Failed)
+        // Classify against the pre-write snapshot, mirroring what
+        // `writeOverrideOnly` would have decided per path: an invalid path is
+        // the only Failed cause once `m_settings` is non-null, and a stored
+        // profile already equal to the requested one is Unchanged and stays
+        // uncounted. The `name` strip must happen here so the comparison is
+        // against the object that will actually be stored.
+        const QString& path = paths.at(i);
+        if (!isValidEventPath(path)) {
             allWritten = false;
-        else if (result == OverrideFileWrite::Written)
-            written.append(paths.at(i));
-        else
-            unchanged.append(paths.at(i));
-    }
-
-    // An `Unchanged` path emits nothing and invalidates nothing, but it can
-    // still be carrying a STRANDED snapshot. The profiles directory is a
-    // documented user-editable boundary (see forgetCachedOverrideFiles): if
-    // something outside this app restores a file to its pre-edit content after
-    // the user edited it here, the next write whose merged object equals that
-    // content returns Unchanged, and the snapshot taken on the first edit is
-    // never dropped. The page then reports pending changes with nothing on
-    // screen differing from disk, and no edit clears it.
-    //
-    // Cheap and idempotent by dropFileSnapshotIfUnchanged's own contract: a
-    // no-op unless disk still matches the staged content. Deferred like the
-    // written ones, but deliberately NOT added to `written` — nothing on disk
-    // moved, so there is no overrideChanged to emit for these.
-    for (const QString& path : unchanged)
-        dropFileSnapshotIfUnchanged(profileFilePath(path), SnapshotDropSignal::Defer);
-
-    if (!written.isEmpty()) {
-        // One invalidate for the whole batch, BEFORE any signal (the QML
-        // handlers re-read through resolvedProfile synchronously on this stack).
-        invalidateDiskProfileCache();
-        for (const QString& path : written) {
-            // Drop any phantom snapshot (a write that restored pre-edit content)
-            // before sampling the net dirty flip below. Defer: the single
-            // pendingChangesChanged below owns the batch's net transition, so a
-            // per-drop emit would be redundant.
-            dropFileSnapshotIfUnchanged(profileFilePath(path), SnapshotDropSignal::Defer);
+            continue;
         }
+        QJsonObject obj = QJsonObject::fromVariantMap(merged);
+        obj.remove(JsonNameKey);
+        if (treeProfileForPath(baseTree, path) == obj) {
+            unchanged.append(path);
+            continue;
+        }
+        edits.append({path, obj.toVariantMap()});
+        written.append(path);
     }
 
-    // Sampled and emitted OUTSIDE the written-only branch, because the
-    // unchanged-path drops above can flip the dirty flag on their own: a call
-    // where every path came back Unchanged writes nothing, emits no
-    // overrideChanged, and could still have released the last stranded
-    // snapshot. Leaving the flip inside the branch is what would keep the
-    // footer stuck on a page with nothing left to save.
-    const bool nowPending = hasPendingChanges();
+    if (!edits.isEmpty() && !writeOverridesBatch(edits)) {
+        // The batch reports false only for a missing settings object, in which
+        // case nothing landed — so nothing may be announced as written.
+        allWritten = false;
+        written.clear();
+    }
+
+    // No `pendingChangesChanged` here. It arrives through the
+    // motionProfileTreeChanged handler wired in the constructor, which fires on
+    // the write itself and so covers writers this controller does not own. An
+    // `Unchanged` path contributes nothing either way, which is why it is not
+    // tracked at all: with the values in config, "unchanged" means the stored
+    // value already equals the requested one and there is no staging artefact
+    // left behind.
     for (const QString& path : written)
         Q_EMIT overrideChanged(path);
-    if (wasPending != nowPending)
-        Q_EMIT pendingChangesChanged();
 
     // A path that could not be written is a DIFFERENT outcome from a refusal,
     // and it used to be silent: the only toast in this function is the refusal
@@ -336,15 +318,17 @@ int AnimationsPageController::setOverrideMergedOnPaths(const QStringList& rawPat
     // it could recover from.
     //
     // Toasted ONCE per run of failures, not once per call. This is reached from
-    // the duration slider's per-move commit, and every reason a write fails
-    // after the async gate is persistent (an unwritable directory, a failed
-    // snapshot, a QSaveFile that will not commit), so the next tick fails the
-    // same way. Emitting per tick would restart the toast's fade before it
-    // finished, leaving a flickering pill that never reads, and would push the
-    // same sentence into the screen reader's queue at pointer rate. Deliberately
-    // NOT solved by having the caller stop writing: a disk failure can be fixed
-    // while the page is open, and a control the user cannot retry is worse than
-    // a repeated message. The latch clears on the first write that fully lands.
+    // the duration slider's per-move commit, and since schema v8 both remaining
+    // causes are persistent: an invalid path in the caller's list, or no
+    // settings object to write through. Both are wiring bugs rather than
+    // anything the user can act on, so the next tick fails the same way.
+    // Emitting per tick would restart the toast's fade before it finished,
+    // leaving a flickering pill that never reads, and would push the same
+    // sentence into the screen reader's queue at pointer rate. The latch stays
+    // rather than being removed with the disk failures it was written for: a
+    // caller bug that silently drops every edit is exactly the case worth
+    // surfacing, and the latch is what keeps surfacing it from being worse than
+    // the bug. It clears on the first write that fully lands.
     if (!allWritten) {
         if (!m_mergedWriteFailureToasted) {
             m_mergedWriteFailureToasted = true;
@@ -358,6 +342,16 @@ int AnimationsPageController::setOverrideMergedOnPaths(const QStringList& rawPat
 
 int AnimationsPageController::clearFieldOnPaths(const QStringList& rawPaths, const QString& field)
 {
+    if (m_settings == nullptr) {
+        // -1 is "nothing was attempted", and with no settings object nothing
+        // can be. Without this the loop below reads an empty rawProfile for
+        // every path, builds an empty edit list, and reports 0 cleared — a
+        // refusal dressed as a no-op, and the reason the failure arm that used
+        // to live at the end of this function could never run.
+        qCWarning(lcConfig) << "clearFieldOnPaths: no settings object";
+        return -1;
+    }
+
     const QStringList paths = distinctPaths(rawPaths);
     // Allowlisted rather than passed through to the JSON: this removes a key
     // from a file, and the only two fields a card's revert links own are the
@@ -368,26 +362,12 @@ int AnimationsPageController::clearFieldOnPaths(const QStringList& rawPaths, con
         qCWarning(lcConfig) << "clearFieldOnPaths: refusing to clear unrecognised field" << field;
         return -1;
     }
-    // Refused outright while the discard worker owns the snapshot map, for the
-    // same reason clearAllOverrides refuses: every write below would fail
-    // individually and the caller would read the resulting 0 as "the field was
-    // already inherited everywhere" rather than "nothing happened".
-    if (m_asyncRevertInFlight) {
-        qCWarning(lcConfig) << "clearFieldOnPaths: refusing while an async discard is in flight";
-        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot change this while a discard is in progress."));
-        return -1;
-    }
 
-    // TWO passes, not one interleaved loop. `setOverride` emits its
-    // `overrideChanged` synchronously, while `removeOverrideFile` emits nothing
-    // and relies on the batch's single `refreshProfileStore()` below. Mixed in
-    // one loop, a rewritten path's signal fires while an already-deleted path's
-    // file is gone from disk but its entry is still live in the profile
-    // registry — and `resolvedProfile` falls through to the registry exactly
-    // when the disk read comes back empty, which is the stale-inherited-value
-    // bug the disk-first read exists to close. Classify, remove, refresh, then
-    // write: every signal is emitted against a settled store.
-    const bool wasPending = hasPendingChanges();
+    // Classified, then applied in ONE write, then announced. Emitting a
+    // path's signal mid-batch would let a handler read the store while the
+    // rest of the batch is still to come — and `resolvedProfile` falls through
+    // to the registry exactly when a path's override has just gone, which is
+    // the stale-inherited-value bug the config-first read exists to close.
     QStringList toRemove;
     QList<QPair<QString, QVariantMap>> toRewrite;
     for (const QString& path : paths) {
@@ -408,89 +388,29 @@ int AnimationsPageController::clearFieldOnPaths(const QStringList& rawPaths, con
             toRewrite.append({path, raw});
     }
 
-    QStringList removed;
-    int changed = 0;
-    int failed = 0;
-    // Tracks the classification-time-present / removal-time-absent race, so the
-    // registry catch-up below still runs when it is the only thing that happened.
-    bool sawAbsent = false;
-    for (const QString& path : toRemove) {
-        // An override with nothing left in it is removed outright. An empty
-        // file and no file resolve identically, but the card's toggle and the
-        // pending-changes walk both key on the file existing.
-        //
-        // removeOverrideFile rather than clearOverride: the latter rescans the
-        // whole profiles directory per call, so a mirrored card's single revert
-        // click paid one full re-read and re-parse per path.
-        switch (removeOverrideFile(path)) {
-        case OverrideFileRemoval::Removed:
-            removed.append(path);
-            ++changed;
-            break;
-        case OverrideFileRemoval::Absent:
-            // rawProfile said the field was there, so the file existed a moment
-            // ago. Something else removed it in between; the desired end state
-            // holds either way, but the REGISTRY may still hold the vanished
-            // file's entry, so this still owes a rescan — and the page's VIEW
-            // of the path really did change (the file is gone), so the path
-            // joins the overrideChanged emit list below. Not counted in
-            // `changed`: this call did not do the removing.
-            sawAbsent = true;
-            removed.append(path);
-            break;
-        case OverrideFileRemoval::Failed:
-            ++failed;
-            break;
-        }
-    }
+    // ONE tree write for the removals AND the rewrites together. They are one
+    // user action, and a write per path would raise a settings change per path,
+    // each of which repopulates the profile registry and re-evaluates every
+    // card binding.
+    QList<QPair<QString, QVariantMap>> edits;
+    edits.reserve(toRemove.size() + toRewrite.size());
+    for (const QString& path : toRemove)
+        edits.append({path, QVariantMap{}}); // empty profile = remove
+    for (const auto& [path, raw] : toRewrite)
+        edits.append({path, raw});
 
-    // ONE rescan for every removal, BEFORE any signal — including the ones
-    // `setOverride` emits for itself in the rewrite pass below.
-    // Also refreshed when every removal reported Absent. A file present at
-    // classification time can vanish before `removeOverrideFile` runs, and then
-    // `removed` is empty while the profile registry still holds an entry for a
-    // file that is gone — which is exactly when `resolvedProfile` falls through
-    // to the registry, so it would serve the stale inherited value.
-    if (!removed.isEmpty() || sawAbsent)
-        refreshProfileStore();
+    // One tree write, so it either lands for every path or the settings object
+    // was missing, which the guard at the top of this function has already
+    // ruled out. There is no partial-failure state left to report here.
+    if (edits.isEmpty())
+        return 0;
+    writeOverridesBatch(edits);
 
-    for (const auto& [path, raw] : toRewrite) {
-        // setOverride owns its own invalidate and its own signals, and performs
-        // no rescan (a write is covered by the disk-first read).
-        if (setOverride(path, raw))
-            ++changed;
-        else
-            ++failed;
-    }
-
-    // Sampled after every mutation, like both clear paths.
-    const bool nowPending = hasPendingChanges();
-    for (const QString& path : removed)
+    // As everywhere else on the timing side, pendingChangesChanged arrives
+    // through the motionProfileTreeChanged handler rather than from here.
+    for (const auto& [path, raw] : std::as_const(edits))
         Q_EMIT overrideChanged(path);
-    // One dirty signal for the batch's net flip, NOT gated on whether a rewrite
-    // ran. A rewrite's `setOverride` emits only when IT observes a flip, and it
-    // samples pending state after the removal pass has already made the page
-    // dirty — so in a mixed batch neither the rewrite nor a `toRewrite`-gated
-    // batch emit fires, and the clean→dirty transition is lost entirely.
-    //
-    // A redundant emit costs nothing: `pendingChangesChanged` is a "may have
-    // changed" signal, and the ctor's forwarder gates the outward `dirtyChanged`
-    // on an observed flip of `m_lastHadPendingChanges`.
-    if (wasPending != nowPending)
-        Q_EMIT pendingChangesChanged();
-    if (failed > 0) {
-        qCWarning(lcConfig) << "clearFieldOnPaths:" << failed << "paths could not be updated";
-        Q_EMIT toastRequested(PhosphorI18n::tr("Some animation overrides could not be reverted."));
-        // `changed`, NOT -1. A partial failure is not a refusal: earlier paths —
-        // including the primary — really were cleared, and the QML gates the
-        // "keep the timing editor open" latch on this return. Reporting -1 here
-        // collapsed the editor under the cursor of the user who had just clicked
-        // inside it, which is the exact regression this change exists to prevent,
-        // re-entering through the partial-failure door. -1 is reserved for
-        // "nothing was attempted"; the toast above is how a partial failure
-        // reaches the user.
-    }
-    return changed;
+    return int(edits.size());
 }
 
 bool AnimationsPageController::anyPathSupportsShaderLeg(const QStringList& rawPaths) const
@@ -517,10 +437,11 @@ bool AnimationsPageController::allPathsHoldShaderEffect(const QStringList& rawPa
         return false;
     const QStringList paths = distinctPaths(rawPaths);
     using namespace PhosphorAnimationShaders;
-    // ONE tree read for the whole group, like divergentPathCount — the header's
-    // rule is that nothing here calls `rawShaderProfile` in a loop, because each
-    // call rebuilds the tree.
-    const ShaderProfileTree tree = m_settings->shaderProfileTree();
+    // ONE tree read for the whole group, like divergentPathCount. The header's
+    // rule is that nothing here calls `rawShaderProfile` in a loop: the tree read
+    // is memoised, but each call still copies a profile out of it into a
+    // QVariantMap.
+    const ShaderProfileTree& tree = shaderTree();
     // Whether any member was actually compared. A group in which every path is
     // skipped below would otherwise fall through to `return true` having tested
     // nothing — the same vacuous true the empty-list guard above refuses,
@@ -557,27 +478,17 @@ int AnimationsPageController::applyShaderGroupWrite(
         const PhosphorAnimationShaders::ShaderProfile& stored, bool hasStored)>& build)
 {
     using namespace PhosphorAnimationShaders;
-    if (!m_settings)
+    if (!m_settings) {
+        // Named, because a page with no settings object answers 0 to every
+        // group write and the count alone reads as "nothing needed doing".
+        qCWarning(lcConfig) << context << ": no settings object";
         return 0;
-    if (m_asyncRevertInFlight) {
-        // Refused as a whole, like clearFieldOnPaths and the descendant clear:
-        // the per-path calls would refuse individually and the caller would
-        // read the resulting 0 as "nothing to write".
-        // Composed into ONE string rather than streamed as two, and unquoted,
-        // so the line is byte-identical to the per-writer literals this
-        // replaced. Streaming `context << ": …"` would put a space after the
-        // caller name and quote-wrap it, which reads worse and breaks the
-        // QTest::ignoreMessage patterns that pin this exact text.
-        qCWarning(lcConfig).noquote() << QString(context)
-                + QLatin1String(": refusing while an async discard is in flight");
-        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot change this while a discard is in progress."));
-        return -1;
     }
 
     // Per-call validation the caller supplies, run HERE rather than before the
-    // call so the two gates above keep precedence: a refusal has to toast, and
-    // a missing ISettings has to report 0 rather than the -1 that means
-    // "refused". Optional; the params writer carries no id to validate.
+    // call so the missing-ISettings gate above keeps precedence: it has to
+    // report 0 rather than the -1 that means "refused". Optional; the params
+    // writer carries no id to validate.
     if (preflight && !preflight())
         return -1;
 
@@ -595,7 +506,7 @@ int AnimationsPageController::applyShaderGroupWrite(
     // Writing once also means the group is applied ATOMICALLY: no card can
     // observe a half-written group and latch a divergence banner that the next
     // path's write immediately clears.
-    ShaderProfileTree tree = m_settings->shaderProfileTree();
+    ShaderProfileTree tree = shaderTree();
     int written = 0;
     int mutated = 0;
     for (const QString& path : paths) {
@@ -633,8 +544,28 @@ int AnimationsPageController::applyShaderGroupWrite(
         ++written;
         ++mutated;
     }
-    if (mutated > 0)
+    if (mutated > 0) {
+        // Suppress the tree-changed handler's path-agnostic broadcast for THIS
+        // write, and announce the paths actually touched instead.
+        //
+        // Without this a parameter drag — which reaches here per pointer move —
+        // made every visible card re-run its whole shader and timing refresh,
+        // several steps of which rebuild the ShaderProfileTree from the store.
+        // Only the writing card is excluded by its own latch; every other card
+        // on the page paid for a change that did not concern it. The timing
+        // side has carried the same depth counter, for the same reason, since
+        // it was written.
+        //
+        // Per-path is safe for the set store on the other end: its
+        // notifyLiveStateChanged collapses a burst into one setsChanged on the
+        // next event-loop turn, so N announcements still cost one sets walk.
+        ++m_selfShaderWriteDepth;
         m_settings->setShaderProfileTree(tree);
+        --m_selfShaderWriteDepth;
+        for (const QString& path : paths) {
+            Q_EMIT shaderProfileChanged(path);
+        }
+    }
     return written;
 }
 
@@ -667,13 +598,23 @@ int AnimationsPageController::setShaderOverrideOnPaths(const QStringList& rawPat
             return acceptableShaderEffectId(effectId, QLatin1String("setShaderOverrideOnPaths"));
         },
         [&, bounded = boundedWrittenMap(parameters, QLatin1String("setShaderOverrideOnPaths"))](
-            const ShaderProfile&, bool) -> std::optional<ShaderProfile> {
+            const ShaderProfile& stored, bool) -> std::optional<ShaderProfile> {
             ShaderProfile profile;
             profile.effectId = effectId;
             // Bounded for the same reason the id is gated: this is the only
             // path QML uses, and the map rides to disk beside the id.
             if (!bounded.isEmpty())
                 profile.parameters = bounded;
+            // Carry the preset reference across a RE-WRITE of the pack this path already
+            // OWNS: the profile is rebuilt fresh, so without this every slider edge on an
+            // owned pack dropped the preset. `stored` is the DIRECT override, so this
+            // cannot fire on a genuine promotion from an inherited pack — there an
+            // inherited preset survives through ShaderProfile::overlay's per-slot cascade
+            // instead, which is why the animation tree needs no seeding step here and the
+            // overlay tree does. A genuine pack SWITCH still drops the reference, because
+            // presets are keyed by pack.
+            if (stored.effectId.has_value() && *stored.effectId == effectId)
+                profile.presetId = stored.presetId;
             return profile;
         });
 }
@@ -721,9 +662,137 @@ int AnimationsPageController::setShaderParametersOnPaths(const QStringList& rawP
                                          profile.parameters = bounded;
                                      // Nothing engaged means there is no override left to store, so
                                      // the entry goes rather than becoming an empty one. This is also
-                                     // how "revert my parameters to inherited" lands.
-                                     if (!profile.effectId.has_value() && !profile.parameters.has_value())
+                                     // how "revert my parameters to inherited" lands, and how
+                                     // "revert to preset" lands — which is why `presetId` has to be
+                                     // in this test. Without it, reverting the parameters on an event
+                                     // that inherits its pack cleared the whole entry and took the
+                                     // preset reference with it, so the obvious button unassigned the
+                                     // preset instead of dropping the edits made on top of it. All
+                                     // three slots are independently engaged; the sibling
+                                     // setShaderPresetOnPaths tests all three.
+                                     if (!profile.effectId.has_value() && !profile.parameters.has_value()
+                                         && !profile.presetId.has_value())
                                          return std::nullopt;
+                                     return profile;
+                                 });
+}
+
+int AnimationsPageController::setShaderParameterOnPaths(const QStringList& rawPaths, const QString& paramId,
+                                                        const QVariant& value)
+{
+    using namespace PhosphorAnimationShaders;
+    // ONE key, merged into each path's own stored map. The sibling above takes a
+    // whole map and REPLACES it, which is right for a Reset or a Randomize (both
+    // stage a complete map deliberately) and wrong for a slider.
+    //
+    // A slider used to go through that sibling, handing it the card's DISPLAYED
+    // map. That was correct only because the displayed map comes from a tree
+    // walk-up that never consults the preset registry, so it held nothing but
+    // stored values. The moment it holds the EFFECTIVE values — binding it to the
+    // merged map, or moving the flatten into the walk-up the way the daemon side
+    // already does — one slider nudge would write every value the preset supplies
+    // into the assignment as its own delta, pinning the whole pack to the preset's
+    // current tuning with no signal of any kind. Writing the key the user actually
+    // moved cannot do that, whatever the display holds.
+    if (paramId.isEmpty()) {
+        qCWarning(lcConfig) << "setShaderParameterOnPaths: refusing an empty parameter id";
+        return -1;
+    }
+    return applyShaderGroupWrite(
+        rawPaths, QLatin1String("setShaderParameterOnPaths"), {},
+        [&](const ShaderProfile& stored, bool /*hasStored*/) -> std::optional<ShaderProfile> {
+            // From the stored profile, so `effectId` and
+            // `presetId` stay exactly as they were: a
+            // parameter edit is not a pack pick and not a
+            // preset pick.
+            ShaderProfile profile = stored;
+            QVariantMap params = profile.parameters.value_or(QVariantMap());
+            params.insert(paramId, value);
+            const QVariantMap bounded = boundedWrittenMap(params, QLatin1String("setShaderParameterOnPaths"));
+            // Prune to nullopt when bounding left nothing, exactly as the two
+            // siblings do. `boundedWrittenMap` drops an over-long key or string
+            // value, so the single key the user moved can be the one dropped —
+            // and assigning the resulting EMPTY map engaged it, which is the
+            // statement "no parameters here, and do not inherit any". That
+            // blocks every inherited parameter at this path and below, from a
+            // slider move that was refused.
+            if (bounded.isEmpty())
+                profile.parameters.reset();
+            else
+                profile.parameters = bounded;
+            // And the same nothing-engaged test the siblings apply: with no
+            // slot engaged there is no override left to store, so the entry
+            // goes rather than becoming an empty one. All three slots are
+            // independently engaged.
+            if (!profile.effectId.has_value() && !profile.parameters.has_value() && !profile.presetId.has_value())
+                return std::nullopt;
+            return profile;
+        });
+}
+
+int AnimationsPageController::setShaderPresetSentinelOnPaths(const QStringList& rawPaths)
+{
+    using namespace PhosphorAnimationShaders;
+
+    // UNCONDITIONAL, which is the whole difference from the call below: see the header.
+    // A motion set reproduces what it captured, so an empty captured id stores the block
+    // whether or not the path already owns a preset.
+    return applyShaderGroupWrite(rawPaths, QLatin1String("setShaderPresetSentinelOnPaths"), {},
+                                 [](const ShaderProfile& stored, bool /*hasStored*/) -> std::optional<ShaderProfile> {
+                                     ShaderProfile profile = stored;
+                                     profile.presetId = QString();
+                                     return profile;
+                                 });
+}
+
+int AnimationsPageController::setShaderPresetOnPaths(const QStringList& rawPaths, const QString& presetId,
+                                                     bool blockInherited)
+{
+    using namespace PhosphorAnimationShaders;
+
+    // Bounded like every other string that reaches disk. An over-long id is a
+    // caller bug rather than something a user can type, and an id naming no
+    // preset resolves to the assignment's own parameters anyway, so dropping
+    // it degrades rather than breaks.
+    if (presetId.size() > kMaxWrittenMapStringChars) {
+        qCWarning(lcConfig) << "setShaderPresetOnPaths: refusing an over-long preset id";
+        return -1;
+    }
+
+    return applyShaderGroupWrite(rawPaths, QLatin1String("setShaderPresetOnPaths"), {},
+                                 [&](const ShaderProfile& stored, bool /*hasStored*/) -> std::optional<ShaderProfile> {
+                                     // Starts from the stored profile for the same reason
+                                     // setShaderParametersOnPaths does: this call carries a preset and
+                                     // nothing else, so the pack and the parameter deltas must survive
+                                     // it untouched.
+                                     ShaderProfile profile = stored;
+                                     if (presetId.isEmpty()) {
+                                         // An empty id is the BLOCKING sentinel when the path would
+                                         // otherwise inherit a preset, and a plain clear when it would
+                                         // not — the same two meanings "None" already has on the pack
+                                         // axis, where engaged-empty blocks what an ancestor supplies.
+                                         //
+                                         // Without the blocking half this control was dead on exactly
+                                         // the cards that need it: the combo shows the RESOLVED preset,
+                                         // so an inheriting event displays its ancestor's, and picking
+                                         // None reset a presetId the path did not have — a no-op, after
+                                         // which the refresh re-resolved the inherited id and the combo
+                                         // snapped back with no feedback.
+                                         if (blockInherited && !stored.presetId.has_value()) {
+                                             profile.presetId = QString();
+                                         } else {
+                                             profile.presetId.reset();
+                                         }
+                                     } else {
+                                         profile.presetId = presetId;
+                                     }
+                                     // An entry with nothing engaged is no override at all, so it goes
+                                     // rather than being stored empty. Clearing the preset on a path
+                                     // that owned only a preset is how "stop using a preset here" lands.
+                                     if (!profile.effectId.has_value() && !profile.parameters.has_value()
+                                         && !profile.presetId.has_value()) {
+                                         return std::nullopt;
+                                     }
                                      return profile;
                                  });
 }
@@ -772,7 +841,7 @@ bool AnimationsPageController::shaderParamsAreStale(const QString& path) const
 {
     if (!m_settings || !isValidEventPath(path))
         return false;
-    return paramsAreStaleAt(m_settings->shaderProfileTree(), path);
+    return paramsAreStaleAt(shaderTree(), path);
 }
 
 int AnimationsPageController::staleParamDescendantCountForPaths(const QStringList& rawPaths) const
@@ -783,7 +852,7 @@ int AnimationsPageController::staleParamDescendantCountForPaths(const QStringLis
     // the same reasons shaderOverrideDescendantCountForPaths gives: two paths in
     // a mirror group can share a descendant, and the count drives a button whose
     // click must not claim to act on it twice.
-    const PhosphorAnimationShaders::ShaderProfileTree tree = m_settings->shaderProfileTree();
+    const PhosphorAnimationShaders::ShaderProfileTree& tree = shaderTree();
     QSet<QString> stale;
     for (const QString& path : distinctPaths(rawPaths)) {
         if (!isValidEventPath(path))
@@ -799,14 +868,9 @@ int AnimationsPageController::staleParamDescendantCountForPaths(const QStringLis
 
 int AnimationsPageController::clearStaleParamDescendantsOnPaths(const QStringList& rawPaths)
 {
-    if (m_asyncRevertInFlight) {
-        qCWarning(lcConfig) << "clearStaleParamDescendantsOnPaths: refusing while an async discard is in flight";
-        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot change this while a discard is in progress."));
-        return -1;
-    }
     if (!m_settings)
         return 0;
-    PhosphorAnimationShaders::ShaderProfileTree tree = m_settings->shaderProfileTree();
+    PhosphorAnimationShaders::ShaderProfileTree tree = shaderTree();
     QSet<QString> stale;
     for (const QString& path : distinctPaths(rawPaths)) {
         if (!isValidEventPath(path))
@@ -819,11 +883,24 @@ int AnimationsPageController::clearStaleParamDescendantsOnPaths(const QStringLis
     }
     if (stale.isEmpty())
         return 0;
-    // The whole entry goes, not just its parameter map. A params-only override
-    // IS its parameter map, so removing the values leaves nothing worth an
-    // entry, and clearOverride is what returns the event to plain inheritance.
-    for (const QString& path : stale)
-        tree.clearOverride(path);
+    // The parameter map goes. The whole ENTRY goes only when nothing else is
+    // engaged at that path — a params-only override IS its parameter map, so with
+    // the values gone there is nothing worth an entry and clearOverride is what
+    // returns the event to plain inheritance.
+    //
+    // A path carrying a PRESET keeps its entry. `collectParamsOnlyDescendants`
+    // selects on "no own pack, non-empty parameters", which includes a path that
+    // also stores a preset reference — and clearing the whole entry there threw
+    // away a reference the user chose, which this sweep has no business touching.
+    // It is the stale VALUES it exists to remove.
+    for (const QString& path : stale) {
+        PhosphorAnimationShaders::ShaderProfile profile = tree.directOverride(path);
+        profile.parameters.reset();
+        if (!profile.effectId.has_value() && !profile.presetId.has_value())
+            tree.clearOverride(path);
+        else
+            tree.setOverride(path, profile);
+    }
     m_settings->setShaderProfileTree(tree);
     // pendingChangesChanged arrives through the shaderProfileTreeChanged
     // handler, as it does for every other writer here.
@@ -837,7 +914,7 @@ int AnimationsPageController::shaderOverrideDescendantCountForPaths(const QStrin
     // ONE tree read for the whole group. The per-path Q_INVOKABLE rebuilds the
     // tree on every call, and the card used to call it once per write path from
     // a refresh that runs at drag rate.
-    const PhosphorAnimationShaders::ShaderProfileTree tree = m_settings->shaderProfileTree();
+    const PhosphorAnimationShaders::ShaderProfileTree& tree = shaderTree();
     // Unioned, not summed. A group holding both an ancestor and one of its
     // descendants would count a shadowing override beneath both of them twice,
     // while the paired clear removes it once — and a count that disagrees with
@@ -863,7 +940,7 @@ bool AnimationsPageController::anyPathOwnsShaderPack(const QStringList& rawPaths
 {
     if (!m_settings)
         return false;
-    const PhosphorAnimationShaders::ShaderProfileTree tree = m_settings->shaderProfileTree();
+    const PhosphorAnimationShaders::ShaderProfileTree& tree = shaderTree();
     for (const QString& path : distinctPaths(rawPaths)) {
         if (!isValidEventPath(path) || !supportsShaderLeg(path))
             continue;
@@ -890,16 +967,11 @@ int AnimationsPageController::clearShaderOverrideOnPaths(const QStringList& rawP
     using namespace PhosphorAnimationShaders;
     if (!m_settings)
         return 0;
-    if (m_asyncRevertInFlight) {
-        qCWarning(lcConfig) << "clearShaderOverrideOnPaths: refusing while an async discard is in flight";
-        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot change this while a discard is in progress."));
-        return -1;
-    }
 
     // One read, one write, for the same reasons as the setter above.
     // `isValidEventPath` gates the loop so an unrecognised path cannot make the
     // caller's list the bound on the work done here.
-    ShaderProfileTree tree = m_settings->shaderProfileTree();
+    ShaderProfileTree tree = shaderTree();
     int cleared = 0;
     for (const QString& path : paths) {
         if (!isValidEventPath(path) || !tree.hasOverride(path))
@@ -915,17 +987,6 @@ int AnimationsPageController::clearShaderOverrideOnPaths(const QStringList& rawP
 int AnimationsPageController::clearShaderOverrideDescendantsOnPaths(const QStringList& rawPaths)
 {
     const QStringList paths = distinctPaths(rawPaths);
-    // Top-level async gate, like every sibling mutator in this file. The
-    // per-path clearShaderOverrideDescendants() below gates too, so this was
-    // already refused transitively — but only after the loop had done its
-    // distinctPaths + per-path validation work, and the refusal toast fired
-    // from whichever path reached the singular first. Refuse up front instead,
-    // once, matching clearShaderOverrideOnPaths.
-    if (m_asyncRevertInFlight) {
-        qCWarning(lcConfig) << "clearShaderOverrideDescendantsOnPaths: refusing while an async discard is in flight";
-        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot change this while a discard is in progress."));
-        return -1;
-    }
     if (!m_settings)
         return 0;
     // ONE tree read, one write back, one broadcast — the same contract every
@@ -936,7 +997,7 @@ int AnimationsPageController::clearShaderOverrideDescendantsOnPaths(const QStrin
     // sentinel dishonest: a refusal arriving mid-loop returned -1, meaning
     // "nothing was attempted", after earlier paths had already been persisted.
     // Refusing up front, above, is now the only way -1 leaves this function.
-    PhosphorAnimationShaders::ShaderProfileTree tree = m_settings->shaderProfileTree();
+    PhosphorAnimationShaders::ShaderProfileTree tree = shaderTree();
     // Unioned, not summed, matching shaderOverrideDescendantCountForPaths: two
     // paths in one group can share a descendant, and clearing it once must not
     // be reported twice.
@@ -1003,15 +1064,22 @@ int AnimationsPageController::divergentPathCount(const QString& primaryPath, con
     if (mirrorPaths.isEmpty())
         return 0;
 
-    // The shader tree is read ONCE for the whole comparison. `rawShaderProfile`
-    // rebuilds it on every call (a settings read plus `ShaderProfileTree::
-    // fromJson` plus a prune walk), and this runs from `refreshFromTree`, i.e.
-    // on every tick of a duration drag for every visible card. Per path it was
-    // a full rebuild each.
-    const PhosphorAnimationShaders::ShaderProfileTree tree =
-        m_settings ? m_settings->shaderProfileTree() : PhosphorAnimationShaders::ShaderProfileTree{};
+    // The shader tree is read ONCE for the whole comparison, from the
+    // controller's parsed-tree cache. `rawShaderProfile` reaches the settings
+    // getter on every call, and this runs from `refreshFromTree`, i.e. on every
+    // tick of a duration drag for every visible card. Per path it was a full
+    // rebuild each.
+    const PhosphorAnimationShaders::ShaderProfileTree& tree = shaderTree();
 
-    const auto keyFor = [this, compareCurve, &tree](const QString& path) {
+    // The TIMING tree read once too, for the same reason the shader tree is:
+    // rawProfile() reaches motionTree() on every call, and each of those copies
+    // the whole stored map out of the settings store. This runs from
+    // refreshFromTree for every visible card, at drag rate, so a per-path read
+    // here made the cost (visible cards x group size) whole-tree copies per
+    // tick — the read-in-a-loop shape this file's own header forbids.
+    const QVariantMap timingTree = motionTree();
+
+    const auto keyFor = [this, compareCurve, &tree, &timingTree](const QString& path) {
         // The shader axis is compared only where a shader can actually be
         // stored. A non-supporting path holds nothing there permanently, so
         // comparing it against a supporting path's real leg would report a
@@ -1019,7 +1087,11 @@ int AnimationsPageController::divergentPathCount(const QString& primaryPath, con
         const QVariantMap shader = (supportsShaderLeg(path) && tree.hasOverride(path))
             ? shaderProfileToMap(tree.directOverride(path))
             : QVariantMap();
-        return comparableStateKey(rawProfile(path), shader, compareCurve);
+        // Same sanitising rawProfile() applies, taken from the hoisted tree so
+        // the comparison key is identical either way.
+        const QVariantMap timing =
+            isValidEventPath(path) ? sanitizedProfileMap(treeProfileForPath(timingTree, path)) : QVariantMap();
+        return comparableStateKey(timing, shader, compareCurve);
     };
 
     const QByteArray primary = keyFor(primaryPath);

@@ -125,6 +125,10 @@ struct DragInsertPreview
 {
     QString windowId;
     QString targetScreenId;
+    /// The context key the preview inserted into (targetScreenId's current
+    /// key at begin), so commit and cancel move the same membership begin
+    /// moved rather than re-resolving one after a context change.
+    PhosphorEngine::TilingStateKey targetKey;
     int lastInsertIndex = -1;
 
     // Prior-state restoration info (used on cancel)

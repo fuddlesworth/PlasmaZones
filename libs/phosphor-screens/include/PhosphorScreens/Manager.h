@@ -15,6 +15,7 @@
 #include <QTimer>
 #include <QVector>
 
+class QEvent;
 class QScreen;
 class QWindow;
 
@@ -147,6 +148,44 @@ public:
     QRect actualAvailableGeometry(QScreen* screen) const;
 
     /**
+     * @brief The compositor's LOGICAL scale for @p screen (1.15, 1.5, 2.0…).
+     *
+     * Read from the screen's layer-shell geometry sensor window, because on
+     * Wayland that is the only place a client can see the real number.
+     * @c QScreen::devicePixelRatio() reports the @c wl_output INTEGER buffer
+     * scale, which a compositor advertises as the ceiling of the true scale
+     * for the benefit of clients that cannot scale fractionally — KWin says
+     * 2 for a 1.15 output. @c QWindow::devicePixelRatio() instead carries the
+     * per-surface value Qt derives from @c wp_fractional_scale_v1, which is
+     * the 1.15 itself.
+     *
+     * Falls back to @c QScreen::devicePixelRatio() when the screen has no
+     * sensor (a synthetic test screen never gets one — see
+     * @c createGeometrySensor) or the sensor has not been mapped yet, and to
+     * 1.0 when there is no QScreen either. The fallback is the OLD, coarse
+     * answer rather than a wrong-by-construction guess.
+     *
+     * DIAGNOSTIC USE ONLY today (the support report and the getScreenInfo
+     * reply). Nothing in placement reads a scale: PlasmaZones works in
+     * logical coordinates throughout, and the compositor owns the conversion.
+     * Do not introduce a device-pixel calculation on the strength of this
+     * accessor without checking that the surface in question is actually
+     * scaled the same way.
+     */
+    qreal logicalScale(const PhysicalScreen& screen) const;
+
+    /**
+     * @brief Bridge overload for consumers holding a live @c QScreen*.
+     *
+     * Mirrors the @ref actualAvailableGeometry(QScreen*) convention: resolve
+     * through the tracked set so the sensor lookup is keyed the same way, and
+     * fall back to the QScreen's own (coarse, integer) ratio for a connector
+     * the manager does not track, which is a hotplug race. A null @p screen
+     * has no ratio to fall back to and answers 1.0.
+     */
+    qreal logicalScale(QScreen* screen) const;
+
+    /**
      * @brief Has the panel source produced its first reading?
      *
      * Components that compute initial zone geometry at startup gate on this
@@ -227,6 +266,16 @@ Q_SIGNALS:
     void screenGeometryChanged(const PhysicalScreen& screen);
     void availableGeometryChanged(const PhysicalScreen& screen, const QRect& availableGeometry);
 
+    /// @ref logicalScale has a different answer for @p screen than it did.
+    ///
+    /// Fires when the compositor tells the screen's sensor window its
+    /// per-surface scale, which is both the first time the real number is
+    /// knowable and every later change to it. It matters because the answer
+    /// before that point is the coarse @c QScreen fallback, so anything that
+    /// caches a scale read at startup is caching the wrong one until this
+    /// says otherwise.
+    void logicalScaleChanged(const PhysicalScreen& screen);
+
     /// Fired once when @ref isPanelGeometryReady transitions to true.
     /// Components that need accurate panel geometry (window restoration,
     /// initial zone layout) should wait for this before performing
@@ -257,6 +306,13 @@ Q_SIGNALS:
     /// next @ref IConfigStore::loadAll agrees with the manager's cache.
     /// Both IDs are physical (no @c /vs:N suffix).
     void screenIdentifierChanged(const QString& oldId, const QString& newId);
+
+protected:
+    /// Watches the geometry sensors for @c QEvent::DevicePixelRatioChange,
+    /// which is the only notice Qt gives that a window's per-surface scale
+    /// moved — @c QWindow has no changed signal for it. Emits
+    /// @ref logicalScaleChanged for the sensor's screen.
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private Q_SLOTS:
     void onProviderScreenAdded(const PhysicalScreen& screen);

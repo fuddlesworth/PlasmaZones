@@ -27,6 +27,7 @@ add_library(PhosphorPlacement SHARED
     include/PhosphorPlacement/SnapStateResolver.h
     include/PhosphorPlacement/WindowTrackingService.h
     src/WindowTrackingService.cpp
+    src/WindowTrackingService_sticky.cpp
     src/navigation.cpp
     src/resnap.cpp
     src/lifecycle.cpp

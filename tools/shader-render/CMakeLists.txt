@@ -45,6 +45,8 @@ set(shader_render_SRCS
     encoder.h
     encoder.cpp
     colorutil.h
+    pointerdriver.h
+    pointerdriver.cpp
 )
 
 add_executable(plasmazones-shader-render ${shader_render_SRCS})
@@ -60,6 +62,10 @@ target_link_libraries(plasmazones-shader-render PRIVATE
     PhosphorShaders::PhosphorShaders
     PhosphorWayland::PhosphorWayland
     PhosphorAudio::PhosphorAudio
+    # PointerHistory / PointerUniformExtension, so a pointer pack is driven by
+    # the same sampler and the same uniform tail the compositor and the settings
+    # preview use, rather than by a second synthetic implementation here.
+    PhosphorPointer::PhosphorPointer
     # The daemon's zone entry scaffold (zoneEntryPrologue / zoneEntryCandidates)
     # lives here. The tool installs the same scaffold so its shader assembly
     # matches the runtime byte-for-byte (see renderer.cpp).

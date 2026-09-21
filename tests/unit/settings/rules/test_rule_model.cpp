@@ -834,6 +834,14 @@ void TestRuleModel::scrollingActionsRenderDistinctLabels()
         // must stay distinguishable from the height pair's.
         ruleWith(ActionType::SetScrollDefaultColumnWidth, 0.5),
         ruleWith(ActionType::OpenColumnWidth, 0.5),
+        // The tab-group name has three summary states: absent (a staged
+        // payload, bare label), a usable name, and the reject shapes the
+        // descriptor refuses (blank, non-string, over the cap).
+        ruleWith(ActionType::OpenTabGroup, QJsonValue()),
+        ruleWith(ActionType::OpenTabGroup, QStringLiteral("  work  ")),
+        ruleWith(ActionType::OpenTabGroup, QStringLiteral("   ")),
+        ruleWith(ActionType::OpenTabGroup, 7),
+        ruleWith(ActionType::OpenTabGroup, QString(PhosphorRules::MaxTabGroupNameLength + 1, QLatin1Char('x'))),
     });
 
     const auto summaryAt = [&](int row) {
@@ -856,6 +864,13 @@ void TestRuleModel::scrollingActionsRenderDistinctLabels()
     QCOMPARE(summaryAt(7), QStringLiteral("Open at width: 50%"));
     QVERIFY(summaryAt(0) != summaryAt(6));
     QVERIFY(summaryAt(1) != summaryAt(7));
+    // Tab group: bare label when unset, trimmed name when set, invalid for
+    // every reject shape (blank, non-string, over the cap).
+    QCOMPARE(summaryAt(8), QStringLiteral("Tab group"));
+    QCOMPARE(summaryAt(9), QStringLiteral("Tab group: work"));
+    QCOMPARE(summaryAt(10), QStringLiteral("Tab group (invalid)"));
+    QCOMPARE(summaryAt(11), QStringLiteral("Tab group (invalid)"));
+    QCOMPARE(summaryAt(12), QStringLiteral("Tab group (invalid)"));
 }
 
 void TestRuleModel::actionLabelPrefixesAreUnique()

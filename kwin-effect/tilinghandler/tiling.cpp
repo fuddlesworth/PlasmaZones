@@ -673,10 +673,10 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     viewProfile = m_effect->resolveEventMotionProfile(PhosphorAnimation::ProfilePaths::ScrollingView,
                                                                       PhosphorRules::WindowQuery{}, QString());
                     if (m_effect->m_windowAnimator->isEnabled()) {
-                        const PhosphorAnimationShaders::ShaderProfile stripShaderProfile =
-                            PhosphorAnimationShaders::resolveShaderWithDefault(
-                                m_effect->m_shaderManager.profileTree(),
-                                PhosphorAnimation::ProfilePaths::ScrollingView);
+                        const auto raw = PhosphorAnimationShaders::resolveShaderWithDefault(
+                            m_effect->m_shaderManager.profileTree(), PhosphorAnimation::ProfilePaths::ScrollingView);
+                        const auto stripShaderProfile = PhosphorAnimationShaders::withPresetsResolved(
+                            raw, m_effect->m_shaderManager.presetRegistry());
                         stripEffectId = stripShaderProfile.effectiveEffectId();
                         stripEffectParams = stripShaderProfile.effectiveParameters();
                     }
@@ -1330,10 +1330,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     continue;
                 }
                 if (KWin::LogicalOutput* out = m_effect->outputForScreenId(screenIt.key())) {
-                    const QRect bounds = m_effect->m_scrollTabPainter->boundsFor(out);
-                    if (bounds.isValid()) {
-                        KWin::effects->addRepaint(KWin::Rect(bounds));
-                    }
+                    damageScrollTabBand(out, m_effect->m_scrollTabPainter->boundsFor(out));
                 }
             }
         }

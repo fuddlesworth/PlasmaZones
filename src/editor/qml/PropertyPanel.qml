@@ -434,9 +434,9 @@ Rectangle {
 
                     visible: panelMode === "single"
                     Kirigami.FormData.label: i18nc("@label", "Name:")
-                    // Mirrors PlasmaZones::MaxLayoutNameLength (core/types/constants.h),
+                    // PlasmaZones::MaxLayoutNameLength via the controller,
                     // same client-side cap as TopBar's layout name field.
-                    maximumLength: 40
+                    maximumLength: editorController ? editorController.maxLayoutNameLength : 40
                     text: selectedZone ? (selectedZone.name || "") : ""
                     enabled: editorController !== null
                     Accessible.name: i18nc("@label", "Zone name")

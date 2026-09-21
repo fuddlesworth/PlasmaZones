@@ -618,10 +618,9 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     applyEffectStaticConfig(shaderItem, effect, shaderIncludePaths);
 
     // iMouse wiring — mirrors the overlay-shader pattern (RenderNodeOverlay's
-    // `MouseArea { hoverEnabled }` and ShaderSettingsDialog's `HoverHandler`
-    // both write cursor position through to `ZoneShaderItem::iMouse`,
-    // with a `(-1, -1)` sentinel when the cursor leaves the shader's
-    // bounding box). Self-contained: parented to shaderItem so it
+    // `MouseArea { hoverEnabled }` writes cursor position through to
+    // `ZoneShaderItem::iMouse`, with a `(-1, -1)` sentinel when the cursor
+    // leaves the shader's bounding box). Self-contained: parented to shaderItem so it
     // auto-destroys on teardown; no consumer-side bus required. The
     // handler reports point coordinates in shader-item-local pixels,
     // which equals the shader's `iResolution`, so authors can use

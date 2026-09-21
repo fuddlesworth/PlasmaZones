@@ -367,14 +367,17 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     role.anchors = PhosphorLayer::AnchorAll;
     role.exclusiveZone = -1;
     // Exclusive is a wholesale keyboard grab on the Overlay layer, so only a
-    // Modal earns it: that is the case where the popout genuinely is the only
-    // thing the user should be typing at. `keyboardFocus` defaults to true, so
-    // granting Exclusive on it alone would give a tray or calendar popout the
-    // keyboard away from the focused application. OnDemand gives those focus
-    // when clicked and leaves it alone otherwise.
+    // Modal earns it by default: that is the case where the popout genuinely
+    // is the only thing the user should be typing at. `keyboardFocus`
+    // defaults to true, so granting Exclusive on it alone would give a tray
+    // or calendar popout the keyboard away from the focused application.
+    // OnDemand gives those focus when clicked and leaves it alone otherwise.
+    // A request may ask for the grab explicitly (`exclusiveKeyboard`)
+    // without the Modal scrim: a credential prompt must not lose the
+    // keyboard to a click elsewhere, and it does not dim the desktop.
     if (!request.keyboardFocus) {
         role.keyboard = PhosphorLayer::KeyboardInteractivity::None;
-    } else if (request.exclusive == PhosphorPopout::ExclusiveMode::Modal) {
+    } else if (request.exclusive == PhosphorPopout::ExclusiveMode::Modal || request.exclusiveKeyboard) {
         role.keyboard = PhosphorLayer::KeyboardInteractivity::Exclusive;
     } else {
         role.keyboard = PhosphorLayer::KeyboardInteractivity::OnDemand;
@@ -417,7 +420,12 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     if (!QObject::connect(hostItem, SIGNAL(dismissed()), this, SLOT(onHostDismissed()))) {
         qCWarning(lcPopoutTransport) << "refusing" << request.popoutId
                                      << "— PopoutHost has no dismissed() signal to connect";
-        hostItem->deleteLater();
+        // Past create() the Surface owns the host, through the window it
+        // wraps, so the host must NOT be deleted separately here — that is
+        // the double free destroyEntry() warns about. Destroy the surface and
+        // the host goes with it. The surface is not in m_entries yet, so
+        // nothing else would ever reap it.
+        surface->deleteLater();
         return {};
     }
 

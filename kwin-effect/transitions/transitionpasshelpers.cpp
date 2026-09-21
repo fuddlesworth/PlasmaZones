@@ -6,13 +6,26 @@
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 
+#include "compositor/effectlogging.h"
+#include "kwincompat.h"
+#include "plasmazoneseffect/shader_internal.h"
+
 #include <core/rendertarget.h>
+#include <core/region.h>
 #include <core/renderviewport.h>
+#include <effect/effect.h>
+#include <effect/effecthandler.h>
+#include <effect/effectwindow.h>
 #include <opengl/glframebuffer.h>
 #include <opengl/gltexture.h>
 #include <opengl/glvertexbuffer.h>
 
+#include <scene/itemrenderer.h>
+#include <scene/windowitem.h>
+#include <scene/workspacescene.h>
+
 #include <QColor>
+#include <QList>
 #include <QSize>
 #include <QVector2D>
 
@@ -28,6 +41,35 @@ GLenum captureFormatFor(const KWin::RenderTarget& outputTarget)
     const KWin::GLFramebuffer* const fb = outputTarget.framebuffer();
     const KWin::GLTexture* const targetTex = fb ? fb->colorAttachment() : nullptr;
     return targetTex ? targetTex->internalFormat() : GL_RGBA8;
+}
+
+GLenum alphaCaptureFormatFor(const KWin::RenderTarget& outputTarget)
+{
+    return alphaCaptureFormatForInternalFormat(captureFormatFor(outputTarget));
+}
+
+void clearAlpha(float alpha)
+{
+    // KWin's renderer leaves the scissor test off between windows, but a
+    // third-party effect ordered after us may not, and a scissored clear
+    // would stamp only a window's rect of the target. Save and restore what
+    // is touched; the colour mask is restored to the all-on state KWin's
+    // renderer expects rather than read back, because nothing in the paint
+    // chain runs with a partial mask.
+    const GLboolean scissorWas = glIsEnabled(GL_SCISSOR_TEST);
+    GLfloat clearWas[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    glGetFloatv(GL_COLOR_CLEAR_VALUE, clearWas);
+    if (scissorWas) {
+        glDisable(GL_SCISSOR_TEST);
+    }
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_TRUE);
+    glClearColor(0.0f, 0.0f, 0.0f, alpha);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glClearColor(clearWas[0], clearWas[1], clearWas[2], clearWas[3]);
+    if (scissorWas) {
+        glEnable(GL_SCISSOR_TEST);
+    }
 }
 
 std::unique_ptr<KWin::GLTexture> allocateOutputTexture(const QSize& deviceSize, GLenum internalFormat)
@@ -66,17 +108,69 @@ void drawOutputQuad(const KWin::RenderViewport& viewport)
 
 const char* outputQuadVertexSource()
 {
-    static constexpr const char* kSource =
-        "#version 450\n"
-        "uniform mat4 modelViewProjectionMatrix;\n"
-        "layout(location = 0) in vec2 position;\n"
-        "layout(location = 1) in vec2 texCoord;\n"
-        "layout(location = 0) out vec2 vTexCoord;\n"
-        "void main() {\n"
-        "    vTexCoord = texCoord;\n"
-        "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
-        "}\n";
-    return kSource;
+    return kOutputQuadVertexSource;
+}
+
+void drawSceneCursor(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                     KWin::RenderDevice* device)
+{
+    // NOT gated on @p device: on 6.7 there is no RenderDevice at all and it is
+    // always null, so bailing here would stop drawing the cursor entirely on that
+    // version. Whether the device is usable is sceneRenderer's business — it
+    // returns null only when a device is genuinely required and missing.
+    if (!KWin::effects) {
+        return;
+    }
+    // The workspace scene is reached through any window item: the effects
+    // API exposes no scene accessor, and Item::scene() on a member of the
+    // scene IS the workspace scene. An empty stacking order means there is
+    // no scene to draw the cursor over either.
+    const QList<KWin::EffectWindow*> stack = KWin::effects->stackingOrder();
+    KWin::WorkspaceScene* scene = nullptr;
+    for (KWin::EffectWindow* w : stack) {
+        if (w && w->windowItem()) {
+            scene = qobject_cast<KWin::WorkspaceScene*>(w->windowItem()->scene());
+            break;
+        }
+    }
+    if (!scene || !scene->cursorItem()) {
+        return;
+    }
+    // WorkspaceScene::updateCursor only moves the item while the cursor is
+    // shown; hidden, its position is whatever the pointer was at when the
+    // hide landed. Track the live pointer the way that slot does (the item's
+    // own hotspot offset lives in its child, so the position IS the pointer).
+    scene->cursorItem()->setPosition(KWin::effects->cursorPos());
+    // @p device is the device of the output pass this call sits inside, which the
+    // caller reads from that pass's RenderView — NOT the compositor's primary
+    // device, which on 6.8 is a different renderer for any output that renders on
+    // a secondary GPU. 6.7 has a single renderer and ignores it (see kwincompat.h).
+    KWin::ItemRenderer* const renderer = KWinCompat::sceneRenderer(scene, device);
+    if (!renderer) {
+        // 6.8 only, and only when the pass had no device to resolve a renderer
+        // from. Every caller reaches this while holding KWin's own cursor HIDDEN
+        // for the pass, so returning quietly means nobody draws the pointer for
+        // the length of the leg — and kwincompat.h forbids callers from testing
+        // the device themselves, so no caller can defend against it. Say so, once
+        // per DEVICE: at vsync rate this would otherwise flood the journal, but a
+        // once-per-run latch would also swallow a genuinely new occurrence later
+        // in the session — a second GPU, an output moved to another device. The
+        // device pointer is only ever compared, never dereferenced, so a stale
+        // one here cannot be unsafe; at worst a re-used address costs one
+        // suppressed line.
+        static const void* lastWarnedDevice = nullptr;
+        static bool warned = false;
+        if (!warned || lastWarnedDevice != static_cast<const void*>(device)) {
+            warned = true;
+            lastWarnedDevice = static_cast<const void*>(device);
+            qCWarning(lcEffect) << "no ItemRenderer for this pass's render device — the scene cursor cannot be drawn; "
+                                   "the pointer will be missing while a strip leg or pointer pack holds the hide";
+        }
+        return;
+    }
+    const ShaderInternal::ScopedGlState glStateGuard;
+    renderer->renderItem(renderTarget, viewport, scene->cursorItem(), KWin::Effect::PAINT_SCREEN_TRANSFORMED,
+                         KWin::Region::infinite(), KWin::WindowPaintData{}, {}, {});
 }
 
 void translatePackParams(

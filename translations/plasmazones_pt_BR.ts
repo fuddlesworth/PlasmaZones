@@ -266,6 +266,56 @@
         <translation>Adicionar zona</translation>
     </message>
     <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="42"/>
+        <source>Focus Workspace Above</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="47"/>
+        <source>Focus Workspace Below</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="52"/>
+        <source>Move Window to Workspace Above</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="57"/>
+        <source>Move Window to Workspace Below</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="62"/>
+        <source>Move Column to Workspace Above</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="67"/>
+        <source>Move Column to Workspace Below</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="72"/>
+        <source>Move Workspace Up</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="77"/>
+        <source>Move Workspace Down</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="83"/>
+        <source>Move Workspace to Monitor on the Left</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="89"/>
+        <source>Move Workspace to Monitor on the Right</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="95"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/KeyboardShortcutOverlay.qml.cpp" line="59"/>
         <source>Open Zone Editor</source>
@@ -537,6 +587,28 @@
         <translation>Absorver ou expulsar em direção ao fim da faixa</translation>
     </message>
     <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="371"/>
+        <source>Next Tab in Column</source>
+        <translation>Próxima aba na coluna</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="376"/>
+        <source>Previous Tab in Column</source>
+        <translation>Aba anterior na coluna</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="702"/>
+        <source>Move Window to Workspace Slot %1</source>
+        <comment>single workspace slot number</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="725"/>
+        <source>Focus Workspace %1</source>
+        <comment>single workspace slot number</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="444"/>
         <source>Maximize to Screen Edges</source>
         <translation>Maximizar até as bordas da tela</translation>
@@ -582,59 +654,15 @@
         <translation>Focalizar a próxima coluna, dando a volta</translation>
     </message>
     <message>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="970"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="777"/>
+        <source>Focus Tab %1</source>
+        <translation>Focar a aba %1</translation>
+    </message>
+    <message>
         <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="402"/>
         <source>Center Column</source>
         <translation>Centralizar a coluna</translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="42"/>
-        <source>Focus Workspace Above</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="47"/>
-        <source>Focus Workspace Below</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="52"/>
-        <source>Move Window to Workspace Above</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="57"/>
-        <source>Move Window to Workspace Below</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="62"/>
-        <source>Move Column to Workspace Above</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="67"/>
-        <source>Move Column to Workspace Below</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="72"/>
-        <source>Move Workspace Up</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="77"/>
-        <source>Move Workspace Down</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="83"/>
-        <source>Move Workspace to Monitor on the Left</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="89"/>
-        <source>Move Workspace to Monitor on the Right</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_table.cpp" line="407"/>
@@ -852,103 +880,6 @@
         <translation>Percorrer o foco para trás</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="271"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="273"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="275"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="277"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="279"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="282"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="285"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="288"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="291"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="295"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="527"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="539"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="120"/>
-        <source>Workspaces</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="272"/>
-        <source>Focus Above</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="274"/>
-        <source>Focus Below</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="276"/>
-        <source>Move Window Above</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="278"/>
-        <source>Move Window Below</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="280"/>
-        <source>Move Column Above</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="281"/>
-        <source>Moves the focused column to the workspace above. Scrolling only.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="283"/>
-        <source>Move Column Below</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="284"/>
-        <source>Moves the focused column to the workspace below. Scrolling only.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="286"/>
-        <source>Move Up</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="287"/>
-        <source>Moves the current workspace earlier in this monitor&apos;s list.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="289"/>
-        <source>Move Down</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="290"/>
-        <source>Moves the current workspace later in this monitor&apos;s list.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="292"/>
-        <source>Move to Left Monitor</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="293"/>
-        <source>Moves the current workspace and its windows to the monitor on the left.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="296"/>
-        <source>Move to Right Monitor</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="297"/>
-        <source>Moves the current workspace and its windows to the monitor on the right.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="300"/>
         <source>Swap Screen Left</source>
         <translation>Trocar a tela com a da esquerda</translation>
@@ -1144,6 +1075,11 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="586"/>
+        <source>Shows the numbered tab of the focused column. In a column that is not tabbed it focuses that window in the stack.</source>
+        <translation>Mostra a aba numerada da coluna focalizada. Em uma coluna sem abas, foca essa janela da pilha.</translation>
+    </message>
+    <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="688"/>
         <source>Apply Layout %1</source>
         <comment>range of layout slots, e.g. 1-9</comment>
@@ -1200,6 +1136,145 @@
         <translation>Focalizar a coluna anterior (parar na borda)</translation>
     </message>
     <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="159"/>
+        <source>Focus</source>
+        <comment>scrolling cheatsheet category</comment>
+        <translation>Foco</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="161"/>
+        <source>Columns</source>
+        <comment>scrolling cheatsheet category</comment>
+        <translation>Colunas</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="163"/>
+        <source>Tabs</source>
+        <comment>scrolling cheatsheet category</comment>
+        <translation>Abas</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="165"/>
+        <source>Column Width</source>
+        <comment>scrolling cheatsheet category</comment>
+        <translation>Largura da coluna</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="167"/>
+        <source>Window Height</source>
+        <comment>scrolling cheatsheet category</comment>
+        <translation>Altura da janela</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="169"/>
+        <source>View</source>
+        <comment>scrolling cheatsheet category</comment>
+        <translation>Visão</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="171"/>
+        <source>Floating</source>
+        <comment>scrolling cheatsheet category</comment>
+        <translation>Flutuante</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="271"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="273"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="275"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="277"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="279"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="282"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="285"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="288"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="291"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="295"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="527"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="539"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="120"/>
+        <source>Workspaces</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="272"/>
+        <source>Focus Above</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="274"/>
+        <source>Focus Below</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="276"/>
+        <source>Move Window Above</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="278"/>
+        <source>Move Window Below</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="280"/>
+        <source>Move Column Above</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="281"/>
+        <source>Moves the focused column to the workspace above. Scrolling only.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="283"/>
+        <source>Move Column Below</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="284"/>
+        <source>Moves the focused column to the workspace below. Scrolling only.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="286"/>
+        <source>Move Up</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="287"/>
+        <source>Moves the current workspace earlier in this monitor&apos;s list.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="289"/>
+        <source>Move Down</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="290"/>
+        <source>Moves the current workspace later in this monitor&apos;s list.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="292"/>
+        <source>Move to Left Monitor</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="293"/>
+        <source>Moves the current workspace and its windows to the monitor on the left.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="296"/>
+        <source>Move to Right Monitor</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="297"/>
+        <source>Moves the current workspace and its windows to the monitor on the right.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="333"/>
         <source>Moves focus one column toward the start of the strip and stops at the edge. The regular focus shortcut continues onto the next monitor instead.</source>
         <translation>Move o foco uma coluna em direção ao início da faixa e para na borda. O atalho de foco comum, em vez disso, segue para o próximo monitor.</translation>
@@ -1233,6 +1308,16 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="348"/>
         <source>Moves focus one column toward the end of the strip, wrapping to the first column at the edge.</source>
         <translation>Move o foco uma coluna em direção ao fim da faixa, dando a volta para a primeira coluna na borda.</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="402"/>
+        <source>Shows the next tab of the focused column, wrapping round to the first one at the end. In a column that is not tabbed it focuses the next window down the stack.</source>
+        <translation>Mostra a próxima aba da coluna focalizada, voltando para a primeira ao chegar ao fim. Em uma coluna sem abas, foca a próxima janela da pilha.</translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="407"/>
+        <source>Shows the previous tab of the focused column, wrapping round to the last one at the start. In a column that is not tabbed it focuses the previous window up the stack.</source>
+        <translation>Mostra a aba anterior da coluna focalizada, voltando para a última ao chegar ao início. Em uma coluna sem abas, foca a janela anterior da pilha.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="408"/>
@@ -1327,18 +1412,6 @@
         <translation>Aplicar o layout %1</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="702"/>
-        <source>Move Window to Workspace Slot %1</source>
-        <comment>single workspace slot number</comment>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="725"/>
-        <source>Focus Workspace %1</source>
-        <comment>single workspace slot number</comment>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="../src/editor/undo/commands/ApplyTemplateCommand.cpp" line="14"/>
         <source>Apply Template: %1</source>
         <comment>@action</comment>
@@ -1410,24 +1483,6 @@
         <source>Change Selection</source>
         <comment>@action</comment>
         <translation>Alterar a seleção</translation>
-    </message>
-    <message>
-        <location filename="../src/editor/undo/commands/UpdateShaderIdCommand.cpp" line="15"/>
-        <source>Change Shader Effect</source>
-        <comment>@action</comment>
-        <translation>Alterar o efeito de shader</translation>
-    </message>
-    <message>
-        <location filename="../src/editor/undo/commands/UpdateShaderParamsCommand.cpp" line="17"/>
-        <source>Change Shader Parameter</source>
-        <comment>@action</comment>
-        <translation>Alterar o parâmetro do shader</translation>
-    </message>
-    <message>
-        <location filename="../src/editor/undo/commands/UpdateShaderParamsCommand.cpp" line="29"/>
-        <source>Change Shader Parameters</source>
-        <comment>@action</comment>
-        <translation>Alterar os parâmetros do shader</translation>
     </message>
     <message>
         <location filename="../src/editor/undo/commands/ChangeZOrderCommand.cpp" line="13"/>
@@ -1565,6 +1620,12 @@
         <location filename="../src/editor/controller/layout.cpp" line="1195"/>
         <source>No layout loaded to export</source>
         <translation>Nenhum layout carregado para exportar</translation>
+    </message>
+    <message>
+        <location filename="../src/editor/controller/layout.cpp" line="109"/>
+        <source>VS%1</source>
+        <comment>@item fallback name for an unnamed virtual screen</comment>
+        <translation>TV%1</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/layout.cpp" line="1202"/>
@@ -1731,12 +1792,6 @@
         <translation>arquivo</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/shader.cpp" line="272"/>
-        <source>Reset Shader Parameters</source>
-        <comment>@action</comment>
-        <translation>Redefinir os parâmetros do shader</translation>
-    </message>
-    <message>
         <location filename="../src/editor/controller/multiselect.cpp" line="189"/>
         <source>Resize %1 Zones</source>
         <comment>@action</comment>
@@ -1784,12 +1839,6 @@
         <source>Split Zone</source>
         <comment>@action</comment>
         <translation>Dividir a zona</translation>
-    </message>
-    <message>
-        <location filename="../src/editor/controller/shader.cpp" line="288"/>
-        <source>Switch Shader Effect</source>
-        <comment>@action</comment>
-        <translation>Trocar o efeito de shader</translation>
     </message>
     <message>
         <location filename="../src/editor/main.cpp" line="177"/>
@@ -2053,46 +2102,9 @@
         <translation>Não foi possível gravar o arquivo do algoritmo. Verifique o espaço em disco e as permissões.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="102"/>
-        <source>Cannot modify sets while a discard is in progress.</source>
-        <translation>Não é possível alterar os conjuntos enquanto um descarte está em andamento.</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="433"/>
-        <source>Cannot save while a discard is in progress.</source>
-        <translation>Não é possível salvar enquanto um descarte está em andamento.</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="670"/>
-        <source>A discard is already in progress. Try again in a moment.</source>
-        <translation>Um descarte já está em andamento. Tente de novo em instantes.</translation>
-    </message>
-    <message numerus="yes">
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="763"/>
-        <source>Could not restore %n profile file. It remains pending.</source>
-        <translation>
-            <numerusform>Não foi possível restaurar %n arquivo de perfil. Ele continua pendente.</numerusform>
-            <numerusform>Não foi possível restaurar %n arquivos de perfil. Eles continuam pendentes.</numerusform>
-        </translation>
-    </message>
-    <message numerus="yes">
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="765"/>
-        <source>Could not restore %n profile files. They remain pending.</source>
-        <translation>
-            <numerusform>Não foi possível restaurar %n arquivo de perfil. Ele continua pendente.</numerusform>
-            <numerusform>Não foi possível restaurar %n arquivos de perfil. Eles continuam pendentes.</numerusform>
-        </translation>
-    </message>
-    <message>
         <location filename="../src/settings/rules/rulecontroller.cpp" line="152"/>
         <source>Discard already in flight.</source>
         <translation>Já há um descarte em andamento.</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="901"/>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="911"/>
-        <source>Cannot modify presets while a discard is in progress.</source>
-        <translation>Não é possível alterar as predefinições enquanto um descarte está em andamento.</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_shaders.cpp" line="133"/>
@@ -2781,6 +2793,11 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="111"/>
+        <source>Group name (windows with the same name share one tabbed column)</source>
+        <translation>Nome do grupo (janelas com o mesmo nome compartilham uma coluna com abas)</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="111"/>
         <source>Open in fullscreen (off = block the app&apos;s own fullscreen at open)</source>
         <translation>Abrir em tela cheia (desligado = bloquear a tela cheia do próprio aplicativo na abertura)</translation>
     </message>
@@ -2963,6 +2980,11 @@
         <translation>Cor da tonalidade</translation>
     </message>
     <message>
+        <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="340"/>
+        <source>Layout</source>
+        <translation>Layout</translation>
+    </message>
+    <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="343"/>
         <source>Inactive zone color</source>
         <translation>Cor da zona inativa</translation>
@@ -3006,6 +3028,19 @@
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="410"/>
         <source>If you later remove this workspace, the rule goes dormant instead of failing. It works again as soon as a workspace with that name comes back.</source>
         <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="417"/>
+        <source>Global default changes the shader for every layout in the matched context. Pick a layout to change only that layout, and only while it is the active one there.</source>
+        <translation>O padrão global muda o shader de todos os layouts no contexto correspondente. Escolha um layout para mudar só esse layout, e só enquanto ele for o ativo ali.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="457"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="169"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="1085"/>
+        <source>None</source>
+        <comment>@item no overlay shader assigned</comment>
+        <translation>Nenhum</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="221"/>
@@ -3135,6 +3170,11 @@
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="311"/>
         <source>Focus when opened</source>
         <translation>Focalizar ao abrir</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="313"/>
+        <source>Open in a tab group</source>
+        <translation>Abrir em um grupo de abas</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="314"/>
@@ -4821,6 +4861,26 @@
         <translation>Curva de %1: %2</translation>
     </message>
     <message>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="527"/>
+        <source>%1 overlay shader</source>
+        <translation>Shader da sobreposição de %1</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="531"/>
+        <source>Block overlay shader</source>
+        <translation>Bloquear o shader da sobreposição</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="532"/>
+        <source>Block %1 overlay shader</source>
+        <translation>Bloquear o shader da sobreposição de %1</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="536"/>
+        <source>%1 overlay shader: %2</source>
+        <translation>Shader da sobreposição de %1: %2</translation>
+    </message>
+    <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="554"/>
         <source>Overlay style (invalid)</source>
         <translation>Estilo da sobreposição (inválido)</translation>
@@ -5052,6 +5112,22 @@
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="763"/>
         <source>Open: %1</source>
         <translation>Abrir: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="766"/>
+        <source>Tab group</source>
+        <translation>Grupo de abas</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="769"/>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="773"/>
+        <source>Tab group (invalid)</source>
+        <translation>Grupo de abas (inválido)</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulemodel_labels.cpp" line="775"/>
+        <source>Tab group: %1</source>
+        <translation>Grupo de abas: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="772"/>
@@ -5668,6 +5744,52 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="44"/>
         <source>Shortcut Cheatsheet</source>
         <translation>Resumo de atalhos</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="55"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="61"/>
+        <source>OSD Bands</source>
+        <comment>@item the Phosphor shell&apos;s on-screen display bands</comment>
+        <translation>Faixas do OSD</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="74"/>
+        <source>Phosphor Shell</source>
+        <comment>@item breadcrumb level for the Phosphor shell&apos;s own surfaces</comment>
+        <translation>Shell Phosphor</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="76"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="49"/>
+        <source>Bar</source>
+        <comment>@item the Phosphor shell&apos;s top bar surface, not a progress or menu bar</comment>
+        <translation>Barra</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="78"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="55"/>
+        <source>Popouts</source>
+        <comment>@item panels that pop out from the Phosphor shell bar</comment>
+        <translation>Janelas suspensas</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="80"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="67"/>
+        <source>Notifications</source>
+        <comment>@item the Phosphor shell&apos;s notification toasts</comment>
+        <translation>Notificações</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="82"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="73"/>
+        <source>Wallpaper Picker</source>
+        <translation>Seletor de papel de parede</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="84"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="79"/>
+        <source>Lock Screen</source>
+        <translation>Tela de bloqueio</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="127"/>
@@ -6585,11 +6707,6 @@
         <translation>perfil</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="276"/>
-        <source>motion set</source>
-        <translation>conjunto de movimento</translation>
-    </message>
-    <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="77"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="232"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="276"/>
@@ -7273,11 +7390,6 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="295"/>
-        <source>decoration set</source>
-        <translation>conjunto de decoração</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="295"/>
         <source>set</source>
         <translation>conjunto</translation>
     </message>
@@ -7379,6 +7491,31 @@
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="93"/>
         <source>system tray</source>
         <translation>bandeja do sistema</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="145"/>
+        <source>overlay set</source>
+        <translation>conjunto de sobreposição</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="233"/>
+        <source>place</source>
+        <translation>posicionar</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="259"/>
+        <source>kickoff</source>
+        <translation>kickoff</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="276"/>
+        <source>motion set</source>
+        <translation>conjunto de movimento</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="293"/>
+        <source>dock</source>
+        <translation>dock</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="104"/>
@@ -7493,19 +7630,40 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="233"/>
-        <source>place</source>
-        <translation>posicionar</translation>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="274"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="283"/>
+        <source>cursor</source>
+        <translation>cursor</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="259"/>
-        <source>kickoff</source>
-        <translation>kickoff</translation>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="275"/>
+        <source>trail</source>
+        <translation>rastro</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="293"/>
-        <source>dock</source>
-        <translation>dock</translation>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="275"/>
+        <source>click</source>
+        <translation>clique</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="275"/>
+        <source>ripple</source>
+        <translation>ondulação</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="276"/>
+        <source>halo</source>
+        <translation>halo</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="276"/>
+        <source>sparks</source>
+        <translation>faíscas</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="295"/>
+        <source>decoration set</source>
+        <translation>conjunto de decoração</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="314"/>
@@ -8037,6 +8195,25 @@
         <translation>gpu</translation>
     </message>
     <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="143"/>
+        <source>override</source>
+        <translation>substituição</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="146"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="252"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="279"/>
+        <source>bundle</source>
+        <translation>pacote</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="146"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="252"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="280"/>
+        <source>share</source>
+        <translation>compartilhar</translation>
+    </message>
+    <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="264"/>
         <source>motion blur</source>
         <translation>desfoque de movimento</translation>
@@ -8046,6 +8223,28 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="565"/>
         <source>heat</source>
         <translation>calor</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="542"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="702"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="708"/>
+        <source>Stop while a window is fullscreen</source>
+        <translation>Parar enquanto uma janela estiver em tela cheia</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="544"/>
+        <source>fullscreen</source>
+        <translation>tela cheia</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="544"/>
+        <source>game</source>
+        <translation>jogo</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="544"/>
+        <source>video</source>
+        <translation>vídeo</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="563"/>
@@ -9706,6 +9905,31 @@
         <translation>rápido</translation>
     </message>
     <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="885"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="95"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="52"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="58"/>
+        <source>Group windows of the same application as tabs</source>
+        <translation>Agrupar janelas do mesmo aplicativo como abas</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="886"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="96"/>
+        <source>group</source>
+        <translation>grupo</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="887"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="96"/>
+        <source>application</source>
+        <translation>aplicativo</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="887"/>
+        <source>same app</source>
+        <translation>mesmo aplicativo</translation>
+    </message>
+    <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="931"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="121"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="209"/>
@@ -10504,11 +10728,6 @@
         <translation>Atalhos rápidos</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="127"/>
-        <source>Named Workspaces</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="281"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="500"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="547"/>
@@ -10519,6 +10738,11 @@
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="355"/>
         <source>Templates</source>
         <translation>Modelos</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="127"/>
+        <source>Named Workspaces</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="375"/>
@@ -10553,6 +10777,13 @@
         <translation>Arraste de janelas</translation>
     </message>
     <message>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="463"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="516"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="561"/>
+        <source>Sets</source>
+        <translation>Conjuntos</translation>
+    </message>
+    <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="521"/>
         <source>Surfaces</source>
         <translation>Superfícies</translation>
@@ -10565,9 +10796,10 @@
         <translation>Shell</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="544"/>
-        <source>Decoration Sets</source>
-        <translation>Conjuntos de decoração</translation>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="512"/>
+        <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="86"/>
+        <source>Pointer</source>
+        <translation>Ponteiro</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="313"/>
@@ -10624,6 +10856,11 @@
         <translation>Conjuntos de movimento</translation>
     </message>
     <message>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="544"/>
+        <source>Decoration Sets</source>
+        <translation>Conjuntos de decoração</translation>
+    </message>
+    <message>
         <location filename="../src/settings/services/shaderpackinstaller.cpp" line="303"/>
         <source>Shader pack installed.</source>
         <translation>Pacote de shaders instalado.</translation>
@@ -10664,14 +10901,24 @@
         <translation>Erro desconhecido no instalador do pacote de shaders.</translation>
     </message>
     <message>
-        <location filename="../src/settings/stores/shadersetstore.cpp" line="169"/>
-        <source>Could not back up the existing set, so it was left untouched.</source>
-        <translation>Não foi possível fazer backup do conjunto existente, então ele ficou intacto.</translation>
-    </message>
-    <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="234"/>
         <source>Could not write the set to disk.</source>
         <translation>Não foi possível gravar o conjunto no disco.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/stores/shadersetstore.cpp" line="345"/>
+        <source>“%1” could not be used here. It may be for another page, or it may need packs or entries this version does not have.</source>
+        <translation>Não foi possível usar “%1” aqui. Pode ser de outra página, ou pode precisar de pacotes ou entradas que esta versão não tem.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/stores/shadersetstore.cpp" line="358"/>
+        <source>Could not finish applying “%1”. Some of it may have been applied, and Discard undoes the whole thing.</source>
+        <translation>Não foi possível terminar de aplicar “%1”. Parte dele pode ter sido aplicada, e Descartar desfaz tudo.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/stores/shadersetstore.cpp" line="370"/>
+        <source>“%1” was saved by an older version, so it does not cover everything a set covers now. Anything it leaves out is unchanged.</source>
+        <translation>“%1” foi salvo por uma versão mais antiga, então não cobre tudo o que um conjunto cobre agora. O que ele deixa de fora fica como está.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="439"/>
@@ -10780,11 +11027,6 @@
         <translation>Esse conjunto está vazio.</translation>
     </message>
     <message>
-        <location filename="../src/settings/stores/shadersetstore.cpp" line="670"/>
-        <source>That set does not match this page.</source>
-        <translation>Esse conjunto não corresponde a esta página.</translation>
-    </message>
-    <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="681"/>
         <source>That set has no usable name.</source>
         <translation>Esse conjunto não tem um nome utilizável.</translation>
@@ -10795,6 +11037,11 @@
         <location filename="../src/settings/stores/shadersetstore.cpp" line="710"/>
         <source>Could not create the sets folder.</source>
         <translation>Não foi possível criar a pasta de conjuntos.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/stores/shadersetstore.cpp" line="169"/>
+        <source>Could not back up the existing set, so it was left untouched.</source>
+        <translation>Não foi possível fazer backup do conjunto existente, então ele ficou intacto.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="355"/>
@@ -10827,10 +11074,25 @@
         <translation>Já existe um conjunto chamado “%1”.</translation>
     </message>
     <message>
+        <location filename="../src/settings/stores/shadersetstore.cpp" line="468"/>
+        <source>Could not capture the current settings.</source>
+        <translation>Não foi possível capturar as configurações atuais.</translation>
+    </message>
+    <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="500"/>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="508"/>
         <source>Could not delete “%1”.</source>
         <translation>Não foi possível excluir “%1”.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/stores/shadersetstore.cpp" line="660"/>
+        <source>That set could not be imported here. It may be for another page, or it may need packs or entries this version does not have.</source>
+        <translation>Não foi possível importar esse conjunto aqui. Pode ser de outra página, ou pode precisar de pacotes ou entradas que esta versão não tem.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/stores/shadersetstore.cpp" line="670"/>
+        <source>That set does not match this page.</source>
+        <translation>Esse conjunto não corresponde a esta página.</translation>
     </message>
     <message>
         <location filename="../src/settings/stores/shadersetstore.cpp" line="715"/>
@@ -10867,16 +11129,6 @@
         <translation>Não foi possível excluir a predefinição “%1”.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="473"/>
-        <source>Cannot reset while a discard is in progress.</source>
-        <translation>Não é possível redefinir enquanto um descarte está em andamento.</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="535"/>
-        <source>Some animation overrides could not be reset.</source>
-        <translation>Não foi possível redefinir algumas substituições de animação.</translation>
-    </message>
-    <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="143"/>
         <source>Settings can only be exported to a local file.</source>
         <translation>As configurações só podem ser exportadas para um arquivo local.</translation>
@@ -10895,6 +11147,11 @@
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="209"/>
         <source>That settings file is no longer there.</source>
         <translation>Esse arquivo de configurações não está mais lá.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="222"/>
+        <source>That file is too large to be a settings file.</source>
+        <translation>Esse arquivo é grande demais para ser um arquivo de configurações.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="224"/>
@@ -10963,14 +11220,19 @@
         <translation>Não foi possível restaurar as suas configurações. Uma cópia está salva em %1.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="529"/>
-        <source>Your settings were imported, but the window rules could not be reloaded. Restart PlasmaZones before you change any rules, or the imported ones will be lost.</source>
-        <translation>As suas configurações foram importadas, mas não foi possível recarregar as regras de janela. Reinicie o PlasmaZones antes de alterar qualquer regra, senão as regras importadas serão perdidas.</translation>
+        <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="552"/>
+        <source>Your settings were imported, but PlasmaZones is still running the old ones. Restart PlasmaZones, or the imported settings may be overwritten.</source>
+        <translation>As suas configurações foram importadas, mas o PlasmaZones ainda está usando as antigas. Reinicie o PlasmaZones, ou as configurações importadas podem ser sobrescritas.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="560"/>
         <source>Your settings were imported, but the animation pages still show the old ones. Reopen the settings window to see the imported values.</source>
         <translation>As suas configurações foram importadas, mas as páginas de animação ainda mostram as antigas. Reabra a janela de configurações para ver os valores importados.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="529"/>
+        <source>Your settings were imported, but the window rules could not be reloaded. Restart PlasmaZones before you change any rules, or the imported ones will be lost.</source>
+        <translation>As suas configurações foram importadas, mas não foi possível recarregar as regras de janela. Reinicie o PlasmaZones antes de alterar qualquer regra, senão as regras importadas serão perdidas.</translation>
     </message>
     <message>
         <location filename="../src/shaderpreview/shaderpreviewcontroller.cpp" line="369"/>
@@ -11715,6 +11977,12 @@
         <source>Exit fullscreen</source>
         <comment>@action:button</comment>
         <translation>Sair da tela cheia</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="820"/>
+        <source>Exit fullscreen (F11)</source>
+        <comment>@action:button</comment>
+        <translation>Sair da tela cheia (F11)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="822"/>
@@ -13080,22 +13348,10 @@
         <translation>Arraste para redimensionar a zona</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="347"/>
-        <source>Shader Settings</source>
-        <comment>@title:window</comment>
-        <translation>Configurações do shader</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="468"/>
-        <source>Enable effect:</source>
-        <comment>@label</comment>
-        <translation>Ativar o efeito:</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="469"/>
-        <source>Enable shader effect</source>
-        <comment>@option:check</comment>
-        <translation>Ativar o efeito de shader</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="174"/>
+        <source>Missing shader %1</source>
+        <comment>@item the assigned overlay shader pack is not installed</comment>
+        <translation>Shader %1 ausente</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="484"/>
@@ -13104,17 +13360,16 @@
         <translation>Shader:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="490"/>
-        <source>Select shader…</source>
-        <comment>@action:button</comment>
-        <translation>Selecionar um shader…</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="330"/>
+        <source>Global default overlay shader</source>
+        <comment>@label:listbox</comment>
+        <translation>Shader da sobreposição padrão global</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="525"/>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="528"/>
-        <source>No description available</source>
-        <comment>@info:placeholder</comment>
-        <translation>Nenhuma descrição disponível</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlayShaderAssignmentCard.qml.cpp" line="330"/>
+        <source>Overlay shader for %1</source>
+        <comment>@label:listbox overlay shader for a named layout</comment>
+        <translation>Shader da sobreposição para %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="554"/>
@@ -13131,72 +13386,6 @@
         <translation>v%1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="560"/>
-        <source>(User shader)</source>
-        <comment>@info user-installed shader</comment>
-        <translation>(shader do usuário)</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="626"/>
-        <source>Apply a built-in preset</source>
-        <comment>@info:tooltip</comment>
-        <translation>Aplica uma predefinição interna</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="629"/>
-        <source>Presets</source>
-        <comment>@action:button</comment>
-        <translation>Predefinições</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="709"/>
-        <source>Enable the shader effect to configure visual effects for zone overlays.</source>
-        <comment>@info</comment>
-        <translation>Ative o efeito de shader para configurar os efeitos visuais das sobreposições de zona.</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="730"/>
-        <source>Dismiss</source>
-        <comment>@action:button</comment>
-        <translation>Fechar</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="742"/>
-        <source>Load Preset</source>
-        <comment>@action:button</comment>
-        <translation>Carregar uma predefinição</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="744"/>
-        <source>Load shader settings from a preset file</source>
-        <comment>@info:tooltip</comment>
-        <translation>Carrega as configurações do shader de um arquivo de predefinição</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="756"/>
-        <source>Save Preset</source>
-        <comment>@action:button</comment>
-        <translation>Salvar a predefinição</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="759"/>
-        <source>Save current shader settings as a preset file</source>
-        <comment>@info:tooltip</comment>
-        <translation>Salva as configurações atuais do shader em um arquivo de predefinição</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="775"/>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="777"/>
-        <source>Apply</source>
-        <comment>@action:button</comment>
-        <translation>Aplicar</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="778"/>
-        <source>Apply the shader settings and close the dialog</source>
-        <translation>Aplica as configurações do shader e fecha o diálogo</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="915"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserDetailDialog.qml.cpp" line="954"/>
         <source>No error details available.</source>
@@ -13204,29 +13393,11 @@
         <translation>Nenhum detalhe do erro disponível.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="921"/>
-        <source>Loading preview…</source>
-        <comment>@info:placeholder</comment>
-        <translation>Carregando a visualização…</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="939"/>
         <location filename=".qml-stubs/src/shared/ShaderParamsEditor.qml.cpp" line="137"/>
         <source>Choose %1</source>
         <comment>@title:window</comment>
         <translation>Escolher %1</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="954"/>
-        <source>Choose Image</source>
-        <comment>@title:window</comment>
-        <translation>Escolher uma imagem</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="955"/>
-        <source>Image files (*.png *.jpg *.jpeg *.bmp *.webp *.svg *.svgz)</source>
-        <comment>@item:inlistbox</comment>
-        <translation>Arquivos de imagem (*.png *.jpg *.jpeg *.bmp *.webp *.svg *.svgz)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="974"/>
@@ -13399,16 +13570,16 @@
         <translation>Configurações do shader</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="433"/>
-        <source>Configure visual shader effects for zones</source>
-        <comment>@info</comment>
-        <translation>Configure os efeitos visuais de shader das zonas</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="457"/>
         <source>Import layout from file</source>
         <comment>@tooltip</comment>
         <translation>Importar um layout de um arquivo</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="433"/>
+        <source>Configure visual shader effects for zones</source>
+        <comment>@info</comment>
+        <translation>Configure os efeitos visuais de shader das zonas</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="459"/>
@@ -13697,6 +13868,13 @@
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="58"/>
         <source>Releases</source>
         <translation>Versões</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="67"/>
+        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="90"/>
+        <source>What&apos;s New</source>
+        <comment>@action:button opens the release history</comment>
+        <translation>Novidades</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="67"/>
@@ -14266,11 +14444,6 @@
         <translation>Restaurar a ordem padrão</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="17"/>
-        <source>What&apos;s New in PlasmaZones %1</source>
-        <translation>Novidades do PlasmaZones %1</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/settings/qml/components/ColorButton.qml.cpp" line="28"/>
         <source>Color picker</source>
         <translation>Seletor de cores</translation>
@@ -14708,6 +14881,12 @@
         <translation>Parar o serviço?</translation>
     </message>
     <message>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="182"/>
+        <source>Stopping the PlasmaZones daemon disables window snapping, tiling and scrolling until you start it again.</source>
+        <oldsource>Stopping the PlasmaZones daemon disables window tiling and snapping until you start it again.</oldsource>
+        <translation>Parar o serviço do PlasmaZones desativa o encaixe, o ladrilhamento e a rolagem de janelas até você iniciá-lo de novo.</translation>
+    </message>
+    <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="185"/>
         <source>Stopping the PlasmaZones daemon disables window snapping, tiling, scrolling and dynamic workspaces until you start it again.</source>
         <translation type="unfinished"></translation>
@@ -14901,6 +15080,12 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="74"/>
         <source>Settings here apply to all child events unless individually overridden.</source>
         <translation>As configurações daqui valem para todos os eventos filhos, a não ser que sejam substituídas uma a uma.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="89"/>
+        <source>Timing inherits from: %1. The animation is not inherited from outside %2.</source>
+        <comment>%1 is an inheritance chain, %2 an event-path root</comment>
+        <translation>O tempo é herdado de: %1. A animação não é herdada de fora de %2.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="77"/>
@@ -15271,6 +15456,41 @@
         <translation>Ignorar a animação quando a geometria mudar menos que isso</translation>
     </message>
     <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="36"/>
+        <source>A set bundles your per-event animation packs and timing into one shareable JSON file. Applying a set merges into your current overrides. Events it doesn&apos;t cover are left unchanged.</source>
+        <oldsource>Sets bundle your per-event animation packs and timing into one shareable JSON file. Applying a set merges into your current overrides. Events it doesn&apos;t cover are left unchanged.</oldsource>
+        <translation>Um conjunto reúne os seus pacotes de animação por evento e o tempo deles em um único arquivo JSON que dá para compartilhar. Aplicar um conjunto mescla o conteúdo dele com as suas substituições atuais. Os eventos que ele não cobre ficam como estão.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="37"/>
+        <source>Capture every per-event animation pack and its timing as a named set.</source>
+        <oldsource>Capture every per-event animation pack and its timing as a named motion set.</oldsource>
+        <translation>Captura todos os pacotes de animação por evento e o tempo deles em um conjunto com nome.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="53"/>
+        <source>Sets are single JSON files under your data directory. Drop a set file here to import it, or use the buttons below.</source>
+        <oldsource>Motion sets are single JSON files under your data directory. Drop a set file here to import it, or use the buttons below.</oldsource>
+        <translation>Os conjuntos são arquivos JSON únicos guardados na sua pasta de dados. Solte um arquivo de conjunto aqui para importá-lo, ou use os botões abaixo.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="52"/>
+        <source>No sets saved yet.</source>
+        <translation>Nenhum conjunto salvo ainda.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="322"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="53"/>
+        <source>Set name</source>
+        <translation>Nome do conjunto</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="332"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="54"/>
+        <source>Set description</source>
+        <translation>Descrição do conjunto</translation>
+    </message>
+    <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="27"/>
         <source>Motion sets bundle your per-event overrides into one shareable JSON file. Applying a set merges into your current overrides. Paths it doesn&apos;t cover are left unchanged.</source>
         <translation>Os conjuntos de movimento reúnem as suas substituições por evento em um único arquivo JSON que dá para compartilhar. Aplicar um conjunto mescla o conteúdo dele com as suas substituições atuais. Os caminhos que ele não cobre ficam como estão.</translation>
@@ -15378,6 +15598,11 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="69"/>
         <source>“%1” will overwrite every per-event override it covers.</source>
         <translation>“%1” vai sobrescrever todas as substituições por evento que ele cobre.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="74"/>
+        <source>“%1” will replace every per-event override it covers. The change is not saved yet, so Discard still undoes it.</source>
+        <translation>“%1” vai substituir todas as substituições por evento que ele cobre. A alteração ainda não foi salva, então Descartar ainda a desfaz.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsOsdsPage.qml.cpp" line="15"/>
@@ -15998,8 +16223,20 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="23"/>
+        <source>A set bundles your per-surface pack chains into one shareable JSON file. Applying a set merges into your current decoration. Surfaces it doesn&apos;t cover are left unchanged.</source>
+        <oldsource>Sets bundle your per-surface pack chains into one shareable JSON file. Applying a set merges into your current decoration. Surfaces it doesn&apos;t cover are left unchanged.</oldsource>
+        <translation>Um conjunto reúne as suas cadeias de pacotes por superfície em um único arquivo JSON que dá para compartilhar. Aplicar um conjunto mescla o conteúdo dele com a sua decoração atual. As superfícies que ele não cobre ficam como estão.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="23"/>
         <source>Decoration sets bundle your per-surface pack chains into one shareable JSON file. Applying a set merges into your current decoration. Surfaces it doesn&apos;t cover are left unchanged.</source>
         <translation>Os conjuntos de decoração reúnem as suas cadeias de pacotes por superfície em um único arquivo JSON que dá para compartilhar. Aplicar um conjunto mescla o conteúdo dele com a sua decoração atual. As superfícies que ele não cobre ficam como estão.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="24"/>
+        <source>Capture every per-surface override as a named set.</source>
+        <oldsource>Capture every per-surface override as a named decoration set.</oldsource>
+        <translation>Captura todas as substituições por superfície em um conjunto com nome.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="24"/>
@@ -16050,6 +16287,17 @@
         <comment>@label decoration surface group</comment>
         <translation>Shell do Plasma</translation>
     </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="53"/>
+        <source>“%1” will replace the decoration on every surface it covers.</source>
+        <translation>“%1” vai substituir a decoração de todas as superfícies que ele cobre.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="41"/>
+        <source>Pointer</source>
+        <comment>@label decoration surface group</comment>
+        <translation>Ponteiro</translation>
+    </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="50"/>
         <source>%n Surface</source>
@@ -16059,14 +16307,31 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="53"/>
-        <source>“%1” will replace the decoration on every surface it covers.</source>
-        <translation>“%1” vai substituir a decoração de todas as superfícies que ele cobre.</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="51"/>
+        <source>“%1” will replace the decoration on every surface it covers. The change is not saved yet, so Discard still undoes it.</source>
+        <translation>“%1” vai substituir a decoração de todas as superfícies que ele cobre. A alteração ainda não foi salva, então Descartar ainda a desfaz.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShadersPage.qml.cpp" line="21"/>
         <source>Browse installed decoration packs. Stack packs onto a surface&apos;s chain from the Windows, OSDs, and Popups pages.</source>
         <translation>Navegue pelos pacotes de decoração instalados. Empilhe pacotes na cadeia de uma superfície pelas páginas Janelas, Avisos na tela e Janelas instantâneas.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShadersPage.qml.cpp" line="24"/>
+        <source>Browse installed decoration packs. Stack packs onto a surface&apos;s chain from the Windows, OSDs, Popups, Shell, and Pointer pages.</source>
+        <translation>Navegue pelos pacotes de decoração instalados. Empilhe pacotes na cadeia de uma superfície pelas páginas Janelas, Avisos na tela, Janelas instantâneas, Shell e Ponteiro.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShadersPage.qml.cpp" line="32"/>
+        <source>Surface</source>
+        <comment>@item decoration pack family (windows, OSDs, popups, shell)</comment>
+        <translation>Superfície</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShadersPage.qml.cpp" line="37"/>
+        <source>Pointer</source>
+        <comment>@item decoration pack family (the mouse pointer)</comment>
+        <translation>Ponteiro</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShadersPage.qml.cpp" line="25"/>
@@ -16354,6 +16619,11 @@
         <source>Other windows keep their decoration but stop moving. Saves graphics card use roughly in proportion to how many windows you have open. Panels and applet popups keep animating, because a panel is never the active window.</source>
         <oldsource>Other windows keep their decoration but stop moving. Saves graphics card use roughly in proportion to how many windows you have open.</oldsource>
         <translation>As outras janelas mantêm a decoração, mas param de se mover. Isso reduz o uso da placa de vídeo mais ou menos na proporção de quantas janelas você tem abertas. Os painéis e as janelas instantâneas de miniaplicativo continuam animando, porque um painel nunca é a janela ativa.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="704"/>
+        <source>Drop every decoration on a monitor while a window on it is fullscreen, the mouse pointer included. Other monitors keep theirs. A fullscreen game or video has no frame to decorate, and it is the last place you want to spend graphics work.</source>
+        <translation>Tira todas as decorações de um monitor enquanto uma janela nele estiver em tela cheia, incluindo o ponteiro do mouse. Os outros monitores mantêm as deles. Um jogo ou vídeo em tela cheia não tem moldura para decorar, e é o último lugar onde você quer gastar trabalho gráfico.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="704"/>
@@ -17625,6 +17895,24 @@
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileSwitcherHeader.qml.cpp" line="175"/>
         <source>Active profile</source>
         <translation>Perfil ativo</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileSwitcherHeader.qml.cpp" line="202"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="383"/>
+        <source>Use this profile?</source>
+        <translation>Usar este perfil?</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileSwitcherHeader.qml.cpp" line="203"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="384"/>
+        <source>You have changes you have not saved yet. Switching to “%1” replaces them with that profile&apos;s settings.</source>
+        <translation>Você tem alterações que ainda não foram salvas. Mudar para “%1” substitui essas alterações pelas configurações desse perfil.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileSwitcherHeader.qml.cpp" line="207"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="388"/>
+        <source>Use profile</source>
+        <translation>Usar o perfil</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="129"/>
@@ -19684,18 +19972,6 @@
         <translation>Nome do conjunto…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="322"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="53"/>
-        <source>Set name</source>
-        <translation>Nome do conjunto</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="332"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="54"/>
-        <source>Set description</source>
-        <translation>Descrição do conjunto</translation>
-    </message>
-    <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="345"/>
         <source>Export Set</source>
         <translation>Exportar o conjunto</translation>
@@ -19707,9 +19983,9 @@
         <translation>Conjunto do PlasmaZones (*.json)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="52"/>
-        <source>No sets saved yet.</source>
-        <translation>Nenhum conjunto salvo ainda.</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="157"/>
+        <source>This captures your current values, including the changes you have not saved yet.</source>
+        <translation>Isto captura os seus valores atuais, incluindo as alterações que ainda não foram salvas.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="183"/>
@@ -19984,9 +20260,10 @@
         <translation>Atribua layouts de zonas a atalhos de teclado para trocar rapidamente.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShadersPage.qml.cpp" line="22"/>
-        <source>Browse installed snapping overlay shaders. Assign a shader to a layout from the layout editor&apos;s appearance section.</source>
-        <translation>Navegue pelos shaders de sobreposição de encaixe instalados. Atribua um shader a um layout pela seção de aparência do editor de layouts.</translation>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaysLibraryPage.qml.cpp" line="24"/>
+        <source>Browse the zone overlay shaders you have installed. To assign one, either as the global default or for a single layout, go to the Layouts page.</source>
+        <comment>@info banner on the overlay shader browser</comment>
+        <translation>Navegue pelos shaders de sobreposição de zonas que você instalou. Para atribuir um, seja como padrão global, seja para um único layout, vá à página Layouts.</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShadersPage.qml.cpp" line="28"/>
@@ -20167,9 +20444,29 @@
         <translation>Ativar %1</translation>
     </message>
     <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="269"/>
+        <source>Not decorated. Add a pointer pack to style the cursor.</source>
+        <translation>Sem decoração. Adicione um pacote de ponteiro para estilizar o cursor.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="339"/>
+        <source>No pointer packs.</source>
+        <translation>Nenhum pacote de ponteiro.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="340"/>
+        <source>No pointer packs. Add one below.</source>
+        <translation>Nenhum pacote de ponteiro. Adicione um abaixo.</translation>
+    </message>
+    <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="333"/>
         <source>Add decoration pack</source>
         <translation>Adicionar um pacote de decoração</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="341"/>
+        <source>Add pointer pack</source>
+        <translation>Adicionar um pacote de ponteiro</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="345"/>
@@ -20177,9 +20474,24 @@
         <translation>Empilha outro pacote na cadeia desta superfície</translation>
     </message>
     <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="342"/>
+        <source>Stack another pack onto the pointer&apos;s chain</source>
+        <translation>Empilha outro pacote na cadeia do ponteiro</translation>
+    </message>
+    <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="348"/>
         <source>No decoration packs are installed</source>
         <translation>Nenhum pacote de decoração instalado</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="343"/>
+        <source>No pointer packs are installed</source>
+        <translation>Nenhum pacote de ponteiro instalado</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="344"/>
+        <source>Add a pointer pack to the pointer&apos;s chain</source>
+        <translation>Adicionar um pacote de ponteiro à cadeia do ponteiro</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="350"/>
@@ -20640,6 +20952,11 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="54"/>
+        <source>When a window opens and the strip already holds a window of the same application, the new window joins that window&apos;s column as a tab instead of taking a column of its own. The column it joins is turned into tabs if it is not already. Per-window rules still take precedence.</source>
+        <translation>Quando uma janela abre e a faixa já contém uma janela do mesmo aplicativo, a nova janela entra na coluna dessa janela como aba em vez de ocupar uma coluna própria. A coluna em que ela entra é convertida em abas se ainda não estiver. As regras por janela continuam tendo prioridade.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="54"/>
         <source>Remove the outer gaps while the strip holds a single column, so that column sits against the screen edge at its own width</source>
         <translation>Remover os espaçamentos externos enquanto a faixa tem uma única coluna, para que essa coluna encoste na borda da tela com a própria largura</translation>
     </message>
@@ -20913,6 +21230,12 @@
         <source>No configurable parameters.</source>
         <comment>@info</comment>
         <translation>Nenhum parâmetro configurável.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/shared/ParameterEditor.qml.cpp" line="471"/>
+        <source>This pack is not installed, so its settings cannot be shown.</source>
+        <comment>@info</comment>
+        <translation>Este pacote não está instalado, então as configurações dele não podem ser mostradas.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/shared/ParameterRow.qml.cpp" line="347"/>
@@ -21496,6 +21819,12 @@
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="481"/>
         <source>Focus on the master window</source>
         <translation>Foco na janela mestre</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="487"/>
+        <source>Focus on the tab</source>
+        <comment>@info:status focus moved to a numbered tab</comment>
+        <translation>Foco na aba</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="485"/>
@@ -22292,6 +22621,11 @@
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="156"/>
         <source>Gives matching windows keyboard focus as soon as they open, or keeps focus where it was when set to off.</source>
         <translation>Dá o foco do teclado às janelas correspondentes assim que elas abrem, ou mantém o foco onde estava quando desligado.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="155"/>
+        <source>Opens matching windows as tabs of one column, named by the group. A new window joins the column that already holds a window of the same group, turning it into tabs if needed, and opens a column of its own when there is none yet. Windows from different rules share a column when the rules use the same group name.</source>
+        <translation>Abre as janelas correspondentes como abas de uma única coluna, nomeada pelo grupo. Uma nova janela entra na coluna que já contém uma janela do mesmo grupo, convertendo-a em abas se necessário, e abre uma coluna própria quando ainda não existe nenhuma. Janelas de regras diferentes compartilham uma coluna quando as regras usam o mesmo nome de grupo.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="161"/>
@@ -23152,6 +23486,17 @@
         <translation>Decoração das superfícies que pertencem ao shell do Plasma. Elas ficam sem decoração até que uma seja ativada aqui, e a decoração padrão global nunca vale para elas.</translation>
     </message>
     <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="21"/>
+        <source>Decoration for surfaces a shell owns: the Plasma panels and applet popups, and the Phosphor shell chrome. The global default decoration never applies to them. Plasma surfaces stay undecorated until a decoration is enabled here, while the Phosphor surfaces start with the decoration the Phosphor shell ships.</source>
+        <translation>Decoração para superfícies que pertencem a um shell: os painéis do Plasma e as janelas instantâneas de miniaplicativo, além da moldura do shell Phosphor. A decoração padrão global nunca se aplica a elas. As superfícies do Plasma ficam sem decoração até que uma seja ativada aqui, enquanto as superfícies do Phosphor começam com a decoração que o shell Phosphor fornece.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="43"/>
+        <source>All Phosphor Shell Surfaces</source>
+        <comment>@item the category root card that every Phosphor shell surface inherits from</comment>
+        <translation>Todas as superfícies do shell Phosphor</translation>
+    </message>
+    <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="20"/>
         <source>Plasma shell animation events</source>
         <translation>Eventos de animação do shell do Plasma</translation>
@@ -23161,6 +23506,13 @@
         <source>Animations for the surfaces the Plasma shell owns, like the application launcher and the system tray popups. No shader you pick for your own windows reaches them, so every row starts with no shader and picking one is the whole opt-in. Until you pick one, these surfaces animate the way Plasma animates them. “All Shell Surfaces” is the default for both events, and either can override it. Panels have no rows here, because a panel stays on screen for the whole session instead of opening and closing.</source>
         <oldsource>Animations for the surfaces the Plasma shell owns, like the application launcher and the system tray popups. No shader you pick for your own windows reaches them, so every row starts with no shader and picking one is the whole opt-in. Until you pick one, these surfaces animate the way Plasma animates them. &quot;All Shell Surfaces&quot; is the default for both events, and either can override it. Panels have no rows here, because a panel stays on screen for the whole session instead of opening and closing.</oldsource>
         <translation>Animações das superfícies que pertencem ao shell do Plasma, como o lançador de aplicativos e as janelas instantâneas da bandeja do sistema. Nenhum shader que você escolher para as suas janelas chega até elas, então cada linha começa sem shader e escolher um já é toda a adesão. Enquanto você não escolher, essas superfícies animam do jeito que o Plasma as anima. O padrão dos dois eventos é “Todas as superfícies do shell”, e qualquer um deles pode substituí-lo. Os painéis não têm linhas aqui, porque um painel fica na tela a sessão inteira em vez de abrir e fechar.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="25"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="25"/>
+        <source>All Shell Surfaces</source>
+        <comment>@item the category root card that every shell surface inherits from</comment>
+        <translation>Todas as superfícies do shell</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="25"/>
@@ -23746,6 +24098,483 @@
         <source>%1 of %2</source>
         <comment>matching shortcuts out of the total</comment>
         <translation>%1 de %2</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="96"/>
+        <source>What&apos;s New</source>
+        <comment>@title:window the browsable release history</comment>
+        <translation>Novidades</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="288"/>
+        <source>All matches</source>
+        <comment>@title the reading pane is showing search results</comment>
+        <translation>Todos os resultados</translation>
+    </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="289"/>
+        <source>%n highlight</source>
+        <translation>
+            <numerusform>%n item</numerusform>
+            <numerusform>%n itens</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="305"/>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="678"/>
+        <source>Since %1</source>
+        <comment>@label %1 is a version number, e.g. 3.4.7</comment>
+        <translation>Desde %1</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="313"/>
+        <source>Nothing new since version %1.</source>
+        <comment>@info empty state of the digest view</comment>
+        <translation>Nada novo desde a versão %1.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="338"/>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="716"/>
+        <source>The release history could not be loaded.</source>
+        <comment>@info shown when whatsnew.json is missing or fails validation</comment>
+        <translation>Não foi possível carregar o histórico de versões.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="379"/>
+        <source>No release has highlights of this kind.</source>
+        <comment>@info empty state when a kind filter matches nothing and no search text is typed</comment>
+        <translation>Nenhuma versão tem itens desse tipo.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="381"/>
+        <source>No new feature matches “%1”.</source>
+        <comment>@info %1 is the user&apos;s search text</comment>
+        <translation>Nenhum recurso novo corresponde a “%1”.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="383"/>
+        <source>No change matches “%1”.</source>
+        <comment>@info %1 is the user&apos;s search text</comment>
+        <translation>Nenhuma mudança corresponde a “%1”.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="385"/>
+        <source>No fix matches “%1”.</source>
+        <comment>@info %1 is the user&apos;s search text</comment>
+        <translation>Nenhuma correção corresponde a “%1”.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="386"/>
+        <source>Nothing matches “%1”.</source>
+        <comment>@info %1 is the user&apos;s search text</comment>
+        <translation>Nada corresponde a “%1”.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="393"/>
+        <source>Changed</source>
+        <comment>@label a release highlight that changes existing behavior</comment>
+        <translation>Alterado</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="482"/>
+        <source>Search releases…</source>
+        <comment>@info:placeholder</comment>
+        <translation>Pesquisar versões…</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="483"/>
+        <source>Search release highlights</source>
+        <comment>@info:whatsthis accessible name of the search field</comment>
+        <translation>Pesquisar itens do histórico de versões</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="497"/>
+        <source>Show every release highlight</source>
+        <comment>@info:whatsthis accessible name of the All filter chip</comment>
+        <translation>Mostrar todos os itens</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="502"/>
+        <source>Show only new features</source>
+        <comment>@info:whatsthis accessible name of the New filter chip</comment>
+        <translation>Mostrar apenas recursos novos</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="507"/>
+        <source>Show only changed behavior</source>
+        <comment>@info:whatsthis accessible name of the Changed filter chip</comment>
+        <translation>Mostrar apenas comportamento alterado</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="512"/>
+        <source>Show only bug fixes</source>
+        <comment>@info:whatsthis accessible name of the Fixed filter chip</comment>
+        <translation>Mostrar apenas correções de erros</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="628"/>
+        <source>Everything since version %1</source>
+        <comment>@info:whatsthis %1 is a version number</comment>
+        <translation>Tudo desde a versão %1</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="630"/>
+        <source>Every matching highlight</source>
+        <comment>@info:whatsthis accessible name of the All matches rail row</comment>
+        <translation>Todos os itens correspondentes</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="632"/>
+        <source>Collapse the %1 releases</source>
+        <comment>@info:whatsthis %1 is a version series, e.g. 3.4</comment>
+        <translation>Recolher as versões %1</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="632"/>
+        <source>Expand the %1 releases</source>
+        <comment>@info:whatsthis %1 is a version series, e.g. 3.4</comment>
+        <translation>Expandir as versões %1</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="633"/>
+        <source>Version %1, released %2</source>
+        <comment>@info:whatsthis %1 is a version number, %2 a release date</comment>
+        <translation>Versão %1, lançada em %2</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="816"/>
+        <source>Show only version %1</source>
+        <comment>@info:whatsthis %1 is a version number</comment>
+        <translation>Mostrar apenas a versão %1</translation>
+    </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="306"/>
+        <source>%n release</source>
+        <translation>
+            <numerusform>%n versão</numerusform>
+            <numerusform>%n versões</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="17"/>
+        <source>What&apos;s New in PlasmaZones %1</source>
+        <translation>Novidades do PlasmaZones %1</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="391"/>
+        <source>New</source>
+        <comment>@label a release highlight that adds a feature</comment>
+        <translation>Novo</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="395"/>
+        <source>Fixed</source>
+        <comment>@label a release highlight that fixes a bug</comment>
+        <translation>Corrigido</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="496"/>
+        <source>All</source>
+        <comment>@option:radio show every kind of release highlight</comment>
+        <translation>Tudo</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="680"/>
+        <source>All matches</source>
+        <comment>@item the rail row that shows every match</comment>
+        <translation>Todos os resultados</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/WhatsNewPage.qml.cpp" line="804"/>
+        <source>Other</source>
+        <comment>@title a digest group of highlights with no New, Changed or Fixed kind</comment>
+        <translation>Outros</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/PointerPreviewPane.qml.cpp" line="111"/>
+        <source>Pause</source>
+        <comment>@option:check pointer preview</comment>
+        <translation>Pausar</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/PointerPreviewPane.qml.cpp" line="121"/>
+        <source>Show cursor</source>
+        <comment>@option:check pointer preview</comment>
+        <translation>Mostrar o cursor</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/PointerPackNotices.qml.cpp" line="48"/>
+        <source>This pack paints over the cursor, so PlasmaZones hides the system cursor and draws it after the pack.</source>
+        <comment>@info pointer preview note</comment>
+        <translation>Este pacote pinta por cima do cursor, então o PlasmaZones esconde o cursor do sistema e o desenha depois do pacote.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/PointerPackNotices.qml.cpp" line="55"/>
+        <source>This pack samples the cursor image. The preview stands a plain arrow in for your cursor theme.</source>
+        <comment>@info pointer preview limitation</comment>
+        <translation>Este pacote lê a imagem do cursor. A visualização coloca uma seta simples no lugar do seu tema de cursor.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/overlayspagecontroller_sets.cpp" line="129"/>
+        <source>Layout %1 (not on this computer)</source>
+        <translation>Layout %1 (não está neste computador)</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/settings/pages/overlayspagecontroller_sets.cpp" line="294"/>
+        <source>%n layouts in this set are not on this computer, so they were skipped. Everything else was applied.</source>
+        <translation>
+            <numerusform>%n layout deste conjunto não está neste computador, então foi pulado. Todo o resto foi aplicado.</numerusform>
+            <numerusform>%n layouts deste conjunto não estão neste computador, então foram pulados. Todo o resto foi aplicado.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPointerPage.qml.cpp" line="10"/>
+        <source>Pointer decoration surface</source>
+        <translation>Superfície de decoração do ponteiro</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPointerPage.qml.cpp" line="11"/>
+        <source>Decoration for the mouse pointer.</source>
+        <translation>Decoração para o ponteiro do mouse.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPointerPage.qml.cpp" line="15"/>
+        <source>Mouse Pointer</source>
+        <translation>Ponteiro do mouse</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaySetsPage.qml.cpp" line="35"/>
+        <source>A set bundles your zone overlay shader assignments into one shareable JSON file. Applying a set merges into your current assignments. Layouts it doesn&apos;t cover are left unchanged.</source>
+        <oldsource>Sets bundle your zone overlay shader assignments into one shareable JSON file. Applying a set merges into your current assignments. Layouts it doesn&apos;t cover are left unchanged.</oldsource>
+        <translation>Um conjunto reúne as suas atribuições de shader de sobreposição de zonas em um único arquivo JSON que dá para compartilhar. Aplicar um conjunto mescla o conteúdo dele com as suas atribuições atuais. Os layouts que ele não cobre ficam como estão.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaySetsPage.qml.cpp" line="36"/>
+        <source>Capture the global default and every per-layout override as a named set.</source>
+        <oldsource>Capture the global default and every per-layout override as a named overlay set.</oldsource>
+        <translation>Captura o padrão global e todas as substituições por layout em um conjunto com nome.</translation>
+    </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaySetsPage.qml.cpp" line="47"/>
+        <source>%n Assignment</source>
+        <translation>
+            <numerusform>%n atribuição</numerusform>
+            <numerusform>%n atribuições</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaySetsPage.qml.cpp" line="50"/>
+        <source>“%1” will replace the overlay shader on everything it covers. The change is not saved yet, so Discard still undoes it.</source>
+        <translation>“%1” vai substituir o shader da sobreposição em tudo o que ele cobre. A alteração ainda não foi salva, então Descartar ainda a desfaz.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/overlays/OverlaysAssignmentsPage.qml.cpp" line="99"/>
+        <source>The global default applies to every layout. Each layout card can override it. To install more packs, go to the Library&apos;s Shaders page.</source>
+        <comment>@info banner on the overlay shader assignments page</comment>
+        <translation>O padrão global vale para todos os layouts. Cada cartão de layout pode substituí-lo. Para instalar mais pacotes, vá à página Shaders da Biblioteca.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/PackPreview.qml.cpp" line="426"/>
+        <source>Loading preview…</source>
+        <comment>@info:placeholder shader preview</comment>
+        <translation>Carregando a visualização…</translation>
+    </message>
+    <message>
+        <location filename="../src/editor/undo/commands/UpdateShaderIdCommand.cpp" line="15"/>
+        <source>Change Shader Effect</source>
+        <comment>@action</comment>
+        <translation>Alterar o efeito de shader</translation>
+    </message>
+    <message>
+        <location filename="../src/editor/undo/commands/UpdateShaderParamsCommand.cpp" line="17"/>
+        <source>Change Shader Parameter</source>
+        <comment>@action</comment>
+        <translation>Alterar o parâmetro do shader</translation>
+    </message>
+    <message>
+        <location filename="../src/editor/undo/commands/UpdateShaderParamsCommand.cpp" line="29"/>
+        <source>Change Shader Parameters</source>
+        <comment>@action</comment>
+        <translation>Alterar os parâmetros do shader</translation>
+    </message>
+    <message>
+        <location filename="../src/editor/controller/shader.cpp" line="272"/>
+        <source>Reset Shader Parameters</source>
+        <comment>@action</comment>
+        <translation>Redefinir os parâmetros do shader</translation>
+    </message>
+    <message>
+        <location filename="../src/editor/controller/shader.cpp" line="288"/>
+        <source>Switch Shader Effect</source>
+        <comment>@action</comment>
+        <translation>Trocar o efeito de shader</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="102"/>
+        <source>Cannot modify sets while a discard is in progress.</source>
+        <translation>Não é possível alterar os conjuntos enquanto um descarte está em andamento.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="433"/>
+        <source>Cannot save while a discard is in progress.</source>
+        <translation>Não é possível salvar enquanto um descarte está em andamento.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="670"/>
+        <source>A discard is already in progress. Try again in a moment.</source>
+        <translation>Um descarte já está em andamento. Tente de novo em instantes.</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="763"/>
+        <source>Could not restore %n profile file. It remains pending.</source>
+        <translation>
+            <numerusform>Não foi possível restaurar %n arquivo de perfil. Ele continua pendente.</numerusform>
+            <numerusform>Não foi possível restaurar %n arquivos de perfil. Eles continuam pendentes.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="765"/>
+        <source>Could not restore %n profile files. They remain pending.</source>
+        <translation>
+            <numerusform>Não foi possível restaurar %n arquivo de perfil. Ele continua pendente.</numerusform>
+            <numerusform>Não foi possível restaurar %n arquivos de perfil. Eles continuam pendentes.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="901"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="911"/>
+        <source>Cannot modify presets while a discard is in progress.</source>
+        <translation>Não é possível alterar as predefinições enquanto um descarte está em andamento.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="473"/>
+        <source>Cannot reset while a discard is in progress.</source>
+        <translation>Não é possível redefinir enquanto um descarte está em andamento.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="535"/>
+        <source>Some animation overrides could not be reset.</source>
+        <translation>Não foi possível redefinir algumas substituições de animação.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="347"/>
+        <source>Shader Settings</source>
+        <comment>@title:window</comment>
+        <translation>Configurações do shader</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="468"/>
+        <source>Enable effect:</source>
+        <comment>@label</comment>
+        <translation>Ativar o efeito:</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="469"/>
+        <source>Enable shader effect</source>
+        <comment>@option:check</comment>
+        <translation>Ativar o efeito de shader</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="490"/>
+        <source>Select shader…</source>
+        <comment>@action:button</comment>
+        <translation>Selecionar um shader…</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="525"/>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="528"/>
+        <source>No description available</source>
+        <comment>@info:placeholder</comment>
+        <translation>Nenhuma descrição disponível</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="560"/>
+        <source>(User shader)</source>
+        <comment>@info user-installed shader</comment>
+        <translation>(shader do usuário)</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="626"/>
+        <source>Apply a built-in preset</source>
+        <comment>@info:tooltip</comment>
+        <translation>Aplica uma predefinição interna</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="629"/>
+        <source>Presets</source>
+        <comment>@action:button</comment>
+        <translation>Predefinições</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="709"/>
+        <source>Enable the shader effect to configure visual effects for zone overlays.</source>
+        <comment>@info</comment>
+        <translation>Ative o efeito de shader para configurar os efeitos visuais das sobreposições de zona.</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="730"/>
+        <source>Dismiss</source>
+        <comment>@action:button</comment>
+        <translation>Fechar</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="742"/>
+        <source>Load Preset</source>
+        <comment>@action:button</comment>
+        <translation>Carregar uma predefinição</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="744"/>
+        <source>Load shader settings from a preset file</source>
+        <comment>@info:tooltip</comment>
+        <translation>Carrega as configurações do shader de um arquivo de predefinição</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="756"/>
+        <source>Save Preset</source>
+        <comment>@action:button</comment>
+        <translation>Salvar a predefinição</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="759"/>
+        <source>Save current shader settings as a preset file</source>
+        <comment>@info:tooltip</comment>
+        <translation>Salva as configurações atuais do shader em um arquivo de predefinição</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="775"/>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="777"/>
+        <source>Apply</source>
+        <comment>@action:button</comment>
+        <translation>Aplicar</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="778"/>
+        <source>Apply the shader settings and close the dialog</source>
+        <translation>Aplica as configurações do shader e fecha o diálogo</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="921"/>
+        <source>Loading preview…</source>
+        <comment>@info:placeholder</comment>
+        <translation>Carregando a visualização…</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="954"/>
+        <source>Choose Image</source>
+        <comment>@title:window</comment>
+        <translation>Escolher uma imagem</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="955"/>
+        <source>Image files (*.png *.jpg *.jpeg *.bmp *.webp *.svg *.svgz)</source>
+        <comment>@item:inlistbox</comment>
+        <translation>Arquivos de imagem (*.png *.jpg *.jpeg *.bmp *.webp *.svg *.svgz)</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingShadersPage.qml.cpp" line="22"/>
+        <source>Browse installed snapping overlay shaders. Assign a shader to a layout from the layout editor&apos;s appearance section.</source>
+        <translation>Navegue pelos shaders de sobreposição de encaixe instalados. Atribua um shader a um layout pela seção de aparência do editor de layouts.</translation>
     </message>
     <message>
         <location filename="../src/daemon/daemon/workspaces.cpp" line="600"/>

@@ -4,22 +4,95 @@
 #pragma once
 
 // Inline helpers shared across the daemon TU files in this directory
-// (start.cpp, signals.cpp, navigation.cpp, osd.cpp, lifecycle.cpp, the
-// init_*.cpp trio, autotile_init.cpp).  Defined inline to avoid ODR
-// issues in both unity and normal builds.
+// (start.cpp, signals.cpp, navigation.cpp, osd.cpp, cheatsheet.cpp,
+// lifecycle.cpp, the init_*.cpp files, autotile_init.cpp and
+// scrolling_init.cpp). Defined inline to avoid ODR issues in both unity and
+// normal builds.
 
 #include <QScreen>
 #include "core/platform/logging.h"
 #include "core/interfaces/settings_interfaces.h"
 #include "core/utils/utils.h"
+#include "dbus/tilingadaptor/tilingadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorContext/DisabledReason.h>
+#include <PhosphorEngine/IPlacementEngine.h>
+
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusPendingCall>
 
 #include <optional>
 
 namespace PlasmaZones {
+
+/// Run one phase of the sticky-screen pin pass on the tiling-family engines.
+///
+/// The phases bracket a context change and the order is not cosmetic: Release
+/// run BEFORE the context moves resolves the migration's destination against
+/// the context being LEFT, dropping the pinned state on that context's live
+/// one and force-releasing every window it held. See
+/// PhosphorEngine::StickyPinPhase.
+inline void applyStickyScreenPins(WindowTrackingAdaptor* adaptor, PhosphorEngine::IPlacementEngine* autotileEngine,
+                                  PhosphorEngine::IPlacementEngine* scrollEngine, PhosphorEngine::StickyPinPhase phase)
+{
+    // Null-guarded service, matching every other daemon ->service() consumer.
+    auto* service = adaptor ? adaptor->service() : nullptr;
+    if (!service) {
+        return;
+    }
+    const auto sticky = [service](const QString& windowId) {
+        return service->isWindowSticky(windowId);
+    };
+    // Only the tiling-family engines keep pins; the snap engine has no pin
+    // concept and inherits the interface's no-op.
+    if (autotileEngine) {
+        autotileEngine->updateStickyScreenPins(sticky, phase);
+    }
+    if (scrollEngine) {
+        scrollEngine->updateStickyScreenPins(sticky, phase);
+    }
+}
+
+/// Run the engines' per-desktop membership pass for each of @p screenIds:
+/// every window whose span covers a screen's current context gets a place
+/// in it, and the places the spans no longer cover are given back.
+///
+/// Ordered AFTER updateEngineScreens() by every caller, and the order is not
+/// cosmetic: the tiling engines gate the pass on their active-screen set,
+/// which that call recomputes for the context just entered. Run before it,
+/// a per-desktop mode assignment (tiling on one desktop, snapping on the
+/// next) had the pass adopt windows into a state the same handler then tore
+/// down, taking the windows' other memberships with it. The adopts only
+/// schedule retiles, which coalesce behind the announce that follows.
+inline void reconcileMembershipsForScreens(TilingAdaptor* adaptor, const QStringList& screenIds)
+{
+    if (!adaptor) {
+        return;
+    }
+    for (const QString& screenId : screenIds) {
+        adaptor->reconcileDesktopMemberships(screenId);
+    }
+}
+
+/// Ask plasmashell to show its own text OSD.
+///
+/// Lives here rather than in osd.cpp because cheatsheet.cpp calls it too. It
+/// was a static in osd.cpp's anonymous namespace, which only linked because a
+/// UNITY build puts both TUs in one blob; a non-unity configure (a packager
+/// build, or -DCMAKE_UNITY_BUILD=OFF) failed to resolve it. Inline here for the
+/// same reason the rest of this header is: one definition that works in both
+/// build modes.
+inline void showKdeTextOsd(const QString& icon, const QString& text)
+{
+    QDBusMessage msg =
+        QDBusMessage::createMethodCall(QStringLiteral("org.kde.plasmashell"), QStringLiteral("/org/kde/osdService"),
+                                       QStringLiteral("org.kde.osdService"), QStringLiteral("showText"));
+    msg << icon << text;
+    QDBusConnection::sessionBus().asyncCall(msg);
+}
 
 inline DisabledReason toDaemonDisabledReason(PhosphorContext::DisabledReason reason)
 {

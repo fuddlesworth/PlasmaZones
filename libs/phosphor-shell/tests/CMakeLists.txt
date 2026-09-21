@@ -117,6 +117,20 @@ target_link_libraries(test_phosphorshell_workspaces
         PhosphorShell::PhosphorShell
 )
 add_test(NAME test_phosphorshell_workspaces COMMAND test_phosphorshell_workspaces)
+
+# PlacementMapParser: the bus-free JSON → cells half of the bar's placement
+# map, plus the forScreen() ownership guard. Needs a session bus only to
+# construct the singleton's service watcher; no daemon is expected, so the
+# screen must read as mode -1 with no cells.
+add_executable(test_phosphorshell_placementmapparser test_placementmapparser.cpp)
+target_link_libraries(test_phosphorshell_placementmapparser
+    PRIVATE
+        Qt6::Test
+        Qt6::Qml
+        PhosphorShell::PhosphorShell
+)
+add_test(NAME test_phosphorshell_placementmapparser COMMAND test_phosphorshell_placementmapparser)
+phosphorshell_isolate_test(test_phosphorshell_placementmapparser "QT_QPA_PLATFORM=offscreen")
 phosphorshell_isolate_test(test_phosphorshell_workspaces "QT_QPA_PLATFORM=offscreen")
 # TIMEOUT set AFTER the isolation call, which only supplies its 120s default
 # when no TIMEOUT is set yet — last write wins.
@@ -219,4 +233,22 @@ phosphorshell_isolate_test(test_phosphorshell_inputregion_rearm "QT_QPA_PLATFORM
 set_tests_properties(test_phosphorshell_inputregion_rearm PROPERTIES
     LABELS "phosphorshell"
     TIMEOUT 60
+)
+
+# WallpaperService as the shell's own wallpaper store: the per-screen map,
+# the preview layer, persistence, and the one-time seed. Points
+# XDG_CONFIG_HOME at a fixture itself, on top of the sandbox.
+add_executable(test_phosphorshell_wallpaperservice test_wallpaperservice.cpp)
+target_link_libraries(test_phosphorshell_wallpaperservice
+    PRIVATE
+        Qt6::Test
+        Qt6::Gui
+        PhosphorShell::PhosphorShell
+        PhosphorShaders::PhosphorShaders
+)
+add_test(NAME test_phosphorshell_wallpaperservice COMMAND test_phosphorshell_wallpaperservice)
+phosphorshell_isolate_test(test_phosphorshell_wallpaperservice "QT_QPA_PLATFORM=offscreen")
+set_tests_properties(test_phosphorshell_wallpaperservice PROPERTIES
+    LABELS "phosphorshell"
+    TIMEOUT 30
 )

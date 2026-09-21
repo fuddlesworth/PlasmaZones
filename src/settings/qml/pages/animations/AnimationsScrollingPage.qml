@@ -15,9 +15,10 @@ import QtQuick
 // for a crossfade pack, so availableShaderEffectsForPath FILTERS the list
 // down to the packs that consume the strip contract (uStrip / iStripMotion
 // via strip_transition.glsl). Nothing is shown dimmed — the incompatible
-// packs are simply absent. The pass decorates the strip and what lies under
-// it, per output, while the spring is in flight (StripTransitionManager);
-// anything stacked above the strip is composited sharp on top afterwards.
+// packs are simply absent. The pass decorates the strip layer alone, per
+// output, while the spring is in flight (StripTransitionManager); what lies
+// under it stays still and anything stacked above it is composited sharp
+// on top afterwards.
 // With no pack assigned the strip scrolls exactly as before.
 //
 // The tab-switch leg is the second event here, and it is a different animal

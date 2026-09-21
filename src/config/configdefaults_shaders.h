@@ -6,6 +6,7 @@
 #include "configdefaults_limits.h"
 
 #include <PhosphorCompositor/DecorationDefaults.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 
 namespace PlasmaZones {
 
@@ -257,6 +258,16 @@ public:
     /// a proper drop shadow (offset, edge-feathered so it never cuts off in a
     /// hard rectangle), tinted with the theme background (useThemeTint,
     /// PopupFrame's original glow colour) so the halo tracks light and dark too.
+    /// The SCHEMA default for the stored decoration tree, which is the empty tree.
+    /// The seeds above are overlaid on read and never persisted, so a fresh config
+    /// stores nothing. Here rather than inline in the KeyDef so the schema reads
+    /// through an accessor like every other key, and so the empty-tree spelling has
+    /// one home if the tree's JSON shape ever gains a field.
+    static QVariantMap decorationProfileTreeStoredDefault()
+    {
+        return ::PhosphorSurfaceShaders::DecorationProfileTree().toJson().toVariantMap();
+    }
+
     static ::PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree()
     {
         // One shared card decoration for every PopupFrame surface — the OSD and
@@ -289,10 +300,66 @@ public:
 
         ::PhosphorSurfaceShaders::DecorationProfileTree tree;
         const ::PhosphorSurfaceShaders::DecorationProfile card = cardDecoration();
-        tree.setOverride(QStringLiteral("osd"), card);
-        tree.setOverride(QStringLiteral("popup.layoutPicker"), card);
-        tree.setOverride(QStringLiteral("popup.zoneSelector"), card);
-        tree.setOverride(QStringLiteral("popup.cheatsheet"), card);
+        // Through the accessors, like the shell.* seeds below: these paths are
+        // also spelled out in DecorationSupportedPaths.h, and a seed written
+        // at a path the tree does not support decorates nothing and says so
+        // nowhere.
+        tree.setOverride(::PhosphorSurfaceShaders::decorationOsdPath(), card);
+        tree.setOverride(::PhosphorSurfaceShaders::decorationPopupLayoutPickerPath(), card);
+        tree.setOverride(::PhosphorSurfaceShaders::decorationPopupZoneSelectorPath(), card);
+        tree.setOverride(::PhosphorSurfaceShaders::decorationPopupCheatsheetPath(), card);
+
+#ifdef PLASMAZONES_HAVE_PHOSPHOR_SHELL
+        // The Phosphor shell's chrome (docs/phosphor-shell-design/identity/A1
+        // §2.4): every surface is a decoration host like a window frame, and
+        // the same packs a focused window wears run on the chrome. The bar,
+        // the popouts, the toasts and the picker carry the flowing spectrum
+        // border at 1 px; the OSD band a cyan halo; the lock clock the motes.
+        // The shell.* subtree is baseline-isolated, so these are the only
+        // way a shell surface is decorated until the user edits it.
+        //
+        // Compiled out with the shell (BUILD_PHOSPHOR_SHELL): without it no
+        // surface reads these paths, and seeding them would put a Phosphor
+        // subtree into every config the plain build writes.
+        const auto phosphorBorder = [](int cornerRadius, double flowSpeed) {
+            ::PhosphorSurfaceShaders::DecorationProfile p;
+            p.chain = QStringList{QStringLiteral("border-phosphor")};
+            QVariantMap border;
+            border.insert(QStringLiteral("borderWidth"), 1);
+            border.insert(QStringLiteral("cornerRadius"), cornerRadius);
+            border.insert(QStringLiteral("flowSpeed"), flowSpeed);
+            border.insert(QStringLiteral("gleamStrength"), 0.5);
+            QVariantMap params;
+            params.insert(QStringLiteral("border-phosphor"), border);
+            p.parameters = params;
+            return p;
+        };
+        // Seeded in decorationShellPhosphorLeafPaths() order, which is the
+        // order the tree reports them in.
+        tree.setOverride(::PhosphorSurfaceShaders::decorationShellPhosphorBarPath(), phosphorBorder(0, 0.03));
+        tree.setOverride(::PhosphorSurfaceShaders::decorationShellPhosphorPopoutPath(), phosphorBorder(10, 0.06));
+        {
+            ::PhosphorSurfaceShaders::DecorationProfile osd;
+            osd.chain = QStringList{QStringLiteral("glow")};
+            QVariantMap glow;
+            glow.insert(QStringLiteral("glowStrength"), 0.7);
+            glow.insert(QStringLiteral("glowSize"), 24);
+            glow.insert(QStringLiteral("cornerRadius"), 3);
+            glow.insert(QStringLiteral("glowColor"), QStringLiteral("#ff22d3ee"));
+            glow.insert(QStringLiteral("useThemeTint"), false);
+            QVariantMap params;
+            params.insert(QStringLiteral("glow"), glow);
+            osd.parameters = params;
+            tree.setOverride(::PhosphorSurfaceShaders::decorationShellPhosphorOsdPath(), osd);
+        }
+        tree.setOverride(::PhosphorSurfaceShaders::decorationShellPhosphorNotificationPath(), phosphorBorder(8, 0.06));
+        tree.setOverride(::PhosphorSurfaceShaders::decorationShellPhosphorPickerPath(), phosphorBorder(0, 0.06));
+        {
+            ::PhosphorSurfaceShaders::DecorationProfile lock;
+            lock.chain = QStringList{QStringLiteral("phosphor-motes")};
+            tree.setOverride(::PhosphorSurfaceShaders::decorationShellPhosphorLockPath(), lock);
+        }
+#endif
         return tree;
     }
 
@@ -316,6 +383,19 @@ public:
     /// one, and a user who wants every unfocused window shimmering is making the
     /// deliberate (and cheap-to-make) choice, not the other way around.
     static bool decorationAnimateFocusedOnly()
+    {
+        return true;
+    }
+
+    /// Draw no decoration at all on an output while a window on it is
+    /// fullscreen. Scoped to that output, so a game on one monitor leaves the
+    /// others decorated. Covers the whole decoration domain, the pointer chain
+    /// included: a fullscreen surface carries no frame to decorate, and a
+    /// pointer trail over a game is the case this exists to prevent. ON by
+    /// default, because that is what a user expects without ever finding this
+    /// setting, and because a fullscreen presentation is the one workload that
+    /// can least afford the decoration pass costing it frames.
+    static bool decorationSuppressWhileFullscreen()
     {
         return true;
     }

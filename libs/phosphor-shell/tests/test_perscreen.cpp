@@ -44,6 +44,7 @@ private Q_SLOTS:
     void primarySwap_doesNotRecreateDelegates();
     void modelReassign_teardownAllAndRebuild();
     void delegatesReceiveScreenNameIndexIsPrimaryRequiredProps();
+    void destroyingPerScreenDestroysItsDelegates();
 
 private:
     // Build a PerScreen instance with a minimal delegate that records
@@ -332,6 +333,29 @@ void TestPerScreen::modelReassign_teardownAllAndRebuild()
 
     ps->setProperty("model", QVariant::fromValue(&modelB));
     QCOMPARE(ps->property("count").toInt(), 3);
+}
+
+void TestPerScreen::destroyingPerScreenDestroysItsDelegates()
+{
+    // A hot reload destroys the root (and this item) while the engine
+    // lives. The delegates are JS-owned and parentless, so unless the item
+    // tears them down they survive to the engine's own destruction and
+    // their bindings run against dying singletons.
+    QQmlEngine engine;
+    FakeScreenModel model;
+    QObject* s1 = model.makeScreen(QStringLiteral("A-1"));
+    model.makeScreen(QStringLiteral("A-2"));
+    auto* parent = new QObject;
+
+    QObject* ps = makePerScreen(engine, parent, &model);
+    QVERIFY(ps != nullptr);
+    QCOMPARE(ps->property("count").toInt(), 2);
+    QPointer<QObject> delegate = delegateFor(engine, ps, s1);
+    QVERIFY(delegate);
+
+    delete parent;
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QVERIFY2(delegate.isNull(), "delegate outlived its PerScreen");
 }
 
 void TestPerScreen::delegatesReceiveScreenNameIndexIsPrimaryRequiredProps()

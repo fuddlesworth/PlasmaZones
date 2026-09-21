@@ -9,10 +9,11 @@
 
 namespace PlasmaZones {
 
-/// The DecorationProfileTree root a decoration surface page owns. The four
+/// The DecorationProfileTree root a decoration surface page owns. The five
 /// surface pages each edit exactly one root subtree — "window" (+ .tiled/
 /// .snapped/.floating), "osd", "popup" (+ .snapAssist/.zoneSelector/
-/// .layoutPicker/.cheatsheet), or "shell" (+ .panel/.appletPopup) — so the
+/// .layoutPicker/.cheatsheet), "shell" (+ .panel/.appletPopup), or "pointer"
+/// (no children, and baseline-isolated) — so the
 /// per-page Reset/Discard/dirty handling must be scoped to that root, or one
 /// surface's revert clobbers the others (the bug this mapping fixes). The roots mirror the surfacePath prefixes the QML
 /// pages bind (DecorationWindowsPage etc.) and the DecorationSupportedPaths

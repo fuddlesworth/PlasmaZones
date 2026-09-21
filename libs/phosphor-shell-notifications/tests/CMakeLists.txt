@@ -31,6 +31,10 @@ target_link_libraries(test_phosphor_shell_notifications
         PhosphorShellWidgetsQmlplugin
         PhosphorThemeQml
         PhosphorThemeQmlplugin
+        # ToastHost imports Phosphor.Shell (for the PlacementMap singleton,
+        # which this harness does not register: the cases bind a fake map).
+        PhosphorShellQml
+        PhosphorShellQmlplugin
 )
 
 add_test(

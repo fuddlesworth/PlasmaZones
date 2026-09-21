@@ -4,7 +4,8 @@
 #pragma once
 
 // Internal helpers shared by the search-catalog seeding TUs
-// (searchcatalog.cpp and searchcatalog_animations.cpp). Not installed and not
+// (searchcatalog.cpp, searchcatalog_animations.cpp and
+// searchcatalog_simple.cpp). Not installed and not
 // part of any public surface — the public entry point stays searchcatalog.h.
 
 #include <PhosphorControl/SearchController.h>

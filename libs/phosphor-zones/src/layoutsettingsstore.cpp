@@ -34,22 +34,15 @@ constexpr QLatin1String kZoneAppearanceMapKey{"zoneAppearance"};
 // shows), not part of the structural layout definition — so it lives here in
 // the sidecar, keyed by id, the same way the curated defaults are seeded. The
 // same store also holds autotile entries keyed by "autotile:<id>".
-const std::array<QLatin1String, 14> layoutSettingKeys{{
-    ZoneJsonKeys::ZonePadding,
-    ZoneJsonKeys::OuterGap,
-    ZoneJsonKeys::UsePerSideOuterGap,
-    ZoneJsonKeys::OuterGapTop,
-    ZoneJsonKeys::OuterGapBottom,
-    ZoneJsonKeys::OuterGapLeft,
-    ZoneJsonKeys::OuterGapRight,
-    ZoneJsonKeys::ShowZoneNumbers,
-    ZoneJsonKeys::OverlayDisplayMode,
-    ZoneJsonKeys::AutoAssign,
-    ZoneJsonKeys::HiddenFromSelector,
-    ZoneJsonKeys::UseFullScreenGeometry,
-    ZoneJsonKeys::ShaderId,
-    ZoneJsonKeys::ShaderParams,
-}};
+// CTAD (no explicit size) so removing a key can never leave value-initialized
+// null entries behind — a null QLatin1String converts to the empty JSON key,
+// which the extract/strip/merge loops below would then match.
+const std::array layoutSettingKeys{
+    ZoneJsonKeys::ZonePadding,   ZoneJsonKeys::OuterGap,           ZoneJsonKeys::UsePerSideOuterGap,
+    ZoneJsonKeys::OuterGapTop,   ZoneJsonKeys::OuterGapBottom,     ZoneJsonKeys::OuterGapLeft,
+    ZoneJsonKeys::OuterGapRight, ZoneJsonKeys::ShowZoneNumbers,    ZoneJsonKeys::OverlayDisplayMode,
+    ZoneJsonKeys::AutoAssign,    ZoneJsonKeys::HiddenFromSelector, ZoneJsonKeys::UseFullScreenGeometry,
+};
 
 } // namespace
 

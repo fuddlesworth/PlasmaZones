@@ -1,0 +1,483 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!--
+  Phosphor mockups v2: wallpaper and theme picker.
+  A 96 px navy-glass strip on the bottom screen edge (no radius, 0 inset). Wallpaper
+  candidates are 6 px thumbnails; theme variants sit at the right end. Hovering a candidate
+  retints the LIVE desktop behind the strip: wallpaper crossfades, window and bar grounds
+  shift, prismata crosses the screen. The four spectrum stops never move.
+  Loop 9 s: 1.5 hover candidate 3 (Ember), 4.0 leave, 5.5 hover the Light variant, 7.5 leave.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720"
+     font-family="Manrope, 'Noto Sans', system-ui, sans-serif">
+  <defs>
+    <linearGradient id="rail" x1="0" y1="0" x2="1280" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#22D3EE"/>
+      <stop offset="0.33" stop-color="#3B82F6"/>
+      <stop offset="0.67" stop-color="#A855F7"/>
+      <stop offset="1"    stop-color="#F43F5E"/>
+    </linearGradient>
+    <!-- The same axis in the light palette (05 §4). Only used while the Light variant is hovered. -->
+    <linearGradient id="railLight" x1="0" y1="0" x2="1280" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#0EA5E9"/>
+      <stop offset="0.33" stop-color="#3B82F6"/>
+      <stop offset="0.67" stop-color="#7C3AED"/>
+      <stop offset="1"    stop-color="#E11D48"/>
+    </linearGradient>
+    <linearGradient id="railV" x1="0" y1="0" x2="0" y2="720" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#22D3EE"/>
+      <stop offset="0.33" stop-color="#3B82F6"/>
+      <stop offset="0.67" stop-color="#A855F7"/>
+      <stop offset="1"    stop-color="#F43F5E"/>
+    </linearGradient>
+    <linearGradient id="wp" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0"    stop-color="#0B1730"/>
+      <stop offset="0.55" stop-color="#070F22"/>
+      <stop offset="1"    stop-color="#050916"/>
+    </linearGradient>
+    <!-- Candidate 3 ("Ember"): a warmer field. Ground and containers retint, the stops do not. -->
+    <linearGradient id="wpEmber" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0"    stop-color="#2A1610"/>
+      <stop offset="0.55" stop-color="#170D0C"/>
+      <stop offset="1"    stop-color="#0B0708"/>
+    </linearGradient>
+    <!-- Light variant field -->
+    <linearGradient id="wpLightTheme" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0"    stop-color="#F6F9FF"/>
+      <stop offset="0.55" stop-color="#EEF3FF"/>
+      <stop offset="1"    stop-color="#E8EEFF"/>
+    </linearGradient>
+    <radialGradient id="wpLight" cx="0.2" cy="0.9" r="0.7">
+      <stop offset="0"   stop-color="#22D3EE" stop-opacity="0.16"/>
+      <stop offset="1"   stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="wpLight2" cx="0.85" cy="0.2" r="0.6">
+      <stop offset="0"   stop-color="#A855F7" stop-opacity="0.14"/>
+      <stop offset="1"   stop-color="#A855F7" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="wpEmberLight" cx="0.75" cy="0.85" r="0.7">
+      <stop offset="0"   stop-color="#F43F5E" stop-opacity="0.18"/>
+      <stop offset="1"   stop-color="#F43F5E" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gleam" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"   stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.6"/>
+      <stop offset="1"   stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <!-- prismata: the spectrum crossing the screen as a palette lands. Fades at both ends. -->
+    <linearGradient id="prismMask" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"   stop-color="#000"/>
+      <stop offset="0.5" stop-color="#fff"/>
+      <stop offset="1"   stop-color="#000"/>
+    </linearGradient>
+    <mask id="prismata" maskContentUnits="userSpaceOnUse">
+      <rect x="-360" y="0" width="360" height="720" fill="url(#prismMask)">
+        <animate attributeName="x" values="-360;-360;1280;1280;-360;1280;1280;-360;1280;1280;-360;1280;1280"
+                 keyTimes="0;0.167;0.22;0.444;0.4441;0.5;0.611;0.6111;0.66;0.833;0.8331;0.885;1"
+                 dur="9s" repeatCount="indefinite" calcMode="spline"
+                 keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+      </rect>
+    </mask>
+    <filter id="glassBlur" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <linearGradient id="revealMask" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset="1" stop-color="#fff"/>
+    </linearGradient>
+    <symbol id="glyph" viewBox="0 0 16 16">
+      <rect x="2" y="2" width="12" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <rect x="5" y="5" width="6" height="6" rx="1" fill="currentColor" opacity="0.7"/>
+    </symbol>
+    <symbol id="mote" viewBox="0 0 4 4"><circle cx="2" cy="2" r="1.4" fill="currentColor"/></symbol>
+    <style>
+      .ui   { font-family: Manrope, 'Noto Sans', system-ui, sans-serif; }
+      .mono { font-family: 'JetBrains Mono', 'Noto Sans Mono', monospace; font-variant-numeric: tabular-nums; }
+      .t1 { fill: #E6EDFF; }
+      .t2 { fill: #94A3B8; }
+      .note-title { font-size: 12px; font-weight: 600; }
+      .note-body  { font-size: 11.5px; fill: #94A3B8; }
+      .eyebrow { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; fill: #94A3B8; }
+    </style>
+  </defs>
+
+  <!-- ===== LAYER 0: wallpaper, three looks crossfading. The picker never blurs it. ===== -->
+  <rect width="1280" height="720" fill="url(#wp)"/>
+  <rect width="1280" height="720" fill="url(#wpLight)"/>
+  <rect width="1280" height="720" fill="url(#wpLight2)"/>
+  <g id="ember-wp" opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.167;0.2;0.444;0.524;1" dur="9s" repeatCount="indefinite"
+             calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+    <rect width="1280" height="720" fill="url(#wpEmber)"/>
+    <rect width="1280" height="720" fill="url(#wpEmberLight)"/>
+  </g>
+  <g id="light-wp" opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.611;0.64;0.833;0.911;1" dur="9s" repeatCount="indefinite"
+             calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+    <rect width="1280" height="720" fill="url(#wpLightTheme)"/>
+  </g>
+
+  <!-- ===== LAYER 1: windows. Frames carry the rail; the ground under them is what retints. ===== -->
+  <g id="windows">
+    <g id="win-a">
+      <rect x="36" y="44" width="792" height="640" rx="8" fill="#0B1730" fill-opacity="0.92"/>
+      <rect x="36.5" y="44.5" width="791" height="639" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.9"/>
+      <rect x="36.5" y="44.5" width="791" height="639" rx="8" fill="none" stroke="#FFFFFF" stroke-width="1" opacity="0.55"/>
+      <rect x="36" y="44" width="120" height="2" fill="url(#gleam)">
+        <animate attributeName="x" values="36;708;36" keyTimes="0;0.5;1" dur="9s" repeatCount="indefinite"/>
+      </rect>
+      <g fill="#E6EDFF" opacity="0.08">
+        <rect x="64" y="84" width="420" height="10" rx="2"/><rect x="64" y="108" width="560" height="10" rx="2"/>
+        <rect x="64" y="132" width="380" height="10" rx="2"/><rect x="64" y="172" width="620" height="10" rx="2"/>
+        <rect x="64" y="196" width="500" height="10" rx="2"/><rect x="64" y="220" width="440" height="10" rx="2"/>
+      </g>
+    </g>
+    <g id="win-b">
+      <rect x="836" y="44" width="408" height="316" rx="8" fill="#0B1730" fill-opacity="0.88"/>
+      <rect x="836.5" y="44.5" width="407" height="315" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.45"/>
+    </g>
+    <g id="win-c">
+      <rect x="836" y="368" width="408" height="316" rx="8" fill="#0B1730" fill-opacity="0.88"/>
+      <rect x="836.5" y="368.5" width="407" height="315" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.45"/>
+    </g>
+  </g>
+
+  <!-- Ember retint of the window grounds: same rects, warm container colour, same rail strokes. -->
+  <g id="ember-windows" opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.167;0.2;0.444;0.524;1" dur="9s" repeatCount="indefinite"
+             calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+    <rect x="36" y="44" width="792" height="640" rx="8" fill="#1B120F" fill-opacity="0.92"/>
+    <rect x="836" y="44" width="408" height="316" rx="8" fill="#1B120F" fill-opacity="0.88"/>
+    <rect x="836" y="368" width="408" height="316" rx="8" fill="#1B120F" fill-opacity="0.88"/>
+    <rect x="36.5" y="44.5" width="791" height="639" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.9"/>
+    <rect x="36.5" y="44.5" width="791" height="639" rx="8" fill="none" stroke="#FFFFFF" stroke-width="1" opacity="0.55"/>
+    <rect x="836.5" y="44.5" width="407" height="315" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.45"/>
+    <rect x="836.5" y="368.5" width="407" height="315" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.45"/>
+    <g fill="#FFF1E8" opacity="0.08">
+      <rect x="64" y="84" width="420" height="10" rx="2"/><rect x="64" y="108" width="560" height="10" rx="2"/>
+      <rect x="64" y="132" width="380" height="10" rx="2"/><rect x="64" y="172" width="620" height="10" rx="2"/>
+      <rect x="64" y="196" width="500" height="10" rx="2"/><rect x="64" y="220" width="440" height="10" rx="2"/>
+    </g>
+    <!-- every window edge pulses once as the palette lands -->
+    <rect x="36.5" y="44.5" width="791" height="639" rx="8" fill="none" stroke="#FFFFFF" stroke-width="1" opacity="0">
+      <animate attributeName="opacity" values="0;0;0.6;0;0" keyTimes="0;0.2;0.21;0.25;1" dur="9s" repeatCount="indefinite"
+               calcMode="spline" keySplines="0 0 1 1;0.34 1 0.64 1;0.05 0.6 0.15 1;0 0 1 1"/>
+    </rect>
+  </g>
+
+  <!-- Light variant: sky/blue/violet/rose on #F6F9FF. Strokes rest at 0.55, text #0B1730. -->
+  <g id="light-windows" opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.611;0.64;0.833;0.911;1" dur="9s" repeatCount="indefinite"
+             calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+    <rect x="36" y="44" width="792" height="640" rx="8" fill="#FFFFFF" fill-opacity="0.96"/>
+    <rect x="836" y="44" width="408" height="316" rx="8" fill="#FFFFFF" fill-opacity="0.9"/>
+    <rect x="836" y="368" width="408" height="316" rx="8" fill="#FFFFFF" fill-opacity="0.9"/>
+    <rect x="36.5" y="44.5" width="791" height="639" rx="8" fill="none" stroke="url(#railLight)" stroke-width="1" opacity="0.9"/>
+    <rect x="36.5" y="44.5" width="791" height="639" rx="8" fill="none" stroke="#0B1730" stroke-width="1" opacity="0.35"/>
+    <rect x="836.5" y="44.5" width="407" height="315" rx="8" fill="none" stroke="url(#railLight)" stroke-width="1" opacity="0.55"/>
+    <rect x="836.5" y="368.5" width="407" height="315" rx="8" fill="none" stroke="url(#railLight)" stroke-width="1" opacity="0.55"/>
+    <g fill="#0B1730" opacity="0.1">
+      <rect x="64" y="84" width="420" height="10" rx="2"/><rect x="64" y="108" width="560" height="10" rx="2"/>
+      <rect x="64" y="132" width="380" height="10" rx="2"/><rect x="64" y="172" width="620" height="10" rx="2"/>
+      <rect x="64" y="196" width="500" height="10" rx="2"/><rect x="64" y="220" width="440" height="10" rx="2"/>
+    </g>
+    <!-- light gleam is a darker segment on the stroke -->
+    <rect x="36" y="44" width="120" height="2" fill="#0B1730" opacity="0.35">
+      <animate attributeName="x" values="36;708;36" keyTimes="0;0.5;1" dur="9s" repeatCount="indefinite"/>
+    </rect>
+  </g>
+
+  <!-- prismata: the rail crossing the screen (masked band), on every retint and every return -->
+  <rect width="1280" height="720" fill="url(#rail)" opacity="0.22" mask="url(#prismata)"/>
+
+  <!-- ===== LAYER 2: the bar. Band ground retints with the palette; the 2 px rail is fixed. ===== -->
+  <g id="bar">
+    <rect x="0" y="2" width="1280" height="26" fill="#0B1730" fill-opacity="0.72"/>
+    <rect x="0" y="2" width="1280" height="26" fill="#1B120F" fill-opacity="0.72" opacity="0">
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.167;0.2;0.444;0.524;1" dur="9s" repeatCount="indefinite"
+               calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+    </rect>
+    <rect x="0" y="0" width="1280" height="2" fill="url(#rail)" opacity="0.75"/>
+    <rect x="0" y="0" width="160" height="2" fill="url(#gleam)">
+      <animate attributeName="x" values="-160;1280" dur="9s" repeatCount="indefinite"/>
+    </rect>
+    <g id="map" transform="translate(12 6)">
+      <rect x="0.5" y="0.5" width="31" height="17" fill="none" stroke="#E6EDFF" stroke-opacity="0.14"/>
+      <rect x="1" y="1" width="19" height="16" fill="#3B82F6" fill-opacity="0.55" stroke="#FFFFFF" stroke-opacity="0.9" stroke-width="1"/>
+      <rect x="21" y="1"  width="10" height="7.5" fill="#CE4BA8" fill-opacity="0.4" stroke="#CE4BA8" stroke-opacity="0.8" stroke-width="1"/>
+      <rect x="21" y="9.5" width="10" height="7.5" fill="#CE4BA8" fill-opacity="0.4" stroke="#CE4BA8" stroke-opacity="0.8" stroke-width="1"/>
+      <g transform="translate(9 19)">
+        <rect x="0" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.9"/>
+        <rect x="4" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+        <rect x="8" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+        <rect x="12" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+      </g>
+    </g>
+    <rect x="56" y="9" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+    <g transform="translate(66 7)" color="#E6EDFF">
+      <use xlink:href="#glyph" width="16" height="16"/>
+      <text x="22" y="12.5" class="ui t1" font-size="13" font-weight="500">kate · phosphor-shell.md</text>
+      <rect x="22" y="16" width="146" height="1" fill="#3B82F6" opacity="0.9"/>
+    </g>
+    <g transform="translate(608 7)">
+      <text x="0" y="12.5" class="mono t1" font-size="14" font-weight="500">14:32</text>
+      <rect x="31" y="16" width="9" height="2" fill="#6F6CF7">
+        <animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.02;0.08;0.2;1" dur="6s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </rect>
+    </g>
+    <g transform="translate(1040 6)">
+      <rect x="0"  y="6"  width="2" height="10" fill="#CE4BA8" opacity="0.85"/>
+      <rect x="5"  y="2"  width="2" height="14" fill="#CE4BA8" opacity="0.85"/>
+      <rect x="10" y="10" width="2" height="6"  fill="#CE4BA8" opacity="0.85"/>
+      <rect x="22" y="3" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+      <g fill="#E6EDFF" opacity="0.9">
+        <circle cx="40" cy="9" r="4" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <rect x="52" y="4" width="8" height="10" rx="1.5" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <path d="M70 5 l4 4 -4 4 M74 5 l4 4 -4 4" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <rect x="88" y="5" width="12" height="7" rx="1.5" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <rect x="89.5" y="6.5" width="7" height="4" fill="#E6EDFF"/>
+      </g>
+      <rect x="112" y="3" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+      <path d="M126 12 h10 l-1.5-2 v-3 a3.5 3.5 0 0 0 -7 0 v3 z" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+      <text x="139" y="8" class="mono t1" font-size="9">3</text>
+      <circle cx="160" cy="9" r="4" fill="#E9457A" opacity="0.7"/>
+      <circle cx="184" cy="9" r="4.5" fill="none" stroke="#E6EDFF" stroke-width="1.2" opacity="0.45"/>
+      <rect x="183.4" y="3" width="1.2" height="5" fill="#E6EDFF" opacity="0.45"/>
+    </g>
+    <!-- Light bar: band #E8EEFF, text #0B1730, rail in the light stops -->
+    <g id="light-bar" opacity="0">
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.611;0.64;0.833;0.911;1" dur="9s" repeatCount="indefinite"
+               calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      <rect x="0" y="2" width="1280" height="26" fill="#E8EEFF" fill-opacity="0.9"/>
+      <rect x="0" y="0" width="1280" height="2" fill="url(#railLight)" opacity="0.85"/>
+      <g transform="translate(12 6)">
+        <rect x="0.5" y="0.5" width="31" height="17" fill="none" stroke="#0B1730" stroke-opacity="0.2"/>
+        <rect x="1" y="1" width="19" height="16" fill="#3B82F6" fill-opacity="0.35" stroke="#0B1730" stroke-opacity="0.7" stroke-width="1"/>
+        <rect x="21" y="1"  width="10" height="7.5" fill="#B4237A" fill-opacity="0.3" stroke="#B4237A" stroke-opacity="0.8" stroke-width="1"/>
+        <rect x="21" y="9.5" width="10" height="7.5" fill="#B4237A" fill-opacity="0.3" stroke="#B4237A" stroke-opacity="0.8" stroke-width="1"/>
+      </g>
+      <rect x="56" y="9" width="1" height="12" fill="#0B1730" opacity="0.25"/>
+      <g transform="translate(66 7)" color="#0B1730">
+        <use xlink:href="#glyph" width="16" height="16"/>
+        <text x="22" y="12.5" class="ui" font-size="13" font-weight="500" fill="#0B1730">kate · phosphor-shell.md</text>
+        <rect x="22" y="16" width="146" height="1" fill="#3B82F6" opacity="0.9"/>
+      </g>
+      <text x="608" y="19.5" class="mono" font-size="14" font-weight="500" fill="#0B1730">14:32</text>
+      <g transform="translate(1040 6)" fill="none" stroke="#0B1730" stroke-width="1.2" opacity="0.85">
+        <rect x="0"  y="6"  width="2" height="10" fill="#B4237A" stroke="none"/>
+        <rect x="5"  y="2"  width="2" height="14" fill="#B4237A" stroke="none"/>
+        <rect x="10" y="10" width="2" height="6"  fill="#B4237A" stroke="none"/>
+        <circle cx="40" cy="9" r="4"/>
+        <rect x="52" y="4" width="8" height="10" rx="1.5"/>
+        <path d="M70 5 l4 4 -4 4 M74 5 l4 4 -4 4"/>
+        <rect x="88" y="5" width="12" height="7" rx="1.5"/>
+        <path d="M126 12 h10 l-1.5-2 v-3 a3.5 3.5 0 0 0 -7 0 v3 z"/>
+        <circle cx="160" cy="9" r="4" fill="#E11D48" stroke="none" opacity="0.8"/>
+        <circle cx="184" cy="9" r="4.5"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- ===== LAYER 3: the picker strip. 96 px, bottom edge, navy glass over the windows behind, no radius. ===== -->
+  <g id="picker">
+    <rect x="0" y="624" width="1280" height="96" fill="#0B1730" fill-opacity="0.86"/>
+    <rect x="0" y="624" width="1280" height="96" fill="#1B120F" fill-opacity="0.86" opacity="0">
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.167;0.2;0.444;0.524;1" dur="9s" repeatCount="indefinite"
+               calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+    </rect>
+    <!-- top edge: 1 px cyan, the source edge -->
+    <rect x="0" y="624" width="1280" height="1" fill="#22D3EE" opacity="0.6"/>
+
+    <!-- eyebrow + candidates. 96x60 thumbnails, radius 6, 16 px gap -->
+    <text x="24" y="648" class="ui eyebrow">Wallpaper</text>
+    <g id="candidates" transform="translate(24 656)">
+      <!-- 1: current, selected = blue 2 px outline -->
+      <rect x="0" y="0" width="96" height="52" rx="6" fill="#0B1730"/>
+      <path d="M0 40 q30 -28 60 -8 t36 -18 v38 h-96 z" fill="#22D3EE" opacity="0.12"/>
+      <rect x="1" y="1" width="94" height="50" rx="6" fill="none" stroke="#3B82F6" stroke-width="2"/>
+      <!-- 2 -->
+      <rect x="112" y="0" width="96" height="52" rx="6" fill="#0E1F2A"/>
+      <path d="M112 30 q40 -20 96 6 v16 h-96 z" fill="#3B82F6" opacity="0.14"/>
+      <rect x="112.5" y="0.5" width="95" height="51" rx="6" fill="none" stroke="#E6EDFF" stroke-opacity="0.18" stroke-width="1"/>
+      <!-- 3: Ember, hovered -->
+      <rect x="224" y="0" width="96" height="52" rx="6" fill="#2A1610"/>
+      <circle cx="296" cy="44" r="30" fill="#F43F5E" opacity="0.16"/>
+      <rect x="224.5" y="0.5" width="95" height="51" rx="6" fill="none" stroke="#E6EDFF" stroke-opacity="0.18" stroke-width="1"/>
+      <rect x="224.5" y="0.5" width="95" height="51" rx="6" fill="none" stroke="#FFFFFF" stroke-width="1" opacity="0">
+        <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.167;0.18;0.444;0.484;1" dur="9s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </rect>
+      <!-- 4 -->
+      <rect x="336" y="0" width="96" height="52" rx="6" fill="#0F1A12"/>
+      <path d="M336 44 l30 -22 26 14 40 -26 v42 h-96 z" fill="#10B981" opacity="0.14"/>
+      <rect x="336.5" y="0.5" width="95" height="51" rx="6" fill="none" stroke="#E6EDFF" stroke-opacity="0.18" stroke-width="1"/>
+      <!-- 5 -->
+      <rect x="448" y="0" width="96" height="52" rx="6" fill="#17102A"/>
+      <circle cx="470" cy="14" r="26" fill="#A855F7" opacity="0.14"/>
+      <rect x="448.5" y="0.5" width="95" height="51" rx="6" fill="none" stroke="#E6EDFF" stroke-opacity="0.18" stroke-width="1"/>
+      <!-- 6 -->
+      <rect x="560" y="0" width="96" height="52" rx="6" fill="#0A1420"/>
+      <path d="M560 52 h96 v-14 q-48 -18 -96 0 z" fill="#22D3EE" opacity="0.1"/>
+      <rect x="560.5" y="0.5" width="95" height="51" rx="6" fill="none" stroke="#E6EDFF" stroke-opacity="0.18" stroke-width="1"/>
+      <!-- candidate names, 11 px, tabular where numeric -->
+      <g class="ui" font-size="11" fill="#94A3B8">
+        <text x="0" y="62">Halcyon</text><text x="112" y="62">Tidewater</text><text x="224" y="62">Ember</text>
+        <text x="336" y="62">Moss</text><text x="448" y="62">Nightbloom</text><text x="560" y="62">Fathom</text>
+      </g>
+    </g>
+
+    <!-- hairline, then theme variants at the right end: five-swatch tiles -->
+    <rect x="712" y="640" width="1" height="64" fill="#FFFFFF" opacity="0.2"/>
+    <text x="732" y="648" class="ui eyebrow">Theme</text>
+    <g id="themes" transform="translate(732 656)">
+      <!-- Dark (active): 2 px blue -->
+      <g>
+        <rect x="0" y="0" width="14" height="36" fill="#050916"/><rect x="14" y="0" width="14" height="36" fill="#070F22"/>
+        <rect x="28" y="0" width="14" height="36" fill="#0B1730"/><rect x="42" y="0" width="14" height="36" fill="#1E293B"/>
+        <rect x="56" y="0" width="14" height="36" fill="#E6EDFF"/>
+        <rect x="1" y="1" width="68" height="34" rx="6" fill="none" stroke="#3B82F6" stroke-width="2"/>
+        <text x="0" y="50" class="ui" font-size="11" fill="#94A3B8">Dark</text>
+      </g>
+      <!-- Light, hovered later -->
+      <g transform="translate(86 0)">
+        <rect x="0" y="0" width="14" height="36" fill="#F6F9FF"/><rect x="14" y="0" width="14" height="36" fill="#EEF3FF"/>
+        <rect x="28" y="0" width="14" height="36" fill="#E8EEFF"/><rect x="42" y="0" width="14" height="36" fill="#C7D2FE"/>
+        <rect x="56" y="0" width="14" height="36" fill="#0B1730"/>
+        <rect x="0.5" y="0.5" width="69" height="35" rx="6" fill="none" stroke="#E6EDFF" stroke-opacity="0.18"/>
+        <rect x="0.5" y="0.5" width="69" height="35" rx="6" fill="none" stroke="#FFFFFF" stroke-width="1" opacity="0">
+          <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.611;0.625;0.833;0.873;1" dur="9s" repeatCount="indefinite"
+                   calcMode="spline" keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+        </rect>
+        <text x="0" y="50" class="ui" font-size="11" fill="#94A3B8">Light</text>
+      </g>
+      <!-- two named variants -->
+      <g transform="translate(172 0)">
+        <rect x="0" y="0" width="14" height="36" fill="#06120F"/><rect x="14" y="0" width="14" height="36" fill="#0A1C18"/>
+        <rect x="28" y="0" width="14" height="36" fill="#0F2823"/><rect x="42" y="0" width="14" height="36" fill="#1F3A35"/>
+        <rect x="56" y="0" width="14" height="36" fill="#E3F4EF"/>
+        <rect x="0.5" y="0.5" width="69" height="35" rx="6" fill="none" stroke="#E6EDFF" stroke-opacity="0.18"/>
+        <text x="0" y="50" class="ui" font-size="11" fill="#94A3B8">Tidewater</text>
+      </g>
+      <g transform="translate(258 0)">
+        <rect x="0" y="0" width="14" height="36" fill="#0B0708"/><rect x="14" y="0" width="14" height="36" fill="#170D0C"/>
+        <rect x="28" y="0" width="14" height="36" fill="#2A1610"/><rect x="42" y="0" width="14" height="36" fill="#3D231C"/>
+        <rect x="56" y="0" width="14" height="36" fill="#FFF1E8"/>
+        <rect x="0.5" y="0.5" width="69" height="35" rx="6" fill="none" stroke="#E6EDFF" stroke-opacity="0.18"/>
+        <text x="0" y="50" class="ui" font-size="11" fill="#94A3B8">Ember</text>
+      </g>
+    </g>
+
+    <!-- hairline, then actions: text with a 2 px underline, no filled button -->
+    <rect x="1088" y="640" width="1" height="64" fill="#FFFFFF" opacity="0.2"/>
+    <g transform="translate(1108 656)">
+      <text x="0" y="14" class="ui" font-size="14" fill="#E6EDFF">Apply</text>
+      <rect x="0" y="19" width="38" height="2" fill="#3B82F6"/>
+      <text x="0" y="40" class="ui t2" font-size="12">Apply on all screens</text>
+      <text x="0" y="58" class="mono t2" font-size="11">12 targets · Esc returns</text>
+    </g>
+    <!-- Light variant of the strip: band #E8EEFF, labels in #0B1730. Thumbnails and tiles show through unchanged. -->
+    <g id="light-strip" opacity="0">
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.611;0.64;0.833;0.911;1" dur="9s" repeatCount="indefinite"
+               calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      <rect x="0" y="625" width="1280" height="95" fill="#E8EEFF" fill-opacity="0.9"/>
+      <rect x="712" y="640" width="1" height="64" fill="#0B1730" opacity="0.2"/>
+      <rect x="1088" y="640" width="1" height="64" fill="#0B1730" opacity="0.2"/>
+      <g class="ui" font-size="11" fill="#0B1730" letter-spacing="0.08em" opacity="0.7">
+        <text x="24" y="648">WALLPAPER</text><text x="732" y="648">THEME</text>
+      </g>
+      <g transform="translate(24 656)">
+        <rect x="0" y="0" width="96" height="52" rx="6" fill="#0B1730"/>
+        <path d="M0 40 q30 -28 60 -8 t36 -18 v38 h-96 z" fill="#22D3EE" opacity="0.12"/>
+        <rect x="1" y="1" width="94" height="50" rx="6" fill="none" stroke="#3B82F6" stroke-width="2"/>
+        <rect x="112" y="0" width="96" height="52" rx="6" fill="#0E1F2A"/>
+        <path d="M112 30 q40 -20 96 6 v16 h-96 z" fill="#3B82F6" opacity="0.14"/>
+        <rect x="224" y="0" width="96" height="52" rx="6" fill="#2A1610"/>
+        <circle cx="296" cy="44" r="30" fill="#F43F5E" opacity="0.16"/>
+        <rect x="336" y="0" width="96" height="52" rx="6" fill="#0F1A12"/>
+        <path d="M336 44 l30 -22 26 14 40 -26 v42 h-96 z" fill="#10B981" opacity="0.14"/>
+        <rect x="448" y="0" width="96" height="52" rx="6" fill="#17102A"/>
+        <circle cx="470" cy="14" r="26" fill="#A855F7" opacity="0.14"/>
+        <rect x="560" y="0" width="96" height="52" rx="6" fill="#0A1420"/>
+        <path d="M560 52 h96 v-14 q-48 -18 -96 0 z" fill="#22D3EE" opacity="0.1"/>
+        <g class="ui" font-size="11" fill="#0B1730" opacity="0.75">
+          <text x="0" y="62">Halcyon</text><text x="112" y="62">Tidewater</text><text x="224" y="62">Ember</text>
+          <text x="336" y="62">Moss</text><text x="448" y="62">Nightbloom</text><text x="560" y="62">Fathom</text>
+        </g>
+      </g>
+      <g transform="translate(732 656)">
+        <rect x="0" y="0" width="14" height="36" fill="#050916"/><rect x="14" y="0" width="14" height="36" fill="#070F22"/>
+        <rect x="28" y="0" width="14" height="36" fill="#0B1730"/><rect x="42" y="0" width="14" height="36" fill="#1E293B"/>
+        <rect x="56" y="0" width="14" height="36" fill="#E6EDFF"/>
+        <rect x="1" y="1" width="68" height="34" rx="6" fill="none" stroke="#3B82F6" stroke-width="2"/>
+        <g transform="translate(86 0)">
+          <rect x="0" y="0" width="14" height="36" fill="#F6F9FF"/><rect x="14" y="0" width="14" height="36" fill="#EEF3FF"/>
+          <rect x="28" y="0" width="14" height="36" fill="#E8EEFF"/><rect x="42" y="0" width="14" height="36" fill="#C7D2FE"/>
+          <rect x="56" y="0" width="14" height="36" fill="#0B1730"/>
+          <!-- hovered: on a light ground the focus edge is still white, carried on a 1 px dark keyline -->
+          <rect x="0.5" y="0.5" width="69" height="35" rx="6" fill="none" stroke="#0B1730" stroke-opacity="0.5"/>
+          <rect x="1.5" y="1.5" width="67" height="33" rx="5" fill="none" stroke="#FFFFFF"/>
+        </g>
+        <g transform="translate(172 0)">
+          <rect x="0" y="0" width="14" height="36" fill="#06120F"/><rect x="14" y="0" width="14" height="36" fill="#0A1C18"/>
+          <rect x="28" y="0" width="14" height="36" fill="#0F2823"/><rect x="42" y="0" width="14" height="36" fill="#1F3A35"/>
+          <rect x="56" y="0" width="14" height="36" fill="#E3F4EF"/>
+        </g>
+        <g transform="translate(258 0)">
+          <rect x="0" y="0" width="14" height="36" fill="#0B0708"/><rect x="14" y="0" width="14" height="36" fill="#170D0C"/>
+          <rect x="28" y="0" width="14" height="36" fill="#2A1610"/><rect x="42" y="0" width="14" height="36" fill="#3D231C"/>
+          <rect x="56" y="0" width="14" height="36" fill="#FFF1E8"/>
+        </g>
+        <g class="ui" font-size="11" fill="#0B1730" opacity="0.75">
+          <text x="0" y="50">Dark</text><text x="86" y="50">Light</text><text x="172" y="50">Tidewater</text><text x="258" y="50">Ember</text>
+        </g>
+      </g>
+      <g transform="translate(1108 656)">
+        <text x="0" y="14" class="ui" font-size="14" fill="#0B1730">Apply</text>
+        <rect x="0" y="19" width="38" height="2" fill="#3B82F6"/>
+        <text x="0" y="40" class="ui" font-size="12" fill="#0B1730" opacity="0.7">Apply on all screens</text>
+        <text x="0" y="58" class="mono" font-size="11" fill="#0B1730" opacity="0.7">12 targets · Esc returns</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- pointer -->
+  <g id="pointer">
+    <animateTransform attributeName="transform" type="translate"
+                      values="300 560;300 560;296 690;296 690;300 560;300 560;868 686;868 686;900 560;900 560"
+                      keyTimes="0;0.11;0.167;0.444;0.5;0.56;0.611;0.833;0.89;1" dur="9s" repeatCount="indefinite"
+                      calcMode="spline" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+    <path d="M0 0 l0 14 4-3 3 6 2-1 -3-6 5 0 z" fill="#E6EDFF" stroke="#050916" stroke-width="0.8"/>
+  </g>
+
+  <!-- ===== LAYER 4: annotations ===== -->
+  <g class="note" transform="translate(64 300)">
+    <rect width="330" height="88" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="22" class="ui note-title" fill="#22D3EE">Live retint, not a preview</text>
+    <text x="12" y="40" class="ui note-body">Hovering Ember swaps the wallpaper and retints the</text>
+    <text x="12" y="55" class="ui note-body">real desktop: window grounds, the bar band, the strip.</text>
+    <text x="12" y="70" class="ui note-body">prismata carries the change across the screen.</text>
+  </g>
+  <g class="note" transform="translate(64 404)">
+    <rect width="330" height="88" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="22" class="ui note-title" fill="#3B82F6">Brand stops are fixed</text>
+    <text x="12" y="40" class="ui note-body">Every frame still samples the same rail. Matugen</text>
+    <text x="12" y="55" class="ui note-body">may move ground, containers and text, never cyan,</text>
+    <text x="12" y="70" class="ui note-body">blue, purple, rose (or Error / Info / Success / Warning).</text>
+  </g>
+  <g class="note" transform="translate(64 508)">
+    <rect width="330" height="88" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="22" class="ui note-title" fill="#6F6CF7">The light variant</text>
+    <text x="12" y="40" class="ui note-body">Sky / blue / violet / rose on #F6F9FF. Strokes rest</text>
+    <text x="12" y="55" class="ui note-body">at 0.55, the gleam becomes a darker segment and the</text>
+    <text x="12" y="70" class="ui note-body">bar band goes #E8EEFF with #0B1730 text.</text>
+  </g>
+  <g class="note" transform="translate(866 480)">
+    <rect width="366" height="88" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="22" class="ui note-title" fill="#CE4BA8">The picker is a strip; Escape returns</text>
+    <text x="12" y="40" class="ui note-body">96 px, bottom edge, 0 inset, no radius, navy glass over the</text>
+    <text x="12" y="55" class="ui note-body">windows it covers. Hover leaves: the desktop returns on the</text>
+    <text x="12" y="70" class="ui note-body">720 ms release. Apply is text with a 2 px underline.</text>
+  </g>
+  <text x="640" y="616" text-anchor="middle" class="ui t2" font-size="12">Phosphor · wallpaper and theme picker · tries the palette on your real layout</text>
+</svg>

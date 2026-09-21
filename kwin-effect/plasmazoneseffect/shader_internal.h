@@ -102,6 +102,17 @@ private:
 /// #version synthesis) live at the definition.
 QByteArray injectKwinDefineAfterVersion(const QString& source);
 
+/// The `pzFinalizeColor` splice that converts a shader's sRGB output into the
+/// render target's colour description on the compositor: KWin's
+/// colormanagement.glsl plus the `PZ_FINALIZE_COLOR` override the shared
+/// uniform headers default to identity. Spliced after `#version` by every
+/// pass that authors NEW sRGB content (window animations, pointer packs), and
+/// deliberately not by the passes whose inputs are captures already in the
+/// blending space. Must be spliced AFTER phosphor include expansion, because
+/// the `#include "colormanagement.glsl"` it carries resolves only in KWin's
+/// own preprocess. Defined beside injectKwinDefineAfterVersion.
+const QString& kwinFinalizeColorBlock();
+
 /// Load a user-texture file into a QImage in `Format_RGBA8888` for GL upload:
 /// PNG/JPG/etc. decode via `QImage`, `.svg` / `.svgz` rasterise via
 /// `QSvgRenderer` at @p svgMaxDim max-axis. Returns a null QImage on any

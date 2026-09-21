@@ -1,5 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
+//
+// FILE-SIZE EXCEPTION (sanctioned): the adaptor's window lifecycle is one
+// ordered pipeline (capture, screen and desktop change, open, close,
+// metadata, frame tracking, prune) whose steps read each other's state;
+// splitting it by step would scatter the ordering the comments here pin.
+// Grew with the per-desktop membership change: the capture's still-on-snap-
+// rect guard walks the record's per-desktop zones, and an output move
+// releases the old output's other-desktop memberships.
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // WindowTrackingAdaptor — window lifecycle
@@ -266,8 +274,19 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
                         // ever being moved: the live frame is still the zone rect. Skip
                         // until the frame differs from the pre-float zones' geometry — the
                         // user's next move while floating captures the real free spot.
-                        const bool stillOnSnapRect =
+                        // Every desktop's zones count, not only the flat
+                        // zoneIds: a window present on several desktops and
+                        // unsnapped on the one in view is still physically on
+                        // the zone it holds on another, and a capture there
+                        // carries an empty zoneIds beside a per-desktop map
+                        // that names that zone.
+                        bool stillOnSnapRect =
                             !slot.zoneIds.isEmpty() && m_service->resolveZoneGeometry(slot.zoneIds, screenKey) == frame;
+                        for (auto d = slot.zonesByDesktop.constBegin();
+                             !stillOnSnapRect && d != slot.zonesByDesktop.constEnd(); ++d) {
+                            stillOnSnapRect =
+                                !d.value().isEmpty() && m_service->resolveZoneGeometry(d.value(), screenKey) == frame;
+                        }
                         // Tiled analogue of the same poison guard (see the
                         // helper doc). The isWindowEngineTiled gate above
                         // cannot catch the float-toggle edge:
@@ -560,6 +579,13 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
 
     qCInfo(lcDbusWindow) << "windowScreenChanged:" << windowId << "moved from" << storedScreen << "to"
                          << resolvedNewScreen << "- unsnapping";
+    // A window is on one screen: the migration re-homes the primary to the
+    // new screen and releases the old screen's OTHER desktop memberships
+    // (their zones dragged the window back on the next switch, seen live on
+    // two outputs); the unassign then clears the zone that came along.
+    if (PhosphorSnapEngine::SnapEngine* snap = snapEngine()) {
+        snap->migrateWindowToScreen(windowId, resolvedNewScreen);
+    }
     m_service->consumePendingAssignment(windowId);
     m_service->unassignWindow(windowId);
 
@@ -798,6 +824,20 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
             meta.virtualDesktop = fresh.virtualDesktop;
             meta.activity = fresh.activity;
             meta.windowType = fresh.windowType;
+            // The multi-desktop span is an EXTENDED field, so it is carried
+            // forward rather than re-sent — but virtualDesktop above is
+            // authoritative on this push, and the effect re-derives it from
+            // x11DesktopNumber every time. A window that moved between the last
+            // full push and this caption tick therefore arrives with a fresh
+            // scalar beside a span from before the move, which breaks
+            // WindowMetadata's stated invariant that a non-empty span starts
+            // with the scalar. Drop the span in that case: it describes a
+            // membership the window no longer has, and the next full push
+            // re-establishes it. Consumers then read the scalar, which is the
+            // one field this push actually knows.
+            if (!meta.virtualDesktops.isEmpty() && meta.virtualDesktops.constFirst() != meta.virtualDesktop) {
+                meta.virtualDesktops.clear();
+            }
         }
         // Fresh captionNormal from the caption tick, when the effect sent one.
         if (const auto it = extended.constFind(QString(Key::CaptionNormal)); it != extended.constEnd()) {
@@ -1244,6 +1284,23 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     if (persistedPruned > 0) {
         scheduleSaveState();
     }
+}
+
+void WindowTrackingAdaptor::relayWindowReleasedFromContext(const QString& windowId, const QString& screenId)
+{
+    if (windowId.isEmpty()) {
+        return;
+    }
+    // "unsnapped", and an empty zoneId, which is what the effect's zone cache
+    // reads as "this window occupies no zone" and removes the entry for. The
+    // screen is carried so a subscriber that keys on it sees the context the
+    // window was released FROM, which is the only screen this statement is
+    // about. isFloating stays false: the release says the window stopped being
+    // a resident there, not that it started floating, and the float domain is
+    // per mode and answered elsewhere.
+    Q_EMIT windowStateChanged(windowId,
+                              PhosphorProtocol::WindowStateEntry{windowId, QString(), screenId, false,
+                                                                 QStringLiteral("unsnapped"), QStringList{}, false});
 }
 
 } // namespace PlasmaZones

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Shared helpers for the shader-pack validators (plasmazones-shader-validate).
-// The per-mode validators (packvalidator_overlay/_animation/_surface.cpp) and
+// The per-mode validators (packvalidator_overlay/_animation/_surface/_pointer.cpp) and
 // the CLI entry point (main.cpp) live in separate translation units to keep
 // each file focused;
 // this header exposes the pieces the validators share: the pack-path confine
@@ -11,12 +11,18 @@
 #pragma once
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>
+#include <PhosphorPointer/PointerShaderEffect.h>
 #include <PhosphorRendering/ShaderCompiler.h>
 #include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QMap>
 #include <QString>
 #include <QStringList>
+#include <QVariant>
+#include <QVariantMap>
 
 #include <rhi/qshader.h>
 
@@ -28,18 +34,19 @@ namespace PlasmaZones::ShaderValidate {
 
 // ── authoring-model detection ──────────────────────────────────────────────
 
-/// The three authoring models a pack can belong to.
+/// The four authoring models a pack can belong to.
 enum class PackModel {
     Overlay,
     Animation,
-    Surface
+    Surface,
+    Pointer
 };
 
 /// Which authoring model @p packDir belongs to, or nullopt when the directory
 /// carries no marker.
 ///
 /// Detected from the pack's SIBLING `shared/` directory rather than from
-/// metadata.json, because the three schemas are not distinguishable: all three
+/// metadata.json, because the three schemas are not distinguishable: all four
 /// carry id / name / fragmentShader, and the only animation-exclusive field
 /// (`appliesTo`) is optional, so a universal animation pack that omits it looks
 /// exactly like an overlay pack. The shared directory is unambiguous, since
@@ -58,16 +65,45 @@ enum class PackModel {
 /// validator logic, and only the flag-override policy on top of it is CLI.
 std::optional<PackModel> detectPackModel(const QString& packDir);
 
+/// The `shared/` include roots for @p packDir, in resolution order.
+///
+/// A pack in the INSTALLED layout, `<data root>/plasmazones/<family>/<id>`,
+/// gets its sibling `shared/` first (always listed, whether or not it exists)
+/// and then the XDG data chain for its family. That is what lets the tool
+/// work on an installed pack: one in `~/.local/share/plasmazones/<family>/<id>`
+/// usually has no sibling `shared/` at all, since the helpers ship once into
+/// the system prefix, and when it has one it may be a partial user override of
+/// a header or two beside the system copy. The widened list is the same SET of
+/// roots the runtime registries resolve includes against. The ORDER differs
+/// for an installed pack: the runtime walks its search paths user-first, while
+/// this list puts the sibling first and then `QStandardPaths::locateAll`,
+/// which is also user-first, so a user override of a shared header shadows the
+/// system copy in both. Only a pack that sits in the system prefix itself and
+/// has a user override of the same header sees a different winner here (the
+/// sibling, i.e. the system copy) than at runtime (the user copy).
+///
+/// Every other layout (the source tree's `data/<family>/<id>`, a scratchpad
+/// laid out like it, a vendored pack set) is self-contained and resolves
+/// against its sibling `shared/` and NOTHING else, so an installed copy of the
+/// helpers can never satisfy an include the tree itself lacks: a header
+/// missing from `data/<family>/shared` fails here the way it fails in CI,
+/// rather than resolving from a stale `/usr/share` copy on a developer machine.
+QStringList packSharedRoots(const QString& packDir);
+
 // Confine a metadata-supplied shader path to its pack dir. Returns the confined
-// path, or nullopt when the path is empty or escapes the pack dir. See the
-// definition for the canonical-vs-lexical domain rules and why this gate is
-// deliberately stricter than the runtime.
+// path, or nullopt when the path is empty or escapes the pack dir. The
+// definition explains the canonical-vs-lexical comparison.
 std::optional<QString> confinedPackPath(const QString& packDir, const QString& rel);
+
+// The report column for a stage label: labels shorter than the column are
+// padded to it, longer ones (`effect.frag (Qt-RHI preview)`) get one space so
+// the OK/ERROR word never runs into the label.
+QString padLabel(const QString& label);
 
 // In-place confinement: rewrites @p path to its confined absolute form and
 // returns true, or returns false when the path escapes the pack dir. An EMPTY
-// path is left as-is and accepted (that stage is simply absent). All three
-// validators gate every user-editable metadata path through this before
+// path is left as-is and accepted (that stage is simply absent). Every
+// validator gates every user-editable metadata path through this before
 // opening it.
 bool confinePackPathInPlace(const QString& packDir, QString& path);
 
@@ -80,7 +116,7 @@ QString poolName(const QString& type);
 
 // Report a compiled stage's outcome ("OK", or "ERROR" with the glslang
 // diagnostics mapped to the author's file/line plus the did-you-mean hint).
-// Returns 1 on failure, 0 on success. Shared by all three validators.
+// Returns 1 on failure, 0 on success. Shared by all the validators.
 int reportCompile(QTextStream& out, const QString& label, const PhosphorRendering::ShaderCompiler::Result& result,
                   const QStringList& declared);
 
@@ -88,6 +124,7 @@ int reportCompile(QTextStream& out, const QString& label, const PhosphorRenderin
 QStringList declaredParamNames(const QList<PhosphorShaders::ShaderRegistry::ParameterInfo>& params);
 QStringList declaredParamNames(const QList<PhosphorAnimationShaders::AnimationShaderEffect::ParameterInfo>& params);
 QStringList declaredParamNames(const QList<PhosphorSurfaceShaders::SurfaceShaderEffect::ParameterInfo>& params);
+QStringList declaredParamNames(const QList<PhosphorPointerShaders::PointerShaderEffect::ParameterInfo>& params);
 
 // ── compositor (KWin classic-GL) bake ──────────────────────────────────────
 // Packs whose appliesTo makes them compositor-only are never loaded by the
@@ -103,6 +140,77 @@ QStringList declaredParamNames(const QList<PhosphorSurfaceShaders::SurfaceShader
 // linked: Qt vendors glslang inside ShaderTools without exposing it, and a
 // direct libglslang dependency for one code path is a heavier build cost than
 // a tool the GLSL toolchain already ships.
+
+/// One declared parameter, reduced to what a preset lint needs: its id, its
+/// type token, and whatever range it declares. The four families spell their
+/// ParameterInfo differently (slot vs step, image vs no image), so the lint
+/// takes this instead of any one of them and each arm projects into it.
+struct PresetLintParam
+{
+    QString id;
+    QString type;
+    QVariant minValue;
+    QVariant maxValue;
+};
+
+/// Lint a pack's `presets` block against what the pack declares.
+///
+/// Checks everything decidable without rendering: every preset key is usable as a
+/// picker label, every key names a declared parameter, every value matches that
+/// parameter's declared type, a numeric value sits inside any declared range AND
+/// inside its own type's range, and an image-typed value names a file the pack ships.
+/// Containment is deliberately NOT among them — see the implementation, where the
+/// parse has already refused an escaping path before this lint can see it.
+///
+/// Collects its findings and prints them under a `presets ERROR` header, then
+/// returns the number of problems found. Emitting straight to the stream as each
+/// problem was found meant a pack whose only fault was a bad preset printed an
+/// unindented error line and then `metadata OK` directly below it, while still
+/// returning a non-zero error count.
+///
+/// @p packDir is the pack's directory, used to check that an image-typed preset
+/// value names a file the pack actually ships. NOT a containment check: the parse
+/// has already dropped an escaping path, so there is nothing left here to refuse
+/// (see the implementation). Every arm passes a real directory today; an empty one
+/// skips the existence check.
+///
+/// Deliberately NOT an error for a preset to omit parameters: a preset is a
+/// partial tuning by design, and the ones it says nothing about fall back to
+/// their defaults.
+/// Lint a preset value set on an IMAGE-typed parameter, for the two families that cannot
+/// keep one.
+///
+/// The animation and surface arms parse a pack's presets before its directory is stamped,
+/// so `parsePackPresets` refuses every image-typed preset value fail-closed and the value
+/// is gone before any other lint sees it. Reads the RAW `presets` block for the keys a
+/// pack sets, because the parsed map is exactly where they have already been dropped.
+int reportImageParamPresets(QTextStream& out, const QJsonObject& root);
+
+/// Lint the RAW `presets` value from @p root, for the faults the parsed map cannot show.
+///
+/// Three of them, each costing the author presets with only a log line: a
+/// present-but-non-object `presets` (the loader ignores it wholesale), more presets than
+/// the loader keeps, and a preset with more values than it keeps. `reportPresetProblems`
+/// below receives the already-parsed, already-truncated map and so is blind to all three.
+///
+/// Returns the number of problems found and prints them under the same `presets` header.
+int reportRawPresetProblems(QTextStream& out, const QJsonObject& root);
+
+int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
+                         const QList<PresetLintParam>& declared);
+
+/// Per-family overloads, so each validator arm is one call rather than its own
+/// projection loop. The four ParameterInfo types spell themselves differently
+/// (slot vs step, image vs no image), which is why the lint takes the reduced
+/// PresetLintParam and these do the reducing.
+int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
+                         const QList<PhosphorShaders::ShaderRegistry::ParameterInfo>& declared);
+int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
+                         const QList<PhosphorAnimationShaders::AnimationShaderEffect::ParameterInfo>& declared);
+int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
+                         const QList<PhosphorSurfaceShaders::SurfaceShaderEffect::ParameterInfo>& declared);
+int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
+                         const QList<PhosphorPointerShaders::PointerShaderEffect::ParameterInfo>& declared);
 
 /// Absolute path to a usable glslang binary (`glslangValidator`, else the
 /// `glslang` the project renamed it to), or an empty string when neither is on

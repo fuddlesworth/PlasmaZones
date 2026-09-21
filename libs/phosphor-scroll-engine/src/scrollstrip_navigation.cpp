@@ -95,6 +95,39 @@ bool ScrollStrip::focusTileAtEnd(bool last)
     return true;
 }
 
+bool ScrollStrip::focusTileByOrdinal(int ordinal)
+{
+    Column* col = activeColumnMutable();
+    if (!col || ordinal < 1) {
+        return false;
+    }
+    // Ordinals count the FOCUSABLE tiles, not the raw tile slots: a minimized
+    // tile draws no tab (ResolvedTile::tabCount excludes them, and the sibling
+    // walks refuse to land on one), so counting slots would make the visible
+    // tabs and the numbers the user presses disagree the moment a tile in the
+    // column is minimized.
+    int seen = 0;
+    for (int i = 0; i < col->tiles.size(); ++i) {
+        if (col->tiles.at(i).minimized) {
+            continue;
+        }
+        if (++seen == ordinal) {
+            // Compared against activeTileIdx rather than activeWindowId(),
+            // matching focusAdjacentTile and focusTileAtEnd. The two differ
+            // only when activeTileIdx points at a MINIMIZED tile, which
+            // production never produces (the compositor reports a minimize as
+            // a float toggle, so the window leaves the column instead). The
+            // family stays consistent rather than one verb diverging here.
+            if (i == col->activeTileIdx) {
+                return false;
+            }
+            col->activeTileIdx = i;
+            return true;
+        }
+    }
+    return false;
+}
+
 bool ScrollStrip::focusWindow(const QString& windowId, const ScrollLayoutParams& params)
 {
     const int colIdx = columnOfWindow(windowId);

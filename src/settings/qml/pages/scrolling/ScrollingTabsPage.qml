@@ -55,7 +55,7 @@ SettingsFlickable {
     // dialog's onAccepted, so a write to `appSettings.scrollingTabIndicatorFont*`
     // there would hit a nonexistent property on the controller and throw. The
     // font writes go through this reference instead (same capture
-    // SnappingOverlayAppearancePage makes for the zone label font).
+    // OverlaysAppearancePage makes for the zone label font).
     readonly property var appSettingsObj: appSettings
 
     // PAGE-LEVEL, shared by the three colour rows: a page rebuild while the

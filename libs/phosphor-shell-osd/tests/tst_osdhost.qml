@@ -68,6 +68,32 @@ TestCase {
         }
     }
 
+    // A stand-in for PlacementMapScreen: the property names OSDHost reads,
+    // a settable focused cell rect, and the coalesced changed() signal.
+    Component {
+        id: fakeMapComp
+
+        QtObject {
+            property int mode: 1
+            property var cells: []
+            property var lens: ({})
+            property int overflowLeft: 0
+            property int overflowRight: 0
+            property rect workArea: Qt.rect(0, 28, 400, 272)
+            property string focusedId: ""
+            property rect focusedRect: Qt.rect(0, 0, 0, 0)
+
+            signal changed
+
+            function focusedCellId() {
+                return focusedId;
+            }
+            function cellRect(id) {
+                return id === focusedId ? focusedRect : Qt.rect(0, 0, 0, 0);
+            }
+        }
+    }
+
     Component {
         id: hostComp
 
@@ -262,6 +288,75 @@ TestCase {
         compare(h.currentKind, "mic", "the re-entrant kind ends up current");
         compare(shownSpy.count, 3, "volume, brightness, mic each announced shown once");
         compare(hiddenSpy.count, 2, "volume and brightness each announced hidden once");
+    }
+
+    // A3 §4: a bottom band sits on the FOCUSED WINDOW's bottom edge, read
+    // from the placement map, not on the screen edge.
+    function test_band_anchors_to_focused_cell_rect() {
+        const map = createTemporaryObject(fakeMapComp, testCase, {
+            "focusedId": "w1",
+            "focusedRect": Qt.rect(100, 50, 200, 100)
+        });
+        const h = createTemporaryObject(hostComp, testCase, {
+            "placementMap": map,
+            "edgeMargin": 8
+        });
+        h.show("volume", 50, undefined, "");
+        const band = fakeProvider.lastItem;
+        compare(h.anchoredToWindow, true, "a focused cell anchors the band");
+        compare(band.x, 100, "band starts at the window's left edge");
+        compare(band.width, 200, "band spans the window's width");
+        compare(band.y, 150 - band.height, "band sits on the window's bottom edge");
+    }
+
+    function test_band_travels_with_focus_while_shown() {
+        const map = createTemporaryObject(fakeMapComp, testCase, {
+            "focusedId": "w1",
+            "focusedRect": Qt.rect(100, 50, 200, 100)
+        });
+        const h = createTemporaryObject(hostComp, testCase, {
+            "placementMap": map,
+            "holdDuration": 5000
+        });
+        h.show("volume", 50, undefined, "");
+        const band = fakeProvider.lastItem;
+        compare(band.x, 100);
+        // Focus moves to another window: the band follows on the map's
+        // coalesced changed(), animating rather than re-appearing.
+        map.focusedId = "w2";
+        map.focusedRect = Qt.rect(10, 20, 300, 120);
+        map.changed();
+        tryCompare(band, "x", 10, 3000, "band travelled to the new window's x");
+        tryCompare(band, "width", 300, 3000, "band spans the new window's width");
+        tryCompare(band, "y", 140 - band.height, 3000, "band sits on the new window's bottom edge");
+    }
+
+    function test_band_falls_back_to_screen_edge_without_focus() {
+        const map = createTemporaryObject(fakeMapComp, testCase, {
+            "focusedId": ""
+        });
+        const h = createTemporaryObject(hostComp, testCase, {
+            "placementMap": map,
+            "edgeMargin": 8
+        });
+        h.show("volume", 50, undefined, "");
+        const band = fakeProvider.lastItem;
+        compare(h.anchoredToWindow, false, "no focused cell: no anchor");
+        compare(band.x, 8, "band inset from the screen's left edge");
+        compare(band.width, 400 - 16, "band spans the screen minus the gap");
+        compare(band.y, 300 - band.height - 8, "band sits on the screen's bottom edge");
+    }
+
+    function test_band_falls_back_without_a_map() {
+        // No placementMap bound and no Phosphor.Shell singleton in this
+        // engine: the screen edge, as in phase 1.
+        const h = createTemporaryObject(hostComp, testCase, {
+            "screenName": "DP-1",
+            "edgeMargin": 8
+        });
+        h.show("volume", 50, undefined, "");
+        compare(h.anchoredToWindow, false);
+        compare(fakeProvider.lastItem.x, 8);
     }
 
     Component {

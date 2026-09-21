@@ -181,6 +181,19 @@ bool ScrollOverhangInputFilter::pointerAxis(KWin::PointerAxisEvent* event)
         resetScrollFactorStream();
         return true;
     }
+    // Tab indicators next, and AFTER the chords: a chord is an explicit
+    // modifier gesture over the strip and must keep working wherever the
+    // cursor happens to sit, including over a pill. What reaches here is an
+    // unmodified wheel, which the tab handler claims only when it lands on a
+    // pill of a multi-tab column.
+    if (TilingHandler* tiling = m_effect->tilingHandler(); tiling
+        && tiling->handleTabWheel(event->position, event->delta, event->deltaV120, event->orientation, event->modifiers,
+                                  event->buttons)) {
+        // Same reason the chord branch resets: the client never sees this
+        // tick, so no ScrollFactor remainder may survive it.
+        resetScrollFactorStream();
+        return true;
+    }
     // Scrolling over the invisible overhang must not reach the straddler;
     // consuming (rather than retargeting) matches how the region reads
     // visually — inert until clicked.
@@ -193,8 +206,9 @@ bool ScrollOverhangInputFilter::pointerAxis(KWin::PointerAxisEvent* event)
         return true;
     }
     // ScrollFactor rule: rescale the event in place and pass it on. Only
-    // events no strip chord claimed reach here (the branch above returns),
-    // so a chord-driven strip move is never scaled by an app's rule.
+    // events neither a strip chord nor the tab wheel claimed reach here (the
+    // branches above return), so a strip move or a tab step is never scaled
+    // by an app's rule.
     applyScrollFactor(event);
     return false;
 }

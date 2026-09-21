@@ -13,7 +13,7 @@ import org.kde.kirigami as Kirigami
  * without its own override falls back through its category up to here.
  * Edits route through `appSettings.animation*` (the existing config-driven
  * `Global` profile in `kSettingsDrivenProfilePaths`), not through the
- * per-event ProfileLoader pipeline — so this page intentionally bypasses
+ * per-event override tree, so this page intentionally bypasses
  * `AnimationsPageController.setOverride` and writes through the same
  * `Settings::animationProfile` Q_PROPERTYs the legacy General > Animations
  * card has always used.
@@ -65,6 +65,12 @@ SettingsFlickable {
                 WideComboBox {
                     id: sequenceModeCombo
 
+                    // The combo index IS the SequenceMode value, so no mapping
+                    // table is needed in either direction. Named here because
+                    // the "Stagger delay" row below gates on the same value and
+                    // would otherwise read as a bare literal.
+                    readonly property int cascadeMode: 1
+
                     Accessible.name: i18n("Multiple windows")
                     enabled: defaultsCard.toggleChecked
                     model: [i18n("All at once"), i18n("One by one")]
@@ -85,7 +91,7 @@ SettingsFlickable {
             }
 
             SettingsRow {
-                visible: page.appSettings.animationSequenceMode === 1
+                visible: page.appSettings.animationSequenceMode === sequenceModeCombo.cascadeMode
                 title: i18n("Stagger delay")
                 searchAnchor: "staggerDelay"
                 description: i18n("Pause between each window's animation start")

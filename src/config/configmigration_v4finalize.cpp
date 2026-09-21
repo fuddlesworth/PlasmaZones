@@ -8,6 +8,7 @@
 #include "configkeys.h"
 #include "settings.h"
 #include "configmigration_v4detail.h"
+#include "configmigration_util.h"
 
 #include <PhosphorConfig/MigrationRunner.h>
 #include <PhosphorRules/ContextRuleBridge.h>
@@ -338,6 +339,15 @@ bool relocateLayoutSettingsImpl(const QString& layoutsDir, const QString& sideca
         // has been reading and writing since. Re-importing would push that
         // file's stale embedded block over a newer edit and silently lose it.
         // Still queue the strip, so the fat file is cleaned up either way.
+        //
+        // Since v8 that strip also takes the layout's inline shaderId with it,
+        // and in this one branch it is dropped rather than relocated: the
+        // sidecar entry that already exists is what the v8 overlay lift reads,
+        // and the fat file's own copy never reaches it. That is the correct
+        // trade. The sidecar entry is the live one the runtime store has been
+        // reading and writing; the fat file's block is a stale snapshot from
+        // before pass 2 first ran, and preferring it would lose every edit made
+        // since. A shader id is one field of that same stale block.
         if (!sidecar.contains(layoutId)) {
             sidecar.insert(layoutId, settings);
             sidecarDirty = true;
@@ -984,51 +994,9 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
 
 namespace {
 
-/// Load rules.json, hand the mutable set to @p mutate, and save only when it
-/// reports a change.
-///
-/// Shared by the two sidecar fix-ups that ride the cleanup branch. They are
-/// non-versioned repairs to rows this code seeded, so both need the same
-/// scaffold: gate on the conversion having happened, tolerate a missing or
-/// unloadable store as "nothing of ours to fix", and never write unless
-/// something actually changed. Each fix-up still loads the store for itself —
-/// this is a DRY extraction, not a perf one.
-///
-/// Not serialised against a RUNNING daemon that already holds the rule set in
-/// memory: `ensureJsonConfig` runs once at process startup, so launching the
-/// settings app beside a live daemon can rewrite rules.json underneath it. The
-/// exposure is the same one `pruneRetiredProviderDefaultRule` has always had,
-/// and it converges — a fix-up only fires while the shape it repairs is still
-/// on disk, so a clobbering save is repaired again on the next daemon start
-/// and stops firing for good once it sticks.
-///
-/// @param jsonPath config.json; only gates on the conversion having happened.
-/// @param what     fix-up name, for the failure warning.
-/// @return true on success or a clean no-op; false only on a write failure.
-bool withRuleSet(const QString& jsonPath, const char* what, const std::function<bool(PhosphorRules::RuleSet&)>& mutate)
-{
-    if (!QFile::exists(jsonPath)) {
-        return true;
-    }
-    const QString rulesPath = ConfigDefaults::rulesFilePath();
-    auto setOpt = PhosphorRules::RuleSet::loadFromFile(rulesPath);
-    if (!setOpt.has_value()) {
-        // No rules.json yet (conversion not established), or a store this
-        // build cannot load. Either way there is nothing of ours to repair,
-        // and prevalidateRulesFile owns the unloadable-store case.
-        return true;
-    }
-    PhosphorRules::RuleSet ruleSet = *setOpt;
-    if (!mutate(ruleSet)) {
-        return true; // nothing to change — no write
-    }
-    if (!ruleSet.saveToFile(rulesPath)) {
-        qWarning("ConfigMigration::%s: failed to write %s", what, qPrintable(rulesPath));
-        return false;
-    }
-    qInfo("ConfigMigration::%s: rewrote %s", what, qPrintable(rulesPath));
-    return true;
-}
+// withRuleSet, the rules.json read-modify-write scaffold the two fix-ups below
+// go through, lives in configmigration_util.h: the v8 overlay finalizer needs
+// the same scaffold for its rule relocation.
 
 } // namespace
 

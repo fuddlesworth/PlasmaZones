@@ -35,7 +35,7 @@ QColor outlineColorFor(const QColor& textColor, const QColor& backgroundColor)
 
 } // namespace
 
-ZoneLabelTexture ZoneLabelTextureBuilder::build(const QVariantList& zones, const QSize& size,
+ZoneLabelTexture ZoneLabelTextureBuilder::build(const QVariantList& zones, const QSize& size, qreal devicePixelRatio,
                                                 const QColor& labelFontColor, bool showNumbers,
                                                 const QColor& backgroundColor, const QString& fontFamily,
                                                 qreal fontSizeScale, int fontWeight, bool fontItalic,
@@ -45,11 +45,22 @@ ZoneLabelTexture ZoneLabelTextureBuilder::build(const QVariantList& zones, const
     if (!showNumbers || zones.isEmpty() || size.width() <= 0 || size.height() <= 0) {
         return result; // empty payload
     }
-    result.size = size;
+    // Everything below is authored in LOGICAL units — the zone rects arrive in
+    // them, and the font size, tile margin and outline width are all tuned in
+    // them. Only the raster resolution changes: the payload's size and tile
+    // offsets are device pixels, and each tile's QPainter carries the scale, so
+    // the glyphs are drawn at the resolution the shader samples them at rather
+    // than being upscaled into it. See the header for why that matters beyond
+    // the glyphs themselves.
+    const qreal dpr = devicePixelRatio > 0.0 ? devicePixelRatio : 1.0;
+    result.size = QSize(qRound(size.width() * dpr), qRound(size.height() * dpr));
+    if (result.size.isEmpty()) {
+        return ZoneLabelTexture{};
+    }
 
     const QColor outlineColor = outlineColorFor(labelFontColor, backgroundColor);
     const QColor fillColor = labelFontColor;
-    const QRect screenRect(QPoint(0, 0), size);
+    const QRect deviceRect(QPoint(0, 0), result.size);
 
     // Slack around glyph content so the 2px outline stroke + antialiasing aren't
     // clipped at a tile's edges.
@@ -112,29 +123,49 @@ ZoneLabelTexture ZoneLabelTextureBuilder::build(const QVariantList& zones, const
             }
         }
 
-        // Tile = glyph + decoration bounds, inflated for the outline stroke/AA,
-        // integer-aligned and clamped to the texture. Only this small region is
-        // allocated — the rest of the screen-addressed texture stays transparent.
+        // Tile = glyph + decoration bounds, inflated for the outline stroke/AA
+        // in logical units, then taken to the device grid and clamped to the
+        // texture. Only this small region is allocated — the rest of the
+        // screen-addressed texture stays transparent. Aligned OUTWARD after
+        // scaling rather than scaling an already-aligned logical rect: at a
+        // fractional ratio the latter can crop a device column of the stroke
+        // the margin was there to protect.
         QRectF contentF = path.boundingRect();
         for (const QRectF& d : decoRects) {
             contentF = contentF.united(d);
         }
-        const QRect tileRect = contentF.toAlignedRect()
-                                   .adjusted(-kTileMargin, -kTileMargin, kTileMargin, kTileMargin)
-                                   .intersected(screenRect);
+        contentF = contentF.adjusted(-kTileMargin, -kTileMargin, kTileMargin, kTileMargin);
+        const QRect tileRect =
+            QRectF(contentF.x() * dpr, contentF.y() * dpr, contentF.width() * dpr, contentF.height() * dpr)
+                .toAlignedRect()
+                .intersected(deviceRect);
         if (tileRect.isEmpty()) {
             continue;
         }
 
         QImage tile(tileRect.size(), QImage::Format_ARGB32_Premultiplied);
+        if (tile.isNull()) {
+            continue; // allocation failure: skip this label rather than abort the payload
+        }
+        // Deliberately NOT setDevicePixelRatio: the scale is applied on the
+        // painter below, and a ratio on the image would apply it a second time
+        // — to the painter here, and again to every drawImage that composites
+        // these tiles (toImage(), the RHI upload's staging path), which treat
+        // a tagged image as logical-sized.
         tile.fill(Qt::transparent);
 
         QPainter painter(&tile);
         painter.setRenderHint(QPainter::Antialiasing);
         painter.setRenderHint(QPainter::TextAntialiasing);
         painter.setRenderHint(QPainter::SmoothPixmapTransform);
-        // Map screen coordinates into this tile's local space.
+        // Map LOGICAL screen coordinates into this tile's local DEVICE space.
+        // Order is load-bearing: translate-then-scale composes as
+        // p_device = dpr * p_logical - tileRect.topLeft(), which is the tile's
+        // own corner measured on the device grid. The reverse order would
+        // scale the offset too and put every glyph at dpr times its distance
+        // from the origin.
         painter.translate(-tileRect.topLeft());
+        painter.scale(dpr, dpr);
 
         const QPen outlinePen(outlineColor, 2.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
         // Draw outline (stroke) then fill — identical order to the prior

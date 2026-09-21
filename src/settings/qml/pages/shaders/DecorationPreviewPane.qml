@@ -73,8 +73,6 @@ Item {
     readonly property bool _isAudioPack: _info.audio === true
     readonly property bool _needsBackdrop: _info.needsBackdrop === true
 
-    readonly property var _audioSpectrum: previewController ? previewController.audioSpectrum : []
-
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: Kirigami.Units.smallSpacing
@@ -99,19 +97,30 @@ Item {
             // live parameter map, which is what makes a padding param (glow
             // size, shadow spread) grow the transparent room as it is dragged
             // rather than only on reopen.
-            DecorationChainPreview {
-                id: chainPreview
+            // Hosted through the shared wrapper, so this pane and a decoration
+            // chain row show a pack identically. PackPreview owns the fixed
+            // composition canvas, the fit into whatever room a host has, and
+            // the live-preview cap; this pane owns the frame, the Focused
+            // toggle, the notices and the cover. The decoration core fits the
+            // canvas into its own bounds already, so for this kind the wrapper
+            // passes the slot straight through and the composition is exactly
+            // what it was before.
+            PackPreview {
+                id: stage
 
                 anchors.fill: parent
                 anchors.margins: 1
+                previewKind: "decoration"
                 previewController: root.previewController
                 packId: root.packId
                 params: root.liveParams
                 active: root.active
-                animationsPaused: !root.animating
+                animating: root.animating
                 focused: focusToggle.checked
-                audioSpectrum: root._audioSpectrum
                 cardTitle: i18nc("@title sample window in a shader preview", "Sample Window")
+                // This pane covers the whole framed slot itself, below; two
+                // covers would draw the same notice twice.
+                showPlaceholder: false
             }
 
             // Covers the preview until the chain has actually compiled, the way
@@ -135,8 +144,8 @@ Item {
                 // and a cover bound to it lifts over the old pixels first —
                 // the stale frame at the front of the flicker. showable drops
                 // the same frame the pack changes. See its doc.
-                visible: !chainPreview.showable || chainPreview.hasError
-                text: chainPreview.hasError ? i18nc("@info:placeholder shader preview", "This pack's shader did not compile.") : i18nc("@info:placeholder shader preview", "Preview unavailable")
+                visible: !stage.showable || stage.hasError
+                text: stage.hasError ? i18nc("@info:placeholder shader preview", "This pack's shader did not compile.") : i18nc("@info:placeholder shader preview", "Preview unavailable")
                 // Opaque, unlike the zone pane's: the preview underneath has to
                 // keep RENDERING to reach `ready` at all, so this conceals it
                 // rather than replacing it. Slot colour and rounding, so it

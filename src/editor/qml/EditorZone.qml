@@ -47,8 +47,12 @@ Item {
     property var snapIndicator: null
     // Fixed geometry support
     property bool isFixedZone: zoneData ? (zoneData.geometryMode === 1) : false
-    property real screenWidth: controller ? controller.targetScreenSize.width : 1920
-    property real screenHeight: controller ? controller.targetScreenSize.height : 1080
+    // The real screen rather than a hardcoded 1920x1080: these divide the
+    // fixed-zone pixel coordinates in every toCanvas*/toRelative* conversion
+    // below, so a wrong reference size lays fixed zones out at the wrong
+    // scale. Matches the fallback DimensionTooltip is given in EditorWindow.
+    property real screenWidth: controller ? controller.targetScreenSize.width : Screen.width
+    property real screenHeight: controller ? controller.targetScreenSize.height : Screen.height
     property int operationState: EditorZone.State.Idle
     // Track if this zone is part of an active divider operation
     // When true, syncFromZoneData() is blocked to prevent overwriting divider updates
@@ -447,13 +451,13 @@ Item {
             // shader, so a legacy layout carrying a width above the current
             // ceiling previews as it will actually be drawn.
             var _w = _zone && _zone.borderWidth !== undefined ? _zone.borderWidth : 2;
-            return Math.min(_w, editorController ? editorController.zoneBorderWidthMax : 10);
+            return Math.min(_w, root.controller ? root.controller.zoneBorderWidthMax : 10);
         }
         property int customBorderRadius: {
             var _ = _borderRadiusTracker; // Dependency on tracker
             var _zone = zoneData; // Dependency on zoneData
             var _r = _zone && _zone.borderRadius !== undefined ? _zone.borderRadius : (Kirigami.Units.smallSpacing * 1.5);
-            return Math.min(_r, editorController ? editorController.zoneBorderRadiusMax : 50);
+            return Math.min(_r, root.controller ? root.controller.zoneBorderRadiusMax : 50);
         }
 
         anchors.fill: parent
@@ -462,6 +466,12 @@ Item {
         // Uses separate active/inactive opacity values
         color: useCustom ? (isSelected ? Qt.rgba(customHighlightColor.r, customHighlightColor.g, customHighlightColor.b, customHighlightColor.a * customActiveOpacity) : Qt.rgba(customInactiveColor.r, customInactiveColor.g, customInactiveColor.b, customInactiveColor.a * customInactiveOpacity)) : (isSelected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, Theme.zoneHighlightAlpha) : Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, Theme.zoneInactiveAlpha))
         border.color: useCustom ? customBorderColor : (isSelected ? Kirigami.Theme.highlightColor : (hoverArea.containsMouse ? Kirigami.Theme.hoverColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)))
+        // Raw pixels on purpose, like the nearby minSize. These are the editor's
+        // FALLBACK border widths for the no-custom-appearance case, and their
+        // job is to match what the overlay actually draws, which is a pixel
+        // count carried by the settings (zoneBorderWidth) and not a Kirigami
+        // spacing unit. Rounding them to Kirigami.Units would make the editor
+        // preview stop agreeing with the overlay it previews.
         border.width: useCustom ? customBorderWidth : (isSelected ? 3 : 2)
         radius: useCustom ? customBorderRadius : (Kirigami.Units.smallSpacing * 1.5)
         // Accessibility: Screen reader announcements

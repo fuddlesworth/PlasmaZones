@@ -137,6 +137,30 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
 
+        <!-- ═══════════════════════════════════════════════════════════════════════════
+             Placement map (replay and focus queries for the Phosphor shell)
+             ═══════════════════════════════════════════════════════════════════════════ -->
+
+        <method name="currentTilesJson">
+            <annotation name="org.gtk.GDBus.DocString" value="The last geometry batch this interface emitted for a screen, replayed as JSON so a client that attaches after the batch went out can rebuild the screen's tiles without asking for a retile. A JSON array with one object per entry of the last windowsTileRequested batch that named this screen, restricted to that screen's entries, carrying the keys the daemon's own batch parser reads: windowId, x, y, width, height, screenId, monocle, floating and zoneId. x, y, width and height are the committed rect in absolute logical pixels and are all 0 on a floating entry, which carries no rect. zoneId is reserved and always empty, as on the signal. The daemon keeps ONE batch per screen, replaced whenever a newer batch names the screen, and prunes an entry the moment its window is closed or released from tracking, so a replay never resurrects a window that has already gone. A screen that leaves the engine-managed set has its batch dropped with the announce that removes it, and a daemon restart starts with nothing. The array is empty (the two characters []) for a screen no batch has named, for an empty screenId, and after the screen's batch was dropped. This is a replay of what was SENT, not a fresh resolve: the paint hints the signal carries beside the rect (scrollEdge, viewDelta, the visual position, tabFrom, viewImmediate) are deliberately absent, because they described a transition rather than a state."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen whose last batch to replay. An empty string yields an empty array."/>
+            </arg>
+            <arg name="tilesJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array string."/>
+            </arg>
+        </method>
+
+        <method name="managedFocusedWindow">
+            <annotation name="org.gtk.GDBus.DocString" value="The window the engine owning a screen considers focused there, or an empty string. Answered by whichever tiling-family engine currently claims the screen (the scroll engine's active tile of the active column, autotile's tracked focus), so the answer follows the screen's mode rather than a caller having to know it. Empty for a screen no tiling-family engine owns, which includes every snapping screen: that mode's placement runs outside this interface's pipeline and has no arm here. Empty also for an empty screenId and while the pipeline is torn down. Changes are announced on focusedWindowChanged below."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen to ask about. An empty string yields an empty string."/>
+            </arg>
+            <arg name="windowId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Window id, or empty when no engine-managed window holds focus there."/>
+            </arg>
+        </method>
+
         <!-- floatWindow, unfloatWindow, toggleFocusedWindowFloat, toggleWindowFloat removed:
              all float operations are now routed through the unified methods —
              org.plasmazones.Snap.toggleFloatForWindow for toggle,
@@ -201,6 +225,16 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when windows are released from engine management (e.g., screen left an engine-managed mode). External contract surface only: the PlasmaZones KWin effect does not subscribe, because the restore runs through the daemon-internal windowsReleased wiring and the resnap path."/>
             <arg name="windowIds" type="as">
                 <annotation name="org.gtk.GDBus.DocString" value="Window IDs no longer under engine control."/>
+            </arg>
+        </signal>
+
+        <signal name="focusedWindowChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="The daemon's notion of the engine-managed focused window on a screen changed. Emitted once per actual change and never for a repeat: the daemon re-reads the owning engine's answer after every focus report from the compositor (notifyWindowFocused), after every engine-driven activation (a focus verb, a window open that takes focus), after every relayout it announces on tilingChanged, after a window closes, and after each coalesced managed-screens announce, and compares against the last value it broadcast for that screen. The payload carries the whole answer, so a receiver replaces rather than merges. An empty windowId means no engine-managed window holds focus there any more, which is also what a screen leaving the engine-managed set announces. NOT seeded at bring-up: a consumer that attaches later reads managedFocusedWindow for the screens it cares about and then follows this signal."/>
+            <arg name="screenId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen whose focused window changed."/>
+            </arg>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="The window now focused there, or empty."/>
             </arg>
         </signal>
 

@@ -48,6 +48,7 @@ LockService::LockService(QObject* parent)
 {
     connect(&d->machine, &LockStateMachine::stateChanged, this, &LockService::stateChanged);
     connect(&d->machine, &LockStateMachine::authenticationFailed, this, &LockService::authenticationFailed);
+    connect(&d->machine, &LockStateMachine::aboutToUnlock, this, &LockService::aboutToUnlock);
     connect(&d->machine, &LockStateMachine::unlocked, this, &LockService::unlocked);
 }
 
@@ -67,7 +68,7 @@ LockService::State LockService::state() const
 
 bool LockService::isLocked() const
 {
-    return state() == State::Locked || state() == State::Authenticating;
+    return state() == State::Locked || state() == State::Authenticating || state() == State::Releasing;
 }
 
 void LockService::lock()
@@ -78,6 +79,11 @@ void LockService::lock()
 void LockService::unlock(const QString& password)
 {
     d->machine.authenticate(password);
+}
+
+void LockService::finishUnlock()
+{
+    d->machine.finishUnlock();
 }
 
 } // namespace PhosphorServiceLock

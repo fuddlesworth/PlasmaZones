@@ -16,6 +16,7 @@ OSDCard {
     // Unused here; present so OSDHost can set it generically.
     property bool active: false
 
+    edge: OSDCard.Right
     label: qsTr("Brightness")
     showProgress: true
     progress: value / 100

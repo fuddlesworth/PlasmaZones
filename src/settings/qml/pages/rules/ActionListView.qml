@@ -43,6 +43,29 @@ ColumnLayout {
     /// receives. May be null while the page is still wiring things up
     /// — resolution falls back to the raw wire string in that case.
     property var appSettings: null
+    /// Bumped whenever either preset bridge reports a change, so the summary rows
+    /// below re-resolve a preset NAME they read imperatively.
+    ///
+    /// `_resolveParamValue` asks the bridge for the pack's presets, and a bridge call
+    /// is not a binding dependency: a preset renamed or deleted anywhere left this
+    /// read-only summary showing the old name until something unrelated happened to
+    /// re-evaluate. Every editing surface holds its rows imperatively against the same
+    /// hazard (PresetRow, ActionPresetEditor); a revision counter is the read-only
+    /// equivalent, and the same `void (rev)` idiom AnimationEventCard uses for the
+    /// shader registry.
+    property int _presetRev: 0
+    Connections {
+        target: root.appSettings ? root.appSettings.animationPresets : null
+        function onPresetsChanged() {
+            ++root._presetRev;
+        }
+    }
+    Connections {
+        target: root.appSettings ? root.appSettings.overlayPresets : null
+        function onPresetsChanged() {
+            ++root._presetRev;
+        }
+    }
     /// Tree visualisation constants — kept in lockstep with
     /// MatchExpressionView's equivalents so the WHEN and THEN trees
     /// look like one consistent tree visualisation.
@@ -173,7 +196,7 @@ ColumnLayout {
             // pickers all show it as None.
             return i18nc("@item rule action layout value, explicitly none at all", "None");
         }
-        if (kind === "snappingLayout" || kind === "tilingAlgorithm" || kind === "scrollingTemplate") {
+        if (kind === "snappingLayout" || kind === "tilingAlgorithm" || kind === "scrollingTemplate" || kind === "overlayLayout") {
             // Layouts are serialised via `toVariantMap(LayoutPreview)` which
             // stamps the friendly title under `displayName`. The previous
             // `.name` read returned undefined, leaving the read-only rule
@@ -183,9 +206,12 @@ ColumnLayout {
             // layout, etc.) so the user can SEE what the rule contains
             // rather than an empty pill.
             var layouts = root.appSettings && root.appSettings.layouts ? root.appSettings.layouts : [];
-            // Snapping layouts and scrolling templates are stored by raw
-            // braced UUID, which keys the layouts list directly (template
-            // rows ride the same list flagged isScrollingTemplate).
+            // Snapping layouts, scrolling templates and the overlay shader
+            // tree's layout nodes are all stored by raw braced UUID, which
+            // keys the layouts list directly (template rows ride the same
+            // list flagged isScrollingTemplate). The overlay node's EMPTY
+            // value never reaches here: it is the tree's global default, and
+            // the descriptor's emptyLabel named it above.
             // Tiling-algorithm actions store the BARE registry token
             // ("bsp"), while the layouts list keys autotile entries as
             // "autotile:<token>" — so prefix before matching, mirroring the C++
@@ -265,9 +291,9 @@ ColumnLayout {
             return names.join(", ");
         }
         if (kind === "overlayShader") {
-            // Overlay shaders come from the snapping-shaders registry, not the
+            // Overlay shaders come from the overlay shader registry, not the
             // animation one (mirrors ActionRow's _overlayShaderEditor source).
-            var ssCtl = root.appSettings ? root.appSettings.snappingShadersPage : null;
+            var ssCtl = root.appSettings ? root.appSettings.overlaysPage : null;
             if (!ssCtl)
                 return rawStr;
 
@@ -277,6 +303,50 @@ ColumnLayout {
                     return overlayEffects[oe].name;
             }
             return rawStr;
+        }
+        if (kind === "shaderPreset") {
+            // Read the revision so the text binding below re-runs when a preset is
+            // renamed or deleted. The bridge lookups in this arm are imperative calls
+            // and register no dependency of their own.
+            void root._presetRev;
+            // Without this arm the value fell through to the raw string and the
+            // summary showed a machine id — a bare UUID for a user preset — in a
+            // view whose contract is that values resolve to the same labels the
+            // editor shows. Every sibling id-valued kind has an arm.
+            //
+            // The decoration chain's form is an OBJECT (`{packId: presetId}`), so
+            // it is reported as a count rather than a name: naming one layer's
+            // preset out of several would be arbitrary.
+            if (raw && typeof raw === "object") {
+                const packIds = Object.keys(raw);
+                if (packIds.length === 0)
+                    return "";
+                // %n, never %1: PhosphorLocalizedContext's numerus path substitutes
+                // only %n, and an extra arg is silently dropped by QML — so %1
+                // renders as the literal placeholder. Same bug PR #801 fixed across
+                // five call sites; every other plural string in this app uses %n.
+                return i18ncp("@info:status number of decoration layers with a preset", "%n layer with a preset", "%n layers with a preset", packIds.length);
+            }
+            if (rawStr.length === 0)
+                return "";
+            // A scalar id belongs to one of the two shader actions, whose pack id
+            // lives beside it in the same payload.
+            const presetBridge = root.appSettings ? (action.type === "overrideOverlayShader" ? root.appSettings.overlayPresets : root.appSettings.animationPresets) : null;
+            const packForPreset = action.effectId || "";
+            // Nothing to say until a bridge has actually answered. While appSettings
+            // is still unresolved the bridge is null, and falling through to the
+            // "Missing preset" line below reported a perfectly valid rule's preset as
+            // gone for the length of that transient. ActionPresetEditor handles the
+            // same null explicitly.
+            if (!presetBridge || packForPreset.length === 0)
+                return "";
+            const rows = presetBridge.presetsFor(packForPreset) || [];
+            for (let pr = 0; pr < rows.length; ++pr) {
+                if (rows[pr].id === rawStr)
+                    return rows[pr].name;
+            }
+            // A preset an assignment outlived: say so rather than showing its id.
+            return i18nc("@info:status preset that no longer exists", "Missing preset");
         }
         if (kind === "curveEditor") {
             // CurvePresets.curveLabel is the single source of truth for the

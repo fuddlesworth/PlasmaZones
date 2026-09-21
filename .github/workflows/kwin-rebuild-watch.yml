@@ -1,0 +1,498 @@
+# PlasmaZones KWin rebuild watch
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# The kwin-effect plugin's IID embeds the exact upstream KWin version it was
+# compiled against, and KWin refuses to load an effect whose IID does not
+# match. So every prebuilt package goes inert the moment its distro ships a
+# different KWin, and the report arrives as "PlasmaZones stopped loading".
+#
+# Each distro moves on its own cadence: Arch has the new KWin the day KDE
+# tags it, Tumbleweed a snapshot or two later, Fedora after a Bodhi cycle,
+# Debian unstable whenever the Qt/KDE team uploads. One release can be fine
+# on three channels and dead on the fourth. This workflow therefore treats
+# every channel separately: it reads the per-channel KWin baseline the
+# release pipeline records (the kwin-baseline.json asset on the latest
+# release), probes each channel's repos for the KWin it ships today, and if
+# ANY channel has moved it dispatches release.yml with the package revision
+# bumped. That rebuilds every channel from the tag, so the ones that did not
+# move get a harmless revision bump and the one that did gets a plugin that
+# loads again.
+#
+# Where the rebuild publishes depends on the release. A mutable release
+# takes the new assets in place, so release.yml is dispatched for the same
+# tag with pkgrel bumped. An immutable release (the default on this repo)
+# can never take new assets, and its tag can never be reused, so the watch
+# tags the SAME commit as v<version>-r<N> (N = pkgrel + 1) and dispatches
+# release.yml for that tag. release.yml reads the revision out of the tag,
+# builds <version>-<N> packages from the unchanged source, and publishes
+# them as their own release, which then becomes the latest release the next
+# run reads its baseline from. The tag is created through the API with the
+# workflow token, which deliberately does not trigger release.yml's tag-push
+# path, so the dispatch below is the one and only run.
+#
+# Channels here must match the list the release job's "Assemble KWin baseline
+# manifest" step in release.yml merges: `arch` (the Arch package, the generic
+# tarball and the AUR plasmazones-bin package that wraps it),
+# `debian-unstable`, `fedora-<N>` for each Fedora release build-rpm builds,
+# and `opensuse-tumbleweed`. That step refuses a baseline artifact it does not
+# know, so adding a channel to one place without the other fails the release
+# rather than leaving the watcher probing a channel no manifest records.
+# Debian and Tumbleweed also publish through OBS, which rebuilds on its own
+# when KWin moves; the static assets on the GitHub release do not, which is
+# what this covers.
+#
+# Bootstrapping: a release published before the manifest existed has no
+# baseline, so the first rebuild has to be cut by hand: tag the release's
+# commit as v<version>-r2 and run
+#   gh workflow run release.yml -f tag=v<version>-r2
+# That run records the manifest and every later bump is automatic.
+
+name: KWin rebuild watch
+
+on:
+  schedule:
+    # Every six hours. A distro can ship a new KWin at any hour and users
+    # notice the missing overlay within one, so a daily check leaves up to a
+    # day of "PlasmaZones stopped loading". Runs that find nothing cost a few
+    # minutes of runner time; a run that finds a rebuild already in flight
+    # skips, so a tighter cadence never dispatches twice.
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Probe and compare, but do not dispatch a rebuild.'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+# One watcher at a time. Two overlapping runs could each see "no rebuild in
+# flight" and dispatch twice.
+concurrency:
+  group: kwin-rebuild-watch
+  cancel-in-progress: false
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Read the baseline the latest release was built against
+  # ═══════════════════════════════════════════════════════════════════════════
+  baseline:
+    name: Read release baseline
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.read.outputs.tag }}
+      version_tag: ${{ steps.read.outputs.version_tag }}
+      sha: ${{ steps.read.outputs.sha }}
+      pkgrel: ${{ steps.read.outputs.pkgrel }}
+      has_baseline: ${{ steps.read.outputs.has_baseline }}
+      immutable: ${{ steps.read.outputs.immutable }}
+    steps:
+      - name: Read latest release and its KWin baseline
+        id: read
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # No checkout runs in this job, so gh has no git remote to infer the
+          # repository from and every `gh release`/`gh run` call would abort.
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # releases/latest is the newest non-draft, non-prerelease release,
+          # which is the one every prebuilt channel points users at.
+          # The latest release is either a plain v<version> or a revision
+          # v<version>-r<N> that an earlier rebuild published. Both carry a
+          # baseline; the version tag is what the next revision is named
+          # from.
+          TAG="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-r[2-9][0-9]*)?$ ]]; then
+              echo "Error: latest release tag '$TAG' is not v<major>.<minor>.<patch>[-r<N>]" >&2
+              exit 1
+          fi
+          TAG_PKGREL=""
+          if [[ "$TAG" =~ -r([2-9][0-9]*)$ ]]; then
+              TAG_PKGREL="${BASH_REMATCH[1]}"
+          fi
+          VERSION_TAG="${TAG%-r"$TAG_PKGREL"}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version_tag=$VERSION_TAG" >> "$GITHUB_OUTPUT"
+          echo "Latest release: $TAG"
+
+          # The commit the release was built from. A revision tag must point
+          # here too, so the rebuild is the same source. The commits endpoint
+          # peels an annotated tag to its commit.
+          SHA="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
+          if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "Error: could not resolve $TAG to a commit (got '$SHA')" >&2
+              exit 1
+          fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "$TAG is at $SHA"
+
+          # An immutable release cannot have its assets replaced, and the tag
+          # can never be reused, so a rebuild of it publishes under a fresh
+          # v<version>-r<N> tag instead of in place. The dispatch step
+          # branches on this.
+          IMMUTABLE="$(gh release view "$TAG" --json isImmutable --jq .isImmutable)"
+          echo "immutable=$IMMUTABLE" >> "$GITHUB_OUTPUT"
+
+          mkdir -p baseline
+          if ! gh release download "$TAG" --pattern kwin-baseline.json --dir baseline 2>/dev/null; then
+              echo "::warning::$TAG has no kwin-baseline.json asset. Cut one rebuild by hand (tag $SHA as $VERSION_TAG-r2, then gh workflow run release.yml -f tag=$VERSION_TAG-r2) to record it; the watch takes over from there."
+              echo "has_baseline=false" >> "$GITHUB_OUTPUT"
+              echo "pkgrel=0" >> "$GITHUB_OUTPUT"
+              exit 0
+          fi
+          cat baseline/kwin-baseline.json
+          # The manifest names the version it was built from. A mismatch means
+          # the asset on this release came from some other run, and a pkgrel
+          # bumped from it would be bumped from the wrong number.
+          MANIFEST_VERSION="$(jq -r .version baseline/kwin-baseline.json)"
+          if [[ "v$MANIFEST_VERSION" != "$VERSION_TAG" ]]; then
+              echo "Error: kwin-baseline.json on $TAG records version '$MANIFEST_VERSION'" >&2
+              exit 1
+          fi
+          PKGREL="$(jq -r .pkgrel baseline/kwin-baseline.json)"
+          if [[ ! "$PKGREL" =~ ^[1-9][0-9]*$ ]]; then
+              echo "Error: manifest pkgrel '$PKGREL' is not a positive integer" >&2
+              exit 1
+          fi
+          if [[ -n "$TAG_PKGREL" && "$PKGREL" != "$TAG_PKGREL" ]]; then
+              echo "Error: $TAG is package revision $TAG_PKGREL but its kwin-baseline.json records pkgrel $PKGREL" >&2
+              exit 1
+          fi
+          echo "pkgrel=$PKGREL" >> "$GITHUB_OUTPUT"
+          echo "has_baseline=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upload baseline
+        if: steps.read.outputs.has_baseline == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: kwin-baseline
+          path: baseline/kwin-baseline.json
+          retention-days: 7
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Probe each channel's repos for the KWin it ships today
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Each probe runs in the same image the release pipeline builds that channel
+  # in and asks the same repos, so what it sees is what a rebuild would compile
+  # against. Only package metadata is fetched; nothing is installed.
+  probe:
+    name: Probe KWin (${{ matrix.channel }})
+    runs-on: ubuntu-latest
+    strategy:
+      # A mirror flake on one channel must not hide a moved KWin on another.
+      fail-fast: false
+      matrix:
+        include:
+          - channel: arch
+            image: archlinux:latest
+            query: |
+              pacman -Sy --noconfirm >/dev/null
+              pacman -Si kwin | sed -n 's/^Version *: *//p'
+          - channel: debian-unstable
+            image: debian:unstable
+            query: |
+              apt-get update -qq >/dev/null
+              apt-cache policy kwin-dev | sed -n 's/^  Candidate: *//p'
+          # One entry per Fedora release build-rpm builds; the release job's
+          # manifest list in release.yml is the other place that names them.
+          # The `\n` is load-bearing: dnf5 prints each match with no separator
+          # otherwise, so the release-repo 6.6.4 and the updates-repo 6.7.4
+          # came out as one line reading 6.6.46.7.4, which is a well-formed
+          # dotted version and would have counted as "moved" every day.
+          - channel: fedora-44
+            image: fedora:44
+            query: |
+              dnf -q repoquery --queryformat '%{version}\n' kwin | sort -V | tail -n 1
+          - channel: opensuse-tumbleweed
+            image: opensuse/tumbleweed:latest
+            query: |
+              zypper -n --gpg-auto-import-keys refresh --force >/dev/null
+              zypper -n info kwin6 | sed -n 's/^Version *: *//p'
+    container:
+      image: ${{ matrix.image }}
+    steps:
+      - name: Query current KWin version
+        shell: bash
+        env:
+          CHANNEL: ${{ matrix.channel }}
+          QUERY: ${{ matrix.query }}
+        run: |
+          set -euo pipefail
+          # Mirrors lag and metadata refreshes flake; give each probe three
+          # tries before calling the channel unreadable.
+          RAW=""
+          for attempt in 1 2 3; do
+              if RAW="$(bash -euo pipefail -c "$QUERY" | tail -n 1)" && [[ -n "$RAW" ]]; then
+                  break
+              fi
+              RAW=""
+              if (( attempt < 3 )); then
+                  echo "::warning::$CHANNEL probe attempt $attempt failed; retrying in 60s"
+                  sleep 60
+              fi
+          done
+          if [[ -z "$RAW" ]]; then
+              echo "Error: could not read the current KWin version for $CHANNEL" >&2
+              exit 1
+          fi
+          # Strip epoch and distro revision: the plugin IID tracks the
+          # upstream version only, and a distro-only rebuild of KWin does not
+          # change it.
+          VERSION="$(sed -E 's/^[0-9]+://; s/-.*$//' <<<"$RAW")"
+          if [[ ! "$VERSION" =~ ^[0-9]+(\.[0-9]+)+$ ]]; then
+              echo "Error: $CHANNEL reported '$RAW', which does not normalise to a dotted version" >&2
+              exit 1
+          fi
+          echo "$CHANNEL: $RAW -> $VERSION"
+          mkdir -p current
+          echo "$VERSION" > "current/$CHANNEL"
+
+      - name: Upload probe result
+        uses: actions/upload-artifact@v7
+        with:
+          name: kwin-current-${{ matrix.channel }}
+          path: current/${{ matrix.channel }}
+          retention-days: 7
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Compare, and dispatch a rebuild when any channel moved
+  # ═══════════════════════════════════════════════════════════════════════════
+  decide:
+    name: Compare and dispatch
+    needs: [baseline, probe]
+    # Run even when a probe failed. fail-fast is off above so the other
+    # channels still report, and this job is where their reports are read;
+    # the default success() gate would throw all of them away because one
+    # mirror flaked. A channel with no probe result is reported as unreadable
+    # below and never counted as moved.
+    if: ${{ !cancelled() && needs.baseline.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      # The v<version>-r<N> tag is cut with the RELEASE_TAG_TOKEN secret,
+      # not GITHUB_TOKEN (see the dispatch step), so no contents write.
+      contents: read
+      # workflow_dispatch of release.yml.
+      actions: write
+    steps:
+      - name: Download baseline and probe results
+        uses: actions/download-artifact@v8
+        with:
+          path: results
+
+      - name: Compare each channel against its baseline
+        id: compare
+        env:
+          HAS_BASELINE: ${{ needs.baseline.outputs.has_baseline }}
+          TAG: ${{ needs.baseline.outputs.tag }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          {
+              echo "## KWin rebuild watch for $TAG"
+              echo ""
+              echo "| Channel | Built against | Ships today | Status |"
+              echo "|---|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # The channel set is the union of what the manifest records and what
+          # the probes returned. A manifest channel with no probe result is
+          # unreadable this run (its probe failed all three attempts); a probe
+          # result the manifest does not know is a channel added since the
+          # release was built.
+          mkdir -p results
+          CHANNELS=()
+          if [[ "$HAS_BASELINE" == "true" ]]; then
+              while IFS= read -r c; do
+                  CHANNELS+=("$c")
+              done < <(jq -r '.kwin | keys[]' results/kwin-baseline/kwin-baseline.json)
+          fi
+          for f in results/kwin-current-*/*; do
+              c="$(basename "$f")"
+              found=false
+              for known in "${CHANNELS[@]}"; do
+                  [[ "$known" == "$c" ]] && found=true
+              done
+              [[ "$found" == true ]] || CHANNELS+=("$c")
+          done
+
+          MOVED=()
+          UNREADABLE=()
+          for channel in "${CHANNELS[@]}"; do
+              f="results/kwin-current-$channel/$channel"
+              if [[ ! -s "$f" ]]; then
+                  echo "::warning::$channel probe returned nothing this run; it is not counted as moved"
+                  echo "| $channel | | | **unreadable** |" >> "$GITHUB_STEP_SUMMARY"
+                  UNREADABLE+=("$channel")
+                  continue
+              fi
+              current="$(tr -d '[:space:]' <"$f")"
+              if [[ "$HAS_BASELINE" != "true" ]]; then
+                  echo "| $channel | (no baseline) | $current | |" >> "$GITHUB_STEP_SUMMARY"
+                  continue
+              fi
+              built="$(jq -r --arg c "$channel" '.kwin[$c] // empty' results/kwin-baseline/kwin-baseline.json)"
+              if [[ -z "$built" ]]; then
+                  # The manifest predates this channel. Treat as moved: a
+                  # rebuild records it, and a channel with no record is one
+                  # that cannot be watched.
+                  echo "::warning::$TAG has no baseline for $channel; rebuilding to record one"
+                  built="(none)"
+              fi
+              if [[ "$built" == "$current" ]]; then
+                  echo "| $channel | $built | $current | unchanged |" >> "$GITHUB_STEP_SUMMARY"
+              else
+                  echo "| $channel | $built | $current | **moved** |" >> "$GITHUB_STEP_SUMMARY"
+                  MOVED+=("$channel")
+              fi
+              echo "$channel: built against $built, ships $current"
+          done
+          echo "unreadable=${UNREADABLE[*]:-}" >> "$GITHUB_OUTPUT"
+
+          if [[ "$HAS_BASELINE" != "true" ]]; then
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "No baseline recorded on $TAG. Dispatch one rebuild by hand to record it." >> "$GITHUB_STEP_SUMMARY"
+              echo "rebuild=false" >> "$GITHUB_OUTPUT"
+              exit 0
+          fi
+          if (( ${#MOVED[@]} == 0 )); then
+              echo "Every readable channel still ships the KWin $TAG was built against."
+              echo "rebuild=false" >> "$GITHUB_OUTPUT"
+          else
+              echo "KWin moved on: ${MOVED[*]}"
+              echo "rebuild=true" >> "$GITHUB_OUTPUT"
+              echo "moved=${MOVED[*]}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dispatch rebuild
+        if: steps.compare.outputs.rebuild == 'true' && inputs.dry_run != true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Only the tag creation uses this; see the comment there.
+          RELEASE_TAG_TOKEN: ${{ secrets.RELEASE_TAG_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.baseline.outputs.tag }}
+          VERSION_TAG: ${{ needs.baseline.outputs.version_tag }}
+          SHA: ${{ needs.baseline.outputs.sha }}
+          PKGREL: ${{ needs.baseline.outputs.pkgrel }}
+          IMMUTABLE: ${{ needs.baseline.outputs.immutable }}
+          MOVED: ${{ steps.compare.outputs.moved }}
+        run: |
+          set -euo pipefail
+          for status in queued in_progress waiting pending requested; do
+              n="$(gh run list --workflow release.yml --status "$status" --json databaseId --jq length)"
+              if (( n > 0 )); then
+                  echo "::notice::A release.yml run is $status; not dispatching another. Re-checked on the next schedule."
+                  echo "" >> "$GITHUB_STEP_SUMMARY"
+                  echo "A release.yml run is already $status, so no rebuild was dispatched. The next scheduled run re-checks." >> "$GITHUB_STEP_SUMMARY"
+                  exit 0
+              fi
+          done
+          LATEST="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)"
+          if [[ "$LATEST" != "$TAG" ]]; then
+              echo "::notice::$LATEST was released while this run was probing $TAG; not dispatching a rebuild of a superseded tag. Re-checked on the next schedule."
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "$LATEST was released during this run, so no rebuild of $TAG was dispatched. The next scheduled run watches $LATEST." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+          fi
+          mkdir -p latest
+          if ! gh release download "$TAG" --pattern kwin-baseline.json --dir latest 2>/dev/null; then
+              echo "::notice::$TAG no longer carries kwin-baseline.json; not dispatching. Re-checked on the next schedule."
+              exit 0
+          fi
+          NOW_PKGREL="$(jq -r .pkgrel latest/kwin-baseline.json)"
+          if [[ "$NOW_PKGREL" != "$PKGREL" ]]; then
+              echo "::notice::$TAG was republished as package revision $NOW_PKGREL while this run was probing; not dispatching on top of it. Re-checked on the next schedule."
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "$TAG was republished as package revision $NOW_PKGREL during this run, so no rebuild was dispatched. The next scheduled run compares against the new baseline." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+          fi
+          NEXT=$((PKGREL + 1))
+
+          if [[ "$IMMUTABLE" != "true" ]]; then
+              # A mutable release takes the new assets in place.
+              echo "Dispatching release.yml for $TAG with pkgrel=$NEXT (KWin moved on: $MOVED)"
+              gh workflow run release.yml --ref "$GITHUB_REF_NAME" -f "tag=$TAG" -f "pkgrel=$NEXT"
+              {
+                  echo ""
+                  echo "Dispatched a rebuild of $TAG as package revision $NEXT (KWin moved on: $MOVED)."
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+          fi
+
+          # An immutable release can never take new assets, so the rebuild
+          # gets its own tag at the same commit and its own release.
+          NEXT_TAG="$VERSION_TAG-r$NEXT"
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$NEXT_TAG" >/dev/null 2>&1; then
+              # A previous run cut the tag and its release run failed or was
+              # cancelled before publishing (had it published, $NEXT_TAG
+              # would be the latest release and we would not be here).
+              # Reuse the tag if it is where it should be; never move it.
+              EXISTING_COMMIT="$(gh api "repos/$GITHUB_REPOSITORY/commits/$NEXT_TAG" --jq .sha)"
+              if [[ "$EXISTING_COMMIT" != "$SHA" ]]; then
+                  echo "::error::$NEXT_TAG already exists at $EXISTING_COMMIT, but $TAG was built from $SHA. A revision tag must point at the release's commit. Resolve by hand."
+                  exit 1
+              fi
+              echo "::notice::$NEXT_TAG already exists at $SHA; reusing it for the dispatch."
+          else
+              # GITHUB_TOKEN cannot create this ref, whatever `permissions`
+              # grants it. GitHub refuses (403 "Resource not accessible by
+              # integration") to let the Actions token point a new ref at
+              # any commit whose .github/workflows differ from the default
+              # branch, because that needs the `workflows` scope and the
+              # Actions token can never hold it. A release commit almost
+              # always differs from main there by the time a rebuild is
+              # due. So the tag is cut with a fine-grained PAT that has
+              # Contents and Workflows write on this repository.
+              #
+              # A PAT-created tag also fires release.yml's push trigger,
+              # which runs the release.yml AT THE TAGGED COMMIT. That copy
+              # may predate revision tags entirely, so release.yml refuses
+              # push events for -r<N> tags and the dispatch below (which
+              # runs main's copy against the tag) is the run that ships.
+              if [[ -z "${RELEASE_TAG_TOKEN:-}" ]]; then
+                  echo "::error::The RELEASE_TAG_TOKEN secret is not set. Cutting $NEXT_TAG needs a fine-grained PAT with Contents and Workflows write on $GITHUB_REPOSITORY; GITHUB_TOKEN cannot create a tag at a commit whose workflow files differ from main."
+                  exit 1
+              fi
+              echo "Tagging $SHA as $NEXT_TAG"
+              GH_TOKEN="$RELEASE_TAG_TOKEN" gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" \
+                  -f "ref=refs/tags/$NEXT_TAG" -f "sha=$SHA" >/dev/null
+          fi
+          echo "Dispatching release.yml for $NEXT_TAG (package revision $NEXT of $VERSION_TAG; KWin moved on: $MOVED)"
+          gh workflow run release.yml --ref "$GITHUB_REF_NAME" -f "tag=$NEXT_TAG"
+          {
+              echo ""
+              echo "$TAG is immutable, so the rebuild was cut as $NEXT_TAG at the same commit ($SHA) and release.yml was dispatched for it (KWin moved on: $MOVED)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Dry run
+        if: steps.compare.outputs.rebuild == 'true' && inputs.dry_run == true
+        env:
+          TAG: ${{ needs.baseline.outputs.tag }}
+          VERSION_TAG: ${{ needs.baseline.outputs.version_tag }}
+          SHA: ${{ needs.baseline.outputs.sha }}
+          PKGREL: ${{ needs.baseline.outputs.pkgrel }}
+          IMMUTABLE: ${{ needs.baseline.outputs.immutable }}
+          MOVED: ${{ steps.compare.outputs.moved }}
+        run: |
+          NEXT=$((PKGREL + 1))
+          if [[ "$IMMUTABLE" == "true" ]]; then
+              echo "::notice::Dry run: $TAG is immutable; would tag $SHA as $VERSION_TAG-r$NEXT and dispatch release.yml for it (KWin moved on: $MOVED)"
+          else
+              echo "::notice::Dry run: would dispatch release.yml for $TAG with pkgrel=$NEXT (KWin moved on: $MOVED)"
+          fi
+
+      # Last, so a moved channel is still acted on above before the run goes
+      # red for the one that could not be read. A red run is the signal that
+      # a channel has been silently unwatched; a green one with a warning
+      # buried in the log is not.
+      - name: Fail when a channel could not be read
+        if: steps.compare.outputs.unreadable != ''
+        env:
+          UNREADABLE: ${{ steps.compare.outputs.unreadable }}
+        run: |
+          echo "::error::Could not read the current KWin version for: $UNREADABLE. Those channels were not compared this run."
+          exit 1

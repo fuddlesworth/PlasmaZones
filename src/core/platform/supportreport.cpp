@@ -157,8 +157,13 @@ SupportReport::Snapshot SupportReport::collectSnapshot(PhosphorScreens::ScreenMa
             info.available = screenManager->actualAvailableGeometry(screen);
             if (screen.qscreen) {
                 info.refreshRate = screen.qscreen->refreshRate();
-                info.devicePixelRatio = screen.qscreen->devicePixelRatio();
             }
+            // The compositor's LOGICAL scale, via the screen's layer-shell
+            // sensor. QScreen::devicePixelRatio() reports the wl_output
+            // INTEGER buffer scale here (2 on a 1.15 output), and a report
+            // that says 2.00 for a fractionally-scaled screen sends triage
+            // straight past every fractional-scale bug.
+            info.devicePixelRatio = screenManager->logicalScale(screen);
             snap.screens.append(info);
         }
     }

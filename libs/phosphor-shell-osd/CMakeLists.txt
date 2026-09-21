@@ -7,7 +7,7 @@
 # timers / debounce / dedupe / fade / screen routing) plus the shared
 # OSDCard chrome and the four built-in OSD delegates (Volume, Brightness,
 # Mic, CapsLock). Themed through phosphor-theme and built on the
-# phosphor-shell-widgets atoms (ElevationShadow).
+# phosphor-shell-widgets atoms (TabularText, SettleAnimation, DecorationSlot).
 #
 # Phase 3.3 deliverable per docs/phosphor-shell-design/04-implementation-plan.md.
 
@@ -29,7 +29,7 @@ endif()
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes)
 
 # The OSDs import Phosphor.Theme (tokens) and Phosphor.Widgets
-# (ElevationShadow). The QML import scanner needs those modules visible at
+# (the atoms). The QML import scanner needs those modules visible at
 # build time, and consumers need their runtime plugins linked. In-tree
 # builds always have the sibling targets; fall back to installed packages.
 if(NOT TARGET PhosphorTheme::PhosphorThemeQml)
@@ -37,6 +37,13 @@ if(NOT TARGET PhosphorTheme::PhosphorThemeQml)
 endif()
 if(NOT TARGET PhosphorShellWidgets::PhosphorShellWidgetsQml)
     find_package(PhosphorShellWidgets CONFIG QUIET)
+endif()
+# OSDHost imports Phosphor.Shell for the PlacementMap singleton (the
+# focused window's rect, A3 §4). The module's own registrar only carries
+# PerScreen; the singleton is registered by ShellEngine at runtime, and
+# OSDHost probes for it, so a host without it (demo, test) still loads.
+if(NOT TARGET PhosphorShell::PhosphorShellQml)
+    find_package(PhosphorShell CONFIG QUIET)
 endif()
 
 if(COMMAND qt_policy)
@@ -81,6 +88,11 @@ qt_add_qml_module(PhosphorShellOsdQml
         Phosphor.Widgets
         QtQuick.Shapes
         QtQuick.Layouts
+    # DEPENDENCIES rather than IMPORTS: Phosphor.Shell's runtime types are
+    # registered imperatively and the qmldir only lists PerScreen, so the
+    # scanner just needs the module named, not its names injected.
+    DEPENDENCIES
+        Phosphor.Shell
     SOURCES
         src/phosphorshellosd_qml_plugin.cpp
     QML_FILES ${_phosphor_osd_qml_files}
@@ -114,6 +126,14 @@ if(TARGET PhosphorTheme::PhosphorThemeQml)
 endif()
 if(TARGET PhosphorThemeQmlplugin)
     target_link_libraries(PhosphorShellOsdQml PUBLIC PhosphorThemeQmlplugin)
+endif()
+# The Phosphor.Shell module + registrar, so `import Phosphor.Shell` in
+# OSDHost resolves in every host, singleton or not.
+if(TARGET PhosphorShell::PhosphorShellQml)
+    target_link_libraries(PhosphorShellOsdQml PUBLIC PhosphorShell::PhosphorShellQml)
+endif()
+if(TARGET PhosphorShellQmlplugin)
+    target_link_libraries(PhosphorShellOsdQml PUBLIC PhosphorShellQmlplugin)
 endif()
 
 # No install rules: PhosphorShellOsdQml is a STATIC, in-tree-only QML

@@ -89,7 +89,7 @@ private Q_SLOTS:
         m_guard = std::make_unique<IsolatedConfigGuard>();
         m_settings = new CountingStubSettings(nullptr);
         m_parent = new QObject(nullptr);
-        m_adaptor = new SettingsAdaptor(m_settings, /*shaderRegistry=*/nullptr, /*profileRegistry=*/nullptr, m_parent);
+        m_adaptor = new SettingsAdaptor(m_settings, /*profileRegistry=*/nullptr, m_parent);
     }
 
     void cleanup()
@@ -526,7 +526,7 @@ private Q_SLOTS:
         registry.registerProfile(QStringLiteral("window.open"), profileWithDuration(900.0));
 
         QObject parent;
-        auto* adaptor = new SettingsAdaptor(m_settings, /*shaderRegistry=*/nullptr, &registry, &parent);
+        auto* adaptor = new SettingsAdaptor(m_settings, &registry, &parent);
 
         QVERIFY(adaptor->getSettingKeys().contains(QStringLiteral("motionProfileTree")));
 
@@ -557,7 +557,7 @@ private Q_SLOTS:
         registry.registerProfile(PhosphorAnimation::ProfilePaths::Global, profileWithDuration(400.0));
 
         QObject parent;
-        auto* adaptor = new SettingsAdaptor(m_settings, /*shaderRegistry=*/nullptr, &registry, &parent);
+        auto* adaptor = new SettingsAdaptor(m_settings, &registry, &parent);
 
         QSignalSpy spy(adaptor, &SettingsAdaptor::motionProfileTreeChanged);
         QVERIFY(spy.isValid());

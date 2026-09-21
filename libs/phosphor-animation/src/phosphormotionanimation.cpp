@@ -282,7 +282,7 @@ void PhosphorMotionAnimation::rebindToRegistryPath(const QString& path)
     applyResolvedProfile(registry->resolveWithInheritance(path));
 
     // Live-rebind: per-path change signal handles every targeted
-    // update (settings UI edits, ProfileLoader rescans — both go
+    // update (settings UI edits, a motion-tree install — both go
     // through registerProfile / reloadFromOwner which emit per-path
     // profileChanged). `profilesReloaded` fires only on wholesale
     // ops (reloadAll / clear) — those don't enumerate paths so the

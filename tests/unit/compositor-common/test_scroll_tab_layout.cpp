@@ -4,7 +4,7 @@
 // Layout + raster contract of the scrolling tab indicators.
 //
 // ScrollTabRaster::layoutPills() is the single source of the pills' geometry:
-// rasterise() iterates the same rects, and the effect hit-tests them, so a
+// rasterisePatch() iterates the same rects, and the effect hit-tests them, so a
 // drift here shows up as pills that are drawn in one place and clickable in
 // another. The cases below pin the arithmetic the QML port fixed in place —
 // contiguous segments at zero gap, the last tab absorbing the division
@@ -18,7 +18,9 @@
 #include <QFontDatabase>
 #include <QImage>
 #include <QPoint>
+#include <QPointF>
 #include <QRect>
+#include <QSize>
 #include <QString>
 #include <QTest>
 #include <QVector>
@@ -92,6 +94,7 @@ private Q_SLOTS:
     void rasteriseSmoke();
     void chipLabelFitsInsideTheChip();
     void chipRunStaysInsideThePillAtLargeGaps();
+    void fractionalPatchMatchesFullRaster();
 };
 
 void TestScrollTabLayout::barSingleTabFillsRect()
@@ -274,7 +277,16 @@ void TestScrollTabLayout::rasteriseSmoke()
     const ScrollTabIndicator indicator = makeIndicator(rect, 2, 2);
     const ScrollTabIndicatorStyle tabStyle = makeStyle(style, 0);
 
-    const QImage image = ScrollTabRaster::rasterise({indicator}, tabStyle, rect, dpr, QString());
+    // Sized the way the effect sizes the band's texture: the device-aligned
+    // box of the logical rect, floored on the origin and ceiled on the far
+    // edge. Both scaled edges are whole here, because the rect is integral
+    // and so are the dprs this row set covers, so the box is just the scaled
+    // rect. fractionalPatchMatchesFullRaster below is the case where it is
+    // not.
+    const QSize deviceSize(int(std::ceil((rect.x() + rect.width()) * dpr)) - int(std::floor(rect.x() * dpr)),
+                           int(std::ceil((rect.y() + rect.height()) * dpr)) - int(std::floor(rect.y() * dpr)));
+    const QImage image =
+        ScrollTabRaster::rasterisePatch({indicator}, tabStyle, QPointF(rect.topLeft()), deviceSize, dpr, QString());
 
     QVERIFY(!image.isNull());
     QCOMPARE(image.format(), QImage::Format_ARGB32_Premultiplied);
@@ -377,7 +389,8 @@ void TestScrollTabLayout::chipLabelFitsInsideTheChip()
 
     // dpr 1.0 with the indicator anchored at the origin, so image coordinates
     // and absolute logical coordinates are the same thing throughout.
-    const QImage image = ScrollTabRaster::rasterise({indicator}, style, rect, 1.0, QString());
+    const QImage image =
+        ScrollTabRaster::rasterisePatch({indicator}, style, QPointF(rect.topLeft()), rect.size(), 1.0, QString());
     QVERIFY(!image.isNull());
 
     const auto hits = ScrollTabRaster::layoutPills(indicator, style);
@@ -417,6 +430,53 @@ void TestScrollTabLayout::chipLabelFitsInsideTheChip()
     // first and last rows carry pill backdrop and never a glyph.
     QCOMPARE(inkInRow(chip.top()), 0);
     QCOMPARE(inkInRow(chip.bottom()), 0);
+}
+
+void TestScrollTabLayout::fractionalPatchMatchesFullRaster()
+{
+    // The invariant the hover sub-update rests on, at the scale that actually
+    // exercises it. The effect re-rasterises only the indicator whose hover
+    // changed and uploads it into the band's texture with glTexSubImage2D,
+    // which addresses whole device pixels, so the patch must come out
+    // pixel-identical to the same region of a full band raster. At an integral
+    // scale that is trivial. At 1.15 the patch's logical origin lands between
+    // logical pixels, and getting there by rounding the offset instead of
+    // moving the origin is what leaves the pills half a pixel out.
+    const qreal dpr = 1.15;
+    const QRect first(37, 11, 200, 24);
+    const QRect second(255, 11, 200, 24);
+    const QVector<ScrollTabIndicator> indicators{makeIndicator(first, 2, 3), makeIndicator(second, 2, 3)};
+    const ScrollTabIndicatorStyle style = makeStyle(0, 2);
+    const QRect band = first.united(second);
+
+    // The band's texture, sized and placed the way the effect's full-raster
+    // arm does: origin floored onto the device grid, far edge ceiled.
+    const QPoint deviceOrigin(int(std::floor(band.x() * dpr)), int(std::floor(band.y() * dpr)));
+    const QSize deviceSize(int(std::ceil((band.x() + band.width()) * dpr)) - deviceOrigin.x(),
+                           int(std::ceil((band.y() + band.height()) * dpr)) - deviceOrigin.y());
+    const QPointF fullOrigin(deviceOrigin.x() / dpr, deviceOrigin.y() / dpr);
+    const QImage full = ScrollTabRaster::rasterisePatch(indicators, style, fullOrigin, deviceSize, dpr, QString());
+    QVERIFY(!full.isNull());
+    QCOMPARE(full.size(), deviceSize);
+
+    // The second indicator's own device-aligned box, as the hover arm derives
+    // it, and the patch rasterised for exactly that box.
+    const int devX0 = int(std::floor(second.x() * dpr)) - deviceOrigin.x();
+    const int devY0 = int(std::floor(second.y() * dpr)) - deviceOrigin.y();
+    const int devX1 = int(std::ceil((second.x() + second.width()) * dpr)) - deviceOrigin.x();
+    const int devY1 = int(std::ceil((second.y() + second.height()) * dpr)) - deviceOrigin.y();
+    QVERIFY(devX0 > 0); // fractional scale: the patch does not start at the band's own origin
+    QVERIFY(devX1 <= full.width() && devY1 <= full.height());
+    const QSize patchSize(devX1 - devX0, devY1 - devY0);
+    const QPointF patchOrigin((deviceOrigin.x() + devX0) / dpr, (deviceOrigin.y() + devY0) / dpr);
+    // The point of the device-addressed form: that origin is NOT on a logical
+    // pixel, so a QRect-based raster could not have asked for this box.
+    QVERIFY(std::abs(patchOrigin.x() - std::round(patchOrigin.x())) > 1.0e-9);
+
+    const QImage patch = ScrollTabRaster::rasterisePatch(indicators, style, patchOrigin, patchSize, dpr, QString());
+    QVERIFY(!patch.isNull());
+    QCOMPARE(patch.size(), patchSize);
+    QCOMPARE(patch, full.copy(QRect(QPoint(devX0, devY0), patchSize)));
 }
 
 QTEST_MAIN(TestScrollTabLayout)

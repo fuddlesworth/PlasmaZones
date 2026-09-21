@@ -34,12 +34,9 @@ constexpr qint64 kMaxPresetFileBytes = animfileutil::kMaxJsonFileBytes;
 
 using presetlib_detail::kMaxPresetFileBytes;
 
-AnimationPresetLibrary::AnimationPresetLibrary(ProfilesDirFn profilesDirFn, SnapshotFn snapshot,
-                                               SnapshotRollbackFn rollback, QObject* parent)
+AnimationPresetLibrary::AnimationPresetLibrary(ProfilesDirFn profilesDirFn, QObject* parent)
     : QObject(parent)
     , m_profilesDir(std::move(profilesDirFn))
-    , m_snapshot(std::move(snapshot))
-    , m_rollback(std::move(rollback))
 {
 }
 
@@ -151,15 +148,6 @@ bool AnimationPresetLibrary::addUserPreset(const QString& name, const QVariantMa
         return false;
     }
 
-    // A false return means the pre-edit content could not be captured. Writing
-    // anyway would lose it for good, with Discard unable to restore.
-    if (m_snapshot && !m_snapshot(filePath)) {
-        qCWarning(lcConfig) << "AnimationPresetLibrary: refusing to write" << filePath
-                            << "— could not capture its pre-edit content";
-        Q_EMIT toastRequested(PhosphorI18n::tr("Could not save the preset “%1”.").arg(name));
-        return false;
-    }
-
     QJsonObject obj = QJsonObject::fromVariantMap(profileJson);
     obj.insert(presetlib_detail::JsonNameKey, name);
 
@@ -169,25 +157,11 @@ bool AnimationPresetLibrary::addUserPreset(const QString& name, const QVariantMa
         file.open(QIODevice::WriteOnly | QIODevice::Truncate) && file.write(payload) == payload.size() && file.commit();
     if (!written) {
         qCWarning(lcConfig) << "AnimationPresetLibrary: could not write" << filePath << ":" << file.errorString();
-        // The snapshot above staged a file the write never touched. Un-stage it,
-        // or the page reports an unsaved change with nothing to discard. The
-        // rollback owns the dirty-state signal and raises it only when it really
-        // dropped something, so this must not emit as well.
-        if (m_rollback)
-            m_rollback(filePath);
         Q_EMIT toastRequested(PhosphorI18n::tr("Could not save the preset “%1”.").arg(name));
         return false;
     }
 
-    // Re-saving a preset with byte-identical content puts the file back exactly
-    // as it was, so the snapshot it staged is a phantom. The rollback declines
-    // unless disk really still matches, so this is safe for a real edit. It owns
-    // the pendingChangesChanged for a drop, so only emit here when it declined.
-    const bool dropped = m_rollback && m_rollback(filePath);
-
     Q_EMIT userPresetsChanged();
-    if (!dropped)
-        Q_EMIT pendingChangesChanged();
     return true;
 }
 
@@ -261,35 +235,13 @@ bool AnimationPresetLibrary::removeUserPreset(const QString& name)
         Q_EMIT toastRequested(PhosphorI18n::tr("Could not find the preset “%1”.").arg(name));
         return false;
     }
-    // A false return means the pre-edit content could not be captured. Writing
-    // anyway would lose it for good, with Discard unable to restore.
-    if (m_snapshot && !m_snapshot(filePath)) {
-        qCWarning(lcConfig) << "AnimationPresetLibrary: refusing to write" << filePath
-                            << "— could not capture its pre-edit content";
-        Q_EMIT toastRequested(PhosphorI18n::tr("Could not delete the preset “%1”.").arg(name));
-        return false;
-    }
     if (!file.remove()) {
         qCWarning(lcConfig) << "AnimationPresetLibrary: could not remove" << filePath;
-        // The snapshot above staged a file the delete never touched. Un-stage
-        // it, or the page reports an unsaved change with nothing to discard. The
-        // rollback owns the dirty-state signal (see addUserPreset).
-        if (m_rollback)
-            m_rollback(filePath);
         Q_EMIT toastRequested(PhosphorI18n::tr("Could not delete the preset “%1”.").arg(name));
         return false;
     }
 
-    // Deleting a preset created earlier in this session puts disk back exactly as
-    // it started, so the staged snapshot is a phantom. The rollback declines
-    // unless disk really still matches the stage, so deleting a PRE-EXISTING
-    // preset keeps its snapshot as Discard's way back. It owns the signal for a
-    // drop, so only emit here when it declined.
-    const bool dropped = m_rollback && m_rollback(filePath);
-
     Q_EMIT userPresetsChanged();
-    if (!dropped)
-        Q_EMIT pendingChangesChanged();
     return true;
 }
 

@@ -195,6 +195,7 @@ const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::OpenWindowHeight,
     ActionType::OpenMaximized,
     ActionType::OpenFocused,
+    ActionType::OpenTabGroup,
     // Effect-consumed open verdict (Tag::EffectVerdict, unlike its Open*
     // siblings) — the KWin effect flips real fullscreen at windowAdded.
     ActionType::OpenFullscreen,
@@ -942,6 +943,7 @@ private Q_SLOTS:
         rejectsStray(ActionType::OpenColumnPlacement, QJsonValue(QStringLiteral("consume")));
         rejectsStray(ActionType::OpenMaximized, QJsonValue(true));
         rejectsStray(ActionType::OpenFocused, QJsonValue(true));
+        rejectsStray(ActionType::OpenTabGroup, QJsonValue(QStringLiteral("work")));
         rejectsStray(ActionType::OpenFullscreen, QJsonValue(true));
         rejectsStray(ActionType::ScrollFactor, QJsonValue(0.75));
         rejectsStray(ActionType::SetUsePerSideOuterGap, QJsonValue(true));
@@ -988,28 +990,56 @@ private Q_SLOTS:
     void testOverrideOverlay_fromJson()
     {
         // The two context-domain overlay actions validate through the public
-        // fromJson boundary. OverrideOverlayShader requires a non-empty effectId
-        // (open shader-id vocabulary, like OverrideAnimationShader);
-        // OverrideOverlayStyle is a CLOSED enum — only the OverlayStyleToken
-        // vocabulary survives load, so a hand-edited rules.json naming an
-        // unknown style is dropped. Pins both validators against a widening
-        // regression in registerBuiltins (which the resolution-layer tests in
-        // test_rule_cascade_fidelity.cpp would not catch).
+        // fromJson boundary. OverrideOverlayShader is node-shaped like
+        // OverrideAnimationShader: an optional layoutId names the
+        // OverlayShaderTree node (absent = the global default), effectId must
+        // be present but may be EMPTY (the engaged-empty "no shader" sentinel),
+        // and the slot is "overlay-shader:<node>" so rules on different nodes
+        // compose. OverrideOverlayStyle is a CLOSED enum — only the
+        // OverlayStyleToken vocabulary survives load, so a hand-edited
+        // rules.json naming an unknown style is dropped. Pins both validators
+        // against a widening regression in registerBuiltins (which the
+        // resolution-layer tests in test_rule_cascade_fidelity.cpp would not
+        // catch).
 
         // ── OverrideOverlayShader ──
         QJsonObject missingId;
         missingId.insert(QStringLiteral("type"), QString(ActionType::OverrideOverlayShader));
-        QVERIFY(!RuleAction::fromJson(missingId).has_value()); // no effectId
+        // No effectId at all is refused: a rule that forgot the shader must
+        // not silently become a block. Presence is what the sentinel rides on.
+        QVERIFY(!RuleAction::fromJson(missingId).has_value());
 
         QJsonObject emptyId;
         emptyId.insert(QStringLiteral("type"), QString(ActionType::OverrideOverlayShader));
         emptyId.insert(QStringLiteral("effectId"), QString());
-        QVERIFY(!RuleAction::fromJson(emptyId).has_value()); // empty effectId rejected
+        // Engaged-empty is the "no shader for this node" sentinel, exactly the
+        // animation action's, and it fills the global node's slot.
+        const auto block = RuleAction::fromJson(emptyId);
+        QVERIFY(block.has_value());
+        QCOMPARE(ActionRegistry::instance().slotFor(*block), QString(ActionSlot::OverlayShaderPrefix));
 
         QJsonObject shader;
         shader.insert(QStringLiteral("type"), QString(ActionType::OverrideOverlayShader));
         shader.insert(QStringLiteral("effectId"), QStringLiteral("plasma-glow"));
-        QVERIFY(RuleAction::fromJson(shader).has_value());
+        const auto global = RuleAction::fromJson(shader);
+        QVERIFY(global.has_value());
+        // A rule with no layoutId addresses the global-default node, which is
+        // what every rule written before the node existed meant.
+        QCOMPARE(ActionRegistry::instance().slotFor(*global), QString(ActionSlot::OverlayShaderPrefix));
+
+        // A layoutId scopes the slot to that layout's node, so two rules on
+        // different layouts do not shadow one another.
+        QJsonObject scoped = shader;
+        scoped.insert(QString(ActionParam::LayoutId), QStringLiteral("{aaaa0000-0000-0000-0000-000000000000}"));
+        const auto node = RuleAction::fromJson(scoped);
+        QVERIFY(node.has_value());
+        QCOMPARE(ActionRegistry::instance().slotFor(*node),
+                 QString(ActionSlot::OverlayShaderPrefix) + QStringLiteral("{aaaa0000-0000-0000-0000-000000000000}"));
+
+        // The node must be a string when present.
+        QJsonObject badNode = shader;
+        badNode.insert(QString(ActionParam::LayoutId), 7);
+        QVERIFY(!RuleAction::fromJson(badNode).has_value());
 
         // The optional params object is in allowedKeys; a populated one validates.
         QJsonObject shaderParams = shader;
@@ -1018,7 +1048,7 @@ private Q_SLOTS:
         shaderParams.insert(QString(ActionParam::Params), params);
         QVERIFY(RuleAction::fromJson(shaderParams).has_value());
 
-        // A key outside allowedKeys ({effectId, params}) is rejected.
+        // A key outside allowedKeys ({layoutId, effectId, params}) is rejected.
         QJsonObject shaderStray = shader;
         shaderStray.insert(QStringLiteral("mode"), QStringLiteral("snapping"));
         QVERIFY(!RuleAction::fromJson(shaderStray).has_value());

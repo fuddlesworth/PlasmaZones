@@ -35,7 +35,7 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
     if (state->isFloating(windowId)) {
         return false;
     }
-    const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
+    const ScrollLayoutParams params = layoutParamsForKey(key);
     const int columnIdx = state->strip().columnOfWindow(windowId);
     if (columnIdx < 0) {
         // Tracked in the reverse map yet in neither the strip nor the

@@ -44,6 +44,13 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
         repaintHoverDecorations(pos);
     }
 
+    // Feed the pointer decoration chain. This is the ONLY cursor-motion and
+    // button signal the effect gets, so it is where the pass samples its
+    // history and asks for its own frames; it early-returns on an unengaged
+    // chain. Deliberately ahead of the drag branches below, which can return
+    // through forceEnd and would otherwise drop a button transition.
+    m_pointerPass.notePointer(pos, oldpos, buttons, oldbuttons);
+
     if (buttonsChanged && m_dragTracker->isDragging()) {
         qCDebug(lcEffect) << "mouseChanged buttons:" << static_cast<int>(oldbuttons) << "->"
                           << static_cast<int>(buttons);

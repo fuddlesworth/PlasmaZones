@@ -34,10 +34,10 @@ ScrollEngine::ScrollEngine(PhosphorEngine::IWindowTrackingService* windowTracker
     , m_screenManager(screenManager)
     // Seeded here rather than in-class: kFuzzyClaimGraceMs lives in the
     // engine-internal enginelimits.h, which the exported header cannot
-    // include, and mirroring the literal there would be exactly the drift the
-    // shared-constant convention exists to prevent.
+    // include, and mirroring it would be the drift the convention prevents.
     , m_fuzzyClaimGraceMs(kFuzzyClaimGraceMs)
 {
+    installContextResolver();
 }
 
 ScrollEngine::~ScrollEngine() = default;
@@ -282,6 +282,14 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
         clearTabStripsForScreen(screenId);
     }
     if (!releasedWindows.isEmpty()) {
+        // A released window leaves this engine on the screen it is on, so
+        // the leaving screen's OTHER desktops' strips give it up too: the
+        // prune above tore down the current-context state only, and
+        // removeWindowsIf drops every membership, which would leave those
+        // strips holding a tile nothing reaps.
+        for (const QString& windowId : std::as_const(releasedWindows)) {
+            dropFromOtherContexts(windowId, PhosphorEngine::PlacementStateKey{});
+        }
         const QSet<QString> releasedSet(releasedWindows.cbegin(), releasedWindows.cend());
         m_states.removeWindowsIf([&releasedSet](const QString& windowId, const PhosphorEngine::PlacementStateKey&) {
             return releasedSet.contains(windowId);
@@ -395,91 +403,6 @@ void ScrollEngine::setActiveScreenHint(const QString& screenId)
     if (!screenId.isEmpty() && m_scrollingScreens.contains(screenId)) {
         m_activeScreen = screenId;
     }
-}
-
-void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedWindows, bool clearScreenBookkeeping)
-{
-    const QString screenId = state->screenId();
-    const QStringList windows = state->managedWindows();
-    // Snapshot each window's scrolling slot into the unified record BEFORE the
-    // state is torn down — the record is the single source of truth for
-    // cross-mode state, and stashStripStructure covers only the TILED
-    // structure, so without this a window floated in scrolling loses its
-    // floating slot across a mode round trip and comes back tiled with a stale
-    // slot.order. AutotileEngine::releaseScreenStateForTeardown does the same.
-    if (m_windowTracker) {
-        for (const QString& windowId : windows) {
-            if (auto record = capturePlacement(windowId)) {
-                m_windowTracker->placementStore().record(*record);
-            }
-        }
-    }
-    // Only the unfloat-slot memory dies here. The float markers and the
-    // last-applied rects are inputs to the daemon's windowsReleased handler,
-    // which has not run yet — see the contract on the declaration.
-    // The pending self-activation entries and the declined-open marks go
-    // too, for windowClosed's reason: a released window's echo can never be
-    // answered while the screen sits in another mode, and a stale entry (or
-    // mark) would eat the first genuine focus report when the window comes
-    // back to scrolling. The parked-edge and windowed-fullscreen memories go
-    // for the eviction symmetry every other exit path holds: neither is an
-    // input to windowsReleased, windowClosed cannot sweep them later
-    // (stateForWindow answers null after this), and pruneStaleWindows only
-    // runs once per session at bring-up.
-    for (const QString& windowId : windows) {
-        m_floatRestore.remove(windowId);
-        m_pendingSelfActivations.removeAll(windowId);
-        m_pendingSelfActivationQueuedAt.remove(windowId);
-        m_declinedOpenFocus.remove(windowId);
-        m_parkedScrollEdge.remove(windowId);
-        m_lastAppliedWindowedFs.remove(windowId);
-        m_lastAppliedMaximizedToEdges.remove(windowId);
-    }
-    releasedWindows.append(windows);
-    if (!clearScreenBookkeeping) {
-        // A sibling context of this screen is still live and owns these maps
-        // (see the declaration): the caller sweeps them through
-        // sweepStatelessScreenBookkeeping once the screen has no state left.
-        state->deleteLater();
-        return;
-    }
-    // Per-screen bookkeeping dies with the state: a stale seed must not
-    // replay on re-entry, and the tab-strip overlay must be told to clear —
-    // no relayout will ever run for a departed screen to do it.
-    m_pendingInitialOrder.remove(screenId);
-    m_consumedInitialOrder.remove(screenId);
-    // Same reasoning for the focus seed: it is scoped to the transition that
-    // captured it, so a state teardown ends its validity whether or not any
-    // burst consumed it.
-    m_pendingInitialFocus.remove(screenId);
-    // Latch and payload cleared inline (plain containers, safe), but the
-    // broadcast is DEFERRED: this function runs from inside
-    // PerScreenStates::removeStatesIf's iteration over m_states, and a
-    // consumer slot that touched the engine's state map synchronously would
-    // invalidate the live iterator. All eight clearTabStripsForScreen call
-    // sites are outside the state map's own iteration and emit directly.
-    m_lastTabStripPayload.remove(screenId);
-    if (m_screensWithTabStrips.remove(screenId)) {
-        QMetaObject::invokeMethod(
-            this,
-            [this, screenId]() {
-                // Re-checked at DELIVERY time. If the screen re-acquired a
-                // strip between the inline latch clear and this callback (it
-                // left scrolling and came back in the same daemon pass, then
-                // any synchronous applyLayout ran ahead of the event queue),
-                // applyLayout has already re-emitted the live payload and
-                // re-set the latch. Firing the stale "[]" last would then be
-                // final: m_lastTabStripPayload still holds the live payload,
-                // so applyLayout's emit-on-change gate suppresses every
-                // re-emit and the tab-strip indicator stays missing until the
-                // payload genuinely changes.
-                if (!m_screensWithTabStrips.contains(screenId)) {
-                    Q_EMIT tabStripsChanged(screenId, QStringLiteral("[]"));
-                }
-            },
-            Qt::QueuedConnection);
-    }
-    state->deleteLater();
 }
 
 StashedStrip
@@ -1109,6 +1032,20 @@ QString ScrollEngine::heldScreenForWindow(const QString& windowId) const
     return {};
 }
 
+std::optional<PhosphorEngine::PlacementStateKey> ScrollEngine::heldKeyForWindow(const QString& windowId) const
+{
+    // Same membership check as heldScreenForWindow, minus the current-context
+    // scoping: the key is answered from whichever state holds the window, a
+    // background desktop's included. See IPlacementEngine::heldKeyForWindow.
+    const QString canonical = canonicalizeForLookup(windowId);
+    PhosphorEngine::PlacementStateKey key;
+    const ScrollState* state = stateForWindow(canonical, &key);
+    if (state && state->containsWindow(canonical)) {
+        return key;
+    }
+    return std::nullopt;
+}
+
 QRect ScrollEngine::lastManagedRect(const QString& rawWindowId) const
 {
     return m_lastAppliedRect.value(canonicalizeForLookup(rawWindowId));
@@ -1462,6 +1399,10 @@ void ScrollEngine::retile(const QString& screenId)
     if (!m_scrollingScreens.contains(screenId)) {
         return;
     }
+    // Same drop the all-screens branch makes: this call IS the apply, so a
+    // queued retile for the screen would run a second full pass when it
+    // drains.
+    m_pendingRetiles.remove(screenId);
     applyLayout(screenId);
 }
 

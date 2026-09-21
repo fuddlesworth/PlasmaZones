@@ -79,7 +79,6 @@ TestCase {
         const cc = createTemporaryObject(controlCenterComp, testCase);
         verify(cc, "ControlCenter instantiates");
         compare(cc.detailTileId, "", "no detail view at rest");
-        compare(cc.columns, 2, "two columns by default");
     }
 
     function test_materialises_each_tile_id_in_order() {

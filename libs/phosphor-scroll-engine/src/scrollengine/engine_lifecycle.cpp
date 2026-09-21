@@ -92,7 +92,8 @@ void ScrollEngine::restoreFloatRecordForOpen(const QString& windowId, const QStr
 }
 
 bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowId, const QString& screenId,
-                                      int minWidthIn, int minHeightIn, ScrollOpenParams* outOpenParams)
+                                      int minWidthIn, int minHeightIn, ScrollOpenParams* outOpenParams, bool migration,
+                                      QString* outDisplacedTab, bool adoption)
 {
     // Public-API belt at the one boundary the update path already guards:
     // windowMinSizeUpdated clamps because "a negative floor flows into
@@ -126,7 +127,10 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     const bool stickyExcluded =
         effectiveStickyWindowHandling(screenOverrides) != PhosphorEngine::StickyWindowHandling::TreatAsNormal
         && m_windowTracker && m_windowTracker->isWindowSticky(windowId);
-    if (oversized || ruleFloated || stickyExcluded) {
+    // Never on an ADOPTION: the same three verdicts already ran for this
+    // window on the desktop it came from and answered "tile" (a floating
+    // source is adopted as floating by the caller and never reaches here).
+    if (!adoption && (oversized || ruleFloated || stickyExcluded)) {
         state->addFloating(windowId);
         seedFloatRestoreForOpen(windowId, minWidth, minHeight);
         // Engine-decided float, so it carries the mode marker like every
@@ -166,8 +170,12 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // strip order from per-window records needed close-burst ledgers and rank
     // anchors that every structural mutation had to invalidate, and the
     // strip stash already restores structure where it matters.
+    // Never on an ADOPTION either: the record is cross-session memory, and
+    // takeForReopen falls back to the app's FIFO, so a live window adopted
+    // onto another desktop could consume a closed sibling's floating record
+    // and be teleported to its float-back.
     const QString appId = currentAppIdFor(windowId);
-    if (m_windowTracker && PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
+    if (!adoption && m_windowTracker && PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
         const PhosphorEngine::PlacementStateKey currentKey = currentKeyForScreen(screenId);
         if (const auto record =
                 m_windowTracker->placementStore().takeForReopen(engineId(), windowId, appId, currentKey.screenId)) {
@@ -357,6 +365,26 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
             }
             // Through the shared consume helper — it drops the screen's entry
             // once the list empties. pendingIt is dangling from here.
+            consumePendingInitialOrder(screenId, windowId);
+        }
+    }
+    // Tab grouping (engine_grouping.cpp): a fresh open joins, as a tab, a
+    // column that already holds a window of its group. Ordered deliberately:
+    // BELOW the stash restore, the consume rule and the order seed, because a
+    // remembered shape or an explicit placement outranks a grouping verdict
+    // (the same precedence the insert-position setting has), and ABOVE the
+    // fresh-open block, because that block is where a column is CREATED and
+    // this arm creates none. A join spends no blueprint entry for the same
+    // reason the IntoActiveColumn arm spends none. Never on a MIGRATION: a
+    // migration is a move, not an open, the rule the height re-stamp in
+    // windowOpened already follows, so a window that changes screen keeps a
+    // column of its own.
+    if (!inserted && !migration) {
+        bool named = false;
+        if (insertGroupedOpen(state, windowId, appId, screenId, params, minWidth, minHeight, openParams,
+                              outDisplacedTab, &named)) {
+            inserted = true;
+            insertArm = named ? "tab-group-rule" : "same-app-tab";
             consumePendingInitialOrder(screenId, windowId);
         }
     }
@@ -564,7 +592,13 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         // already contains the window, and unkeying a live tile would just
         // create the mirror inconsistency.)
         if (!state->strip().containsWindow(windowId) && !state->isFloating(windowId)) {
-            m_states.removeWindow(windowId);
+            if (adoption) {
+                // An adoption's membership is the one just added for THIS
+                // context; the window keeps the others it holds.
+                m_states.removeMembership(windowId, currentKeyForScreen(screenId));
+            } else {
+                m_states.removeWindow(windowId);
+            }
         }
     }
     // Which arm placed the arrival, and whether it ended up as the strip's
@@ -674,7 +708,7 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         // FloatRestore could re-slot an unfloat on the NEW screen against
         // the OLD strip's geometry, and lastAppliedRect would keep
         // answering for a context that no longer holds the window.
-        const ScrollLayoutParams oldParams = layoutParamsForScreen(oldKey.screenId);
+        const ScrollLayoutParams oldParams = layoutParamsForKey(oldKey);
         const bool wasFloating = oldState->isFloating(windowId);
         // Windowed fullscreen is per-tile state the fresh insert below would
         // silently default false; read it off the old tile before takeWindow
@@ -739,6 +773,13 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     if (!state) {
         return;
     }
+    // A MIGRATION moves the window out of every context it held: a window
+    // that changed screen has left that screen's other desktops too (the
+    // strip it was resolved from is emptied above; the rest are emptied
+    // here), and only then does the replace below hold the whole truth.
+    if (oldState) {
+        dropFromOtherContexts(windowId, oldKey);
+    }
     // Track BEFORE inserting: insertOpenedWindow's oversized/rule-float
     // paths emit windowFloatingStateSynced, and a synchronous query-back from
     // a subscriber must already see the window as this engine's.
@@ -767,7 +808,9 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     // parked right now.
     const QString priorParkedEdge = m_parkedScrollEdge.take(windowId);
     ScrollOpenParams openParams;
-    if (!insertOpenedWindow(state, windowId, screenId, minWidth, minHeight, &openParams)) {
+    QString displacedTab;
+    if (!insertOpenedWindow(state, windowId, screenId, minWidth, minHeight, &openParams, oldState != nullptr,
+                            &displacedTab)) {
         // Every insert refused (the strip already holds the window). On a
         // fresh open nothing moved; on the MIGRATION path above the old
         // context already released the window and announced its own retile,
@@ -845,6 +888,18 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     if (!focusNew && !priorActive.isEmpty() && state->strip().activeWindowId() == windowId
         && state->strip().containsWindow(priorActive)) {
         const ScrollLayoutParams params = layoutParamsForScreen(screenId);
+        // A grouped join made the arrival its host column's shown tab. When
+        // that host is NOT the prior-active column, rewinding the strip's
+        // active column alone would leave the host showing the arrival: the
+        // user working in kate would see the firefox column behind them flip
+        // to the new firefox window, which is the disturbance an OFF setting
+        // exists to prevent. Put the displaced tab back on show first (a
+        // same-column focus, so no re-anchor), then move the column focus.
+        // When the host IS the prior-active column the second call re-points
+        // the tile to priorActive anyway.
+        if (!displacedTab.isEmpty() && state->strip().containsWindow(displacedTab)) {
+            state->strip().focusWindow(displacedTab, params);
+        }
         state->strip().focusWindow(priorActive, params);
         // Rewinding the strip is only half of declining focus. The compositor
         // focuses the arriving window on its own, and reports that focus back
@@ -975,7 +1030,7 @@ void ScrollEngine::endArrivalBurst()
         if (!seededFocus.isEmpty()) {
             ScrollState* state = stateForKey(key, false);
             if (state && state->strip().containsWindow(seededFocus)) {
-                state->strip().focusWindow(seededFocus, layoutParamsForScreen(key.screenId));
+                state->strip().focusWindow(seededFocus, layoutParamsForKey(key));
                 restoredFocus = true;
             }
         }
@@ -1008,7 +1063,13 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
         return;
     }
     const bool wasActive = state->strip().activeWindowId() == windowId;
-    const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
+    // For the window's OWN key, not the screen's current one. removeWindow
+    // re-derives the view anchor as it closes the gap, and a close on a
+    // background desktop resolved through the screen-only form would measure
+    // that anchor with the desktop-in-view's gap rules. updateViewForFocus
+    // leaves a fully visible column's anchor alone, so the error can survive
+    // the desktop return rather than being corrected by it.
+    const ScrollLayoutParams params = layoutParamsForKey(key);
     const bool inStrip = state->strip().removeWindow(windowId, params);
     // Unconditional, not gated on the strip removal failing: the two sets are
     // meant to be disjoint, but a window that somehow sits in BOTH would keep
@@ -1024,6 +1085,9 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
     // position, and a close-time consume would send it to the ordinary
     // next-to-focus path instead (partiallyConsumedSeedGuardsReopens covers
     // exactly that sequence).
+    // The OTHER desktops' strips first: a window present on several holds a
+    // column in each, and removeWindow below drops every membership at once.
+    dropFromOtherContexts(windowId, key);
     m_states.removeWindow(windowId);
     // m_lastAppliedRect is deliberately RETAINED through the close: the
     // daemon's close capture consults lastManagedRect DURING windowClosed

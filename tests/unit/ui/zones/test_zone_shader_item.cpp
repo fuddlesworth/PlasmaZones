@@ -20,6 +20,9 @@
 
 #include <QImage>
 
+#include <algorithm>
+#include <cmath>
+
 using namespace PlasmaZones;
 
 /**
@@ -524,7 +527,7 @@ private Q_SLOTS:
     {
         const QSize screen(1920, 1080);
         const PhosphorRendering::ZoneLabelTexture labels =
-            ZoneLabelTextureBuilder::build(makeFourZoneLayout(), screen, Qt::white, /*showNumbers=*/true);
+            ZoneLabelTextureBuilder::build(makeFourZoneLayout(), screen, /*dpr=*/1.0, Qt::white, /*showNumbers=*/true);
 
         QVERIFY(!labels.isEmpty());
         // The payload is screen-addressed but carries one tile per numbered zone.
@@ -547,10 +550,90 @@ private Q_SLOTS:
         QVERIFY(tileBytes < fullScreenBytes / 10);
     }
 
+    void testZoneLabelBuilder_rastersAtDeviceResolution()
+    {
+        // The labels texture is sampled by a shader whose iResolution is
+        // logical x devicePixelRatio (ShaderEffect reports
+        // requiresPhysicalResolution on the overlay path), so building it at
+        // logical resolution hands the GPU a texture it bilinearly upscales —
+        // soft glyphs at every HiDPI scale, and overlay packs whose
+        // 1.0/iResolution halo and edge-detect taps step less than one texel.
+        // 1.15 rather than 2.0 because a whole ratio hides rounding.
+        const QSize screen(1920, 1080);
+        const qreal dpr = 1.15;
+
+        const PhosphorRendering::ZoneLabelTexture logical =
+            ZoneLabelTextureBuilder::build(makeFourZoneLayout(), screen, /*dpr=*/1.0, Qt::white, /*showNumbers=*/true);
+        const PhosphorRendering::ZoneLabelTexture device =
+            ZoneLabelTextureBuilder::build(makeFourZoneLayout(), screen, dpr, Qt::white, /*showNumbers=*/true);
+
+        QVERIFY(!logical.isEmpty());
+        QVERIFY(!device.isEmpty());
+        // The payload is device-addressed: the node allocates the GPU texture
+        // at exactly this size.
+        QCOMPARE(device.size, QSize(qRound(screen.width() * dpr), qRound(screen.height() * dpr)));
+        QCOMPARE(device.tiles.size(), logical.tiles.size());
+
+        // Ink extent inside a tile, which is what actually distinguishes a
+        // glyph RASTERISED at the higher resolution from one merely allocated
+        // a bigger tile. A tile whose painter forgot the scale keeps its size
+        // and draws a logical-sized glyph into the corner of it.
+        const auto inkBounds = [](const QImage& image) {
+            int minX = image.width();
+            int minY = image.height();
+            int maxX = -1;
+            int maxY = -1;
+            for (int y = 0; y < image.height(); ++y) {
+                for (int x = 0; x < image.width(); ++x) {
+                    if (qAlpha(image.pixel(x, y)) > 0) {
+                        minX = std::min(minX, x);
+                        minY = std::min(minY, y);
+                        maxX = std::max(maxX, x);
+                        maxY = std::max(maxY, y);
+                    }
+                }
+            }
+            return maxX < 0 ? QRect() : QRect(QPoint(minX, minY), QPoint(maxX, maxY));
+        };
+
+        for (int i = 0; i < device.tiles.size(); ++i) {
+            const PhosphorRendering::ZoneLabelTile& lo = logical.tiles.at(i);
+            const PhosphorRendering::ZoneLabelTile& de = device.tiles.at(i);
+
+            // Still inside the texture it composites into.
+            QVERIFY(!de.image.isNull());
+            QVERIFY(QRect(QPoint(0, 0), device.size).contains(QRect(de.dest, de.image.size())));
+
+            const QRect loInk = inkBounds(lo.image);
+            const QRect deInk = inkBounds(de.image);
+            QVERIFY2(loInk.isValid(), "no ink in the logical-resolution tile: the glyph never rendered");
+            QVERIFY2(deInk.isValid(), "no ink in the device-resolution tile: the glyph never rendered");
+
+            // The glyph is drawn dpr times larger in device pixels, which is
+            // the whole point — same size on screen, more samples. Two pixels
+            // of slack for antialiasing and the outward tile alignment.
+            QVERIFY2(std::abs(deInk.width() - loInk.width() * dpr) <= 2.0,
+                     qPrintable(QStringLiteral("glyph %1 ink width %2, expected ~%3 at dpr %4")
+                                    .arg(i)
+                                    .arg(deInk.width())
+                                    .arg(loInk.width() * dpr)
+                                    .arg(dpr)));
+            QVERIFY2(std::abs(deInk.height() - loInk.height() * dpr) <= 2.0,
+                     "glyph ink height did not scale with the device pixel ratio");
+
+            // And it stays where it was: the tile's device origin is its
+            // logical origin scaled, so the number does not drift across the
+            // zone. Catches a transform composed in the wrong order, which
+            // scales the offset too and throws every glyph outward.
+            QVERIFY2(std::abs(de.dest.x() - lo.dest.x() * dpr) <= 3.0, "tile drifted horizontally");
+            QVERIFY2(std::abs(de.dest.y() - lo.dest.y() * dpr) <= 3.0, "tile drifted vertically");
+        }
+    }
+
     void testZoneLabelBuilder_emptyWhenNumbersOff()
     {
-        const PhosphorRendering::ZoneLabelTexture labels =
-            ZoneLabelTextureBuilder::build(makeFourZoneLayout(), QSize(1920, 1080), Qt::white, /*showNumbers=*/false);
+        const PhosphorRendering::ZoneLabelTexture labels = ZoneLabelTextureBuilder::build(
+            makeFourZoneLayout(), QSize(1920, 1080), /*dpr=*/1.0, Qt::white, /*showNumbers=*/false);
         QVERIFY(labels.isEmpty());
         QVERIFY(labels.toImage().isNull());
     }
@@ -559,7 +642,7 @@ private Q_SLOTS:
     {
         const QSize screen(1920, 1080);
         const PhosphorRendering::ZoneLabelTexture labels =
-            ZoneLabelTextureBuilder::build(makeFourZoneLayout(), screen, Qt::white, /*showNumbers=*/true);
+            ZoneLabelTextureBuilder::build(makeFourZoneLayout(), screen, /*dpr=*/1.0, Qt::white, /*showNumbers=*/true);
 
         const QImage composited = labels.toImage();
         QCOMPARE(composited.size(), screen);
@@ -581,8 +664,8 @@ private Q_SLOTS:
     void testZoneShaderItem_labelsTexturePayloadRoundTrips()
     {
         ZoneShaderItem item;
-        const PhosphorRendering::ZoneLabelTexture labels =
-            ZoneLabelTextureBuilder::build(makeFourZoneLayout(), QSize(1920, 1080), Qt::white, /*showNumbers=*/true);
+        const PhosphorRendering::ZoneLabelTexture labels = ZoneLabelTextureBuilder::build(
+            makeFourZoneLayout(), QSize(1920, 1080), /*dpr=*/1.0, Qt::white, /*showNumbers=*/true);
 
         QSignalSpy spy(&item, &ZoneShaderItem::labelsTextureChanged);
         item.setLabelsTexture(labels);
@@ -614,8 +697,8 @@ private Q_SLOTS:
     void testZoneShaderItem_labelsTextureSamePayloadSuppressesSignal()
     {
         ZoneShaderItem item;
-        const PhosphorRendering::ZoneLabelTexture labels =
-            ZoneLabelTextureBuilder::build(makeFourZoneLayout(), QSize(1920, 1080), Qt::white, /*showNumbers=*/true);
+        const PhosphorRendering::ZoneLabelTexture labels = ZoneLabelTextureBuilder::build(
+            makeFourZoneLayout(), QSize(1920, 1080), /*dpr=*/1.0, Qt::white, /*showNumbers=*/true);
 
         item.setLabelsTexture(labels); // first set: genuine change from the empty default
 
@@ -627,8 +710,8 @@ private Q_SLOTS:
 
         // A genuinely different payload (same geometry, different glyph color →
         // different tile pixels) still emits.
-        const PhosphorRendering::ZoneLabelTexture other =
-            ZoneLabelTextureBuilder::build(makeFourZoneLayout(), QSize(1920, 1080), Qt::red, /*showNumbers=*/true);
+        const PhosphorRendering::ZoneLabelTexture other = ZoneLabelTextureBuilder::build(
+            makeFourZoneLayout(), QSize(1920, 1080), /*dpr=*/1.0, Qt::red, /*showNumbers=*/true);
         item.setLabelsTexture(other);
         QCOMPARE(spy.count(), 1);
     }

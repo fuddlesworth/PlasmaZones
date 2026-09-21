@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Requires Plasma 6.7+ (KF6 6.26, Qt 6.10, KWin 6.7).
+# Requires Plasma 6.7+ (KF6 6.26, Qt 6.10, KWin 6.7+). Builds against 6.7 and 6.8.
 #
 # Build-Depends carry alternatives because the same control file feeds three
 # targets and they disagree on binary package names. Only the Debian spellings

@@ -37,6 +37,43 @@ class TestSettingsAnimationProfile : public QObject
 
 private Q_SLOTS:
 
+    /// Resetting the blob back to the shipped defaults must announce itself,
+    /// even though it changes no VALUE.
+    ///
+    /// `hasExplicitAnimationProfile()` is a storage fact, and sparse
+    /// persistence deletes a default-equal key, so a user who edits the global
+    /// profile and then resets it flips explicit-ness true → false while every
+    /// field reads exactly as it did before. Both the daemon and the settings
+    /// app choose which registry LAYER the global profile occupies from that
+    /// flag, so an unannounced flip leaves the layer wrong — the global keeps
+    /// outranking every family seed — until the process restarts.
+    ///
+    /// `animationProfileChanged` has no backing Q_PROPERTY, so the
+    /// meta-object re-emission loop cannot cover this: only an explicit
+    /// comparison can.
+    void testAnimationProfile_resetToDefaultsAnnouncesTheExplicitnessFlip()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+
+        // Store the blob explicitly. It has to differ from the shipped default
+        // to be stored at all: sparse persistence deletes a default-equal
+        // write, which is the same mechanism that makes the reset below flip
+        // explicit-ness without the user touching a value.
+        PhosphorAnimation::Profile edited = settings.animationProfile();
+        edited.duration = 500.0;
+        settings.setAnimationProfile(edited);
+        settings.save();
+        QVERIFY2(settings.hasExplicitAnimationProfile(), "precondition: the blob must be stored before the reset");
+
+        QSignalSpy spy(&settings, &Settings::animationProfileChanged);
+        settings.resetKeys({{ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey()}});
+
+        QVERIFY2(spy.count() > 0,
+                 "resetting the animation profile must announce the change even when no field value moved");
+        QVERIFY2(!settings.hasExplicitAnimationProfile(), "the reset must clear the stored blob");
+    }
+
     /// Two writers over one config file (settings app + daemon in
     /// production): a composite-blob write through a STALE but CLEAN
     /// backend must not resurrect old sibling fields over a value the

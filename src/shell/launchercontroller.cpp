@@ -12,6 +12,7 @@
 #include <PhosphorShellLauncher/LauncherModel.h>
 #include <PhosphorShellLauncher/WindowsProvider.h>
 
+#include <QCoreApplication>
 #include <QLoggingCategory>
 
 #include <memory>

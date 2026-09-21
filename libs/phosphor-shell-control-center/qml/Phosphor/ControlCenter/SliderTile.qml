@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// Phosphor.ControlCenter.SliderTile, the chrome for one continuous control.
+// Phosphor.ControlCenter.SliderTile, the chrome for one continuous rail.
 //
-// The companion to Tile: where Tile is a toggle with a readout, this is a
-// control with a range — volume, brightness. Same surface treatment and
-// the same detail-chevron affordance, but the tile face carries a slider
-// instead of an on/off state, and it spans the grid rather than sitting
-// in a single cell (a slider in a half-width cell is too short to aim at).
+// The companion to Tile: a control with a range (volume, brightness).
+// Same 52 px rail, but the 2 px underline along the bottom IS the slider
+// (A3 §2b): its length is the value and its colour is the state-axis
+// sample of that value, cyan low to rose at the limit. The whole rail is
+// the drag surface; the wheel steps it.
 //
 //   SliderTile {
 //       iconName: "audio-volume-high"
@@ -18,13 +18,8 @@
 //   }
 //
 // Like Tile, this does not latch: `moved` asks the service to change and
-// `value` follows the service's echo. That matters more here than on a
-// toggle, because a service that clamps or quantises a request (PipeWire
-// rounding a volume curve, a backlight with 16 steps) would otherwise
-// leave the handle somewhere the hardware never went.
-//
-// Kirigami.Icon draws its own fallback glyph for a name the icon theme
-// cannot resolve, so a missing icon never yields an invisible control.
+// `value` follows the service's echo, so a clamped or quantised request
+// never leaves the line somewhere the hardware never went.
 
 import QtQuick
 import QtQuick.Layouts
@@ -35,49 +30,23 @@ import Phosphor.Widgets
 Item {
     id: root
 
-    // Icon glyph name, resolved by the host's icon theme.
     property string iconName: ""
-    // What this tile controls ("Volume", "Brightness").
     property string label: ""
-    // Current value, in [from, to]. Driven by the service.
     property real value: 0
     property real from: 0
     property real to: 100
-    // Shown after the label. Empty derives a percentage from the range,
-    // which is what both current consumers want.
     property string readout: ""
-    // Drawn in the muted/disabled treatment. Distinct from `available`:
-    // a muted sink is present and adjustable, it just is not audible.
     property bool muted: false
-    // Set false when the underlying service is missing or the hardware is
-    // absent. Inert but still visible, so the grid does not reflow as
-    // services come and go.
     property bool available: true
-    // Whether this tile has a detail view (a device picker, usually).
-    // Same contract as Tile: the tile supplies the detail view, and the
-    // chevron appears only when there is one behind it.
     property string detailTitle: ""
     property Component detailContent: null
     property bool detailEnabled: true
     readonly property bool hasDetail: root.detailEnabled && root.detailContent !== null
-    // Layout hint read by ControlCenter: this tile wants the full grid
-    // width. A slider in a half-width cell is too short to aim at, and the
-    // label + readout row needs the room. The host applies it as a column
-    // span, so the tile does not have to know how many columns there are.
     readonly property bool spansRow: true
 
-    // The user moved the slider. Carries the new value in [from, to].
     signal moved(real value)
-    // The user activated the icon, which is the mute affordance on tiles
-    // that have one. Hosts without a mute concept leave it unconnected AND
-    // leave `hasIconAction` false, so the icon is presented as decoration
-    // rather than as a button that does nothing when pressed.
     signal iconActivated
-    // Whether the icon is an affordance at all. Brightness has no mute, so
-    // announcing its icon as a Mute button would tell a screen-reader user
-    // about a control that is not there.
     property bool hasIconAction: false
-    // The user asked for this tile's detail view.
     signal detailRequested
 
     function _activateIcon(): void {
@@ -86,166 +55,235 @@ Item {
     }
 
     function _activateIconFromKey(event: var): void {
-        // Autorepeat guard: a held key must not toggle mute twice. Same
-        // shape as Tile's own key activation.
         if (event.isAutoRepeat)
             return;
         root._activateIcon();
         event.accepted = true;
     }
 
-    // Width is a floor, not a target: the host stretches tiles to their
-    // cell. Kept small enough that two half-width toggle cells, not this,
-    // set the grid's natural width.
-    implicitWidth: 160
-    // A FLOOR, not a fixed size. 72 is the design height, but the label and
-    // readout are text: at a larger font scale the content outgrows it and
-    // the tile would clip, taking the grid's row height with it.
-    implicitHeight: Math.max(72, content.implicitHeight + 2 * Tokens.spacing_m)
+    implicitWidth: 320
+    implicitHeight: Math.max(52, content.implicitHeight + Tokens.spacing_m)
     opacity: root.available ? 1 : StateLayer.disabled_content
 
+    readonly property real _fraction: root.to > root.from ? Math.max(0, Math.min(1, (root.value - root.from) / (root.to - root.from))) : 0
     readonly property string _readout: {
         if (root.readout !== "")
             return root.readout;
         if (root.to <= root.from)
             return "";
-        return Math.round(100 * (root.value - root.from) / (root.to - root.from)) + "%";
+        return Math.round(100 * root._fraction) + "%";
     }
 
-    // A GROUPING, not a Slider. The real slider is a child of this item and
-    // carries the Slider role itself, so declaring one here too announced
-    // two nested sliders, with the outer one exposing no value and no
-    // increase/decrease action. The tile is the container; the control
-    // inside it is the control.
-    Accessible.role: Accessible.Grouping
+    Accessible.role: Accessible.Slider
     Accessible.name: root.label
     Accessible.description: root._readout
 
-    Rectangle {
-        id: surface
+    activeFocusOnTab: root.available
+    Keys.onLeftPressed: root._step(-1)
+    Keys.onRightPressed: root._step(1)
 
-        anchors.fill: parent
-        radius: Tokens.radius_l
-        // Always the container treatment, never the filled/primary one a
-        // toggle uses for its on state: a range has no "on", and filling
-        // the tile would fight the slider's own active track for meaning.
-        color: Theme.surface_container_high
-        border.width: 1
-        border.color: Theme.outline_variant
+    function _step(direction: int): void {
+        if (!root.available)
+            return;
+        const span = root.to - root.from;
+        root.moved(Math.max(root.from, Math.min(root.to, root.value + direction * span / 20)));
+    }
 
-        readonly property color contentColor: root.muted ? Theme.on_surface_variant : Theme.on_surface
+    function _moveTo(x: real): void {
+        if (!root.available || root.width <= 0)
+            return;
+        const f = Math.max(0, Math.min(1, x / root.width));
+        root.moved(root.from + f * (root.to - root.from));
+    }
 
-        ColumnLayout {
-            id: content
+    HoverHandler {
+        id: hover
 
-            anchors.fill: parent
-            anchors.margins: Tokens.spacing_m
-            anchors.rightMargin: root.hasDetail ? Tokens.spacing_m + chevron.width + Tokens.spacing_s : Tokens.spacing_m
-            spacing: Tokens.spacing_xxs
+        enabled: root.available
+        cursorShape: Qt.SizeHorCursor
+    }
 
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: Tokens.spacing_s
+    // The whole rail is the drag surface.
+    DragHandler {
+        id: drag
 
-                Item {
-                    id: iconButton
-
-                    implicitWidth: 22
-                    implicitHeight: 22
-
-                    // Announced as a button only when it is one. A tile with
-                    // no mute concept leaves hasIconAction false, and the icon
-                    // then reads as part of the tile rather than as a separate
-                    // control that does nothing.
-                    Accessible.role: root.hasIconAction ? Accessible.Button : Accessible.Graphic
-                    Accessible.ignored: !root.hasIconAction
-                    Accessible.name: root.muted ? qsTr("Unmute") : qsTr("Mute")
-                    Accessible.onPressAction: root._activateIcon()
-
-                    // Reachable by keyboard, like DetailPanel's back button
-                    // and Tile's own surface. A control with a Button role
-                    // that only pointers can reach is not usable.
-                    activeFocusOnTab: root.available && root.hasIconAction
-                    Keys.onSpacePressed: event => root._activateIconFromKey(event)
-                    Keys.onReturnPressed: event => root._activateIconFromKey(event)
-                    Keys.onEnterPressed: event => root._activateIconFromKey(event)
-
-                    Kirigami.Icon {
-                        anchors.fill: parent
-                        source: root.iconName
-                        color: surface.contentColor
-                    }
-
-                    HoverHandler {
-                        enabled: root.available && root.hasIconAction
-                        cursorShape: Qt.PointingHandCursor
-                    }
-
-                    TapHandler {
-                        enabled: root.available && root.hasIconAction
-                        onTapped: root._activateIcon()
-                    }
-                }
-
-                Text {
-                    Accessible.ignored: true
-                    text: root.label
-                    color: surface.contentColor
-                    font.family: Tokens.font_family
-                    font.pixelSize: Tokens.font_size_label_l
-                    font.weight: Tokens.font_weight_medium
-                    elide: Text.ElideRight
-                    Layout.fillWidth: true
-                }
-
-                Text {
-                    Accessible.ignored: true
-                    text: root._readout
-                    color: surface.contentColor
-                    opacity: StateLayer.secondary_content
-                    font.family: Tokens.font_family
-                    font.pixelSize: Tokens.font_size_body_s
-                }
-            }
-
-            PhosphorSlider {
-                id: slider
-
-                enabled: root.available
-                from: root.from
-                to: root.to
-                value: root.value
-                // Named for what it controls. Without this the slider
-                // announced only its own value, leaving a screen-reader user
-                // to infer from the grouping which control they had reached.
-                Accessible.name: root.label
-                Accessible.description: root._readout
-                Layout.fillWidth: true
-                onMoved: v => root.moved(v)
-            }
+        enabled: root.available
+        target: null
+        yAxis.enabled: false
+        onActiveChanged: {
+            if (active)
+                root._moveTo(centroid.position.x);
         }
+        onCentroidChanged: {
+            if (active)
+                root._moveTo(centroid.position.x);
+        }
+    }
+    TapHandler {
+        enabled: root.available
+        onTapped: eventPoint => root._moveTo(eventPoint.position.x)
+    }
+    // A wheel notch steps the value; a two-finger horizontal swipe on a
+    // touchpad (A3 §5) arrives as an x delta and steps it the same way,
+    // right for more.
+    WheelHandler {
+        enabled: root.available
+        onWheel: event => {
+            const delta = event.angleDelta.x !== 0 ? event.angleDelta.x : event.angleDelta.y;
+            // Both components zero is a scroll-phase or end event, not a
+            // downward notch. Without this the ternary falls to -1 and the
+            // event quietly turns the volume or the brightness DOWN.
+            if (delta === 0) {
+                return;
+            }
+            root._step(delta > 0 ? 1 : -1);
+        }
+    }
 
-        Kirigami.Icon {
-            id: chevron
+    RowLayout {
+        id: content
 
-            anchors.right: parent.right
-            anchors.rightMargin: Tokens.spacing_s
-            anchors.verticalCenter: parent.verticalCenter
-            width: 16
-            height: 16
-            source: "go-next-symbolic"
-            color: surface.contentColor
-            visible: root.hasDetail
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.leftMargin: Tokens.spacing_xs
+        anchors.rightMargin: root.hasDetail ? chevron.width + Tokens.spacing_s : Tokens.spacing_xs
+        spacing: Tokens.spacing_m
+
+        Item {
+            id: iconButton
+
+            implicitWidth: 16
+            implicitHeight: 16
+            Layout.alignment: Qt.AlignVCenter
+
+            Accessible.role: root.hasIconAction ? Accessible.Button : Accessible.Graphic
+            Accessible.ignored: !root.hasIconAction
+            Accessible.name: root.muted ? qsTr("Unmute") : qsTr("Mute")
+            Accessible.onPressAction: root._activateIcon()
+
+            activeFocusOnTab: root.available && root.hasIconAction
+            Keys.onSpacePressed: event => root._activateIconFromKey(event)
+            Keys.onReturnPressed: event => root._activateIconFromKey(event)
+            Keys.onEnterPressed: event => root._activateIconFromKey(event)
+
+            Kirigami.Icon {
+                anchors.fill: parent
+                source: root.iconName
+                isMask: true
+                color: Theme.on_surface
+                opacity: root.muted ? 0.45 : 1
+            }
 
             HoverHandler {
-                enabled: root.available && root.hasDetail
+                enabled: root.available && root.hasIconAction
                 cursorShape: Qt.PointingHandCursor
             }
 
             TapHandler {
-                enabled: root.available && root.hasDetail
-                onTapped: root.detailRequested()
+                enabled: root.available && root.hasIconAction
+                gesturePolicy: TapHandler.ReleaseWithinBounds
+                onTapped: root._activateIcon()
             }
+        }
+
+        Text {
+            Accessible.ignored: true
+            text: root.label
+            color: Theme.on_surface
+            font.family: Tokens.font_family_ui
+            font.pixelSize: Tokens.font_size_body_l
+            font.weight: Tokens.font_weight_medium
+            elide: Text.ElideRight
+            Layout.fillWidth: true
+        }
+
+        TabularText {
+            Accessible.ignored: true
+            text: root._readout
+            color: Theme.on_surface_variant
+            font.pixelSize: Tokens.font_size_body_m
+            tickOnChange: true
+            t: root._fraction
+        }
+    }
+
+    // Track: the resting line under the whole rail.
+    Rectangle {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: 2
+        color: Theme.on_surface
+        opacity: 0.12
+    }
+
+    // The slider: length is the value, colour is the value.
+    SpectrumUnderline {
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        length: root.width
+        value: root.muted ? 0 : root._fraction
+        t: root._fraction
+        opacity: hover.hovered || drag.active ? 1 : 0.9
+    }
+
+    // The knob shows only while the rail is being aimed at.
+    Rectangle {
+        x: root.width * root._fraction - width / 2
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: -3
+        width: 8
+        height: 8
+        radius: 4
+        color: Spectrum.focus
+        opacity: (hover.hovered || drag.active) && !root.muted ? 0.9 : 0
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: hover.hovered ? Motion.duration_enter : Motion.duration_release
+                easing: hover.hovered ? Motion.enter : Motion.release
+            }
+        }
+    }
+
+    SpectrumStroke {
+        anchors.fill: parent
+        radius: Tokens.radius_edge
+        focused: root.activeFocus
+        // See Tile.qml: `visible` suppresses the resting stroke; an added
+        // `opacity: 0` would suppress the focus ring along with it.
+        visible: root.activeFocus
+    }
+
+    Item {
+        id: chevron
+
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        width: 28
+        height: 28
+        visible: root.hasDetail
+
+        Kirigami.Icon {
+            anchors.centerIn: parent
+            width: 16
+            height: 16
+            source: "go-next-symbolic"
+            isMask: true
+            color: Theme.on_surface
+            opacity: 0.7
+        }
+
+        HoverHandler {
+            enabled: root.available && root.hasDetail
+            cursorShape: Qt.PointingHandCursor
+        }
+
+        TapHandler {
+            enabled: root.available && root.hasDetail
+            gesturePolicy: TapHandler.ReleaseWithinBounds
+            onTapped: root.detailRequested()
         }
     }
 }

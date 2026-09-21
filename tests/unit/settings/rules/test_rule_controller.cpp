@@ -696,6 +696,7 @@ void TestRuleController::actionMetadata()
     // picker's divider.
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("openMaximized"), -1), 7);
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("openFocused"), -1), 7);
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("openTabGroup"), -1), 7);
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("openFullscreen"), -1), 7);
     // The unfloat fallback is a windowManagement action, riding
     // Window/Placement with the blanket Exclude.

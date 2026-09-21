@@ -15,6 +15,7 @@
 #include <PhosphorWayland/CompositorLost.h>
 #include <PhosphorWayland/IdleNotifier.h>
 #include <PhosphorWayland/LayerSurface.h>
+#include <PhosphorWayland/LockSurface.h>
 #include <PhosphorWayland/SessionLock.h>
 #include <PhosphorWayland/SinglePixelBuffer.h>
 #include <PhosphorWayland/ToplevelDrag.h>

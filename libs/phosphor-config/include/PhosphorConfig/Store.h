@@ -95,6 +95,23 @@ public:
     /// across the round trip. Undeclared keys return @c QVariant().
     QVariant readVariant(const QString& group, const QString& key) const;
 
+    /// Whether @p key is physically stored, as opposed to being served from
+    /// the schema default.
+    ///
+    /// @c read and @c readVariant deliberately substitute the schema default
+    /// for an absent key, which makes "the user chose this value" and "the
+    /// user has never touched this" indistinguishable at those accessors.
+    /// Some callers need that distinction — a layer that should only outrank
+    /// another once the user has actually expressed an intent, for instance.
+    /// This is the only way to ask.
+    ///
+    /// Note what sparse persistence costs here: a default-equal write deletes
+    /// the key, so a user who sets a value to exactly the shipped default
+    /// reads back as unset. The predicate is therefore "differs from the
+    /// shipped default", not "was never edited". Returns false for an
+    /// undeclared key.
+    bool hasExplicitValue(const QString& group, const QString& key) const;
+
     /// Write a value. If the schema declares an @c expectedType for this
     /// key and @p value has a different @c typeId, a warning is logged but
     /// the write proceeds (Qt will coerce on read back). Emits @c changed

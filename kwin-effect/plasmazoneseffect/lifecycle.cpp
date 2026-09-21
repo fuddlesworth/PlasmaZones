@@ -80,6 +80,14 @@ PlasmaZonesEffect::PlasmaZonesEffect()
 {
     PhosphorProtocol::registerWireTypes();
 
+    // The pointer pass reads KWin's cursor-hide counter to notice a software
+    // KVM taking the pointer away (see PointerDecorationPass::cursorSpriteGone).
+    // The strip pass raises the same counter while it draws its own copy of
+    // the cursor, which must NOT read as the pointer being gone.
+    m_pointerPass.setForeignCursorDrawer([this]() {
+        return m_stripTransition.holdsCursorHide();
+    });
+
     // The compositor-drawn tab pills carry one translated string (the
     // untitled-tab placeholder) and this process is kwin_wayland, which
     // installs no PlasmaZones catalog of its own. Load the daemon's catalog
@@ -132,6 +140,9 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // Last, and it must stay last: the existing-window sweep inside can reach
     // code that expects the daemon subscriptions above to be wired.
     initExistingWindowsAndInput();
+    // Independent of the sweep: the shell's touchpad gestures only fire once
+    // a daemon is up to relay them, and reportShellGesture is one-way.
+    initTouchpadGestures();
 }
 
 void PlasmaZonesEffect::clearDaemonCompositorState()
@@ -146,6 +157,11 @@ void PlasmaZonesEffect::clearDaemonCompositorState()
     // Same for the strip pass (no claim to release, but its capture textures
     // and compiled shaders free under the same context discipline).
     m_stripTransition.reset();
+    // Same for the pointer pass: it owns compiled pack shaders, uploaded
+    // textures and any multipass buffer targets, and it may be holding the
+    // compositor's cursor hidden for a `layer: above` pack, which must be
+    // handed back before the effect goes.
+    m_pointerPass.reset();
     // And the tab indicators: the override cursor must be handed back before
     // the effect goes (KWin would keep a pointing hand nothing owns). The
     // handler's clear is GL-free — it RETIRES the per-output textures rather
@@ -373,6 +389,19 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // alive.
     disconnect(&m_shaderManager.m_animationShaderRegistry, nullptr, this, nullptr);
     disconnect(&m_surfaceShaderRegistry, nullptr, this, nullptr);
+    // Same UAF hazard for the pointer registry: its effectsChanged lambda
+    // touches m_pointerPass's own caches, and the registry lives INSIDE that
+    // member, so a signal emitted during the member's teardown would dispatch
+    // against half-destroyed state.
+    disconnect(&m_pointerPass.registry(), nullptr, this, nullptr);
+    // And the preset registry, which lives inside m_shaderManager's preset store and
+    // so is torn down with the members too. Its presetsChanged reaches
+    // schedulePresetSweep, which writes the sweep latches and reads the registry, so
+    // an emission during member teardown (a preset file changing as the effect
+    // unloads) would dispatch against half-destroyed state. The three re-seed
+    // handlers are on the pack registries disconnected above, so they are already
+    // covered; this is the one sender that was not.
+    disconnect(&m_shaderManager.presetStore().registry(), nullptr, this, nullptr);
 
     // Make the context current for the WHOLE destructor, member destruction included.
     //

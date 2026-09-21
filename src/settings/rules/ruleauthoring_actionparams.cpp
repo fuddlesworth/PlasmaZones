@@ -107,6 +107,9 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::OpenFocused && key == ActionParam::Value) {
         return PhosphorI18n::tr("Focus the window when it opens (off = keep the current focus)");
     }
+    if (type == ActionType::OpenTabGroup && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Group name (windows with the same name share one tabbed column)");
+    }
     if (type == ActionType::OpenFullscreen && key == ActionParam::Value) {
         return PhosphorI18n::tr("Open in fullscreen (off = block the app's own fullscreen at open)");
     }
@@ -329,6 +332,13 @@ QString paramLabel(const QString& type, const QString& key)
     }
     // Context overlay-property overrides. These come BEFORE the generic
     // EffectId / Value fallbacks so they win for the overlay actions.
+    if (type == ActionType::OverrideOverlayShader && key == ActionParam::LayoutId) {
+        // The OverlayShaderTree node the rule overrides, named the way the
+        // Layouts page names its cards. Not "Snapping layout": that label is
+        // SetSnappingLayout's, where the value ASSIGNS a layout, and here it
+        // only picks which layout's shader to change.
+        return PhosphorI18n::tr("Layout");
+    }
     if (type == ActionType::OverrideOverlayShader && key == ActionParam::EffectId) {
         return PhosphorI18n::tr("Overlay shader");
     }
@@ -411,6 +421,11 @@ QString paramHint(const QString& type, const QString& key)
             "If you later remove this workspace, the rule goes dormant instead of failing. "
             "It works again as soon as a workspace with that name comes back.");
     }
+    if (type == ActionType::OverrideOverlayShader && key == ActionParam::LayoutId) {
+        return PhosphorI18n::tr(
+            "Global default changes the shader for every layout in the matched context. "
+            "Pick a layout to change only that layout, and only while it is the active one there.");
+    }
     return {};
 }
 
@@ -434,6 +449,20 @@ QString paramEmptyValueLabel(const QString& typeWire, const QString& key)
 {
     if (typeWire == PhosphorRules::ActionType::SetTabIndicatorFontFamily && key == PhosphorRules::ActionParam::Value) {
         return PhosphorI18n::tr("System font");
+    }
+    if (typeWire == QString(PhosphorRules::ActionType::OverrideOverlayShader)) {
+        // Both of this action's empty values are real choices, mirroring the
+        // OverlayShaderTree the rule overrides: an empty node is the tree's
+        // global default, and an empty shader is its "no shader" suppression
+        // node. The wording is the assignments page's own for the same two
+        // states, uncontexted / contexted exactly as it spells them, so each
+        // shares that page's catalogue entry and translations.
+        if (key == QString(PhosphorRules::ActionParam::LayoutId)) {
+            return PhosphorI18n::tr("Global default");
+        }
+        if (key == QString(PhosphorRules::ActionParam::EffectId)) {
+            return PhosphorI18n::tr("None", "@item no overlay shader assigned");
+        }
     }
     return {};
 }
@@ -617,8 +646,10 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
             // tab-indicator font family is a plain string rather than a
             // picker, and empty is
             // a meaningful value for it (it means the system font), so unlike
-            // the pickers its seeded rule is already savable. Four kinds are
-            // seeded above instead:
+            // the pickers its seeded rule is already savable. The openTabGroup
+            // name is the other plain string, and there empty is the reject
+            // case, so like the pickers it stays unsavable until named. Four
+            // kinds are seeded above instead:
             // zoneOrdinals and virtualDesktop because their validators reject an
             // empty value, zoneNames and decorationChain because an empty ARRAY
             // (not an empty string) is their valid starting shape. The

@@ -45,6 +45,7 @@ public:
         Locking, ///< lock() issued; awaiting the compositor's reply.
         Locked, ///< The compositor locked the session; awaiting authentication.
         Authenticating, ///< An unlock() attempt is verifying credentials.
+        Releasing, ///< Authenticated; the lock surfaces get a moment to leave before the compositor lock is released.
     };
     Q_ENUM(State)
 
@@ -70,12 +71,24 @@ public:
     /// failure `authenticationFailed()` fires and the state returns to `Locked`.
     Q_INVOKABLE void unlock(const QString& password);
 
+    /// Release the compositor lock after a successful authentication. The
+    /// service enters `Releasing` and emits `aboutToUnlock()` instead of
+    /// releasing at once, so a lock surface can play its exit while it is
+    /// still on screen; the surface calls this when done. A no-op unless
+    /// currently `Releasing`. If nobody calls it, the service releases on
+    /// its own after a short failsafe, so a lock can never outlive a
+    /// successful login.
+    Q_INVOKABLE void finishUnlock();
+
 Q_SIGNALS:
     /// `state()` changed.
     void stateChanged();
     /// An `unlock()` attempt was rejected; @p reason is a human-readable,
     /// non-sensitive explanation. The session stays locked.
     void authenticationFailed(const QString& reason);
+    /// Authentication succeeded and the lock is about to be released. The
+    /// surfaces are still mapped; call `finishUnlock()` when they are done.
+    void aboutToUnlock();
     /// The session was successfully unlocked after authentication.
     void unlocked();
 

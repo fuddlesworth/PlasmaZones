@@ -19,6 +19,24 @@
 
 namespace PlasmaZones {
 
+void LayoutAdaptor::stageOrApply(const QString& resolvedId)
+{
+    m_changedScreenIds.insert(resolvedId);
+    // A save batch is open (the settings app brackets its writes with
+    // setSaveBatchMode); its closing applyAssignmentChanges drains the set.
+    if (m_suppressScreenLayoutSignal) {
+        return;
+    }
+    // A single write from a bus peer with no batch open (a script, qdbus, a
+    // shortcut daemon) is complete in itself and gets the same apply pass
+    // the batch close would give it: the mode switch alone left the
+    // screen's windows wherever the previous engine put them, since only
+    // the apply pass resnaps them into the new layout and restores the
+    // snap zones of windows a tiling engine released.
+    m_changedScreenIds.remove(resolvedId);
+    applyAssignmentChangesFor({resolvedId});
+}
+
 void LayoutAdaptor::markScreensWithStoredAssignments(AssignmentFamily family)
 {
     // Every batch setter routes through LayoutRegistry::applyBatchAssignments,

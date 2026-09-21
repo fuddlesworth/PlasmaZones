@@ -138,6 +138,68 @@ void ControlCenterController::setOpenScreen(const QString& screenName)
     Q_EMIT openScreenChanged();
 }
 
+bool ControlCenterController::isPaneExternal() const
+{
+    return m_paneExternal;
+}
+
+void ControlCenterController::setPaneExternal(bool external)
+{
+    if (m_paneExternal == external) {
+        return;
+    }
+    m_paneExternal = external;
+    Q_EMIT paneExternalChanged();
+}
+
+QRect ControlCenterController::paneRect() const
+{
+    return m_paneRect;
+}
+
+void ControlCenterController::reportPaneRect(const QRect& rect)
+{
+    // Any non-positive rect is "not located"; normalise so the NOTIFY does
+    // not fire for one empty rect replacing another.
+    const QRect normalised = (rect.width() > 0 && rect.height() > 0) ? rect : QRect();
+    if (m_paneRect == normalised) {
+        return;
+    }
+    m_paneRect = normalised;
+    Q_EMIT paneRectChanged();
+}
+
+void ControlCenterController::reportChipRect(const QString& screenName, const QRect& rect)
+{
+    if (screenName.isEmpty()) {
+        return;
+    }
+    const QRect normalised = (rect.width() > 0 && rect.height() > 0) ? rect : QRect();
+    if (normalised.isNull()) {
+        m_chipRects.remove(screenName);
+    } else {
+        m_chipRects.insert(screenName, normalised);
+    }
+}
+
+QRect ControlCenterController::chipRectFor(const QString& screenName) const
+{
+    return m_chipRects.value(screenName);
+}
+
+void ControlCenterController::reportScreenMode(const QString& screenName, int mode)
+{
+    if (screenName.isEmpty()) {
+        return;
+    }
+    m_screenModes.insert(screenName, mode);
+}
+
+int ControlCenterController::modeForScreen(const QString& screenName) const
+{
+    return m_screenModes.value(screenName, -1);
+}
+
 QScreen* ControlCenterController::screenOf(QQuickItem* item) const
 {
     QScreen* screen = nullptr;

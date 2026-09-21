@@ -305,8 +305,18 @@ SettingsFlickable {
 
     // ── Row action handlers (wired from each ProfileRow's signals) ──
     function _activate(m) {
-        if (root.bridge)
-            root.bridge.activateProfile(m.id);
+        if (!root.bridge)
+            return;
+        // Activating stages the profile's whole configuration, which replaces
+        // anything the user has edited and not yet saved, possibly on a page
+        // they are not looking at. Ask first when there is something to lose.
+        if (settingsController.needsSave) {
+            activateConfirm.profileId = m.id;
+            activateConfirm.profileName = m.name;
+            activateConfirm.open();
+            return;
+        }
+        root.bridge.activateProfile(m.id);
     }
     function _update(m) {
         if (root.bridge)
@@ -361,6 +371,29 @@ SettingsFlickable {
             // Reset the per-open excludeId so a later rename sees the full list.
             profileDialog.excludeId = "";
         }
+    }
+
+    // ── Activate confirmation, shown only when there are unsaved changes ──
+    Kirigami.PromptDialog {
+        id: activateConfirm
+
+        property string profileId: ""
+        property string profileName: ""
+
+        title: i18n("Use this profile?")
+        subtitle: i18n("You have changes you have not saved yet. Switching to “%1” replaces them with that profile's settings.", activateConfirm.profileName)
+        standardButtons: Kirigami.Dialog.Cancel
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Use profile")
+                icon.name: "dialog-ok-apply"
+                onTriggered: {
+                    if (root.bridge)
+                        root.bridge.activateProfile(activateConfirm.profileId);
+                    activateConfirm.close();
+                }
+            }
+        ]
     }
 
     // ── Delete confirmation ──

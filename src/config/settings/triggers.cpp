@@ -545,6 +545,13 @@ void Settings::setQuickLayoutShortcut(int index, const QString& shortcut)
 // NOTIFY emitters fails the build instead of dispatching through a garbage
 // member pointer.
 inline constexpr int SnapToZoneSlotCount = 9;
+// The schema loop and ConfigKeys::snapToZoneKey's range guard both bound on
+// the PROTOCOL constant, so the two have to stay equal. Without this, raising
+// the protocol count leaves the accessors below silently truncating at 9 and
+// the schema-declared slots past it unreadable and unwritable through
+// Settings — their own static_assert compares against this local and passes.
+static_assert(SnapToZoneSlotCount == PhosphorProtocol::Service::QuickLayoutSlotCount,
+              "snap-to-zone slots must cover every protocol slot the schema registers");
 
 #define P_SNAP_TO_ZONE(N)                                                                                              \
     QString Settings::snapToZone##N##Shortcut() const                                                                  \
@@ -593,6 +600,66 @@ void Settings::setSnapToZoneShortcut(int index, const QString& shortcut)
         &Settings::snapToZone9ShortcutChanged,
     };
     static_assert(std::size(signals) == SnapToZoneSlotCount, "add a NOTIFY emitter for each new snap-to-zone slot");
+    Q_EMIT(this->*signals[index])();
+    Q_EMIT settingsChanged();
+}
+
+// scrollFocusTab1..9 — the scrolling tab ordinals, same dispatch pattern as
+// the two families above and the same reason for naming the count once.
+inline constexpr int ScrollFocusTabSlotCount = 9;
+// Same tie as SnapToZoneSlotCount above, and for the same reason: the schema
+// loop and ConfigKeys::scrollFocusTabKey's guard both bound on the protocol
+// constant.
+static_assert(ScrollFocusTabSlotCount == PhosphorProtocol::Service::QuickLayoutSlotCount,
+              "focus-tab slots must cover every protocol slot the schema registers");
+
+#define P_SCROLL_FOCUS_TAB(N)                                                                                          \
+    QString Settings::scrollFocusTab##N##Shortcut() const                                                              \
+    {                                                                                                                  \
+        return m_store->read<QString>(ConfigDefaults::shortcutsGlobalGroup(), ConfigDefaults::scrollFocusTabKey(N));   \
+    }                                                                                                                  \
+    void Settings::setScrollFocusTab##N##Shortcut(const QString& shortcut)                                             \
+    {                                                                                                                  \
+        setScrollFocusTabShortcut(N - 1, shortcut);                                                                    \
+    }
+
+P_SCROLL_FOCUS_TAB(1)
+P_SCROLL_FOCUS_TAB(2)
+P_SCROLL_FOCUS_TAB(3)
+P_SCROLL_FOCUS_TAB(4)
+P_SCROLL_FOCUS_TAB(5)
+P_SCROLL_FOCUS_TAB(6)
+P_SCROLL_FOCUS_TAB(7)
+P_SCROLL_FOCUS_TAB(8)
+P_SCROLL_FOCUS_TAB(9)
+#undef P_SCROLL_FOCUS_TAB
+
+QString Settings::scrollFocusTabShortcut(int index) const
+{
+    if (index < 0 || index >= ScrollFocusTabSlotCount) {
+        return {};
+    }
+    return m_store->read<QString>(ConfigDefaults::shortcutsGlobalGroup(), ConfigDefaults::scrollFocusTabKey(index + 1));
+}
+
+void Settings::setScrollFocusTabShortcut(int index, const QString& shortcut)
+{
+    if (index < 0 || index >= ScrollFocusTabSlotCount) {
+        return;
+    }
+    const QString key = ConfigDefaults::scrollFocusTabKey(index + 1);
+    if (m_store->read<QString>(ConfigDefaults::shortcutsGlobalGroup(), key) == shortcut) {
+        return;
+    }
+    m_store->write(ConfigDefaults::shortcutsGlobalGroup(), key, shortcut);
+    static constexpr ShortcutSignalFn signals[] = {
+        &Settings::scrollFocusTab1ShortcutChanged, &Settings::scrollFocusTab2ShortcutChanged,
+        &Settings::scrollFocusTab3ShortcutChanged, &Settings::scrollFocusTab4ShortcutChanged,
+        &Settings::scrollFocusTab5ShortcutChanged, &Settings::scrollFocusTab6ShortcutChanged,
+        &Settings::scrollFocusTab7ShortcutChanged, &Settings::scrollFocusTab8ShortcutChanged,
+        &Settings::scrollFocusTab9ShortcutChanged,
+    };
+    static_assert(std::size(signals) == ScrollFocusTabSlotCount, "add a NOTIFY emitter for each new focus-tab slot");
     Q_EMIT(this->*signals[index])();
     Q_EMIT settingsChanged();
 }

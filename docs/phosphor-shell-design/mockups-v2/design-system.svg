@@ -1,0 +1,330 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!--
+  Phosphor mockups v2: design system sheet.
+  (a) the spectrum as the rail axis, (b) material layers, (c) radius family,
+  (d) motion envelopes with a live 1:4 demo, (e) type scale with the digit tick.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720"
+     font-family="Manrope, 'Noto Sans', system-ui, sans-serif">
+  <defs>
+    <!-- The one spectrum. Everything that encodes screen position samples this by x. -->
+    <linearGradient id="rail" x1="0" y1="0" x2="1280" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#22D3EE"/>
+      <stop offset="0.33" stop-color="#3B82F6"/>
+      <stop offset="0.67" stop-color="#A855F7"/>
+      <stop offset="1"    stop-color="#F43F5E"/>
+    </linearGradient>
+    <linearGradient id="railV" x1="0" y1="0" x2="0" y2="720" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#22D3EE"/>
+      <stop offset="0.33" stop-color="#3B82F6"/>
+      <stop offset="0.67" stop-color="#A855F7"/>
+      <stop offset="1"    stop-color="#F43F5E"/>
+    </linearGradient>
+    <linearGradient id="wp" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0"    stop-color="#0B1730"/>
+      <stop offset="0.55" stop-color="#070F22"/>
+      <stop offset="1"    stop-color="#050916"/>
+    </linearGradient>
+    <radialGradient id="wpLight" cx="0.2" cy="0.9" r="0.7">
+      <stop offset="0"   stop-color="#22D3EE" stop-opacity="0.16"/>
+      <stop offset="1"   stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="wpLight2" cx="0.85" cy="0.2" r="0.6">
+      <stop offset="0"   stop-color="#A855F7" stop-opacity="0.14"/>
+      <stop offset="1"   stop-color="#A855F7" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gleam" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"   stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.6"/>
+      <stop offset="1"   stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glassBlur" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <linearGradient id="revealMask" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset="1" stop-color="#fff"/>
+    </linearGradient>
+    <symbol id="glyph" viewBox="0 0 16 16">
+      <rect x="2" y="2" width="12" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <rect x="5" y="5" width="6" height="6" rx="1" fill="currentColor" opacity="0.7"/>
+    </symbol>
+    <symbol id="mote" viewBox="0 0 4 4"><circle cx="2" cy="2" r="1.4" fill="currentColor"/></symbol>
+    <style>
+      .ui   { font-family: Manrope, 'Noto Sans', system-ui, sans-serif; }
+      .mono { font-family: 'JetBrains Mono', 'Noto Sans Mono', monospace; font-variant-numeric: tabular-nums; }
+      .t1 { fill: #E6EDFF; }
+      .t2 { fill: #94A3B8; }
+      .note-title { font-size: 12px; font-weight: 600; }
+      .note-body  { font-size: 11.5px; fill: #94A3B8; }
+      .eyebrow { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; fill: #94A3B8; }
+      .role { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; fill: #94A3B8; }
+      .lane { font-size: 11px; fill: #94A3B8; }
+      .curve { fill: none; stroke: #E6EDFF; stroke-width: 1.5; stroke-linecap: round; }
+      .axis { stroke: #E6EDFF; stroke-opacity: 0.14; stroke-width: 1; }
+    </style>
+  </defs>
+
+  <!-- ===== LAYER 0: wallpaper ===== -->
+  <rect width="1280" height="720" fill="url(#wp)"/>
+  <rect width="1280" height="720" fill="url(#wpLight)"/>
+  <rect width="1280" height="720" fill="url(#wpLight2)"/>
+
+  <!-- ===== LAYER 1: windows. None on a design sheet. ===== -->
+  <g id="windows"></g>
+
+  <!-- ===== LAYER 2: the bar, rail + band, carrying the sheet title ===== -->
+  <g id="bar">
+    <rect x="0" y="2" width="1280" height="26" fill="#0B1730" fill-opacity="0.72"/>
+    <rect x="0" y="0" width="1280" height="2" fill="url(#rail)" opacity="0.75"/>
+    <rect x="0" y="0" width="160" height="2" fill="url(#gleam)">
+      <animate attributeName="x" values="-160;1280" dur="9s" repeatCount="indefinite"/>
+    </rect>
+    <text x="12" y="19.5" class="ui t1" font-size="13" font-weight="500">Phosphor design system</text>
+    <text x="1268" y="19.5" text-anchor="end" class="mono t2" font-size="13">spectrum · material · radius · motion · type</text>
+  </g>
+
+  <!-- ===== LAYER 3: SCENE ===== -->
+  <g id="scene">
+
+    <!-- ============ (a) SPECTRUM AS THE RAIL AXIS ============ -->
+    <g id="spectrum">
+      <text x="40" y="52" class="ui eyebrow">A · The spectrum is the rail axis · t = x / screenWidth</text>
+      <!-- the axis itself: the same #rail, full width, 4 px so it reads on a sheet -->
+      <rect x="0" y="62" width="1280" height="4" fill="url(#rail)"/>
+      <!-- sampled hue ticks -->
+      <g stroke="#E6EDFF" stroke-opacity="0.5" stroke-width="1">
+        <line x1="0.5" y1="66" x2="0.5" y2="74"/>
+        <line x1="218" y1="66" x2="218" y2="74"/>
+        <line x1="422" y1="66" x2="422" y2="74"/>
+        <line x1="640" y1="66" x2="640" y2="74"/>
+        <line x1="858" y1="66" x2="858" y2="74"/>
+        <line x1="1062" y1="66" x2="1062" y2="74"/>
+        <line x1="1279.5" y1="66" x2="1279.5" y2="74"/>
+      </g>
+      <g class="mono t2" font-size="10.5">
+        <text x="4" y="86">t=0 #22D3EE</text>
+        <text x="218" y="86" text-anchor="middle">t=0.17 #2FB0F2</text>
+        <text x="422" y="86" text-anchor="middle">t=0.33 #3B82F6</text>
+        <text x="640" y="86" text-anchor="middle">t=0.5 #6F6CF7</text>
+        <text x="858" y="86" text-anchor="middle">t=0.67 #A855F7</text>
+        <text x="1062" y="86" text-anchor="middle">t=0.83 #CE4BA8</text>
+        <text x="1276" y="86" text-anchor="end">t=1 #F43F5E</text>
+      </g>
+      <!-- the four discrete state stops: an indicator bar in the stop colour, then meaning -->
+      <g font-size="11.5" class="ui">
+        <rect x="4" y="100" width="40" height="2" fill="#22D3EE"/>
+        <text x="4" y="118" class="t1" font-weight="500">cyan <tspan class="t2" font-weight="400">resting · info</tspan></text>
+
+        <rect x="402" y="100" width="40" height="2" fill="#3B82F6"/>
+        <text x="422" y="118" text-anchor="middle" class="t1" font-weight="500">blue <tspan class="t2" font-weight="400">active · selected</tspan></text>
+
+        <rect x="838" y="100" width="40" height="2" fill="#A855F7"/>
+        <text x="858" y="118" text-anchor="middle" class="t1" font-weight="500">purple <tspan class="t2" font-weight="400">pending · transient</tspan></text>
+
+        <rect x="1236" y="100" width="40" height="2" fill="#F43F5E"/>
+        <text x="1276" y="118" text-anchor="end" class="t1" font-weight="500">rose <tspan class="t2" font-weight="400">hot · destructive · at limit</tspan></text>
+      </g>
+      <text x="640" y="118" text-anchor="middle" class="ui t2" font-size="11">focus and urgency are white, off the axis</text>
+    </g>
+
+    <!-- ============ (b) MATERIAL LAYERS, exploded ============ -->
+    <g id="material">
+      <text x="40" y="164" class="ui eyebrow">B · Material, bottom to top</text>
+      <!-- ground -->
+      <g transform="translate(90 350)">
+        <path d="M0,0 h200 l-50,40 h-200 z" fill="#0B1730" stroke="#1E293B" stroke-width="1"/>
+      </g>
+      <!-- stroke: 1 px inset line sampling its axis -->
+      <g transform="translate(90 300)">
+        <path d="M0,0 h200 l-50,40 h-200 z" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.35">
+          <animate attributeName="opacity" values="0.35;1;1;0.35;0.35" keyTimes="0;0.03;0.2;0.32;1" dur="3s" repeatCount="indefinite"
+                   calcMode="spline" keySplines="0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+        </path>
+      </g>
+      <!-- gleam: a short bright segment travelling the top edge of the stroke -->
+      <g transform="translate(90 250)">
+        <path d="M0,0 h200 l-50,40 h-200 z" fill="none" stroke="#E6EDFF" stroke-opacity="0.08" stroke-width="1"/>
+        <rect x="0" y="-1" width="36" height="2" fill="url(#gleam)">
+          <animate attributeName="x" values="0;164;164;0;0" keyTimes="0;0.4;0.55;0.95;1" dur="9s" repeatCount="indefinite"/>
+        </rect>
+      </g>
+      <!-- content -->
+      <g transform="translate(90 200)">
+        <path d="M0,0 h200 l-50,40 h-200 z" fill="none" stroke="#E6EDFF" stroke-opacity="0.08" stroke-width="1"/>
+        <g fill="#E6EDFF" opacity="0.5">
+          <rect x="4" y="8" width="90" height="4" rx="1"/>
+          <rect x="0" y="18" width="70" height="4" rx="1"/>
+        </g>
+        <text x="150" y="30" class="mono t1" font-size="12" font-weight="500">42 %</text>
+      </g>
+      <!-- layer labels -->
+      <g class="ui" font-size="11.5">
+        <text x="310" y="222" class="t1">content</text>
+        <text x="310" y="236" class="t2">text #E6EDFF / #94A3B8, values in mono</text>
+        <text x="310" y="272" class="t1">gleam</text>
+        <text x="310" y="286" class="t2">12 % of the perimeter, alpha 0.6, one pass per 9 s</text>
+        <text x="310" y="322" class="t1">1 px stroke</text>
+        <text x="310" y="336" class="t2">samples its axis, 0.35 resting, 1.0 active</text>
+        <text x="310" y="372" class="t1">ground</text>
+        <text x="310" y="386" class="t2">navy #0B1730 over blur, no shadow, no outline</text>
+      </g>
+    </g>
+
+    <!-- ============ (c) RADIUS FAMILY, to scale ============ -->
+    <g id="radius">
+      <text x="530" y="164" class="ui eyebrow">C · Radius family, to scale</text>
+      <g fill="#0B1730" fill-opacity="0.9" stroke="url(#rail)" stroke-width="1">
+        <rect x="530.5" y="196.5" width="56" height="56" rx="3"/>
+        <rect x="598.5" y="196.5" width="56" height="56" rx="6"/>
+        <rect x="666.5" y="196.5" width="56" height="56" rx="8"/>
+        <rect x="734.5" y="196.5" width="56" height="56" rx="10"/>
+      </g>
+      <g class="ui" font-size="11" text-anchor="middle">
+        <text x="558" y="272" class="t1"><tspan class="mono">3</tspan> <tspan class="t2">miniature</tspan></text>
+        <text x="626" y="272" class="t1"><tspan class="mono">6</tspan> <tspan class="t2">chrome</tspan></text>
+        <text x="694" y="272" class="t1"><tspan class="mono">8</tspan> <tspan class="t2">tile</tspan></text>
+        <text x="762" y="272" class="t1"><tspan class="mono">10</tspan> <tspan class="t2">floating</tspan></text>
+      </g>
+      <!-- the pill, crossed out -->
+      <rect x="530.5" y="300.5" width="180" height="48" rx="24" fill="none" stroke="#94A3B8" stroke-width="1" stroke-dasharray="3 3" opacity="0.7"/>
+      <g stroke="#F43F5E" stroke-width="1.5" stroke-linecap="round">
+        <line x1="600" y1="308" x2="640" y2="342"/>
+        <line x1="640" y1="308" x2="600" y2="342"/>
+      </g>
+      <text x="620" y="368" text-anchor="middle" class="ui" font-size="11"><tspan class="mono t1">24</tspan> <tspan class="t2">pill, never</tspan></text>
+    </g>
+
+    <!-- ============ (d) MOTION ENVELOPES ============ -->
+    <g id="motion">
+      <text x="820" y="164" class="ui eyebrow">D · Motion envelopes · 0.4 px per ms</text>
+      <!-- lanes. Curves are the literal cubic-bezier of each named curve. x0 = 880, H = 24. -->
+      <g class="axis">
+        <line x1="880" y1="184" x2="880" y2="356"/>
+        <line x1="880" y1="356" x2="1168" y2="356"/>
+        <line x1="916" y1="356" x2="916" y2="360"/>
+        <line x1="968" y1="356" x2="968" y2="360"/>
+        <line x1="1024" y1="356" x2="1024" y2="360"/>
+        <line x1="1168" y1="356" x2="1168" y2="360"/>
+      </g>
+      <g class="mono t2" font-size="9.5" text-anchor="middle">
+        <text x="880" y="371">0</text>
+        <text x="916" y="371">90</text>
+        <text x="968" y="371">220</text>
+        <text x="1024" y="371">360</text>
+        <text x="1168" y="371">720 ms</text>
+      </g>
+      <!-- enter 90 ms, osd-pop 0.34 1 0.64 1 (2% overshoot exaggerated by the lane height) -->
+      <text x="820" y="212" class="ui lane">enter</text>
+      <path class="curve" d="M880,214 C892.2,185.2 903,190 916,190 L1168,190" stroke-opacity="0.95"/>
+      <!-- release 360 ms, phosphor-release 0.05 0.6 0.15 1; 720 ms geometry dashed -->
+      <text x="820" y="246" class="ui lane">release</text>
+      <path class="curve" d="M880,224 C887.2,238.4 901.6,248 1024,248" stroke-opacity="0.95"/>
+      <path class="curve" d="M880,224 C894.4,238.4 923.2,248 1168,248" stroke-opacity="0.35" stroke-dasharray="2 3"/>
+      <!-- reveal 220 ms, widget-out 0.33 1 0.68 1 -->
+      <text x="820" y="280" class="ui lane">reveal</text>
+      <path class="curve" d="M880,282 C909,258 939.8,258 968,258 L1168,258" stroke-opacity="0.95"/>
+      <!-- dismiss 140 ms, osd-in 0.32 0 0.67 0 -->
+      <text x="820" y="314" class="ui lane">dismiss</text>
+      <path class="curve" d="M880,292 C897.9,292 917.5,316 936,316 L1168,316" stroke-opacity="0.95"/>
+      <!-- tick 60 ms, widget-pop 0.34 1 0.64 1, then release 360 -->
+      <text x="820" y="348" class="ui lane">tick</text>
+      <path class="curve" d="M880,350 C888.2,312.6 895.4,326 904,326 C911.2,340.4 925.6,350 1048,350" stroke-opacity="0.95"/>
+
+      <!-- live demo: enter 90 / hold 100 / release 360, looping every 2 s. 0.4 px per ms. -->
+      <g id="demo">
+        <path class="axis" d="M860,424 h220" fill="none"/>
+        <!-- envelope: enter 36 px, hold 40 px, release 144 px, H 28 -->
+        <path d="M860,424 C872.2,390.4 883,396 896,396 L936,396 C943.2,412.8 957.6,424 1080,424" fill="none" stroke="#E6EDFF" stroke-opacity="0.35" stroke-width="1"/>
+        <!-- playhead, linear in time -->
+        <rect x="860" y="392" width="1" height="34" fill="#FFFFFF" opacity="0.8">
+          <animate attributeName="x" values="860;896;936;1080;1080" keyTimes="0;0.045;0.095;0.275;1" dur="2s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="0.8;0.8;0.8;0.8;0;0" keyTimes="0;0.045;0.095;0.275;0.4;1" dur="2s" repeatCount="indefinite"/>
+        </rect>
+        <!-- the chip stroke that the envelope drives -->
+        <rect x="1104.5" y="394.5" width="120" height="24" rx="6" fill="#0B1730" fill-opacity="0.9" stroke="url(#rail)" stroke-width="1" stroke-opacity="0.35">
+          <animate attributeName="stroke-opacity" values="0.35;1;1;0.35;0.35" keyTimes="0;0.045;0.095;0.275;1" dur="2s" repeatCount="indefinite"
+                   calcMode="spline" keySplines="0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+        </rect>
+        <text x="1164.5" y="410.5" text-anchor="middle" class="ui t1" font-size="11" font-weight="500">hover</text>
+        <text x="860" y="440" class="ui t2" font-size="10.5">1 : 4 · enter 90 ms, hold, release 360 ms · opacity moves, t does not</text>
+      </g>
+    </g>
+
+    <!-- ============ (e) TYPE ============ -->
+    <g id="type">
+      <text x="40" y="472" class="ui eyebrow">E · Type · Manrope for words, JetBrains Mono for every value</text>
+      <g class="role">
+        <text x="40" y="500">bar label · 13 medium</text>
+        <text x="40" y="524">bar value · mono 13</text>
+        <text x="40" y="552">popout title · 16 semibold</text>
+        <text x="40" y="576">body · 13</text>
+        <text x="40" y="598">secondary · 13</text>
+        <text x="40" y="620">eyebrow · 12 caps</text>
+        <text x="40" y="654">osd value · mono 24</text>
+        <text x="40" y="690">power word · 24 regular</text>
+      </g>
+      <g class="ui t1">
+        <text x="230" y="500" font-size="13" font-weight="500" letter-spacing="0.2">kate · phosphor-shell.md</text>
+        <text x="230" y="524" class="mono" font-size="13" font-weight="500">14:32   62 %   1.2 GB   -48 dB</text>
+        <text x="230" y="552" font-size="16" font-weight="600">Control center</text>
+        <text x="230" y="576" font-size="13">Bluetooth is on. Three devices are in range.</text>
+        <text x="230" y="598" font-size="13" class="t2">Last connected 12 minutes ago</text>
+        <text x="230" y="620" font-size="12" letter-spacing="0.08em" class="t2">NETWORK</text>
+        <text x="230" y="654" class="mono" font-size="24" font-weight="500">64</text>
+        <rect x="230" y="658" width="28" height="2" fill="#26C7EF"/>
+        <text x="230" y="690" font-size="24" font-weight="400">S<tspan text-decoration="underline">u</tspan>spend</text>
+      </g>
+      <!-- lock clock, 96 ExtraLight tabular, tracking -2 -->
+      <text x="620" y="600" class="ui t1" font-size="96" font-weight="200" letter-spacing="-2" style="font-variant-numeric: tabular-nums">14:32</text>
+      <text x="622" y="628" class="ui t2" font-size="16" letter-spacing="1.5">THURSDAY 4 SEPTEMBER</text>
+      <text x="622" y="650" class="role">lock clock · 96 extralight · lock date · 16 caps +1.5 px</text>
+
+      <!-- the digit tick: 14:32 -> 14:33, the changed digit gets a 2 px underline that enters and releases -->
+      <g id="digit-tick" transform="translate(1000 500)">
+        <text x="0" y="24" class="mono t1" font-size="28" font-weight="500">14:3</text>
+        <!-- old digit releases over 300 ms, new digit enters over 150 ms sliding up 4 px -->
+        <text x="70.5" y="24" class="mono t1" font-size="28" font-weight="500">2
+          <animate attributeName="opacity" values="1;1;0;0" keyTimes="0;0.25;0.325;1" dur="4s" repeatCount="indefinite"
+                   calcMode="spline" keySplines="0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+        </text>
+        <text x="70.5" y="28" class="mono t1" font-size="28" font-weight="500" opacity="0">3
+          <animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.25;0.2875;1" dur="4s" repeatCount="indefinite"
+                   calcMode="spline" keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1"/>
+          <animate attributeName="y" values="28;28;24;24" keyTimes="0;0.25;0.2875;1" dur="4s" repeatCount="indefinite"
+                   calcMode="spline" keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1"/>
+        </text>
+        <!-- underline in the rail hue at this x (t ~ 0.84) -->
+        <rect x="70.5" y="30" width="17" height="2" fill="#CE4BA8" opacity="0">
+          <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.25;0.2725;0.35;0.44;1" dur="4s" repeatCount="indefinite"
+                   calcMode="spline" keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+        </rect>
+        <text x="0" y="52" class="ui t2" font-size="10.5">changed digit · 2 px underline</text>
+        <text x="0" y="66" class="ui t2" font-size="10.5">enters 90 ms, releases 360 ms</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ===== LAYER 4: annotations ===== -->
+  <g class="note" transform="translate(40 396)">
+    <rect width="300" height="46" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="20" class="ui note-title" fill="#26C7EF">Depth is a stroke and a ground step</text>
+    <text x="12" y="36" class="ui note-body">No drop shadow on any shell surface. Blur only over windows.</text>
+  </g>
+  <g class="note" transform="translate(530 386)">
+    <rect width="260" height="56" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B">
+    </rect>
+    <text x="12" y="20" class="ui note-title" fill="#726CF6">One gradient, sampled by x</text>
+    <text x="12" y="36" class="ui note-body">#rail is defined once. Nothing owns a private</text>
+    <text x="12" y="50" class="ui note-body">gradient. Colour says what, opacity says when.</text>
+  </g>
+  <g class="note" transform="translate(1000 584)">
+    <rect width="240" height="70" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="20" class="ui note-title" fill="#DD468C">Tabular figures everywhere</text>
+    <text x="12" y="36" class="ui note-body">Widths never change, so the underline lands</text>
+    <text x="12" y="50" class="ui note-body">under the same glyph every time. It samples</text>
+    <text x="12" y="64" class="ui note-body">the surface's axis, so it is brand, not decoration.</text>
+  </g>
+  <text x="640" y="708" text-anchor="middle" class="ui t2" font-size="12">Phosphor · design system · spectrum identity</text>
+</svg>

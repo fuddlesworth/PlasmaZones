@@ -20,11 +20,14 @@ class DBusScreenAdaptor;
 
 namespace PhosphorAnimation {
 class CurveLoader;
-class ProfileLoader;
 }
 
 namespace PhosphorAnimationShaders {
 class AnimationShaderRegistry;
+}
+
+namespace PhosphorShaders {
+class ShaderPresetStore;
 }
 
 namespace PhosphorSurfaceShaders {
@@ -87,7 +90,6 @@ class ZoneDetectionAdaptor;
 class WindowTrackingAdaptor;
 class WindowDragAdaptor;
 class RuleAdaptor;
-class ZoneSelectorController;
 class UnifiedLayoutController;
 class WorkspaceController;
 class TilingAdaptor;

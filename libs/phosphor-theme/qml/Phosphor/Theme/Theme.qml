@@ -92,6 +92,13 @@ QtObject {
     readonly property color brand_stop_1: _t("brand_stop_1")
     readonly property color brand_stop_2: _t("brand_stop_2")
     readonly property color brand_stop_3: _t("brand_stop_3")
+    // ─── Field polarity ──────────────────────────────────────────────────
+    // Whether the active palette is a dark field. The palette wire format
+    // carries no polarity token, so it is derived from the relative
+    // luminance of `background`: matugen's dark schemes sit well under
+    // 0.5 and its light schemes well over. Spectrum reads this to pick the
+    // dark or light brand ramp.
+    readonly property bool isDark: (0.2126 * background.r + 0.7152 * background.g + 0.0722 * background.b) < 0.5
 
     // Token accessor with a loud-magenta fallback. Inline helper so
     // every accessor below stays a one-liner that reads naturally.

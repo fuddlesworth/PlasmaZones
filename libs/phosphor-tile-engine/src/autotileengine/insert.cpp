@@ -357,8 +357,14 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
             << "insertWindow: state refused" << windowId << "on" << screenId << "- window left unmanaged";
         // windowOpened keys the reverse map before calling in here, so the
         // sweep has to drop that key too — the same cleanup the defer gate and
-        // claimCrossScreenReopen run for their own refusals.
-        m_states.removeWindow(windowId);
+        // claimCrossScreenReopen run for their own refusals. ONLY this
+        // context's membership: a window present on other desktops keeps its
+        // tiles there, and the per-window caches below describe a window that
+        // is still live, so they go only when no context is left.
+        m_states.removeMembership(windowId, currentKey);
+        if (m_states.hasWindow(windowId)) {
+            return false;
+        }
         m_windowMinSizes.remove(windowId);
         m_autotileFloatedWindows.remove(windowId);
         purgeFromPendingOrders(windowId);
@@ -372,7 +378,11 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
         purgePendingFocusForWindow(windowId);
         return false;
     }
-    m_states.setKeyForWindow(windowId, currentKey);
+    // ADD, not replace: an adoption gives a window present on other desktops
+    // a tile here as well, and a replace would drop those memberships while
+    // their states keep the tiles. For a fresh open this is the same as the
+    // replace it supersedes.
+    m_states.addMembership(windowId, currentKey);
     return true;
 }
 
@@ -443,13 +453,30 @@ void AutotileEngine::removeWindow(const QString& windowId)
     // survive to activate a dead id on its screen's next retile.
     purgePendingFocusForWindow(windowId);
 
-    const TilingStateKey key = m_states.takeWindow(windowId);
-    if (key.screenId.isEmpty()) {
-        return;
-    }
-
-    PhosphorTiles::TilingState* state = m_states.stateForKey(key);
-    if (state) {
+    // EVERY state holding the window, with the algorithm's remove hook on
+    // each: a window present on several desktops has a tile in each, and
+    // taking the memberships while removing from one state left the other
+    // layouts reserving a slot for a closed window nothing could reap.
+    const QList<TilingStateKey> memberships = m_states.membershipsForWindow(windowId);
+    m_states.removeWindow(windowId);
+    for (const TilingStateKey& key : memberships) {
+        if (key.screenId.isEmpty()) {
+            continue;
+        }
+        PhosphorTiles::TilingState* state = m_states.stateForKey(key);
+        if (!state) {
+            continue;
+        }
+        PhosphorTiles::TilingAlgorithm* algo = effectiveAlgorithm(key.screenId);
+        if (algo && algo->supportsLifecycleHooks()) {
+            const int idx = state->tiledWindows().indexOf(windowId);
+            if (idx >= 0) {
+                algo->onWindowRemoved(state, idx);
+            } else {
+                qCDebug(PhosphorTileEngine::lcTileEngine)
+                    << "removeWindow: window" << windowId << "not found in tiling state — lifecycle hook skipped";
+            }
+        }
         // No position is saved here. The window's autotiled placement (its position)
         // is captured into the unified WindowPlacementStore by the tiling close
         // relay (TilingAdaptor::windowClosed runs the shared capture funnel

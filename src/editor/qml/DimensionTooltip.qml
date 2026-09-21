@@ -27,8 +27,13 @@ Rectangle {
     property real canvasHeight: 1
     property bool showDimensions: false
     property bool isFixedMode: false
-    property real screenWidth: 1920
-    property real screenHeight: 1080
+    // Zero rather than a fake screen size: the percentage readouts below
+    // already guard on > 0, and the only instantiation binds both from the
+    // controller (falling back to the real Screen), so these defaults are
+    // never the value in use. A plausible-looking 1920x1080 here would print
+    // confidently wrong percentages if that ever stopped being true.
+    property real screenWidth: 0
+    property real screenHeight: 0
     // Calculate percentages (relative mode)
     property int widthPercent: (canvasWidth > 0 && !isNaN(zoneWidth)) ? Math.round((zoneWidth / canvasWidth) * 100) : 0
     property int heightPercent: (canvasHeight > 0 && !isNaN(zoneHeight)) ? Math.round((zoneHeight / canvasHeight) * 100) : 0

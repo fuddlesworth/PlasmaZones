@@ -333,6 +333,51 @@ QSet<QString> allAnchorsIn(const QString& qmlPath)
     return out;
 }
 
+/// Every page id inside SettingsController::validPageNames()'s body, or an
+/// empty set with @p why set when the slice could not be taken.
+///
+/// Sliced to the FUNCTION BODY rather than scanned whole-file: the same file
+/// also holds the category-id tables and reveal-target maps, so non-navigable
+/// ids (placement, snapping, animations, the *-cat headers) would count as
+/// known — and a catalogue entry addressed at a category also passes hasPage()
+/// at runtime, then navigates into an empty page body, which is the exact dead
+/// result class the callers catch. Comments are stripped BEFORE the slice, so a
+/// commented-out id cannot count as navigable.
+///
+/// One helper rather than the two verbatim copies the two slots below used to
+/// carry, because a fix applied to one copy and not the other is the way this
+/// kind of parse rots.
+QSet<QString> validPageIds(QString* why)
+{
+    const QString topology = stripLineComments(
+        readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/controller/settingscontroller_pagetopology.cpp")));
+    if (topology.isEmpty()) {
+        *why = QStringLiteral("settingscontroller_pagetopology.cpp unreadable");
+        return {};
+    }
+    const int bodyStart = topology.indexOf(QStringLiteral("SettingsController::validPageNames()"));
+    const int braceStart = bodyStart >= 0 ? topology.indexOf(QLatin1Char('{'), bodyStart) : -1;
+    const int bodyEnd = braceStart >= 0 ? topology.indexOf(QStringLiteral("};"), braceStart) : -1;
+    if (bodyEnd <= braceStart) {
+        *why = QStringLiteral("could not slice validPageNames() body");
+        return {};
+    }
+    QSet<QString> out;
+    static const QRegularExpression kValid(QStringLiteral("QStringLiteral\\(\"([a-z0-9-]+)\"\\)"));
+    auto it = kValid.globalMatch(topology.mid(braceStart, bodyEnd - braceStart));
+    while (it.hasNext()) {
+        out.insert(it.next().captured(1));
+    }
+    // Guard against the slice silently collapsing: validPageNames has about 50
+    // entries, so a near-zero count means the parse broke, not that the
+    // catalogue is clean.
+    if (out.size() <= 20) {
+        *why = QStringLiteral("validPageNames slice yielded only %1 ids").arg(out.size());
+        return {};
+    }
+    return out;
+}
+
 /// Top-level argument list of every `name(...)` call in @p src. Quote- and
 /// nesting-aware, because the registration calls this reads carry both
 /// (`PhosphorI18n::tr("Scrolling", "tiling mode name")` is ONE argument, and
@@ -412,7 +457,7 @@ const QHash<QString, QString>& regPageMemberToPageId()
         {QStringLiteral("m_generalPage"), QStringLiteral("general")},
         {QStringLiteral("m_rulesPage"), QStringLiteral("rules")},
         {QStringLiteral("m_editorPage"), QStringLiteral("editor")},
-        {QStringLiteral("m_snappingShadersPage"), QStringLiteral("snapping-shaders")},
+        {QStringLiteral("m_overlaysPage"), QStringLiteral("overlays-shaders")},
         {QStringLiteral("m_tilingBehaviorPage"), QStringLiteral("tiling-behavior")},
         {QStringLiteral("m_tilingAlgorithmPage"), QStringLiteral("tiling-algorithm")},
         {QStringLiteral("m_windowAppearancePage"), QStringLiteral("window-appearance")},
@@ -729,6 +774,29 @@ private Q_SLOTS:
             registered.size() > 200,
             qPrintable(
                 QStringLiteral("catalogue parse yielded only %1 unique (page, anchor) pairs").arg(registered.size())));
+        // The intersect below is what makes "a catalogue entry may legitimately
+        // not exist for a given anchor" safe, but it is also a silent drop: an
+        // advanced-gated QML anchor the catalogue forgot entirely disappears
+        // from `missing` instead of being reported. Pin the drop set so the
+        // exemption is a decision on the record rather than a side effect, and
+        // guard it in both directions so it cannot rot.
+        static const QSet<QString> kAnchorsWithNoCatalogueEntry = {};
+        const QSet<QString> unregisteredAdvanced = expected - registered;
+        for (const QString& k : unregisteredAdvanced) {
+            if (!kAnchorsWithNoCatalogueEntry.contains(k)) {
+                qWarning() << "advanced in QML but the catalogue registers no entry for it:" << k;
+            }
+        }
+        QVERIFY2(
+            (unregisteredAdvanced - kAnchorsWithNoCatalogueEntry).isEmpty(),
+            qPrintable(QStringLiteral("%1 advanced-gated QML anchors have no catalogue entry at all — add the entry, "
+                                      "or list the anchor in kAnchorsWithNoCatalogueEntry with a reason")
+                           .arg((unregisteredAdvanced - kAnchorsWithNoCatalogueEntry).size())));
+        for (const QString& k : kAnchorsWithNoCatalogueEntry) {
+            QVERIFY2(!registered.contains(k),
+                     qPrintable(QStringLiteral("stale exemption: %1 is registered in the catalogue now").arg(k)));
+        }
+
         expected.intersect(registered);
 
         const QSet<QString> missing = expected - flagged;
@@ -909,41 +977,9 @@ private Q_SLOTS:
     {
         const QString catalogSrc =
             stripLineComments(readAll(m_catalog) + readAll(m_catalogAnimations) + readAll(m_catalogSimple));
-        const QString registration =
-            readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/controller/settingscontroller_pageregistration.cpp"));
-        // stripLineComments BEFORE slicing, like every other source read in
-        // this file: a commented-out id inside validPageNames() would
-        // otherwise count as navigable, defeating the exact regression this
-        // slice exists to catch.
-        const QString topology = stripLineComments(
-            readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/controller/settingscontroller_pagetopology.cpp")));
-        QVERIFY2(!registration.isEmpty(), "settingscontroller_pageregistration.cpp unreadable");
-        QVERIFY2(!topology.isEmpty(), "settingscontroller_pagetopology.cpp unreadable");
-
-        // Slice to validPageNames()'s BODY before matching. Scanning the whole
-        // file also picks up the category-id tables and reveal-target maps, so
-        // non-navigable ids (placement, snapping, animations, the *-cat
-        // headers) would count as known — and a catalogue entry addressed at a
-        // category also passes hasPage() at runtime, then navigates into an
-        // empty page body. That is the exact dead-result class this catches.
-        const int bodyStart = topology.indexOf(QStringLiteral("SettingsController::validPageNames()"));
-        QVERIFY2(bodyStart >= 0, "validPageNames() definition not found in pagetopology");
-        const int braceStart = topology.indexOf(QLatin1Char('{'), bodyStart);
-        const int bodyEnd = topology.indexOf(QStringLiteral("};"), braceStart);
-        QVERIFY2(braceStart >= 0 && bodyEnd > braceStart, "could not slice validPageNames() body");
-        const QString validBody = topology.mid(braceStart, bodyEnd - braceStart);
-
-        QSet<QString> known;
-        static const QRegularExpression kValid(QStringLiteral("QStringLiteral\\(\"([a-z0-9-]+)\"\\)"));
-        auto vit = kValid.globalMatch(validBody);
-        while (vit.hasNext()) {
-            known.insert(vit.next().captured(1));
-        }
-        // Guard against the slice silently collapsing: validPageNames has
-        // about 50 entries, so a near-zero count means the parse broke, not
-        // that the catalogue is clean.
-        QVERIFY2(known.size() > 20,
-                 qPrintable(QStringLiteral("validPageNames slice yielded only %1 ids").arg(known.size())));
+        QString why;
+        const QSet<QString> known = validPageIds(&why);
+        QVERIFY2(!known.isEmpty(), qPrintable(why));
 
         static const QRegularExpression kCall(
             QStringLiteral("\\badd(?:Setting|Section)\\(\\s*search\\s*,\\s*QStringLiteral\\(\"([^\"]+)\"\\)"));
@@ -994,29 +1030,10 @@ private Q_SLOTS:
     {
         const QString registration = stripLineComments(
             readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/controller/settingscontroller_pageregistration.cpp")));
-        // stripLineComments BEFORE slicing, like every other source read in
-        // this file: a commented-out id inside validPageNames() would
-        // otherwise count as navigable, defeating the exact regression this
-        // slice exists to catch.
-        const QString topology = stripLineComments(
-            readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/controller/settingscontroller_pagetopology.cpp")));
         QVERIFY2(!registration.isEmpty(), "settingscontroller_pageregistration.cpp unreadable");
-        QVERIFY2(!topology.isEmpty(), "settingscontroller_pagetopology.cpp unreadable");
-
-        const int bodyStart = topology.indexOf(QStringLiteral("SettingsController::validPageNames()"));
-        QVERIFY2(bodyStart >= 0, "validPageNames() definition not found in pagetopology");
-        const int braceStart = topology.indexOf(QLatin1Char('{'), bodyStart);
-        const int bodyEnd = topology.indexOf(QStringLiteral("};"), braceStart);
-        QVERIFY2(braceStart >= 0 && bodyEnd > braceStart, "could not slice validPageNames() body");
-        const QString validBody = topology.mid(braceStart, bodyEnd - braceStart);
-        QSet<QString> valid;
-        static const QRegularExpression kValid(QStringLiteral("QStringLiteral\\(\"([a-z0-9-]+)\"\\)"));
-        auto vit = kValid.globalMatch(validBody);
-        while (vit.hasNext()) {
-            valid.insert(vit.next().captured(1));
-        }
-        QVERIFY2(valid.size() > 20,
-                 qPrintable(QStringLiteral("validPageNames slice yielded only %1 ids").arg(valid.size())));
+        QString why;
+        const QSet<QString> valid = validPageIds(&why);
+        QVERIFY2(!valid.isEmpty(), qPrintable(why));
 
         QStringList unreachable;
         int leafCount = 0;
@@ -1058,6 +1075,103 @@ private Q_SLOTS:
         QVERIFY2(unreachable.isEmpty(),
                  qPrintable(QStringLiteral("registered pages missing from validPageNames(): %1")
                                 .arg(unreachable.join(QLatin1String(", ")))));
+    }
+
+    /// The MISSING DIRECTION. Every other slot here walks catalogue → app:
+    /// each registered entry must name a page that exists, and each anchor
+    /// must exist on its page. Nothing walked app → catalogue, so a page could
+    /// be registered, navigable, and rendered while contributing nothing to
+    /// search — unreachable by typing its own subject, with every existing
+    /// assertion still green. That is exactly how the overlay assignments page
+    /// shipped: registered, reachable by clicking, and invisible to search.
+    ///
+    /// Deliberately NOT a count floor. A floor is the vacuity shape that let
+    /// this through in the first place: the catalogue has hundreds of entries,
+    /// so one page contributing zero moves no total anyone would notice.
+    void everyNavigableLeafPageHasCatalogueContent()
+    {
+        const QString catalogSrc =
+            stripLineComments(readAll(m_catalog) + readAll(m_catalogAnimations) + readAll(m_catalogSimple));
+        const QString registration = stripLineComments(
+            readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/controller/settingscontroller_pageregistration.cpp")));
+        QVERIFY2(!catalogSrc.isEmpty(), "search catalogue sources unreadable");
+        QVERIFY2(!registration.isEmpty(), "settingscontroller_pageregistration.cpp unreadable");
+
+        // Pages that legitimately contribute nothing searchable. Empty today:
+        // every rendered leaf earns its way into the catalogue. Each future
+        // entry should carry its reason, and an entry that stops being a
+        // registered leaf FAILS below rather than silently exempting nothing,
+        // so a rename cannot quietly widen the exemption. Category headers
+        // need no entry here — they have no qmlFile and are filtered out
+        // above.
+        const QSet<QString> exempt{};
+
+        // Every id the catalogue mentions in any of its three registration
+        // forms. A page needs only one to be findable.
+        QSet<QString> covered;
+        static const QRegularExpression kEntry(
+            QStringLiteral("\\badd(?:Setting|Section)\\(\\s*search\\s*,\\s*QStringLiteral\\(\"([^\"]+)\"\\)"));
+        auto eit = kEntry.globalMatch(catalogSrc);
+        while (eit.hasNext()) {
+            covered.insert(eit.next().captured(1));
+        }
+        static const QRegularExpression kKeywords(
+            QStringLiteral("\\bsetPageKeywords\\(\\s*QStringLiteral\\(\"([^\"]+)\"\\)"));
+        auto kit = kKeywords.globalMatch(catalogSrc);
+        while (kit.hasNext()) {
+            covered.insert(kit.next().captured(1));
+        }
+        QVERIFY2(covered.size() > 20,
+                 qPrintable(QStringLiteral("catalogue parse yielded only %1 page ids").arg(covered.size())));
+
+        QStringList silent;
+        QStringList staleExemptions;
+        QSet<QString> leaves;
+        const QList<QStringList> virtualCalls = callArgLists(registration, QStringLiteral("regVirtual"));
+        for (const QStringList& args : virtualCalls) {
+            if (args.size() < 4) {
+                continue;
+            }
+            const QString id = stringLiteralIn(args.at(0));
+            const QString file = stringLiteralIn(args.at(3));
+            if (id.isEmpty() || file.isEmpty()) {
+                continue; // category header, not a rendered leaf
+            }
+            leaves.insert(id);
+        }
+        const QList<QStringList> pageCalls = callArgLists(registration, QStringLiteral("regPage"));
+        for (const QStringList& args : pageCalls) {
+            if (args.size() < 4) {
+                continue;
+            }
+            static const QRegularExpression kMember(QStringLiteral("\\b(m_\\w+)"));
+            const auto m = kMember.match(args.at(0));
+            const QString id = regPageMemberToPageId().value(m.hasMatch() ? m.captured(1) : QString());
+            if (!id.isEmpty()) {
+                leaves.insert(id);
+            }
+        }
+        QVERIFY2(leaves.size() > 30,
+                 qPrintable(QStringLiteral("registration parse yielded only %1 leaf pages").arg(leaves.size())));
+
+        for (const QString& id : std::as_const(leaves)) {
+            if (!covered.contains(id) && !exempt.contains(id)) {
+                silent << id;
+            }
+        }
+        for (const QString& id : exempt) {
+            if (!leaves.contains(id)) {
+                staleExemptions << id;
+            }
+        }
+        silent.sort();
+        staleExemptions.sort();
+        QVERIFY2(staleExemptions.isEmpty(),
+                 qPrintable(QStringLiteral("exempt ids that are no longer registered leaves: %1")
+                                .arg(staleExemptions.join(QLatin1String(", ")))));
+        QVERIFY2(silent.isEmpty(),
+                 qPrintable(QStringLiteral("navigable pages with no search catalogue entry: %1")
+                                .arg(silent.join(QLatin1String(", ")))));
     }
 
 private:

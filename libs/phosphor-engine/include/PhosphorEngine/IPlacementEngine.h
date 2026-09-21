@@ -6,12 +6,15 @@
 // engine implements and the daemon dispatches against — and C++ cannot
 // split one class's members across headers. Extracting groups of virtuals
 // into secondary bases would change the contract's shape (and every
-// implementer and mock) purely to satisfy a line count.
+// implementer and mock) purely to satisfy a line count. Grew with the
+// per-desktop membership contract: reconcileDesktopMemberships and its
+// per-window form, their result type's contract, and the span query.
 
 #pragma once
 
 #include <phosphorengine_export.h>
 
+#include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorEngine/IPlacementState.h>
 #include <PhosphorEngine/NavigationContext.h>
 #include <PhosphorEngine/WindowPlacement.h>
@@ -155,12 +158,12 @@ public:
     /// cross-screen reclaim, the effect's already-queued arrival announce
     /// still carries the ARRIVAL screen, and dispatching it would migrate
     /// the window straight back. isWindowTracked cannot serve — its contract
-    /// is PER-ENGINE: SnapEngine and ScrollEngine answer from the raw
-    /// reverse-map key, which a refused adoption can leave dangling, while
-    /// AutotileEngine verifies membership as well (a phantom key answers
-    /// false there — see its override doc for why that engine needed the
-    /// stricter form). Callers wanting one uniform answer across engines
-    /// cannot get it from that predicate. isWindowManaged/isWindowTiled
+    /// is PER-ENGINE: ScrollEngine answers from the raw reverse-map key,
+    /// which a refused adoption can leave dangling, while SnapEngine and
+    /// AutotileEngine verify membership as well (a phantom key answers
+    /// false there — see AutotileEngine's override doc for why that engine
+    /// needed the stricter form). Callers wanting one uniform answer across
+    /// engines cannot get it from that predicate. isWindowManaged/isWindowTiled
     /// cannot serve either — both exclude engine-floating windows, which a
     /// reclaim can legitimately produce.
     ///
@@ -177,6 +180,41 @@ public:
     {
         Q_UNUSED(windowId)
         return {};
+    }
+
+    /// The (screen, desktop, activity) key of the state that genuinely holds
+    /// @p windowId, tiled or floating, in ANY context — or nullopt when no
+    /// state holds it. Membership-grade like heldScreenForWindow, but
+    /// deliberately NOT scoped to the screen's current context: this is the
+    /// query for "which desktop's stack still lists this window", which the
+    /// daemon's desktop-membership reconcile asks after the compositor
+    /// reports the window's desktop set changed. The holding state is
+    /// usually a BACKGROUND one by then (the user is looking at the desktop
+    /// the window arrived on), which is exactly the case the current-context
+    /// predicates answer empty for.
+    ///
+    /// At most ONE key comes back: the window's PRIMARY membership (the one in
+    /// the context its screen is showing, else the first) when the state it
+    /// names genuinely holds the window, otherwise the first membership whose
+    /// state does. A window present on several desktops holds a membership
+    /// in each; ask the engine's membership pass for the rest. A caller must
+    /// not read nullopt as "no engine state mentions this window" — a
+    /// phantom membership left by a refused adoption answers nullopt too,
+    /// which is the safe direction here.
+    ///
+    /// ScrollEngine answers nullopt for the duration of a drag-insert
+    /// preview: the preview keeps the membership pointed at the target
+    /// context while the window is detached from the strip, so the
+    /// membership term fails until the drop or cancel.
+    ///
+    /// All three engines override it. Snapping takes part in the daemon's
+    /// desktop-membership reconcile as a membership engine (it holds no
+    /// stack, so a release there is a zone assignment dropped, not a gap
+    /// closed).
+    virtual std::optional<PlacementStateKey> heldKeyForWindow(const QString& windowId) const
+    {
+        Q_UNUSED(windowId)
+        return std::nullopt;
     }
 
     /// Bracket a BURST of windowOpened calls delivered together (the
@@ -203,6 +241,12 @@ public:
     }
 
     /// A window was closed.
+    ///
+    /// An implementation must drop the window from whichever state actually
+    /// holds it, BACKGROUND contexts included, resolving through the stored
+    /// key rather than the screen's current one. heldKeyForWindow answers
+    /// across every context, so a close that only cleaned the current
+    /// context would leave it answering a key for a window that is gone.
     virtual void windowClosed(const QString& windowId) = 0;
 
     /// A window gained focus (called when the compositor reports activation).
@@ -1089,15 +1133,71 @@ public:
     {
         Q_UNUSED(resolver)
     }
-    virtual void updateStickyScreenPins(const std::function<bool(const QString&)>& isWindowSticky)
+    /// Run one phase of the sticky-screen pin pass; see StickyPinPhase for
+    /// why the two phases bracket a context change rather than sharing a
+    /// call site. Only the tiling-family engines keep pins.
+    virtual void updateStickyScreenPins(const StickyPredicate& isSticky, StickyPinPhase phase)
     {
-        Q_UNUSED(isWindowSticky)
+        Q_UNUSED(isSticky)
+        Q_UNUSED(phase)
+    }
+    /// Give every window whose span covers @p screenId's current context a
+    /// place in it, and take back the places on that screen the span no
+    /// longer covers. Run AFTER the context moves and after the engine's
+    /// active-screen set is recomputed, so the engine gates on the set the
+    /// switch produced. Memberships under a sticky pin are left to the
+    /// engine's own unpin migration. Returns what changed so the caller can
+    /// drive the bookkeeping the engine cannot reach.
+    virtual MembershipReconcileResult reconcileDesktopMemberships(const QString& screenId,
+                                                                  const DesktopSpanQuery& spanOf)
+    {
+        Q_UNUSED(screenId)
+        Q_UNUSED(spanOf)
+        return {};
+    }
+    /// The same pass for ONE window, on the screen it is held on. The
+    /// daemon calls it when the compositor reports that window's desktop set
+    /// or activity changed, so a span shrink releases only the contexts the
+    /// window left and a sticky transition adopts the context in view without
+    /// waiting for a desktop switch.
+    virtual MembershipReconcileResult reconcileWindowMemberships(const QString& windowId,
+                                                                 const DesktopSpanQuery& spanOf)
+    {
+        Q_UNUSED(windowId)
+        Q_UNUSED(spanOf)
+        return {};
     }
     virtual QSet<int> desktopsWithActiveState() const
     {
         return {};
     }
     virtual void pruneStatesForDesktop(int removedDesktop)
+    {
+        Q_UNUSED(removedDesktop)
+    }
+    /// Shift every per-(screen, desktop, activity) state ABOVE @p
+    /// removedDesktop down by one, because Plasma renumbers x11 desktop
+    /// numbers when a desktop in the middle is deleted (removing 2 of 4
+    /// makes 3 become 2 and 4 become 3).
+    ///
+    /// This is the companion to pruneStatesForDesktop, which only drops the
+    /// removed desktop's own state. Without the shift, every surviving
+    /// higher state stays filed under the number it had before, and any
+    /// consumer that compares a stored key against a number the compositor
+    /// reports now — the daemon's desktop-membership reconcile above all —
+    /// reads a window that never moved as having left its desktop.
+    ///
+    /// The caller drives prune first, then this, and must have established
+    /// which desktop was removed. desktopCountChanged alone cannot: it
+    /// carries the new count, and after a mid-list removal every surviving
+    /// number is still within it.
+    ///
+    /// An implementation must move EVERY structure keyed by a
+    /// PlacementStateKey or by a bare desktop number, not just the state
+    /// store, and must walk the affected desktops in ASCENDING order so
+    /// each target key is already vacant when it is written (descending
+    /// collides at every step, and the store's insert overwrites silently).
+    virtual void renumberDesktopsAfterRemoval(int removedDesktop)
     {
         Q_UNUSED(removedDesktop)
     }

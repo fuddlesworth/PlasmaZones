@@ -3,8 +3,10 @@
 
 #include "layershellintegration.h"
 #include "layershellwindow.h"
+#include "sessionlockwindow.h"
 #include "../compositorlost_internal.h"
 #include <PhosphorWayland/LayerSurface.h>
+#include <PhosphorWayland/LockSurface.h>
 
 #include <algorithm>
 #include <cstring>
@@ -107,6 +109,19 @@ bool LayerShellIntegration::initialize(QtWaylandClient::QWaylandDisplay* display
         qCWarning(lcLayerShellIntegration) << "Compositor does not support zwlr_layer_shell_v1 —"
                                            << "overlays will fall back to xdg_toplevel (wrong stacking/anchoring)."
                                            << "GNOME/Mutter does not implement this protocol.";
+    }
+
+    // Missing layer-shell alone is NOT a failed initialization. This plugin
+    // also carries ext-session-lock-v1, and SessionLock::isSupported() answers
+    // through this singleton, which is published only on success. Failing here
+    // made a compositor that implements ext-session-lock but not
+    // wlr-layer-shell report the session lock unsupported, coupling two
+    // unrelated protocols. createShellSurface already refuses a layer surface
+    // on its own when m_layerShell is null, and routes everything else to the
+    // xdg-shell fallback. Only bind nothing at all is a real failure.
+    if (!m_layerShell && !m_sessionLockManager) {
+        qCWarning(lcLayerShellIntegration) << "Neither zwlr_layer_shell_v1 nor ext_session_lock_manager_v1 is"
+                                           << "advertised; this shell integration has nothing to add.";
         return false;
     }
 
@@ -122,8 +137,28 @@ bool LayerShellIntegration::initialize(QtWaylandClient::QWaylandDisplay* display
 QtWaylandClient::QWaylandShellSurface*
 LayerShellIntegration::createShellSurface(QtWaylandClient::QWaylandWindow* window)
 {
-    // Only create layer surfaces for windows we've marked
     QWindow* qwindow = window->window();
+
+    // A lock surface is a child of the active ext_session_lock_v1, so it can
+    // only exist while SessionLock holds one. Refusing leaves the window
+    // roleless and unmapped, which is the protocol's own answer: nothing may
+    // be presented as a lock surface outside a lock. Deliberately NOT handed
+    // to xdg-shell either: a lock screen that came up as an ordinary toplevel
+    // would look locked without being locked.
+    if (qwindow && qwindow->property(LockSurfaceProps::IsSessionLock).toBool()) {
+        if (!m_activeSessionLock) {
+            qCWarning(lcLayerShellIntegration) << "Refusing to create a lock surface: no session lock is held";
+            return nullptr;
+        }
+        auto* lockWindow = new SessionLockWindow(this, window);
+        if (!lockWindow->isValid()) {
+            delete lockWindow;
+            return nullptr;
+        }
+        return lockWindow;
+    }
+
+    // Only create layer surfaces for windows we've marked
     if (!qwindow || !qwindow->property(LayerSurfaceProps::IsLayerShell).toBool()) {
         // Not a layer-shell window — delegate to xdg-shell so the window gets
         // a proper xdg_toplevel or xdg_popup role. Without this, the window has
@@ -296,6 +331,14 @@ void LayerShellIntegration::registryRemoveHandler(void* data, struct wl_registry
 {
     Q_UNUSED(registry)
     auto* self = static_cast<LayerShellIntegration*>(data);
+    // Every id field below is 0 when its global was never bound, or was bound
+    // and already removed. Wayland never issues object id 0, so a real removal
+    // can never alias one of those — but the chain only stays safe while that
+    // holds, so say it here rather than leaving it implicit in eight
+    // comparisons.
+    if (id == 0) {
+        return;
+    }
     if (id == self->m_singlePixelBufferManagerId) {
         self->m_singlePixelBufferAvailable = false;
         self->m_singlePixelBufferManagerId = 0;

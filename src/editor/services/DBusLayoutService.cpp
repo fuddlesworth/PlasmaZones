@@ -37,7 +37,13 @@ DBusLayoutService::DBusLayoutService(QObject* parent)
 QString DBusLayoutService::loadLayout(const QString& layoutId)
 {
     if (layoutId.isEmpty()) {
-        Q_EMIT errorOccurred(PhosphorI18n::tr("Layout ID cannot be empty"));
+        // Composed from the two strings this file already has rather than
+        // re-worded into one: errorOccurred is now relayed verbatim, so a bare
+        // "Layout ID cannot be empty" would toast with no hint of what failed,
+        // while re-wording the source would re-key the catalogue entry and drop
+        // the translations all seven languages already have for both halves.
+        Q_EMIT errorOccurred(
+            PhosphorI18n::tr("Failed to load layout: %1").arg(PhosphorI18n::tr("Layout ID cannot be empty")));
         return QString();
     }
 
@@ -64,7 +70,9 @@ QString DBusLayoutService::loadLayout(const QString& layoutId)
 QString DBusLayoutService::createLayout(const QString& jsonLayout)
 {
     if (jsonLayout.isEmpty()) {
-        Q_EMIT errorOccurred(PhosphorI18n::tr("Layout JSON cannot be empty"));
+        // Composed, not re-worded — see loadLayout above.
+        Q_EMIT errorOccurred(
+            PhosphorI18n::tr("Failed to create layout: %1").arg(PhosphorI18n::tr("Layout JSON cannot be empty")));
         return QString();
     }
 
@@ -88,7 +96,9 @@ QString DBusLayoutService::createLayout(const QString& jsonLayout)
 bool DBusLayoutService::updateLayout(const QString& jsonLayout)
 {
     if (jsonLayout.isEmpty()) {
-        Q_EMIT errorOccurred(PhosphorI18n::tr("Layout JSON cannot be empty"));
+        // Composed, not re-worded — see loadLayout above.
+        Q_EMIT errorOccurred(
+            PhosphorI18n::tr("Failed to update layout: %1").arg(PhosphorI18n::tr("Layout JSON cannot be empty")));
         return false;
     }
 

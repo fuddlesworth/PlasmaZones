@@ -15,17 +15,20 @@ TestCase {
     id: testCase
 
     name: "PhosphorAtoms"
+    // Shown and sized to match tst_ripple_clip.qml beside it, so the cases
+    // that drive forceActiveFocus() and keyClick() run against a real window
+    // rather than relying on the offscreen platform's implicit focus. They do
+    // pass either way under the harness's QT_QPA_PLATFORM=offscreen — this is
+    // about not depending on that, not about repairing a broken assertion.
+    when: windowShown
+    visible: true
+    width: 200
+    height: 60
 
     Component {
         id: buttonComp
 
         PhosphorButton {}
-    }
-
-    Component {
-        id: pillComp
-
-        PhosphorPill {}
     }
 
     Component {
@@ -52,12 +55,6 @@ TestCase {
         PhosphorRipple {}
     }
 
-    Component {
-        id: shadowComp
-
-        ElevationShadow {}
-    }
-
     function test_button_defaults() {
         const b = createTemporaryObject(buttonComp, testCase);
         verify(b, "PhosphorButton instantiates");
@@ -79,18 +76,11 @@ TestCase {
         compare(spy.count, 1, "clicked actually fires on activation");
     }
 
-    function test_pill_defaults() {
-        const p = createTemporaryObject(pillComp, testCase);
-        verify(p, "PhosphorPill instantiates");
-        compare(p.text, "", "default text empty");
-        compare(p.selected, false, "default unselected");
-    }
-
     function test_card_defaults() {
         const c = createTemporaryObject(cardComp, testCase);
         verify(c, "PhosphorCard instantiates");
         compare(c.elevation, 1, "default elevation 1");
-        compare(c.radius, 16, "default radius 16");
+        compare(c.radius, 10, "default radius is the container radius");
         compare(c.padding, 16, "default padding 16");
     }
 
@@ -153,17 +143,6 @@ TestCase {
         }, 3000, "the sweep finishes");
     }
 
-    function test_shadow_level_clamps() {
-        const e = createTemporaryObject(shadowComp, testCase, {
-            "level": 9
-        });
-        verify(e, "ElevationShadow instantiates");
-        compare(e._level, 5, "over-range level clamps to 5");
-        e.level = -3;
-        compare(e._level, 0, "under-range level clamps to 0");
-        compare(e.shadowEnabled, false, "level 0 disables the shadow");
-    }
-
     function test_button_space_and_enter_activate() {
         const b = createTemporaryObject(buttonComp, testCase, {
             "text": "Go"
@@ -187,31 +166,6 @@ TestCase {
         compare(b.activeFocusOnTab, false, "a disabled button is not Tab-focusable");
     }
 
-    function test_pill_space_toggles() {
-        const p = createTemporaryObject(pillComp, testCase, {
-            "text": "Wi-Fi"
-        });
-        const clickSpy = createTemporaryObject(signalSpyComp, testCase, {
-            "target": p,
-            "signalName": "clicked"
-        });
-        const toggleSpy = createTemporaryObject(signalSpyComp, testCase, {
-            "target": p,
-            "signalName": "toggled"
-        });
-        p.forceActiveFocus();
-        verify(p.activeFocus, "pill takes keyboard focus");
-        keyClick(Qt.Key_Space);
-        compare(clickSpy.count, 1, "Space emits clicked");
-        compare(toggleSpy.count, 1, "Space emits toggled");
-    }
-
-    // The keys REQUEST a value; they do not set one. The slider does not
-    // assign its own `value`, because a host binds that to the service's echo
-    // and a JS assignment here would sever the binding on the first key
-    // press, after which the handle would stop following the service. So the
-    // assertions are on `moved`'s payload, and on `value` staying put until
-    // something answers.
     function test_slider_arrow_keys_request_a_new_value() {
         const s = createTemporaryObject(sliderComp, testCase, {
             "from": 0,

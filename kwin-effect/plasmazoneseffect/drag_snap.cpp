@@ -725,9 +725,9 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             // via `motionProfile` above (driving the animator's
             // duration), so the shader still terminates with the
             // rule-overridden snap motion.
-            const auto resolved = PlasmaZones::resolveAnimationShaderProfile(m_shaderManager.animationRuleEvaluator(),
-                                                                             m_shaderManager.profileTree(), windowId,
-                                                                             query(), profilePath);
+            const auto resolved = PlasmaZones::resolveAnimationShaderProfile(
+                m_shaderManager.animationRuleEvaluator(), m_shaderManager.profileTree(),
+                m_shaderManager.presetRegistry(), windowId, query(), profilePath);
             auto shaderProfile = resolved.profile;
             if (!resolved.shaderSlotFromRule && shaderProfile.effectiveEffectId().isEmpty()) {
                 // No rule matched and no tree override resolved a shader for
@@ -739,8 +739,10 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                 // persisting it into config. Gated on `!shaderSlotFromRule`: a
                 // per-app rule that set "None" (engaged-empty effectId)
                 // is a deliberate opt-out and must NOT be overridden here.
-                shaderProfile =
-                    PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(), profilePath);
+                // Flattened: REPLACES the flattened profile above.
+                shaderProfile = PhosphorAnimationShaders::withPresetsResolved(
+                    PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(), profilePath),
+                    m_shaderManager.presetRegistry());
             }
             // Runtime applicability gate — same canonical-predicate check
             // as tryBeginShaderForEvent (resolvedShaderAppliesToEvent): the

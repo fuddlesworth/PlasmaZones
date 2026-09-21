@@ -1,0 +1,290 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!--
+  Phosphor mockups v2: the full bar at rest with every chip from A2 §5.
+  The bar is drawn once (#barfull) and used four times: three rows at 2x
+  (0-420, 420-840, 840-1280 px of the bar) and once at true size at the bottom.
+  States loop over 8 s: hover on the media chip, a new notification (rail 4 px
+  white over the bell), and the battery going critical. Hairline separators,
+  no chip backgrounds, no pills.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720"
+     font-family="Manrope, 'Noto Sans', system-ui, sans-serif">
+  <defs>
+    <linearGradient id="rail" x1="0" y1="0" x2="1280" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#22D3EE"/>
+      <stop offset="0.33" stop-color="#3B82F6"/>
+      <stop offset="0.67" stop-color="#A855F7"/>
+      <stop offset="1"    stop-color="#F43F5E"/>
+    </linearGradient>
+    <linearGradient id="railV" x1="0" y1="0" x2="0" y2="720" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#22D3EE"/>
+      <stop offset="0.33" stop-color="#3B82F6"/>
+      <stop offset="0.67" stop-color="#A855F7"/>
+      <stop offset="1"    stop-color="#F43F5E"/>
+    </linearGradient>
+    <linearGradient id="wp" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0"    stop-color="#0B1730"/>
+      <stop offset="0.55" stop-color="#070F22"/>
+      <stop offset="1"    stop-color="#050916"/>
+    </linearGradient>
+    <radialGradient id="wpLight" cx="0.2" cy="0.9" r="0.7">
+      <stop offset="0"   stop-color="#22D3EE" stop-opacity="0.16"/>
+      <stop offset="1"   stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="wpLight2" cx="0.85" cy="0.2" r="0.6">
+      <stop offset="0"   stop-color="#A855F7" stop-opacity="0.14"/>
+      <stop offset="1"   stop-color="#A855F7" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gleam" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"   stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.6"/>
+      <stop offset="1"   stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glassBlur" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <linearGradient id="revealMask" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset="1" stop-color="#fff"/>
+    </linearGradient>
+    <symbol id="glyph" viewBox="0 0 16 16">
+      <rect x="2" y="2" width="12" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <rect x="5" y="5" width="6" height="6" rx="1" fill="currentColor" opacity="0.7"/>
+    </symbol>
+    <symbol id="mote" viewBox="0 0 4 4"><circle cx="2" cy="2" r="1.4" fill="currentColor"/></symbol>
+    <!-- zoom row clips, in bar coordinates -->
+    <clipPath id="zoomA"><rect x="0" y="0" width="420" height="28"/></clipPath>
+    <clipPath id="zoomB"><rect x="420" y="0" width="420" height="28"/></clipPath>
+    <clipPath id="zoomC"><rect x="840" y="0" width="440" height="28"/></clipPath>
+    <style>
+      .ui   { font-family: Manrope, 'Noto Sans', system-ui, sans-serif; }
+      .mono { font-family: 'JetBrains Mono', 'Noto Sans Mono', monospace; font-variant-numeric: tabular-nums; }
+      .t1 { fill: #E6EDFF; }
+      .t2 { fill: #94A3B8; }
+      .note-title { font-size: 12px; font-weight: 600; }
+      .note-body  { font-size: 11.5px; fill: #94A3B8; }
+      .eyebrow { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; fill: #94A3B8; }
+      .cap { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; fill: #94A3B8; }
+      .g { fill: none; stroke: #E6EDFF; stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+
+    <!-- ===== THE BAR, drawn once. 2 px rail + 26 px band, 0 inset, no radius. ===== -->
+    <g id="barfull">
+      <rect x="0" y="2" width="1280" height="26" fill="#0B1730" fill-opacity="0.72"/>
+      <rect x="0" y="0" width="1280" height="2" fill="url(#rail)" opacity="0.75"/>
+      <rect x="0" y="0" width="160" height="2" fill="url(#gleam)">
+        <animate attributeName="x" values="-160;1280" dur="9s" repeatCount="indefinite"/>
+      </rect>
+
+      <!-- HOVER on the media chip (884..1000): the rail segment above it goes to 100 % in 100 ms, releases in 500 ms -->
+      <rect x="884" y="0" width="116" height="2" fill="url(#rail)" opacity="0">
+        <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.55;0.5625;0.72;0.7825;1" dur="8s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </rect>
+      <!-- URGENCY over the notifications chip (1190..1224): rail 2 -> 4 px in white, pulses, releases over 3 s -->
+      <rect x="1190" y="0" width="34" height="4" fill="#FFFFFF" opacity="0">
+        <animate attributeName="opacity" values="0;0;1;0.5;1;0.5;1;0;0" keyTimes="0;0.125;0.15;0.225;0.3;0.375;0.45;0.825;1" dur="8s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0 0 1 1;0.34 1 0.64 1;0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </rect>
+      <!-- MEDIA timeline: playback progress is a 1 px white line on the rail above the chip -->
+      <rect x="884" y="0.5" width="46" height="1" fill="#FFFFFF" opacity="0.6">
+        <animate attributeName="width" values="46;70" dur="8s" repeatCount="indefinite"/>
+      </rect>
+
+      <!-- placement map -->
+      <g transform="translate(12 6)">
+        <rect x="0.5" y="0.5" width="31" height="17" fill="none" stroke="#E6EDFF" stroke-opacity="0.14"/>
+        <rect x="1" y="1" width="19" height="16" fill="#3B82F6" fill-opacity="0.55" stroke="#FFFFFF" stroke-opacity="0.9" stroke-width="1"/>
+        <rect x="21" y="1"  width="10" height="7.5" fill="#CE4BA8" fill-opacity="0.4" stroke="#CE4BA8" stroke-opacity="0.8" stroke-width="1"/>
+        <rect x="21" y="9.5" width="10" height="7.5" fill="#CE4BA8" fill-opacity="0.4" stroke="#CE4BA8" stroke-opacity="0.8" stroke-width="1"/>
+        <g transform="translate(9 19)">
+          <rect x="0" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.9"/>
+          <rect x="4" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+          <rect x="8" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+          <rect x="12" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+        </g>
+      </g>
+      <rect x="56" y="9" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+      <!-- focused window: glyph + title, 1 px underline in the window's position hue (its cell is at 0.33 -> blue) -->
+      <g transform="translate(66 7)" color="#E6EDFF">
+        <use xlink:href="#glyph" width="16" height="16"/>
+        <text x="22" y="12.5" class="ui t1" font-size="13" font-weight="500" letter-spacing="0.2">kate · phosphor-shell.md</text>
+        <rect x="22" y="16" width="146" height="1" fill="#3B82F6" opacity="0.9"/>
+      </g>
+
+      <!-- clock: HH:MM, 14 px tabular; the minute digit ticks with a 2 px underline in the rail hue at its x (0.5) -->
+      <g transform="translate(608 7)">
+        <text x="0" y="12.5" class="mono t1" font-size="14" font-weight="500">14:3</text>
+        <text x="33.7" y="12.5" class="mono t1" font-size="14" font-weight="500">2
+          <animate attributeName="opacity" values="1;1;0;0" keyTimes="0;0.5;0.5375;1" dur="8s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+        </text>
+        <text x="33.7" y="16.5" class="mono t1" font-size="14" font-weight="500" opacity="0">3
+          <animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.5;0.51875;1" dur="8s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1"/>
+          <animate attributeName="y" values="16.5;16.5;12.5;12.5" keyTimes="0;0.5;0.51875;1" dur="8s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1"/>
+        </text>
+        <rect x="33.7" y="16" width="8.4" height="2" fill="#6F6CF7" opacity="0">
+          <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.5;0.51125;0.56;0.605;1" dur="8s" repeatCount="indefinite"
+                   calcMode="spline" keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+        </rect>
+      </g>
+
+      <!-- right group -->
+      <!-- metrics: three 2 x 16 bars (cpu 62, mem 88, gpu 35), rail hue at x ~855 (0.67), 1 px peak-hold marks -->
+      <g fill="#A755F7">
+        <rect x="850" y="12" width="2" height="10" opacity="0.85">
+          <animate attributeName="y" values="12;9;13;12" dur="8s" repeatCount="indefinite"/>
+          <animate attributeName="height" values="10;13;9;10" dur="8s" repeatCount="indefinite"/>
+        </rect>
+        <rect x="855" y="8" width="2" height="14" opacity="0.85"/>
+        <rect x="860" y="16" width="2" height="6" opacity="0.85"/>
+        <rect x="850" y="8" width="2" height="1" opacity="0.5"/>
+        <rect x="855" y="7" width="2" height="1" opacity="0.5"/>
+        <rect x="860" y="13" width="2" height="1" opacity="0.5"/>
+      </g>
+      <rect x="874" y="9" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+      <!-- media: play glyph + title; hover underline in the rail hue at x ~950 (0.74) -->
+      <path d="M886 9.5 L896 15 L886 20.5 Z" class="g"/>
+      <text x="904" y="19.5" class="ui t1" font-size="13" font-weight="500" letter-spacing="0.2">Dayvan Cowboy</text>
+      <rect x="904" y="23" width="92" height="1" fill="#B850D7" opacity="0">
+        <animate attributeName="opacity" values="0;0;0.9;0.9;0;0" keyTimes="0;0.55;0.5625;0.72;0.7825;1" dur="8s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </rect>
+      <rect x="1010" y="9" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+      <!-- tray: glyphs only, 60 % at rest -->
+      <g class="g" opacity="0.6">
+        <circle cx="1028" cy="15" r="5"/>
+        <path d="M1028 12 v3 l2 2"/>
+        <rect x="1047" y="10" width="10" height="10" rx="2"/>
+        <circle cx="1052" cy="15" r="1.5" fill="#E6EDFF" stroke="none"/>
+        <path d="M1074 9 l-4 7 h5 l-3 6 l7 -8 h-5 z"/>
+      </g>
+      <rect x="1092" y="9" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+      <!-- net / bt / audio / battery. State is brightness: on 90 %, off 35 %. -->
+      <g class="g">
+        <!-- wifi, connected -->
+        <g opacity="0.9">
+          <path d="M1103 13 a10 10 0 0 1 14 0"/>
+          <path d="M1106 16 a6 6 0 0 1 8 0"/>
+          <circle cx="1110" cy="19.5" r="1" fill="#E6EDFF" stroke="none"/>
+        </g>
+        <!-- bluetooth, off -->
+        <path d="M1127 11 l6 4 l-6 4 v-10 l6 4 l-6 4" opacity="0.35"/>
+        <!-- audio, on -->
+        <g opacity="0.9">
+          <path d="M1142 12.5 h3 l4 -3 v11 l-4 -3 h-3 z"/>
+          <path d="M1152 12 a4 4 0 0 1 0 6"/>
+        </g>
+        <!-- battery: normal 60 %, then critical: fill drops to 8 %, glyph goes white and breathes -->
+        <g id="bat-normal" opacity="0.9">
+          <animate attributeName="opacity" values="0.9;0.9;0;0;0.9" keyTimes="0;0.4375;0.45;0.99;1" dur="8s" repeatCount="indefinite" calcMode="discrete"/>
+          <rect x="1162" y="11.5" width="12" height="7" rx="1.5"/>
+          <rect x="1174.5" y="13.5" width="1.5" height="3" fill="#E6EDFF" stroke="none"/>
+          <rect x="1163.5" y="13" width="6" height="4" fill="#E6EDFF" stroke="none"/>
+        </g>
+        <g id="bat-critical" stroke="#FFFFFF" opacity="0">
+          <animate attributeName="opacity" values="0;0;1;0.55;1;0.55;1;0.55;1;0.55;1;0;0" keyTimes="0;0.4375;0.45;0.525;0.6;0.675;0.75;0.825;0.9;0.95;0.985;0.99;1" dur="8s" repeatCount="indefinite"
+                   calcMode="spline" keySplines="0 0 1 1;0.34 1 0.64 1;0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1;0.32 0 0.67 0;0 0 1 1"/>
+          <rect x="1162" y="11.5" width="12" height="7" rx="1.5"/>
+          <rect x="1174.5" y="13.5" width="1.5" height="3" fill="#FFFFFF" stroke="none"/>
+          <rect x="1163.5" y="13" width="1" height="4" fill="#FFFFFF" stroke="none"/>
+        </g>
+      </g>
+      <rect x="1186" y="9" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+      <!-- notifications: bell + tabular superscript count; 3 -> 4 enters over 100 ms with the rail pulse -->
+      <path d="M1196 18 h10 l-1.5-2 v-3 a3.5 3.5 0 0 0 -7 0 v3 z" class="g"/>
+      <text x="1209" y="14" class="mono t1" font-size="9">3
+        <animate attributeName="opacity" values="1;1;0;0" keyTimes="0;0.125;0.1375;1" dur="8s" repeatCount="indefinite"/>
+      </text>
+      <text x="1209" y="14" class="mono t1" font-size="9" opacity="0">4
+        <animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.125;0.1375;1" dur="8s" repeatCount="indefinite" calcMode="spline" keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1"/>
+      </text>
+      <!-- control center: one 8 px dot in the rail hue at its x (0.96), 70 % -->
+      <circle cx="1232" cy="15" r="4" fill="#EA4271" opacity="0.7"/>
+      <!-- power: 45 % -->
+      <g opacity="0.45">
+        <circle cx="1256" cy="15.5" r="4.5" class="g"/>
+        <rect x="1255.4" y="9" width="1.2" height="5" fill="#E6EDFF"/>
+      </g>
+    </g>
+  </defs>
+
+  <!-- ===== LAYER 0: wallpaper ===== -->
+  <rect width="1280" height="720" fill="url(#wp)"/>
+  <rect width="1280" height="720" fill="url(#wpLight)"/>
+  <rect width="1280" height="720" fill="url(#wpLight2)"/>
+
+  <!-- ===== LAYER 1: windows. Only the faint tops under the true-size bar. ===== -->
+  <g id="windows" transform="translate(0 560)">
+    <rect x="36.5" y="44.5" width="791" height="94" rx="8" fill="#0B1730" fill-opacity="0.6" stroke="url(#rail)" stroke-opacity="0.5"/>
+    <rect x="836.5" y="44.5" width="407" height="94" rx="8" fill="#0B1730" fill-opacity="0.6" stroke="url(#rail)" stroke-opacity="0.3"/>
+  </g>
+
+  <!-- ===== LAYER 2: the bar, three rows at 2x and one at true size ===== -->
+  <g id="bar">
+    <text x="40" y="44" class="ui eyebrow">The bar at 2× · bar px 0–420</text>
+    <g transform="translate(40 52) scale(2)" clip-path="url(#zoomA)"><use xlink:href="#barfull"/></g>
+    <g class="cap">
+      <text x="64" y="124">map · ticks</text>
+      <text x="176" y="124">focused window · underline in its position hue</text>
+    </g>
+
+    <text x="40" y="152" class="ui eyebrow">bar px 420–840</text>
+    <g transform="translate(-800 160) scale(2)" clip-path="url(#zoomB)"><use xlink:href="#barfull"/></g>
+    <text x="416" y="232" class="cap">clock · tabular, the minute digit ticks</text>
+
+    <text x="40" y="260" class="ui eyebrow">bar px 840–1280</text>
+    <g transform="translate(-1640 268) scale(2)" clip-path="url(#zoomC)"><use xlink:href="#barfull"/></g>
+    <g class="cap">
+      <text x="60" y="340">metrics</text>
+      <text x="128" y="340">media · rail is the timeline</text>
+      <text x="400" y="340">tray</text>
+      <text x="564" y="340">net · bt · audio · battery</text>
+      <text x="752" y="340">notifications</text>
+      <text x="826" y="340">cc</text>
+      <text x="866" y="340">power</text>
+    </g>
+
+    <text x="40" y="548" class="ui eyebrow">True size · 28 px = 2 px rail + 26 px band, 0 inset, no radius</text>
+    <g transform="translate(0 560)"><use xlink:href="#barfull"/></g>
+  </g>
+
+  <!-- ===== LAYER 3: SCENE ===== -->
+  <g id="scene"></g>
+
+  <!-- ===== LAYER 4: annotations ===== -->
+  <g class="note" transform="translate(40 372)">
+    <rect width="290" height="74" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="20" class="ui note-title" fill="#B850D7">Hover</text>
+    <text x="12" y="36" class="ui note-body">The rail segment above the chip goes to 100 % in</text>
+    <text x="12" y="50" class="ui note-body">100 ms and the label gets a 1 px underline in the rail</text>
+    <text x="12" y="64" class="ui note-body">hue at that x. Chips never paint a hover background.</text>
+  </g>
+  <g class="note" transform="translate(350 372)">
+    <rect width="290" height="74" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="20" class="ui note-title" fill="#FFFFFF">Urgency</text>
+    <text x="12" y="36" class="ui note-body">A new notification thickens the rail 2 → 4 px in white</text>
+    <text x="12" y="50" class="ui note-body">over the bell, pulsing at 1.2 s, and releases over 3 s.</text>
+    <text x="12" y="64" class="ui note-body">The count enters in 100 ms. White, never a hue.</text>
+  </g>
+  <g class="note" transform="translate(660 372)">
+    <rect width="290" height="74" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="20" class="ui note-title" fill="#FFFFFF">Battery critical</text>
+    <text x="12" y="36" class="ui note-body">State is brightness: on 90 %, off 35 %. At 15 % the</text>
+    <text x="12" y="50" class="ui note-body">glyph goes white, and under 5 % it breathes between</text>
+    <text x="12" y="64" class="ui note-body">55 % and 100 %. Green and amber stay off the bar.</text>
+  </g>
+  <g class="note" transform="translate(970 372)">
+    <rect width="270" height="74" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="20" class="ui note-title" fill="#A755F7">Values are lines</text>
+    <text x="12" y="36" class="ui note-body">Metrics are 2 px bars in the rail hue at their x,</text>
+    <text x="12" y="50" class="ui note-body">white above 90 %. Media progress is a 1 px white line</text>
+    <text x="12" y="64" class="ui note-body">on the rail. Every figure is mono and tabular.</text>
+  </g>
+  <g class="note" transform="translate(40 462)">
+    <rect width="380" height="46" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="20" class="ui note-title" fill="#3B82F6">No chip backgrounds, no pills</text>
+    <text x="12" y="36" class="ui note-body">Groups are separated by 1 × 12 px hairlines at 25 % white, nothing else.</text>
+  </g>
+  <text x="640" y="708" text-anchor="middle" class="ui t2" font-size="12">Phosphor · bar widgets · every chip at rest, with hover, urgency and battery-critical states</text>
+</svg>

@@ -97,11 +97,10 @@ void EditorController::toggleScreenAllowed(const QString& screenName)
             return;
         }
     } else if (screens.contains(screenName)) {
+        // Removing the last entry leaves the list empty, which already means
+        // "visible everywhere" — no explicit clear() is needed, and the one
+        // that used to sit here could only ever run on an already-empty list.
         screens.removeAll(screenName);
-        // If removing last screen, clear to mean "all screens"
-        if (screens.isEmpty()) {
-            screens.clear(); // explicit: empty = visible everywhere
-        }
     } else {
         screens.append(screenName);
         // If all screens are now in the list, clear it (= visible everywhere)

@@ -9,7 +9,7 @@ namespace PlasmaZones {
 
 /// Shared validate+copy helper for installing a shader pack into a user
 /// directory. Used by both `AnimationsPageController::installShaderPack`
-/// and `SnappingShadersPageController::installShaderPack` — the two
+/// and `OverlaysPageController::installShaderPack` — the two
 /// callsites were copy-paste duplicates including the symlink-rejection
 /// safety logic. Centralising here keeps the security-sensitive bits
 /// in one place.

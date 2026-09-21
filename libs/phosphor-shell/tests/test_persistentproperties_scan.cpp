@@ -21,6 +21,7 @@
 #include "../../phosphor-layer/tests/mocks/mocktransport.h"
 
 #include <QDir>
+#include <QPointer>
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QSignalSpy>
@@ -133,7 +134,12 @@ void TestPersistentPropertiesScan::nestedStateSurvivesAReload()
     ShellEngine engine(deps);
     QVERIFY(engine.load(QUrl::fromLocalFile(path)));
 
-    QObject* before = singletonFor(engine, QStringLiteral("nested-state"));
+    // QPointer, not a raw pointer: the reload frees the old generation
+    // before it builds the new one (teardown flushes deferred deletes so
+    // nothing outlives the engine's singletons), so the new object can
+    // legitimately land at the old address. "Rebuilt" means the old
+    // object died, not that the address moved.
+    QPointer<QObject> before = singletonFor(engine, QStringLiteral("nested-state"));
     QVERIFY(before);
     before->setProperty("counter", 7);
 
@@ -149,7 +155,7 @@ void TestPersistentPropertiesScan::nestedStateSurvivesAReload()
 
     QObject* after = singletonFor(engine, QStringLiteral("nested-state"));
     QVERIFY2(after, "the rebuilt generation registers the nested state again");
-    QVERIFY2(after != before, "the reload really did rebuild the object graph");
+    QVERIFY2(before.isNull(), "the reload really did rebuild the object graph");
     QCOMPARE(after->property("counter").toInt(), 7);
 }
 

@@ -318,12 +318,12 @@ ExpandableRowDelegate {
                         return diffColumn.resolvePack(settingsController.animationsPage, value);
                     if (kind === "decorationPack")
                         return diffColumn.resolvePack(settingsController.decorationPage, value);
-                    // No config key is described as overlayShader today (the
-                    // overlay keys live in per-screen groups outside the diff),
-                    // so this branch is parity with the rule preview's kind
-                    // vocabulary rather than a path current diffs exercise.
+                    // Overlays/OverlayShaderTree is described as overlayShader
+                    // in the value-labels table, so a profile diff touching a
+                    // zone overlay assignment reaches this branch and resolves
+                    // the pack id to its name.
                     if (kind === "overlayShader")
-                        return diffColumn.resolvePack(settingsController.snappingShadersPage, value);
+                        return diffColumn.resolvePack(settingsController.overlaysPage, value);
                 }
                 // A desktop is a number, so it sits outside the string guard.
                 // Like overlayShader, no described config key emits this kind

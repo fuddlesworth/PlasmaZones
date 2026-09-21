@@ -37,15 +37,13 @@ QtObject {
     // a registry refresh that fires while the dialog is open could
     // silently retarget the write at a different effect's param map.
     function _writeShaderParam(effectId, paramId, value) {
-        // Refused writes are dropped WITHOUT restoring the control, and that
-        // asymmetry with `_writeAllShaderParams` below is deliberate. This path
+        // This path does NOT refresh the control afterwards, and that
+        // asymmetry with `_writeAllShaderParams` below is deliberate. This one
         // is drag-rate — a parameter slider emits per pointer move — so
-        // refreshing here would reassign `currentShaderParams` from the tree on
-        // every refused tick and drag the handle back out from under the user.
-        // A stale-looking slider for the length of a discard is the better of
-        // the two, and the drag's last value is what the first accepted write
-        // commits.
-        if (!effectId || card._writesRefused)
+        // re-seeding `currentShaderParams` from the tree here would drag the
+        // handle back out from under the user. The discrete path below stages
+        // a whole map before emitting, so it refreshes instead.
+        if (!effectId)
             return;
 
         // Bail if the user navigated to a different effect while the
@@ -58,14 +56,23 @@ QtObject {
         if (effectId !== card.currentShaderEffectId)
             return;
 
+        // The local display map still gets the whole-map assign, because that is
+        // what the controls are bound to and they have to show the new value now.
         var next = Object.assign({}, card.currentShaderParams || {});
         next[paramId] = value;
         card.currentShaderParams = next;
-        // Params-only: never restate the pack. `effectId` above is the RESOLVED
-        // id, so on a leaf that inherits its pack, writing it would pin that
-        // pack here and sever the cascade. It is still read for the stale-effect
-        // guard above, which is the only thing it is good for on this path.
-        card._noteWriteResult(card._setShaderParamsOnAll(next));
+        // The WRITE carries one key. Handing over `next` was correct only while
+        // `currentShaderParams` holds stored values alone — it comes from a tree
+        // walk-up that never consults the preset registry — and the day it holds
+        // the preset-merged effective values, a whole-map write would pin every
+        // one of the preset's values here as this event's own delta, with no
+        // signal. One key cannot, whatever the display holds.
+        //
+        // Params-only either way: never restate the pack. `effectId` above is the
+        // RESOLVED id, so on a leaf that inherits its pack, writing it would pin
+        // that pack here and sever the cascade. It is still read for the
+        // stale-effect guard above, which is all it is good for on this path.
+        card._setShaderParamOnAll(paramId, value);
     }
 
     /// Whether EVERY write path is already showing @p defaults and owns no
@@ -138,22 +145,12 @@ QtObject {
         if (!effectId || effectId !== card.currentShaderEffectId)
             return;
 
-        // Refused: same reasoning as `_writeShaderParam`, and worse here.
-        // Randomize and Reset stage their whole map onto the editor before
-        // emitting, so dropping the write silently leaves every parameter row
-        // showing a value that was never persisted. Discrete actions have no
-        // next tick to correct them either.
-        if (card._writesRefused) {
-            card.refreshShaderFromTree();
-            return;
-        }
-
         // `currentShaderParams` is deliberately NOT re-staged here. It is an
         // alias onto the editor's own `shaderParams`, and the editor assigns
         // the rolled or default map to that property before emitting, so
         // assigning it again would be writing the value it already holds.
         // Params-only, for the reason _writeShaderParam gives.
-        card._noteWriteResult(card._setShaderParamsOnAll(allParams));
+        card._setShaderParamsOnAll(allParams);
     }
 
     function refreshShaderFromTree() {
@@ -166,6 +163,10 @@ QtObject {
 
         card.currentShaderEffectId = nextEffectId;
         card.currentShaderParams = (resolved && resolved.parameters) ? resolved.parameters : ({});
+        // The preset the event points at, resolved through the same walk-up as
+        // the pack and the parameters, so an event inheriting its preset shows
+        // the one it actually renders with.
+        card.currentShaderPresetId = (resolved && resolved.presetId) ? resolved.presetId : "";
         // Computed HERE, not in refreshFromTree, because it reads the id
         // assigned on the line above. Component.onCompleted runs refreshFromTree
         // FIRST and this second, so computing it there would evaluate it against

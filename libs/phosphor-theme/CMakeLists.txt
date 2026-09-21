@@ -5,7 +5,7 @@
 #
 # Holds the active M3 token palette, watches the on-disk JSON palette for
 # hot-reload, and exposes everything to QML as a `Phosphor.Theme` import
-# (Theme / Tokens / Motion / StateLayer singletons).
+# (Theme / Tokens / Motion / StateLayer / Spectrum singletons).
 #
 # Phase 1.1 deliverable per docs/phosphor-shell-design/04-implementation-plan.md.
 
@@ -47,6 +47,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(phosphortheme_public_HDRS
     include/PhosphorTheme/PhosphorTheme.h
     include/PhosphorTheme/IThemeService.h
+    include/PhosphorTheme/FontFaces.h
     include/PhosphorTheme/MatugenRunner.h
     include/PhosphorTheme/PaletteStore.h
     include/PhosphorTheme/TemplateEngine.h
@@ -54,6 +55,7 @@ set(phosphortheme_public_HDRS
 
 set(phosphortheme_SRCS
     src/defaultpalette.cpp
+    src/fontfaces.cpp
     src/matugenrunner.cpp
     src/palettestore.cpp
     src/templateengine.cpp
@@ -116,8 +118,8 @@ set_target_properties(PhosphorTheme PROPERTIES
 # ═══════════════════════════════════════════════════════════════════════════════
 #
 # C++ side: PaletteStore is registered as a QML singleton so QML files can
-# `import Phosphor.Theme` and reference it. The four QML-file singletons
-# (Theme / Tokens / Motion / StateLayer) live alongside.
+# `import Phosphor.Theme` and reference it. The five QML-file singletons
+# (Theme / Tokens / Motion / StateLayer / Spectrum) live alongside.
 #
 # QML singletons are *not* process-global statics, Qt instantiates one per
 # QQmlEngine. Each shell process gets exactly one engine, so there's one
@@ -130,6 +132,7 @@ set(_phosphor_theme_qml_singletons
     qml/Phosphor/Theme/Tokens.qml
     qml/Phosphor/Theme/Motion.qml
     qml/Phosphor/Theme/StateLayer.qml
+    qml/Phosphor/Theme/Spectrum.qml
 )
 
 # qt_add_qml_module's default resource layout nests each QML_FILES entry
@@ -157,6 +160,7 @@ set(_phosphor_theme_qml_sources
     # The IMPLEMENTATIONS still live in PhosphorTheme.so (linked below);
     # the QML module only needs the type metadata.
     include/PhosphorTheme/PaletteStore.h
+    include/PhosphorTheme/FontFaces.h
     include/PhosphorTheme/MatugenRunner.h
     include/PhosphorTheme/TemplateEngine.h
 )

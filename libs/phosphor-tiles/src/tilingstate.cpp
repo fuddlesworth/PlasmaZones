@@ -508,18 +508,6 @@ void TilingState::setFloating(const QString& windowId, bool floating)
     notifyStateChanged();
 }
 
-// Returns the new floating state after toggle, or false if the window is untracked.
-// Note: false is ambiguous (could mean "not floating" or "untracked"). Callers
-// should check windowOrder membership first if the distinction matters.
-bool TilingState::toggleFloating(const QString& windowId)
-{
-    if (!m_windowOrder.contains(windowId)) {
-        return false; // Untracked window
-    }
-    setFloating(windowId, !isFloating(windowId));
-    return isFloating(windowId);
-}
-
 QStringList TilingState::floatingWindows() const
 {
     QStringList list(m_floatingWindows.begin(), m_floatingWindows.end());

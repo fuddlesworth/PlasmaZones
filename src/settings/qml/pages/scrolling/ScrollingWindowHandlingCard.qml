@@ -49,6 +49,22 @@ SettingsCard {
         SettingsSeparator {}
 
         SettingsRow {
+            title: i18n("Group windows of the same application as tabs")
+            searchAnchor: "scrollingGroupSameAppAsTabs"
+            description: i18n("When a window opens and the strip already holds a window of the same application, the new window joins that window's column as a tab instead of taking a column of its own. The column it joins is turned into tabs if it is not already. Per-window rules still take precedence.")
+
+            SettingsSwitch {
+                checked: appSettings.scrollingGroupSameAppAsTabs
+                accessibleName: i18n("Group windows of the same application as tabs")
+                onToggled: function (newValue) {
+                    appSettings.scrollingGroupSameAppAsTabs = newValue;
+                }
+            }
+        }
+
+        SettingsSeparator {}
+
+        SettingsRow {
             title: i18n("Smart gaps")
             searchAnchor: "scrollingSmartGaps"
             description: i18n("Remove the outer gaps while the strip holds a single column, so that column sits against the screen edge at its own width")

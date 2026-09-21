@@ -1,35 +1,45 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// Phosphor.Bar.BarHost, the connected-corner bar surface.
+// Phosphor.Bar.BarHost, the spectrum-rail bar surface.
 //
-// A single layer-shell PanelWindow painting the signature floating
-// capsule (BarCanvas atom). Widgets are arranged in three slots (left /
-// center / right); each slot mounts an ordered list of widget ids through
-// the shell's IBarWidgetFactory registry (the `BarRegistry` context
-// property), so the catalog is pluggable and the bar owns no widget code.
+// One layer-shell PanelWindow per output painting the bar of
+// docs/phosphor-shell-design/05-visual-identity.md: a 2 px spectrum rail
+// on the screen edge (the screen's x-axis painted cyan → rose) over a
+// 26 px band of navy, 0 inset, no radius, no shadow. Widgets are bare
+// content on the band, arranged in three slots (left / center / right)
+// mounted through the shell's IBarWidgetFactory registry (the
+// `BarRegistry` context property), so the bar owns no widget code.
 //
-// The capsule is inset from the screen edges (a floating island, per
-// docs/phosphor-shell-design/mockups/bar-top.svg); the rest of the panel
-// surface is left unpainted so the desktop shows around it. The panel
-// reserves an exclusive zone of capsule-height + top-inset so windows
-// tile below the bar.
+// A popout hangs from the bar as a PANE tied to the rail by a 2 px tether
+// in the rail's hue at the chip's x (A2 §4.3). Two forms:
 //
-// One bar per output. BarHost itself is a single PanelWindow and takes no
-// position on how many exist: compose it under Phosphor.Shell's
-// PerScreenPanels to get one per screen (what examples/phosphor-shell does),
-// or instantiate it bare for a single bar on the primary output, which is
-// what ShellEngine resolves an unset PanelWindow.screen to.
+//   - ENGINE-PLACED (`paneExternal`): the pane is a real toplevel the
+//     placement engine positions (A2 §4.1). The bar draws only the tether,
+//     routed along the rail to wherever the placement map says the pane
+//     landed (`paneScreenRect`), and the pane's own surface draws the rest.
+//   - FLOATING FALLBACK (A2 §4.2, last row): a surface drawn 0 px under
+//     the band at the chip's x, inside the bar's own PanelWindow, for an
+//     output with no placement engine.
 //
-//   BarHost { }   // defaults match the mockup; override the *Groups
-//                 // lists or barThickness/screenInset to customise.
+// Both share `_paneProgress`, so the open/close choreography (A2 §4.4)
+// is one animation either way: tether first, content after; content
+// releases first, tether retracts last.
 //
-// The centre slot is anchored to the capsule's true centre (the clock sits
-// mid-screen, as the mockup shows) while the side slots anchor to the
-// edges, so none of the three reserves space against the others. On an
-// output narrow enough for the trailing cluster to reach the middle they
-// would overlap. That is the same trade the panel this replaced made
-// deliberately, and it keeps the clock optically centred rather than
-// centred in whatever space the sides leave.
+// The bar has one pane of its own besides the host's: the EXPANDED
+// PLACEMENT MAP (A2 §1.1), opened by a long-press or right-click on the
+// map chip and drawn inline under it (`mapPaneOpen`). It uses the same
+// tether and choreography, anchored to "placementmap". At most one pane
+// per screen (A2 §4.7): the host's pane opening closes the map pane, and
+// the map pane does not open while the host's is up.
+//
+// Urgency (A2 §3.3, §6): while any cell on this screen's map demands
+// attention, the rail over the map chip thickens 2 → 4 px in white,
+// entering over 200 ms and pulsing with the cell.
+//
+//   BarHost { }   // defaults match mockups-v2/bar-widgets.svg
+//
+// The centre slot anchors to the bar's true centre while the side slots
+// anchor to the edges, so the clock stays optically centred.
 
 import QtQuick
 import Phosphor.Theme
@@ -41,286 +51,579 @@ PanelWindow {
 
     edge: PanelWindow.Top
     panelLayer: PanelWindow.LayerTop
-    // Reserve the capsule plus its top inset; the side insets are
-    // horizontal and don't affect a top panel's exclusive zone. The bottom
-    // deliberately gets no inset: the zone ends at the capsule's lower edge
-    // so tiled windows start immediately below the bar rather than leaving a
-    // permanent strip of wallpaper there.
-    thickness: panel.barThickness + panel.screenInset
-    // The transparent strip below the exclusive zone is still part of the
-    // wl_surface, so it would swallow clicks along the top edge of whatever
-    // tiles beneath. ShellEngine masks the surface's input region down to
-    // the painted band (PanelWindow.visibleBand), which excludes it. The
-    // two properties that set that up, `shadowSize` and
-    // `interactiveThickness`, are assigned further down this file.
+    // The exclusive zone is the whole bar: rail plus band. The engines'
+    // own outer gap separates windows from the band.
+    thickness: Tokens.bar_thickness
     alignment: PanelWindow.Fill
-    // The bar never wants keyboard focus (Plasma-panel behaviour); attached
-    // popouts take their own grab.
-    //
-    // CONSEQUENCE for socket-hosted content: a popout in the pocket has no
-    // surface of its own, so it inherits this and the compositor never
-    // routes a key to it. The control center's Escape, Tab and arrow
-    // handling is therefore inert on a real screen, though the code is
-    // correct and its tests pass. Pointer interaction is unaffected.
-    // Changing this is a policy decision about every bar, not a local fix;
-    // see the control-center section of
-    // docs/phosphor-shell-design/04-implementation-plan.md for the options
-    // and what each one costs.
+    // The bar never wants keyboard focus (Plasma-panel behaviour); a pane
+    // painted inside it inherits this, so keyboard handling in pane
+    // content is inert on a real screen until the pane is its own
+    // surface (phase 2). Pointer interaction is unaffected.
     keyboardFocus: PanelWindow.None
 
-    // Capsule strip height and the inset from the screen edges.
-    property int barThickness: 44
-    property int screenInset: Tokens.spacing_xl
+    // ─── Pane (the bar-anchored popout) ─────────────────────────────────
+    //
+    // Content, mounted when `paneOpen` first goes true and kept.
+    property Component paneContent: null
+    property bool paneOpen: false
+    // True when the open pane is an engine-placed toplevel: the inline
+    // pane stays down and the tether routes to `paneScreenRect`.
+    property bool paneExternal: false
+    // Widget id whose chip the pane hangs under and the tether drops from.
+    property string paneAnchor: "controlcenter"
+    property int paneWidth: 380
+    property int paneDepth: 460
 
-    // ─── Bar-anchored popout (the connected-corner socket) ──────────────
-    //
-    // A popout that grows DOWNWARD out of the capsule as one continuous
-    // painted surface, per docs/phosphor-shell-design/mockups/control-center.svg.
-    // The host supplies the content; the bar owns the pocket geometry, the
-    // growth animation, and the surface plumbing that makes the pocket
-    // clickable.
-    //
-    // Content, mounted into the pocket when `socketOpen` first goes true.
-    property Component socketContent: null
-    // Whether the pocket is open. Animating `_socketDepth` off this is what
-    // grows the capsule.
-    property bool socketOpen: false
-    // Pocket width, and its natural (fully-open) depth. The host sizes
-    // these to whatever it is mounting.
-    property int socketWidth: 380
-    property int socketDepth: 420
-    // What the pocket can actually take on THIS output, which is the
-    // requested depth or whatever is left below the bar, whichever is less.
-    // A short display (a 1366x768 panel, or any output at a fractional scale
-    // that shrinks the logical size) would otherwise get a surface deeper
-    // than the screen, and the compositor simply clips the bottom off the
-    // pocket. Everything that positions or reserves for the pocket derives
-    // from this rather than from the raw request.
-    readonly property int _usableSocketDepth: {
-        const available = (panel.screen ? panel.screen.height : 0) - panel.screenInset - panel.barThickness - Tokens.spacing_xl;
-        return available > 0 ? Math.min(panel.socketDepth, available) : panel.socketDepth;
+    // ─── The map pane (the bar's own) ───────────────────────────────────
+    // Open when the map chip was long-pressed or right-clicked. Toggled
+    // by the chip; closed by the pane's own close row or by the host's
+    // pane opening.
+    property bool mapPaneOpen: false
+    // Opened on its menu section (a right-click).
+    property bool mapPaneMenuFocused: false
+    property int mapPaneWidth: 360
+
+    // What the pane machinery below actually shows: the host's pane, or
+    // the map pane when that is the one open.
+    readonly property bool _paneOpenEff: panel.paneOpen || panel.mapPaneOpen
+    readonly property bool _paneExternalEff: panel.mapPaneOpen ? false : panel.paneExternal
+    readonly property string _paneAnchorEff: panel.mapPaneOpen ? "placementmap" : panel.paneAnchor
+    readonly property int _paneWidthEff: panel.mapPaneOpen ? panel.mapPaneWidth : panel.paneWidth
+
+    // The map chip, once its slot has mounted it, for the expand request
+    // and the urgency thickening.
+    readonly property Item _mapWidget: {
+        void leftSlot.mountedCount;
+        void centerSlot.mountedCount;
+        void rightSlot.mountedCount;
+        const c = leftSlot.cellFor("placementmap") || centerSlot.cellFor("placementmap") || rightSlot.cellFor("placementmap");
+        return c && c.widget ? c.widget : null;
     }
-    // How much surface to reserve below the capsule for the open pocket.
-    // Reserved ONCE, at materialization: ShellEngine snapshots
-    // `thickness + shadowSize` when it creates the layer surface and never
-    // resizes it, so a pocket that needs room later must have it reserved
-    // now. Costs nothing while closed: the strip is transparent and, by
-    // default, outside the input region.
-    //
-    // This is the lever for a bar that will never grow a pocket. Setting it
-    // to 0 gives the surface no room below the capsule beyond its shadow,
-    // which is right for a bar with no socket content and wrong for one that
-    // might open later, since the reservation cannot grow afterwards.
-    property int socketReserve: panel._usableSocketDepth
 
-    // Emitted when the pocket has finished closing.
-    //
-    // The pocket's content is built once and KEPT, so this is not a
-    // teardown cue and no host in this repo consumes it. It exists for a
-    // host that owns something the closed pocket should not hold: a
-    // keyboard grab, a running poll, a service subscription. Its one
-    // guarantee is timing, that nothing is on screen when it fires.
-    signal socketClosed
+    Connections {
+        target: panel._mapWidget
 
-    // Animated pocket depth. The socket descriptor and the content clip
-    // both derive from this, so one animation drives the whole growth.
-    property real _socketDepth: panel.socketOpen ? panel._usableSocketDepth : 0
+        function onExpandRequested(menu: bool): void {
+            // One pane per screen: the host's pane wins while it is up.
+            if (panel.paneOpen)
+                return;
+            if (panel.mapPaneOpen && !menu) {
+                panel.mapPaneOpen = false;
+                return;
+            }
+            panel.mapPaneMenuFocused = menu;
+            panel.mapPaneOpen = true;
+        }
+    }
 
-    Behavior on _socketDepth {
+    Binding {
+        target: panel._mapWidget
+        property: "expanded"
+        value: panel.mapPaneOpen
+        when: panel._mapWidget !== null && panel._mapWidget.expanded !== undefined
+    }
+
+    // The band, for a host that requests compositor effects behind it
+    // (phosphor-glass is real backdrop blur under the navy tint, and only
+    // the compositor can blur what is behind a surface).
+    readonly property Item bandItem: band
+    // The surface pack on the band (A1 §2.4): the host's decoration
+    // Component, instantiated over the band with `shell.phosphor.bar`.
+    property Component decoration: null
+    readonly property rect bandRect: Qt.rect(0, Tokens.rail_thickness, panel.width, Tokens.bar_thickness - Tokens.rail_thickness)
+
+    // Where the engine put the external pane, in this screen's pixels, or
+    // an empty rect while unknown. A Wayland client is never told where
+    // its toplevel went, so the bar reads it off the placement map: the
+    // engines focus a window they place, and the cell that BECOMES focused
+    // after the pane opens is the pane's (a tile or column of its own, or
+    // the zone it snapped into). Latched once per open; the rect then
+    // follows the cell as the map changes (a scrolled strip, a reflow).
+    // A pane that landed in the cell that was already focused never
+    // changes focus, so it is not located and the tether drops straight.
+    readonly property rect paneScreenRect: {
+        void panel._mapEpoch;
+        if (!panel._paneExternalEff || !panel._paneOpenEff || panel._paneCellId === "" || !panel.placementMap)
+            return Qt.rect(0, 0, 0, 0);
+        return panel.placementMap.cellRect(panel._paneCellId);
+    }
+    property string _paneCellId: ""
+    property string _focusAtOpen: ""
+    property int _mapEpoch: 0
+
+    // Re-capture the focus latch for whatever pane is showing now. This has to
+    // run on every edge that changes WHICH pane is up, not only on
+    // `_paneOpenEff`: on a map-pane -> host-pane swap the surface stays up so
+    // `_paneOpenEff` never moves, and the external pane would otherwise start
+    // life holding the focus captured when the MAP pane opened and latch the
+    // wrong cell on its first `changed()`.
+    function _recaptureFocusLatch(): void {
+        panel._paneCellId = "";
+        panel._focusAtOpen = panel._paneOpenEff && panel.placementMap ? panel.placementMap.focusedCellId() : "";
+    }
+
+    on_PaneOpenEffChanged: panel._recaptureFocusLatch()
+    // A second pane replaces the first (A2 §4.7): the host's pane opening
+    // closes the map pane.
+    onPaneOpenChanged: {
+        if (panel.paneOpen)
+            panel.mapPaneOpen = false;
+        panel._recaptureFocusLatch();
+    }
+    onPaneExternalChanged: panel._recaptureFocusLatch()
+
+    Connections {
+        target: panel.placementMap
+
+        function onChanged(): void {
+            panel._mapEpoch++;
+            if (!panel._paneOpenEff || !panel._paneExternalEff || panel._paneCellId !== "")
+                return;
+            const focused = panel.placementMap.focusedCellId();
+            if (focused !== "" && focused !== panel._focusAtOpen)
+                panel._paneCellId = focused;
+        }
+    }
+    // What the pane can take on THIS output: the requested depth or what is
+    // left below the bar, whichever is less, so a short display never gets
+    // a surface the compositor clips.
+    readonly property int _usablePaneDepth: {
+        const available = (panel.screen ? panel.screen.height : 0) - Tokens.bar_thickness - Tokens.spacing_xl;
+        return available > 0 ? Math.min(panel.paneDepth, available) : panel.paneDepth;
+    }
+    // Surface reserved below the band for the pane. Reserved ONCE at
+    // materialization: ShellEngine snapshots `thickness + shadowSize` when
+    // it creates the layer surface and never resizes it. Costs nothing
+    // while closed: the strip is transparent and outside the input region.
+    property int paneReserve: panel._usablePaneDepth
+
+    // Emitted when the pane has finished closing; nothing is on screen.
+    signal paneClosed
+
+    // Open/close progress, 0..1. Everything in the pane derives from it so
+    // one animation carries the whole choreography (A2 §4.4): tether drops
+    // first, content enters after, and on close the content leaves first
+    // and the tether retracts.
+    property real _paneProgress: panel._paneOpenEff ? 1 : 0
+
+    Behavior on _paneProgress {
         NumberAnimation {
-            id: socketAnim
-
-            duration: Motion.duration_long_2
-            easing: Motion.emphasized
+            duration: panel._paneOpenEff ? Motion.duration_reveal + Motion.duration_enter_content : Motion.duration_dismiss + 250
+            easing: panel._paneOpenEff ? Motion.reveal : Motion.release
             onFinished: {
-                if (!panel.socketOpen)
-                    panel.socketClosed();
+                if (!panel._paneOpenEff)
+                    panel.paneClosed();
             }
         }
     }
 
-    // Extra surface below the exclusive zone: the capsule's drop shadow
-    // plus room for the open pocket.
-    shadowSize: Tokens.spacing_l + panel.socketReserve
+    shadowSize: panel.paneReserve
 
-    // Widen the INPUT REGION to cover the open pocket, and only then.
-    //
-    // The surface is permanently tall enough for the pocket, but
-    // ShellEngine masks input down to the painted band, so without this the
-    // pocket would paint and swallow nothing — every control in it dead.
-    // This is the one panel geometry ShellEngine samples live; see
-    // PanelWindow.interactiveThickness. Deliberately NOT `thickness`, which
-    // sets the exclusive zone: widening that would shove every tiled window
-    // down the screen each time a popout opened.
-    //
-    // 0 while fully closed hands the band back to `thickness`, so the
-    // shadow strip goes click-through again rather than staying live at the
-    // capsule's own depth.
-    //
-    // Quantised to open-or-closed rather than tracking the animated depth.
-    // Following the ramp changed the ceiling on nearly every frame, and
-    // PanelWindow dedups only equal ints, so one open animation issued a
-    // Wayland input-region update and a requestUpdate per frame. Input has
-    // exactly two interesting states here: the pocket is growing or open, in
-    // which case the whole pocket should take clicks, or it is shut. Opening
-    // the band early costs nothing, since the strip it covers is the bar's
-    // own shadow and the pocket painting into it.
-    interactiveThickness: panel._socketDepth > 0.5 ? panel.screenInset + panel.barThickness + panel._usableSocketDepth : 0
+    // Input region covers the pane only while it is open or in flight.
+    // Quantised, so a NumberAnimation does not issue a Wayland input-region
+    // update per frame. `thickness` is deliberately not widened: that is
+    // the exclusive zone, and growing it would shove tiled windows.
+    // An external pane takes its own input on its own surface; the strip
+    // below the band then only carries the tether, which is not clickable.
+    interactiveThickness: panel._paneProgress > 0.01 && !panel._paneExternalEff ? Tokens.bar_thickness + panel._usablePaneDepth : 0
 
-    // Bar layout: each slot is a list of groups, and each group is an
-    // array of widget ids sharing one island chip. Related widgets are
-    // combined (the status icons, the trailing buttons); others stand
-    // alone. Defaults match the bar-top mockup; a layout editor / config
-    // can override these later.
-    property var leftGroups: [["workspaces"], ["focusedapp"]]
+    // Bar layout: each slot is a list of groups; each group is an array of
+    // widget ids separated from its neighbours by a hairline.
+    property var leftGroups: [["placementmap"], ["focusedapp"]]
     property var centerGroups: [["clock"]]
     property var rightGroups: [["systemmetrics"], ["media"], ["tray"], ["audio", "network", "bluetooth", "battery"], ["notification", "controlcenter", "power"]]
 
-    // The floating capsule. Inset from the panel edges so the desktop
-    // shows around it; the unpainted remainder of the panel surface stays
-    // transparent.
-    BarCanvas {
-        id: canvas
+    // This screen's placement map, shared by the rail (which binds its
+    // slice to the strip on a scrolling screen) and the map widget.
+    readonly property var placementMap: panel.screen ? PlacementMap.forScreen(panel.screen.name) : null
+    readonly property bool _scrolling: panel.placementMap ? panel.placementMap.mode === 2 : false
+    readonly property var _lens: panel.placementMap && panel._scrolling ? panel.placementMap.lens : null
 
-        anchors.top: parent.top
+    // ─── The band ───────────────────────────────────────────────────────
+    Rectangle {
+        id: band
+
+        // The pack's capture item: a decoration wraps the band, and the
+        // widgets stay above it as siblings.
+        property bool shaderAnchor: true
+
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.topMargin: panel.screenInset
-        anchors.leftMargin: panel.screenInset
-        anchors.rightMargin: panel.screenInset
-
-        barHeight: panel.barThickness
-        // Fully-rounded capsule (radius = half height), per the mockup.
-        cornerRadius: panel.barThickness / 2
-        // Capsule uses the navy surface so the lighter surface_variant widget
-        // chips read against it (the mockup's colour relationship).
+        anchors.top: parent.top
+        anchors.topMargin: Tokens.rail_thickness
+        height: Tokens.bar_thickness - Tokens.rail_thickness
+        // phosphor-glass as the pack defines it for the bar (A2 §3.2):
+        // the navy tint at its 0.55 depth over a real backdrop blur, glow
+        // and sweep off. The blur is the compositor's, requested behind
+        // `bandRect` by the host (ShellEffects), since a client cannot
+        // sample what lies behind its own surface; this rectangle is the
+        // tint. Without a blur backend it reads as a plain navy tint.
         color: Theme.surface
+        opacity: 0.55
+    }
 
-        // Lift the capsule off the wallpaper as a floating island. The
-        // shadow is shaped by the capsule's own alpha (the layered item),
-        // so it follows the rounded corners; PanelWindow.shadowSize above
-        // reserves the surface room it needs below.
-        layer.enabled: true
-        layer.effect: ElevationShadow {
-            level: 2
+    // The band's pack, between the band and everything drawn on it.
+    DecorationSlot {
+        anchors.fill: parent
+        component: panel.decoration
+        contentItem: band
+        surfacePath: "shell.phosphor.bar"
+    }
+
+    // ─── The rail ───────────────────────────────────────────────────────
+    SpectrumRail {
+        id: rail
+
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        gleam: true
+        // Bound axis on a scrolling screen: the rail shows the same slice
+        // of the strip's gradient as the lens (A2 §3.3). The lens is the
+        // viewport's fraction of the strip from Scrolling.stripModelJson,
+        // so it narrows as columns pile up off screen; against an older
+        // daemon the visible-cut fallback gives a full-width lens.
+        sliceStart: panel._lens && panel._lens.x !== undefined ? panel._lens.x : 0
+        sliceEnd: panel._lens && panel._lens.w !== undefined ? panel._lens.x + panel._lens.w : 1
+    }
+
+    // Overflow ends: on a scrolling screen with columns beyond an edge the
+    // rail brightens and thickens over the last 48 px on that side.
+    Repeater {
+        model: 2
+        delegate: Rectangle {
+            required property int index
+            readonly property bool _left: index === 0
+            readonly property int _count: panel.placementMap ? (_left ? panel.placementMap.overflowLeft : panel.placementMap.overflowRight) : 0
+            visible: panel._scrolling && _count > 0
+            x: _left ? 0 : panel.width - width
+            y: 0
+            width: 48
+            height: Tokens.rail_thickness + 1
+            color: Spectrum.at(_left ? Math.max(0, rail.sliceStart - 0.05) : Math.min(1, rail.sliceEnd + 0.05))
         }
-        // PINNED to the fully-open size, not to the item's live height.
-        // The capsule's height animates with the pocket, and a layer sized
-        // from the item reallocates its offscreen texture on every frame of
-        // that animation, for the full width of the output. Fixing the
-        // texture at the largest size the capsule ever reaches allocates
-        // once, and the extra area while closed costs memory rather than
-        // per-frame work.
-        layer.textureSize: Qt.size(Math.max(1, width), Math.max(1, panel.barThickness + panel._usableSocketDepth))
+    }
 
-        // The capsule has to be tall enough to paint the pocket it grows;
-        // BarCanvas draws the strip in its top `barHeight` band and the
-        // socket below that.
-        height: panel.barThickness + Math.max(0, panel._socketDepth)
+    // Hover highlight: the rail segment above a hovered chip at full
+    // opacity, the same gradient sampled at the same x.
+    Item {
+        id: railHighlight
 
-        // Pocket geometry. Centred on the capsule, matching the mockup.
-        //
-        // Below ~0.5 the socket reads as closed and BarCanvas degrades to a
-        // flat edge, so dropping the descriptor entirely there means the
-        // pocket grows out of nothing and leaves nothing behind. Same
-        // threshold the bar-canvas demo uses.
-        // Clamped, and the width with it: on an output narrower than the
-        // pocket plus its insets this would go negative and hang the socket
-        // and its content off the left edge of the capsule.
-        readonly property real socketW: Math.min(panel.socketWidth, width)
-        readonly property real socketX: Math.max(0, (width - socketW) / 2)
-        sockets: panel._socketDepth > 0.5 ? [
-            {
-                "x": canvas.socketX,
-                "width": canvas.socketW,
-                "depth": panel._socketDepth
+        readonly property Item _cell: leftSlot.hoveredCell || centerSlot.hoveredCell || rightSlot.hoveredCell || _anchorCell
+        readonly property Item _anchorCell: panel._paneProgress > 0.01 ? panel._anchorCell : null
+        readonly property real _x: {
+            panel._trackCell(_cell);
+            return _cell ? _cell.mapToItem(panel.contentItem, 0, 0).x : 0;
+        }
+        readonly property real _w: _cell ? _cell.width : 0
+
+        visible: _cell !== null
+        x: _x
+        width: _w
+        height: Tokens.rail_thickness
+        clip: true
+
+        SpectrumRail {
+            x: -railHighlight._x
+            width: panel.width
+            height: Tokens.rail_thickness
+            opacity: 1
+            sliceStart: rail.sliceStart
+            sliceEnd: rail.sliceEnd
+        }
+    }
+
+    // Urgency: while any cell on the map demands attention, the rail over
+    // the map chip thickens 2 → 4 px in white (A2 §3.3), entering over
+    // 200 ms into the band (never into the screen) and pulsing 0.4 → 1.0
+    // at 1.2 s with the cell. Steady under reduced motion. Releases when
+    // clear.
+    Rectangle {
+        id: railUrgency
+
+        readonly property Item _cell: {
+            void leftSlot.mountedCount;
+            void centerSlot.mountedCount;
+            void rightSlot.mountedCount;
+            return leftSlot.cellFor("placementmap") || centerSlot.cellFor("placementmap") || rightSlot.cellFor("placementmap");
+        }
+        readonly property bool active: panel._mapWidget !== null && panel._mapWidget.urgent === true && _cell !== null
+        property real pulse: 1
+
+        visible: height > 0 && _cell !== null
+        x: {
+            panel._trackCell(_cell);
+            return _cell ? _cell.mapToItem(panel.contentItem, 0, 0).x : 0;
+        }
+        y: 0
+        width: _cell ? _cell.width : 0
+        height: active ? Tokens.rail_thickness * 2 : 0
+        color: Spectrum.focus
+        opacity: active ? pulse : 0
+
+        Behavior on height {
+            NumberAnimation {
+                duration: railUrgency.active ? Motion.duration_short_4 : Motion.duration_release
+                easing: railUrgency.active ? Motion.reveal : Motion.release
             }
-        ] : []
+        }
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Motion.duration_release
+                easing: Motion.release
+            }
+        }
+        SequentialAnimation on pulse {
+            running: railUrgency.active && !Motion.reducedMotion
+            loops: Animation.Infinite
+            NumberAnimation {
+                from: 0.4
+                to: 1.0
+                duration: 600
+                easing: Motion.decelerated
+            }
+            NumberAnimation {
+                from: 1.0
+                to: 0.4
+                duration: 600
+                easing: Motion.accelerated
+            }
+            onRunningChanged: {
+                if (!running)
+                    railUrgency.pulse = 1;
+            }
+        }
+    }
 
-        // Pocket content, drawn over the painted socket so the two read as
-        // one surface. Clipped to the pocket so the content is revealed by
-        // the growth rather than sliding around inside it.
+    // ─── Slots ──────────────────────────────────────────────────────────
+    Slot {
+        id: leftSlot
+
+        anchors.left: parent.left
+        anchors.leftMargin: Tokens.spacing_m
+        anchors.verticalCenter: band.verticalCenter
+        groups: panel.leftGroups
+        registry: BarRegistry
+        screenWidth: panel.width
+        screenName: panel.screen ? panel.screen.name : ""
+    }
+
+    Slot {
+        id: centerSlot
+
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.verticalCenter: band.verticalCenter
+        groups: panel.centerGroups
+        registry: BarRegistry
+        screenWidth: panel.width
+        screenName: panel.screen ? panel.screen.name : ""
+    }
+
+    Slot {
+        id: rightSlot
+
+        anchors.right: parent.right
+        anchors.rightMargin: Tokens.spacing_m
+        anchors.verticalCenter: band.verticalCenter
+        groups: panel.rightGroups
+        registry: BarRegistry
+        screenWidth: panel.width
+        screenName: panel.screen ? panel.screen.name : ""
+    }
+
+    // ─── Pane geometry ──────────────────────────────────────────────────
+    // The anchor chip, looked up across the slots. Re-evaluated as cells
+    // mount (each slot bumps `mountedCount`).
+    readonly property Item _anchorCell: {
+        void leftSlot.mountedCount;
+        void centerSlot.mountedCount;
+        void rightSlot.mountedCount;
+        return leftSlot.cellFor(panel._paneAnchorEff) || centerSlot.cellFor(panel._paneAnchorEff) || rightSlot.cellFor(panel._paneAnchorEff);
+    }
+    // mapToItem registers no binding dependency, so anything that follows a
+    // chip reads the chip's own geometry chain first: its x and width, its
+    // row's, and the slots' (a clock that grows re-lays out every chip in
+    // its slot, and the centre slot moves with its width).
+    function _trackCell(c: Item): void {
+        void panel.width;
+        void leftSlot.x;
+        void leftSlot.width;
+        void centerSlot.x;
+        void centerSlot.width;
+        void rightSlot.x;
+        void rightSlot.width;
+        if (!c)
+            return;
+        void c.x;
+        void c.width;
+        if (c.parent) {
+            void c.parent.x;
+            void c.parent.width;
+        }
+    }
+    readonly property real _anchorCenterX: {
+        const c = panel._anchorCell;
+        panel._trackCell(c);
+        if (!c)
+            return panel.width / 2;
+        return c.mapToItem(panel.contentItem, 0, 0).x + c.width / 2;
+    }
+    // The anchor chip's rect in the bar's own coordinates, which are the
+    // screen's (the bar sits at the screen's top-left). Empty until the
+    // chip has mounted. A host reports it to the pane transport, which
+    // asks the engine for the zone nearest the chip (A2 §4.2).
+    readonly property rect paneAnchorRect: {
+        const c = panel._anchorCell;
+        panel._trackCell(c);
+        if (!c || c.width <= 0)
+            return Qt.rect(0, 0, 0, 0);
+        const p = c.mapToItem(panel.contentItem, 0, 0);
+        return Qt.rect(p.x, p.y, c.width, c.height);
+    }
+    readonly property real _paneW: Math.min(panel._paneWidthEff, panel.width)
+    // The map pane is as deep as its content; the host's pane takes the
+    // reserved depth.
+    readonly property int _paneDepthEff: panel.mapPaneOpen && mapContent.item && mapContent.item.implicitHeight > 0 ? Math.min(panel._usablePaneDepth, Math.round(mapContent.item.implicitHeight) + Tokens.rail_thickness) : panel._usablePaneDepth
+    // Right-aligned under the chip, clamped to the screen: a trailing chip
+    // gets a pane that ends where the chip ends.
+    readonly property real _paneX: Math.max(0, Math.min(panel.width - panel._paneW, panel._anchorCenterX + Tokens.spacing_l - panel._paneW))
+    readonly property real _paneT: Spectrum.tForX(panel._paneX + panel._paneW / 2, panel.width)
+
+    // The tether: rail hue at the chip's x, dropping from the rail to the
+    // pane's top edge. First to arrive, last to leave. For an external
+    // pane it runs along the rail to the pane's x when the pane is not
+    // under the chip, and drops to the pane's top edge (which lies in the
+    // surface strip reserved below the band); for the inline pane, and
+    // for an external pane not yet located, it drops to the band's edge.
+    PaneTether {
+        id: tether
+
+        anchors.fill: parent
+        anchorX: panel._anchorCenterX
+        paneRect: panel.paneScreenRect
+        screenWidth: panel.width
+        progress: panel._paneProgress
+        sliceStart: rail.sliceStart
+        sliceEnd: rail.sliceEnd
+    }
+
+    // The pane.
+    Item {
+        id: pane
+
+        x: panel._paneX
+        y: Tokens.bar_thickness
+        width: panel._paneW
+        height: Math.max(0, panel._paneDepthEff * Math.max(0, Math.min(1, (panel._paneProgress - 0.2) / 0.8)))
+        clip: true
+        // Never for an external pane: the toplevel is the pane then.
+        visible: height > 0 && !panel._paneExternalEff
+        // Gate input the instant a close starts: an opacity-0 Item is still
+        // hit-testable, and the collapse outlasts the fade.
+        enabled: panel._paneOpenEff && !panel._paneExternalEff
+
+        Rectangle {
+            anchors.fill: parent
+            radius: Tokens.radius_tile
+            color: Theme.surface_container
+            opacity: 0.96
+        }
+        SpectrumStroke {
+            anchors.fill: parent
+            radius: Tokens.radius_tile
+            t: panel._paneT
+            active: panel._paneOpenEff
+        }
+        // The pane's top edge carries the rail gradient over its own
+        // x-range, so it matches the bar above it in hue.
         Item {
-            id: pocket
-
-            x: canvas.socketX
-            y: panel.barThickness
-            width: panel.socketWidth
-            height: Math.max(0, panel._socketDepth)
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            height: Tokens.rail_thickness
             clip: true
-            opacity: panel.socketOpen ? 1 : 0
-            // Gate input off the instant a close starts: an opacity-0 Item
-            // is still hit-testable, and the depth collapse outlasts the
-            // opacity fade, so without this the invisible controls stay
-            // clickable through the whole close. Same trap the bar-canvas
-            // demo documents.
-            enabled: panel.socketOpen
-
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: Motion.duration_short_3
-                    easing: Motion.standard
-                }
+            SpectrumRail {
+                x: -pane.x
+                width: panel.width
+                height: Tokens.rail_thickness
+                opacity: 1
             }
+        }
 
-            // Latched by a plain flag rather than by the Loader reading its
-            // own `item` inside its own `active` binding, which is a cycle
-            // through the very property the binding drives.
-            property bool everOpened: false
+        // Latched by a plain flag rather than the Loader reading its own
+        // `item` inside its own `active` binding (a cycle).
+        property bool everOpened: false
+
+        Connections {
+            target: panel
+
+            function onPaneOpenChanged() {
+                if (panel.paneOpen && !panel.paneExternal)
+                    pane.everOpened = true;
+            }
+        }
+
+        // Content enters after the tether and the surface: opacity plus
+        // a 4 px slide, no scale.
+        readonly property real _p: Math.max(0, Math.min(1, (panel._paneProgress - 0.5) / 0.5))
+
+        Loader {
+            id: content
+
+            anchors.fill: parent
+            anchors.topMargin: Tokens.rail_thickness
+            opacity: pane._p
+            anchors.bottomMargin: -4 * (1 - pane._p)
+            // Built on first open and kept: the tiles hold live service
+            // connections that would be re-enumerated on every open. Hidden,
+            // not unloaded, while the map pane has the surface.
+            active: (panel.paneOpen && !panel.paneExternal) || pane.everOpened
+            visible: !mapContent.showing
+            sourceComponent: panel.paneContent
+        }
+
+        // The map pane's content, in its own loader so opening it never
+        // tears down the host's kept content. Kept through its close so
+        // the content releases before the surface collapses (A2 §4.4).
+        Loader {
+            id: mapContent
+
+            property bool showing: false
 
             Connections {
                 target: panel
 
-                function onSocketOpenChanged() {
-                    if (panel.socketOpen)
-                        pocket.everOpened = true;
+                function onMapPaneOpenChanged(): void {
+                    if (panel.mapPaneOpen) {
+                        mapContent.showing = true;
+                    } else if (panel.paneOpen) {
+                        // A host pane is replacing the map pane (A2 §4.7). The
+                        // surface stays up, so `_paneProgress` never moves and
+                        // the release below would never fire: without this the
+                        // map's content stays latched over the host's, and
+                        // opening the control center shows the map instead.
+                        mapContent.showing = false;
+                    }
+                }
+                function on_PaneProgressChanged(): void {
+                    // The ordinary close: hold the content until the surface
+                    // has collapsed so it releases behind the animation.
+                    if (!panel.mapPaneOpen && panel._paneProgress <= 0.001)
+                        mapContent.showing = false;
                 }
             }
 
-            Loader {
-                anchors.fill: parent
-                // Built on first open and kept thereafter: the tiles behind
-                // it hold live service connections, and rebuilding them on
-                // every open would re-enumerate NetworkManager, BlueZ and
-                // PipeWire each time the user glanced at the panel.
-                active: panel.socketOpen || pocket.everOpened
-                sourceComponent: panel.socketContent
+            anchors.fill: parent
+            anchors.topMargin: Tokens.rail_thickness
+            opacity: pane._p
+            anchors.bottomMargin: -4 * (1 - pane._p)
+            active: showing
+            visible: showing
+            sourceComponent: MapPane {
+                map: panel.placementMap
+                menuFocused: panel.mapPaneMenuFocused
+                onCloseRequested: panel.mapPaneOpen = false
             }
-        }
-
-        // Default children land in the bar strip (the top barHeight band of
-        // BarCanvas), so `parent` below is that strip and verticalCenter
-        // centres within the capsule.
-        Slot {
-            id: leftSlot
-
-            anchors.left: parent.left
-            anchors.leftMargin: Tokens.spacing_l
-            anchors.verticalCenter: parent.verticalCenter
-
-            groups: panel.leftGroups
-            registry: BarRegistry
-        }
-
-        Slot {
-            id: centerSlot
-
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.verticalCenter: parent.verticalCenter
-
-            groups: panel.centerGroups
-            registry: BarRegistry
-        }
-
-        Slot {
-            id: rightSlot
-
-            anchors.right: parent.right
-            anchors.rightMargin: Tokens.spacing_l
-            anchors.verticalCenter: parent.verticalCenter
-
-            groups: panel.rightGroups
-            registry: BarRegistry
         }
     }
 }

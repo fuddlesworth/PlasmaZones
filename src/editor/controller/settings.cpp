@@ -6,7 +6,6 @@
 #include "../services/SnappingService.h"
 #include "core/types/constants.h"
 #include "core/platform/logging.h"
-#include "../helpers/SettingsDbusQueries.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ScrollAxisEnum.h>

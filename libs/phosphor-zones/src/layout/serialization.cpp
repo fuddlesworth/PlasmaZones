@@ -60,25 +60,6 @@ QJsonObject Layout::toJson() const
         json[::PhosphorZones::ZoneJsonKeys::SystemSourcePath] = m_systemSourcePath;
     }
 
-    // Shader support — empty shaderId means "no shader", we only persist the
-    // key when populated. Layout is a pure data holder: it persists whatever
-    // m_shaderParams was last set to, without reaching into a UI-side
-    // validator. Stale-param cleanup (stripping values whose keys don't
-    // belong to the current shader) is the editor's responsibility on the
-    // edit boundary — see EditorController::stripStaleShaderParams and the
-    // shader-refresh path that calls it when the active shader changes.
-    // Keeping Layout decoupled from ShaderRegistry lets the core data type
-    // eventually live in a standalone phosphor-zones library without
-    // pulling phosphor-wayland into the dependency graph.
-    if (!m_shaderId.isEmpty()) {
-        json[::PhosphorZones::ZoneJsonKeys::ShaderId] = m_shaderId;
-    }
-    // Don't persist params when no shader is bound — stale params without a
-    // shaderId are meaningless to consumers and just bloat the file.
-    if (!m_shaderId.isEmpty() && !m_shaderParams.isEmpty()) {
-        json[::PhosphorZones::ZoneJsonKeys::ShaderParams] = QJsonObject::fromVariantMap(m_shaderParams);
-    }
-
     // Auto-assign - only serialize if true
     if (m_autoAssign) {
         json[::PhosphorZones::ZoneJsonKeys::AutoAssign] = true;
@@ -266,12 +247,6 @@ void Layout::initFromJson(const QJsonObject& json)
             qCWarning(lcLayoutLib) << "dropping invalid systemSourcePath" << m_systemSourcePath;
             m_systemSourcePath.clear();
         }
-    }
-
-    // Shader support
-    m_shaderId = json[::PhosphorZones::ZoneJsonKeys::ShaderId].toString();
-    if (json.contains(::PhosphorZones::ZoneJsonKeys::ShaderParams)) {
-        m_shaderParams = json[::PhosphorZones::ZoneJsonKeys::ShaderParams].toObject().toVariantMap();
     }
 
     // Auto-assign

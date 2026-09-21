@@ -153,10 +153,17 @@ inline constexpr QLatin1StringView OverrideAnimationTiming{"overrideAnimationTim
 /// checks the curve slot first.
 inline constexpr QLatin1StringView OverrideAnimationCurve{"overrideAnimationCurve"};
 inline constexpr QLatin1StringView SetOpacity{"setOpacity"};
-/// Context-domain overlay-property overrides. A matched context rule
-/// (screen / desktop / activity) overrides the active layout's overlay shader
-/// or style (display mode: zone rectangles vs layout preview) for that context's
-/// zone overlay. Resolved daemon-side via `LayoutRegistry::resolveContextOverlay`.
+/// Context-domain override of one node of the zone-overlay shader tree, the
+/// overlay analogue of OverrideAnimationShader. Carries the node
+/// (`ActionParam::LayoutId`: a layout UUID, or absent / empty for the tree's
+/// global default), the shader (`ActionParam::EffectId`) and optional uniform
+/// overrides (`ActionParam::Params`). For the matched context (screen /
+/// desktop / activity) the rule replaces what the tree would have resolved at
+/// that node: a layout node applies only while that layout is the context's
+/// active one, the global node applies to every layout there. An engaged EMPTY
+/// effectId is the "no shader" sentinel, blocking the tree's answer for that
+/// node just as the animation action's does. Resolved daemon-side via
+/// `LayoutRegistry::resolveContextOverlay`, slot `overlay-shader:<node>`.
 inline constexpr QLatin1StringView OverrideOverlayShader{"overrideOverlayShader"};
 inline constexpr QLatin1StringView OverrideOverlayStyle{"overrideOverlayStyle"};
 /// Context-domain overrides of the active layout's zone-overlay APPEARANCE —
@@ -544,6 +551,26 @@ inline constexpr QLatin1StringView OpenMaximized{"openMaximized"};
 /// other Open* slots and layered over
 /// `IScrollSettings::scrollingFocusNewWindows`.
 inline constexpr QLatin1StringView OpenFocused{"openFocused"};
+/// Open the window as a tab of a NAMED group. String `ActionParam::Value`,
+/// non-empty: the group name. On open, the scrolling engine looks for a
+/// column that already holds a window whose own rules resolve to the same
+/// group name and joins it as a tab, turning that column tabbed if needed; no
+/// such column means a column of its own. The name is what ties windows
+/// together, so a rule matching a title, a class or anything else groups
+/// every window it matches with every other window resolving to that name,
+/// across applications. Outranks the app-keyed
+/// `IScrollSettings::scrollingGroupSameAppAsTabs` default: a window with a
+/// group name never falls back to same-app grouping. An OpenColumnPlacement
+/// consume rule on the same window outranks it, the way every explicit
+/// placement outranks a grouping verdict.
+///
+/// Names compare exactly after trimming, case included ("Work" and "work"
+/// are two groups). Membership is resolved LIVE: on every open the engine
+/// re-evaluates each existing tile's rules against that tile's current
+/// metadata, so a group keyed on a title condition follows the live title,
+/// and a tile can enter or leave a group between two opens without moving.
+/// Nothing is remembered per window.
+inline constexpr QLatin1StringView OpenTabGroup{"openTabGroup"};
 /// Fullscreen at open — niri's `open-fullscreen`. Boolean `ActionParam::Value`:
 /// true puts the opening window into real KWin fullscreen, false vetoes the
 /// app's OWN fullscreen request at open (apps that start fullscreen by

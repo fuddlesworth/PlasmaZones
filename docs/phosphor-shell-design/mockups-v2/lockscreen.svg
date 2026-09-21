@@ -1,0 +1,359 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!--
+  Phosphor mockups v2: lockscreen (A3 §6). The layout you left, as outlines.
+  8 s loop: password dots type one by one (0.5 .. 3.0 s), Enter at 3.5 s (field edge goes blue),
+  unlock at 3.9 s: the outlines fill back in with the real windows (already where they were) and the
+  lock content dismisses. The desktop holds, then re-locks at 6.5 s for the loop.
+  The layout leaves its largest empty region on the right (x 908..1244); clock and auth live there.
+  Static base state = locked, four dots typed.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720"
+     font-family="Manrope, 'Noto Sans', system-ui, sans-serif">
+  <defs>
+    <linearGradient id="rail" x1="0" y1="0" x2="1280" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#22D3EE"/>
+      <stop offset="0.33" stop-color="#3B82F6"/>
+      <stop offset="0.67" stop-color="#A855F7"/>
+      <stop offset="1"    stop-color="#F43F5E"/>
+    </linearGradient>
+    <linearGradient id="railV" x1="0" y1="0" x2="0" y2="720" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#22D3EE"/>
+      <stop offset="0.33" stop-color="#3B82F6"/>
+      <stop offset="0.67" stop-color="#A855F7"/>
+      <stop offset="1"    stop-color="#F43F5E"/>
+    </linearGradient>
+    <linearGradient id="wp" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0"    stop-color="#0B1730"/>
+      <stop offset="0.55" stop-color="#070F22"/>
+      <stop offset="1"    stop-color="#050916"/>
+    </linearGradient>
+    <radialGradient id="wpLight" cx="0.2" cy="0.9" r="0.7">
+      <stop offset="0"   stop-color="#22D3EE" stop-opacity="0.16"/>
+      <stop offset="1"   stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="wpLight2" cx="0.85" cy="0.2" r="0.6">
+      <stop offset="0"   stop-color="#A855F7" stop-opacity="0.14"/>
+      <stop offset="1"   stop-color="#A855F7" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gleam" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"   stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.6"/>
+      <stop offset="1"   stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glassBlur" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <!-- focus-fade on the wallpaper: 12% saturation while locked, full on unlock -->
+    <filter id="desat" x="0" y="0" width="1" height="1">
+      <feColorMatrix type="saturate" values="0.12">
+        <animate attributeName="values" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="0.12;0.12;1;1;0.12;0.12" keyTimes="0;0.4875;0.5775;0.8125;0.9;1"
+                 keySplines="0 0 1 1;0.05 0.6 0.15 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </feColorMatrix>
+    </filter>
+    <linearGradient id="revealMask" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset="1" stop-color="#fff"/>
+    </linearGradient>
+    <symbol id="glyph" viewBox="0 0 16 16">
+      <rect x="2" y="2" width="12" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <rect x="5" y="5" width="6" height="6" rx="1" fill="currentColor" opacity="0.7"/>
+    </symbol>
+    <symbol id="mote" viewBox="0 0 4 4"><circle cx="2" cy="2" r="1.4" fill="currentColor"/></symbol>
+    <style>
+      .ui   { font-family: Manrope, 'Noto Sans', system-ui, sans-serif; }
+      .mono { font-family: 'JetBrains Mono', 'Noto Sans Mono', monospace; font-variant-numeric: tabular-nums; }
+      .t1 { fill: #E6EDFF; }
+      .t2 { fill: #94A3B8; }
+      .note-title { font-size: 12px; font-weight: 600; }
+      .note-body  { font-size: 11.5px; fill: #94A3B8; }
+      .eyebrow { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; fill: #94A3B8; }
+      .clock { font-size: 96px; font-weight: 200; letter-spacing: -2px; font-variant-numeric: tabular-nums; fill: #E6EDFF; }
+      .date  { font-size: 16px; font-weight: 400; letter-spacing: 1.5px; text-transform: uppercase; fill: #94A3B8; }
+    </style>
+  </defs>
+
+  <!-- ===== LAYER 0: wallpaper, desaturated and darkened to the void while locked ===== -->
+  <g filter="url(#desat)">
+    <rect width="1280" height="720" fill="url(#wp)"/>
+    <rect width="1280" height="720" fill="url(#wpLight)"/>
+    <rect width="1280" height="720" fill="url(#wpLight2)"/>
+  </g>
+  <rect id="dim" width="1280" height="720" fill="#050916" opacity="0.8">
+    <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+             values="0.8;0.8;0;0;0.8;0.8" keyTimes="0;0.4875;0.5775;0.8125;0.9;1"
+             keySplines="0 0 1 1;0.05 0.6 0.15 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+  </rect>
+
+  <!-- ===== LAYER 1: the windows. Locked: 1 px spectrum outline (sampled by x), 8% navy fill, glyph centred.
+       Unlocked: the same rects fill back to the real windows. Nothing moves. ===== -->
+  <g id="windows">
+    <!-- A: large left window (focused when unlocked) -->
+    <g id="win-a">
+      <rect x="36" y="44" width="604" height="640" rx="8" fill="#0B1730" fill-opacity="0.08">
+        <animate attributeName="fill-opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="0.08;0.08;0.92;0.92;0.08;0.08" keyTimes="0;0.4875;0.5775;0.8125;0.9;1"
+                 keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </rect>
+      <rect x="36.5" y="44.5" width="603" height="639" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.9"/>
+      <rect x="36.5" y="44.5" width="603" height="639" rx="8" fill="none" stroke="#FFFFFF" stroke-width="1" opacity="0">
+        <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="0;0;0.55;0.55;0;0" keyTimes="0;0.5;0.5175;0.8125;0.86;1"
+                 keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </rect>
+      <g color="#E6EDFF" opacity="0.3" transform="translate(322 348)">
+        <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="0.3;0.3;0;0;0.3;0.3" keyTimes="0;0.4875;0.505;0.8125;0.9;1"
+                 keySplines="0 0 1 1;0.32 0 0.67 0;0 0 1 1;0.34 1 0.64 1;0 0 1 1"/>
+        <use xlink:href="#glyph" width="32" height="32"/>
+      </g>
+      <g fill="#E6EDFF" opacity="0">
+        <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="0;0;0.08;0.08;0;0" keyTimes="0;0.4875;0.5775;0.8125;0.9;1"
+                 keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+        <rect x="64" y="84" width="420" height="10" rx="2"/><rect x="64" y="108" width="520" height="10" rx="2"/>
+        <rect x="64" y="132" width="380" height="10" rx="2"/><rect x="64" y="172" width="560" height="10" rx="2"/>
+        <rect x="64" y="196" width="500" height="10" rx="2"/><rect x="64" y="220" width="440" height="10" rx="2"/>
+      </g>
+    </g>
+    <!-- B: top middle -->
+    <g id="win-b">
+      <rect x="648" y="44" width="252" height="316" rx="8" fill="#0B1730" fill-opacity="0.08">
+        <animate attributeName="fill-opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="0.08;0.08;0.88;0.88;0.08;0.08" keyTimes="0;0.4875;0.5775;0.8125;0.9;1"
+                 keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </rect>
+      <rect x="648.5" y="44.5" width="251" height="315" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.9"/>
+      <g color="#E6EDFF" opacity="0.3" transform="translate(758 186)">
+        <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="0.3;0.3;0;0;0.3;0.3" keyTimes="0;0.4875;0.505;0.8125;0.9;1"
+                 keySplines="0 0 1 1;0.32 0 0.67 0;0 0 1 1;0.34 1 0.64 1;0 0 1 1"/>
+        <use xlink:href="#glyph" width="32" height="32"/>
+      </g>
+      <g fill="#E6EDFF" opacity="0">
+        <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="0;0;0.08;0.08;0;0" keyTimes="0;0.4875;0.5775;0.8125;0.9;1"
+                 keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+        <rect x="672" y="84" width="180" height="10" rx="2"/><rect x="672" y="108" width="140" height="10" rx="2"/>
+        <rect x="672" y="132" width="200" height="10" rx="2"/>
+      </g>
+    </g>
+    <!-- C: bottom middle, the player -->
+    <g id="win-c">
+      <rect x="648" y="368" width="252" height="316" rx="8" fill="#0B1730" fill-opacity="0.08">
+        <animate attributeName="fill-opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="0.08;0.08;0.88;0.88;0.08;0.08" keyTimes="0;0.4875;0.5775;0.8125;0.9;1"
+                 keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </rect>
+      <rect x="648.5" y="368.5" width="251" height="315" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.9"/>
+      <g color="#E6EDFF" opacity="0.3" transform="translate(758 510)">
+        <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="0.3;0.3;0;0;0.3;0.3" keyTimes="0;0.4875;0.505;0.8125;0.9;1"
+                 keySplines="0 0 1 1;0.32 0 0.67 0;0 0 1 1;0.34 1 0.64 1;0 0 1 1"/>
+        <use xlink:href="#glyph" width="32" height="32"/>
+      </g>
+      <g fill="#E6EDFF" opacity="0">
+        <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="0;0;0.1;0.1;0;0" keyTimes="0;0.4875;0.5775;0.8125;0.9;1"
+                 keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+        <rect x="700" y="560" width="3" height="18"/><rect x="708" y="552" width="3" height="34"/><rect x="716" y="558" width="3" height="22"/>
+        <rect x="724" y="546" width="3" height="46"/><rect x="732" y="556" width="3" height="26"/><rect x="740" y="550" width="3" height="38"/>
+        <rect x="748" y="562" width="3" height="14"/><rect x="756" y="554" width="3" height="30"/><rect x="764" y="548" width="3" height="42"/>
+      </g>
+      <!-- media: 2 px band on the player's bottom edge, length = playback position; follows while locked -->
+      <rect x="648" y="683" width="252" height="2" rx="1" fill="#3B82F6" opacity="0.15"/>
+      <rect x="648" y="683" width="101" height="2" rx="1" fill="#3B82F6">
+        <animate attributeName="width" values="101;121" dur="8s" repeatCount="indefinite"/>
+      </rect>
+    </g>
+  </g>
+
+  <!-- ===== LAYER 2: the bar. Hidden under the lock, returns with the desktop. ===== -->
+  <g id="bar" opacity="0">
+    <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+             values="0;0;1;1;0;0" keyTimes="0;0.5;0.5375;0.8125;0.86;1"
+             keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+    <rect x="0" y="2" width="1280" height="26" fill="#0B1730" fill-opacity="0.72"/>
+    <rect x="0" y="0" width="1280" height="2" fill="url(#rail)" opacity="0.75"/>
+    <g id="map" transform="translate(12 6)">
+      <rect x="0.5" y="0.5" width="31" height="17" fill="none" stroke="#E6EDFF" stroke-opacity="0.14"/>
+      <rect x="1" y="1" width="15" height="16" fill="#3B82F6" fill-opacity="0.55" stroke="#FFFFFF" stroke-opacity="0.9" stroke-width="1"/>
+      <rect x="17" y="1"  width="6" height="7.5" fill="#6F6CF7" fill-opacity="0.4" stroke="#6F6CF7" stroke-opacity="0.8" stroke-width="1"/>
+      <rect x="17" y="9.5" width="6" height="7.5" fill="#6F6CF7" fill-opacity="0.4" stroke="#6F6CF7" stroke-opacity="0.8" stroke-width="1"/>
+      <g transform="translate(9 19)">
+        <rect x="0" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.9"/>
+        <rect x="4" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+        <rect x="8" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+      </g>
+    </g>
+    <rect x="56" y="9" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+    <g transform="translate(66 7)" color="#E6EDFF">
+      <use xlink:href="#glyph" width="16" height="16"/>
+      <text x="22" y="12.5" class="ui t1" font-size="13" font-weight="500">kate · phosphor-shell.md</text>
+      <rect x="22" y="16" width="146" height="1" fill="#3B82F6" opacity="0.9"/>
+    </g>
+    <g transform="translate(608 7)">
+      <text x="0" y="12.5" class="mono t1" font-size="14" font-weight="500">14:32</text>
+    </g>
+    <g transform="translate(1040 6)">
+      <rect x="0"  y="6"  width="2" height="10" fill="#CE4BA8" opacity="0.85"/>
+      <rect x="5"  y="2"  width="2" height="14" fill="#CE4BA8" opacity="0.85"/>
+      <rect x="10" y="10" width="2" height="6"  fill="#CE4BA8" opacity="0.85"/>
+      <rect x="22" y="3" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+      <g fill="#E6EDFF" opacity="0.9">
+        <circle cx="40" cy="9" r="4" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <rect x="52" y="4" width="8" height="10" rx="1.5" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <path d="M70 5 l4 4 -4 4 M74 5 l4 4 -4 4" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <rect x="88" y="5" width="12" height="7" rx="1.5" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <rect x="89.5" y="6.5" width="7" height="4" fill="#E6EDFF"/>
+      </g>
+      <rect x="112" y="3" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+      <path d="M126 12 h10 l-1.5-2 v-3 a3.5 3.5 0 0 0 -7 0 v3 z" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+      <text x="139" y="8" class="mono t1" font-size="9">3</text>
+      <circle cx="160" cy="9" r="4" fill="#E9457A" opacity="0.7"/>
+      <circle cx="184" cy="9" r="4.5" fill="none" stroke="#E6EDFF" stroke-width="1.2" opacity="0.45"/>
+      <rect x="183.4" y="3" width="1.2" height="5" fill="#E6EDFF" opacity="0.45"/>
+    </g>
+  </g>
+
+  <!-- ===== LAYER 3: SCENE, the lock content. Dismisses on unlock (140 ms), re-enters on re-lock. ===== -->
+  <g id="lock" opacity="1">
+    <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+             values="1;1;0;0;1;1" keyTimes="0;0.4875;0.505;0.92;0.95;1"
+             keySplines="0 0 1 1;0.32 0 0.67 0;0 0 1 1;0.34 1 0.64 1;0 0 1 1"/>
+
+    <!-- phosphor-motes: dust drifting in the empty regions. Cyan at birth, fading to rose. Opt-in. -->
+    <g id="motes">
+      <use xlink:href="#mote" width="4" height="4" x="960" y="120" color="#22D3EE" opacity="0.6">
+        <animate attributeName="y" values="120;60" dur="6s" repeatCount="indefinite"/>
+        <animate attributeName="x" values="960;990" dur="6s" repeatCount="indefinite"/>
+        <animate attributeName="color" values="#22D3EE;#3B82F6;#A855F7;#F43F5E" dur="6s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;0.7;0.5;0" dur="6s" repeatCount="indefinite"/>
+      </use>
+      <use xlink:href="#mote" width="3" height="3" x="1120" y="200" color="#3B82F6" opacity="0.5">
+        <animate attributeName="y" values="200;130" dur="7s" repeatCount="indefinite"/>
+        <animate attributeName="x" values="1120;1100" dur="7s" repeatCount="indefinite"/>
+        <animate attributeName="color" values="#22D3EE;#3B82F6;#A855F7;#F43F5E" dur="7s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;0.6;0.4;0" dur="7s" repeatCount="indefinite"/>
+      </use>
+      <use xlink:href="#mote" width="4" height="4" x="1200" y="520" color="#A855F7" opacity="0.5">
+        <animate attributeName="y" values="520;440" dur="8s" repeatCount="indefinite"/>
+        <animate attributeName="x" values="1200;1180" dur="8s" repeatCount="indefinite"/>
+        <animate attributeName="color" values="#22D3EE;#3B82F6;#A855F7;#F43F5E" dur="8s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;0.6;0.5;0" dur="8s" repeatCount="indefinite"/>
+      </use>
+      <use xlink:href="#mote" width="3" height="3" x="1010" y="600" color="#F43F5E" opacity="0.4">
+        <animate attributeName="y" values="600;540" dur="5.5s" repeatCount="indefinite"/>
+        <animate attributeName="x" values="1010;1040" dur="5.5s" repeatCount="indefinite"/>
+        <animate attributeName="color" values="#22D3EE;#3B82F6;#A855F7;#F43F5E" dur="5.5s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;0.6;0.4;0" dur="5.5s" repeatCount="indefinite"/>
+      </use>
+      <use xlink:href="#mote" width="3" height="3" x="1150" y="660" color="#22D3EE" opacity="0.5">
+        <animate attributeName="y" values="660;590" dur="6.5s" repeatCount="indefinite"/>
+        <animate attributeName="x" values="1150;1130" dur="6.5s" repeatCount="indefinite"/>
+        <animate attributeName="color" values="#22D3EE;#3B82F6;#A855F7;#F43F5E" dur="6.5s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;0.7;0.5;0" dur="6.5s" repeatCount="indefinite"/>
+      </use>
+      <use xlink:href="#mote" width="4" height="4" x="1060" y="480" color="#6F6CF7" opacity="0.4">
+        <animate attributeName="y" values="480;420" dur="7.5s" repeatCount="indefinite"/>
+        <animate attributeName="x" values="1060;1080" dur="7.5s" repeatCount="indefinite"/>
+        <animate attributeName="color" values="#22D3EE;#3B82F6;#A855F7;#F43F5E" dur="7.5s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;0.5;0.4;0" dur="7.5s" repeatCount="indefinite"/>
+      </use>
+      <!-- in the gap between A and the middle column -->
+      <use xlink:href="#mote" width="3" height="3" x="642" y="300" color="#3B82F6" opacity="0.5">
+        <animate attributeName="y" values="300;240" dur="6s" repeatCount="indefinite"/>
+        <animate attributeName="color" values="#22D3EE;#3B82F6;#A855F7;#F43F5E" dur="6s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;0.6;0.4;0" dur="6s" repeatCount="indefinite"/>
+      </use>
+      <use xlink:href="#mote" width="3" height="3" x="902" y="380" color="#A855F7" opacity="0.5">
+        <animate attributeName="y" values="380;320" dur="7s" repeatCount="indefinite"/>
+        <animate attributeName="x" values="902;912" dur="7s" repeatCount="indefinite"/>
+        <animate attributeName="color" values="#22D3EE;#3B82F6;#A855F7;#F43F5E" dur="7s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;0.6;0.4;0" dur="7s" repeatCount="indefinite"/>
+      </use>
+      <use xlink:href="#mote" width="3" height="3" x="300" y="700" color="#22D3EE" opacity="0.4">
+        <animate attributeName="y" values="700;690" dur="8s" repeatCount="indefinite"/>
+        <animate attributeName="x" values="300;340" dur="8s" repeatCount="indefinite"/>
+        <animate attributeName="color" values="#22D3EE;#3B82F6;#A855F7;#F43F5E" dur="8s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;0.5;0.4;0" dur="8s" repeatCount="indefinite"/>
+      </use>
+    </g>
+
+    <!-- The largest empty region: x 908..1244. Clock, date, auth, left-aligned to it. -->
+    <g id="clock-block" transform="translate(932 0)">
+      <text x="0" y="296" class="ui clock">14:32</text>
+      <!-- minute underline ticks once a minute (R7) -->
+      <rect x="196" y="304" width="46" height="2" fill="#B24FD9">
+        <animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.02;0.08;0.2;1" dur="6s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </rect>
+      <text x="2" y="332" class="ui date">Friday 4 September</text>
+
+      <!-- Auth field: 320 x 44, radius 6, abyss ground, 1 px edge cyan idle / blue authenticating -->
+      <g transform="translate(2 356)">
+        <rect x="0" y="0" width="320" height="44" rx="6" fill="#070F22"/>
+        <rect x="0.5" y="0.5" width="319" height="43" rx="6" fill="none" stroke="#22D3EE" stroke-width="1" opacity="0.85">
+          <animate attributeName="stroke" dur="8s" repeatCount="indefinite" calcMode="discrete"
+                   values="#22D3EE;#3B82F6;#22D3EE" keyTimes="0;0.4375;0.92"/>
+        </rect>
+        <!-- password dots, typed one by one at 0.5 s intervals; the field clears for the loop -->
+        <g fill="#E6EDFF">
+          <circle cx="20" cy="22" r="3.5"><animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.0625;0.8;0.8001;1" dur="8s" repeatCount="indefinite" calcMode="discrete"/></circle>
+          <circle cx="34" cy="22" r="3.5"><animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.125;0.8;0.8001;1" dur="8s" repeatCount="indefinite" calcMode="discrete"/></circle>
+          <circle cx="48" cy="22" r="3.5"><animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.1875;0.8;0.8001;1" dur="8s" repeatCount="indefinite" calcMode="discrete"/></circle>
+          <circle cx="62" cy="22" r="3.5"><animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.25;0.8;0.8001;1" dur="8s" repeatCount="indefinite" calcMode="discrete"/></circle>
+          <circle cx="76" cy="22" r="3.5" opacity="0"><animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.3125;0.8;0.8001;1" dur="8s" repeatCount="indefinite" calcMode="discrete"/></circle>
+          <circle cx="90" cy="22" r="3.5" opacity="0"><animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.375;0.8;0.8001;1" dur="8s" repeatCount="indefinite" calcMode="discrete"/></circle>
+        </g>
+        <!-- caret -->
+        <rect x="90" y="14" width="1" height="16" fill="#E6EDFF" opacity="0.8">
+          <animate attributeName="x" values="12;26;40;54;68;82;96;96;12" keyTimes="0;0.0625;0.125;0.1875;0.25;0.3125;0.375;0.8;0.8001" dur="8s" repeatCount="indefinite" calcMode="discrete"/>
+          <animate attributeName="opacity" values="0.8;0;0.8;0;0.8;0" keyTimes="0;0.06;0.125;0.19;0.25;0.31" dur="1s" repeatCount="indefinite" calcMode="discrete"/>
+        </rect>
+        <!-- key glyph on the right: a small lock outline -->
+        <g transform="translate(296 14)" fill="none" stroke="#94A3B8" stroke-width="1.2">
+          <rect x="1" y="6" width="10" height="8" rx="1.5"/>
+          <path d="M3 6 v-2.5 a3 3 0 0 1 6 0 v2.5"/>
+        </g>
+      </g>
+    </g>
+
+    <!-- Bottom-left: battery, layout, unread (purple). Bottom-right: media title. 13 px tabular. -->
+    <g class="mono" font-size="13" fill="#94A3B8">
+      <text x="36" y="706">84% · us</text>
+      <text x="112" y="706" fill="#A855F7">· 3 unread</text>
+      <text x="888" y="662" text-anchor="end" fill="#94A3B8" class="ui" font-size="12">Boards of Canada · Roygbiv</text>
+    </g>
+  </g>
+
+  <!-- ===== LAYER 4: annotations ===== -->
+  <g class="note" transform="translate(60 590)">
+    <rect width="390" height="60" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="20" class="ui note-title" fill="#2FB0F2">Outline of your layout</text>
+    <text x="12" y="37" class="ui note-body">Every window rect at 1:1 as a static 1 px spectrum outline (sampled</text>
+    <text x="12" y="51" class="ui note-body">by x), 8% navy fill, app glyph centred at 30%. No titles, no wallpaper.</text>
+  </g>
+  <g class="note" transform="translate(908 440)">
+    <rect width="336" height="74" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="20" class="ui note-title" fill="#CE4BA8">Clock in the empty region</text>
+    <text x="12" y="37" class="ui note-body">96 px ExtraLight tabular, the date eyebrow and a</text>
+    <text x="12" y="51" class="ui note-body">320 x 44 auth field sit in the largest empty region</text>
+    <text x="12" y="65" class="ui note-body">the placement map has. Nothing centred by default.</text>
+  </g>
+  <g class="note" transform="translate(660 560)">
+    <rect width="230" height="74" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="20" class="ui note-title" fill="#6F6CF7">Unlock fills in</text>
+    <text x="12" y="37" class="ui note-body">Enter: the field edge goes blue, then</text>
+    <text x="12" y="51" class="ui note-body">the outlines fill 8% to 100% with the</text>
+    <text x="12" y="65" class="ui note-body">real windows. Nothing slides or scales.</text>
+  </g>
+  <g class="note" transform="translate(654 70)">
+    <rect width="240" height="60" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="20" class="ui note-title" fill="#22D3EE">Motes, opt-in</text>
+    <text x="12" y="37" class="ui note-body">phosphor-motes dust drifts between</text>
+    <text x="12" y="51" class="ui note-body">the outlines, cyan at birth, rose at death.</text>
+  </g>
+  <text x="640" y="708" text-anchor="middle" class="ui t2" font-size="12">Phosphor · lockscreen · the layout you left, as an outline</text>
+</svg>

@@ -807,6 +807,14 @@ bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w,
         return false;
     }
 
+    // FULLSCREEN GATE (Decorations.Performance.SuppressWhileFullscreen) — see
+    // refreshFullscreenSuppression in surface_gating.cpp. FIRST, ahead of the
+    // shell carve-out below, whose switch returns true before every other
+    // reject here and would otherwise keep a panel animating over a game.
+    if (decorationSuppressedByFullscreen(w)) {
+        return false;
+    }
+
     const QString windowClass = w->windowClass();
 
     // Always-wrong surfaces — never draw a border here regardless of any
@@ -858,15 +866,12 @@ bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w,
     if (isOwnOverlayClass(windowClass) || isXdgDesktopPortalSurface(windowClass) || isPlasmaShellSurface(windowClass)) {
         return false;
     }
+    // isSpecialWindow() covers notifications, critical notifications and OSDs
+    // (KWin's disjunction also takes in splash, toolbar, applet popup and
+    // tooltip), so those are hard-excluded here with no toggle: a border on a
+    // notification popup or a volume OSD is never sensible, which splits them
+    // off from the transient family below (which IS toggleable).
     if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isFullScreen() || w->isSkipSwitcher()) {
-        return false;
-    }
-
-    // Notification / OSD surfaces — hard-excluded with no toggle. A border on a
-    // notification popup or a volume OSD is never sensible, so these are split
-    // off from the transient family below (which IS toggleable) and always
-    // rejected. There is no decoration NotificationsAndOsd knob.
-    if (w->isNotification() || w->isCriticalNotification() || w->isOnScreenDisplay()) {
         return false;
     }
 

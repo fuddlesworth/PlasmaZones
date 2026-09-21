@@ -32,11 +32,11 @@
 #include <array>
 
 #include <PhosphorServiceIdle/IdleService.h>
+#include <PhosphorShaders/ShaderPresetStore.h>
 #include <PhosphorAnimation/CurveLoader.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
-#include <PhosphorAnimation/ProfileLoader.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/PhosphorCurve.h>
 #include <PhosphorAnimation/QtQuickClockManager.h>
@@ -176,18 +176,16 @@ void Daemon::start()
     // the idle state permanently stale. Guarded on !m_idleService so the ordinary
     // init()-then-start() path does not build it twice.
     //
-    // Note what this does NOT fix: stop() also unregisters the D-Bus object and the service
-    // name, and re-registering them lives in init(), not here. A restarted daemon therefore
-    // has no bus presence, so nothing it publishes reaches the effect regardless. The
-    // same asymmetry covers the autotile shortcuts: their grabs survive stop()
-    // while their handler connections died with the engine, and although
-    // initializeAutotile() re-runs from start() below, it wires the handlers
-    // only when m_autotileEngine exists — which after a no-init stop() it does
-    // not (engines are rebuilt in init(), not here). With no bus presence
-    // nothing they would trigger reaches anyone anyway, so wiring them here
-    // would repair a limb of a cycle that is degraded by design. The
-    // re-arm exists so the daemon's own state is consistent after the cycle (which the
-    // repairs below also do), not because the cycle fully restores service.
+    // Note what this does NOT fix: stop() also unregisters the D-Bus object and the
+    // service name, and re-registering them lives in init(), not here, so a restarted
+    // daemon has no bus presence and nothing it publishes reaches the effect regardless.
+    // The same asymmetry covers the autotile shortcuts: their grabs survive stop() while
+    // their handler connections died with the engine, and initializeAutotile() re-runs
+    // from start() below but wires handlers only when m_autotileEngine exists, which
+    // after a no-init stop() it does not. With no bus presence nothing they trigger
+    // reaches anyone, so wiring them here would repair a limb of a cycle that is
+    // degraded by design. The re-arm exists so the daemon's own state is consistent
+    // after the cycle, not because the cycle restores service.
     if (!m_idleService) {
         setupIdleService();
     }
@@ -425,13 +423,12 @@ void Daemon::stop()
         m_plasmaWorkspaceTargetPath.clear();
     }
 
-    // Null the drag adaptor's borrowed pointers ABOVE the m_running gate, for
-    // the same reason as the provider lambdas and QML statics below: both are
-    // wired from init() (init_adaptors.cpp / init_engines.cpp), which runs
-    // before start(), so an init-without-start teardown (test fixture,
-    // early-fail init, double-stop) would otherwise reach member destruction
-    // with the adaptor still holding a pointer to the about-to-die
-    // ShortcutManager / AutotileEngine. Both setters are null-safe and
+    // Null the drag adaptor's borrowed pointers ABOVE the m_running gate, for the same
+    // reason as the provider lambdas and QML statics below: both are wired from init()
+    // (init_adaptors.cpp / init_engines.cpp), which runs before start(), so an
+    // init-without-start teardown (test fixture, early-fail init, double-stop) would
+    // otherwise reach member destruction with the adaptor still holding a pointer to the
+    // about-to-die ShortcutManager / AutotileEngine. Both setters are null-safe and
     // idempotent, so running this on an already-stopped daemon costs nothing.
     if (m_windowDragAdaptor) {
         // Cancel a live preview BEFORE dropping the engine borrows. The
@@ -489,11 +486,11 @@ void Daemon::stop()
     // Animation-loader teardown, ALSO above the m_running gate for the same
     // ctor-origin reason as the statics it pairs with: setupAnimationProfiles
     // runs from the ctor, so an init-without-start teardown reaches the
-    // member destructors with both loaders (and their QFileSystemWatchers)
+    // member destructors with the curve loader (and its QFileSystemWatcher)
     // still live — exactly the construct-without-start fixture the reset
     // comment below names. NOTE the deliberate asymmetry this creates for a
-    // stop() → start() cycle: nothing rebuilds the loaders (they are
-    // ctor-only), so live reload of `plasmazones/{curves,profiles}` does not
+    // stop() → start() cycle: nothing rebuilds the loader (it is ctor-only),
+    // so live reload of `plasmazones/curves` does not
     // survive the cycle — the seeds and the low-precedence tag DO survive,
     // so inheritance keeps resolving, and a restarted daemon has no bus
     // presence anyway (see the partition-shedding rationale above).
@@ -513,10 +510,7 @@ void Daemon::stop()
     // window where stale path-change signals could fire into a
     // half-destroyed object — visible in tests that re-construct the
     // daemon, and theoretically observable in production on a
-    // configure-reload cycle. ProfileLoader's destructor issues its
-    // own `clearOwner(kPlasmaZonesUserProfilesOwnerTag)` so the
-    // per-daemon `m_profileRegistry` value member sheds those entries here.
-    m_profileLoader.reset();
+    // configure-reload cycle.
     m_curveLoader.reset();
 
     // Idle wiring, ALSO before the m_running gate, for the same reason as the two
@@ -596,10 +590,11 @@ void Daemon::stop()
     // raw-Qt-parented RuleAdaptor only runs its own destructor
     // *after* that, as part of QObject child cleanup.
     //
-    // The other nine raw-Qt-parented adaptors (LayoutAdaptor,
+    // The other eleven raw-Qt-parented adaptors (LayoutAdaptor,
     // OverlayAdaptor, ZoneDetectionAdaptor, WindowTrackingAdaptor,
     // DBusScreenAdaptor, WindowDragAdaptor, CompositorBridgeAdaptor,
-    // SnapAdaptor, TilingAdaptor) all ship destructors that don't
+    // SnapAdaptor, TilingAdaptor, AutotileAdaptor, ScrollingAdaptor) all
+    // ship destructors that don't
     // deref any borrowed pointer — most are `= default` / empty-body
     // (no member access), and the two outliers do only self-cleanup
     // on a Qt-child member: DBusScreenAdaptor ships an empty out-of-
@@ -613,7 +608,7 @@ void Daemon::stop()
     // method dispatch to them before we begin tearing down, and Qt's
     // sender-destruction auto-disconnect cleans up signal wiring when the
     // borrowed sender (m_layoutManager, etc.) is destroyed during member
-    // destruction. Adding detach() to those nine would require null-guarding
+    // destruction. Adding detach() to those eleven would require null-guarding
     // every slot body (they currently rely on the "borrowed pointer is
     // always valid" invariant), which is a larger refactor than the
     // defense-in-depth buys. If a future adaptor grows a dtor body that
@@ -632,14 +627,14 @@ void Daemon::stop()
         m_ruleAdaptor->detach();
     }
 
-    // Shader registries + warm-bake pool: torn down ABOVE the !m_running gate
-    // because they are ctor/init-origin (setupAnimationShaderEffects /
-    // setupSurfaceShaderEffects / setupShaderWarmBakes all run from init(),
-    // before start() sets m_running). An init-without-start teardown (a failed
-    // init, or a double-stop) must still null the OverlayService's borrows and
-    // run the registries' destructors, or ~OverlayService is left holding two
-    // dangling registry pointers — the same reverse-destruction hazard the
-    // adaptor detaches above guard against.
+    // Shader registries + preset store + warm-bake pool: torn down ABOVE the
+    // !m_running gate because they are ctor/init-origin (setupAnimationShaderEffects
+    // / setupSurfaceShaderEffects / setupShaderPresets / setupShaderWarmBakes all
+    // run from init(), before start() sets m_running). An init-without-start
+    // teardown (a failed init, or a double-stop) must still null the
+    // OverlayService's borrows and run these destructors, or ~OverlayService is left
+    // holding three dangling pointers — two registries and the preset registry —
+    // the same reverse-destruction hazard the adaptor detaches above guard against.
     m_shaderBakePool.clear();
     m_shaderBakePool.waitForDone(500);
     // Reap the warm-bake QFutureWatchers with their host: a bake discarded by
@@ -660,10 +655,30 @@ void Daemon::stop()
         m_overlayService->setSurfaceShaderRegistry(nullptr);
     }
     m_surfaceShaderRegistry.reset();
-    // Clear the warm-bake dedup so a stop() -> init() cycle re-warms every
-    // pack (the registries are rebuilt, so a remembered fingerprint would
-    // wrongly suppress the fresh bake), and the hash does not grow unbounded
-    // across cycles.
+    // Same order for the preset store, so no queued presetsChanged reaches a
+    // dangling registry while the event loop spins during shutdown.
+    if (m_overlayService) {
+        m_overlayService->setPresetRegistry(nullptr);
+    }
+    // Both connections to the ctor-owned m_shaderRegistry, severed before the store
+    // goes. That registry is not reset here, keeps its watcher running, and stop() runs
+    // with the event loop alive, so a later shadersChanged would reach the preset sync
+    // (publishing into the store reset below) and the zone warm-bake (parenting a
+    // watcher to an already-reset host).
+    disconnect(m_overlayPresetSyncConnection);
+    m_overlayPresetSyncConnection = {};
+    // Belt and braces: these two die with the registries reset above, but the handles
+    // must be cleared or setupShaderPresets' own sever reads a stale one next init.
+    disconnect(m_animationPresetSyncConnection);
+    m_animationPresetSyncConnection = {};
+    disconnect(m_surfacePresetSyncConnection);
+    m_surfacePresetSyncConnection = {};
+    disconnect(m_zoneWarmBakeConnection);
+    m_zoneWarmBakeConnection = {};
+    m_presetStore.reset();
+    // Clear the warm-bake dedup so a stop() -> init() cycle re-warms every pack (the
+    // registries are rebuilt, so a remembered fingerprint would wrongly suppress the
+    // fresh bake) and the hash does not grow unbounded across cycles.
     m_scheduledBakeFingerprints.clear();
 
     // initEnginesAndWiring lends the resolver to OverlayService before
@@ -674,18 +689,17 @@ void Daemon::stop()
         m_overlayService->setContextResolver(nullptr);
     }
 
-    // The borrow-severing blocks below are ALSO init-origin (initEnginesAndWiring
-    // wires them, and init() can complete without start() ever running), so they
-    // must sit ABOVE the running gate: on an init-without-start teardown (failed
-    // init, ~Daemon after init()) the captured `this` / raw-member closures would
-    // otherwise stay installed while member destruction frees what they deref.
-    // Every one of them is a null-safe idempotent clear, so running them on a
-    // never-inited daemon is a no-op.
+    // The borrow-severing blocks below are ALSO init-origin (initEnginesAndWiring wires
+    // them, and init() can complete without start() ever running), so they must sit
+    // ABOVE the running gate: on an init-without-start teardown (failed init, ~Daemon
+    // after init()) the captured `this` / raw-member closures would otherwise stay
+    // installed while member destruction frees what they deref. Each is a null-safe
+    // idempotent clear, so running them on a never-inited daemon is a no-op.
 
-    // Clear adaptor engine pointers BEFORE destroying the engines.
-    // Adaptors are Qt children of the daemon (destroyed later); a D-Bus call
-    // arriving between engine destruction and adaptor destruction would otherwise
-    // access freed memory. After clearing, ensureEngine() returns false.
+    // Clear adaptor engine pointers BEFORE destroying the engines. Adaptors are Qt
+    // children of the daemon (destroyed later); a D-Bus call arriving between engine
+    // destruction and adaptor destruction would otherwise access freed memory. After
+    // clearing, ensureEngine() returns false.
     if (m_tilingAdaptor) {
         m_tilingAdaptor->clearEngine();
     }
@@ -786,6 +800,9 @@ void Daemon::stop()
         // half-torn-down state. Symmetric with the resolver / router clears above
         // and honours the shutdown-nullptr contract documented in tilingadaptor.h.
         m_tilingAdaptor->setWindowTrackingAdaptor(nullptr);
+        // Same contract for the registry subscription: a metadata push landing
+        // in the teardown gap must not walk engines that are being reset.
+        m_tilingAdaptor->setWindowRegistry(nullptr);
     }
 
     // Sever SnapEngine's borrow of m_excludeRuleSet (a daemon-owned value
@@ -807,6 +824,14 @@ void Daemon::stop()
         // Same contract for the tile-defer liveness resolver, which captures
         // QPointers to both tiling engines.
         concreteSnap->setTilingEngineLiveResolver({});
+        // The window-registry borrow belongs here too. Member order means the
+        // registry outlives the engines, so nothing can deref it in the
+        // teardown gap; this is the grep-discoverable contract, and it matches
+        // the clear the tiling adaptor's identically-named borrow gets above.
+        concreteSnap->setWindowRegistry(nullptr);
+        // The navigation-state provider is a raw borrow of a Qt-child adaptor,
+        // in the same class as the zone-detection pointer noted below.
+        concreteSnap->setNavigationStateProvider(nullptr);
     }
 
     // Likewise sever WindowTrackingAdaptor's borrow of m_ruleStore (used by
@@ -1012,24 +1037,23 @@ void Daemon::stop()
     // neither `init()` nor `start()` calls it. A stop()→start() cycle on the
     // same instance is supported (see the re-publish of the three QML statics
     // and the idle re-arm in `start()`), and shedding them would bring it back
-    // with an empty seed partition and an empty low-precedence tag —
-    // `resolveWithInheritance` degrades to a single-layer walk and every shell
-    // `PhosphorMotionAnimation { profile: … }` resolves against nothing.
-    // Leaving them in place is what makes the cycle come back whole.
+    // with an empty seed store: pass 1 of `resolveWithInheritance` would find
+    // nothing and every shell `PhosphorMotionAnimation { profile: … }` would
+    // resolve against library defaults. Leaving them in place is what makes the
+    // cycle come back whole. The config-backed timing partition survives for
+    // the same reason and by the same route — `installMotionProfileTree` is
+    // also reached only from the ctor-origin setup.
     //
-    // The one partition stop() still sheds is the loader-owned user-JSON
-    // partition (tagged `kPlasmaZonesUserProfilesOwnerTag`), and only as a side
-    // effect of the loader teardown ABOVE (the loader resets are hoisted above
-    // the m_running gate): `m_profileLoader` / `m_curveLoader`
-    // are reset so their destructors run NOW (issuing their own
-    // `clearOwner(ownerTag)` and tearing down the QFileSystemWatchers) rather
-    // than in the `~Daemon` body, where they would fire path-change signals
-    // into a half-destroyed object. The user-JSON entries are optional
-    // overrides on top of the seeds, so losing them across a cycle only drops
-    // the user's authored tweaks, not the shell's ability to resolve — and the
-    // seeds that remain keep inheritance working. The raw-JSON snapshot is
-    // cleared with them, since it mirrors exactly the entries those destructors
-    // drop. (The clears and resets themselves run ABOVE the m_running gate,
+    // `m_curveLoader` is reset ABOVE the m_running gate so its destructor runs
+    // NOW (issuing its own `clearOwner(ownerTag)` and tearing down the
+    // QFileSystemWatcher) rather than in the `~Daemon` body, where it would
+    // fire path-change signals into a half-destroyed object. What it owns is
+    // CURVES, not profiles, so its teardown costs the cycle live curve reload
+    // and nothing else — and it is the only sender of `curvesChanged`, so after
+    // a cycle nothing re-parses the timing tree against a reloaded registry
+    // either. The raw-JSON snapshot is cleared alongside because it caches
+    // curve-resolved profiles, not because any destructor drops matching
+    // entries. (The clears and resets themselves run ABOVE the m_running gate,
     // hoisted next to the QML-static null-outs they pair with — the loaders
     // are ctor-origin, so an init-without-start teardown needs them too.)
 

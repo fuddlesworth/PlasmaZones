@@ -540,6 +540,12 @@ public:
     /// screenLayoutChanged muted for the daemon's lifetime.
     void clearSaveBatchMode();
 
+    /// Record @p resolvedId as changed by a single-context assignment write.
+    /// Inside a save batch it is staged for the closing applyAssignmentChanges;
+    /// outside one the write is applied at once through applyAssignmentChangesFor,
+    /// so a lone bus call resnaps and announces like a batch close does.
+    void stageOrApply(const QString& resolvedId);
+
     /**
      * @brief Publish the daemon's freshly recomputed active-assignment snapshot.
      *

@@ -5,6 +5,7 @@
 
 #include <PhosphorLayer/IScreenProvider.h>
 
+#include <QQmlEngine>
 #include <QScreen>
 
 namespace PhosphorShell {
@@ -53,6 +54,12 @@ QVariant ScreenModel::data(const QModelIndex& index, int role) const
 
     switch (role) {
     case ScreenRole:
+        // data() is a Q_INVOKABLE, and a parentless QObject returned from
+        // one takes JavaScript ownership: the engine's collector would then
+        // delete the QScreen (a hot reload tears the old engine down, and
+        // the next engine's delegates read a dead screen). The screens are
+        // the application's.
+        QQmlEngine::setObjectOwnership(screen, QQmlEngine::CppOwnership);
         return QVariant::fromValue(screen);
     case NameRole:
         return screen->name();

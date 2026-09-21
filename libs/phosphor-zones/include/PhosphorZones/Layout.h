@@ -62,8 +62,6 @@ class PHOSPHORZONES_EXPORT Layout : public QObject
     Q_PROPERTY(int zoneCount READ zoneCount NOTIFY zonesChanged)
     Q_PROPERTY(QString sourcePath READ sourcePath WRITE setSourcePath NOTIFY sourcePathChanged)
     Q_PROPERTY(bool isSystemLayout READ isSystemLayout NOTIFY sourcePathChanged)
-    Q_PROPERTY(QString shaderId READ shaderId WRITE setShaderId NOTIFY shaderIdChanged)
-    Q_PROPERTY(QVariantMap shaderParams READ shaderParams WRITE setShaderParams NOTIFY shaderParamsChanged)
 
     // Auto-assign: new windows fill first empty zone
     Q_PROPERTY(bool autoAssign READ autoAssign WRITE setAutoAssign NOTIFY autoAssignChanged)
@@ -237,18 +235,6 @@ public:
     {
         return !m_systemSourcePath.isEmpty();
     }
-
-    // Shader support
-    QString shaderId() const
-    {
-        return m_shaderId;
-    }
-    void setShaderId(const QString& id);
-    QVariantMap shaderParams() const
-    {
-        return m_shaderParams;
-    }
-    void setShaderParams(const QVariantMap& params);
 
     // Aspect ratio classification
     ::PhosphorLayout::AspectRatioClass aspectRatioClass() const
@@ -465,8 +451,6 @@ Q_SIGNALS:
     void showZoneNumbersChanged();
     void overlayDisplayModeChanged();
     void sourcePathChanged();
-    void shaderIdChanged();
-    void shaderParamsChanged();
     void aspectRatioClassChanged();
     void hiddenFromSelectorChanged();
     void allowedScreensChanged();
@@ -523,10 +507,6 @@ private:
 
     // Geometry mode: zones use full screen (true) or available area excluding panels (false)
     bool m_useFullScreenGeometry = false;
-
-    // Shader support
-    QString m_shaderId; // Shader effect ID (empty = no shader)
-    QVariantMap m_shaderParams; // Shader-specific parameters
 
     // Aspect ratio classification
     ::PhosphorLayout::AspectRatioClass m_aspectRatioClass = ::PhosphorLayout::AspectRatioClass::Any;

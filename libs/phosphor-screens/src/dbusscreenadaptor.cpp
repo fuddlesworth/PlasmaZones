@@ -232,6 +232,15 @@ void DBusScreenAdaptor::connectScreenManagerSignals(ScreenManager* mgr)
     // Without this wiring the adaptor's m_cachedEffectiveIdsPerScreen
     // leaked under the stale key and KCM-style consumers kept a dead id.
     connect(mgr, &ScreenManager::screenIdentifierChanged, this, &DBusScreenAdaptor::handleScreenIdentifierChanged);
+    // getScreenInfo caches its JSON per screen, and that JSON carries the
+    // logical scale. The real scale is only knowable once the compositor has
+    // configured the screen's sensor surface, which is not one of the events
+    // above — so a getScreenInfo answered during startup would otherwise
+    // cache the coarse QScreen fallback (2 for a 1.15 output) and serve it
+    // for the life of the process. Drop the blobs when the scale settles.
+    connect(mgr, &ScreenManager::logicalScaleChanged, this, [this](const PhysicalScreen&) {
+        invalidateScreenInfoCache();
+    });
 }
 
 void DBusScreenAdaptor::disconnectScreenManagerSignals(ScreenManager* mgr)
@@ -246,6 +255,7 @@ void DBusScreenAdaptor::disconnectScreenManagerSignals(ScreenManager* mgr)
     disconnect(mgr, &ScreenManager::virtualScreensChanged, this, nullptr);
     disconnect(mgr, &ScreenManager::virtualScreenRegionsChanged, this, nullptr);
     disconnect(mgr, &ScreenManager::screenIdentifierChanged, this, nullptr);
+    disconnect(mgr, &ScreenManager::logicalScaleChanged, this, nullptr);
 }
 
 void DBusScreenAdaptor::handleScreenIdentifierChanged(const QString& oldId, const QString& newId)
@@ -421,7 +431,12 @@ QString DBusScreenAdaptor::getScreenInfo(const QString& screenId)
         physSize = QSizeF(physSize.width() * region.width(), physSize.height() * region.height());
     }
     info[kKeyPhysicalSize] = QJsonObject{{kKeyWidth, physSize.width()}, {kKeyHeight, physSize.height()}};
-    info[kKeyDevicePixelRatio] = screen->devicePixelRatio();
+    // The compositor's logical scale, not QScreen's wl_output buffer scale
+    // (which is the ceiling of it — 2 for a 1.15 output). Only the manager
+    // can answer, because only its per-screen layer-shell sensor window
+    // carries the fractional-scale-v1 value; without one, this falls back to
+    // the same coarse QScreen number it always reported.
+    info[kKeyDevicePixelRatio] = m_screenManager ? m_screenManager->logicalScale(screen) : screen->devicePixelRatio();
     info[kKeyRefreshRate] = screen->refreshRate();
     info[kKeyDepth] = screen->depth();
     info[kKeyScreenId] = screenId;

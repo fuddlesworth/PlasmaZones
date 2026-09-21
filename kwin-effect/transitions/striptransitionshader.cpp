@@ -23,6 +23,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QLoggingCategory>
+#include <QStringList>
 
 #include <memory>
 
@@ -31,8 +32,8 @@
 // desktop pipeline's shape (desktoptransitionshader.cpp) — read → entry-point
 // scaffold → include expansion → param preamble → KWin define →
 // generateCustomShader — differing only in which uniform locations are cached
-// (the strip contract's uStrip / iStripMotion / iStripRect instead of the
-// desktop's two samplers and iSwitchDelta).
+// (the strip contract's uStrip / uBelow / iStripMotion / iStripAxis /
+// iStripRect instead of the desktop's two samplers and iSwitchDelta).
 namespace PlasmaZones {
 
 StripTransitionManager::CompiledStripShader* StripTransitionManager::compiledShader(const QString& effectId)
@@ -74,6 +75,19 @@ StripTransitionManager::CompiledStripShader* StripTransitionManager::compiledSha
         qCWarning(lcEffect) << "Strip shader file is empty" << eff.fragmentShaderPath;
         return &compiled;
     }
+    // A pack that ships its own main() keeps it: assembleEntryPoint wraps
+    // only entry-only sources. That bypasses the generated main's
+    // PZ_FINALIZE_COLOR call, which on this pass is strip_transition.glsl's
+    // re-composite of the pack's output over the undisplaced below-strip
+    // content. Without it the quad (drawn with blending off) writes the
+    // strip layer alone and every gap between the columns turns black for
+    // the leg. Same predicate the scaffold acts on, checked on the raw body
+    // it sees; abandon to the plain translation like a compile failure.
+    if (PhosphorShaders::definesMain(rawSource)) {
+        qCWarning(lcEffect) << "Strip effect" << effectId
+                            << "defines its own main() and bypasses the strip entry point; abandoning strip pass";
+        return &compiled;
+    }
 
     QStringList animIncludePaths;
     for (const QString& sp : mgr.shaderRegistry().searchPaths()) {
@@ -90,8 +104,17 @@ StripTransitionManager::CompiledStripShader* StripTransitionManager::compiledSha
         PhosphorAnimationShaders::AnimationShaderRegistry::animationEntryCandidates());
     QString includeError;
     const QString currentDir = QFileInfo(eff.fragmentShaderPath).absolutePath();
-    QString expanded = PhosphorShaders::ShaderIncludeResolver::expandIncludes(assembledSource, currentDir,
-                                                                              animIncludePaths, &includeError);
+    // The source-string legend the resolver's `#line <n> <i>` directives
+    // refer to: a driver diagnostic names source string i, and without the
+    // legend the journal shows an integer nothing maps back to a file.
+    // Index 0 is the top-level source, which the resolver leaves for the
+    // caller to fill.
+    QStringList sourcePaths;
+    QString expanded = PhosphorShaders::ShaderIncludeResolver::expandIncludes(
+        assembledSource, currentDir, animIncludePaths, &includeError, nullptr, &sourcePaths);
+    if (!sourcePaths.isEmpty()) {
+        sourcePaths[0] = eff.fragmentShaderPath;
+    }
     if (expanded.isEmpty()) {
         qCWarning(lcEffect) << "Failed to expand strip shader includes for" << effectId << ":" << includeError;
         return &compiled;
@@ -105,7 +128,7 @@ StripTransitionManager::CompiledStripShader* StripTransitionManager::compiledSha
 
     std::unique_ptr<KWin::GLShader> shader = KWin::ShaderManager::instance()->generateCustomShader(
         KWin::ShaderTrait::MapTexture, vertWithKwinDefine, fragWithKwinDefine);
-    bool abandonedForMissingUStrip = false;
+    bool abandonedForContract = false;
     if (shader && shader->uniformLocation("uStrip") < 0) {
         // A pack that never samples uStrip has it optimised out at link
         // time. The quad REPLACES the output (blend off), so running such a
@@ -115,10 +138,23 @@ StripTransitionManager::CompiledStripShader* StripTransitionManager::compiledSha
         qCWarning(lcEffect) << "Strip effect" << effectId
                             << "never samples uStrip (getStripColor); abandoning strip pass";
         shader.reset();
-        abandonedForMissingUStrip = true;
+        abandonedForContract = true;
+    }
+    if (shader && shader->uniformLocation("uBelow") < 0) {
+        // The generated main's re-composite always samples uBelow, so a
+        // link that optimised it out means the re-composite is not in the
+        // program: strip_transition.glsl no longer installs it, or an
+        // include shadowed it. Same consequence as a bypassed entry point
+        // (black gaps), same abandonment; the definesMain check above
+        // catches the pack-side cause before the compile.
+        qCWarning(lcEffect) << "Strip effect" << effectId
+                            << "links without the below-strip re-composite (uBelow); abandoning strip pass";
+        shader.reset();
+        abandonedForContract = true;
     }
     if (shader) {
         compiled.uStripLoc = shader->uniformLocation("uStrip");
+        compiled.uBelowLoc = shader->uniformLocation("uBelow");
         compiled.iTimeLoc = shader->uniformLocation("iTime");
         compiled.iResolutionLoc = shader->uniformLocation("iResolution");
         compiled.iFrameLoc = shader->uniformLocation("iFrame");
@@ -132,10 +168,17 @@ StripTransitionManager::CompiledStripShader* StripTransitionManager::compiledSha
             compiled.customColorsLoc[slot] = shader->uniformLocation(ShaderInternal::kCustomColorsElementNames[slot]);
         }
         compiled.shader = std::move(shader);
-    } else if (!abandonedForMissingUStrip) {
-        // Only a genuine compile/link failure reaches here — the uStrip
-        // abandonment above already reported its own reason.
-        qCWarning(lcEffect) << "Failed to compile strip transition shader for" << effectId;
+    } else if (!abandonedForContract) {
+        // Only a genuine compile/link failure reaches here — the contract
+        // abandonments above already reported their own reason. The legend
+        // turns the driver's `<i>:<line>` into a file, since the pack's
+        // includes are pasted in as numbered source strings.
+        QStringList legend;
+        for (qsizetype i = 0; i < sourcePaths.size(); ++i) {
+            legend << QString::number(i) + QLatin1Char('=') + QFileInfo(sourcePaths.at(i)).fileName();
+        }
+        qCWarning(lcEffect) << "Failed to compile strip transition shader for" << effectId
+                            << "(source strings:" << legend.join(QLatin1String(", ")) << ")";
     }
     return &compiled;
 }

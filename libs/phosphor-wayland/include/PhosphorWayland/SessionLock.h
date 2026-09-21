@@ -22,12 +22,16 @@ namespace PhosphorWayland {
  * session). On a successful authentication the owner calls `unlockAndDestroy()`.
  *
  * This is the foundation primitive a lock service composes; it carries no
- * authentication, no UI, and (deliberately) no lock *surfaces*. Per the
- * protocol a real lock screen must create an `ext_session_lock_surface_v1` for
- * every output before the compositor presents the locked frame and sends
- * `locked()`; that rendering layer is a shell concern wired in a later phase.
- * Until surfaces are added the compositor decides, per its own policy and time
- * limit, when (or whether) to emit `locked()`.
+ * authentication and no UI. Lock *surfaces* (one `ext_session_lock_surface_v1`
+ * per output, presented by the compositor as the locked frame) are QWindows
+ * marked through `LockSurface::get()`; the QPA plugin creates them against the
+ * lock object this class holds, so they can only exist between `lock()` and
+ * the lock's release (`canCreateSurfaces()`). Create them as soon as `lock()`
+ * has been called, NOT after `locked()`: a compositor is free to withhold
+ * `locked()` until every output carries a lock surface, and waiting for the
+ * grant before creating them would then deadlock. `canCreateSurfaces()` is
+ * true for exactly the window in which they may be created, which is why it
+ * is not the same predicate as `isLocked()`.
  *
  * Security guarantee (from the protocol): if the client dies while the session
  * is locked, the compositor must NOT unlock. Accordingly this object never
@@ -49,13 +53,20 @@ public:
     ~SessionLock() override;
 
     /// True iff the compositor advertises `ext_session_lock_manager_v1`. The
-    /// constructor still succeeds when unsupported, but `lock()` is a no-op.
+    /// constructor still succeeds when unsupported; `lock()` then reports
+    /// `finished()` rather than locking.
     static bool isSupported();
 
-    /// Request that the session be locked. The compositor replies with exactly
-    /// one of `locked()` or `finished()`. A no-op if a lock is already in
-    /// progress, the session is already locked by this object, or the protocol
-    /// is unsupported.
+    /// Request that the session be locked. Answers with exactly one of
+    /// `locked()` or `finished()` — including when the request never reaches
+    /// the compositor (protocol unsupported, no integration, or the lock
+    /// object could not be created), in which case `finished()` is emitted
+    /// asynchronously. Callers set their own state before calling and have no
+    /// other exit, so a silent return would strand them for good.
+    ///
+    /// The one case that answers with neither is a redundant call: a lock
+    /// already in flight or already held by this object is ignored, because
+    /// the reply for the outstanding request is still owed.
     void lock();
 
     /// Release the lock after a successful authentication: sends
@@ -69,6 +80,11 @@ public:
     /// True between `locked()` and `unlockAndDestroy()` (or a compositor-driven
     /// `finished()`).
     [[nodiscard]] bool isLocked() const;
+
+    /// True while a lock object exists (requested or granted), which is when a
+    /// `LockSurface`-marked window can be mapped as a lock surface. Reads the
+    /// process-wide state: at most one SessionLock holds a lock at a time.
+    static bool canCreateSurfaces();
 
 Q_SIGNALS:
     /// The session is now locked; this client owns the lock and must call

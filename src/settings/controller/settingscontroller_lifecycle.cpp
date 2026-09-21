@@ -44,7 +44,7 @@
 
 namespace PlasmaZones {
 
-bool SettingsController::adoptOnDiskState(bool treatAsyncRevertAsClean)
+void SettingsController::adoptOnDiskState()
 {
     // Hold m_loading for the whole body: every step below can fire a NOTIFY that
     // routes through onSettingsPropertyChanged and would re-dirty the very pages
@@ -52,29 +52,13 @@ bool SettingsController::adoptOnDiskState(bool treatAsyncRevertAsClean)
     // reset, and it runs after the flag drops.
     const ScopedFlag loadingScope(m_loading);
 
-    // Animation pages persist per-event motion overrides as separate
-    // files (file-per-path under ~/.local/share/plasmazones/profiles/);
-    // m_settings.load() alone wouldn't restore them. The page controller's
-    // pre-edit snapshot rewinds those files. Shader overrides don't need this —
-    // they ride Settings::load()'s Q_PROPERTY re-emit like every other page
-    // setting.
-    //
-    // A refusal has two causes and they mean opposite things, which is what
-    // @p treatAsyncRevertAsClean selects between.
-    //
-    // On the global Discard path this page's async revert is dispatched FIRST, so
-    // by the time the settings domain gets here the worker already owns the
-    // snapshot map and revertPending() refuses. That is the restore proceeding
-    // normally, not a failure: the worker finishes the job and re-raises
-    // pendingChangesChanged itself if it has to retain a file. Treating it as
-    // "not clean" left every dirty badge lit after a discard that succeeded.
-    //
-    // A refusal with no worker running, or a partial restore failure, IS a page
-    // that is still dirty, and forcing needsSave false there would strand the
-    // snapshots for the next Discard to write back over the new state.
-    const bool animationsClean = !m_animationsPage
-        || (treatAsyncRevertAsClean && m_animationsPage->asyncRevertInFlight()) || m_animationsPage->revertPending();
-
+    // The animations page writes only config keys, so `m_settings.load()`
+    // below reverts every value it owns. `revertPending()` exists for what
+    // Settings cannot do: re-emit the page's own signals so an OPEN page
+    // rebinds. It runs BEFORE the load so the page's dirty bookkeeping is
+    // reset before the reload's signals arrive.
+    if (m_animationsPage)
+        m_animationsPage->revertPending();
     m_settings.load();
     // Adopting disk re-takes the committed baseline, so any quick-slot rename
     // cascade recorded by renameWorkspaceSlotTargets no longer describes an
@@ -115,7 +99,6 @@ bool SettingsController::adoptOnDiskState(bool treatAsyncRevertAsClean)
         Q_EMIT stagedTilingOrderChanged();
     if (hadStagedScroll)
         Q_EMIT stagedScrollingOrderChanged();
-    return animationsClean;
 }
 
 void SettingsController::load()
@@ -125,12 +108,8 @@ void SettingsController::load()
     // the flag so the clean transition at the end of this load doesn't
     // schedule a redundant second reload.
     m_pendingExternalReload = false;
-    const bool animationsClean = adoptOnDiskState(/*treatAsyncRevertAsClean=*/true);
-    if (!animationsClean) {
-        qCWarning(lcConfig) << "load: animation snapshots are still staged after the revert";
-    } else {
-        setNeedsSave(false);
-    }
+    adoptOnDiskState();
+    setNeedsSave(false);
 }
 
 void SettingsController::save()
@@ -482,29 +461,18 @@ void SettingsController::defaults()
     if (hadStagedScroll)
         Q_EMIT stagedScrollingOrderChanged();
 
-    // Drop the animations page's in-memory staged edits so the page
-    // matches the reset settings (on-disk animation overrides in
-    // per-event JSON files are a separate concern — reset() doesn't
-    // touch them, and the user would need a dedicated "reset all
-    // animation customizations" entry point to clear those).
-    if (m_animationsPage && !m_animationsPage->revertPending()) {
-        // Refused because an async discard is still in flight. The reset leaves
-        // the per-event override files as they are, so say so rather than
-        // reporting defaults that are only half applied.
-        //
-        // Deliberately NOT the asyncRevertInFlight() shortcut load() takes: on
-        // the Discard path the worker owns the restore and finishing it IS the
-        // goal, but defaults() wants the files reset NOW, so treating a busy
-        // worker as clean would silently skip that work. Same posture as
-        // importAllSettings().
-        qCWarning(lcConfig) << "defaults: animation snapshots are still staged after the revert (a discard is in "
-                               "flight, or a restore failed)";
-        // A log line is not a result. The two sibling paths (per-page Reset and
-        // per-page Discard) both raise a signal for exactly this refusal, and
-        // without one here the animation pages silently keep their overrides
-        // while the rest of the app reports a completed factory reset.
-        Q_EMIT pageResetFailed(QStringLiteral("animations"), QString(ReasonOverridesNotCleared));
-    }
+    // Drop the animations page's in-memory dirty memo so the page matches the
+    // reset settings. The per-event timing overrides themselves are config
+    // keys since schema v8, so `m_settings.reset()` above has already cleared
+    // them — there is nothing left for a separate "reset all animation
+    // customizations" entry point to do.
+    //
+    // The return is deliberately ignored: revertPending() drops a memo and
+    // cannot fail. It used to refuse while an async discard worker owned the
+    // per-event files, and this branch raised pageResetFailed for that; the
+    // worker and the files are both gone, so the branch was unreachable.
+    if (m_animationsPage)
+        m_animationsPage->revertPending();
 
     // Quick-layout slots are daemon-backed (mode-keyed LayoutRegistry), so
     // m_settings.reset() above did not touch them and clearAll() only dropped

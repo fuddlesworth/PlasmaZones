@@ -90,7 +90,17 @@ namespace PlasmaZones {
 /// v7: the window-movement placement animation nodes `snapIn` / `snapOut` are
 ///     renamed `placeIn` / `placeOut`, and `window.movement.maximize` is
 ///     retired into them (see migrateV6ToV7).
-inline constexpr int ConfigSchemaVersion = 7;
+/// v8: two stores fold into config. Per-event animation TIMING overrides move
+///     out of the loose `<data>/plasmazones/profiles/<event.path>.json` files
+///     and into `Animations/MotionProfileTree`, beside the pack assignment
+///     already in `Animations/ShaderProfileTree` (see migrateV7ToV8); and
+///     zone-overlay shader assignments move out of the layout-settings sidecar
+///     into `Overlays/OverlayShaderTree` (global baseline +
+///     per-layout overrides). The overlay half has no chain step of its own:
+///     the sidecar lift needs filesystem access, so it runs from
+///     ensureJsonConfig's finalize pass (see relocateOverlayShaderAssignments),
+///     mirroring how the v4 layout-settings relocation runs outside the chain.
+inline constexpr int ConfigSchemaVersion = 8;
 
 class PLASMAZONES_EXPORT ConfigMigration
 {
@@ -128,15 +138,48 @@ public:
     /// strictly one-way and this should never be called.
     static void resetMigrationGuardForTesting();
 
+    /// External state a migration step may read.
+    ///
+    /// `Disabled` is for a root that is NOT this machine's live config — a
+    /// settings profile's sparse delta, or a config blob imported from another
+    /// machine — where a step that imports from the filesystem would write the
+    /// migrating machine's own state into a document that never carried it.
+    /// Steps that are pure JSON→JSON transforms ignore this.
+    ///
+    /// Declared ahead of the runners below because they take it as a
+    /// parameter. Deliberately NOT defaulted anywhere: importing this
+    /// machine's loose files into a document is only correct when the document
+    /// IS this machine's config, and a default made that the silent behaviour
+    /// of any new call site. Every caller states which it has.
+    enum class ExternalImports {
+        Enabled,
+        Disabled
+    };
+
     /// Convert an INI config file to JSON format. Produces v1 JSON.
     /// Used by ensureJsonConfig() for one-time INI migration,
     /// and by settings import for legacy INI files.
-    static bool migrateIniToJson(const QString& iniPath, const QString& jsonPath);
+    ///
+    /// Pass `Disabled` when @p iniPath is a foreign blob rather than this
+    /// machine's own former config: the chain this runs ends at the current
+    /// schema version, so it executes every import-bearing step.
+    static bool migrateIniToJson(const QString& iniPath, const QString& jsonPath, ExternalImports imports);
 
     /// Run the schema migration chain on a JSON config file.
     /// Reads the file, applies all steps from current _version to
     /// ConfigSchemaVersion, writes atomically.
-    static bool runMigrationChain(const QString& jsonPath);
+    ///
+    /// @p imports is about the CONTENT, not the path. Settings import writes a
+    /// foreign export over the live config path and then migrates it, so the
+    /// path being the live one does not make the document this machine's.
+    /// Recover pre-v8 per-event timing files on the ensureJsonConfig exits the
+    /// version chain never reaches (corrupt-with-no-INI, whitespace-only, fresh
+    /// install). Idempotent, and a no-op unless the config is already stamped
+    /// v8 and carries no MotionProfileTree. Mirrors finalizeV4Conversion, which
+    /// exists on the same exits for the same reason.
+    static bool finalizeV8MotionImport(const QString& jsonPath);
+
+    static bool runMigrationChain(const QString& jsonPath, ExternalImports imports);
 
     /// Run the migration chain in-memory. Two callers: ensureJsonConfig's
     /// INI→JSON + upgrade single pass (a full nested config root), and
@@ -144,7 +187,7 @@ public:
     /// config delta translated into the nested shape — so a step must be
     /// correct for a sparse input too (write retired values' replacements
     /// explicitly; removal there means "inherit", not "default").
-    static void runMigrationChainInMemory(QJsonObject& root);
+    static void runMigrationChainInMemory(QJsonObject& root, ExternalImports imports);
 
     // Schema migration functions (one per version bump).
     // Public so the `PhosphorConfig::MigrationStep` registry built in
@@ -285,6 +328,48 @@ public:
     /// renameRetiredAnimationEventPaths, since rules.json is outside this
     /// chain. Stamps `_version = 7`.
     static void migrateV6ToV7(QJsonObject& root);
+
+    /// v7 → v8: fold the per-event motion override FILES into config.
+    ///
+    /// Per-event timing (curve, duration, ...) was the last part of an
+    /// animation's look kept in loose files under the data dir, while the pack
+    /// that plays it, and the whole decoration domain, were already config. So
+    /// a settings profile captured an event's PACK and not its TIMING, a motion
+    /// set had to snapshot two different stores, and the animations page
+    /// carried a private file-staging apparatus that the decoration page,
+    /// backed by one config tree, does not need at all.
+    ///
+    /// This reads `<data>/plasmazones/profiles/<event.path>.json` and writes the
+    /// equivalent ProfileTree into Animations/MotionProfileTree. Files whose
+    /// `name` is not a built-in event path are USER PRESETS and are left alone;
+    /// the override files themselves are also left in place, so a downgrade
+    /// still finds them.
+    ///
+    /// @param importOverrideFiles whether to read the profiles directory at
+    ///        all. FALSE for the settings-PROFILE delta path: a saved profile
+    ///        stores only the keys it changes, and importing the migrating
+    ///        machine's own override files into one would silently write this
+    ///        user's timings into every profile they load. That path only needs
+    ///        the version stamp, which is applied either way.
+    static void migrateV7ToV8(QJsonObject& root, bool importOverrideFiles);
+
+    /// The overlay-shader half of v8: lift zone-overlay shader assignments
+    /// from the layout-settings sidecar into the config's OverlayShaderTree,
+    /// stripping the relocated keys from the sidecar, and rewrite every
+    /// OverrideOverlayShader rule written against the old per-layout property
+    /// onto the tree's node shape (the global-default node made explicit, so
+    /// the rule keeps meaning "every layout in this context").
+    ///
+    /// It has no chain step of its own. The lift needs filesystem access and
+    /// must not run on sparse profile deltas, so like the v4 layout-settings
+    /// relocation it runs from the finalize pass instead, and migrateV7ToV8
+    /// owns the version stamp for both halves.
+    ///
+    /// Idempotent and crash-safe — ensureJsonConfig calls it on every run
+    /// beside finalizeV4Conversion. An already-present tree entry for a layout
+    /// always wins over the sidecar copy (a retry after a partial run must not
+    /// clobber a since-edited assignment).
+    static bool relocateOverlayShaderAssignments(const QString& jsonPath);
 
     /// Prune the retired provider-default catch-all assignment rule from
     /// rules.json. Runs from @ref finalizeV4Conversion's idempotent cleanup

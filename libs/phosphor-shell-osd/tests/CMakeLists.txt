@@ -34,6 +34,10 @@ target_link_libraries(test_phosphor_shell_osd
         PhosphorShellWidgetsQmlplugin
         PhosphorThemeQml
         PhosphorThemeQmlplugin
+        # OSDHost imports Phosphor.Shell (for the PlacementMap singleton,
+        # which this harness does not register: the cases bind a fake map).
+        PhosphorShellQml
+        PhosphorShellQmlplugin
 )
 
 add_test(

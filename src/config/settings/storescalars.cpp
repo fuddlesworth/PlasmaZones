@@ -263,6 +263,14 @@ P_STORE_GET(double, decorationBlurScaleMultiplier, decorationsPerformanceGroup, 
 P_STORE_SET_DOUBLE(setDecorationBlurScaleMultiplier, decorationsPerformanceGroup, blurScaleMultiplierKey,
                    decorationBlurScaleMultiplierChanged)
 
+// Back to a WHEN gate, and the hardest one: on an output carrying a fullscreen
+// window nothing decorates at all, and the suppressed surfaces stop asking for
+// frames rather than drawing empty ones. Scoped to that output by the effect,
+// so this is a plain global on/off here.
+P_STORE_GET(bool, decorationSuppressWhileFullscreen, decorationsPerformanceGroup, suppressWhileFullscreenKey, bool)
+P_STORE_SET_BOOL(setDecorationSuppressWhileFullscreen, decorationsPerformanceGroup, suppressWhileFullscreenKey,
+                 decorationSuppressWhileFullscreenChanged)
+
 // ── Rendering (PhosphorConfig::Store-backed) ────────────────────────────────
 // Validator (normalizeRenderingBackend in the schema) coerces unknown values
 // to a known backend, so a hand-edited "Rendering.Backend = foobar" reads

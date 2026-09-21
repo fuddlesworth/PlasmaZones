@@ -7,6 +7,7 @@
 #include <QFont>
 #include <QImage>
 #include <QPoint>
+#include <QPointF>
 #include <QRect>
 #include <QString>
 #include <QVector>
@@ -164,19 +165,30 @@ struct ScrollTabHitRect
 namespace ScrollTabRaster {
 
 /// Hit rects for every tab of @p indicator, in absolute logical coordinates,
-/// in the same order the tabs are drawn. Both this and rasterise() derive
+/// in the same order the tabs are drawn. Both this and rasterisePatch() derive
 /// their rects from the same internal tab-rect list (these are that list
 /// clipped to the indicator; the raster draws the unclipped list under a
 /// clip to the same rect), so hit-testing and drawing cannot drift apart.
 QVector<ScrollTabHitRect> layoutPills(const ScrollTabIndicator& indicator, const ScrollTabIndicatorStyle& style);
 
-/// Rasterise @p indicators into an ARGB32-premultiplied image covering
-/// @p bounds at @p devicePixelRatio. Drawing happens in image-local
-/// coordinates (absolute minus bounds.topLeft()).
+/// Rasterise @p indicators into an ARGB32-premultiplied image of exactly
+/// @p deviceSize DEVICE pixels, looking at the logical plane from
+/// @p logicalOrigin. Drawing happens in absolute logical coordinates, which
+/// the image's device-pixel ratio and that origin are the window onto.
+///
+/// Addressed in device pixels rather than by a logical rect because both
+/// callers pick their size there: the band's texture covers the device-
+/// aligned box KWin's damage alignment produces, and the hover sub-update
+/// has to start on a whole device pixel (that is the space glTexSubImage2D
+/// addresses). On a fractionally-scaled output the logical origin that lands
+/// on such a boundary sits BETWEEN logical pixels, so @p logicalOrigin is a
+/// QPointF and the same region of two different rasters comes out
+/// pixel-identical.
 ///
 /// @p hoveredWindowId marks that window's pill hovered.
-QImage rasterise(const QVector<ScrollTabIndicator>& indicators, const ScrollTabIndicatorStyle& style,
-                 const QRect& bounds, qreal devicePixelRatio, const QString& hoveredWindowId);
+QImage rasterisePatch(const QVector<ScrollTabIndicator>& indicators, const ScrollTabIndicatorStyle& style,
+                      const QPointF& logicalOrigin, const QSize& deviceSize, qreal devicePixelRatio,
+                      const QString& hoveredWindowId);
 
 } // namespace ScrollTabRaster
 
@@ -249,6 +261,34 @@ public:
     /// rects overlap, the one drawn LAST (topmost) wins, matching the raster.
     QString pillAt(KWin::LogicalOutput* output, const QPointF& pos, const QPointF& viewOffset) const;
 
+    /// The indicator whose tab run contains @p windowId, or nullptr when no
+    /// indicator on @p output draws that window as a tab.
+    ///
+    /// Answers from the MODEL rather than from the hit rects, and so do the
+    /// two queries below it: a tab clipped away by a too-short indicator
+    /// draws and hit-tests as nothing, but it is still a tab of the column
+    /// and a wheel step must reach it. The alternative is a run the user can
+    /// never scroll past.
+    ///
+    /// The returned pointer is owned by the painter and is invalidated by
+    /// the next setIndicators/clearOutput/clearAll on that output. Callers
+    /// use it within one synchronous input event and never store it.
+    const ScrollTabIndicator* indicatorFor(KWin::LogicalOutput* output, const QString& windowId) const;
+
+    /// The windowId of the tab drawn ACTIVE in the indicator that owns
+    /// @p windowId. Empty when the id names no tab here or when the run has
+    /// no active tab.
+    ///
+    /// This is the model's view of which tab the column is showing, so it
+    /// trails a focus change until the daemon relays the new strip back.
+    QString activePillFor(KWin::LogicalOutput* output, const QString& windowId) const;
+
+    /// The windowId @p delta (-1/+1) tabs away from @p windowId within the
+    /// indicator that owns it, wrapping at either end. Empty when the id
+    /// names no tab here, when its indicator has only one tab, or when
+    /// @p delta is not -1/+1.
+    QString neighbourPill(KWin::LogicalOutput* output, const QString& windowId, int delta) const;
+
     /// Union of @p output's indicator rects, absolute logical and WITHOUT
     /// the view offset. At rest the offset is zero, so this is exactly the
     /// on-screen rect and the right damage region; while a view leg is in
@@ -305,15 +345,21 @@ public:
     /// and first deletes any retired textures (this is the GL-current point).
     /// @p clipRegion is the DEVICE-space region of the scene walk in
     /// progress (the pass's damage region); the blit is hardware-clipped to
-    /// it, never painted unclipped. Paint order only yields stacking order
+    /// it, never painted unclipped. It is mapped through the render target's
+    /// transform into buffer space before it reaches the scissor, the same
+    /// way KWin's item renderer maps its own: the scissor takes framebuffer
+    /// rects, and a screen target is Y-flipped (and possibly rotated)
+    /// relative to the device region. Paint order only yields stacking order
     /// when every window above repaints the same pixels afterwards, and KWin
     /// hands each of them only the damage region — pill pixels outside it
     /// would surface over whatever is stacked above the strip until the next
     /// full-damage frame.
-    /// Returns true only when the blit was actually issued: a latched
+    /// Returns true when the pills stand on screen after this pass: a latched
     /// raster/upload failure, an over-limit bounds, or a missing texture
     /// return false, and the caller's pass outcome (what gates pill input)
-    /// must record that nothing is on screen.
+    /// must record that nothing is on screen. A @p clipRegion that misses the
+    /// band entirely still returns true with no draw issued, because the
+    /// pixels the last pass painted are untouched by this one.
     bool paint(KWin::LogicalOutput* output, const KWin::RenderTarget& renderTarget,
                const KWin::RenderViewport& viewport, const KWin::Region& clipRegion, const QPointF& viewOffset);
 
@@ -348,6 +394,21 @@ private:
         /// for. A change in either is a re-rasterise, not just a re-upload.
         QRect textureBounds;
         qreal textureScale = 0.0;
+        /// The texture's top-left in DEVICE pixels, measured from the render
+        /// viewport's own corner rather than the absolute logical origin:
+        /// `textureBounds`'s origin, taken relative to `textureRenderOrigin`,
+        /// floored onto the device grid. On a fractionally-scaled output that
+        /// is NOT textureBounds.topLeft() * textureScale, and the difference
+        /// is the whole point — the texture covers the same device-aligned box
+        /// KWin's damage alignment produces, so the blit and the damage cannot
+        /// disagree about a border column. Both the quad's placement and the
+        /// hover patch's sub-upload offset are measured from here.
+        QPoint textureDeviceOrigin;
+        /// The render viewport's logical top-left that `textureDeviceOrigin`
+        /// was measured from. Part of the geometry the texture was rasterised
+        /// for, so a viewport whose corner moved re-rasterises: the alignment
+        /// is only meaningful against the corner it was computed against.
+        QPointF textureRenderOrigin;
         /// Bounds/scale pair for which rasterising or uploading FAILED (an
         /// image too large for GL, an allocation failure). While it matches
         /// the current pair the paint does not retry every frame; any model,

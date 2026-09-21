@@ -1,0 +1,361 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!--
+  Phosphor mockups v2: OSDs as value bands on the edge that concerns them (A3 §4).
+  8 s loop: volume band draws on the focused window's bottom edge at 58, ticks 62 -> 66 -> 62,
+  holds, travels to the newly focused window at 3.6 s, retracts toward its fill point at 5.2 s.
+  Brightness (screen right edge), caps (focused top edge) and media (player bottom edge) coexist.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720"
+     font-family="Manrope, 'Noto Sans', system-ui, sans-serif">
+  <defs>
+    <linearGradient id="rail" x1="0" y1="0" x2="1280" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#22D3EE"/>
+      <stop offset="0.33" stop-color="#3B82F6"/>
+      <stop offset="0.67" stop-color="#A855F7"/>
+      <stop offset="1"    stop-color="#F43F5E"/>
+    </linearGradient>
+    <linearGradient id="railV" x1="0" y1="0" x2="0" y2="720" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#22D3EE"/>
+      <stop offset="0.33" stop-color="#3B82F6"/>
+      <stop offset="0.67" stop-color="#A855F7"/>
+      <stop offset="1"    stop-color="#F43F5E"/>
+    </linearGradient>
+    <linearGradient id="wp" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0"    stop-color="#0B1730"/>
+      <stop offset="0.55" stop-color="#070F22"/>
+      <stop offset="1"    stop-color="#050916"/>
+    </linearGradient>
+    <radialGradient id="wpLight" cx="0.2" cy="0.9" r="0.7">
+      <stop offset="0"   stop-color="#22D3EE" stop-opacity="0.16"/>
+      <stop offset="1"   stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="wpLight2" cx="0.85" cy="0.2" r="0.6">
+      <stop offset="0"   stop-color="#A855F7" stop-opacity="0.14"/>
+      <stop offset="1"   stop-color="#A855F7" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gleam" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"   stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.6"/>
+      <stop offset="1"   stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glassBlur" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <linearGradient id="revealMask" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset="1" stop-color="#fff"/>
+    </linearGradient>
+    <symbol id="glyph" viewBox="0 0 16 16">
+      <rect x="2" y="2" width="12" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <rect x="5" y="5" width="6" height="6" rx="1" fill="currentColor" opacity="0.7"/>
+    </symbol>
+    <symbol id="mote" viewBox="0 0 4 4"><circle cx="2" cy="2" r="1.4" fill="currentColor"/></symbol>
+    <style>
+      .ui   { font-family: Manrope, 'Noto Sans', system-ui, sans-serif; }
+      .mono { font-family: 'JetBrains Mono', 'Noto Sans Mono', monospace; font-variant-numeric: tabular-nums; }
+      .t1 { fill: #E6EDFF; }
+      .t2 { fill: #94A3B8; }
+      .note-title { font-size: 12px; font-weight: 600; }
+      .note-body  { font-size: 11.5px; fill: #94A3B8; }
+      .eyebrow { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; fill: #94A3B8; }
+      .readout { font-size: 22px; font-weight: 500; fill: #E6EDFF; stroke: #070F22; stroke-width: 1; paint-order: stroke; }
+    </style>
+  </defs>
+
+  <!-- ===== LAYER 0: wallpaper ===== -->
+  <rect width="1280" height="720" fill="url(#wp)"/>
+  <rect width="1280" height="720" fill="url(#wpLight)"/>
+  <rect width="1280" height="720" fill="url(#wpLight2)"/>
+
+  <!-- ===== LAYER 1: windows. Focus moves A -> B at 3.6 s (white edge follows). ===== -->
+  <g id="windows">
+    <g id="win-a">
+      <rect x="36" y="44" width="792" height="640" rx="8" fill="#0B1730" fill-opacity="0.92"/>
+      <rect x="36.5" y="44.5" width="791" height="639" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.9"/>
+      <rect x="36.5" y="44.5" width="791" height="639" rx="8" fill="none" stroke="#FFFFFF" stroke-width="1" opacity="0.55">
+        <animate attributeName="opacity" values="0.55;0.55;0;0;0.55" keyTimes="0;0.45;0.49;0.9;1" dur="8s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0 0 1 1;0.05 0.6 0.15 1;0 0 1 1;0.34 1 0.64 1"/>
+      </rect>
+      <rect x="36" y="44" width="120" height="2" fill="url(#gleam)">
+        <animate attributeName="x" values="36;708;36" keyTimes="0;0.5;1" dur="9s" repeatCount="indefinite"/>
+      </rect>
+      <g fill="#E6EDFF" opacity="0.08">
+        <rect x="64" y="84" width="420" height="10" rx="2"/><rect x="64" y="108" width="560" height="10" rx="2"/>
+        <rect x="64" y="132" width="380" height="10" rx="2"/><rect x="64" y="172" width="620" height="10" rx="2"/>
+        <rect x="64" y="196" width="500" height="10" rx="2"/><rect x="64" y="220" width="440" height="10" rx="2"/>
+      </g>
+    </g>
+    <g id="win-b">
+      <rect x="836" y="44" width="408" height="316" rx="8" fill="#0B1730" fill-opacity="0.88"/>
+      <rect x="836.5" y="44.5" width="407" height="315" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.45"/>
+      <rect x="836.5" y="44.5" width="407" height="315" rx="8" fill="none" stroke="#FFFFFF" stroke-width="1" opacity="0">
+        <animate attributeName="opacity" values="0;0;0.55;0.55;0" keyTimes="0;0.45;0.4675;0.9;1" dur="8s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1"/>
+      </rect>
+      <g fill="#E6EDFF" opacity="0.08">
+        <rect x="860" y="84" width="300" height="10" rx="2"/><rect x="860" y="108" width="240" height="10" rx="2"/>
+        <rect x="860" y="132" width="330" height="10" rx="2"/>
+      </g>
+    </g>
+    <g id="win-c">
+      <rect x="836" y="368" width="408" height="316" rx="8" fill="#0B1730" fill-opacity="0.88"/>
+      <rect x="836.5" y="368.5" width="407" height="315" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.45"/>
+      <!-- player: a waveform sketch -->
+      <g fill="#E6EDFF" opacity="0.1">
+        <rect x="900" y="560" width="3" height="18"/><rect x="908" y="552" width="3" height="34"/><rect x="916" y="558" width="3" height="22"/>
+        <rect x="924" y="546" width="3" height="46"/><rect x="932" y="556" width="3" height="26"/><rect x="940" y="550" width="3" height="38"/>
+        <rect x="948" y="562" width="3" height="14"/><rect x="956" y="554" width="3" height="30"/><rect x="964" y="548" width="3" height="42"/>
+        <rect x="972" y="558" width="3" height="22"/><rect x="980" y="552" width="3" height="34"/><rect x="988" y="560" width="3" height="18"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- ===== LAYER 2: the bar ===== -->
+  <g id="bar">
+    <rect x="0" y="2" width="1280" height="26" fill="#0B1730" fill-opacity="0.72"/>
+    <rect x="0" y="0" width="1280" height="2" fill="url(#rail)" opacity="0.75"/>
+    <rect x="0" y="0" width="160" height="2" fill="url(#gleam)">
+      <animate attributeName="x" values="-160;1280" dur="9s" repeatCount="indefinite"/>
+    </rect>
+    <g id="map" transform="translate(12 6)">
+      <rect x="0.5" y="0.5" width="31" height="17" fill="none" stroke="#E6EDFF" stroke-opacity="0.14"/>
+      <rect x="1" y="1" width="19" height="16" fill="#3B82F6" fill-opacity="0.55" stroke="#FFFFFF" stroke-opacity="0.9" stroke-width="1">
+        <animate attributeName="stroke-opacity" values="0.9;0.9;0;0;0.9" keyTimes="0;0.45;0.4675;0.9;1" dur="8s" repeatCount="indefinite"/>
+      </rect>
+      <rect x="21" y="1"  width="10" height="7.5" fill="#CE4BA8" fill-opacity="0.4" stroke="#CE4BA8" stroke-opacity="0.8" stroke-width="1">
+        <animate attributeName="stroke" values="#CE4BA8;#CE4BA8;#FFFFFF;#FFFFFF;#CE4BA8" keyTimes="0;0.45;0.4675;0.9;1" dur="8s" repeatCount="indefinite"/>
+      </rect>
+      <rect x="21" y="9.5" width="10" height="7.5" fill="#CE4BA8" fill-opacity="0.4" stroke="#CE4BA8" stroke-opacity="0.8" stroke-width="1"/>
+      <g transform="translate(9 19)">
+        <rect x="0" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.9"/>
+        <rect x="4" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+        <rect x="8" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+        <rect x="12" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+      </g>
+    </g>
+    <rect x="56" y="9" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+    <g transform="translate(66 7)" color="#E6EDFF">
+      <use xlink:href="#glyph" width="16" height="16"/>
+      <g>
+        <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;0.45;0.4675;0.9;1" dur="8s" repeatCount="indefinite"/>
+        <text x="22" y="12.5" class="ui t1" font-size="13" font-weight="500">kate · phosphor-shell.md</text>
+        <rect x="22" y="16" width="146" height="1" fill="#3B82F6" opacity="0.9"/>
+      </g>
+      <g opacity="0">
+        <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.45;0.4675;0.9;1" dur="8s" repeatCount="indefinite"/>
+        <text x="22" y="12.5" class="ui t1" font-size="13" font-weight="500">firefox · Phosphor docs</text>
+        <rect x="22" y="16" width="134" height="1" fill="#CE4BA8" opacity="0.9"/>
+      </g>
+    </g>
+    <g transform="translate(608 7)">
+      <text x="0" y="12.5" class="mono t1" font-size="14" font-weight="500">14:32</text>
+      <rect x="31" y="16" width="9" height="2" fill="#6F6CF7">
+        <animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.02;0.08;0.2;1" dur="6s" repeatCount="indefinite"
+                 calcMode="spline" keySplines="0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </rect>
+    </g>
+    <g transform="translate(1040 6)">
+      <rect x="0"  y="6"  width="2" height="10" fill="#CE4BA8" opacity="0.85"/>
+      <rect x="5"  y="2"  width="2" height="14" fill="#CE4BA8" opacity="0.85"/>
+      <rect x="10" y="10" width="2" height="6"  fill="#CE4BA8" opacity="0.85"/>
+      <rect x="22" y="3" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+      <g fill="#E6EDFF" opacity="0.9">
+        <circle cx="40" cy="9" r="4" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <rect x="52" y="4" width="8" height="10" rx="1.5" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <path d="M70 5 l4 4 -4 4 M74 5 l4 4 -4 4" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <rect x="88" y="5" width="12" height="7" rx="1.5" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <rect x="89.5" y="6.5" width="7" height="4" fill="#E6EDFF"/>
+      </g>
+      <rect x="112" y="3" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+      <path d="M126 12 h10 l-1.5-2 v-3 a3.5 3.5 0 0 0 -7 0 v3 z" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+      <text x="139" y="8" class="mono t1" font-size="9">3</text>
+      <circle cx="160" cy="9" r="4" fill="#E9457A" opacity="0.7"/>
+      <circle cx="184" cy="9" r="4.5" fill="none" stroke="#E6EDFF" stroke-width="1.2" opacity="0.45"/>
+      <rect x="183.4" y="3" width="1.2" height="5" fill="#E6EDFF" opacity="0.45"/>
+    </g>
+  </g>
+
+  <!-- ===== LAYER 3: SCENE. Every band is compositor-drawn on an edge. ===== -->
+  <g id="scene">
+
+    <!-- Volume: 3 px band on the focused window's bottom edge. Colour = state axis at the value
+         (62% sits between blue and purple: #9560F7). Timeline in loop fractions of 8 s:
+         0.0375 draw from fill point (58) · 0.125 tick 62 · 0.1875 tick 66 · 0.25 tick 62 · 0.45 travel to B · 0.65 retract. -->
+    <g id="osd-volume">
+      <!-- unfilled remainder: same hue at 15% -->
+      <rect x="527" y="682.5" width="301" height="3" rx="1.5" fill="#9560F7" opacity="0.15">
+        <animate attributeName="x" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="495;495;495;495;527;527;559;559;527;527;1089;1089;1089;1089"
+                 keyTimes="0;0.0375;0.0625;0.125;0.1325;0.1875;0.195;0.25;0.2575;0.45;0.4675;0.65;0.725;1"
+                 keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+        <animate attributeName="width" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="0;0;333;333;301;301;269;269;301;301;155;155;0;0"
+                 keyTimes="0;0.0375;0.0625;0.125;0.1325;0.1875;0.195;0.25;0.2575;0.45;0.4675;0.65;0.725;1"
+                 keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+        <animate attributeName="y" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="682.5;682.5;358.5;358.5" keyTimes="0;0.45;0.4675;1" keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1"/>
+      </rect>
+      <!-- filled portion -->
+      <rect x="36" y="682.5" width="491" height="3" rx="1.5" fill="#9560F7">
+        <animate attributeName="x" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="495;495;36;36;36;36;36;36;36;36;836;836;1089;1089"
+                 keyTimes="0;0.0375;0.0625;0.125;0.1325;0.1875;0.195;0.25;0.2575;0.45;0.4675;0.65;0.725;1"
+                 keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+        <animate attributeName="width" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="0;0;459;459;491;491;523;523;491;491;253;253;0;0"
+                 keyTimes="0;0.0375;0.0625;0.125;0.1325;0.1875;0.195;0.25;0.2575;0.45;0.4675;0.65;0.725;1"
+                 keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+        <animate attributeName="y" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="682.5;682.5;358.5;358.5" keyTimes="0;0.45;0.4675;1" keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1"/>
+      </rect>
+      <!-- tick flash at the band end (widget-pop 60 ms, then release) -->
+      <rect x="-3" y="-1" width="6" height="5" rx="1.5" fill="#FFFFFF" opacity="0">
+        <animateTransform attributeName="transform" type="translate" dur="8s" repeatCount="indefinite" calcMode="discrete"
+                 values="495 683;527 683;559 683;527 683;1089 359" keyTimes="0;0.125;0.1875;0.25;0.45"/>
+        <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="0;0;1;0;0;1;0;0;1;0;0"
+                 keyTimes="0;0.125;0.1325;0.18;0.1875;0.195;0.2425;0.25;0.2575;0.305;1"
+                 keySplines="0 0 1 1;0.34 1 0.64 1;0.05 0.6 0.15 1;0 0 1 1;0.34 1 0.64 1;0.05 0.6 0.15 1;0 0 1 1;0.34 1 0.64 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </rect>
+      <!-- readout rides the fill point: 22 px tabular mono, 10 px above the band, glyph 12 px to its left -->
+      <g opacity="1" transform="translate(527 672)">
+        <animateTransform attributeName="transform" type="translate" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="495 672;495 672;527 672;527 672;559 672;559 672;527 672;527 672;1089 348;1089 348"
+                 keyTimes="0;0.125;0.1325;0.1875;0.195;0.25;0.2575;0.45;0.4675;1"
+                 keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1"/>
+        <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="0;0;1;1;0;0" keyTimes="0;0.0625;0.08;0.62;0.665;1"
+                 keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+        <!-- speaker glyph, 12 px -->
+        <g transform="translate(-52 -14)" fill="none" stroke="#E6EDFF" stroke-width="1.2">
+          <path d="M1 4 h3 l4 -3 v10 l-4 -3 h-3 z"/>
+          <path d="M10 3 a3.5 3.5 0 0 1 0 6"/>
+        </g>
+        <text x="-4" y="0" text-anchor="end" class="mono readout" opacity="0">
+          <animate attributeName="opacity" values="1;1;0;0" keyTimes="0;0.125;0.1251;1" dur="8s" repeatCount="indefinite" calcMode="discrete"/>58</text>
+        <text x="-4" y="0" text-anchor="end" class="mono readout" opacity="1">
+          <animate attributeName="opacity" values="0;0;1;1;0;0;1;1" keyTimes="0;0.125;0.1251;0.1875;0.1876;0.25;0.2501;1" dur="8s" repeatCount="indefinite" calcMode="discrete"/>62</text>
+        <text x="-4" y="0" text-anchor="end" class="mono readout" opacity="0">
+          <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.1875;0.1876;0.25;0.2501;1" dur="8s" repeatCount="indefinite" calcMode="discrete"/>66</text>
+        <!-- changed-digit underline: 2 px, state hue, enters on each tick and releases -->
+        <rect x="-17" y="4" width="13" height="2" fill="#9560F7" opacity="1">
+          <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="0;0;1;1;0;0;1;1;0;0;1;1;0;0"
+                 keyTimes="0;0.125;0.135;0.15;0.185;0.1875;0.1975;0.2125;0.2475;0.25;0.26;0.275;0.31;1"
+                 keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+        </rect>
+      </g>
+    </g>
+
+    <!-- Brightness: vertical 3 px band on the screen's right edge, 74% from the bottom, samples #railV.
+         Draws from its fill point at 1.8 s, retracts toward it at 6.0 s. -->
+    <g id="osd-brightness">
+      <rect x="1277" y="0" width="3" height="187" rx="1.5" fill="url(#railV)" opacity="0.15">
+        <animate attributeName="y" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="187;187;0;0;187;187" keyTimes="0;0.225;0.25;0.75;0.825;1"
+                 keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+        <animate attributeName="height" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="0;0;187;187;0;0" keyTimes="0;0.225;0.25;0.75;0.825;1"
+                 keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </rect>
+      <rect x="1277" y="187" width="3" height="533" rx="1.5" fill="url(#railV)">
+        <animate attributeName="height" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="0;0;533;533;0;0" keyTimes="0;0.225;0.25;0.75;0.825;1"
+                 keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </rect>
+      <g opacity="1">
+        <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="0;0;1;1;0;0" keyTimes="0;0.25;0.2675;0.72;0.765;1"
+                 keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+        <text x="1265" y="195" text-anchor="end" class="mono readout">74</text>
+        <!-- sun glyph 12 px, left of the figure -->
+        <g transform="translate(1210 183)" fill="none" stroke="#E6EDFF" stroke-width="1.2">
+          <circle cx="6" cy="6" r="2.6"/>
+          <path d="M6 0.5 v2 M6 9.5 v2 M0.5 6 h2 M9.5 6 h2 M2.1 2.1 l1.4 1.4 M8.5 8.5 l1.4 1.4 M9.9 2.1 l-1.4 1.4 M3.5 8.5 l-1.4 1.4"/>
+        </g>
+        <!-- the hue at 74% of the screen's height: the band's own colour -->
+        <rect x="1240" y="199" width="25" height="2" fill="#B24FD9" opacity="0">
+          <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="0;0;1;1;0;0" keyTimes="0;0.2675;0.2775;0.30;0.345;1"
+                 keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+        </rect>
+      </g>
+    </g>
+
+    <!-- Caps lock: 2 px blue band on the focused window's top edge, CAPS eyebrow at the top-right inside.
+         Enters at 2.6 s (draws outward from the centre), releases at 7.0 s. -->
+    <g id="osd-caps">
+      <rect x="36" y="43" width="792" height="2" rx="1" fill="#3B82F6">
+        <animate attributeName="x" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="432;432;36;36;432;432" keyTimes="0;0.325;0.3475;0.875;0.92;1"
+                 keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+        <animate attributeName="width" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="0;0;792;792;0;0" keyTimes="0;0.325;0.3475;0.875;0.92;1"
+                 keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </rect>
+      <text x="812" y="63" text-anchor="end" class="ui eyebrow" font-size="12" opacity="1">CAPS
+        <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="0;0;1;1;0;0" keyTimes="0;0.3475;0.365;0.86;0.905;1"
+                 keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </text>
+    </g>
+
+    <!-- Media: 2 px blue band on the player's bottom edge, length = playback position (follows). Title at the left end. -->
+    <g id="osd-media">
+      <rect x="836" y="683" width="408" height="2" rx="1" fill="#3B82F6" opacity="0.15"/>
+      <rect x="836" y="683" width="163" height="2" rx="1" fill="#3B82F6">
+        <animate attributeName="width" values="163;196" dur="8s" repeatCount="indefinite"/>
+      </rect>
+      <g transform="translate(848 663)">
+        <path d="M0 0 l0 10 l8 -5 z" fill="#E6EDFF"/>
+        <text x="14" y="9" class="ui" font-size="12" fill="#E6EDFF">Boards of Canada · Roygbiv</text>
+        <text x="392" y="9" text-anchor="end" class="mono" font-size="12" fill="#94A3B8">01:02 / 02:31</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ===== LAYER 4: annotations ===== -->
+  <g class="note" transform="translate(60 596)">
+    <rect width="252" height="60" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="20" class="ui note-title" fill="#9560F7">Band on the edge</text>
+    <text x="12" y="37" class="ui note-body">3 px on the focused window's bottom edge, drawn by the</text>
+    <text x="12" y="51" class="ui note-body">compositor. Draws out from the fill point, retracts to it.</text>
+  </g>
+  <g class="note" transform="translate(490 590)">
+    <rect width="330" height="60" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B">
+      <animate attributeName="stroke" values="#1E293B;#1E293B;#9560F7;#1E293B;#1E293B" keyTimes="0;0.125;0.1325;0.2;1" dur="8s" repeatCount="indefinite"/>
+    </rect>
+    <text x="12" y="20" class="ui note-title" fill="#9560F7">Readout rides the fill</text>
+    <text x="12" y="37" class="ui note-body">62 sits at 62%. Each notch is a 60 ms tick: the band end</text>
+    <text x="12" y="51" class="ui note-body">flashes and a 2 px underline enters under the changed digit.</text>
+  </g>
+  <g class="note" transform="translate(940 226)">
+    <rect width="296" height="74" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="20" class="ui note-title" fill="#B24FD9">Bands coexist</text>
+    <text x="12" y="37" class="ui note-body">Brightness lives on the screen's right edge, caps on the</text>
+    <text x="12" y="51" class="ui note-body">focused top edge, media on the player's bottom edge.</text>
+    <text x="12" y="65" class="ui note-body">Different edges, so nothing swaps or stacks.</text>
+  </g>
+  <g class="note" transform="translate(860 416)">
+    <rect width="300" height="60" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="20" class="ui note-title" fill="#CE4BA8">Travels with focus</text>
+    <text x="12" y="37" class="ui note-body">Focus moves to the top-right window at 3.6 s: the volume</text>
+    <text x="12" y="51" class="ui note-body">band slides across the gap in 140 ms. It does not re-appear.</text>
+  </g>
+  <!-- inset: the thing this is not -->
+  <g class="note" transform="translate(560 462)">
+    <rect width="260" height="70" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="20" class="ui note-title" fill="#94A3B8">Not this</text>
+    <g transform="translate(24 32)" opacity="0.5">
+      <rect x="0" y="0" width="120" height="24" rx="12" fill="none" stroke="#94A3B8"/>
+      <rect x="28" y="11" width="80" height="2" fill="#94A3B8"/>
+      <rect x="28" y="11" width="50" height="2" fill="#E6EDFF"/>
+      <circle cx="16" cy="12" r="4" fill="none" stroke="#94A3B8"/>
+    </g>
+    <path d="M28 30 l116 28 M144 30 l-116 28" stroke="#F43F5E" stroke-width="1.5"/>
+    <text x="160" y="43" class="ui note-body">centred pill</text>
+    <text x="160" y="57" class="ui note-body">over the desktop</text>
+  </g>
+  <text x="640" y="708" text-anchor="middle" class="ui t2" font-size="12">Phosphor · OSDs · value bands on the edge that concerns them</text>
+</svg>

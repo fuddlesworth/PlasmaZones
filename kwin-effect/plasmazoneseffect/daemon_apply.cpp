@@ -641,6 +641,14 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
         genByScreen.insert(p.screenId, ++m_daemonGate.batchGenByScreen[p.screenId]);
     }
 
+    // The per-window motion resolve happens inside this callable, at FIRE
+    // time, so a motion-tree refetch landing part-way through a cascade
+    // animates windows 0..k on the old timing and the rest on the new. That is
+    // accepted rather than overlooked: resolving every window's profile up
+    // front would pin timing that a queued-but-unstarted leg is better off
+    // picking up, and the split needs a config save to land inside one
+    // stagger, where the visible result is a batch that changes pace rather
+    // than anything incorrect.
     applyStaggeredOrImmediate(
         pending.size(),
         [this, pending, batchProfilePath, genByScreen](int i) {

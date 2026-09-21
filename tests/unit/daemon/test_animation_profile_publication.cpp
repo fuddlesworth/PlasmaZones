@@ -40,15 +40,13 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
-#include <QFile>
-#include <QTextStream>
 #include <QTimer>
 
 #include <PhosphorAnimation/CurveLoader.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
-#include <PhosphorAnimation/ProfileLoader.h>
+#include "core/resolve/animationbootstrap.h"
 #include <PhosphorAnimation/ProfilePaths.h>
 
 #include "config/settings.h"
@@ -70,12 +68,21 @@ namespace {
 /// not "the tag string is exactly this literal".
 const QString kLoaderOwnerTag = QStringLiteral("plasmazones-user-profiles");
 
-void writeFile(const QString& path, const QString& contents)
+/// The timing tree in the shape `ISettings::motionProfileTree()` returns, so
+/// these slots drive the route the daemon actually takes.
+///
+/// They used to plant `plasmazones/profiles/*.json` and load them through a
+/// ProfileLoader. That route is gone: since schema v8 the daemon installs this
+/// partition from `Animations/MotionProfileTree` via `installMotionProfileTree`,
+/// and nothing constructs a loader over that directory. The tests kept passing
+/// because they drove the registry directly, which meant they pinned the
+/// publication behaviour against a persistence path the shipped daemon cannot
+/// take.
+QVariantMap motionTreeWith(const QString& path, const QVariantMap& profile)
 {
-    QFile f(path);
-    QVERIFY(f.open(QIODevice::WriteOnly));
-    QTextStream s(&f);
-    s << contents;
+    return QVariantMap{
+        {QStringLiteral("overrides"),
+         QVariantList{QVariantMap{{QStringLiteral("path"), path}, {QStringLiteral("profile"), profile}}}}};
 }
 
 } // namespace
@@ -112,23 +119,14 @@ private Q_SLOTS:
     {
         IsolatedConfigGuard guard;
 
-        // Build the user profile dir layout the daemon would scan.
-        const QString profileDir = guard.dataPath() + QStringLiteral("/plasmazones/profiles");
-        QVERIFY(QDir().mkpath(profileDir));
-
-        // Drop a profile JSON. Note: filename basename must match the
-        // inner `name` field (ProfileLoader rejects mismatches).
-        writeFile(profileDir + QStringLiteral("/widget.zoneHighlight.json"), QStringLiteral(R"({
-            "name": "widget.zoneHighlight",
-            "duration": 175,
-            "curve": "0.42,0.00,0.58,1.00"
-        })"));
-
-        // Build the daemon's loader plumbing — same shapes, no daemon
-        // construction required.
+        // Install the per-event timing partition the way the daemon does.
         CurveRegistry curveRegistry;
-        ProfileLoader profileLoader(m_registry, curveRegistry, kLoaderOwnerTag);
-        QCOMPARE(profileLoader.loadFromDirectory(profileDir), 1);
+        PlasmaZones::installMotionProfileTree(
+            m_registry, curveRegistry,
+            motionTreeWith(QStringLiteral("widget.zoneHighlight"),
+                           QVariantMap{{QStringLiteral("duration"), 175},
+                                       {QStringLiteral("curve"), QStringLiteral("0.42,0.00,0.58,1.00")}}),
+            kLoaderOwnerTag);
 
         // Registry now contains the user profile.
         auto& registry = m_registry;
@@ -236,23 +234,13 @@ private Q_SLOTS:
         QVERIFY(preLoaderResolved.has_value());
         QCOMPARE(preLoaderResolved->effectiveDuration(), 425.0);
 
-        // Step 2 — drop a Global.json into the user profile dir, then
-        // load via ProfileLoader with the partitioned owner tag. The
-        // loader's commitBatch routes through reloadFromOwner, which
-        // (per Phase 1b) silently skips paths already owned by the
-        // direct/empty tag.
-        const QString profileDir = guard.dataPath() + QStringLiteral("/plasmazones/profiles");
-        QVERIFY(QDir().mkpath(profileDir));
-        // Loader requires the basename and inner name to match.
-        writeFile(profileDir + QStringLiteral("/global.json"), QStringLiteral(R"({
-            "name": "global",
-            "duration": 999
-        })"));
-
+        // Step 2 — install a tree carrying `global` under the partitioned
+        // owner tag. installMotionProfileTree routes through reloadFromOwner,
+        // which silently skips paths already owned by the direct/empty tag.
         CurveRegistry curveRegistry;
-        ProfileLoader profileLoader(m_registry, curveRegistry, kLoaderOwnerTag);
-        const int loaded = profileLoader.loadFromDirectory(profileDir);
-        QCOMPARE(loaded, 1);
+        PlasmaZones::installMotionProfileTree(
+            m_registry, curveRegistry,
+            motionTreeWith(ProfilePaths::Global, QVariantMap{{QStringLiteral("duration"), 999}}), kLoaderOwnerTag);
 
         // The Global entry MUST still be direct-owned and carry the
         // Settings value (425), NOT the loader's value (999). If
@@ -293,19 +281,13 @@ private Q_SLOTS:
 
         // A user Global.json that sets ONLY duration (no prior direct-owned
         // entry, so the loader genuinely OWNS the path).
-        const QString profileDir = guard.dataPath() + QStringLiteral("/plasmazones/profiles");
-        QVERIFY(QDir().mkpath(profileDir));
-        writeFile(profileDir + QStringLiteral("/global.json"), QStringLiteral(R"({
-            "name": "global",
-            "duration": 999
-        })"));
-
         CurveRegistry curveRegistry;
-        ProfileLoader profileLoader(m_registry, curveRegistry, kLoaderOwnerTag);
-        QCOMPARE(profileLoader.loadFromDirectory(profileDir), 1);
+        PlasmaZones::installMotionProfileTree(
+            m_registry, curveRegistry,
+            motionTreeWith(ProfilePaths::Global, QVariantMap{{QStringLiteral("duration"), 999}}), kLoaderOwnerTag);
         QCOMPARE(registry.ownerOf(ProfilePaths::Global), kLoaderOwnerTag);
 
-        // The loader's parsed JSON is the raw snapshot: duration set, minDistance
+        // The installed tree's profile is the raw snapshot: duration set, minDistance
         // unset. Cache it exactly as the daemon caches m_rawJsonProfiles.
         const auto rawOpt = registry.resolve(ProfilePaths::Global);
         QVERIFY(rawOpt.has_value());

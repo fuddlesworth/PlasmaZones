@@ -175,9 +175,43 @@ Item {
             Accessible.name: i18n("Active profile")
             onActivated: function (index) {
                 const row = profileHeader.profileRows[index];
-                if (row && profileHeader.profilesBridge)
-                    profileHeader.profilesBridge.activateProfile(row.id);
+                if (!row || !profileHeader.profilesBridge)
+                    return;
+                // Same guard the Profiles page applies: activating stages the
+                // whole configuration over anything unsaved, and the combo is
+                // reachable from every page, so the edits at risk are usually
+                // on the one the user is looking at.
+                if (settingsController.needsSave) {
+                    switchConfirm.profileId = row.id;
+                    switchConfirm.profileName = row.name;
+                    switchConfirm.open();
+                    profileCombo.syncToActive();
+                    return;
+                }
+                profileHeader.profilesBridge.activateProfile(row.id);
             }
         }
+    }
+
+    Kirigami.PromptDialog {
+        id: switchConfirm
+
+        property string profileId: ""
+        property string profileName: ""
+
+        title: i18n("Use this profile?")
+        subtitle: i18n("You have changes you have not saved yet. Switching to “%1” replaces them with that profile's settings.", switchConfirm.profileName)
+        standardButtons: Kirigami.Dialog.Cancel
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Use profile")
+                icon.name: "dialog-ok-apply"
+                onTriggered: {
+                    if (profileHeader.profilesBridge)
+                        profileHeader.profilesBridge.activateProfile(switchConfirm.profileId);
+                    switchConfirm.close();
+                }
+            }
+        ]
     }
 }

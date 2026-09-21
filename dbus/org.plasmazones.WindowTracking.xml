@@ -7,7 +7,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 <node>
     <!-- Window Tracking Interface -->
     <interface name="org.plasmazones.WindowTracking">
-        <annotation name="org.gtk.GDBus.DocString" value="Window-to-zone tracking: pre-snap geometry for restore, floating state, zone geometry, drag-out unsnap, resolution-change handling, keyboard-navigation feedback, and window-metadata registration. Snap commits, snap-restore fallback chains, and daemon-driven navigation targets live on the org.plasmazones.Snap adaptor."/>
+        <annotation name="org.gtk.GDBus.DocString" value="Window-to-zone tracking: pre-snap geometry for restore, floating state, zone geometry, drag-out unsnap, resolution-change handling, keyboard-navigation feedback, window-metadata registration, and the Phosphor shell surface (activateWindow, getWindowMetadata, moveWindowToDesktop, getUrgentWindows, getWindowStatesForDesktop, findWindowByPid with the windowMetadataChanged and windowUrgencyChanged announcements). Snap commits, snap-restore fallback chains, and daemon-driven navigation targets live on the org.plasmazones.Snap adaptor."/>
         <method name="notifyDragOutUnsnap">
             <annotation name="org.gtk.GDBus.DocString" value="Notify that a snapped window was dragged without the activation trigger. Saves pre-float zone, marks floating, and clears zone assignment so the window does not auto-restore to the zone on close/reopen."/>
             <arg name="windowId" type="s" direction="in">
@@ -557,6 +557,85 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="state" type="(sssbsasb)">
                 <annotation name="org.gtk.GDBus.DocString" value="WindowStateEntry: (windowId, zoneId, screenId, isFloating, changeType, zoneIds, isSticky). changeType: snapped, unsnapped, floated, unfloated, screen_changed."/>
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out1" value="PhosphorProtocol::WindowStateEntry"/>
+            </arg>
+        </signal>
+        <method name="activateWindow">
+            <annotation name="org.gtk.GDBus.DocString" value="Ask the compositor to activate (focus) a tracked window. The verb behind a click on a Phosphor shell placement-map cell. The daemon emits activateWindowRequested for the id, the same signal its own focus and cycle verbs use, and the KWin effect turns that into activateWindow. A window the daemon does not track (no setWindowMetadata registration, or already closed) is a silent no-op with no error reply."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier, as the placement models carry it."/>
+            </arg>
+        </method>
+        <method name="getWindowMetadata">
+            <annotation name="org.gtk.GDBus.DocString" value="A tracked window's identity as the compositor last reported it through setWindowMetadata: app id, caption, and desktop file name. All three are empty for a window the daemon does not track; title and desktopFile are also empty when the compositor reported them so (a window with no caption yet, or no matching desktop entry). Changes are announced by windowMetadataChanged."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="appId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Current app class."/>
+            </arg>
+            <arg name="title" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Current caption, as the compositor sends it (the KWin effect pushes every caption change)."/>
+            </arg>
+            <arg name="desktopFile" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Desktop file name, without directory, for icon and display-name lookup."/>
+            </arg>
+        </method>
+        <method name="moveWindowToDesktop">
+            <annotation name="org.gtk.GDBus.DocString" value="Ask the compositor to move a tracked window to a virtual desktop. The verb behind dragging a placement-map cell onto another desktop's pane. The daemon emits windowDesktopMoveRequested, which the KWin effect already consumes for the cross-desktop directional move (windowToDesktops); the daemon's own tracking follows through the compositor's resulting desktop report, the same way it does for that move. Silent no-op with no error reply for an untracked window or a desktop below 1; a desktop past the compositor's last one is ignored by the compositor."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="desktop" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Target virtual desktop, 1-based."/>
+            </arg>
+        </method>
+        <method name="getUrgentWindows">
+            <annotation name="org.gtk.GDBus.DocString" value="Every tracked window currently demanding attention (KWin's demandsAttention). The daemon keeps the set from the isDemandingAttention field of the compositor's metadata pushes, which the KWin effect re-sends on every demandsAttentionChanged edge, and drops a window on close. Sorted, so two reads of an unchanged set compare equal. Edges are announced by windowUrgencyChanged."/>
+            <arg name="windowIds" type="as" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifiers, sorted."/>
+            </arg>
+        </method>
+        <method name="getWindowStatesForDesktop">
+            <annotation name="org.gtk.GDBus.DocString" value="getAllWindowStates filtered to one screen and one virtual desktop, for the Phosphor shell dashboard's per-desktop placement maps. A window is on the desktop when its last setWindowMetadata push named it (virtualDesktop, or any entry of the multi-desktop span list), or when it is sticky (the push's IsSticky flag, a virtualDesktop of 0, or the service's setWindowSticky record), which puts it on every desktop. Windows the compositor never registered through setWindowMetadata are left out, since there is no desktop to compare against. Same WindowStateEntry struct and the same rows as getAllWindowStates; nothing is added or re-shaped."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen identifier the rows must be on (the entry's screenId). Empty means any screen, except that a virtualDesktop of 0 then has no screen to resolve against and answers nothing."/>
+            </arg>
+            <arg name="virtualDesktop" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Virtual desktop, 1-based. 0 means the screen's current desktop (per-output on Plasma 6.7, as screenDesktopChanged reported it). Negative answers nothing."/>
+            </arg>
+            <arg name="states" type="a(sssbsasb)" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Array of WindowStateEntry structs: (windowId, zoneId, screenId, isFloating, changeType, zoneIds, isSticky)."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::WindowStateList"/>
+            </arg>
+        </method>
+        <method name="findWindowByPid">
+            <annotation name="org.gtk.GDBus.DocString" value="The tracked window whose last setWindowMetadata push carried this process id, for attaching the Phosphor shell's polkit prompt to the window that asked. When several windows share the pid (a multi-window application) the one whose metadata was pushed most recently wins. Empty when no registered window matches, or when pid is not positive."/>
+            <arg name="pid" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Process id, as setWindowMetadata received it."/>
+            </arg>
+            <arg name="windowId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier, as the placement models carry it, or empty."/>
+            </arg>
+        </method>
+        <signal name="windowMetadataChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="A tracked window's app id or caption changed, or the window was just registered. Emitted only when one of the two carried fields differs from the previous push, so a geometry or state edge that leaves them equal is silent. A consumer that also wants the desktop file reads getWindowMetadata."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="appId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Current app class."/>
+            </arg>
+            <arg name="title" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Current caption."/>
+            </arg>
+        </signal>
+        <signal name="windowUrgencyChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="A tracked window started or stopped demanding attention. Emitted once per edge, never for a push that repeats the current state, and once with urgent false when a window closes while urgent so a consumer's own set never keeps a dead entry."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="urgent" type="b">
+                <annotation name="org.gtk.GDBus.DocString" value="True when the window now demands attention."/>
             </arg>
         </signal>
     </interface>

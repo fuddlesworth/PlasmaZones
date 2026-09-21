@@ -271,7 +271,7 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
         // additionalProperties open — so of everything mergeSettings injects,
         // only showZoneNumbers is type-checked here. The rest (the gap/padding
         // values, overlayDisplayMode, autoAssign, hiddenFromSelector,
-        // useFullScreenGeometry, shaderId/shaderParams, the zoneAppearance
+        // useFullScreenGeometry, the zoneAppearance
         // block) passes unexamined and is left to fromJson's own per-key
         // coercion. What this gate is really for is the structural surface the
         // sidecar can no longer reach: mergeSettings re-emits the zones array
@@ -670,6 +670,22 @@ PhosphorZones::Layout* LayoutRegistry::importLayout(const QString& filePath)
     return layout;
 }
 
+/// An exported layout carries its zones and its own settings, and NOT the
+/// zone-overlay shader assigned to it. That is a decision, not an omission.
+///
+/// Since schema v8 the assignment lives in the user's config, in the
+/// OverlayShaderTree, keyed by layout UUID. It is not a property of the layout
+/// document, and the import side has no migration hop that could lift one back
+/// out of a document into the tree. Writing the resolved assignment into the
+/// export would also make an export lie in the common case: a layout with no
+/// override resolves to the global BASELINE, so the file would claim a
+/// per-layout assignment the exporting user never made, and importing it
+/// elsewhere would stamp exactly that.
+///
+/// Overlay sets are the mechanism for moving assignments between machines, and
+/// they are built for it: they carry the baseline and the per-layout overrides
+/// together, and they skip the layouts the receiving machine does not have
+/// rather than inventing them.
 bool LayoutRegistry::exportLayout(PhosphorZones::Layout* layout, const QString& filePath)
 {
     if (!layout) {

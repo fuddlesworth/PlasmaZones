@@ -38,6 +38,7 @@
 #include "scrollstubsettings.h"
 #include "scrollstubtracking.h"
 
+#include <QSignalSpy>
 #include <QVariantMap>
 #include <QtTest>
 

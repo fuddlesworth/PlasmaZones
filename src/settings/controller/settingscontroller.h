@@ -7,27 +7,32 @@
 // into page-scoped sub-controllers (EditorPageController, …) hung off this
 // class via child Q_PROPERTYs so QML reads `settingsController.<page>.<prop>`.
 //
-// FILE-SIZE EXCEPTION (sanctioned), CEILING 1300 LINES: what remains here after
-// that split is the root object QML binds to. Its Q_PROPERTY surface IS the QML
-// contract, so moving another group of properties out means either a new child
-// controller every page URL and binding has to be rewritten for, or a second
-// root QML cannot see. The implementation is already split across
-// settingscontroller_*.cpp by concern, same shape as daemon.h.
+// FILE-SIZE EXCEPTION (sanctioned), CEILING 1370 LINES: what remains here after that
+// split is the root object QML binds to. Its Q_PROPERTY surface IS the QML contract, so
+// moving another group of properties out means either a new child controller every page
+// URL and binding has to be rewritten for, or a second root QML cannot see. The
+// implementation is already split across settingscontroller_*.cpp, same shape as
+// daemon.h.
 //
-// The number above is a real budget, not a description of wherever the file
-// happens to sit: the exception is for the QML contract, so a new declaration
-// that pushes past it has to buy its room by removing another (a retired
-// Q_INVOKABLE, a property that moved to a child controller). It does NOT
-// license a comment block — those belong on the definition in the matching
-// settingscontroller_*.cpp when they will not fit here.
+// The number above is a real budget, not a description of wherever the file happens to
+// sit: the exception is for the QML contract, so a new declaration that pushes past it
+// buys its room by removing another (a retired Q_INVOKABLE, a property moved to a child
+// controller). It does NOT license a comment block — those belong on the definition in
+// the matching settingscontroller_*.cpp when they will not fit here.
 //
-// The 1300 above supersedes the general 1150 hard ceiling in CLAUDE.md for this
+// The 1370 above supersedes the general 1150 hard ceiling in CLAUDE.md for this
 // file, the same way the repo's other sanctioned file-size exceptions do, so
-// sitting between the two figures is not a review finding here. (Raised from
-// 1215 when the per-screen selector stores grew their per-card sub-domain
-// has/clear pairs — chip-invoked Q_INVOKABLEs that belong on the root the
-// scope chips call by method name; the drift before that raise is
-// acknowledged, not licensed.)
+// sitting between the two figures is not a review finding here.
+//
+// Raise history, because each raise has to say what bought the room. From 1215 when the
+// per-screen selector stores grew their per-card has/clear pairs (chip-invoked
+// Q_INVOKABLEs belonging on the root the chips call by method name). Then to 1370 for
+// the named-parameter-presets work: four ShaderPresetBridge members, one per family,
+// plus the Q_PROPERTY accessors QML binds them through. That IS the QML contract this
+// exception exists for, since every preset surface reads
+// `settingsController.<family>Presets`, so it cannot move to a child controller without
+// rewriting the binding at every call site. Splitting this class by page group is the
+// follow-up the ceiling is asking for.
 
 #pragma once
 
@@ -64,6 +69,14 @@ namespace PhosphorWorkspaces {
 class VirtualDesktopManager;
 }
 
+namespace PhosphorPointerShaders {
+class PointerShaderRegistry;
+}
+
+namespace PhosphorShaders {
+class ShaderPresetStore;
+}
+
 namespace PhosphorRules {
 // Forward-declared for the `std::unique_ptr<RuleStore>` member
 // below. The complete type is needed only in settingscontroller.cpp
@@ -97,6 +110,7 @@ class RegistryShaderPreviewBackend;
 
 #include "settings/services/algorithmservice.h"
 #include "settings/pages/animationspagecontroller.h"
+#include "settings/stores/shaderpresetbridge.h"
 #include "settings/pages/editorpagecontroller.h"
 #include "settings/services/externaleditscope.h"
 #include "settings/pages/generalpagecontroller.h"
@@ -104,7 +118,7 @@ class RegistryShaderPreviewBackend;
 #include "settings/pages/snappingzonescontroller.h"
 #include "settings/pages/snappingbehaviorcontroller.h"
 #include "settings/pages/snappingeffectscontroller.h"
-#include "settings/pages/snappingshaderspagecontroller.h"
+#include "settings/pages/overlayspagecontroller.h"
 #include "settings/pages/snappingzoneselectorcontroller.h"
 #include "settings/pages/decorationpagecontroller.h"
 #include "settings/services/stagingservice.h"
@@ -134,11 +148,17 @@ class SettingsController : public QObject
     Q_PROPERTY(QString activeDirtyScope READ activeDirtyScope NOTIFY activeDirtyScopeChanged)
     Q_PROPERTY(Settings* settings READ settings CONSTANT)
     Q_PROPERTY(DaemonController* daemonController READ daemonController CONSTANT)
+    // Whether this build carries the Phosphor shell (BUILD_PHOSPHOR_SHELL).
+    // Pages that list the shell's own surfaces (the `shell.phosphor.*`
+    // decoration cards) bind their model on this so a plain build never shows
+    // a tree no surface reads.
+    Q_PROPERTY(bool hasPhosphorShell READ hasPhosphorShell CONSTANT)
 
-    // What's New
-    Q_PROPERTY(QString lastSeenWhatsNewVersion READ lastSeenWhatsNewVersion NOTIFY lastSeenWhatsNewVersionChanged)
+    // What's New — see loadWhatsNew() for the baseline snapshot contract.
     Q_PROPERTY(bool hasUnseenWhatsNew READ hasUnseenWhatsNew NOTIFY lastSeenWhatsNewVersionChanged)
     Q_PROPERTY(QVariantList whatsNewEntries READ whatsNewEntries CONSTANT)
+    Q_PROPERTY(QString whatsNewBaselineVersion READ whatsNewBaselineVersion CONSTANT)
+    Q_PROPERTY(int unseenWhatsNewReleaseCount READ unseenWhatsNewReleaseCount CONSTANT)
 
     // PhosphorZones::Layout management
     Q_PROPERTY(QVariantList layouts READ layouts NOTIFY layoutsChanged)
@@ -172,7 +192,7 @@ class SettingsController : public QObject
     Q_PROPERTY(SnappingZoneSelectorController* snappingZoneSelectorPage READ snappingZoneSelectorPage CONSTANT)
     Q_PROPERTY(SnappingZonesController* snappingZonesPage READ snappingZonesPage CONSTANT)
     Q_PROPERTY(SnappingEffectsController* snappingEffectsPage READ snappingEffectsPage CONSTANT)
-    Q_PROPERTY(SnappingShadersPageController* snappingShadersPage READ snappingShadersPage CONSTANT)
+    Q_PROPERTY(OverlaysPageController* overlaysPage READ overlaysPage CONSTANT)
     Q_PROPERTY(WindowAppearanceController* windowAppearancePage READ windowAppearancePage CONSTANT)
     Q_PROPERTY(TilingAlgorithmController* tilingAlgorithmPage READ tilingAlgorithmPage CONSTANT)
     Q_PROPERTY(GeneralPageController* generalPage READ generalPage CONSTANT)
@@ -181,6 +201,12 @@ class SettingsController : public QObject
     // resolved through a DecorationProfileTree. QML reads
     // `settingsController.decorationPage.<invokable>()`.
     Q_PROPERTY(DecorationPageController* decorationPage READ decorationPage CONSTANT)
+    // Named parameter presets, one bridge per shader family: a pack editor is
+    // generic over its family, so its host passes the matching bridge in.
+    Q_PROPERTY(ShaderPresetBridge* animationPresets READ animationPresets CONSTANT)
+    Q_PROPERTY(ShaderPresetBridge* surfacePresets READ surfacePresets CONSTANT)
+    Q_PROPERTY(ShaderPresetBridge* pointerPresets READ pointerPresets CONSTANT)
+    Q_PROPERTY(ShaderPresetBridge* overlayPresets READ overlayPresets CONSTANT)
     // Rules page — the unified rule surface. The controller owns one
     // RuleModel and talks to the daemon's org.plasmazones.Rules
     // adaptor; QML reads `settingsController.rulesPage.model`.
@@ -252,16 +278,14 @@ public:
         return !m_dirtyPages.isEmpty();
     }
     QStringList dirtyPages() const;
-    /// Returns true if the page (or any of its children, for parent categories
-    /// like "snapping" / "tiling") currently has unsaved changes. For pages in
-    /// the per-page config manifest (@ref pageOwnedConfigKeys) the answer is
-    /// value-based — any owned key differing from the committed baseline —
-    /// which stays correct across a per-page Discard/Reset. The ordering,
-    /// shortcuts, virtual-screens, animation and decoration pages are
-    /// value-based too, each against its own staged state rather than the
-    /// manifest, and the condensed simple pages (@ref simplePageBackingPages)
-    /// answer with the union of their backing pages. Only a page in none of
-    /// those groups falls back to the m_dirtyPages membership set.
+    /// Returns true if the page (or any child, for parent categories like "snapping" /
+    /// "tiling") has unsaved changes. For pages in the per-page config manifest (@ref
+    /// pageOwnedConfigKeys) the answer is value-based — any owned key differing from the
+    /// committed baseline — which stays correct across a per-page Discard/Reset. The
+    /// ordering, shortcuts, virtual-screens, animation and decoration pages are
+    /// value-based too, each against its own staged state, and the condensed simple pages
+    /// (@ref simplePageBackingPages) answer with the union of their backing pages. Only a
+    /// page in none of those groups falls back to the m_dirtyPages membership set.
     Q_INVOKABLE bool isPageDirty(const QString& page) const;
 
     // ── Per-page Reset / Discard (kebab menu in the breadcrumb row) ──────────
@@ -393,6 +417,15 @@ public:
     }
     void setAdvancedMode(bool advanced);
 
+    bool hasPhosphorShell() const
+    {
+#ifdef PLASMAZONES_HAVE_PHOSPHOR_SHELL
+        return true;
+#else
+        return false;
+#endif
+    }
+
     Settings* settings()
     {
         return &m_settings;
@@ -402,22 +435,12 @@ public:
         return &m_daemonController;
     }
     // What's New
-    QString lastSeenWhatsNewVersion() const
-    {
-        return m_lastSeenWhatsNewVersion;
-    }
     bool hasUnseenWhatsNew() const;
-    QVariantList whatsNewEntries() const
-    {
-        return m_whatsNewEntries;
-    }
+    QVariantList whatsNewEntries() const;
+    QString whatsNewBaselineVersion() const;
+    int unseenWhatsNewReleaseCount() const;
     Q_INVOKABLE void markWhatsNewSeen();
 
-private:
-    /// Highest entry version in m_whatsNewEntries, or empty if no entries.
-    QString latestWhatsNewVersion() const;
-
-public:
     // PhosphorZones::Layout accessors
     QVariantList layouts() const
     {
@@ -572,7 +595,7 @@ public:
     }
     SnappingZonesController* snappingZonesPage() const;
     SnappingEffectsController* snappingEffectsPage() const;
-    SnappingShadersPageController* snappingShadersPage() const;
+    OverlaysPageController* overlaysPage() const;
     WindowAppearanceController* windowAppearancePage() const;
     TilingAlgorithmController* tilingAlgorithmPage() const;
     GeneralPageController* generalPage() const
@@ -591,9 +614,15 @@ public:
     {
         return m_rulesPage;
     }
+    // Defined out of line: this header is past the size ceiling, and four
+    // one-line getters are not worth pushing it further over.
+    ShaderPresetBridge* animationPresets() const;
+    ShaderPresetBridge* surfacePresets() const;
+    ShaderPresetBridge* pointerPresets() const;
+    ShaderPresetBridge* overlayPresets() const;
     ProfilePageController* profilesPage() const
     {
-        return m_profilesPage;
+        return m_profilesPage.get();
     }
 
     PhosphorControl::ApplicationController* app() const
@@ -635,14 +664,13 @@ public:
     /// The staged (not yet applied) assignment for the (screen × desktop ×
     /// activity) context, as a map of only the fields that are actually staged.
     ///
-    /// Key ABSENCE is meaningful and spans three files: staging collapses an
-    /// EMPTY id to "not staged" on the way in (StagingService maps it to
-    /// nullopt), so once an entry is staged, an absent "layoutId" or
-    /// "algorithmId" here is the echo of a staged CLEAR of that field. A
-    /// present key always carries a non-empty id, and a producer must never
-    /// insert an empty-string value expecting it to read back as a distinct
-    /// clear state — there is no such state on this map. An absent "mode"
-    /// means neither an explicit mode nor an inferable one was staged.
+    /// Key ABSENCE is meaningful and spans three files: staging collapses an EMPTY id to
+    /// "not staged" on the way in (StagingService maps it to nullopt), so once an entry
+    /// is staged, an absent "layoutId" or "algorithmId" here is the echo of a staged
+    /// CLEAR of that field. A present key always carries a non-empty id, and a producer
+    /// must never insert an empty string expecting it to read back as a distinct clear
+    /// state: there is no such state on this map. An absent "mode" means neither an
+    /// explicit mode nor an inferable one was staged.
     Q_INVOKABLE QVariantMap getStagedAssignment(const QString& screenName, int virtualDesktop = 0,
                                                 const QString& activityId = QString()) const;
 
@@ -827,9 +855,9 @@ Q_SIGNALS:
     /// branches emit it for unrelated reasons the shell must word differently:
     ///   * `ReasonDaemonUnreachable` — a value resetPage must READ first is
     ///     unavailable, currently the daemon's quick-layout slot map.
-    ///   * `ReasonOverridesNotCleared` — a WRITE was refused: an animation or
-    ///     decoration override could not be cleared (an async discard still owns
-    ///     the snapshot map, or a file could not be removed). The daemon is fine.
+    ///   * `ReasonOverridesNotCleared` — a WRITE was refused: an animation or decoration
+    ///     override could not be cleared (an async discard still owns the snapshot map,
+    ///     or a file could not be removed), with the daemon fine.
     /// @p reason is one of the Reason* constants above, NOT user-facing text:
     /// the shell wires i18n in QML and branches on the token.
     void pageResetFailed(const QString& page, const QString& reason);
@@ -837,8 +865,9 @@ Q_SIGNALS:
     /// pageResetFailed. The animation branch reconciles value-based, so a
     /// refused revert leaves the page BADGED with no other word. The only
     /// refusal is a WRITE that could not complete, so `reason` is always
-    /// `ReasonOverridesNotCleared`; the branch checks `asyncRevertInFlight()`
-    /// first so a benign refusal during a global async discard never emits.
+    /// `ReasonOverridesNotCleared`. Since schema v8 the animation revert has
+    /// no failure mode a user can reach — it refuses only with no settings
+    /// object at all — so this is effectively a wiring-bug signal there.
     void pageDiscardFailed(const QString& page, const QString& reason);
     void screensChanged();
     void workspacesAtCapChanged();
@@ -935,6 +964,10 @@ private Q_SLOTS:
     void reloadLocalRuleStore(bool persisted);
 
 private:
+    /// Highest parseable entry version in m_whatsNewEntries, or empty.
+    QString latestWhatsNewVersion() const;
+    /// Reads the bundled release history into m_whatsNewEntries. Ctor-only.
+    void loadWhatsNew();
     /// Install the RuleController's label resolvers (settingscontroller_rulelookups.cpp).
     /// Called once from the ctor after m_rulesPage and the registries it reads exist.
     void installRuleLabelLookups();
@@ -960,18 +993,16 @@ private:
     // entry on the simple leaf the edit was attributed to while the user was
     // in simple mode. Both syncs share one dirtyPagesChanged emit.
     void reconcilePageDirty(const QString& page);
-    /// Set @p page's m_dirtyPages membership to @p dirty, returning whether the
-    /// membership actually flipped. The one place a SINGLE page's membership is
-    /// written: the reconcile helpers, setNeedsSave, and the Reset/Discard
-    /// branches that own their own staged state all go through this, so
-    /// insert/remove and "did anything change" can never drift apart. Does not
-    /// emit — the caller owns the batching.
+    /// Set @p page's m_dirtyPages membership to @p dirty, returning whether it actually
+    /// flipped. The one place a SINGLE page's membership is written: the reconcile
+    /// helpers, setNeedsSave and the Reset/Discard branches that own their own staged
+    /// state all go through this, so insert/remove and "did anything change" cannot
+    /// drift apart. Does not emit — the caller owns the batching.
     ///
     /// Whole-set operations are the exception and do not route through it:
-    /// setNeedsSave(false) clears the set outright (load() and save() reach
-    /// it that way), and defaults() replaces the set with a full recompute.
-    /// Neither is a per-page decision, and both compare the whole set before
-    /// emitting.
+    /// setNeedsSave(false) clears the set outright (load() and save() reach it that way),
+    /// and defaults() replaces it with a full recompute. Neither is a per-page decision,
+    /// and both compare the whole set before emitting.
     bool syncDirtyMembership(const QString& page, bool dirty);
     /// RAII batch window for the above: defers dirtyPagesChanged for the
     /// enclosing scope so a delegated Reset/Discard that walks several backing
@@ -1049,13 +1080,7 @@ private:
     /// same thing done to the in-memory session. The whole body runs under
     /// m_loading, and the caller owns the trailing setNeedsSave(false).
     ///
-    /// @param treatAsyncRevertAsClean whether an animation revert refused because
-    ///        an async discard already owns the snapshot map counts as clean. True
-    ///        on Discard, where that worker IS the restore. False on import, where
-    ///        the snapshots hold pre-import content for files just rewritten.
-    /// @return whether the animation page's snapshots came back clean. False means
-    ///         the adopt only partly landed and needsSave must not be cleared.
-    bool adoptOnDiskState(bool treatAsyncRevertAsClean);
+    void adoptOnDiskState();
 
     /// Shared tail of the two KZones import entry points: stash the layout to
     /// auto-select, schedule the layout refresh, report count and message to QML,
@@ -1121,34 +1146,50 @@ private:
     /// Safe only while `~DecorationPageController` stays `= default`.
     PhosphorSurfaceShaders::SurfaceShaderRegistry* m_surfaceShaderRegistry = nullptr;
     DecorationPageController* m_decorationPage = nullptr;
+    /// Settings-side mirror of the daemon's / compositor's pointer-pack
+    /// registry — the pack family the `pointer` decoration surface draws from.
+    /// Same parent / construction-order situation as the two registries above:
+    /// a QObject child of `this` constructed before the page controller that
+    /// borrows it, so insertion-order child deletion tears the registry down
+    /// FIRST and the page's non-owned registry pointer dangles through its own
+    /// destruction. Safe only while that page's destructor stays `= default`.
+    PhosphorPointerShaders::PointerShaderRegistry* m_pointerShaderRegistry = nullptr;
     /// Rules page sub-controller. Parented to `this`; owns its
     /// RuleModel internally. Constructed after m_animationsPage so its
     /// dirty-tracking connection is wired in the same ctor block.
     RuleController* m_rulesPage = nullptr;
-    /// Profiles page sub-controller. Parented to `this`; owns its ProfileStore
-    /// internally. Registered via regPage so its active-pointer staging
-    /// participates in the framework's Save/Discard.
-    ProfilePageController* m_profilesPage = nullptr;
-    /// Settings-side mirror of the daemon's overlay-shader registry —
-    /// drives the read-only Snapping → Shaders browser. Same parent /
+    /// Settings-side mirror of the daemon's overlay-shader registry — drives
+    /// the Appearance → Overlays pages, both the read-only Library browser and
+    /// the Layouts assignment page that writes the tree. Same parent /
     /// construction-order situation as `m_animationShaderRegistry` above.
-    /// The companion `m_snappingShadersPage` is declared further down as
+    /// The companion `m_overlaysPage` is declared further down as
     /// a `std::unique_ptr<>` (after `m_localLayoutManager`) because that
     /// page borrows the layout registry — see the declaration-order
     /// invariant block below.
     PlasmaZones::ShaderRegistry* m_overlayShaderRegistry = nullptr;
 
+    /// Preset store plus one QML-facing bridge per family, after the pack registries
+    /// that seed it and before the pages that hand a bridge to QML. Each bridge
+    /// BORROWS the store, hence unique_ptr: a raw child's ~QObject runs after reset.
+    std::unique_ptr<PhosphorShaders::ShaderPresetStore> m_presetStore;
+    std::unique_ptr<ShaderPresetBridge> m_animationPresets;
+    std::unique_ptr<ShaderPresetBridge> m_surfacePresets;
+    std::unique_ptr<ShaderPresetBridge> m_pointerPresets;
+    std::unique_ptr<ShaderPresetBridge> m_overlayPresets;
+
     // Shared zone-shader live-preview feed for the overlay-shader browser
     // (T3.1). The backend borrows m_overlayShaderRegistry + m_settings; the
     // controller borrows the backend. Declared backend-before-controller so
     // reverse member destruction tears the controller down first;
-    // m_snappingShadersPage (declared later) borrows the controller and is
+    // m_overlaysPage (declared later) borrows the controller and is
     // destroyed before it.
     std::unique_ptr<RegistryShaderPreviewBackend> m_shaderPreviewBackend;
     std::unique_ptr<ShaderPreviewController> m_shaderPreviewController;
 
     DaemonController m_daemonController;
     QString m_lastSeenWhatsNewVersion;
+    QString m_whatsNewBaselineVersion;
+    int m_unseenWhatsNewReleaseCount = 0;
     QVariantList m_whatsNewEntries;
     ScreenHelper m_screenHelper;
     /// Simple/advanced UI mode. THE single source of the default: false
@@ -1221,7 +1262,7 @@ private:
     // ─── DECLARATION ORDER INVARIANT ─────────────────────────────────
     // m_localAlgorithmRegistry + m_localLayoutManager are borrowed by the
     // bundle's sources and by m_scriptLoader. Reverse-order member destruction
-    // runs, in order: the borrowers declared after them (~m_snappingShadersPage,
+    // runs, in order: the borrowers declared after them (~m_overlaysPage,
     // ~m_tilingAlgorithmPage, ~m_algorithmService, which disconnects its
     // registry watchers); ~m_scriptLoader, which unregisters scripted algorithms
     // while the registry is still alive (a UAF the QObject-child pattern had,
@@ -1266,7 +1307,7 @@ private:
     /// first and would double-free this object on close.
     std::unique_ptr<TilingAlgorithmController> m_tilingAlgorithmPage;
 
-    /// Snapping→Shaders page sub-controller. Same rationale as
+    /// Appearance→Overlays page sub-controller. Same rationale as
     /// `m_tilingAlgorithmPage`: borrows `m_localLayoutManager` (the registry
     /// walked by `shaderEffectUsages` for the "Used in:" reverse-lookup), so it
     /// MUST be a `unique_ptr<>` declared AFTER that registry — the unique_ptr
@@ -1275,7 +1316,7 @@ private:
     /// does not adopt it to the first-destroyed m_app (double-free on close).
     /// Borrows `m_overlayShaderRegistry` too, but that registry is a QObject
     /// child of `this` and survives until ~QObject — fine.
-    std::unique_ptr<SnappingShadersPageController> m_snappingShadersPage;
+    std::unique_ptr<OverlaysPageController> m_overlaysPage;
 
     /// Recompute zone geometry for every manual layout in
     /// @c m_localLayoutManager against the primary screen so
@@ -1337,6 +1378,24 @@ private:
     // determinism: m_app unregisters its tracked domains against live objects
     // instead of leaving the teardown order to self-nulling handles.
     std::unique_ptr<PhosphorControl::ApplicationController> m_app;
+
+    /// Profiles page sub-controller. Owns its ProfileStore internally, and
+    /// that store holds closures over `m_rulesPage` (a RuleController&).
+    ///
+    /// Hence the `unique_ptr`, following the `m_tilingAlgorithmPage` idiom: a
+    /// member unique_ptr resets BEFORE ~QObject reaches the raw children, so
+    /// this is destroyed while the RuleController it borrows is still alive.
+    /// As a plain child it would have gone the other way — ~QObject deletes
+    /// children in construction order, m_rulesPage first, leaving the store
+    /// holding a dangling reference for the rest of teardown. Still
+    /// constructed with parent `this`, because regPage adopts a parentless
+    /// page to m_app, which is destroyed first and would double-free it.
+    /// Registered via regPage so its active-pointer staging participates in
+    /// the framework's Save/Discard, which is why it is declared AFTER m_app:
+    /// reverse member order then destroys this page first, with m_app still up
+    /// to unregister it, exactly as the old explicit delete at the top of the
+    /// destructor body did.
+    std::unique_ptr<ProfilePageController> m_profilesPage;
 
     void buildApplicationController();
 

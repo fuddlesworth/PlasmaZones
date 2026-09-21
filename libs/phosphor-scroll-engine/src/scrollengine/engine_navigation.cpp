@@ -164,6 +164,15 @@ void ScrollEngine::focusInDirectionResolved(const QString& direction, const Phos
     const bool moved = (mainStep != 0) ? state->strip().focusAdjacentColumn(mainStep, params)
                                        : (crossStep != 0 && state->strip().focusAdjacentTile(crossStep));
     if (moved) {
+        if (crossStep != 0) {
+            // The CROSS leg is a tile-focus move, and the strip's tile-focus
+            // ops never re-anchor. Hand the view back to the policy the way
+            // P_SCROLL_TILE_FOCUS_VERB does for the named stack verbs, or a
+            // press after a wheel pan activates a window that is off-screen.
+            // The MAIN leg needs nothing: focusAdjacentColumn re-anchors, and
+            // reanchorAfterFocusChange clears the latch itself.
+            state->strip().setViewDetached(false);
+        }
         applyLayout(screen, true);
         // Focus is PERSISTED state: serializeStripState writes focusedWindow
         // and viewAnchor, and the only thing that marks DirtyScrollStrips is
@@ -627,6 +636,11 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
             targetState->strip().setMaximizedToEdgesForWindow(windowId, true);
         }
         targetState->strip().focusWindow(windowId, targetParams);
+        // The mover left its source OUTPUT, so every context it held there
+        // goes: the source strip was emptied above, the source screen's other
+        // desktops' strips are emptied here, and only then may the target key
+        // become its sole membership.
+        dropFromOtherContexts(windowId, sourceKey);
         m_states.setKeyForWindow(windowId, targetKey);
         // The mover was just taken out of the source strip and re-inserted on
         // the target, so its retained rect belongs to the OTHER output. Left
@@ -686,6 +700,7 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
             }
             if (moverInserted) {
                 Q_EMIT windowOutputMoveExpected(partner, screenId); // same marker rule as the mover's arm
+                dropFromOtherContexts(partner, targetKey); // same output-leaving rule as the mover's
                 m_states.setKeyForWindow(partner, sourceKey);
                 m_lastAppliedRect.remove(partner); // same rationale as the mover's
                 m_parkedScrollEdge.remove(partner);

@@ -4,7 +4,7 @@
 import QtQuick
 
 /**
- * @brief Decoration → Library → Decoration Sets.
+ * @brief Decorations → Library → Sets.
  *
  * A decoration set is a snapshot of the decoration profile tree (every
  * per-surface override) persisted as one JSON file under
@@ -20,15 +20,11 @@ ShaderSetsPage {
     importAnchor: "importDecorationSets"
     savedAnchor: "savedDecorationSets"
 
-    infoBannerText: i18n("Decoration sets bundle your per-surface pack chains into one shareable JSON file. Applying a set merges into your current decoration. Surfaces it doesn't cover are left unchanged.")
-    saveDescription: i18n("Capture every per-surface override as a named decoration set.")
-    importDescription: i18n("Decoration sets are single JSON files under your data directory. Drop a set file here to import it, or use the buttons below.")
-    emptyStateText: i18n("No decoration sets saved yet.")
-    nameFieldAccessibleName: i18n("Decoration set name")
-    descriptionFieldAccessibleName: i18n("Decoration set description")
+    infoBannerText: i18n("A set bundles your per-surface pack chains into one shareable JSON file. Applying a set merges into your current decoration. Surfaces it doesn't cover are left unchanged.")
+    saveDescription: i18n("Capture every per-surface override as a named set.")
 
     // Coverage chips are keyed on the root segment of a surface path
-    // ("window.tiled" → "window"), matching the four Decoration surface pages.
+    // ("window.tiled" → "window"), matching the five Decoration surface pages.
     // A root with no case here renders its raw untranslated token, so a new
     // surface root needs a case added the same day it ships.
     coverageLabel: function (token) {
@@ -41,6 +37,8 @@ ShaderSetsPage {
             return i18nc("@label decoration surface group", "Popups");
         case "shell":
             return i18nc("@label decoration surface group", "Plasma shell");
+        case "pointer":
+            return i18nc("@label decoration surface group", "Pointer");
         default:
             return token;
         }
@@ -50,6 +48,6 @@ ShaderSetsPage {
         return i18np("%n Surface", "%n Surfaces", count);
     }
     applySubtitleFor: function (name) {
-        return i18n("“%1” will replace the decoration on every surface it covers.", name);
+        return i18n("“%1” will replace the decoration on every surface it covers. The change is not saved yet, so Discard still undoes it.", name);
     }
 }

@@ -8,6 +8,7 @@
 // Split out of settingscontroller_session.cpp, which sits at its size
 // ceiling; same class, separate translation unit, no API change.
 
+#include "settings/utils/animationfileutils.h"
 #include "settingscontroller.h"
 
 #include "config/configdefaults.h"
@@ -204,9 +205,21 @@ bool SettingsController::importAllSettings(const QString& filePath)
         Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That file path is not allowed."));
         return false;
     }
-    if (!QFile::exists(safeFilePath)) {
-        qCWarning(lcCore) << "importAllSettings: file not found" << filePath;
+    // isFile, not exists: a directory, a fifo or a device node all pass
+    // exists(), and the two readAll() calls below run on the GUI thread — a
+    // fifo would block the window outright. The size cap is the same boundary
+    // every sibling file reader in this app applies, for the same reason: a
+    // config export is a few kilobytes and the parse copy is unbounded without
+    // it.
+    const QFileInfo importInfo(safeFilePath);
+    if (!importInfo.isFile()) {
+        qCWarning(lcCore) << "importAllSettings: not a regular file" << filePath;
         Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That settings file is no longer there."));
+        return false;
+    }
+    if (importInfo.size() > animfileutil::kMaxJsonFileBytes) {
+        qCWarning(lcCore) << "importAllSettings: refusing" << importInfo.size() << "bytes from" << filePath;
+        Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That file is too large to be a settings file."));
         return false;
     }
 
@@ -346,7 +359,11 @@ bool SettingsController::importAllSettings(const QString& filePath)
             // into rules.json and quicklayouts.json and strips the scratch keys.
             // Unpaired, the stashes sit orphaned in config.json and the next
             // launch strips them unported, dropping every imported assignment.
-            ok = PlasmaZones::ConfigMigration::migrateIniToJson(safeFilePath, configPath)
+            // Imports disabled for the same reason as the JSON arm below: an
+            // imported INI is stamped v1, so the chain runs every step
+            // including the import-bearing ones, and the file is the sender's.
+            ok = PlasmaZones::ConfigMigration::migrateIniToJson(safeFilePath, configPath,
+                                                                ConfigMigration::ExternalImports::Disabled)
                 && PlasmaZones::ConfigMigration::finalizeV4Conversion(configPath);
             if (!ok) {
                 qCWarning(PlasmaZones::lcCore) << "Failed to convert legacy INI file:" << safeFilePath;
@@ -431,7 +448,15 @@ bool SettingsController::importAllSettings(const QString& filePath)
                     // Says what failed, not what the restore below will do:
                     // that runs after this and can fail too.
                     Q_EMIT settingsTransferFailed(PhosphorI18n::tr("Could not replace your settings with that file."));
-                } else if (!ConfigMigration::runMigrationChain(configPath)
+                    // Disabled because the bytes just written are the SENDER's,
+                    // not this machine's former config. With imports enabled a
+                    // pre-v8 export would pick up this machine's leftover
+                    // per-event timing files and stamp them into the imported
+                    // document, handing the user the sender's packs driven by
+                    // their own durations — a state neither machine ever had.
+                    // Every export in the wild today is pre-v8, so this is the
+                    // common path, not the edge case.
+                } else if (!ConfigMigration::runMigrationChain(configPath, ConfigMigration::ExternalImports::Disabled)
                            || !ConfigMigration::finalizeV4Conversion(configPath)) {
                     // An imported blob can be ANY older schema version, and
                     // ensureJsonConfig's one-shot latch has long since fired, so
@@ -516,7 +541,18 @@ bool SettingsController::importAllSettings(const QString& filePath)
         // LayoutRegistry D-Bus surface, which is a wider change than this path.
         // Until then an import does not carry quick-layout slots across, which
         // is what the refusal wording above tells the user.
-        DaemonDBus::notifyReload();
+        if (!DaemonDBus::notifyReload()) {
+            // Same shape as the rules arm below, and the same stakes: the
+            // daemon is still holding its pre-import config, and a backend sync
+            // rewrites the whole document from that in-memory root, so the
+            // imported values get put back at some later flush from any source.
+            qCWarning(PlasmaZones::lcCore) << "importAllSettings: the daemon did not reload config.json after the "
+                                              "import; it is still serving the pre-import settings";
+            Q_EMIT settingsTransferFailed(
+                PhosphorI18n::tr("Your settings were imported, but PlasmaZones is still running the old ones. "
+                                 "Restart PlasmaZones, or the imported settings may be overwritten."));
+            ok = false;
+        }
         if (!DaemonDBus::notifyRulesReload()) {
             // The config landed but the daemon is still serving its pre-import
             // rules, and the revert inside adoptOnDiskState below is about to
@@ -528,47 +564,24 @@ bool SettingsController::importAllSettings(const QString& filePath)
             Q_EMIT settingsTransferFailed(
                 PhosphorI18n::tr("Your settings were imported, but the window rules could not be reloaded. Restart "
                                  "PlasmaZones before you change any rules, or the imported ones will be lost."));
-            // Report not-fully-landed for the same reason the animation-snapshot
-            // branch below does: the bool's only job is gating the General
-            // page's success toast, and that toast replaces whatever is in
-            // flight, so returning true here would overwrite the warning just
-            // emitted with "Settings imported".
+            // Report not-fully-landed: the bool's only job is gating the
+            // General page's success toast, and that toast replaces whatever is
+            // in flight, so returning true here would overwrite the warning
+            // just emitted with "Settings imported".
             ok = false;
         }
         // Adopting the on-disk state is exactly what a reload deferred by
         // onExternalSettingsChanged() would have done, so drop that flag.
         m_pendingExternalReload = false;
         // Adopt the imported state the way Discard adopts a reverted one.
-        // asyncRevertInFlight does NOT count as clean here: on Discard that
-        // worker IS the restore, but here it holds snapshots of pre-import
-        // content for files the import just rewrote.
         //
         // One asymmetry worth knowing: the rules revert inside is ASYNC, so the
         // success toast is raised before it resolves. A failed re-fetch still
         // surfaces, through the permanent revertFinished listener in
         // settingscontroller.cpp, which re-badges the Rules page rather than
         // reporting through this return value.
-        const bool adopted = adoptOnDiskState(/*treatAsyncRevertAsClean=*/false);
-        if (!adopted) {
-            qCWarning(lcConfig) << "importConfig: animation snapshots are still staged after the revert (a discard is "
-                                   "in flight, or a restore failed)";
-            // The settings on disk are the imported ones, but the animation
-            // page still holds pre-import snapshots. That is a partial result
-            // the user has to know about: without this the import reports plain
-            // success while the page shows something else.
-            Q_EMIT settingsTransferFailed(
-                PhosphorI18n::tr("Your settings were imported, but the animation pages still show the old ones. "
-                                 "Reopen the settings window to see the imported values."));
-            // Report not-fully-landed. The bool's only job is gating the General
-            // page's success toast (see the settingsTransferFailed doc), and the
-            // toast surface replaces whatever is in flight. Returning true here
-            // would let the caller overwrite the reason just emitted, inside the
-            // same JS statement, so the user would only ever read "Settings
-            // imported" on the one path that exists to say otherwise.
-            ok = false;
-        } else {
-            setNeedsSave(false);
-        }
+        adoptOnDiskState();
+        setNeedsSave(false);
     }
     return ok;
 }

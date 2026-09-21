@@ -188,9 +188,10 @@ private Q_SLOTS:
         // dirty mark, per-page Reset and Discard silently skipped it)
         // precisely because this sweep did not cover the group.
         // Decorations.Performance joined when its fourth key
-        // (BlurScaleMultiplier) landed: all four are owned by the
-        // window-appearance page today, and sweeping the group keeps a future
-        // fifth key from shipping ownerless the way Rendering.Gpu did.
+        // (BlurScaleMultiplier) landed: all five are owned by the
+        // window-appearance page today, and sweeping the group is what kept
+        // the fifth (SuppressWhileFullscreen) from shipping ownerless the way
+        // Rendering.Gpu did.
         // Snapping.Behavior, Snapping.Behavior.ZoneSpan and Tiling.Behavior
         // joined with the trigger release graces: those three arms were the
         // only ones of the four outside this sweep, so deleting any of their

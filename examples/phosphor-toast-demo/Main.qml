@@ -135,10 +135,10 @@ ApplicationWindow {
                 }
             }
 
-            PhosphorPill {
-                text: qsTr("Do Not Disturb")
-                selected: toastHost.rules !== null
-                onToggled: toastHost.rules = toastHost.rules ? null : root.dndRule
+            PhosphorButton {
+                text: toastHost.rules !== null ? qsTr("Do Not Disturb: on") : qsTr("Do Not Disturb: off")
+                variant: toastHost.rules !== null ? PhosphorButton.Tonal : PhosphorButton.Outlined
+                onClicked: toastHost.rules = toastHost.rules ? null : root.dndRule
             }
         }
 

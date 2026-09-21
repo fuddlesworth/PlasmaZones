@@ -1,19 +1,16 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// FILE SIZE: this TU sits in the 1000-1150 grace band and stays whole
-// deliberately: it is a flat sequence of one appendXxxSchema function per
-// config domain plus the validator helpers several of them share — one
-// file-local (validStringOr), the rest at namespace scope in settingsschema_p.h
-// or declared in settingsschema.h because the per-domain TUs share them too
-// (canonicalCommaList, canonicalThemeFallbackColor, canonicalTriggerList).
-// The domains big enough to carry their own weight are already split
-// (settingsschema_scrolling.cpp's three entry points, settingsschema_tiling.cpp's
-// one, and settingsschema_workspaces.cpp's one with its named-entry validator);
-// every remaining function is under ninety lines, and moving one out drags its
-// helpers into a header for a single consumer. When a domain grows past that,
-// split it the way those were — do not let this file cross the 1150 ceiling
-// instead.
+// FILE SIZE: this TU stays whole deliberately. It is a flat sequence of one
+// appendXxxSchema function per config domain plus the validator helpers several of them
+// share — one file-local (validStringOr), the rest at namespace scope in
+// settingsschema_p.h or declared in settingsschema.h because the per-domain TUs share
+// them too (canonicalCommaList, canonicalThemeFallbackColor, canonicalTriggerList). The
+// domains big enough to carry their own weight are already split
+// (settingsschema_scrolling.cpp, settingsschema_tiling.cpp and
+// settingsschema_workspaces.cpp); every remaining function is under ninety lines, and
+// moving one out drags its helpers into a header for a single consumer. When a domain
+// grows past that, split it the way those were rather than letting this file cross it.
 
 #include "settingsschema.h"
 
@@ -46,6 +43,7 @@ PhosphorConfig::Schema buildSettingsSchema()
     s.versionKey = ConfigKeys::versionKey();
 
     appendShadersSchema(s);
+    appendOverlayShadersSchema(s);
     appendAppearanceSchema(s);
     appendOrderingSchema(s);
     appendAnimationsSchema(s);
@@ -424,11 +422,16 @@ void appendAnimationsSchema(PhosphorConfig::Schema& schema)
         // directly. Existing string-blob configs are migrated transparently
         // by Store::read's legacy-string fallback on first load.
         {CD::animationProfileKey(), CD::animationProfile(sSchemaRegistry), QMetaType::QVariantMap,
-         QStringLiteral("The active motion profile, holding its easing curve, duration, stagger interval, and sequence "
-                        "mode. The animations page writes this, so it is not meant to be edited by hand.")},
+         QStringLiteral("The active motion profile: easing curve, duration, stagger interval and sequence mode. "
+                        "The animations page writes this; it is not meant to be edited by hand.")},
         {CD::shaderProfileTreeKey(), CD::shaderProfileTree(), QMetaType::QVariantMap,
          QStringLiteral("Per-context overrides of which animation shader each transition uses. The animations page "
-                        "writes this, so it is not meant to be edited by hand.")},
+                        "writes this, so it is not meant to be edited by hand."),
+         sanitizeShaderProfileTree},
+        {CD::motionProfileTreeKey(), CD::motionProfileTree(), QMetaType::QVariantMap,
+         QStringLiteral("Per-context overrides of animation timing: each context's easing curve and duration. "
+                        "The animations page writes this; it is not meant to be edited by hand."),
+         sanitizeMotionProfileTree},
     };
 }
 
@@ -615,6 +618,20 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
     for (int i = 0; i < PhosphorProtocol::Service::QuickLayoutSlotCount; ++i) {
         addShortcut(globals, CD::snapToZoneKey(i + 1), snapToZoneDefaults[i],
                     QStringLiteral("Snaps the focused window to zone %1 of the current layout.").arg(i + 1));
+    }
+    const QString scrollFocusTabDefaults[] = {
+        CD::scrollFocusTab1Shortcut(), CD::scrollFocusTab2Shortcut(), CD::scrollFocusTab3Shortcut(),
+        CD::scrollFocusTab4Shortcut(), CD::scrollFocusTab5Shortcut(), CD::scrollFocusTab6Shortcut(),
+        CD::scrollFocusTab7Shortcut(), CD::scrollFocusTab8Shortcut(), CD::scrollFocusTab9Shortcut(),
+    };
+    // Same protocol-constant bound as the two loops above.
+    static_assert(std::size(scrollFocusTabDefaults) == PhosphorProtocol::Service::QuickLayoutSlotCount,
+                  "focus-tab defaults array must cover every protocol slot");
+    for (int i = 0; i < PhosphorProtocol::Service::QuickLayoutSlotCount; ++i) {
+        addShortcut(globals, CD::scrollFocusTabKey(i + 1), scrollFocusTabDefaults[i],
+                    QStringLiteral("Shows tab %1 of the focused column in scrolling mode. In a column that is not "
+                                   "tabbed it focuses window %1 in the stack.")
+                        .arg(i + 1));
     }
     addShortcut(globals, CD::rotateWindowsClockwiseKey(), CD::rotateWindowsClockwiseShortcut(),
                 QStringLiteral("Moves every window one zone clockwise within the current layout."));
@@ -871,6 +888,9 @@ void appendDisplaySchema(PhosphorConfig::Schema& schema)
                      {static_cast<int>(OverlayDisplayMode::LayoutPreview), "layoutPreview"_L1}})},
     };
 }
+
+// Overlays lives in settingsschema_overlayshaders.cpp, split
+// out for file size the way the scrolling and tiling domains were.
 
 // ─── PhosphorZones::Zone Selector ──────────────────────────────────────────────────────────
 // Pops up at the edge of the screen during drag to let users pick which zone
@@ -1180,12 +1200,10 @@ void appendGapsSchema(PhosphorConfig::Schema& schema)
 
 // ─── Decorations ──────────────────────────────────────────────────────────────
 // Per-surface decoration tree: a DecorationProfileTree (the user-applied surface
-// shader-pack chain) keyed on a dot-path surface namespace, persisted as a nested
-// JSON object — same QVariantMap storage shape as the autotile PerAlgorithmSettings
-// entry above and the animation ShaderProfileTree blob, with no sanitizer because
-// the per-pack override schema is not known to the config layer. The blob is a
-// leaf key under Decorations, mirroring ShaderProfileTree under Animations; the
-// Decorations.WindowFiltering sub-group is registered separately.
+// shader-pack chain) keyed on a dot-path surface namespace, persisted as a nested JSON
+// object — the same QVariantMap shape as the autotile PerAlgorithmSettings entry above
+// and the animation ShaderProfileTree blob. Both are bounded in
+// settingsschema_shadertrees.cpp, which covers a hand-edited config.json.
 
 void appendDecorationsSchema(PhosphorConfig::Schema& schema)
 {
@@ -1197,10 +1215,10 @@ void appendDecorationsSchema(PhosphorConfig::Schema& schema)
         // persisted: Settings overlays it as a lowest-precedence seed layer on
         // every read (withSeedDefaults), so shipped default updates keep
         // flowing to configs that never customized those surfaces.
-        {CD::decorationProfileTreeKey(), PhosphorSurfaceShaders::DecorationProfileTree().toJson().toVariantMap(),
-         QMetaType::QVariantMap,
+        {CD::decorationProfileTreeKey(), CD::decorationProfileTreeStoredDefault(), QMetaType::QVariantMap,
          QStringLiteral("The decoration profiles themselves, as a baseline set plus per-window overrides. The "
-                        "decorations page writes this, so it is not meant to be edited by hand.")},
+                        "decorations page writes this, so it is not meant to be edited by hand."),
+         sanitizeDecorationProfileTree},
     };
     // Mostly what the decoration chain is allowed to keep redrawing (an animated
     // pack repaints every window carrying it on every vsync, which never lets the
@@ -1236,6 +1254,9 @@ void appendDecorationsSchema(PhosphorConfig::Schema& schema)
          QStringLiteral("Resolution the blur passes render at, relative to the window. Below 1 is cheaper and softer, "
                         "above 1 is sharper and costs more."),
          clampDouble(CD::decorationBlurScaleMultiplierMin(), CD::decorationBlurScaleMultiplierMax())},
+        {CD::suppressWhileFullscreenKey(), CD::decorationSuppressWhileFullscreen(), QMetaType::Bool,
+         QStringLiteral("Draw no decorations on a monitor while a window on it is fullscreen. Other monitors keep "
+                        "theirs.")},
     };
 }
 

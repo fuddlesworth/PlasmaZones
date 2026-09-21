@@ -40,6 +40,7 @@ private Q_SLOTS:
     void noResolvableEngineYieldsNull();
     void registryChangesRefreshTheIdSet();
     void relaysActivationWithItsRegistryId();
+    void activateWidgetWithoutALiveWidgetIsRefused();
     void activationWithoutAnIdIsRefused();
     void aDynamicPropertyWriteReportsFailureButStoresTheValue();
 };
@@ -76,11 +77,11 @@ void TestBarController::registersEveryBuiltin()
     // builtinWidgets() so that adding or dropping a widget has to be a
     // deliberate edit in two places.
     const QStringList expected{
-        QStringLiteral("audio"), QStringLiteral("battery"),       QStringLiteral("bluetooth"),
-        QStringLiteral("clock"), QStringLiteral("controlcenter"), QStringLiteral("focusedapp"),
-        QStringLiteral("media"), QStringLiteral("network"),       QStringLiteral("notification"),
-        QStringLiteral("power"), QStringLiteral("spacer"),        QStringLiteral("systemmetrics"),
-        QStringLiteral("tray"),  QStringLiteral("workspaces"),
+        QStringLiteral("audio"),         QStringLiteral("battery"),       QStringLiteral("bluetooth"),
+        QStringLiteral("clock"),         QStringLiteral("controlcenter"), QStringLiteral("focusedapp"),
+        QStringLiteral("media"),         QStringLiteral("network"),       QStringLiteral("notification"),
+        QStringLiteral("placementmap"),  QStringLiteral("power"),         QStringLiteral("spacer"),
+        QStringLiteral("systemmetrics"), QStringLiteral("tray"),
     };
 
     QCOMPARE(ids.size(), expected.size());
@@ -90,7 +91,7 @@ void TestBarController::registersEveryBuiltin()
     // name because its absence was previously pinned here, and a silent
     // regression to that state would otherwise read as an ordinary count
     // change.
-    QVERIFY(ids.contains(QStringLiteral("workspaces")));
+    QVERIFY(ids.contains(QStringLiteral("placementmap")));
 }
 
 void TestBarController::factoryIdsAreSorted()
@@ -211,6 +212,18 @@ void TestBarController::relaysActivationWithItsRegistryId()
     // The source travels with the id so a multi-monitor composer can tell
     // which bar's button fired.
     QCOMPARE(spy.first().at(1).value<QQuickItem*>(), &widget);
+}
+
+void TestBarController::activateWidgetWithoutALiveWidgetIsRefused()
+{
+    // No widget was built through createWidgetFor (no factory can build one
+    // here), so a press by id has nothing to press and says so; nothing is
+    // relayed.
+    BarController controller;
+    QSignalSpy spy(&controller, &BarController::widgetActivated);
+    QVERIFY(!controller.activateWidget(QStringLiteral("power")));
+    QVERIFY(!controller.activateWidget(QString()));
+    QCOMPARE(spy.count(), 0);
 }
 
 void TestBarController::activationWithoutAnIdIsRefused()

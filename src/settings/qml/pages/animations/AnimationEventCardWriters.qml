@@ -95,14 +95,14 @@ QtObject {
     }
 
     /// Remove the override on every write path outright, in ONE controller
-    /// call rather than clearOverride in a loop: the batch entry point deletes
-    /// every file, rescans the profile registry ONCE, and emits one dirty
-    /// signal for the net flip.
+    /// call rather than clearOverride in a loop: the batch entry point removes
+    /// every entry in a single tree write and emits one dirty signal for the
+    /// net flip.
     ///
-    /// False when the controller returned -1: an async discard is in flight, OR
-    /// some file could not be removed. Both raise a toast C++-side, so the
-    /// caller must honour it — a partial failure deliberately keeps the editor
-    /// open rather than reporting success it did not achieve.
+    /// The controller's count is never negative in practice — a -1 means it had
+    /// no settings object, i.e. a wiring bug — so this reads as "did the call
+    /// run", not "did it clear something". A clear that found nothing to clear
+    /// returns 0 and is still a success.
     function _clearOverrideOnAll() {
         card._committing = true;
         try {
@@ -125,8 +125,10 @@ QtObject {
     /// event's pack alone. The controller still applies the whole group to one
     /// tree read and one write.
     ///
-    /// False when the controller returned -1: an async discard owns the tree
-    /// and it toasted the reason.
+    /// False only when the controller rejected the effect id itself
+    /// (over-length, NUL-bearing, path-separator, or naming no installed pack).
+    /// That is a caller bug rather than something the user did, and it warns
+    /// rather than toasting.
     function _setShaderOverrideOnAll(effectId, params) {
         card._committingShader = true;
         try {
@@ -159,12 +161,56 @@ QtObject {
         }
     }
 
+    /// Merge ONE parameter into every write path's stored map, leaving each
+    /// path's pack, preset and other parameters as stored.
+    ///
+    /// What the sliders use. `_setShaderParamsOnAll` above replaces the whole map,
+    /// which is what a Reset or a Randomize wants — each stages a complete map on
+    /// purpose — and is a hazard for a single-value edit, because the map a slider
+    /// has to hand over is the one the card is DISPLAYING. That holds stored values
+    /// only because `currentShaderParams` comes from a tree walk-up that never
+    /// consults the preset registry; bind it to the effective map instead, or move
+    /// the flatten into that walk-up the way the daemon side already does, and one
+    /// nudge would pin every value the preset supplies as this event's own.
+    function _setShaderParamOnAll(paramId, value) {
+        card._committingShader = true;
+        try {
+            return settingsController.animationsPage.setShaderParameterOnPaths(card._writePaths, paramId, value) >= 0;
+        } finally {
+            card._committingShader = false;
+            card.refreshShaderFromTree();
+            card.refreshFromTree(true);
+        }
+    }
+
+    /// Point every write path at @p presetId, leaving each path's pack and its
+    /// own parameter edits alone.
+    ///
+    /// An empty @p presetId means "no preset here", and which of its two readings
+    /// applies is decided HERE rather than in the controller, because only the card
+    /// knows whether the preset it is showing is this event's own or inherited: the
+    /// combo is fed the RESOLVED id. On an event that stores none of its own, None
+    /// has to BLOCK what the ancestor supplies, or it is a dead control — the write
+    /// would clear a reference the path does not have, and the refresh would
+    /// re-resolve the ancestor's and snap the combo back with no feedback.
+    function _setShaderPresetOnAll(presetId) {
+        card._committingShader = true;
+        const blockInherited = presetId.length === 0 && card._primaryPresetId.length === 0 && card.currentShaderPresetId.length > 0;
+        try {
+            return settingsController.animationsPage.setShaderPresetOnPaths(card._writePaths, presetId, blockInherited) >= 0;
+        } finally {
+            card._committingShader = false;
+            card.refreshShaderFromTree();
+            card.refreshFromTree(true);
+        }
+    }
+
     /// Clear the shader override on every write path, returning the event to
     /// inheritance. Distinct from writing the engaged-empty sentinel, which is
     /// an explicit "None" that BLOCKS inheritance — that is the picker's job,
     /// not the toggle's.
-    /// False when the controller returned -1 (an async discard owns the tree,
-    /// and it toasted the reason).
+    /// The controller's count is never negative here, so this reads as "did the
+    /// call run". A clear with nothing to clear returns 0 and is a success.
     function _clearShaderOverrideOnAll() {
         card._committingShader = true;
         try {
@@ -177,12 +223,10 @@ QtObject {
     }
 
     /// Clear the shader overrides BELOW every write path. Returns the number
-    /// cleared, or -1 if a path refused (the controller's "async discard in
-    /// flight" sentinel), which the caller must not read as a smaller
-    /// successful clear.
+    /// cleared, which is never negative.
     /// Discard the orphaned parameter overrides below every write path.
     ///
-    /// Returns the controller's count verbatim, including its -1 refusal, the
+    /// Returns the controller's count verbatim, the
     /// same way `_clearShaderOverrideDescendantsOnAll` below does — the caller
     /// is a banner action, not a drag, so there is no latch to arm.
     function _clearStaleParamDescendantsOnAll() {

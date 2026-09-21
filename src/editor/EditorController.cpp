@@ -22,7 +22,6 @@
 #include <PhosphorZones/LayoutComputeService.h>
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
-#include "../shaderpreview/shaderpreviewcontroller.h"
 
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/ScrollingTemplateStore.h>
@@ -56,18 +55,6 @@ EditorController::EditorController(QObject* parent)
     // comma-operator trick so the intent is obvious at a glance —
     // matches the daemon's handling.
     ensureScreenIdResolver();
-
-    // The shared zone-shader preview feed. EditorController is its backend
-    // (IShaderPreviewBackend — D-Bus shader metadata + the live edited layout);
-    // the QML-facing preview methods delegate to it. Forward the audio-spectrum
-    // change so existing editor QML bindings on `audioSpectrum` keep firing.
-    m_shaderPreview = new ShaderPreviewController(this, this);
-    connect(m_shaderPreview, &ShaderPreviewController::audioSpectrumChanged, this,
-            &EditorController::audioSpectrumChanged);
-    connect(m_shaderPreview, &ShaderPreviewController::shaderPresetSaveFailed, this,
-            &EditorController::shaderPresetSaveFailed);
-    connect(m_shaderPreview, &ShaderPreviewController::shaderPresetLoadFailed, this,
-            &EditorController::shaderPresetLoadFailed);
 
     // The template preview's axis is derived from the target screen (its
     // per-screen override, and its size under Auto), so it re-resolves
@@ -188,10 +175,11 @@ EditorController::EditorController(QObject* parent)
     m_scrollingTemplate = new EditorTemplateModel(this, this);
 
     // Connect service signals
-    connect(m_layoutService, &ILayoutService::errorOccurred, this, [this](const QString& error) {
-        Q_EMIT layoutLoadFailed(error);
-        Q_EMIT layoutSaveFailed(error);
-    });
+    // One relay, one toast: the service's messages name the failed operation
+    // themselves, and fanning the error into BOTH layoutLoadFailed and
+    // layoutSaveFailed produced two stacked toasts with contradictory
+    // prefixes for every service error.
+    connect(m_layoutService, &ILayoutService::errorOccurred, this, &EditorController::serviceErrorOccurred);
 
     connect(m_zoneManager, &ZoneManager::zonesChanged, this, [this]() {
         // Check if selected zones still exist after zones changed

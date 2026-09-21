@@ -17,6 +17,7 @@
 #include <PhosphorShaders/CustomParamsKey.h>
 #include <PhosphorShaders/PixelUnits.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
+#include <PhosphorShaders/ShaderPresetParse.h>
 #include "shaderutils.h"
 
 #include <PhosphorFsLoader/DirectoryLoader.h>
@@ -54,37 +55,13 @@ namespace ShaderRegistryParse {
 /// a texture the shader can sample. CLAUDE.md: "Sanitize file paths to prevent
 /// directory traversal."
 ///
-/// Subdirectories INSIDE the pack stay legal (`"shaders/effect.frag"`), because
-/// containment is checked on the resolved canonical path rather than by
-/// refusing separators. A name that does not exist yet resolves lexically, so a
-/// pack referencing a file it does not ship is still rejected later by the
-/// existence checks rather than here.
-///
-/// @p policy defaults to `Reject`, which is right for everything a PACK FILE
-/// declares: a pack ships its own assets, so an absolute path can only be a
-/// mistake or an escape. Only a value the USER supplied at runtime (a file
-/// picker, D-Bus) may pass `Trust`.
+/// Overlay-family spelling of the shared `PhosphorShaders::resolveWithinPack`,
+/// which every family now uses; this forwarder exists only to bind the overlay
+/// logging category so the ~dozen call sites in this TU keep their three-argument
+/// shape. The policy contract lives on the shared declaration.
 QString resolveWithinPack(const QDir& dir, const QString& declaredName, PhosphorFsLoader::AbsolutePathPolicy policy)
 {
-    // An empty declared name is ABSENT, not an escape. `toString(default)` hands
-    // back an explicit `""` rather than the default (an empty string IS a
-    // string), so without this the guard refused it and warned "declared a path
-    // outside its own directory: ''", which points the pack author at the wrong
-    // problem. Both callers now schema-gate first (minLength 1), so this is
-    // pure belt-and-braces for any future gate-free caller.
-    if (declaredName.isEmpty()) {
-        return {};
-    }
-    // Delegates to the shared guard rather than hand-rolling a fifth copy: a
-    // lexical-only check (which this was) misses a symlink inside the pack
-    // pointing out of it, and mixing canonical with lexical fails open.
-    const auto resolved = PhosphorFsLoader::resolveWithinDirectory(declaredName, dir.absolutePath(), policy);
-    if (!resolved) {
-        qCWarning(lcShaderRegistry) << "Shader pack declared a path outside its own directory:" << declaredName << "in"
-                                    << dir.absolutePath() << "— ignoring";
-        return {};
-    }
-    return *resolved;
+    return PhosphorShaders::resolveWithinPack(dir, declaredName, policy, lcShaderRegistry());
 }
 
 ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const QJsonObject& root)
@@ -426,62 +403,21 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
         }
     }
 
-    // Presets
-    //
-    // Image-typed preset values are pack-declared paths, exactly like an image
-    // param's `default`, and must be containment-checked at parse time with the
-    // same Reject policy. They cannot be trusted at translate time: a preset
-    // reaches `translateParamsToUniforms` through `storedParams` (the user picked
-    // the preset), so the provenance heuristic there (`storedParams.contains(id)`
-    // → Trust) would wave a pack-manufactured `"tex": "/home/user/.ssh/id_rsa"`
-    // straight through — the very escape the `default` path already closes. Gate
-    // it here, where the value's true (pack) provenance is known.
+    // Presets. Overlay is the one family whose parameters are SUPPORTED as
+    // image-typed, which is not the same as the one family that can reach the shared
+    // parser with a non-empty image-id set: `type` is read raw from a hand-editable
+    // metadata.json with no enum validation, so a pack in ANY family can declare one
+    // and the set below is never statically empty. That is exactly what
+    // `parsePackPresets`' fail-closed guard covers. Why those values have to be
+    // containment-checked HERE rather than at translate time is written up there
+    // too.
     QSet<QString> imageParamIds;
     for (const ShaderRegistry::ParameterInfo& p : std::as_const(info.parameters)) {
         if (p.type == QLatin1String("image")) {
             imageParamIds.insert(p.id);
         }
     }
-    const QJsonObject presetsObj = root.value(QLatin1String("presets")).toObject();
-    for (auto it = presetsObj.begin(); it != presetsObj.end(); ++it) {
-        const QJsonObject values = it.value().toObject();
-        QVariantMap presetValues;
-        QStringList refusedImageEntries;
-        for (auto vit = values.begin(); vit != values.end(); ++vit) {
-            if (imageParamIds.contains(vit.key())) {
-                const QString declared = vit.value().toVariant().toString();
-                if (declared.isEmpty()) {
-                    // Empty = "no texture" for this slot; carry through.
-                    presetValues[vit.key()] = QString();
-                    continue;
-                }
-                // Reject, like every other pack-declared path: an absolute or
-                // escaping preset texture is a mistake or an attack, never
-                // legitimate. A refused value is dropped from the preset so it
-                // falls back to the param's default rather than binding an
-                // arbitrary file.
-                const QString resolved = resolveWithinPack(dir, declared, PhosphorFsLoader::AbsolutePathPolicy::Reject);
-                if (!resolved.isEmpty()) {
-                    presetValues[vit.key()] = resolved;
-                } else {
-                    refusedImageEntries.append(vit.key());
-                }
-                continue;
-            }
-            presetValues[vit.key()] = vit.value().toVariant();
-        }
-        if (!refusedImageEntries.isEmpty()) {
-            // Name the preset. Without this a preset whose image entries were
-            // all refused vanishes from the pack with nothing in the log
-            // pointing at which one, or why.
-            qCWarning(lcShaderRegistry).noquote() << "Shader pack" << dir.dirName() << "preset" << it.key()
-                                                  << "declares texture path(s) outside the pack; refused:"
-                                                  << refusedImageEntries.join(QLatin1String(", "));
-        }
-        if (!presetValues.isEmpty()) {
-            info.presets[it.key()] = presetValues;
-        }
-    }
+    info.presets = parsePackPresets(dir, imageParamIds, root, lcShaderRegistry());
 
     return info;
 }

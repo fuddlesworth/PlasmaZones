@@ -5,6 +5,7 @@
 
 #include <phosphorengine_export.h>
 #include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 
 #include <functional>
 
@@ -99,7 +100,25 @@ public:
     /// tracker's tests pin that behaviour.
     int screenDesktop(const QString& screenId) const
     {
-        return m_screenCurrentDesktop.value(screenId, m_currentDesktop);
+        if (const auto perOut = m_screenCurrentDesktop.constFind(screenId);
+            perOut != m_screenCurrentDesktop.constEnd()) {
+            return perOut.value();
+        }
+        // The per-output push is keyed by the PHYSICAL output the effect
+        // reports; a subdivided output's `/vs:N` children are asked about by
+        // their own id and never pushed. Resolve a virtual id against its
+        // parent before falling back to the global desktop, as the desktop
+        // manager does, or every key minted for a virtual screen sits on the
+        // startup desktop while the zone commits (which read the manager)
+        // land on the live one.
+        if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
+            if (const auto parent =
+                    m_screenCurrentDesktop.constFind(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
+                parent != m_screenCurrentDesktop.constEnd()) {
+                return parent.value();
+            }
+        }
+        return m_currentDesktop;
     }
 
     // ── Context mutators ─────────────────────────────────────────────────────
@@ -236,6 +255,17 @@ public:
     /// The dynamic-workspaces renumber pass drives this alongside the engines'
     /// state-map rewrite so pins stay keyed to the desktop they meant.
     void renumberDesktops(const QHash<int, int>& oldToNew);
+
+    /// Shift every stored desktop number ABOVE @p removedDesktop down by one,
+    /// after pruneDesktop has dropped the entries that referenced it.
+    ///
+    /// The companion to the engines' renumberDesktopsAfterRemoval, and it must
+    /// run with them or not at all. Both maps hold POSITIONAL desktop numbers
+    /// that index the same numbering the state keys use, so renumbering the
+    /// stores while dropping these would leave a pinned or per-output value
+    /// naming a position whose content moved — the desync pruneDesktop's own
+    /// comment warns about, in the other direction.
+    void renumberDesktopsAfterRemoval(int removedDesktop);
 
 private:
     /// Current desktop/activity context. `*ContextEverSet` carry "a context was

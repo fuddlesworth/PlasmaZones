@@ -30,7 +30,7 @@ void addNumberedWindows(PhosphorTiles::TilingState& state, int count)
  * Tests cover:
  * - Master count (default, set/get, clamping, signals, isMaster, master/stack lists)
  * - Split ratio (default, set/get, clamping, increase/decrease, signals)
- * - Per-window floating state (set, toggle, tiled count, lists, signals)
+ * - Per-window floating state (set, untracked guard, tiled count, lists, signals)
  */
 class TestTilingStateConfig : public QObject
 {
@@ -239,34 +239,17 @@ private Q_SLOTS:
 
     void testFloating_untrackedWindow()
     {
+        // containsWindow is what a caller checks before flipping — setFloating
+        // itself carries no "did it work" return to misread, which is the
+        // ambiguity discussion #1076 was caused by and this state no longer
+        // exposes. The engine's own pin for that regression lives in
+        // TestAutotileEngineCore::testToggleFloat_unfloatLegRetilesAndAnnounces.
         PhosphorTiles::TilingState state(QStringLiteral("test"));
 
         // Setting floating on untracked window should be ignored
+        QVERIFY(!state.containsWindow(QStringLiteral("nonexistent")));
         state.setFloating(QStringLiteral("nonexistent"), true);
         QVERIFY(!state.isFloating(QStringLiteral("nonexistent")));
-    }
-
-    void testFloating_toggle()
-    {
-        PhosphorTiles::TilingState state(QStringLiteral("test"));
-        state.addWindow(QStringLiteral("win1"));
-
-        bool result = state.toggleFloating(QStringLiteral("win1"));
-        QVERIFY(result);
-        QVERIFY(state.isFloating(QStringLiteral("win1")));
-
-        result = state.toggleFloating(QStringLiteral("win1"));
-        QVERIFY(!result);
-        QVERIFY(!state.isFloating(QStringLiteral("win1")));
-    }
-
-    void testFloating_toggleUntracked()
-    {
-        PhosphorTiles::TilingState state(QStringLiteral("test"));
-
-        // Toggle on untracked should return false and do nothing
-        bool result = state.toggleFloating(QStringLiteral("nonexistent"));
-        QVERIFY(!result);
     }
 
     void testFloating_tiledWindowCount()

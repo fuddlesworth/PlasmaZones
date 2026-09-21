@@ -91,6 +91,9 @@ void seedSimplePageAnchors(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingNewWindowPlacement"),
                PhosphorI18n::tr("New window placement"),
                {PhosphorI18n::tr("insert"), PhosphorI18n::tr("position"), PhosphorI18n::tr("column")});
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingGroupSameAppAsTabs"),
+               PhosphorI18n::tr("Group windows of the same application as tabs"),
+               {PhosphorI18n::tr("tabs"), PhosphorI18n::tr("group"), PhosphorI18n::tr("application")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingSmartGaps"),
                PhosphorI18n::tr("Smart gaps"),
                {PhosphorI18n::tr("gap"), PhosphorI18n::tr("smart"), PhosphorI18n::tr("single"),

@@ -195,6 +195,10 @@ bool NavigationController::crossOutputMove(const QString& sourceScreenId, const 
     // windowFocused() path does: migrateWindowBetweenKeys re-adds the window via
     // onWindowAdded() → screenForWindow(), which reads this map. Without the
     // update it would resolve back to the source screen and re-add it there.
+    // The window leaves its source OUTPUT, so every other context it held
+    // there goes first, with the hook pairing; the resolved one is emptied by
+    // the migration below.
+    m_engine->dropFromOtherContexts(focused, m_engine->m_states.keyForWindow(focused));
     m_engine->m_states.setKeyForWindow(focused, newKey);
     // migrateWindowBetweenKeys removes the window from the source state (with
     // its onWindowRemoved lifecycle) and adds it on the neighbour output. It

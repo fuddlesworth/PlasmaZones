@@ -178,14 +178,12 @@ Item {
         x: root._trackWidth * root._ratio
         color: root.enabled ? Theme.primary : root._disabledTint
 
-        // Animate to programmatic value changes, but not while the user
-        // drags: the handle must track the pointer with no easing lag.
+        // The knob settles on the shell's spring (A1 M4): a programmatic
+        // value change overshoots 3 % and lands, and a drag retargets the
+        // same motion from its current velocity rather than restarting it,
+        // so the handle follows the pointer without easing lag.
         Behavior on x {
-            enabled: !drag.active
-            NumberAnimation {
-                duration: Motion.duration_short_2
-                easing: Motion.standard
-            }
+            SettleAnimation {}
         }
     }
 

@@ -14,6 +14,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QTimer>
 
 namespace PhosphorServiceLock {
 
@@ -35,10 +36,15 @@ public:
     void requestLock();
     /// Verify @p password for the session user. A no-op unless currently Locked.
     void authenticate(const QString& password);
+    /// Release the compositor lock from Releasing. See LockService::finishUnlock.
+    void finishUnlock();
+    /// How long Releasing waits for finishUnlock() before releasing anyway.
+    static constexpr int ReleaseFailsafeMs = 1000;
 
 Q_SIGNALS:
     void stateChanged();
     void authenticationFailed(const QString& reason);
+    void aboutToUnlock();
     void unlocked();
 
 private:
@@ -52,6 +58,7 @@ private:
     IAuthenticator* m_authenticator;
     QString m_username;
     LockService::State m_state = LockService::State::Unlocked;
+    QTimer m_releaseFailsafe;
 };
 
 } // namespace PhosphorServiceLock

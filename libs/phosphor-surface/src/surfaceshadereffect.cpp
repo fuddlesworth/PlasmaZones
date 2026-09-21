@@ -5,6 +5,7 @@
 
 #include <PhosphorSurface/SurfaceShaderContract.h>
 
+#include <QDir>
 #include <QJsonArray>
 #include <QJsonValue>
 #include <QLoggingCategory>
@@ -154,6 +155,12 @@ QJsonObject SurfaceShaderEffect::toJson() const
         if (!texArr.isEmpty())
             obj.insert(QLatin1String("textures"), texArr);
     }
+    if (!presets.isEmpty()) {
+        QJsonObject presetsObj;
+        for (auto it = presets.constBegin(); it != presets.constEnd(); ++it)
+            presetsObj.insert(it.key(), QJsonObject::fromVariantMap(it.value()));
+        obj.insert(QLatin1String("presets"), presetsObj);
+    }
 
     return obj;
 }
@@ -178,11 +185,17 @@ SurfaceShaderEffect SurfaceShaderEffect::fromJson(const QJsonObject& obj)
     e.providesBorder = obj.value(QLatin1String("providesBorder")).toBool(false);
     e.providesOpacityTint = obj.value(QLatin1String("providesOpacityTint")).toBool(false);
     e.audio = obj.value(QLatin1String("audio")).toBool(false);
+    // EVERY entry is kept IN PLACE, with no empty-string compaction, because
+    // bufferWraps / bufferFilters below are positionally aligned with this list — as
+    // the comment on those loops says in so many words. Compacting an empty entry
+    // here shifted every later buffer's override onto the wrong buffer, and since
+    // toJson re-emits empties, a dropped empty broke alignment again on the very next
+    // load. An empty entry fails the existence check at scan time and fail-closes
+    // multipass coherently, like any other missing buffer source. The animation twin
+    // appends unconditionally for exactly this reason.
     const QJsonArray bufArr = obj.value(QLatin1String("bufferShaders")).toArray();
     for (const QJsonValue& v : bufArr) {
         const QString name = v.toString();
-        if (name.isEmpty())
-            continue;
         // Capped at the boundary: each pass costs a canvas-sized texture and a
         // fullscreen draw per decorated window per frame, and anything past the
         // fourth is structurally unreadable (the fold binds iChannel0..3). Drop the
@@ -308,6 +321,32 @@ SurfaceShaderEffect SurfaceShaderEffect::fromJson(const QJsonObject& obj)
         e.parameters.append(std::move(p));
     }
 
+    // Pack-declared presets. The image-id set is derived from the declared
+    // parameters rather than hard-coded empty, so if this family ever gains an
+    // `image` parameter type the containment check starts applying on its own
+    // instead of silently trusting pack-declared paths. It is empty today —
+    // surface packs carry textures in a separate top-level `textures` array,
+    // and the schema's parameter `type` enum has no `image` member.
+    //
+    // `sourceDir` is stamped by the registry loader AFTER fromJson returns, so there
+    // is no pack directory to anchor against here. That case IS fail-closed, in
+    // `parsePackPresets` itself: an empty or "." pack directory with a non-empty
+    // image-param set refuses every image-typed value rather than resolving it,
+    // because `QDir(QString())` behaves as `QDir(".")` and `absolutePath()` would
+    // otherwise answer the process working directory — confining a relative path to
+    // THAT instead of refusing it. So a hand-written `"type": "image"` in this family
+    // loses its preset texture values and keeps the rest of the preset.
+    //
+    // If this family ever SUPPORTS an image parameter type, `fromJson` has to take a
+    // `sourceDir` the way the pointer twin already does, or every such value is
+    // refused rather than resolved.
+    QSet<QString> imageParamIds;
+    for (const ParameterInfo& p : std::as_const(e.parameters)) {
+        if (p.type == QLatin1String("image"))
+            imageParamIds.insert(p.id);
+    }
+    e.presets = PhosphorShaders::parsePackPresets(QDir(e.sourceDir), imageParamIds, obj, lcSurfaceShader());
+
     // Cap the texture list at the contract budget. Surplus entries are
     // silently dropped — exposing more would require both runtimes to
     // grow more sampler bindings. A future contract bump
@@ -409,6 +448,8 @@ bool SurfaceShaderEffect::operator==(const SurfaceShaderEffect& other) const
             return false;
     }
     if (textures != other.textures)
+        return false;
+    if (presets != other.presets)
         return false;
     return true;
 }

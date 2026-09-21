@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plasmazoneseffect.h"
+#include "kwincompat.h"
 #include "compositor/effectlogging.h"
 
 #include <core/renderviewport.h>
@@ -329,6 +330,15 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     // content substitution above: `expanded` describes the canvas TEXTURE
     // extent, and substituting the visible-body rect there would tell the
     // shader the texture is only as big as the body, mis-mapping the SDF.
+    //
+    // DEAD on the only call path today, and it must stay that way: surfacelayers
+    // passes the same `logicalGeometry` it stored as state.canvasGeo, and
+    // foldCursorFor decides the inside/outside cursor sentinel against THAT rect.
+    // A caller that let this fallback fire would map iMouse against
+    // expandedGeometry while the sentinel was decided against the canvas, and the
+    // two would disagree by the canvas/expanded delta — a cursor-reactive pack
+    // reading the pointer at the wrong offset. Keep the two fed from one rect;
+    // this exists only so a missing canvas degrades instead of dividing by zero.
     QRectF expanded = canvasRect;
     if (!expanded.isValid() || expanded.isEmpty()) {
         expanded = w->expandedGeometry();
@@ -465,9 +475,17 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     }
 }
 
-void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
-                                   KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
-                                   KWin::WindowPaintData& data)
+KWinCompat::PaintResult PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget,
+                                                      const KWin::RenderViewport& viewport, KWin::EffectWindow* w,
+                                                      int mask, const KWin::Region& deviceRegion,
+                                                      KWin::WindowPaintData& data)
+{
+    return KWinCompat::paintResult(drawWindowImpl(renderTarget, viewport, w, mask, deviceRegion, data));
+}
+
+bool PlasmaZonesEffect::drawWindowImpl(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                       KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
+                                       KWin::WindowPaintData& data)
 {
     // EVERY decorated window presents through the composite: paintWindow ran
     // the full chain fold (renderSurfaceChainComposite) for it this frame, and
@@ -490,8 +508,34 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
     // for a window nothing else is animating; the padded-present branch below
     // widens it when a FOREIGN effect has clipped it.
     KWin::Region drawRegion = deviceRegion;
+    // What the foreign-band bookkeeping looked like BEFORE this draw recorded its
+    // intent, so a draw that then fails can put it back. Those two fields say
+    // "this is the band we last painted", and the next frame's changed-test is
+    // their only reader: recording a band a failed draw never painted makes that
+    // test answer "unchanged", so none of the three damage rects is issued and the
+    // halo band is neither recomposited nor cleared. A transform that then holds
+    // still leaves it that way indefinitely.
+    struct ForeignBandUndo
+    {
+        QString wid;
+        QRectF band;
+        qreal opacity = 1.0;
+    };
+    std::optional<ForeignBandUndo> foreignBandUndo;
     if (!m_capturingSnapshot && !m_windowDecorations.isEmpty() && !m_shaderManager.findTransition(w)) {
-        const QString wid = getWindowId(w);
+        // The FROZEN cache, not getWindowId — the same rule apply() follows and
+        // for the same reason: that resolver re-derives on a miss and re-inserts
+        // into both id maps, and the reverse map holds a raw EffectWindow*, so a
+        // miss taken for a dying window would re-populate exactly what the close
+        // path's scrub just cleared. Behaviour is identical on every path that
+        // reaches here — a window with a decoration entry necessarily had its id
+        // derived when that entry was made, and slotWindowClosed deliberately
+        // KEEPS the mapping for a window riding a close animation, which is the
+        // only way a corpse is still painted. So this is a hit in both cases; the
+        // frozen read just makes a future miss fail closed instead of resurrecting
+        // the maps. A miss yields an empty id, which no decoration key is expected
+        // to be.
+        const QString wid = m_idCaches.windowIdCache.value(w);
         // Mutable: the foreign-transform branch below records what it painted.
         const auto bit = m_windowDecorations.find(wid);
         if (bit != m_windowDecorations.end() && bit->shaderApplied) {
@@ -536,8 +580,12 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
                 const QRectF band = foreign
                     ? paddedBandRect(w, bit->outerPadding).translated(data.xTranslation(), data.yTranslation())
                     : QRectF();
-                const bool changed =
-                    band != bit->lastForeignBand || !qFuzzyCompare(data.opacity(), bit->lastForeignOpacity);
+                // foldStateEqual, not qFuzzyCompare: this is a 0..1 fold-state
+                // value and data.opacity() genuinely reaches 0.0 during a peek
+                // fade, where a relative comparison collapses. Same rule, and the
+                // same reason, as the fold-state comparisons in surface_capture.cpp.
+                const bool changed = band != bit->lastForeignBand
+                    || !foldStateEqual(static_cast<float>(data.opacity()), static_cast<float>(bit->lastForeignOpacity));
                 if (changed && KWin::effects) {
                     if (!band.isEmpty()) {
                         drawRegion |= viewport.mapToDeviceCoordinatesAligned(KWin::RectF(band));
@@ -548,6 +596,7 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
                     }
                     damagePaddedBand(w, bit->outerPadding);
                 }
+                foreignBandUndo = ForeignBandUndo{wid, bit->lastForeignBand, bit->lastForeignOpacity};
                 bit->lastForeignBand = band;
                 bit->lastForeignOpacity = data.opacity();
             }
@@ -616,7 +665,10 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
     bool reboundSnapshotUnit = false;
     const ShaderTransition* const st = m_capturingSnapshot ? nullptr : m_shaderManager.findTransition(w);
     if (st && st->cached) {
-        const auto reIt = m_surfaceMultipass.find(getWindowId(w));
+        // Frozen read, as above. `wid` is not in scope here: that branch is the
+        // no-transition arm and this one requires a live transition, so the two
+        // are mutually exclusive.
+        const auto reIt = m_surfaceMultipass.find(m_idCaches.windowIdCache.value(w));
         if (reIt != m_surfaceMultipass.end()) {
             if (KWin::GLTexture* const comp = reIt->second.compositeTex[reIt->second.finalSlot].get()) {
                 constexpr int kSurfaceLayerUnitDraw = ShaderInternal::kSurfaceLayerUnit;
@@ -647,7 +699,11 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
             reboundSnapshotUnit = true;
         }
     }
-    KWin::OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, drawRegion, data);
+    // Result carried to the end rather than returned here: the texture-unbind
+    // hygiene below is what keeps a stray bind out of the next window's draw,
+    // and a failed draw is exactly when leaving one behind would be worst. The
+    // unbinds touch no window content, so they are safe to issue either way.
+    const bool drawn = PLASMAZONES_OFFSCREEN_DRAW_WINDOW(renderTarget, viewport, w, mask, drawRegion, data);
 
     // Unbind the multipass channel units we bound and restore GL_TEXTURE0 —
     // texture hygiene mirroring paint_pipeline.cpp, so a stray bind doesn't leak
@@ -675,6 +731,17 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
     if (boundChannels > 0 || reboundLayerUnit || reboundSnapshotUnit) {
         glActiveTexture(GL_TEXTURE0);
     }
+    // The draw failed, so the band recorded above was never painted. Put the
+    // previous values back, or the next frame's changed-test compares against a
+    // band that does not exist on screen and issues no damage for it.
+    if (!drawn && foreignBandUndo) {
+        const auto bit = m_windowDecorations.find(foreignBandUndo->wid);
+        if (bit != m_windowDecorations.end()) {
+            bit->lastForeignBand = foreignBandUndo->band;
+            bit->lastForeignOpacity = foreignBandUndo->opacity;
+        }
+    }
+    return drawn;
 }
 
 } // namespace PlasmaZones

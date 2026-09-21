@@ -157,6 +157,13 @@ QString actionDescription(const QString& type)
             "Gives matching windows keyboard focus as soon as they open, or keeps focus where it "
             "was when set to off.");
     }
+    if (type == ActionType::OpenTabGroup) {
+        return PhosphorI18n::tr(
+            "Opens matching windows as tabs of one column, named by the group. A new window joins "
+            "the column that already holds a window of the same group, turning it into tabs if "
+            "needed, and opens a column of its own when there is none yet. Windows from different "
+            "rules share a column when the rules use the same group name.");
+    }
     if (type == ActionType::OpenFullscreen) {
         return PhosphorI18n::tr(
             "Opens matching windows in fullscreen mode. Off stops apps from starting in "

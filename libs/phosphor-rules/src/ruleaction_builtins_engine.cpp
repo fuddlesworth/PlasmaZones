@@ -488,13 +488,44 @@ void ActionRegistry::registerBuiltinsEngine()
         },
         .validate =
             [](const QJsonObject& p) {
-                return hasNonEmptyString(p, ActionParam::Event);
+                if (!hasNonEmptyString(p, ActionParam::Event)) {
+                    return false;
+                }
+                // TYPE as well as length. `"presetId": 7` used to validate and then
+                // be silently ignored by every consumer, because they all read it
+                // with .toString() and a number answers empty — so the rule loaded,
+                // looked fine in the editor and did nothing. ActionParams.h says this
+                // is "A STRING, always", the PresetIds validator a hundred lines away
+                // checks it, and the isString() checks on the adjacent keys in this
+                // very file do too. Undefined stays accepted: the key is optional.
+                const QJsonValue preset = p.value(ActionParam::PresetId);
+                if (!preset.isUndefined() && !preset.isString()) {
+                    return false;
+                }
+                // Bounded like every other free-form string in this vocabulary.
+                // An over-long id is inert rather than dangerous (it resolves to
+                // no preset), but rules.json is hand-editable and the asymmetry
+                // with MaxFontFamilyLength and friends is the kind that drifts.
+                if (preset.toString().size() > MaxShaderPresetIdLength) {
+                    return false;
+                }
+                // The PACK id on the same terms. It is type-checked by the key ladder but
+                // was never length-bounded, while the preset id beside it is — the exact
+                // asymmetry this file's own comment calls the kind that drifts.
+                if (p.value(ActionParam::EffectId).toString().size() > MaxChainPackIdLength) {
+                    return false;
+                }
+                // The `params` blob, which nothing bounded at all until now. See
+                // paramsBlobIsSane: same axis as PresetIds above, same reason.
+                return paramsBlobIsSane(p.value(ActionParam::Params));
             },
         .terminal = false,
-        .allowedKeys = {QString(ActionParam::Event), QString(ActionParam::EffectId), QString(ActionParam::Params)},
+        .allowedKeys = {QString(ActionParam::Event), QString(ActionParam::EffectId), QString(ActionParam::Params),
+                        QString(ActionParam::PresetId)},
         .domain = ActionDomain::Window,
         .params = {P{.key = QString(ActionParam::Event), .kind = QString(ParamKind::AnimationEvent)},
-                   P{.key = QString(ActionParam::EffectId), .kind = QStringLiteral("shaderEffect")}},
+                   P{.key = QString(ActionParam::EffectId), .kind = QStringLiteral("shaderEffect")},
+                   P{.key = QString(ActionParam::PresetId), .kind = QStringLiteral("shaderPreset")}},
         .category = QStringLiteral("animation"),
         .displayOrder = 0,
         .tags = {QString(Tag::Animation), QString(Tag::Effect)},
@@ -603,25 +634,67 @@ void ActionRegistry::registerBuiltinsEngine()
         .tags = {QString(Tag::Effect)},
     });
 
-    // ── overlay-property slots — context-domain overrides of the active
-    //    layout's zone-overlay shader / style. Daemon-side only
-    //    (LayoutRegistry::resolveContextOverlay → OverlayService); no Tag::Effect.
-    //    Shader-id vocabulary validation lives at the consumer (the overlay
-    //    service falls back to the layout default for an unknown id), mirroring
-    //    SetEngineMode's open-vocabulary rationale above.
+    // ── overlay-property slots — context-domain overrides of the zone-overlay
+    //    shader / style. Daemon-side only (LayoutRegistry::resolveContextOverlay
+    //    → OverlayService); no Tag::Effect. Shader-id vocabulary validation
+    //    lives at the consumer (the overlay service falls back to the tree's
+    //    answer for an unknown id), mirroring SetEngineMode's open-vocabulary
+    //    rationale above.
+    //
+    //    The shader action is node-scoped, "overlay-shader:<layoutId>", the
+    //    overlay twin of the "anim-shader:<event>" slot above: the node is the
+    //    OverlayShaderTree path the rule overrides, a layout uuid or the empty
+    //    global-default node. LayoutId is optional and absent means the global
+    //    node, so a rule written before the node existed keeps meaning "every
+    //    layout in this context". EffectId must be PRESENT but may be empty:
+    //    engaged-empty is the same "block the tree, no shader" sentinel the
+    //    animation action carries, and the resolver relies on the slot being
+    //    filled to tell it from an unmatched rule. Requiring the key keeps a
+    //    hand-edited rule that simply forgot the shader from silently blocking.
     registerAction(ActionDescriptor{
         .type = QString(ActionType::OverrideOverlayShader),
-        .slotFor = constantSlot(ActionSlot::OverlayShader),
+        .slotFor = [](const QJsonObject& p) -> QString {
+            return QString(ActionSlot::OverlayShaderPrefix) + p.value(ActionParam::LayoutId).toString();
+        },
         .validate =
             [](const QJsonObject& p) {
-                return hasNonEmptyString(p, ActionParam::EffectId);
+                const QJsonValue effect = p.value(ActionParam::EffectId);
+                if (!effect.isString()) {
+                    return false;
+                }
+                const QJsonValue node = p.value(ActionParam::LayoutId);
+                if (!node.isUndefined() && !node.isString()) {
+                    return false;
+                }
+                // Type-checked and bounded on the same terms as the animation twin
+                // above, including why undefined stays accepted.
+                const QJsonValue preset = p.value(ActionParam::PresetId);
+                if (!preset.isUndefined() && !preset.isString()) {
+                    return false;
+                }
+                if (preset.toString().size() > MaxShaderPresetIdLength) {
+                    return false;
+                }
+                // The pack id and the layout id, bounded for the reason the animation twin
+                // above gives.
+                if (p.value(ActionParam::EffectId).toString().size() > MaxChainPackIdLength
+                    || p.value(ActionParam::LayoutId).toString().size() > MaxChainPackIdLength) {
+                    return false;
+                }
+                return paramsBlobIsSane(p.value(ActionParam::Params));
             },
         .terminal = false,
         // Params carries the optional shader-uniform overrides, mirroring
         // OverrideAnimationShader; the inline ParameterEditor writes it.
-        .allowedKeys = {QString(ActionParam::EffectId), QString(ActionParam::Params)},
+        .allowedKeys = {QString(ActionParam::LayoutId), QString(ActionParam::EffectId), QString(ActionParam::Params),
+                        QString(ActionParam::PresetId)},
         .domain = ActionDomain::Context,
-        .params = {P{.key = QString(ActionParam::EffectId), .kind = QStringLiteral("overlayShader")}},
+        // Node first, shader second, preset third: the node decides what the
+        // shader applies to and the preset tunes the shader, the same order the
+        // animation action lists Event before EffectId.
+        .params = {P{.key = QString(ActionParam::LayoutId), .kind = QStringLiteral("overlayLayout")},
+                   P{.key = QString(ActionParam::EffectId), .kind = QStringLiteral("overlayShader")},
+                   P{.key = QString(ActionParam::PresetId), .kind = QStringLiteral("shaderPreset")}},
         .category = QStringLiteral("overlay"),
         .displayOrder = 0,
         .tags = {QString(Tag::Overlay)},

@@ -72,8 +72,11 @@ vec4 pTransition(vec2 uv, float t) {
     // content past the screen edge, which the clamped capture would answer
     // by smearing its last pixel row/column. Fade those samples into shadow
     // instead: the tilted plane's far edge pulls away from the screen edge
-    // and darkness shows behind it, which is the depth cue a real drum
-    // would give. Vanishes with the tilt, so settle stays the identity.
+    // and darkness shows behind it over the columns, which is the depth cue
+    // a real drum would give; in a gap between columns the still wallpaper
+    // shows through instead, since the fade darkens rgb and keeps the
+    // sample's own coverage. Vanishes with the tilt, so settle stays the
+    // identity.
     // Ramp INTO the void before the edge rather than after it: a sample is
     // already clamped the instant it leaves [0,1], so a ramp starting at 0
     // would show a band of half-lit smear. Starting the ramp 0.006 uv inside

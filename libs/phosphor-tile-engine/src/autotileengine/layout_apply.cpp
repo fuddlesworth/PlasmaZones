@@ -598,10 +598,10 @@ bool AutotileEngine::shouldTileWindow(const QString& rawWindowId) const
 QString AutotileEngine::screenForWindow(const QString& rawWindowId) const
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);
-    // Check if already tracked
-    auto it = m_states.windowKeys().constFind(windowId);
-    if (it != m_states.windowKeys().constEnd()) {
-        return it->screenId;
+    // Check if already tracked. A window on several desktops is on the same
+    // screen in each, so the primary's screen answers for all of them.
+    if (const auto key = m_states.windowKey(windowId)) {
+        return key->screenId;
     }
 
     // R6 fix: Warn when falling back to primary screen — this may indicate a
@@ -768,14 +768,16 @@ void AutotileEngine::backfillWindows()
         // Collect candidates to avoid modifying m_states during iteration
         // (insertWindow mutates m_states, which is unsafe during const iteration)
         QStringList candidates;
-        for (auto it = m_states.windowKeys().constBegin(); it != m_states.windowKeys().constEnd(); ++it) {
-            if (it.value().screenId == screenId
-                && it.value().desktop == currentKeyForScreen(it.value().screenId).desktop
-                && it.value().activity == m_context.currentActivity() && !state->containsWindow(it.key())
-                && shouldTileWindow(it.key())) {
-                candidates.append(it.key());
+        // Per MEMBERSHIP: a window present on several desktops is a candidate
+        // for this screen's current context on the strength of the membership
+        // that names it, not of whichever one happens to be primary.
+        m_states.forEachMembership([&](const QString& trackedId, const PhosphorEngine::PlacementStateKey& key) {
+            if (key.screenId == screenId && key.desktop == currentKeyForScreen(key.screenId).desktop
+                && key.activity == m_context.currentActivity() && !state->containsWindow(trackedId)
+                && shouldTileWindow(trackedId) && !candidates.contains(trackedId)) {
+                candidates.append(trackedId);
             }
-        }
+        });
         for (const QString& windowId : candidates) {
             const bool inserted = insertWindow(windowId, screenId);
             // Same passive float-state sync onWindowAdded does: a window that

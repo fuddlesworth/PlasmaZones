@@ -58,6 +58,17 @@ void writeProfileObject(PhosphorConfig::Store& store, const QJsonObject& obj)
 }
 } // namespace
 
+bool Settings::hasExplicitAnimationProfile() const
+{
+    // Deliberately NOT derived from animationProfile(): that accessor
+    // substitutes the ConfigDefaults blob for an absent key (see
+    // readProfileObject above), so every field is engaged whether or not the
+    // user has ever opened the page. Callers that must rank the global
+    // profile as user INTENT rather than as a shipped default need the
+    // storage fact, which only the store can answer.
+    return m_store->hasExplicitValue(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey());
+}
+
 PhosphorAnimation::Profile Settings::animationProfile() const
 {
     // Only a MALFORMED blob returns an empty object here (yielding a
@@ -123,6 +134,59 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
     const QJsonObject incoming = profile.toJson();
     for (auto it = incoming.constBegin(); it != incoming.constEnd(); ++it) {
         merged.insert(it.key(), it.value());
+    }
+
+    // BOUNDED, because the merge above is forward-only and this key has no schema
+    // coercion either: a field a hand edit puts in config.json is preserved by every
+    // later write, so without a cap an unbounded string or an object of thousands of
+    // junk keys is carried forever, re-serialised on each save. The motion TREE's
+    // setter bounds its own bodies for the same reason.
+    //
+    // Unknown keys are kept rather than dropped, which is the documented contract
+    // above (a newer build's field must survive an older build's write) and what
+    // test_settings_animation_profile pins. So this bounds SIZE and LENGTH only: the
+    // two things a preserved unknown field can cost.
+    constexpr int kMaxProfileFields = 64;
+    constexpr int kMaxProfileStringChars = 1024;
+    if (merged.size() > kMaxProfileFields) {
+        // The KNOWN fields and the incoming write go in FIRST, then whatever room is
+        // left goes to the unknown keys. A plain truncation would have dropped the
+        // user's edit: QJsonObject iterates key-SORTED, so 64 junk keys sorting before
+        // `curve` (any "a…" or "b…" key does) took every slot, the real fields fell off
+        // the end, and the setter still wrote and emitted — the edit lost in silence.
+        QJsonObject capped;
+        for (auto it = incoming.constBegin(); it != incoming.constEnd(); ++it) {
+            capped.insert(it.key(), it.value());
+        }
+        using P = PhosphorAnimation::Profile;
+        const QList<QLatin1String> knownFields{
+            QLatin1String(P::JsonFieldCurve),           QLatin1String(P::JsonFieldDuration),
+            QLatin1String(P::JsonFieldMinDistance),     QLatin1String(P::JsonFieldSequenceMode),
+            QLatin1String(P::JsonFieldStaggerInterval), QLatin1String(P::JsonFieldPresetName),
+        };
+        for (const QLatin1String& field : knownFields) {
+            if (capped.size() >= kMaxProfileFields) {
+                break;
+            }
+            if (!capped.contains(field) && merged.contains(field)) {
+                capped.insert(field, merged.value(field));
+            }
+        }
+        for (auto it = merged.constBegin(); it != merged.constEnd() && capped.size() < kMaxProfileFields; ++it) {
+            if (!capped.contains(it.key())) {
+                capped.insert(it.key(), it.value());
+            }
+        }
+        // Named rather than silent, like every other bounder on this path.
+        qCWarning(lcConfig) << "setAnimationProfile: the stored profile carries" << merged.size() << "fields; keeping"
+                            << capped.size() << "and dropping the rest";
+        merged = capped;
+    }
+    for (const QString& key : merged.keys()) {
+        const QJsonValue value = merged.value(key);
+        if (value.isString() && value.toString().size() > kMaxProfileStringChars) {
+            merged.insert(key, value.toString().left(kMaxProfileStringChars));
+        }
     }
 
     if (merged == current) {

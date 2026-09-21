@@ -183,14 +183,12 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // Activity is left unset — SnapState carries no per-window activity
         // tag, mirroring isPersistedContextDisabled's snap-side default.
         //
-        // Desktop: resolveWindowRestore carries no per-restore virtual desktop,
-        // so the CURRENT desktop is used. This is exact for the common case (a
-        // window opens on the current desktop) and is the only desktop the
-        // predicate signature can observe; a cross-virtual-desktop session
-        // restore onto a desktop other than the current one is therefore gated
-        // by the current desktop's disable state rather than the target's.
-        snap->setShouldRestorePredicate([this](const QString& screenId) -> bool {
-            return !isPersistedContextDisabled(screenId, currentDesktopForScreen(screenId));
+        // Desktop: the engine passes the desktop the window is being restored
+        // ONTO (the registry's answer, else the record's), so a session
+        // restore onto a background desktop is gated by that desktop's
+        // disable state, not by whatever the screen is showing.
+        snap->setShouldRestorePredicate([this](const QString& screenId, int desktop) -> bool {
+            return !isPersistedContextDisabled(screenId, desktop >= 1 ? desktop : currentDesktopForScreen(screenId));
         });
 
         // Floated-position restore gate (snap-floated windows). On open the engine
@@ -542,6 +540,9 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                     }
                     if (const auto it = raw.constFind(ScrollOpenKeys::focused()); it != raw.constEnd()) {
                         params.focused = it->toBool();
+                    }
+                    if (const auto it = raw.constFind(ScrollOpenKeys::tabGroup()); it != raw.constEnd()) {
+                        params.tabGroup = it->toString();
                     }
                     return params;
                 });

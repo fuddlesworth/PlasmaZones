@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Core library — always needed. Pin Qt to match the library's build minimum;
+# without the version guard a consumer on an older Qt resolves
+# find_package(PhosphorPointer) cleanly and then fails later with a cryptic
+# missing-symbol at link time.
+find_dependency(Qt6 6.10 COMPONENTS Core Gui)
+
+# PhosphorRegistry is a PUBLIC link dependency — PointerShaderRegistry's public
+# header exposes Registry<PointerPack> + MetadataPackLoader<PointerPack> — so the
+# exported target references PhosphorRegistry::PhosphorRegistry and a standalone
+# find_package consumer must resolve it.
+find_dependency(PhosphorRegistry 0.1.0)
+
+# PhosphorFsLoader is a PUBLIC link dependency in its own right — the public
+# PointerShaderRegistry header consumes PhosphorFsLoader::LiveReload and
+# PhosphorFsLoader::RegistrationOrder directly in addSearchPath/addSearchPaths
+# signatures, and the exported target links PhosphorFsLoader::PhosphorFsLoader
+# PUBLIC. Declare it explicitly rather than relying on PhosphorRegistry's Config
+# re-exporting it transitively, matching the sibling PhosphorSurface Config.
+find_dependency(PhosphorFsLoader 0.1.0)
+
+# PhosphorShaders is a PUBLIC link dependency — PointerShaderContract.h includes
+# <PhosphorShaders/CustomParamsKey.h>, PointerShaderUniforms.h pins against
+# PhosphorShaders::BaseUniforms, PointerUniformExtension derives from
+# PhosphorShaders::IUniformExtension, and the registry uses the slot-assignment /
+# entry-point helpers, so a standalone consumer must resolve it.
+find_dependency(PhosphorShaders)
+
+include("${CMAKE_CURRENT_LIST_DIR}/PhosphorPointerTargets.cmake")
+
+check_required_components(PhosphorPointer)

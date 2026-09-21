@@ -347,7 +347,7 @@ private Q_SLOTS:
     // the gap-regime output rather than a stale or differently-derived list.
     void testVisibleStripJson_relaysGapInsetTiles()
     {
-        m_engine->setContextGapProvider([](const QString&) {
+        m_engine->setContextGapProvider([](const QString&, int, const QString&) {
             return QVariantMap{{QString(PhosphorEngine::PerScreenKeys::OuterGap), 20}};
         });
         m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);

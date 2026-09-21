@@ -30,9 +30,6 @@
 #include <PhosphorTiles/AutotilePreviewRender.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include "config/settings.h"
-#include <QDBusConnection>
-#include <QDBusMessage>
-#include <QDBusPendingCall>
 #include <QRegularExpression>
 #include <QScreen>
 #include <QTimer>
@@ -44,15 +41,6 @@
 namespace PlasmaZones {
 
 namespace {
-
-void showKdeTextOsd(const QString& icon, const QString& text)
-{
-    QDBusMessage msg =
-        QDBusMessage::createMethodCall(QStringLiteral("org.kde.plasmashell"), QStringLiteral("/org/kde/osdService"),
-                                       QStringLiteral("org.kde.osdService"), QStringLiteral("showText"));
-    msg << icon << text;
-    QDBusConnection::sessionBus().asyncCall(msg);
-}
 
 /// Object-name prefix of the per-screen scrolling-OSD settle timers. One
 /// restartable timer per screen, parented to the Daemon and found back by

@@ -1,0 +1,316 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!--
+  Phosphor mockups v2: power / session menu (A3 §5).
+  8 s loop: the compositor dims and desaturates the desktop (600 ms), a column of words enters on
+  the left edge, the selection line slides Lock -> Restart (110 ms), Enter arms the 3 s countdown
+  (line 3 -> 6 px, shortening), a second Enter commits as a spectrum wipe, then the session goes.
+  Static base state = selection resting on Restart before the confirm.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 720"
+     font-family="Manrope, 'Noto Sans', system-ui, sans-serif">
+  <defs>
+    <linearGradient id="rail" x1="0" y1="0" x2="1280" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#22D3EE"/>
+      <stop offset="0.33" stop-color="#3B82F6"/>
+      <stop offset="0.67" stop-color="#A855F7"/>
+      <stop offset="1"    stop-color="#F43F5E"/>
+    </linearGradient>
+    <linearGradient id="railV" x1="0" y1="0" x2="0" y2="720" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#22D3EE"/>
+      <stop offset="0.33" stop-color="#3B82F6"/>
+      <stop offset="0.67" stop-color="#A855F7"/>
+      <stop offset="1"    stop-color="#F43F5E"/>
+    </linearGradient>
+    <linearGradient id="wp" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0"    stop-color="#0B1730"/>
+      <stop offset="0.55" stop-color="#070F22"/>
+      <stop offset="1"    stop-color="#050916"/>
+    </linearGradient>
+    <radialGradient id="wpLight" cx="0.2" cy="0.9" r="0.7">
+      <stop offset="0"   stop-color="#22D3EE" stop-opacity="0.16"/>
+      <stop offset="1"   stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="wpLight2" cx="0.85" cy="0.2" r="0.6">
+      <stop offset="0"   stop-color="#A855F7" stop-opacity="0.14"/>
+      <stop offset="1"   stop-color="#A855F7" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gleam" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"   stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.6"/>
+      <stop offset="1"   stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glassBlur" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <!-- focus-fade: the compositor's desaturation of the desktop (1.0 -> 0.4 over the dim) -->
+    <filter id="desat" x="0" y="0" width="1" height="1">
+      <feColorMatrix type="saturate" values="0.4">
+        <animate attributeName="values" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="1;1;0.4;0.4;1;1" keyTimes="0;0.02;0.095;0.85;0.95;1"
+                 keySplines="0 0 1 1;0.05 0.6 0.15 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+      </feColorMatrix>
+    </filter>
+    <linearGradient id="revealMask" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset="1" stop-color="#fff"/>
+    </linearGradient>
+    <symbol id="glyph" viewBox="0 0 16 16">
+      <rect x="2" y="2" width="12" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <rect x="5" y="5" width="6" height="6" rx="1" fill="currentColor" opacity="0.7"/>
+    </symbol>
+    <symbol id="mote" viewBox="0 0 4 4"><circle cx="2" cy="2" r="1.4" fill="currentColor"/></symbol>
+    <style>
+      .ui   { font-family: Manrope, 'Noto Sans', system-ui, sans-serif; }
+      .mono { font-family: 'JetBrains Mono', 'Noto Sans Mono', monospace; font-variant-numeric: tabular-nums; }
+      .t1 { fill: #E6EDFF; }
+      .t2 { fill: #94A3B8; }
+      .note-title { font-size: 12px; font-weight: 600; }
+      .note-body  { font-size: 11.5px; fill: #94A3B8; }
+      .eyebrow { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; fill: #94A3B8; }
+      .word { font-size: 24px; font-weight: 400; }
+    </style>
+  </defs>
+
+  <!-- ===== The desktop (layers 0 to 2), desaturated by the compositor while the menu is up ===== -->
+  <g id="desktop" filter="url(#desat)">
+    <!-- LAYER 0: wallpaper -->
+    <rect width="1280" height="720" fill="url(#wp)"/>
+    <rect width="1280" height="720" fill="url(#wpLight)"/>
+    <rect width="1280" height="720" fill="url(#wpLight2)"/>
+
+    <!-- LAYER 1: windows -->
+    <g id="windows">
+      <g id="win-a">
+        <rect x="36" y="44" width="792" height="640" rx="8" fill="#0B1730" fill-opacity="0.92"/>
+        <rect x="36.5" y="44.5" width="791" height="639" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.9"/>
+        <rect x="36.5" y="44.5" width="791" height="639" rx="8" fill="none" stroke="#FFFFFF" stroke-width="1" opacity="0.55"/>
+        <rect x="36" y="44" width="120" height="2" fill="url(#gleam)">
+          <animate attributeName="x" values="36;708;36" keyTimes="0;0.5;1" dur="9s" repeatCount="indefinite"/>
+        </rect>
+        <g fill="#E6EDFF" opacity="0.08">
+          <rect x="64" y="84" width="420" height="10" rx="2"/><rect x="64" y="108" width="560" height="10" rx="2"/>
+          <rect x="64" y="132" width="380" height="10" rx="2"/><rect x="64" y="172" width="620" height="10" rx="2"/>
+          <rect x="64" y="196" width="500" height="10" rx="2"/><rect x="64" y="220" width="440" height="10" rx="2"/>
+        </g>
+      </g>
+      <g id="win-b">
+        <rect x="836" y="44" width="408" height="316" rx="8" fill="#0B1730" fill-opacity="0.88"/>
+        <rect x="836.5" y="44.5" width="407" height="315" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.45"/>
+        <g fill="#E6EDFF" opacity="0.08">
+          <rect x="860" y="84" width="300" height="10" rx="2"/><rect x="860" y="108" width="240" height="10" rx="2"/>
+          <rect x="860" y="132" width="330" height="10" rx="2"/>
+        </g>
+      </g>
+      <g id="win-c">
+        <rect x="836" y="368" width="408" height="316" rx="8" fill="#0B1730" fill-opacity="0.88"/>
+        <rect x="836.5" y="368.5" width="407" height="315" rx="8" fill="none" stroke="url(#rail)" stroke-width="1" opacity="0.45"/>
+        <g fill="#E6EDFF" opacity="0.08">
+          <rect x="860" y="408" width="280" height="10" rx="2"/><rect x="860" y="432" width="340" height="10" rx="2"/>
+        </g>
+      </g>
+    </g>
+
+    <!-- LAYER 2: the bar -->
+    <g id="bar">
+      <rect x="0" y="2" width="1280" height="26" fill="#0B1730" fill-opacity="0.72"/>
+      <rect x="0" y="0" width="1280" height="2" fill="url(#rail)" opacity="0.75"/>
+      <rect x="0" y="0" width="160" height="2" fill="url(#gleam)">
+        <animate attributeName="x" values="-160;1280" dur="9s" repeatCount="indefinite"/>
+      </rect>
+      <g id="map" transform="translate(12 6)">
+        <rect x="0.5" y="0.5" width="31" height="17" fill="none" stroke="#E6EDFF" stroke-opacity="0.14"/>
+        <rect x="1" y="1" width="19" height="16" fill="#3B82F6" fill-opacity="0.55" stroke="#FFFFFF" stroke-opacity="0.9" stroke-width="1"/>
+        <rect x="21" y="1"  width="10" height="7.5" fill="#CE4BA8" fill-opacity="0.4" stroke="#CE4BA8" stroke-opacity="0.8" stroke-width="1"/>
+        <rect x="21" y="9.5" width="10" height="7.5" fill="#CE4BA8" fill-opacity="0.4" stroke="#CE4BA8" stroke-opacity="0.8" stroke-width="1"/>
+        <g transform="translate(9 19)">
+          <rect x="0" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.9"/>
+          <rect x="4" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+          <rect x="8" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+          <rect x="12" y="0" width="2" height="1" fill="#FFFFFF" opacity="0.25"/>
+        </g>
+      </g>
+      <rect x="56" y="9" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+      <g transform="translate(66 7)" color="#E6EDFF">
+        <use xlink:href="#glyph" width="16" height="16"/>
+        <text x="22" y="12.5" class="ui t1" font-size="13" font-weight="500">kate · phosphor-shell.md</text>
+        <rect x="22" y="16" width="146" height="1" fill="#3B82F6" opacity="0.9"/>
+      </g>
+      <g transform="translate(608 7)">
+        <text x="0" y="12.5" class="mono t1" font-size="14" font-weight="500">14:32</text>
+      </g>
+      <g transform="translate(1040 6)">
+        <rect x="0"  y="6"  width="2" height="10" fill="#CE4BA8" opacity="0.85"/>
+        <rect x="5"  y="2"  width="2" height="14" fill="#CE4BA8" opacity="0.85"/>
+        <rect x="10" y="10" width="2" height="6"  fill="#CE4BA8" opacity="0.85"/>
+        <rect x="22" y="3" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+        <g fill="#E6EDFF" opacity="0.9">
+          <circle cx="40" cy="9" r="4" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+          <rect x="52" y="4" width="8" height="10" rx="1.5" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+          <path d="M70 5 l4 4 -4 4 M74 5 l4 4 -4 4" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+          <rect x="88" y="5" width="12" height="7" rx="1.5" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+          <rect x="89.5" y="6.5" width="7" height="4" fill="#E6EDFF"/>
+        </g>
+        <rect x="112" y="3" width="1" height="12" fill="#FFFFFF" opacity="0.25"/>
+        <path d="M126 12 h10 l-1.5-2 v-3 a3.5 3.5 0 0 0 -7 0 v3 z" fill="none" stroke="#E6EDFF" stroke-width="1.2"/>
+        <text x="139" y="8" class="mono t1" font-size="9">3</text>
+        <circle cx="160" cy="9" r="4" fill="#E9457A" opacity="0.7"/>
+        <!-- power glyph: the chip that opened this, white while the menu is up -->
+        <circle cx="184" cy="9" r="4.5" fill="none" stroke="#FFFFFF" stroke-width="1.2" opacity="0.9"/>
+        <rect x="183.4" y="3" width="1.2" height="5" fill="#FFFFFF" opacity="0.9"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- ===== LAYER 3: SCENE ===== -->
+  <g id="scene">
+    <!-- The dim: 600 ms release to 35% brightness. No dialog, no scrim of its own. -->
+    <rect id="dim" width="1280" height="720" fill="#050916" opacity="0.65">
+      <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+               values="0;0;0.65;0.65;0;0" keyTimes="0;0.02;0.095;0.85;0.95;1"
+               keySplines="0 0 1 1;0.05 0.6 0.15 1;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+    </rect>
+
+    <!-- The column: 320 px, void at 70%, full height, 1 px cyan line on its right edge drawn from the middle -->
+    <g id="column">
+      <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+               values="0;0;1;1;0;0" keyTimes="0;0.095;0.12;0.69;0.72;1"
+               keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0.32 0 0.67 0;0 0 1 1"/>
+      <rect x="0" y="0" width="320" height="720" fill="#050916" opacity="0.7"/>
+      <rect x="319" y="0" width="1" height="720" fill="#22D3EE" opacity="0.6">
+        <animate attributeName="y" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="360;360;0;0" keyTimes="0;0.1;0.13;1" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+        <animate attributeName="height" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="0;0;720;720" keyTimes="0;0.1;0.13;1" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+      </rect>
+
+      <!-- Six rows, 72 px, block centred (y 144..576). Words coloured on the state axis by destructiveness.
+           First letter underlined (2 px) as the key hint. Rows enter with a 30 ms stagger from the top. -->
+      <g id="rows" transform="translate(40 144)" class="ui">
+        <g fill="#22D3EE">
+          <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+                   values="0;0;1;1" keyTimes="0;0.12;0.1375;1" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+          <text x="0" y="44" class="word">Lock</text>
+          <rect x="0" y="49" width="13" height="2"/>
+        </g>
+        <g fill="#3B82F6" transform="translate(0 72)">
+          <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+                   values="0;0;1;1" keyTimes="0;0.124;0.1415;1" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+          <text x="0" y="44" class="word">Suspend</text>
+          <rect x="0" y="49" width="13" height="2"/>
+        </g>
+        <g fill="#6F6CF7" transform="translate(0 144)">
+          <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+                   values="0;0;1;1" keyTimes="0;0.128;0.1455;1" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+          <text x="0" y="44" class="word">Hibernate</text>
+          <rect x="0" y="49" width="14" height="2"/>
+        </g>
+        <g fill="#A855F7" transform="translate(0 216)">
+          <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+                   values="0;0;1;1" keyTimes="0;0.132;0.1495;1" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+          <text x="0" y="44" class="word">Log out</text>
+          <rect x="0" y="49" width="11" height="2"/>
+        </g>
+        <g fill="#CE4BA8" transform="translate(0 288)">
+          <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+                   values="0;0;1;1" keyTimes="0;0.136;0.1535;1" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+          <!-- the label swaps to the confirm form while the countdown runs -->
+          <text x="0" y="44" class="word" opacity="1">Restart
+            <animate attributeName="opacity" values="1;1;0;0;1;1" keyTimes="0;0.325;0.3251;0.7;0.7001;1" dur="8s" repeatCount="indefinite" calcMode="discrete"/>
+          </text>
+          <text x="0" y="44" class="word" opacity="0">Restart · Enter again
+            <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.325;0.3251;0.7;0.7001;1" dur="8s" repeatCount="indefinite" calcMode="discrete"/>
+          </text>
+          <rect x="0" y="49" width="14" height="2"/>
+        </g>
+        <g fill="#F43F5E" transform="translate(0 360)">
+          <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+                   values="0;0;1;1" keyTimes="0;0.14;0.1575;1" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+          <text x="0" y="44" class="word">Shut down</text>
+          <rect x="0" y="49" width="14" height="2"/>
+        </g>
+
+        <!-- under the block: what is lost, 13 px tabular -->
+        <g transform="translate(0 456)" class="mono" font-size="13" fill="#94A3B8">
+          <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+                   values="0;0;1;1" keyTimes="0;0.15;0.1675;1" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+          <text x="0" y="0">up 6h 12m · 84%</text>
+          <!-- battery figure samples the inverted spectrum: 84% -> cyan-blue -->
+          <rect x="132" y="4" width="26" height="2" fill="#2FB0F2" opacity="0.9"/>
+          <text x="0" y="22">3 updates pending</text>
+          <text x="0" y="44">14 windows · 3 desktops</text>
+        </g>
+      </g>
+
+      <!-- The selection line: 3 px on the screen's left edge. Slides Lock -> Restart in 110 ms,
+           grows to 6 px when Enter arms the confirm, then shortens as the 3 s countdown. -->
+      <rect id="selection" x="0" y="432" width="3" height="72" fill="#CE4BA8">
+        <animate attributeName="fill" dur="8s" repeatCount="indefinite" calcMode="discrete"
+                 values="#22D3EE;#CE4BA8;#22D3EE" keyTimes="0;0.257;0.7"/>
+        <animate attributeName="y" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="144;144;432;432;144;144" keyTimes="0;0.25;0.26375;0.7;0.7001;1"
+                 keySplines="0 0 1 1;0.22 1 0.36 1;0 0 1 1;0 0 1 1;0 0 1 1"/>
+        <animate attributeName="width" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="3;3;6;6;3;3" keyTimes="0;0.325;0.336;0.7;0.7001;1"
+                 keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1;0 0 1 1;0 0 1 1"/>
+        <animate attributeName="height" dur="8s" repeatCount="indefinite"
+                 values="72;72;41;41;72;72" keyTimes="0;0.34;0.5;0.7;0.7001;1"/>
+        <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="0;0;1;1" keyTimes="0;0.13;0.1415;1" keySplines="0 0 1 1;0.34 1 0.64 1;0 0 1 1"/>
+      </rect>
+      <!-- the countdown: 3 s ticking beside the shortened line -->
+      <text x="12" y="428" class="mono" font-size="11" fill="#94A3B8" opacity="0">
+        <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.336;0.35;0.5;0.51;1" dur="8s" repeatCount="indefinite"/>3 s</text>
+    </g>
+
+    <!-- Commit: the chosen row's line spreads across the whole screen, a wipe from the left edge in the
+         spectrum at 20%, with a 2 px leading edge in the row's colour. Then the action runs. -->
+    <g id="wipe">
+      <rect x="0" y="0" width="0" height="720" fill="url(#rail)" opacity="0.2">
+        <animate attributeName="width" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="0;0;1280;1280;0;0" keyTimes="0;0.5;0.5625;0.72;0.7201;1"
+                 keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1;0 0 1 1;0 0 1 1"/>
+      </rect>
+      <rect x="-2" y="0" width="2" height="720" fill="#CE4BA8" opacity="0">
+        <animate attributeName="x" dur="8s" repeatCount="indefinite" calcMode="spline"
+                 values="-2;-2;1280;1280" keyTimes="0;0.5;0.5625;1" keySplines="0 0 1 1;0.33 1 0.68 1;0 0 1 1"/>
+        <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.5;0.501;0.56;0.5625;1" dur="8s" repeatCount="indefinite"/>
+      </rect>
+    </g>
+    <!-- the session goes: void, then the desktop returns for the loop -->
+    <rect id="void" width="1280" height="720" fill="#050916" opacity="0">
+      <animate attributeName="opacity" dur="8s" repeatCount="indefinite" calcMode="spline"
+               values="0;0;1;1;0;0" keyTimes="0;0.68;0.72;0.85;0.95;1"
+               keySplines="0 0 1 1;0.32 0 0.67 0;0 0 1 1;0.05 0.6 0.15 1;0 0 1 1"/>
+    </rect>
+  </g>
+
+  <!-- ===== LAYER 4: annotations ===== -->
+  <g class="note" transform="translate(360 60)">
+    <rect width="350" height="60" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="20" class="ui note-title" fill="#3B82F6">Dim, not dialog</text>
+    <text x="12" y="37" class="ui note-body">The compositor dims to 35% and desaturates to 40% in 600 ms.</text>
+    <text x="12" y="51" class="ui note-body">The desktop stays visible: you see what you are about to lose.</text>
+  </g>
+  <g class="note" transform="translate(360 200)">
+    <rect width="350" height="74" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="20" class="ui note-title" fill="#22D3EE">Word column</text>
+    <text x="12" y="37" class="ui note-body">Six words, 24 px Manrope, on the left screen edge, 72 px rows.</text>
+    <text x="12" y="51" class="ui note-body">The underlined first letter is the key. No tiles, no chips,</text>
+    <text x="12" y="65" class="ui note-body">no dialog box. A 3 px line on the edge slides between them.</text>
+  </g>
+  <g class="note" transform="translate(360 372)">
+    <rect width="350" height="74" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="20" class="ui note-title" fill="#F43F5E">Destructiveness axis</text>
+    <text x="12" y="37" class="ui note-body">Lock cyan through Shut down rose on the state axis. Enter on a</text>
+    <text x="12" y="51" class="ui note-body">destructive word grows the line to 6 px and starts a 3 s countdown</text>
+    <text x="12" y="65" class="ui note-body">that shortens it. A second Enter confirms.</text>
+  </g>
+  <g class="note" transform="translate(850 590)">
+    <rect width="370" height="60" rx="6" fill="#070F22" fill-opacity="0.92" stroke="#1E293B"/>
+    <text x="12" y="20" class="ui note-title" fill="#CE4BA8">Wipe commit</text>
+    <text x="12" y="37" class="ui note-body">The chosen line spreads to fill the screen: the spectrum sweeping</text>
+    <text x="12" y="51" class="ui note-body">in from the left edge at 20%. Then the action runs.</text>
+  </g>
+  <text x="640" y="708" text-anchor="middle" class="ui t2" font-size="12">Phosphor · power menu · a column of words over your dimmed desktop</text>
+</svg>

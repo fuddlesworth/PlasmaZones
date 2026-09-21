@@ -64,7 +64,7 @@ PhosphorUi.AboutPageShell {
                     Layout.fillWidth: true
                     flat: true
                     horizontalPadding: Kirigami.Units.largeSpacing
-                    Accessible.name: i18n("What's New")
+                    Accessible.name: i18nc("@action:button opens the release history", "What's New")
                     onClicked: {
                         // `window` resolves to Main.qml's root id, so this page
                         // only has it when mounted inside the settings app's
@@ -87,7 +87,7 @@ PhosphorUi.AboutPageShell {
                         }
 
                         Label {
-                            text: i18n("What's New")
+                            text: i18nc("@action:button opens the release history", "What's New")
                             Layout.fillWidth: true
                             // Elide rather than wrap: this label is a button's
                             // contentItem, so wrapping would grow the button

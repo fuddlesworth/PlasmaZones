@@ -29,7 +29,19 @@ public:
     /**
      * @brief Build the sparse zone-labels payload from zone data
      * @param zones PhosphorZones::Zone data (QVariantList of maps with x, y, width, height, zoneNumber)
-     * @param size Overlay size in pixels (the screen-addressed texture dimensions the tiles map into)
+     * @param size Overlay size in LOGICAL pixels (the coordinate space the zone rects are in)
+     * @param devicePixelRatio Scale between @p size and the texture actually
+     *        produced. The payload's size and every tile offset come out in
+     *        DEVICE pixels, because the shader samples this texture with an
+     *        `iResolution` of logical x dpr — a logical-resolution texture is
+     *        bilinearly upscaled to that, which softens the glyphs and makes
+     *        the overlay packs' `1.0/iResolution` halo and edge-detect taps
+     *        step less than one texel. Glyph geometry stays authored in
+     *        logical units and is rasterised at the higher resolution, so the
+     *        numbers keep their size and gain detail. Pass the same ratio the
+     *        shader gets (QQuickWindow::effectiveDevicePixelRatio), or 1.0 for
+     *        an unscaled target. No default: answering 1.0 by omission is the
+     *        bug this parameter exists to prevent.
      * @param labelFontColor Text color for zone labels
      * @param showNumbers Whether to draw numbers (false returns an empty payload)
      * @param backgroundColor Background color for outline contrast (default Qt::black)
@@ -42,8 +54,8 @@ public:
      * @return Sparse ZoneLabelTexture payload (empty if showNumbers=false or no zones)
      */
     static PhosphorRendering::ZoneLabelTexture build(const QVariantList& zones, const QSize& size,
-                                                     const QColor& labelFontColor, bool showNumbers,
-                                                     const QColor& backgroundColor = Qt::black,
+                                                     qreal devicePixelRatio, const QColor& labelFontColor,
+                                                     bool showNumbers, const QColor& backgroundColor = Qt::black,
                                                      const QString& fontFamily = QString(), qreal fontSizeScale = 1.0,
                                                      int fontWeight = QFont::Bold, bool fontItalic = false,
                                                      bool fontUnderline = false, bool fontStrikeout = false);

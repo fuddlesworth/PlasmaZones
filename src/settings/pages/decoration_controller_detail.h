@@ -5,10 +5,16 @@
 
 // Inline helpers for the DecorationPageController translation units (currently
 // decorationpagecontroller.cpp; the class is split across several TUs). They
-// convert surface-pack effect / parameter values to QVariantMap for QML and
-// build the sparse / resolved DecorationProfile -> QVariantMap projections.
+// convert surface-pack and pointer-pack effect / parameter values to
+// QVariantMap for QML and build the sparse / resolved DecorationProfile ->
+// QVariantMap projections. The pointer is a decoration surface like any other,
+// so its packs are projected beside the surface family: their half lives in
+// pointer_controller_detail.h (included here) so the pointer preview
+// controller can share it without the surface headers.
 // Inline definitions here let any consuming TU get its own copy without relying
 // on unity-build TU merging for cross-TU linkage.
+
+#include "pointer_controller_detail.h"
 
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
@@ -71,11 +77,11 @@ inline QVariantMap effectToMap(const PhosphorSurfaceShaders::SurfaceShaderEffect
     return m;
 }
 
-/// Project the ENGAGED chain/parameters fields of @p p into a sparse
+/// Project the ENGAGED chain, parameters and presetIds fields of @p p into a sparse
 /// QVariantMap as a QVariant projection (chain as a QStringList, parameters as
 /// a nested QVariantMap). Only fields whose optional is engaged appear — an
 /// inherited (nullopt) field is omitted, so QML can tell "set here" from
-/// "inherited" by key presence. The third engaged field, disabledPacks, is
+/// "inherited" by key presence. The remaining engaged field, disabledPacks, is
 /// deliberately NOT projected here — it is surfaced through the dedicated
 /// disabledPacksAt() invokable, not this map. Border width / radius / colour
 /// are NOT decoration fields — they live in `parameters["border"]` and ride
@@ -88,13 +94,15 @@ inline QVariantMap profileToSparseMap(const PhosphorSurfaceShaders::DecorationPr
         m.insert(QLatin1String(DP::JsonFieldChain), QVariant(*p.chain));
     if (p.parameters)
         m.insert(QLatin1String(DP::JsonFieldParameters), *p.parameters);
+    if (p.presetIds)
+        m.insert(QLatin1String(DP::JsonFieldPresetIds), *p.presetIds);
     return m;
 }
 
 /// Project @p p with library defaults filled in (via withDefaults()) into a
 /// QVariantMap. Used for the resolved/effective view so QML always reads
 /// concrete values. Same key/value encoding as profileToSparseMap, so every
-/// chain/parameters field is present (disabledPacks is likewise surfaced via
+/// chain / parameters / presetIds field is present (disabledPacks is likewise via
 /// disabledPacksAt(), not this map).
 inline QVariantMap profileToResolvedMap(const PhosphorSurfaceShaders::DecorationProfile& profile)
 {

@@ -31,11 +31,14 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSignalSpy>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
+
 #include <QTest>
 
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 
+#include "config/configbackends.h"
 #include "config/configdefaults.h"
 #include "config/settings.h"
 #include "helpers/IsolatedConfigGuard.h"
@@ -61,6 +64,17 @@ PhosphorSurfaceShaders::DecorationProfileTree makeBaselinePlusLeafTree()
     tree.setOverride(QStringLiteral("window.tiled"), leaf);
 
     return tree;
+}
+
+/// The Phosphor shell's own surfaces live under the baseline-isolated
+/// `shell.*` root, so their seeds are injected even when the user engaged a
+/// global baseline chain (that is the isolation's purpose: a window chain
+/// must never veto the chrome's defaults). Every read of the settings tree
+/// therefore carries them; a user tree compares equal to its read-back only
+/// once it wears the same seeds.
+PhosphorSurfaceShaders::DecorationProfileTree withShellSeeds(const PhosphorSurfaceShaders::DecorationProfileTree& tree)
+{
+    return tree.withSeedDefaults(ConfigDefaults::decorationProfileTree());
 }
 
 } // namespace
@@ -90,9 +104,13 @@ private Q_SLOTS:
         const auto tree = settings.decorationProfileTree();
         QCOMPARE(tree, ConfigDefaults::decorationProfileTree());
         QVERIFY2(!tree.baseline().chain.has_value(), "default baseline must carry no chain (fully neutral)");
-        QCOMPARE(tree.overriddenPaths(),
-                 (QStringList{QStringLiteral("osd"), QStringLiteral("popup.layoutPicker"),
-                              QStringLiteral("popup.zoneSelector"), QStringLiteral("popup.cheatsheet")}));
+        QStringList expectedPaths{QStringLiteral("osd"), QStringLiteral("popup.layoutPicker"),
+                                  QStringLiteral("popup.zoneSelector"), QStringLiteral("popup.cheatsheet")};
+#ifdef PLASMAZONES_HAVE_PHOSPHOR_SHELL
+        // The Phosphor shell's chrome seeds ride behind the shell gate.
+        expectedPaths += PhosphorSurfaceShaders::decorationShellPhosphorLeafPaths();
+#endif
+        QCOMPARE(tree.overriddenPaths(), expectedPaths);
 
         // Every card surface resolves to the same border + theme-tinted shadow.
         const QStringList cardSurfaces{QStringLiteral("osd"), QStringLiteral("popup.layoutPicker"),
@@ -200,7 +218,7 @@ private Q_SLOTS:
         const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
         QVERIFY(doc.isObject());
         const auto parsed = PhosphorSurfaceShaders::DecorationProfileTree::fromJson(doc.object());
-        QCOMPARE(parsed, tree);
+        QCOMPARE(parsed, withShellSeeds(tree));
     }
 
     /// setDecorationProfileTreeJson("") resets to the canonical default
@@ -234,7 +252,7 @@ private Q_SLOTS:
         QSignalSpy spy(&settings, &Settings::decorationProfileTreeChanged);
         settings.setDecorationProfileTreeJson(QStringLiteral("{ this is not valid json"));
         QCOMPARE(spy.count(), 0);
-        QCOMPARE(settings.decorationProfileTree(), tree);
+        QCOMPARE(settings.decorationProfileTree(), withShellSeeds(tree));
     }
 
     /// committedDecorationProfileTree() is the baseline the per-surface
@@ -503,6 +521,305 @@ private Q_SLOTS:
                                                                         .value(QLatin1String("DecorationProfileTree"))
                                                                         .toObject());
         QCOMPARE(stored.overriddenPaths(), QStringList{QStringLiteral("popup.zoneSelector")});
+    }
+
+    /// The pointer surface is the fifth root the tree carries, and it rides
+    /// the same contract as the four window/osd/popup/shell roots: an edit
+    /// there round-trips through the store, shows as a live-vs-committed
+    /// diff until save(), survives another root's scoped reset, and is
+    /// removed by its own.
+    void testDecorationProfileTree_pointerRootRoundTripsAndResetsInItsOwnScope()
+    {
+        IsolatedConfigGuard guard;
+        const QString pointer = PhosphorSurfaceShaders::decorationPointerPath();
+
+        Settings a;
+        PhosphorSurfaceShaders::DecorationProfileTree tree = a.decorationProfileTree();
+        PhosphorSurfaceShaders::DecorationProfile halo;
+        halo.chain = QStringList{QStringLiteral("halo")};
+        tree.setOverride(pointer, halo);
+        PhosphorSurfaceShaders::DecorationProfile glow;
+        glow.chain = QStringList{QStringLiteral("glow")};
+        tree.setOverride(QStringLiteral("osd"), glow);
+        a.setDecorationProfileTree(tree);
+
+        // Live carries the pointer edit; committed does not until save().
+        QCOMPARE(a.decorationProfileTree().resolve(pointer).enabledChain(), QStringList{QStringLiteral("halo")});
+        QVERIFY(!a.committedDecorationProfileTree().hasOverride(pointer));
+        a.save();
+        QVERIFY(a.committedDecorationProfileTree().hasOverride(pointer));
+        Settings b;
+        QCOMPARE(b.decorationProfileTree().resolve(pointer).enabledChain(), QStringList{QStringLiteral("halo")});
+
+        // Another root's scoped reset (the OSDs page) leaves the pointer edit.
+        tree = a.decorationProfileTree();
+        for (const QString& path : tree.overriddenPaths()) {
+            if (path == QLatin1String("osd") || path.startsWith(QLatin1String("osd.")))
+                tree.clearOverride(path);
+        }
+        a.setDecorationProfileTree(tree);
+        QVERIFY(a.decorationProfileTree().hasOverride(pointer));
+
+        // The pointer page's own reset removes it, and the store holds nothing
+        // for it afterwards.
+        tree = a.decorationProfileTree();
+        for (const QString& path : tree.overriddenPaths()) {
+            if (path == pointer || path.startsWith(pointer + QLatin1Char('.')))
+                tree.clearOverride(path);
+        }
+        a.setDecorationProfileTree(tree);
+        a.save();
+        QVERIFY(!a.decorationProfileTree().hasOverride(pointer));
+        QVERIFY(a.decorationProfileTree().resolve(pointer).enabledChain().isEmpty());
+        QFile file(guard.configPath() + QStringLiteral("/plasmazones/config.json"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QJsonObject root = QJsonDocument::fromJson(file.readAll()).object();
+        const auto stored =
+            PhosphorSurfaceShaders::DecorationProfileTree::fromJson(root.value(QLatin1String("Decorations"))
+                                                                        .toObject()
+                                                                        .value(QLatin1String("DecorationProfileTree"))
+                                                                        .toObject());
+        QVERIFY(!stored.hasOverride(pointer));
+    }
+
+    /// The write side bounds every profile's size, whichever door it came in
+    /// by: a chain past 64 entries, a parameter map past 64 keys, and any
+    /// string past 1024 chars are trimmed rather than stored.
+    void testDecorationProfileTree_writeBoundsProfileSizes()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings a;
+        PhosphorSurfaceShaders::DecorationProfileTree tree = a.decorationProfileTree();
+        PhosphorSurfaceShaders::DecorationProfile huge;
+        QStringList chain;
+        for (int i = 0; i < 80; ++i)
+            chain.append(QStringLiteral("pack%1").arg(i));
+        chain.append(QString(2000, QLatin1Char('x')));
+        huge.chain = chain;
+        QVariantMap packParams;
+        for (int i = 0; i < 80; ++i)
+            packParams.insert(QStringLiteral("p%1").arg(i), i);
+        packParams.insert(QStringLiteral("long"), QString(2000, QLatin1Char('y')));
+        huge.parameters = QVariantMap{{QStringLiteral("pack0"), packParams}};
+        tree.setOverride(QStringLiteral("window.tiled"), huge);
+        a.setDecorationProfileTree(tree);
+
+        const auto stored = a.decorationProfileTree().directOverride(QStringLiteral("window.tiled"));
+        QVERIFY(stored.chain.has_value());
+        QCOMPARE(stored.chain->size(), 64);
+        QVERIFY(!stored.chain->contains(QString(2000, QLatin1Char('x'))));
+        QVERIFY(stored.parameters.has_value());
+        const QVariantMap storedPack = stored.parameters->value(QStringLiteral("pack0")).toMap();
+        // EXACTLY the cap, like the chain assertion two lines above.
+        QCOMPARE(storedPack.size(), 64);
+        QVERIFY(!storedPack.contains(QStringLiteral("long")));
+    }
+
+    /// Write `tree` straight to the backend, bypassing the setter, so the next
+    /// `Settings` reads exactly these bytes.
+    ///
+    /// Which is the only way to reach the READ path: the setter bounds on the
+    /// way in, so a tree written through it can never be the hand-edited
+    /// `config.json` the schema sanitizer exists for.
+    void writeRawDecorationTree(const PhosphorSurfaceShaders::DecorationProfileTree& tree)
+    {
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        auto decorations = backend->group(ConfigDefaults::decorationsGroup());
+        decorations->writeJson(ConfigDefaults::decorationProfileTreeKey(), tree.toJson());
+    }
+
+    /// The decoration sanitizer on the READ path, which is the half the setter
+    /// cannot cover.
+    ///
+    /// The sanitizer was registered on the KeyDef with nothing driving it:
+    /// removing it left every test in this file passing, because they all write
+    /// through the setter and the setter has its own bound. A hand-edited
+    /// `config.json` goes through neither.
+    void testDecorationTreeSanitizerBoundsAHandEditedBlob()
+    {
+        IsolatedConfigGuard guard;
+        const QString kPath = QStringLiteral("window.tiled");
+
+        PhosphorSurfaceShaders::DecorationProfileTree tree;
+        PhosphorSurfaceShaders::DecorationProfile huge;
+        QStringList chain;
+        for (int i = 0; i < 80; ++i)
+            chain.append(QStringLiteral("pack%1").arg(i));
+        huge.chain = chain;
+        QVariantMap packParams;
+        for (int i = 0; i < 80; ++i)
+            packParams.insert(QStringLiteral("p%1").arg(i), i);
+        packParams.insert(QStringLiteral("long"), QString(2000, QLatin1Char('y')));
+        huge.parameters = QVariantMap{{QStringLiteral("pack0"), packParams},
+                                      // A scalar where a pack's parameter map
+                                      // belongs resolves to no parameters at
+                                      // all, so keeping it preserves nothing.
+                                      {QStringLiteral("pack1"), 7}};
+        huge.presetIds = QVariantMap{{QStringLiteral("pack0"), QStringLiteral("a1b2c3")},
+                                     {QStringLiteral("pack1"), QString(2000, QLatin1Char('z'))},
+                                     {QStringLiteral("pack2"), 7}};
+        tree.setOverride(kPath, huge);
+        writeRawDecorationTree(tree);
+
+        Settings a;
+        const auto stored = a.decorationProfileTree().directOverride(kPath);
+        QVERIFY(stored.chain.has_value());
+        QCOMPARE(stored.chain->size(), 64);
+        QVERIFY(stored.parameters.has_value());
+        QVERIFY(!stored.parameters->contains(QStringLiteral("pack1")));
+        QCOMPARE(stored.parameters->value(QStringLiteral("pack0")).toMap().size(), 64);
+        QVERIFY(!stored.parameters->value(QStringLiteral("pack0")).toMap().contains(QStringLiteral("long")));
+        // presetIds is flat and string-valued at both levels, so an over-long
+        // or non-string value goes while the usable entry stays.
+        QVERIFY(stored.presetIds.has_value());
+        QCOMPARE(stored.presetIds->value(QStringLiteral("pack0")).toString(), QStringLiteral("a1b2c3"));
+        QVERIFY(!stored.presetIds->contains(QStringLiteral("pack1")));
+        QVERIFY(!stored.presetIds->contains(QStringLiteral("pack2")));
+    }
+
+    /// A duplicate chain entry is dropped, which the setter does not judge.
+    ///
+    /// The compositor folds the chain per entry, so a repeated pack id costs a
+    /// draw and a buffer slot for nothing.
+    void testDecorationTreeSanitizerDropsDuplicateChainEntries()
+    {
+        IsolatedConfigGuard guard;
+        const QString kPath = QStringLiteral("window.tiled");
+
+        PhosphorSurfaceShaders::DecorationProfileTree tree;
+        PhosphorSurfaceShaders::DecorationProfile p;
+        p.chain = QStringList{QStringLiteral("border"), QStringLiteral("glow"), QStringLiteral("border")};
+        tree.setOverride(kPath, p);
+        writeRawDecorationTree(tree);
+
+        Settings a;
+        const auto stored = a.decorationProfileTree().directOverride(kPath);
+        QVERIFY(stored.chain.has_value());
+        QCOMPARE(*stored.chain, QStringList({QStringLiteral("border"), QStringLiteral("glow")}));
+    }
+
+    /// The sanitizer leaves an ordinary blob alone, presets included.
+    ///
+    /// The negative control for the two above: a bound that rewrote a
+    /// legitimate tree on every read would be worse than no bound, because the
+    /// damage would be invisible until the user looked.
+    void testDecorationTreeSanitizerLeavesAnOrdinaryBlobAlone()
+    {
+        IsolatedConfigGuard guard;
+        const QString kPath = QStringLiteral("window.tiled");
+
+        PhosphorSurfaceShaders::DecorationProfileTree tree;
+        PhosphorSurfaceShaders::DecorationProfile p;
+        p.chain = QStringList{QStringLiteral("border"), QStringLiteral("glow")};
+        p.disabledPacks = QStringList{QStringLiteral("shadow")};
+        p.presetIds = QVariantMap{{QStringLiteral("border"), QStringLiteral("a1b2c3")}};
+        p.parameters = QVariantMap{{QStringLiteral("border"), QVariantMap{{QStringLiteral("width"), 2}}}};
+        tree.setOverride(kPath, p);
+        writeRawDecorationTree(tree);
+
+        Settings a;
+        const auto stored = a.decorationProfileTree().directOverride(kPath);
+        QCOMPARE(*stored.chain, QStringList({QStringLiteral("border"), QStringLiteral("glow")}));
+        QCOMPARE(*stored.disabledPacks, QStringList({QStringLiteral("shadow")}));
+        QCOMPARE(stored.presetIdFor(QStringLiteral("border")), QStringLiteral("a1b2c3"));
+        QCOMPARE(stored.parameters->value(QStringLiteral("border")).toMap().value(QStringLiteral("width")).toInt(), 2);
+    }
+
+    /// An engaged-but-empty field survives the bound.
+    ///
+    /// Engaged-empty is "explicitly undecorated" / "explicitly no preset",
+    /// which is how a child stops inheriting an ancestor's. A bound that
+    /// disengaged the field would silently turn that back into "inherit".
+    void testDecorationTreeSanitizerPreservesEngagedEmptyFields()
+    {
+        IsolatedConfigGuard guard;
+        const QString kPath = QStringLiteral("window.tiled");
+
+        PhosphorSurfaceShaders::DecorationProfileTree tree;
+        PhosphorSurfaceShaders::DecorationProfile p;
+        p.chain = QStringList{};
+        p.presetIds = QVariantMap{};
+        tree.setOverride(kPath, p);
+        writeRawDecorationTree(tree);
+
+        Settings a;
+        const auto stored = a.decorationProfileTree().directOverride(kPath);
+        QVERIFY(stored.chain.has_value());
+        QVERIFY(stored.chain->isEmpty());
+        QVERIFY(stored.presetIds.has_value());
+        QVERIFY(stored.presetIds->isEmpty());
+    }
+
+    /// The SETTER bounds presetIds too.
+    ///
+    /// It did not: every other field had a setter-side bound and this one was
+    /// covered by the schema alone, so which bound applied came down to which
+    /// door the write came in by.
+    void testDecorationProfileTree_writeBoundsPresetIds()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings a;
+        PhosphorSurfaceShaders::DecorationProfileTree tree = a.decorationProfileTree();
+        PhosphorSurfaceShaders::DecorationProfile p;
+        p.chain = QStringList{QStringLiteral("border")};
+        QVariantMap presets{{QStringLiteral("border"), QStringLiteral("a1b2c3")},
+                            {QStringLiteral("glow"), QString(2000, QLatin1Char('z'))},
+                            {QStringLiteral("shadow"), 7}};
+        for (int i = 0; i < 80; ++i)
+            presets.insert(QStringLiteral("pack%1").arg(i), QStringLiteral("p%1").arg(i));
+        p.presetIds = presets;
+        tree.setOverride(QStringLiteral("window.tiled"), p);
+        a.setDecorationProfileTree(tree);
+
+        const auto stored = a.decorationProfileTree().directOverride(QStringLiteral("window.tiled"));
+        QVERIFY(stored.presetIds.has_value());
+        QCOMPARE(stored.presetIds->size(), 64);
+        QVERIFY(!stored.presetIds->contains(QStringLiteral("glow")));
+        QVERIFY(!stored.presetIds->contains(QStringLiteral("shadow")));
+    }
+
+    /// The sanitizer must be IDEMPOTENT and ORDER-STABLE.
+    ///
+    /// This tree serialises its overrides as a JSON ARRAY, so insertion order is
+    /// observable and round-trips — unlike the overlay tree, whose object keys are
+    /// sorted either way, which is why the overlay suite's existing second-pass test
+    /// cannot see the mutation that matters here. Making `forEachInOrder` iterate the
+    /// underlying hash, or `overriddenPaths()` sort, would leave this sanitizer
+    /// order-unstable and fire `decorationProfileTreeChanged` on every repeat write,
+    /// at slider-drag rate, while keeping every other test in this file green.
+    void testDecorationProfileTree_sanitizerIsIdempotentAndOrderStable()
+    {
+        IsolatedConfigGuard guard;
+
+        // Non-alphabetical on purpose, so an implementation that sorted instead of
+        // preserving insertion order would fail rather than coincide.
+        const QStringList inserted{QStringLiteral("window.tiled"), QStringLiteral("popup.zoneSelector"),
+                                   QStringLiteral("osd")};
+        PhosphorSurfaceShaders::DecorationProfileTree tree;
+        for (const QString& path : inserted) {
+            PhosphorSurfaceShaders::DecorationProfile p;
+            p.chain = QStringList{QStringLiteral("glow")};
+            tree.setOverride(path, p);
+        }
+
+        Settings settings;
+        QSignalSpy spy(&settings, &Settings::decorationProfileTreeChanged);
+        settings.setDecorationProfileTree(tree);
+        QCOMPARE(spy.count(), 1);
+
+        const auto firstPass = settings.decorationProfileTree();
+        for (const QString& path : inserted) {
+            QVERIFY2(firstPass.overriddenPaths().contains(path), qPrintable(path));
+        }
+        const QStringList firstOrder = firstPass.overriddenPaths();
+
+        // A second pass over the sanitizer's OWN output must change nothing. That is
+        // what makes the setter's equality gate reachable at all.
+        settings.setDecorationProfileTree(firstPass);
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(settings.decorationProfileTree().overriddenPaths(), firstOrder);
     }
 };
 

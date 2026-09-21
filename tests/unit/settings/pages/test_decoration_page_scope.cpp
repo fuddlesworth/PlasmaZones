@@ -18,6 +18,7 @@
 
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 
 #include "settings/pages/decorationpagescope.h"
 
@@ -42,7 +43,7 @@ class TestDecorationPageScope : public QObject
 
 private Q_SLOTS:
 
-    /// The four surface pages map to their roots; the non-surface leaves
+    /// The five surface pages map to their roots; the non-surface leaves
     /// (sets library, shaders browser) and unknown ids map to the empty
     /// string, which the callers dispatch to whole-tree handling.
     void testDecorationSurfaceRoot_mapsSurfacePagesOnly()
@@ -51,10 +52,52 @@ private Q_SLOTS:
         QCOMPARE(decorationSurfaceRoot(QStringLiteral("decorations-osds")), QStringLiteral("osd"));
         QCOMPARE(decorationSurfaceRoot(QStringLiteral("decorations-popups")), QStringLiteral("popup"));
         QCOMPARE(decorationSurfaceRoot(QStringLiteral("decorations-shell")), QStringLiteral("shell"));
+        QCOMPARE(decorationSurfaceRoot(QStringLiteral("decorations-pointer")), QStringLiteral("pointer"));
         QVERIFY(decorationSurfaceRoot(QStringLiteral("decorations-sets")).isEmpty());
         QVERIFY(decorationSurfaceRoot(QStringLiteral("decorations-shaders")).isEmpty());
         QVERIFY(decorationSurfaceRoot(QStringLiteral("window-appearance")).isEmpty());
         QVERIFY(decorationSurfaceRoot(QString()).isEmpty());
+    }
+
+    /// Every root in the surface taxonomy is reachable through some page.
+    ///
+    /// The case above is a hand-written list, which is why it stayed green
+    /// when a fifth surface shipped with no mapping: nothing there could
+    /// notice a page that nobody had thought to add. This one derives the
+    /// expected roots from decorationSupportedSurfacePaths(), so adding a
+    /// surface to the taxonomy without giving it a root fails here and names
+    /// the root that is missing. An unmapped page is not a harmless gap — its
+    /// root resolves empty, which is the whole-tree sentinel, so its Reset and
+    /// Discard act on every other surface's overrides.
+    void testDecorationSurfaceRoot_coversTheWholeTaxonomy()
+    {
+        QSet<QString> taxonomyRoots;
+        for (const QString& path : PhosphorSurfaceShaders::decorationSupportedSurfacePaths()) {
+            if (path.isEmpty()) {
+                continue; // the baseline, which is nobody's page
+            }
+            taxonomyRoots.insert(path.section(QLatin1Char('.'), 0, 0));
+        }
+
+        QSet<QString> mappedRoots;
+        const QStringList pages{
+            QStringLiteral("decorations-windows"), QStringLiteral("decorations-osds"),
+            QStringLiteral("decorations-popups"),  QStringLiteral("decorations-shell"),
+            QStringLiteral("decorations-pointer"),
+        };
+        for (const QString& page : pages) {
+            const QString root = decorationSurfaceRoot(page);
+            QVERIFY2(!root.isEmpty(),
+                     qPrintable(QStringLiteral("surface page %1 has no root, so its Reset would clear the whole "
+                                               "decoration tree")
+                                    .arg(page)));
+            mappedRoots.insert(root);
+        }
+
+        const QSet<QString> unmapped = taxonomyRoots - mappedRoots;
+        QVERIFY2(unmapped.isEmpty(),
+                 qPrintable(QStringLiteral("these surface roots exist in the taxonomy but no page maps to them: %1")
+                                .arg(QStringList(unmapped.cbegin(), unmapped.cend()).join(QStringLiteral(", ")))));
     }
 
     void testDecorationPathInRoot_data()
