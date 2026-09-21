@@ -765,6 +765,7 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId)
     TilingStateHelpers::cleanupClosedWindowState(windowId, m_border, windowState);
     m_minimizeFloatMarks.remove(windowId);
     m_unfloatInFlight.remove(windowId);
+    m_fullscreenFloatedWindows.remove(windowId);
     // Same reasoning as the retry budget below: ids are appId-derived and
     // reusable, so a reused id must not inherit an armed toggle. Without this
     // a window closing inside its own round trip leaves an entry that
@@ -1273,9 +1274,8 @@ void TilingHandler::clearPerSessionDaemonState()
     // setWindowFloatingForScreen against state the new daemon never had, and
     // a stale record would mis-route the next unminimize. Pending
     // cross-screen size-restore connections are likewise per-session.
-    // clearAllPendingMinimizeFloats() also cancels the pending deferred
-    // unminimize→unfloat timers; an escapee's timeout would bail anyway when
-    // ownership lookup misses after the clear below.
+    // clearAllPendingMinimizeFloats() also cancels the deferred unfloat timers
+    // (an escapee bails on the ownership miss below) and the fullscreen-floats.
     clearAllPendingMinimizeFloats();
     m_minimizeFloatedWindows.clear();
     m_unfloatInFlight.clear();

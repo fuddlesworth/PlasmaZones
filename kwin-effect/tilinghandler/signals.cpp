@@ -406,6 +406,9 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         // windowActivated for an already-active window on fullscreen exit,
         // so nothing else heals it.
         const QString screenId = m_notifiedWindowScreens.value(windowId);
+        // Taken unconditionally, before any arm can return: whichever way this
+        // exit resolves, the fullscreen hold the record describes is over.
+        const bool ownedFullscreenFloat = m_fullscreenFloatedWindows.remove(windowId);
         if (!m_notifiedWindows.contains(windowId)) {
             // Never-tracked window: a window that OPENED fullscreen was
             // rejected by isEligibleForTilingNotify (fullscreen guard) and
@@ -443,6 +446,34 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
             releaseMaximizedToEdges(windowId, w);
             m_notifiedWindows.remove(windowId);
             m_notifiedWindowScreens.remove(windowId);
+            m_effect->updateAllDecorations();
+            return;
+        }
+        // A strip tile WE floated for its own fullscreen (the enter branch)
+        // returns to the strip. The engine's float path kept its slot, so the
+        // unfloat puts it back in the same column, width and tab group, and the
+        // daemon's batch re-marks it tiled. Checked BEFORE the floating arm
+        // below, because the local float cache still reads true here: the
+        // unfloat's broadcast has not come back yet. The reapply follows the
+        // unfloat on the same connection for the reason the tiled tail gives:
+        // KWin restores the PRE-fullscreen rect a client round-trip later, and
+        // the engine's emit-on-change gate would not correct it unprompted. A
+        // closed daemon gate leaves the window floating, which the floating arm
+        // handles; the bulk reset has already dropped the record by then.
+        if (ownedFullscreenFloat && isScrollingScreen(screenId) && m_effect->m_daemonGate.serviceRegistered) {
+            qCInfo(lcEffect) << "Strip tile left its own fullscreen, unfloating back into its slot:" << windowId;
+            PhosphorProtocol::ClientHelpers::fireAndForget(
+                m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
+                QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, false},
+                QStringLiteral("setWindowFloatingForScreen"));
+            PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Scrolling,
+                                                           QStringLiteral("reapplyWindowGeometry"), {windowId},
+                                                           QStringLiteral("reapplyWindowGeometry"));
+            // Membership BEFORE the sweep, the order the tiled tail below takes:
+            // the window is returning to the strip, the enter branch removed
+            // its decoration, and the sweep is what puts it back. Without this
+            // the re-mark waited for the daemon's batch, after the sweep.
+            markWindowTiled(screenId, windowId);
             m_effect->updateAllDecorations();
             return;
         }
@@ -585,6 +616,37 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
                 m_effect->m_trackedScreenPerWindow[w] = m_effect->getWindowScreenId(w);
             }
         }
+    }
+    // A scrolling strip tile entering its OWN fullscreen LEAVES the strip for
+    // the hold, by floating. Left seated, the daemon kept a column reserved
+    // behind the fullscreen surface: the neighbours did not close up, focus
+    // verbs could land on it, and a game that shares its launcher's class sat
+    // there as a TAB in the launcher's column. Floating rather than releasing,
+    // because the engine's float path remembers the slot and the exit branch's
+    // unfloat restores column, width and tab group, where a release would
+    // re-insert it as a fresh open. The float's geometry apply is inert: it
+    // takes applyWindowGeometry's fullscreen bail.
+    //
+    // Windowed-fullscreen members never reach here (they returned above). An
+    // already-floating window is skipped so its float keeps its owner, exactly
+    // as the minimize-float claim does, and so is one this handler holds as a
+    // minimize-float. Keyed on the NOTIFIED screen rather than on tiled
+    // membership: a window that fullscreens between its announce and its first
+    // batch has no membership yet but is in the daemon's strip all the same.
+    // Recorded only when the request is actually sent, so a closed daemon gate
+    // cannot leave a record the exit would answer with an unfloat the daemon
+    // never had a float for.
+    const QString notifiedScreen = m_notifiedWindowScreens.value(windowId);
+    if (m_notifiedWindows.contains(windowId) && isScrollingScreen(notifiedScreen)
+        && m_managedScreens.contains(notifiedScreen) && m_effect->m_daemonGate.serviceRegistered
+        && !m_effect->isWindowFloating(windowId) && !isMinimizeFloated(windowId)) {
+        m_fullscreenFloatedWindows.insert(windowId);
+        qCInfo(lcEffect) << "Strip tile entered its own fullscreen, floating it out of the strip:" << windowId << "on"
+                         << notifiedScreen;
+        PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
+                                                       QStringLiteral("setWindowFloatingForScreen"),
+                                                       {windowId, notifiedScreen, true},
+                                                       QStringLiteral("setWindowFloatingForScreen"));
     }
     m_effect->removeWindowDecoration(windowId);
     // Drain a keep-floating-above grant on this edge: keepFloatingAboveDefault

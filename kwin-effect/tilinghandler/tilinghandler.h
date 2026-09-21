@@ -1105,9 +1105,8 @@ public Q_SLOTS:
 
     /// The daemon is about to dispatch the windowed-fullscreen toggle on
     /// @p screenId and needs any natively-fullscreen tile there released first.
-    /// No other verb asks: navigation never takes a window out of fullscreen.
-    /// Thin: defers wholly to leaveNativeFullscreenTiles. Safe on a screen this
-    /// process does not manage, and on one holding no fullscreen tile.
+    /// No other verb asks. Thin: defers wholly to leaveNativeFullscreenTiles.
+    /// Safe on an unmanaged screen, and on one holding no fullscreen tile.
     void slotLeaveNativeFullscreenRequested(const QString& screenId);
 
     void slotScrollEffectBehaviourChanged(const QVariantMap& behaviour);
@@ -1859,6 +1858,7 @@ private:
     /// lambda consuming the newer hop's map entry.
     QHash<QString, quint64> m_crossScreenRestoreGen;
     QSet<QString> m_minimizeFloatedWindows;
+    QSet<QString> m_fullscreenFloatedWindows; ///< Strip tiles WE floated for their own fullscreen (signals.cpp).
     /// Ownership after an unfloat dispatch and before its authoritative echo.
     /// The generation rejects completions from a countermanded older request.
     /// A re-minimize countermand moves the window back to the active set.

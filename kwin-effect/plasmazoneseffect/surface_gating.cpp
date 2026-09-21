@@ -294,6 +294,19 @@ void PlasmaZonesEffect::refreshFullscreenSuppression()
                 || w->isMinimized() || w->isHiddenByShowDesktop()) {
                 continue;
             }
+            // A WINDOWED-FULLSCREEN strip column is fullscreen only as far as
+            // KWin is concerned. It fills its column rect inside the work area,
+            // so the panels and any neighbouring output content stay on screen
+            // and must stay decorated. Counting it stripped every decoration on
+            // the monitor, the panels' included, for as long as the toggle was
+            // held. The member itself still wears no chrome: shouldDecorateWindow
+            // rejects it on isFullScreen() on its own. Membership is written
+            // BEFORE the effect's setFullScreen and dropped before its release,
+            // so the fullscreen-changed edge that re-runs this walk already sees
+            // the right answer in both directions.
+            if (m_windowedFullscreenWindows.contains(getWindowId(w))) {
+                continue;
+            }
             // windowOutput(), not w->screen(): KWin can assign a window the
             // wrong one of two identical-model outputs, and the whole point of
             // this gate is which MONITOR goes undecorated. Using the effect's

@@ -65,6 +65,13 @@ void TilingHandler::clearAllPendingMinimizeFloats()
     // The restore-side timers must not fire against a disabled engine or a
     // torn-down handler either.
     m_pendingUnminimizeUnfloat.cancelAll();
+    // The fullscreen-float records go with them, for both callers. A new daemon
+    // session never held the float, and its re-announce rejects the
+    // still-fullscreen window at first contact, so the exit takes the
+    // never-tracked arm. A disabled engine has nothing to unfloat into. Either
+    // way an exit that found the record would send an unfloat for a float the
+    // daemon does not have.
+    m_fullscreenFloatedWindows.clear();
 }
 
 bool TilingHandler::beginUnminimizeUnfloat(const QString& windowId)
