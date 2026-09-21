@@ -175,6 +175,9 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
         // anchors. Only the horizontal differs.
         placement = QStringLiteral("barItem");
         break;
+    case PhosphorPopout::Anchor::BarItemRight:
+        placement = QStringLiteral("barItemRight");
+        break;
     case PhosphorPopout::Anchor::BottomCenter:
         placement = QStringLiteral("bottomCenter");
         break;
@@ -353,7 +356,7 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
             }
         });
     }
-    if (request.anchor == PhosphorPopout::Anchor::BarItem) {
+    if (request.anchor == PhosphorPopout::Anchor::BarItem || request.anchor == PhosphorPopout::Anchor::BarItemRight) {
         // x only: BarItem takes its vertical from the reserved band, so
         // writing customY here would be writing a value the host's y
         // binding does not read on this branch.

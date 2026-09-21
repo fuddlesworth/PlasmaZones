@@ -41,6 +41,7 @@
 #include <PhosphorServiceNetwork/QmlRegistration.h>
 #include <PhosphorServicePipeWire/QmlRegistration.h>
 #include <PhosphorServiceUPower/QmlRegistration.h>
+#include <PhosphorShell/QmlRegistration.h>
 
 #include <QElapsedTimer>
 #include <QQmlComponent>
@@ -61,6 +62,7 @@ private Q_SLOTS:
     void opensWithinBudget();
     void popoutHostCostsLittlePerOpen();
     void contentIsPlacedBeforeItCouldBeSeen();
+    void rightAlignedWidgetAnchorStaysOnScreen();
 
 private:
     std::unique_ptr<QQmlEngine> m_engine;
@@ -85,6 +87,7 @@ void TestPanelOpenCost::initTestCase()
     PhosphorServiceUPower::registerQmlTypes();
     PhosphorServiceMpris::registerQmlTypes();
     PhosphorServicePipeWire::registerQmlTypes();
+    PhosphorShell::registerQmlTypes();
 
     m_engine = std::make_unique<QQmlEngine>();
     // The static QML modules are laid out under the build tree's qml/ root.
@@ -107,15 +110,13 @@ void TestPanelOpenCost::opensWithinBudget_data()
 {
     QTest::addColumn<QString>("type");
 
-    // Every panel a status chip can open. The calendar is left out: it
-    // imports Phosphor.Shell for SystemClock, which only the shell process
-    // registers, and it builds no service host so it is not what this
-    // case is about.
+    // Panels that own service hosts must not enumerate hardware on open.
     QTest::newRow("network") << QStringLiteral("NetworkPanel");
     QTest::newRow("bluetooth") << QStringLiteral("BluetoothPanel");
     QTest::newRow("audio") << QStringLiteral("AudioPanel");
     QTest::newRow("battery") << QStringLiteral("BatteryPanel");
     QTest::newRow("media") << QStringLiteral("MediaPanel");
+    QTest::newRow("stats") << QStringLiteral("StatsPanel");
 }
 
 void TestPanelOpenCost::opensWithinBudget()
@@ -257,6 +258,36 @@ void TestPanelOpenCost::contentIsPlacedBeforeItCouldBeSeen()
              "the frame is still not considered placed after the surface was configured, so it would never fade in");
 
     host->deleteLater();
+}
+
+void TestPanelOpenCost::rightAlignedWidgetAnchorStaysOnScreen()
+{
+    QQmlComponent component(m_engine.get(), QStringLiteral("Phosphor.Popout"), QStringLiteral("PopoutHost"));
+    std::unique_ptr<QObject> object(component.create());
+    auto* host = qobject_cast<QQuickItem*>(object.get());
+    QVERIFY2(host, qPrintable(component.errorString()));
+    auto* content = new QQuickItem;
+    content->setImplicitWidth(452);
+    content->setImplicitHeight(700);
+    host->setProperty("contentItem", QVariant::fromValue(content));
+    host->setProperty("placement", QStringLiteral("barItemRight"));
+    host->setProperty("customX", 1100.0);
+    host->setProperty("reservedTop", 70);
+    host->setProperty("barInset", 16.0);
+    host->setWidth(1440);
+    host->setHeight(900);
+    QCoreApplication::processEvents();
+    auto* frame = content->parentItem();
+    QVERIFY(frame);
+    QCOMPARE(frame->x() + frame->width(), 1100.0);
+    QCOMPARE(frame->y(), 72.0);
+    host->setProperty("customX", 100.0);
+    QCOMPARE(frame->x(), 16.0); // also works when the widget is moved to the left
+    host->setProperty("customX", 1440.0);
+    QCOMPARE(frame->x() + frame->width(), 1424.0);
+    host->setProperty("reservedTop", 0);
+    host->setProperty("reservedBottom", 70);
+    QCOMPARE(frame->y() + frame->height(), 828.0);
 }
 
 QTEST_MAIN(TestPanelOpenCost)

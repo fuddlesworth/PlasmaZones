@@ -466,7 +466,7 @@ Item {
     // One map rather than a chain of else-ifs, because every entry opens
     // the same shape in the same way: a Cooperative popout hanging under
     // the chip that was pressed. A widget missing from this map simply has
-    // no panel, which is how systemmetrics and focusedapp stay inert
+    // no panel, which is how focusedapp stays inert
     // without needing a case of their own.
     //
     // `keyboard` is per panel and not a shared default, because the two
@@ -477,6 +477,10 @@ Item {
     // granted keyboard focus cannot receive a keystroke at all — the field
     // would look editable and silently swallow everything typed into it.
     readonly property var widgetPanels: ({
+            "systemmetrics": {
+                "component": statsPanelComponent,
+                "keyboard": true
+            },
             "network": {
                 "component": networkPanelComponent,
                 "keyboard": true
@@ -564,6 +568,17 @@ Item {
     }
 
     Component {
+        id: statsPanelComponent
+        StatsPanel {
+            onCloseRequested: Popouts.close(Popouts.handleFor("bar.panel.systemmetrics"))
+            onNetworkSettingsRequested: {
+                Popouts.close(Popouts.handleFor("bar.panel.systemmetrics"));
+                root.toggleControlCenter(root._lastPanelSource);
+            }
+        }
+    }
+
+    Component {
         id: calendarPanelComponent
 
         CalendarPanel {
@@ -606,8 +621,8 @@ Item {
             // GC cannot delete the live screen when this wrapper is
             // collected. Do not reach for a QScreen any other way from QML.
             "targetScreen": screen,
-            "anchor": id === "notification" ? PhosphorPopout.Anchor.BarRight : anchored ? PhosphorPopout.Anchor.BarItem : PhosphorPopout.Anchor.BarCenter,
-            "customAnchor": Qt.point(anchored ? centre : 0, 0),
+            "anchor": id === "notification" ? PhosphorPopout.Anchor.BarRight : anchored ? (id === "systemmetrics" ? PhosphorPopout.Anchor.BarItemRight : PhosphorPopout.Anchor.BarItem) : PhosphorPopout.Anchor.BarCenter,
+            "customAnchor": Qt.point(anchored ? centre + (id === "systemmetrics" ? source.width / 2 : 0) : 0, 0),
             "exclusive": PhosphorPopout.ExclusiveMode.Cooperative,
             // Per panel; see widgetPanels above for why this is not one
             // shared value.

@@ -48,8 +48,9 @@ QVariantMap AppearanceLibrary::scopedSettings(const QVariantMap& values, bool wa
     if (wallpaper)
         keys.append(QStringLiteral("wallpapers"));
     if (bar)
-        keys.append(
-            {QStringLiteral("barLayout"), QStringLiteral("barInset"), QStringLiteral("edge"), QStringLiteral("media")});
+        keys.append({QStringLiteral("barLayout"), QStringLiteral("barInset"), QStringLiteral("edge"),
+                     QStringLiteral("media"), QStringLiteral("statsStyle"), QStringLiteral("statsMetrics"),
+                     QStringLiteral("statsMemoryUnit"), QStringLiteral("statsInterval"), QStringLiteral("statsGpuId")});
     QVariantMap result;
     for (const auto& key : keys) {
         if (values.contains(key))

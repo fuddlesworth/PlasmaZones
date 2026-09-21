@@ -16,6 +16,16 @@ Item {
     // hex color. Encode ordinary sRGB channels explicitly for the SVG renderer.
     readonly property string strokeColor: "#" + [color.r, color.g, color.b].map(channel => ("0" + Math.round(channel * 255).toString(16)).slice(-2)).join("")
     readonly property string drawing: {
+        if (source === "cpu")
+            return '<rect x="5" y="5" width="14" height="14" rx="3"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2 V5 M15 2 V5 M9 19 V22 M15 19 V22 M2 9 H5 M2 15 H5 M19 9 H22 M19 15 H22"/>';
+        if (source === "video-card")
+            return '<rect x="3" y="5" width="18" height="13" rx="2"/><circle cx="11" cy="11.5" r="3.5"/><path d="M2 3 V20 M7 18 V21 H16 V18 M17 8 H18 M17 12 H18"/>';
+        if (source === "memory")
+            return '<rect x="2" y="5" width="20" height="12" rx="1"/><path d="M6 8 V13 M10 8 V13 M14 8 V13 M18 8 V13 M5 17 V20 M9 17 V20 M13 17 V20 M17 17 V20 M21 17 V20"/>';
+        if (source === "network-transfer")
+            return '<path d="M7 3 V21 M3 7 L7 3 L11 7 M17 3 V21 M13 17 L17 21 L21 17"/>';
+        if (source === "drive-harddisk")
+            return '<path d="M6 3 H18 L22 14 V21 H2 V14 Z M2 14 H22 M17 18 H18"/>';
         if (source === "preferences-system")
             return '<path d="M3 7 H21 M3 17 H21"/><circle cx="8" cy="7" r="3" fill="none"/><circle cx="16" cy="17" r="3" fill="none"/>';
         if (source === "utilities-system-monitor")

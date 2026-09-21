@@ -36,6 +36,8 @@ QML_ELEMENT
 // popout summoned by one bar widget uses, so the panel opens under the
 // thing that was clicked. customAnchor.y() is ignored; the reserved band
 // decides the vertical, exactly as it does for BarLeft/Center/Right.
+// BarItemRight uses the same reserved band but aligns the panel's right
+// edge to customAnchor.x(), the invoking widget's right edge.
 enum class Anchor {
     BarLeft,
     BarCenter,
@@ -45,6 +47,7 @@ enum class Anchor {
     AtPointer,
     Custom,
     BottomCenter,
+    BarItemRight,
 };
 Q_ENUM_NS(Anchor)
 

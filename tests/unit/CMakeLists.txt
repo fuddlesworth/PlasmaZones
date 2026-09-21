@@ -2551,6 +2551,9 @@ if(TARGET PhosphorShellBar::PhosphorShellBarQml AND TARGET PhosphorServiceNetwor
             Qt6::Gui
             Qt6::Qml
             Qt6::Quick
+            PhosphorShell::PhosphorShell
+            PhosphorShellQml
+            PhosphorShellQmlplugin
             PhosphorShellBar::PhosphorShellBarQml
             PhosphorShellBarQmlplugin
             PhosphorShellWidgetsQml

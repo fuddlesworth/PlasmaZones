@@ -31,7 +31,7 @@ Item {
             controlcenter: qsTr("Quick settings"),
             appearance: qsTr("Appearance"),
             power: qsTr("Power"),
-            systemmetrics: qsTr("System metrics"),
+            systemmetrics: qsTr("System stats"),
             audio: qsTr("Audio"),
             battery: qsTr("Battery"),
             bluetooth: qsTr("Bluetooth"),

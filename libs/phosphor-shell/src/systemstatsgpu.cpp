@@ -83,7 +83,11 @@ struct SystemStatsGpu::Private
             auto nameFn = resolve<int (*)(Device, char*, unsigned int)>("nvmlDeviceGetName");
             if (nameFn)
                 nameFn(device, name, sizeof(name));
-            auto gpu = emptyGpu(QStringLiteral("nvidia-%1").arg(i), QString::fromUtf8(name[0] ? name : "NVIDIA GPU"));
+            char uuid[96]{};
+            auto uuidFn = resolve<int (*)(Device, char*, unsigned int)>("nvmlDeviceGetUUID");
+            const auto id = uuidFn && uuidFn(device, uuid, sizeof(uuid)) == 0 ? QString::fromLatin1(uuid)
+                                                                              : QStringLiteral("nvidia-%1").arg(i);
+            auto gpu = emptyGpu(id, QString::fromUtf8(name[0] ? name : "NVIDIA GPU"));
             Utilization usage{};
             auto usageFn = resolve<int (*)(Device, Utilization*)>("nvmlDeviceGetUtilizationRates");
             if (usageFn && usageFn(device, &usage) == 0 && usage.gpu <= 100)

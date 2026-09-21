@@ -37,12 +37,17 @@
 #include <PhosphorServiceSni/QmlRegistration.h>
 #include <PhosphorServiceUPower/QmlRegistration.h>
 #include <PhosphorShell/QmlRegistration.h>
+#include <PhosphorShell/SystemStats.h>
+#include <PhosphorTheme/AppearanceStore.h>
 
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
 #include <QQmlComponent>
 #include <QQmlEngine>
+#include <QQuickItem>
+#include <QQuickWindow>
+#include <QSignalSpy>
 #include <QStringList>
 #include <QTest>
 #include <QUrl>
@@ -58,6 +63,7 @@ private Q_SLOTS:
     void everyShippedFileCompiles_data();
     void everyShippedFileCompiles();
     void aBadPropertyAssignmentIsCaught();
+    void statsPagesHaveWorkingLiveBindings();
 
 private:
     std::unique_ptr<QQmlEngine> m_engine;
@@ -65,6 +71,17 @@ private:
 
 namespace {
 constexpr auto kModuleRoot = ":/qt/qml/Phosphor";
+
+QQuickItem* namedItem(QQuickItem* root, const QString& name)
+{
+    if (root->objectName() == name)
+        return root;
+    for (auto* child : root->childItems()) {
+        if (auto* found = namedItem(child, name))
+            return found;
+    }
+    return nullptr;
+}
 
 /// The files that must be among those collected. Guard for the guard: the
 /// enumeration below walks a resource tree, and a tree that stopped being
@@ -184,6 +201,77 @@ void TestShellQmlCompiles::aBadPropertyAssignmentIsCaught()
     QVERIFY(component.isError());
     QVERIFY2(component.errorString().contains(QLatin1String("non-existent property")),
              qPrintable(component.errorString()));
+}
+
+void TestShellQmlCompiles::statsPagesHaveWorkingLiveBindings()
+{
+    // Unlike the compilation sweep, exercise the async snapshot, delegate
+    // scopes, adaptive layouts and keyboard navigation in the real panel.
+    QSignalSpy warnings(m_engine.get(), &QQmlEngine::warnings);
+    QQmlComponent component(m_engine.get());
+    component.setData("import Phosphor.Bar\nStatsPanel { width: 452; height: 560 }\n",
+                      QUrl(QStringLiteral("qrc:/stats-runtime.qml")));
+    std::unique_ptr<QObject> object(component.create());
+    QVERIFY2(object, qPrintable(component.errorString()));
+    auto* panel = qobject_cast<QQuickItem*>(object.get());
+    QVERIFY(panel);
+    QQuickWindow window;
+    window.resize(452, 560);
+    panel->setParentItem(window.contentItem());
+    window.show();
+    auto* service = m_engine->singletonInstance<PhosphorShell::SystemStats*>(QStringLiteral("Phosphor.Shell"),
+                                                                             QStringLiteral("SystemStats"));
+    QVERIFY(service);
+    QTRY_VERIFY(service->revision() > 1);
+    auto* scroller = panel->findChild<QQuickItem*>(QStringLiteral("statsScroll"));
+    QVERIFY(scroller);
+    for (const auto& page : {QStringLiteral("cpu"), QStringLiteral("gpu"), QStringLiteral("memory"),
+                             QStringLiteral("network"), QStringLiteral("storage"), QStringLiteral("customize")}) {
+        QVERIFY(panel->setProperty("page", page));
+        QTest::qWait(25);
+        QVERIFY(scroller->height() > 100);
+        QVERIFY(scroller->property("contentHeight").toReal() > 100);
+        const auto bottom = scroller->mapToItem(panel, QPointF(0, scroller->height())).y();
+        QVERIFY(bottom < panel->height()); // the footer remains reachable on short screens
+        panel->forceActiveFocus();
+        QTest::keyClick(&window, Qt::Key_Escape);
+        QCOMPARE(panel->property("page").toString(), QStringLiteral("overview"));
+    }
+    auto* pause = panel->findChild<QObject*>(QStringLiteral("statsPause"));
+    QVERIFY(pause);
+    QVERIFY(QMetaObject::invokeMethod(pause, "clicked"));
+    QVERIFY(service->paused());
+    QVERIFY(QMetaObject::invokeMethod(pause, "clicked"));
+    QVERIFY(!service->paused());
+    auto* store = PhosphorTheme::AppearanceStore::create(nullptr, nullptr);
+    QVERIFY(store->beginPreview());
+    panel->setProperty("page", QStringLiteral("customize"));
+    for (const auto& style : {QStringLiteral("meters"), QStringLiteral("numbers"), QStringLiteral("traces")}) {
+        auto* button = namedItem(panel, QStringLiteral("statsStyle_") + style);
+        QVERIFY(button);
+        QVERIFY(QMetaObject::invokeMethod(button, "clicked"));
+        QCOMPARE(store->values().value(QStringLiteral("statsStyle")).toString(), style);
+        QTest::qWait(25);
+    }
+    auto* memory = namedItem(panel, QStringLiteral("statsMetric_memory"));
+    auto* network = namedItem(panel, QStringLiteral("statsMetric_network"));
+    QVERIFY(memory);
+    QVERIFY(network);
+    QVERIFY(!network->property("enabled").toBool());
+    QVERIFY(QMetaObject::invokeMethod(memory, "clicked"));
+    QCOMPARE(store->values().value(QStringLiteral("statsMetrics")).toList().size(), 2);
+    QVERIFY(network->property("enabled").toBool());
+    QVERIFY(QMetaObject::invokeMethod(network, "clicked"));
+    QVERIFY(store->values().value(QStringLiteral("statsMetrics")).toList().contains(QStringLiteral("network")));
+    QCOMPARE(store->values().value(QStringLiteral("statsMetrics")).toList().size(), 3);
+    store->endPreview();
+    panel->setParentItem(nullptr);
+    QStringList messages;
+    for (const auto& warning : warnings) {
+        for (const auto& error : qvariant_cast<QList<QQmlError>>(warning.first()))
+            messages.append(error.toString());
+    }
+    QVERIFY2(messages.isEmpty(), qPrintable(messages.join(QLatin1Char('\n'))));
 }
 
 QTEST_MAIN(TestShellQmlCompiles)

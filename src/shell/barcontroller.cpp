@@ -62,7 +62,7 @@ const QList<BarController::BuiltinWidget>& BarController::builtinWidgets()
         {QStringLiteral("clock"), QStringLiteral("Clock"), QStringLiteral("Clock")},
         {QStringLiteral("focusedapp"), QStringLiteral("Focused App"), QStringLiteral("FocusedApp")},
         {QStringLiteral("placementmap"), QStringLiteral("Placement Map"), QStringLiteral("PlacementMap")},
-        {QStringLiteral("systemmetrics"), QStringLiteral("System Metrics"), QStringLiteral("SystemMetrics")},
+        {QStringLiteral("systemmetrics"), QStringLiteral("System stats"), QStringLiteral("SystemMetrics")},
         {QStringLiteral("network"), QStringLiteral("Network"), QStringLiteral("Network")},
         {QStringLiteral("bluetooth"), QStringLiteral("Bluetooth"), QStringLiteral("Bluetooth")},
         {QStringLiteral("audio"), QStringLiteral("Audio"), QStringLiteral("Audio")},

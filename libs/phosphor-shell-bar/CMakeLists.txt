@@ -93,6 +93,18 @@ set(_phosphor_bar_qml_files
     qml/Phosphor/Bar/Widgets/DropProxyGeometry.js
     qml/Phosphor/Bar/MapPane.qml
     qml/Phosphor/Bar/Widgets/SystemMetrics.qml
+    qml/Phosphor/Bar/Stats/StatsModel.qml
+    qml/Phosphor/Bar/Stats/StatsChart.qml
+    qml/Phosphor/Bar/Stats/StatsReadout.qml
+    qml/Phosphor/Bar/Stats/StatsCard.qml
+    qml/Phosphor/Bar/Stats/StatsMemoryMeter.qml
+    qml/Phosphor/Bar/Stats/StatsFacts.qml
+    qml/Phosphor/Bar/Stats/StatsDrives.qml
+    qml/Phosphor/Bar/Stats/StatsOverview.qml
+    qml/Phosphor/Bar/Stats/StatsHistory.qml
+    qml/Phosphor/Bar/Stats/StatsDetails.qml
+    qml/Phosphor/Bar/Stats/StatsWidgetSettings.qml
+    qml/Phosphor/Bar/Stats/StatsPanel.qml
     qml/Phosphor/Bar/Widgets/Network.qml
     qml/Phosphor/Bar/Widgets/Bluetooth.qml
     qml/Phosphor/Bar/Widgets/Audio.qml
@@ -157,6 +169,8 @@ endforeach()
 # qt_add_qml_module generates here. Full rationale: src/shared/CMakeLists.txt.
 set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dirs")
 
+set_source_files_properties(qml/Phosphor/Bar/Stats/StatsModel.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+
 qt_add_qml_module(PhosphorShellBarQml
     URI Phosphor.Bar
     VERSION 1.0
@@ -186,13 +200,11 @@ add_library(PhosphorShellBar::PhosphorShellBarQml ALIAS PhosphorShellBarQml)
 
 target_compile_features(PhosphorShellBarQml PUBLIC cxx_std_20)
 
-# No Qt6::QuickShapes here: the bar QML imports no QtQuick.Shapes itself. The
-# Shapes usage lives in Phosphor.Widgets' PhosphorRipple; that module's own
-# target links Qt6::QuickShapes and propagates it through the PUBLIC link
-# below.
+# Stats charts use vector paths from QtQuick.Shapes.
 target_link_libraries(PhosphorShellBarQml
     PUBLIC
         Qt6::Core
+        Qt6::QuickShapes
         Qt6::Gui
         Qt6::Qml
         Qt6::Quick

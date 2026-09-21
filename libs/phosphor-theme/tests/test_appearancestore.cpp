@@ -13,6 +13,41 @@ class TestAppearanceStore : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void statsPreferencesValidateAndPersist()
+    {
+        QTemporaryDir dir;
+        const auto path = dir.filePath(QStringLiteral("appearance.json"));
+        AppearanceStore store(path);
+        const QVariantList metrics{QStringLiteral("memory"), QStringLiteral("network")};
+        QVERIFY(store.setValue(QStringLiteral("statsMetrics"), metrics));
+        QVERIFY(store.setValue(QStringLiteral("statsStyle"), QStringLiteral("meters")));
+        QVERIFY(store.setValue(QStringLiteral("statsMemoryUnit"), QStringLiteral("used")));
+        QVERIFY(store.setValue(QStringLiteral("statsInterval"), 5));
+        const auto valid = store.values();
+        for (const auto& invalid : QList<QVariantList>{
+                 {},
+                 {QStringLiteral("cpu"), QStringLiteral("cpu")},
+                 {QStringLiteral("invalid")},
+                 {QStringLiteral("cpu"), QStringLiteral("gpu"), QStringLiteral("memory"), QStringLiteral("network")}}) {
+            QVERIFY(!store.setValue(QStringLiteral("statsMetrics"), invalid));
+        }
+        QVERIFY(!store.setValue(QStringLiteral("statsStyle"), QStringLiteral("invalid")));
+        QVERIFY(!store.setValue(QStringLiteral("statsMemoryUnit"), QStringLiteral("invalid")));
+        QVERIFY(!store.setValue(QStringLiteral("statsInterval"), 0));
+        QVERIFY(!store.setValue(QStringLiteral("statsInterval"), 3));
+        QVERIFY(!store.setValue(QStringLiteral("statsInterval"), QStringLiteral("2")));
+        QCOMPARE(store.values(), valid);
+        QCOMPARE(AppearanceStore(path).values(), valid);
+        QVERIFY(store.beginPreview());
+        QVERIFY(store.setValue(QStringLiteral("statsStyle"), QStringLiteral("numbers")));
+        QCOMPARE(AppearanceStore(path).values(), valid);
+        store.endPreview();
+        QCOMPARE(store.values(), valid);
+        QVERIFY(store.applyPreset(QStringLiteral("ember")));
+        for (const auto& key : {QStringLiteral("statsMetrics"), QStringLiteral("statsStyle"),
+                                QStringLiteral("statsMemoryUnit"), QStringLiteral("statsInterval")})
+            QCOMPARE(store.values().value(key), valid.value(key));
+    }
     void decorationPreviewIsOwnedAndNeverReplacesSavedSettings()
     {
         QTemporaryDir dir;

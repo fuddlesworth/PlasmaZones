@@ -12,6 +12,7 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJSValue>
 #include <QSaveFile>
 #include <QLockFile>
 #include <QRegularExpression>
@@ -41,9 +42,10 @@ QVariantMap AppearanceStore::defaults()
                          {QStringLiteral("center"),
                           QVariantList{QVariantList{QStringLiteral("placementmap"), QStringLiteral("workspaces")}}},
                          {QStringLiteral("right"),
-                          QVariantList{QVariantList{QStringLiteral("clock"), QStringLiteral("notification"),
-                                                    QStringLiteral("tray"), QStringLiteral("controlcenter"),
-                                                    QStringLiteral("appearance"), QStringLiteral("power")}}}}},
+                          QVariantList{QVariantList{QStringLiteral("systemmetrics"), QStringLiteral("clock"),
+                                                    QStringLiteral("notification"), QStringLiteral("tray"),
+                                                    QStringLiteral("controlcenter"), QStringLiteral("appearance"),
+                                                    QStringLiteral("power")}}}}},
             {QStringLiteral("wallpapers"), QVariantMap{}},
             {QStringLiteral("wallpaperColors"),
              QVariantList{QStringLiteral("#919dcc"), QStringLiteral("#aca0d7"), QStringLiteral("#c0a5bd"),
@@ -68,6 +70,12 @@ QVariantMap AppearanceStore::defaults()
             {QStringLiteral("lockLayout"), QStringLiteral("split")},
             {QStringLiteral("lockMedia"), false},
             {QStringLiteral("lockNotifications"), true},
+            {QStringLiteral("statsStyle"), QStringLiteral("traces")},
+            {QStringLiteral("statsMetrics"),
+             QVariantList{QStringLiteral("cpu"), QStringLiteral("gpu"), QStringLiteral("memory")}},
+            {QStringLiteral("statsMemoryUnit"), QStringLiteral("percent")},
+            {QStringLiteral("statsInterval"), 2},
+            {QStringLiteral("statsGpuId"), QString()},
             {QStringLiteral("visualizer"), QStringLiteral("ribbon")}};
 }
 AppearanceStore::AppearanceStore(QObject* parent)
@@ -135,6 +143,8 @@ bool AppearanceStore::validate(const QVariantMap& values, QVariantMap& result)
 {
     result = defaults();
     const QMap<QString, QStringList> enums{
+        {QStringLiteral("statsStyle"), {QStringLiteral("traces"), QStringLiteral("meters"), QStringLiteral("numbers")}},
+        {QStringLiteral("statsMemoryUnit"), {QStringLiteral("percent"), QStringLiteral("used")}},
         {QStringLiteral("surfaceEffect"), {QStringLiteral("none"), QStringLiteral("glass"), QStringLiteral("motes")}},
         {QStringLiteral("presentation"), {QStringLiteral("navigator"), QStringLiteral("stage")}},
         {QStringLiteral("palette"), {QStringLiteral("spectrum"), QStringLiteral("wallpaper"), QStringLiteral("ember")}},
@@ -151,6 +161,34 @@ bool AppearanceStore::validate(const QVariantMap& values, QVariantMap& result)
         if (enums.contains(it.key())) {
             if (it.value().metaType().id() != QMetaType::QString
                 || !enums.value(it.key()).contains(it.value().toString()))
+                return false;
+        } else if (it.key() == QLatin1String("statsMetrics")) {
+            if (it.value().metaType().id() != QMetaType::QVariantList)
+                return false;
+            const auto metrics = it.value().toList();
+            if (metrics.isEmpty() || metrics.size() > 3)
+                return false;
+            const QStringList allowed{QStringLiteral("cpu"), QStringLiteral("gpu"), QStringLiteral("memory"),
+                                      QStringLiteral("network"), QStringLiteral("storage")};
+            QSet<QString> seen;
+            for (const auto& metric : metrics) {
+                if (metric.metaType().id() != QMetaType::QString || !allowed.contains(metric.toString())
+                    || seen.contains(metric.toString()))
+                    return false;
+                seen.insert(metric.toString());
+            }
+        } else if (it.key() == QLatin1String("statsGpuId")) {
+            if (it.value().metaType().id() != QMetaType::QString
+                || !QRegularExpression(QStringLiteral("^[a-zA-Z0-9_.:-]{0,80}$"))
+                        .match(it.value().toString())
+                        .hasMatch())
+                return false;
+        } else if (it.key() == QLatin1String("statsInterval")) {
+            const auto type = it.value().metaType().id();
+            if (type != QMetaType::Int && type != QMetaType::Double && type != QMetaType::LongLong)
+                return false;
+            const auto interval = it.value().toDouble();
+            if (interval != 1 && interval != 2 && interval != 5)
                 return false;
         } else if (it.key() == QLatin1String("wallpapers")) {
             if (it.value().metaType().id() != QMetaType::QVariantMap || it.value().toMap().size() > 32)
@@ -341,7 +379,9 @@ bool AppearanceStore::setWallpaper(const QString& path, const QString& screen, c
 bool AppearanceStore::setValue(const QString& key, const QVariant& value)
 {
     auto next = m_values;
-    next[key] = value;
+    // QML passes arrays/objects through QVariant as QJSValue. Normalize at
+    // this boundary so the same strict validation serves native and QML callers.
+    next[key] = value.metaType().id() == qMetaTypeId<QJSValue>() ? value.value<QJSValue>().toVariant() : value;
     return commit(next);
 }
 bool AppearanceStore::moveWidget(const QString& id, const QString& region, int index)
@@ -413,13 +453,28 @@ bool AppearanceStore::applyPreset(const QString& preset)
     if (next.isEmpty()) {
         return fail(tr("Unknown appearance preset."));
     }
-    for (const auto& key :
-         {QStringLiteral("wallpapers"), QStringLiteral("wallpaperColors"), QStringLiteral("presentation"),
-          QStringLiteral("barLayout"), QStringLiteral("uiFont"), QStringLiteral("monoFont"), QStringLiteral("motion"),
-          QStringLiteral("visualizer"), QStringLiteral("textScale"), QStringLiteral("surfaceEffect"),
-          QStringLiteral("surfacePacks"), QStringLiteral("desktopStyle"), QStringLiteral("lockLayout"),
-          QStringLiteral("lockMedia"), QStringLiteral("lockNotifications"), QStringLiteral("notificationGrouping"),
-          QStringLiteral("notificationPreviews")})
+    for (const auto& key : {QStringLiteral("wallpapers"),
+                            QStringLiteral("wallpaperColors"),
+                            QStringLiteral("presentation"),
+                            QStringLiteral("barLayout"),
+                            QStringLiteral("uiFont"),
+                            QStringLiteral("monoFont"),
+                            QStringLiteral("motion"),
+                            QStringLiteral("visualizer"),
+                            QStringLiteral("textScale"),
+                            QStringLiteral("surfaceEffect"),
+                            QStringLiteral("surfacePacks"),
+                            QStringLiteral("desktopStyle"),
+                            QStringLiteral("lockLayout"),
+                            QStringLiteral("lockMedia"),
+                            QStringLiteral("lockNotifications"),
+                            QStringLiteral("notificationGrouping"),
+                            QStringLiteral("notificationPreviews"),
+                            QStringLiteral("statsStyle"),
+                            QStringLiteral("statsMetrics"),
+                            QStringLiteral("statsMemoryUnit"),
+                            QStringLiteral("statsInterval"),
+                            QStringLiteral("statsGpuId")})
         next[key] = m_values.value(key);
     return commit(next);
 }

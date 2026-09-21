@@ -15,6 +15,32 @@ class TestAppearanceLibrary : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void statsPreferencesTravelOnlyWithTheBarPreset()
+    {
+        QTemporaryDir dir;
+        AppearanceStore store(dir.filePath(QStringLiteral("appearance.json")));
+        AppearanceLibrary library(&store, dir.filePath(QStringLiteral("library")));
+        const QVariantList metrics{QStringLiteral("network"), QStringLiteral("storage")};
+        QVERIFY(store.setValue(QStringLiteral("statsMetrics"), metrics));
+        QVERIFY(store.setValue(QStringLiteral("statsStyle"), QStringLiteral("numbers")));
+        QVERIFY(store.setValue(QStringLiteral("statsInterval"), 5));
+        QVERIFY(library.savePreset(QStringLiteral("Desktop stats"), false, true));
+        const auto id = library.presets().last().toMap().value(QStringLiteral("id")).toString();
+        const auto file = QUrl::fromLocalFile(dir.filePath(QStringLiteral("stats.json")));
+        QVERIFY(library.exportPreset(id, file));
+        QVERIFY(store.setValue(QStringLiteral("statsStyle"), QStringLiteral("meters")));
+        QVERIFY(store.setValue(QStringLiteral("statsInterval"), 1));
+        QVERIFY(library.inspectImport(file));
+        QVERIFY(store.beginPreview());
+        QVERIFY(library.previewPreset(QStringLiteral("imported"), false, false));
+        QCOMPARE(store.values().value(QStringLiteral("statsStyle")).toString(), QStringLiteral("meters"));
+        QCOMPARE(store.values().value(QStringLiteral("statsInterval")).toInt(), 1);
+        QVERIFY(library.previewPreset(QStringLiteral("imported"), false, true));
+        QCOMPARE(store.values().value(QStringLiteral("statsStyle")).toString(), QStringLiteral("numbers"));
+        QCOMPARE(store.values().value(QStringLiteral("statsInterval")).toInt(), 5);
+        QCOMPARE(store.values().value(QStringLiteral("statsMetrics")).toList(), metrics);
+        store.endPreview();
+    }
     void qmlAndNativeShareTheDraftAcrossEngineReloads()
     {
         auto* native = AppearanceStore::create(nullptr, nullptr);

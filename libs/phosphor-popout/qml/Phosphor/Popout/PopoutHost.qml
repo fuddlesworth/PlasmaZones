@@ -579,6 +579,7 @@ FocusScope {
             case "barRight":
                 return Math.max(0, Math.round(root.width - width - root.barInset));
             case "barItem":
+            case "barItemRight":
                 {
                     // Centre on the widget, then keep the whole frame on screen.
                     // The clamp is what makes this usable for the rightmost bar
@@ -587,7 +588,7 @@ FocusScope {
                     // Math.min is applied BEFORE Math.max so that a frame wider
                     // than the usable width lands at barInset rather than at a
                     // negative x: the min would otherwise win and push it left.
-                    const centred = root.customX - width / 2;
+                    const centred = root.customX - (root.placement === "barItemRight" ? width : width / 2);
                     const rightmost = root.width - width - root.barInset;
                     return Math.round(Math.max(root.barInset, Math.min(centred, rightmost)));
                 }
@@ -609,6 +610,7 @@ FocusScope {
             case "barCenter":
             case "barRight":
             case "barItem":
+            case "barItemRight":
                 return root.reservedBottom > root.reservedTop ? Math.max(0, Math.round(root.height - root.reservedBottom - height - 2)) : Math.round(root.reservedTop + 2);
             case "custom":
                 return Math.round(root.customY);
