@@ -660,8 +660,8 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w,
     // surface plasmashell owns from any call site, present or future. Do NOT
     // "finish the feature" by admitting the shell kinds here.
     if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isSkipSwitcher()
-        || isPlasmaShellSurface(windowClass) || isOwnOverlayClass(windowClass)
-        || isXdgDesktopPortalSurface(windowClass)) {
+        || isPlasmaShellSurface(windowClass) || isOwnOverlayClass(windowClass) || isXdgDesktopPortalSurface(windowClass)
+        || windowIsBareOverrideRedirect(w)) {
         return false;
     }
 
@@ -871,7 +871,9 @@ bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w,
     // tooltip), so those are hard-excluded here with no toggle: a border on a
     // notification popup or a volume OSD is never sensible, which splits them
     // off from the transient family below (which IS toggleable).
-    if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isFullScreen() || w->isSkipSwitcher()) {
+    // windowIsBareOverrideRedirect: untyped tray proxies (xembedsniproxy), see window_query.h.
+    if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isFullScreen() || w->isSkipSwitcher()
+        || windowIsBareOverrideRedirect(w)) {
         return false;
     }
 

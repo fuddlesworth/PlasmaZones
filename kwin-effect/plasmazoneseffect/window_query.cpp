@@ -23,6 +23,11 @@ bool windowIsTransient(KWin::EffectWindow* w)
         || w->isTooltip() || w->isMenu() || w->isSplash() || w->transientFor() != nullptr;
 }
 
+bool windowIsBareOverrideRedirect(KWin::EffectWindow* w)
+{
+    return w && !w->isManaged() && !windowIsTransient(w);
+}
+
 PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w)
 {
     using PhosphorProtocol::WindowType;

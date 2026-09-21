@@ -28,6 +28,17 @@ PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w);
 /// scope gate (Normal type AND not transient) in the KWin effect.
 bool windowIsTransient(KWin::EffectWindow* w);
 
+/// True if @p w is an override-redirect (unmanaged) X11 window OUTSIDE the
+/// transient family: a surface the window manager never manages and that
+/// declares no popup/menu type to explain itself. These are client plumbing,
+/// not application windows. The live case is xembedsniproxy's 32x32 container
+/// for a legacy XEmbed tray icon (Wine / Proton apps such as Battle.net),
+/// which carries no _NET_WM_WINDOW_TYPE, so KWin reports it as neither
+/// special nor transient and every type-based reject misses it. A typed
+/// override-redirect popup (an X11 menu or dropdown) is deliberately NOT
+/// matched, so the user-toggleable transient filters stay the verdict there.
+bool windowIsBareOverrideRedirect(KWin::EffectWindow* w);
+
 /// Build a per-window PhosphorRules::WindowQuery from a live KWin window,
 /// populating every window-side field declared on `WindowQuery` so user-
 /// authored rules can match on any of them. The unified shape means a rule
