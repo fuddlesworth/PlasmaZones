@@ -8,7 +8,8 @@
                 "Fixed: Moving a floated or hand-placed window to another desktop no longer snaps it into the first empty zone there (#1108)",
                 "Fixed: A window restored from minimize goes straight into its tile instead of flashing at its old size over the other windows (#1110)",
                 "Fixed: A reopened window is only put back in its remembered zone when that zone belongs to the layout its desktop runs now (#1104)",
-                "Fixed: With \"Keep floating windows above\" on, a fullscreen game no longer stays on top after you Alt+Tab away from it (#1114)"
+                "Fixed: With \"Keep floating windows above\" on, a fullscreen game no longer stays on top after you Alt+Tab away from it (#1114)",
+                "Fixed: Old-style tray icons, such as those from Wine and Proton apps, no longer leave a glowing bordered square on the panel (#1115)"
             ]
         },
         {
