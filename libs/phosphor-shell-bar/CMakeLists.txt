@@ -114,6 +114,15 @@ set(_phosphor_bar_qml_files
     qml/Phosphor/Bar/Panels/PanelRow.qml
     qml/Phosphor/Bar/Panels/PanelToggle.qml
     qml/Phosphor/Bar/Panels/ValueRow.qml
+    qml/Phosphor/Bar/Panels/QuickDetailFrame.qml
+    qml/Phosphor/Bar/Panels/DetailText.qml
+    qml/Phosphor/Bar/Panels/DetailList.qml
+    qml/Phosphor/Bar/Panels/DetailCard.qml
+    qml/Phosphor/Bar/Panels/DetailDeviceRow.qml
+    qml/Phosphor/Bar/Panels/DetailEmptyState.qml
+    qml/Phosphor/Bar/Panels/DetailSectionHeading.qml
+    qml/Phosphor/Bar/Panels/DetailNotice.qml
+    qml/Phosphor/Bar/Panels/DetailSwitch.qml
     qml/Phosphor/Bar/Panels/NetworkPanel.qml
     qml/Phosphor/Bar/Panels/BluetoothPanel.qml
     qml/Phosphor/Bar/Panels/AudioPanel.qml

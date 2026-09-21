@@ -9,7 +9,7 @@ import QtQuick.Controls.Basic as Basic
 import Phosphor.Theme
 import Phosphor.Widgets
 
-Item {
+FocusScope {
     id: root
 
     // Tile source: an object with createTile(id, parent) -> Item.
@@ -18,6 +18,10 @@ Item {
     // the registry (and, later, from the user's tile arrangement); a test
     // passes a literal list.
     property list<string> tileIds: []
+    // Full detail surfaces are supplied by the shell, keeping this module
+    // independent of the bar's service-bound panels.
+    property var detailPanels: ({})
+    readonly property alias detailPanelId: priv.detailPanelId
     // Detail view currently open, or "" for the grid. Read-only for
     // consumers; drive it through openDetail() / closeDetail().
     readonly property alias detailTileId: priv.detailTileId
@@ -64,12 +68,12 @@ Item {
         }
     }
 
-    implicitWidth: root.panelWidth
+    implicitWidth: detailLoader.active ? 410 : root.panelWidth
     // The taller of the two views, not just the grid. A host that sizes
     // itself to this would otherwise clip a detail view taller than the
     // grid behind it, and neither view scrolls or clips, so the overflow
     // would simply be cut off.
-    implicitHeight: Math.max(main.implicitHeight, detail.implicitHeight) + 2 * (Appearance.padding + 1)
+    implicitHeight: detailLoader.active ? (detailLoader.status === Loader.Ready ? detailLoader.item.implicitHeight : 760) : Math.max(main.implicitHeight, detail.implicitHeight) + 2 * (Appearance.padding + 1)
 
     /// Where this surface sits along the screen, 0..1, for the stroke and
     /// the top band. Set by the host from the chip that opened it.
@@ -78,11 +82,13 @@ Item {
 
     ShellSurface {
         id: ground
+        visible: !detailLoader.active
         property bool shaderAnchor: true
         anchors.fill: parent
         railT: root.railT
     }
     DecorationSlot {
+        visible: !detailLoader.active
         anchors.fill: parent
         component: root.decoration
         contentItem: ground
@@ -95,6 +101,7 @@ Item {
         id: priv
 
         property string detailTileId: ""
+        property string detailPanelId: ""
         // Rebuilds are suppressed until construction finishes. Setting
         // `provider` and `tileIds` as initial properties fires both change
         // handlers during initialization, and Component.onCompleted then
@@ -129,6 +136,8 @@ Item {
         if (priv.detailTileId !== "")
             root.closeDetail();
         priv.detailTileId = tileId;
+        const panelId = priv.tiles[tileId].detailPanelId ?? "";
+        priv.detailPanelId = root.detailPanels[panelId] ? panelId : "";
         root.detailOpened(tileId);
         return true;
     }
@@ -140,7 +149,9 @@ Item {
             return;
         const closing = priv.detailTileId;
         priv.detailTileId = "";
+        priv.detailPanelId = "";
         root.detailClosed(closing);
+        priv.tiles[closing]?.forceActiveFocus();
     }
 
     // Rebuild every tile from the current provider + tileIds. Called
@@ -217,7 +228,7 @@ Item {
                     // in the same place.
                     const panelId = item.detailPanelId === undefined ? "" : item.detailPanelId;
                     item.detailRequested.connect(function () {
-                        if (panelId !== "")
+                        if (panelId !== "" && !root.detailPanels[panelId])
                             root.panelRequested(panelId);
                         else
                             root.openDetail(id);
@@ -465,12 +476,34 @@ Item {
         anchors.fill: parent
         anchors.margins: Appearance.padding + 1
         tileId: priv.detailTileId
-        open: priv.detailTileId !== ""
+        open: priv.detailTileId !== "" && priv.detailPanelId === ""
         // Fed from the tile being drilled into. Without these the panel
         // opened blank and untitled over a hidden grid, which is a dead end
         // the user has to back out of.
         title: root._detailTile ? (root._detailTile.detailTitle ?? "") : ""
         contentComponent: root._detailTile ? (root._detailTile.detailContent ?? null) : null
         onDismissed: root.closeDetail()
+    }
+
+    Loader {
+        id: detailLoader
+        objectName: "quickDetailLoader"
+        anchors.fill: parent
+        active: priv.detailPanelId !== ""
+        sourceComponent: root.detailPanels[priv.detailPanelId] ?? null
+        onLoaded: {
+            item.embedded = true;
+            item.railT = Qt.binding(() => root.railT);
+            item.forceActiveFocus();
+        }
+    }
+    Connections {
+        target: detailLoader.status === Loader.Ready ? detailLoader.item : null
+        function onBackRequested(): void {
+            root.closeDetail();
+        }
+        function onCloseRequested(): void {
+            root.closeRequested();
+        }
     }
 }

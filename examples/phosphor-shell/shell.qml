@@ -199,27 +199,13 @@ Item {
             // adding rails means raising paneDepth to match, since the
             // surface reservation cannot grow after materialization.
             paneContent: Component {
-                ControlCenter {
+                QuickSettingsSurface {
                     decoration: ShellChrome.decorationComponent
-                    MprisHost {
-                        id: controlsMpris
-                    }
-                    mediaPlayer: controlsMpris.playerCount > 0 ? controlsMpris.playerAt(0) : null
-                    UPowerHost {
-                        id: controlsPower
-                    }
-                    focusEnabled: NotificationRegistry.doNotDisturb
-                    focusAvailable: NotificationRegistry.serverActive
-                    nightLightEnabled: QuickSettings.nightLightEnabled
-                    nightLightAvailable: QuickSettings.nightLightAvailable
-                    batterySummary: controlsPower.displayDevice && controlsPower.displayDevice.isPresent ? Math.round(controlsPower.displayDevice.percentage) + "%" : ""
-                    powerSummary: QuickSettings.powerProfile === "balanced" ? qsTr("Balanced power") : QuickSettings.powerProfile === "power-saver" ? qsTr("Power saver") : QuickSettings.powerProfile === "performance" ? qsTr("Performance") : ""
-                    notificationSummary: NotificationRegistry.unreadCount ? qsTr("%1 unread notifications").arg(NotificationRegistry.unreadCount) : qsTr("No pending notifications")
-                    onFocusToggled: NotificationRegistry.doNotDisturb = !NotificationRegistry.doNotDisturb
-                    onNightLightToggled: QuickSettings.toggleNightLight()
                     onCloseRequested: Popouts.close(Popouts.handleFor("control-center"))
-                    provider: ControlCenterRegistry
-                    tileIds: ControlCenterRegistry.tileIds.filter(id => id !== "idle")
+                    onPanelRequested: panelId => {
+                        Popouts.close(Popouts.handleFor("control-center"));
+                        root.toggleWidgetPanel(panelId, root._lastPanelSource);
+                    }
                 }
             }
         }
@@ -322,33 +308,9 @@ Item {
     Component {
         id: paneComponent
 
-        ControlCenter {
+        QuickSettingsSurface {
             decoration: ShellChrome.decorationComponent
-            MprisHost {
-                id: controlsMpris
-            }
-            mediaPlayer: controlsMpris.playerCount > 0 ? controlsMpris.playerAt(0) : null
-            UPowerHost {
-                id: controlsPower
-            }
-            focusEnabled: NotificationRegistry.doNotDisturb
-            focusAvailable: NotificationRegistry.serverActive
-            nightLightEnabled: QuickSettings.nightLightEnabled
-            nightLightAvailable: QuickSettings.nightLightAvailable
-            batterySummary: controlsPower.displayDevice && controlsPower.displayDevice.isPresent ? Math.round(controlsPower.displayDevice.percentage) + "%" : ""
-            powerSummary: QuickSettings.powerProfile === "balanced" ? qsTr("Balanced power") : QuickSettings.powerProfile === "power-saver" ? qsTr("Power saver") : QuickSettings.powerProfile === "performance" ? qsTr("Performance") : ""
-            notificationSummary: NotificationRegistry.unreadCount ? qsTr("%1 unread notifications").arg(NotificationRegistry.unreadCount) : qsTr("No pending notifications")
-            onFocusToggled: NotificationRegistry.doNotDisturb = !NotificationRegistry.doNotDisturb
-            onNightLightToggled: QuickSettings.toggleNightLight()
             onCloseRequested: Popouts.close(Popouts.handleFor("control-center"))
-            provider: ControlCenterRegistry
-            tileIds: ControlCenterRegistry.tileIds.filter(id => id !== "idle")
-            // A card drilling in opens the bar panel that card names, which
-            // is the same surface its chip on the bar opens. The control
-            // center closes first: two Cooperative popouts in one scope
-            // would otherwise have the arbiter close this one anyway, and
-            // doing it here makes the hand-off deliberate rather than a
-            // side effect of arbitration.
             onPanelRequested: panelId => {
                 Popouts.close(Popouts.handleFor("control-center"));
                 root.toggleWidgetPanel(panelId, root._lastPanelSource);
@@ -548,7 +510,13 @@ Item {
     Component {
         id: networkPanelComponent
 
-        NetworkPanel {}
+        NetworkPanel {
+            onBackRequested: {
+                Popouts.close(Popouts.handleFor("bar.panel.network"));
+                root.toggleControlCenter(root._lastPanelSource);
+            }
+            onCloseRequested: Popouts.close(Popouts.handleFor("bar.panel.network"))
+        }
     }
 
     Component {

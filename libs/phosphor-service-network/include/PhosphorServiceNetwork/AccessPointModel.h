@@ -49,6 +49,7 @@ public:
     [[nodiscard]] int rowCount(const QModelIndex& parent = {}) const override;
     [[nodiscard]] QVariant data(const QModelIndex& index, int role) const override;
     [[nodiscard]] QHash<int, QByteArray> roleNames() const override;
+    Q_INVOKABLE PhosphorServiceNetwork::AccessPoint* accessPointAt(int index) const;
 
 Q_SIGNALS:
     void deviceChanged();

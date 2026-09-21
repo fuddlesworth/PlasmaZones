@@ -1,228 +1,487 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// Phosphor.Bar.NetworkPanel, the network chip's panel.
-//
-// The Wi-Fi radio switch in the header, then every access point the first
-// Wi-Fi device can see, strongest first, with a passphrase field for a
-// secured network. Owns its own NetworkHost for the reason NetworkTile
-// documents: NetworkHost is a thin view over NetworkManager's D-Bus
-// state, so a second one costs a set of property mirrors, not a second
-// connection's worth of traffic.
-//
-// The radio switch governs WIRELESS specifically, never NetworkManager's
-// global networking switch: flipping the global one from a control
-// labelled Wi-Fi would take an ethernet link down with it.
-//
-// Every write here is fire-and-forget. NetworkManager echoes the result
-// back through the device's state and the manager's connectivity, so the
-// panel shows what actually happened rather than what was asked for, and a
-// refused connection simply leaves the row where it was.
-
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls.Basic as Basic
 import Phosphor.Theme
 import Phosphor.Widgets
 import Phosphor.Service.Network
 
-PanelFrame {
+QuickDetailFrame {
     id: root
-
-    title: qsTr("Network")
-    iconName: root._wifiDevice ? "network-wireless" : "network-wired"
-    subtitle: {
-        if (!host.networkingEnabled)
-            return qsTr("Networking is off");
-        if (!host.wirelessEnabled)
-            return qsTr("Wi-Fi is off");
-        if (host.primaryConnectionType.length === 0)
-            return qsTr("Not connected");
-        return host.primaryConnectionType.includes("wireless") ? qsTr("Connected over Wi-Fi") : qsTr("Connected over %1").arg(host.primaryConnectionType);
-    }
-
-    NetworkHost {
-        id: host
-    }
-
-    // The first managed Wi-Fi device. NM exposes no "primary" wireless
-    // device, and a machine with two radios is rare enough that picking the
-    // first is the honest simplification; the panel says which interface it
-    // is acting on so a two-radio box is not silently confusing.
-    //
-    // Recomputed on deviceCount, which NM emits per add AND per remove, so
-    // a count-neutral replacement (remove then add) notifies twice and this
-    // re-resolves each time rather than holding a freed device.
-    readonly property NetworkDevice _wifiDevice: {
-        // Referenced so the binding re-evaluates when devices come and go;
-        // deviceAt() is a plain call and tracks no dependency of its own.
-        const n = host.deviceCount;
-        for (let i = 0; i < n; ++i) {
-            const device = host.deviceAt(i);
+    title: qsTr("Wi-Fi")
+    footerText: root.wifiDevice ? root.wifiDevice.interfaceName : qsTr("Your connection")
+    property var serviceHost: host
+    property var pointModel: accessPoints
+    property var profileModel: profiles
+    property var wifiDevice: {
+        for (let i = 0; i < root.serviceHost.deviceCount; ++i) {
+            const device = root.serviceHost.deviceAt(i);
             if (device && device.deviceType === NetworkDevice.Wifi && device.managed)
                 return device;
         }
         return null;
     }
-
-    // The access point the panel is asking a passphrase for, or null. One
-    // at a time: a second press elsewhere replaces it, which is also how
-    // the field is cancelled.
-    property var _pendingAp: null
-
+    readonly property bool radioAvailable: serviceHost.available && serviceHost.networkingEnabled && serviceHost.wirelessHardwareEnabled && wifiDevice !== null
+    readonly property bool powered: radioAvailable && serviceHost.wirelessEnabled
+    readonly property var activeAp: {
+        const path = root.wifiDevice ? root.wifiDevice.activeAccessPointPath : "";
+        for (let i = 0; i < root.pointModel.count; ++i) {
+            const ap = root.pointModel.accessPointAt(i);
+            if (ap && ap.dbusPath === path)
+                return ap;
+        }
+        return null;
+    }
+    readonly property bool connected: powered && wifiDevice.state === NetworkDevice.Activated && activeAp !== null
+    readonly property bool portal: serviceHost.connectivity === NetworkHost.Portal
+    readonly property bool limited: serviceHost.connectivity === NetworkHost.Limited || serviceHost.connectivity === NetworkHost.NoConnectivity
+    readonly property var availablePoints: {
+        const networks = new Map();
+        for (let i = 0; i < root.pointModel.count; ++i) {
+            const ap = root.pointModel.accessPointAt(i);
+            if (!ap || (root.connected && root.activeAp && ap.ssid === root.activeAp.ssid && ap.secured === root.activeAp.secured))
+                continue;
+            const key = ap.ssid + "\u0000" + ap.security;
+            const previous = networks.get(key);
+            if (!previous || ap.strength > previous.strength)
+                networks.set(key, ap);
+        }
+        return Array.from(networks.values()).sort((a, b) => b.strength - a.strength);
+    }
+    property var pendingAp: null
+    property bool connecting: false
+    property bool requestOutstanding: false
+    property bool scanning: false
+    property double scanStartedAt: -1
+    property bool detailsOpen: false
+    property bool showPassword: false
+    property bool autoConnect: true
+    property string errorText: ""
+    property string notice: ""
+    readonly property bool editing: pendingAp !== null && !connecting
+    cancelTask: root.cancel
+    NetworkHost {
+        id: host
+    }
     AccessPointModel {
         id: accessPoints
-
-        device: root._wifiDevice
+        device: root.serviceHost === host ? root.wifiDevice : null
+    }
+    NetworkConnectionModel {
+        id: profiles
     }
 
-    // A scan on open, so the list is current rather than whatever the
-    // daemon last happened to cache. Fire-and-forget; rows arrive as the
-    // daemon reports them.
-    Component.onCompleted: {
-        if (host.wirelessEnabled)
-            host.scanWifi();
+    function savedProfile(ap): var {
+        if (!ap)
+            return null;
+        for (let i = 0; i < root.profileModel.count; ++i) {
+            const profile = root.profileModel.connectionAt(i);
+            if (profile && profile.connectionType === "802-11-wireless" && profile.ssid === ap.ssid && (profile.security !== "") === ap.secured)
+                return profile;
+        }
+        return null;
     }
-
+    function scan(): void {
+        if (!root.powered || root.connecting)
+            return;
+        root.scanning = true;
+        root.scanStartedAt = root.wifiDevice.lastScan;
+        root.errorText = "";
+        scanDeadline.restart();
+        root.serviceHost.scanWifi();
+    }
+    function cancel(): bool {
+        if (!root.pendingAp && !root.connecting)
+            return false;
+        if (root.connecting && root.wifiDevice)
+            root.serviceHost.disconnectDevice(root.wifiDevice);
+        connectionDeadline.stop();
+        root.connecting = false;
+        root.pendingAp = null;
+        root.showPassword = false;
+        password.clear();
+        root.errorText = "";
+        return true;
+    }
+    function choose(ap): void {
+        if (root.connecting || root.requestOutstanding || !ap)
+            return;
+        root.errorText = "";
+        root.notice = "";
+        root.pendingAp = ap;
+        root.showPassword = false;
+        password.clear();
+        const profile = root.savedProfile(ap);
+        root.autoConnect = profile ? profile.autoConnect : true;
+        if (profile || !ap.secured) {
+            root.connectNetwork(profile);
+        } else if (ap.security === "WEP" || ap.security === "802.1X" || ap.ssid === "") {
+            root.pendingAp = null;
+            root.errorText = qsTr("This network needs additional configuration in your network manager.");
+        } else {
+            password.forceActiveFocus();
+        }
+    }
+    function connectNetwork(profile): void {
+        if (!root.pendingAp || !root.wifiDevice || root.requestOutstanding)
+            return;
+        root.connecting = true;
+        root.requestOutstanding = true;
+        root.errorText = "";
+        connectionDeadline.restart();
+        if (profile)
+            root.serviceHost.activateConnection(profile, root.wifiDevice);
+        else
+            root.serviceHost.connectToAccessPoint(root.wifiDevice, root.pendingAp, password.text, root.autoConnect, root.savedProfile(root.pendingAp));
+        password.clear();
+        root.showPassword = false;
+    }
+    function updateConnection(): void {
+        if (!root.connecting || !root.wifiDevice)
+            return;
+        if (root.connected && root.activeAp === root.pendingAp) {
+            connectionDeadline.stop();
+            root.connecting = false;
+            root.pendingAp = null;
+            root.notice = qsTr("Connected to %1.").arg(root.activeAp.ssid);
+        } else if (root.wifiDevice.state === NetworkDevice.Failed) {
+            connectionDeadline.stop();
+            const passwordError = root.wifiDevice.state === NetworkDevice.NeedAuth || root.wifiDevice.stateReason === 7;
+            root.connecting = false;
+            root.serviceHost.disconnectDevice(root.wifiDevice);
+            root.errorText = passwordError ? qsTr("That password didn’t work. Check it and try again.") : qsTr("Couldn’t connect. Check that the network is in range and try again.");
+            password.forceActiveFocus();
+        }
+    }
+    function networkMeta(ap): string {
+        if (!ap)
+            return "";
+        const band = ap.frequency >= 5925 ? qsTr("6 GHz") : ap.frequency >= 4900 ? qsTr("5 GHz") : qsTr("2.4 GHz");
+        const signal = ap.strength >= 60 ? qsTr("Strong signal") : ap.strength >= 30 ? qsTr("Fair signal") : qsTr("Weak signal");
+        return qsTr("%1 · %2 · %3").arg(band).arg(signal).arg(ap.secured ? ap.security : qsTr("Open network"));
+    }
+    onPoweredChanged: {
+        if (root.powered)
+            root.scan();
+        else {
+            root.cancel();
+            scanDeadline.stop();
+            root.scanning = false;
+        }
+    }
+    onWifiDeviceChanged: {
+        root.cancel();
+        if (root.powered)
+            root.scan();
+    }
+    onPendingApChanged: if (!root.pendingAp && root.connecting)
+        root.cancel()
+    Component.onDestruction: root.cancel()
+    onActiveApChanged: root.updateConnection()
+    Component.onCompleted: if (root.powered)
+        root.scan()
+    Connections {
+        target: root.wifiDevice
+        function onStateChanged(): void {
+            root.updateConnection();
+        }
+        function onDetailsChanged(): void {
+            if (root.scanning && root.wifiDevice.lastScan !== root.scanStartedAt) {
+                root.scanning = false;
+                scanDeadline.stop();
+            }
+        }
+    }
+    Connections {
+        target: root.serviceHost
+        function onOperationFinished(operation: string, path: string, errorName: string): void {
+            if (operation === "connectToAccessPoint" || operation === "activateConnection") {
+                root.requestOutstanding = false;
+                if (errorName && root.connecting) {
+                    root.connecting = false;
+                    connectionDeadline.stop();
+                    root.errorText = errorName.includes("NotAuthorized") || errorName.includes("PermissionDenied") ? qsTr("Permission was denied. Check your network permissions and try again.") : qsTr("Couldn’t connect. Check the password and try again.");
+                    password.forceActiveFocus();
+                }
+            } else if (operation === "RequestScan" && errorName) {
+                root.scanning = false;
+                scanDeadline.stop();
+                root.errorText = qsTr("Couldn’t search for networks. Try again in a moment.");
+            } else if (errorName) {
+                root.errorText = qsTr("The network request was refused. Check your permissions and try again.");
+            }
+        }
+    }
+    Timer {
+        id: scanDeadline
+        interval: 10000
+        onTriggered: root.scanning = false
+    }
+    Timer {
+        id: connectionDeadline
+        interval: 60000
+        onTriggered: {
+            root.connecting = false;
+            root.serviceHost.disconnectDevice(root.wifiDevice);
+            root.errorText = qsTr("The connection timed out. Check the network and try again.");
+        }
+    }
     headerAction: Component {
-        PanelToggle {
-            subject: qsTr("Wi-Fi")
-            checked: host.wirelessEnabled
-            // Networking disabled wholesale (airplane mode, or NM stopped)
-            // leaves no radio to turn on, so the control goes inert rather
-            // than offering a write NetworkManager will refuse.
-            available: host.networkingEnabled
-            onToggled: {
-                // Captured BEFORE the write. setWirelessEnabled issues an
-                // async Properties.Set and the cached value only moves when
-                // the daemon echoes it back, so reading the property again
-                // after the assignment still returns the old state — the
-                // trap that would make this scan on the way down.
-                const turningOn = !host.wirelessEnabled;
-                host.wirelessEnabled = turningOn;
-                if (turningOn)
-                    host.scanWifi();
+        DetailSwitch {
+            on: root.serviceHost.wirelessEnabled
+            enabled: root.radioAvailable
+            Accessible.name: qsTr("Wi-Fi")
+            onClicked: root.serviceHost.wirelessEnabled = !root.serviceHost.wirelessEnabled
+        }
+    }
+    DetailNotice {
+        text: root.errorText
+        error: true
+    }
+    DetailNotice {
+        text: root.notice
+    }
+    DetailEmptyState {
+        visible: !root.powered
+        iconName: "network-wireless"
+        title: !root.radioAvailable ? qsTr("Wi-Fi isn’t available") : qsTr("Wi-Fi is off")
+        description: !root.serviceHost.available ? qsTr("NetworkManager isn’t available. Try reconnecting to the service.") : !root.serviceHost.wirelessHardwareEnabled ? qsTr("The wireless adapter is blocked. Check your hardware wireless switch.") : !root.serviceHost.networkingEnabled ? qsTr("Networking is disabled. Enable it in Network Settings.") : !root.wifiDevice ? qsTr("Connect a wireless adapter, then try again.") : qsTr("Turn it on to discover networks nearby.")
+        actionText: root.radioAvailable ? qsTr("Turn on Wi-Fi") : qsTr("Try again")
+        onActivated: root.radioAvailable ? root.serviceHost.wirelessEnabled = true : root.serviceHost.refresh()
+    }
+    DetailCard {
+        visible: root.connected
+        title: root.activeAp ? root.activeAp.ssid : ""
+        description: root.portal ? qsTr("Sign in to get internet access.") : root.limited ? qsTr("Connected, with limited internet access.") : qsTr("You’re online. Make yourself at home.")
+        iconName: "network-wireless"
+        status: root.portal ? qsTr("Action needed") : root.limited ? qsTr("Limited access") : qsTr("Connected")
+        compact: root.pendingAp !== null
+        DetailText {
+            visible: !root.pendingAp
+            width: parent.width
+            text: root.networkMeta(root.activeAp)
+            size: 10
+            muted: true
+        }
+        Rectangle {
+            visible: !root.pendingAp
+            width: parent.width
+            height: 1
+            color: Appearance.outline
+        }
+        RowLayout {
+            visible: !root.pendingAp
+            width: parent.width
+            ShellButton {
+                text: root.detailsOpen ? qsTr("Hide details") : qsTr("Details")
+                iconName: "arrow-down"
+                flat: true
+                foreground: Appearance.muted
+                onClicked: root.detailsOpen = !root.detailsOpen
+            }
+            Item {
+                Layout.fillWidth: true
+            }
+            ShellButton {
+                text: qsTr("Disconnect")
+                flat: true
+                foreground: Appearance.muted
+                onClicked: root.serviceHost.disconnectDevice(root.wifiDevice)
+            }
+        }
+        GridLayout {
+            visible: root.detailsOpen && !root.pendingAp
+            width: parent.width
+            columns: 2
+            rowSpacing: 9
+            DetailText {
+                text: qsTr("IP address")
+                muted: true
+                size: 11
+            }
+            DetailText {
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignRight
+                text: root.wifiDevice && root.wifiDevice.ipAddress ? root.wifiDevice.ipAddress : qsTr("Unavailable")
+                size: 11
+            }
+            DetailText {
+                text: qsTr("Link speed")
+                muted: true
+                size: 11
+            }
+            DetailText {
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignRight
+                text: root.wifiDevice && root.wifiDevice.bitrate ? qsTr("%1 Mb/s").arg(Math.round(root.wifiDevice.bitrate / 1000)) : qsTr("Unavailable")
+                size: 11
+            }
+            DetailText {
+                text: qsTr("Auto-connect")
+                muted: true
+                size: 11
+            }
+            DetailText {
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignRight
+                text: root.savedProfile(root.activeAp)?.autoConnect ? qsTr("On") : qsTr("Off")
+                size: 11
+            }
+        }
+        ShellButton {
+            visible: root.portal && !root.pendingAp
+            text: qsTr("Open sign-in")
+            highlighted: true
+            onClicked: {
+                const uri = root.serviceHost.connectivityCheckUri;
+                if (/^https?:\/\//i.test(uri))
+                    Qt.openUrlExternally(uri);
+                else
+                    root.errorText = qsTr("Open your browser and visit an HTTP page to sign in to this network.");
             }
         }
     }
-
-    Text {
-        width: parent.width
-        visible: accessPoints.count === 0
-        text: {
-            if (!root._wifiDevice)
-                return qsTr("No Wi-Fi device");
-            if (!host.wirelessEnabled)
-                return qsTr("Turn Wi-Fi on to see networks");
-            return qsTr("Looking for networks…");
+    DetailCard {
+        visible: root.pendingAp !== null
+        tone: 1
+        titleSize: 16
+        title: root.connecting ? qsTr("Connecting to %1").arg(root.pendingAp?.ssid ?? "") : qsTr("Connect to %1").arg(root.pendingAp?.ssid ?? "")
+        description: root.connecting ? qsTr("Checking the connection. This may take a moment.") : qsTr("Enter the password for this network.")
+        Basic.BusyIndicator {
+            visible: root.connecting
+            running: visible && Appearance.motion
+            width: 28
+            height: 28
         }
-        color: Appearance.muted
-        font.pixelSize: Tokens.font_size_body_s
-        font.family: Tokens.font_family_ui
-        wrapMode: Text.Wrap
-        topPadding: Tokens.spacing_s
-        bottomPadding: Tokens.spacing_s
-    }
-
-    Repeater {
-        model: accessPoints
-
-        delegate: Column {
-            id: apEntry
-
-            required property var accessPoint
-            required property string ssid
-            required property int strength
-            required property bool secured
-
-            width: parent ? parent.width : 0
-            spacing: 0
-
-            // The device carries the association, so "connected" is the
-            // device naming this access point's object path as its active
-            // one. Matched on the PATH, not the SSID: several access points
-            // in a mesh share one SSID, and matching by name would light
-            // every one of them.
-            readonly property bool _connected: root._wifiDevice !== null && apEntry.accessPoint !== null && root._wifiDevice.activeAccessPointPath !== "" && root._wifiDevice.activeAccessPointPath === apEntry.accessPoint.dbusPath
-
-            PanelRow {
-                width: parent.width
-                // The four-bar family, so the row's glyph carries the
-                // strength as well as the trailing readout does.
-                iconName: {
-                    if (apEntry.strength >= 75)
-                        return "network-wireless-signal-excellent";
-                    if (apEntry.strength >= 50)
-                        return "network-wireless-signal-good";
-                    if (apEntry.strength >= 25)
-                        return "network-wireless-signal-ok";
-                    return "network-wireless-signal-weak";
-                }
-                label: apEntry.ssid.length > 0 ? apEntry.ssid : qsTr("Hidden network")
-                sublabel: apEntry.secured ? qsTr("Secured") : qsTr("Open")
-                trailingText: apEntry.strength + "%"
-                current: apEntry._connected
-                actionName: apEntry._connected ? qsTr("Connected to %1").arg(apEntry.ssid) : qsTr("Connect to %1").arg(apEntry.ssid)
-                onClicked: root._press(apEntry.accessPoint, apEntry.secured)
+        Column {
+            visible: root.editing
+            width: parent.width
+            spacing: 8
+            DetailText {
+                text: qsTr("Password")
+                size: 11
             }
-
-            // The passphrase field, shown under the row it belongs to so it
-            // is unambiguous which network is being joined. Only ever one is
-            // open, since _pendingAp holds a single access point.
             RowLayout {
-                id: passphraseRow
-
                 width: parent.width
-                visible: root._pendingAp === apEntry.accessPoint
-                spacing: Tokens.spacing_xs
-
-                PhosphorTextField {
-                    id: passphrase
-
+                spacing: 4
+                Basic.TextField {
+                    id: password
+                    objectName: "wifiPassword"
                     Layout.fillWidth: true
-                    placeholderText: qsTr("Password")
-                    echoMode: TextInput.Password
-                    onAccepted: root._connect(apEntry.accessPoint, passphrase.text)
+                    implicitHeight: 40
+                    echoMode: root.showPassword ? TextInput.Normal : TextInput.Password
+                    inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoPredictiveText
+                    maximumLength: 64
+                    color: Appearance.text
+                    font.family: Tokens.font_family_ui
+                    font.pixelSize: Math.round(14 * Appearance.textScale)
+                    Accessible.name: qsTr("Network password")
+                    background: Rectangle {
+                        radius: 8
+                        color: Appearance.recess
+                        border.width: 1
+                        border.color: password.activeFocus ? Appearance.stops[1] : Appearance.outline
+                    }
+                    onAccepted: if (connectButton.enabled)
+                        root.connectNetwork(null)
                 }
-
-                // The field takes focus as it appears, so joining a network
-                // is press-then-type with nothing in between. Bound to the
-                // ROW's visibility rather than the field's own: the field is
-                // inside the row, so its `visible` reads as effective and
-                // would already be false here for the same reason.
-                Connections {
-                    target: passphraseRow
-
-                    function onVisibleChanged(): void {
-                        if (passphraseRow.visible)
-                            passphrase.forceActiveFocus();
+                ShellButton {
+                    iconName: "view-visible"
+                    label: root.showPassword ? qsTr("Hide password") : qsTr("Show password")
+                    onClicked: root.showPassword = !root.showPassword
+                }
+            }
+            Basic.CheckBox {
+                id: autoConnectCheck
+                indicator: Rectangle {
+                    x: 2
+                    y: (parent.height - height) / 2
+                    width: 16
+                    height: 16
+                    radius: 3
+                    color: autoConnectCheck.checked ? Qt.alpha(Appearance.stops[1], 0.25) : Appearance.recess
+                    border.width: 1
+                    border.color: autoConnectCheck.visualFocus ? Appearance.text : Appearance.outline
+                    ShellIcon {
+                        anchors.centerIn: parent
+                        width: 12
+                        height: 12
+                        visible: autoConnectCheck.checked
+                        source: "checkmark"
+                        isMask: true
+                        color: Appearance.text
                     }
                 }
-
-                PhosphorButton {
-                    text: qsTr("Join")
-                    // Outlined, not Filled: R1 keeps colour out of a button
-                    // background, and an outline is a stroke.
-                    variant: PhosphorButton.Outlined
-                    onClicked: root._connect(apEntry.accessPoint, passphrase.text)
+                checked: root.autoConnect
+                text: qsTr("Connect automatically")
+                onToggled: root.autoConnect = checked
+                contentItem: DetailText {
+                    text: parent.text
+                    size: 11
+                    muted: true
+                    leftPadding: 28
+                    verticalAlignment: Text.AlignVCenter
                 }
             }
         }
-    }
-
-    function _press(accessPoint, secured) {
-        if (!root._wifiDevice || !accessPoint)
-            return;
-        if (!secured) {
-            root._connect(accessPoint, "");
-            return;
+        RowLayout {
+            width: parent.width
+            Item {
+                Layout.fillWidth: true
+            }
+            ShellButton {
+                text: qsTr("Cancel")
+                onClicked: root.cancel()
+            }
+            ShellButton {
+                id: connectButton
+                objectName: "wifiConnect"
+                visible: !root.connecting
+                text: qsTr("Connect")
+                highlighted: true
+                enabled: root.editing && !root.requestOutstanding && ((password.length >= 8 && password.length <= 63) || /^[0-9a-fA-F]{64}$/.test(password.text))
+                onClicked: root.connectNetwork(null)
+            }
         }
-        // Toggle: pressing the open row again puts the field away.
-        root._pendingAp = root._pendingAp === accessPoint ? null : accessPoint;
     }
-
-    function _connect(accessPoint, pass) {
-        if (!root._wifiDevice || !accessPoint)
-            return;
-        host.connectToAccessPoint(root._wifiDevice, accessPoint, pass);
-        root._pendingAp = null;
+    DetailSectionHeading {
+        visible: root.powered
+        title: qsTr("Available networks")
+        actionText: root.scanning ? qsTr("Searching…") : qsTr("Refresh")
+        actionEnabled: !root.scanning && !root.connecting
+        onActivated: root.scan()
+    }
+    DetailList {
+        visible: root.powered && root.availablePoints.length > 0
+        Repeater {
+            model: root.availablePoints
+            delegate: DetailDeviceRow {
+                required property var modelData
+                grouped: true
+                title: modelData.ssid || qsTr("Hidden network")
+                subtitle: root.networkMeta(modelData) + (root.savedProfile(modelData) ? qsTr(" · Saved") : "")
+                iconName: modelData.strength >= 60 ? "network-wireless-signal-excellent" : "network-wireless-signal-ok"
+                selected: root.pendingAp === modelData
+                trailingIcon: modelData.secured ? "object-locked-symbolic" : "network-connect"
+                enabled: !root.connecting && !root.requestOutstanding
+                onClicked: root.choose(modelData)
+            }
+        }
+    }
+    DetailEmptyState {
+        visible: root.powered && root.availablePoints.length === 0 && !root.scanning
+        title: qsTr("No networks found")
+        description: qsTr("Move closer to your router or search again.")
+        iconName: "network-wireless"
+        actionText: qsTr("Search again")
+        onActivated: root.scan()
+    }
+    DetailText {
+        visible: root.powered
+        width: parent.width
+        text: qsTr("Secured networks keep your connection private.")
+        size: 10
+        muted: true
     }
 }

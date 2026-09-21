@@ -24,6 +24,9 @@ class PHOSPHORSERVICENETWORK_EXPORT NetworkConnection : public QObject
     Q_PROPERTY(QString id READ id NOTIFY idChanged)
     Q_PROPERTY(QString uuid READ uuid NOTIFY uuidChanged)
     Q_PROPERTY(QString connectionType READ connectionType NOTIFY connectionTypeChanged)
+    Q_PROPERTY(QString ssid READ ssid NOTIFY settingsChanged)
+    Q_PROPERTY(QString security READ security NOTIFY settingsChanged)
+    Q_PROPERTY(bool autoConnect READ autoConnect NOTIFY settingsChanged)
 
 public:
     explicit NetworkConnection(const QString& dbusPath, QObject* parent = nullptr);
@@ -35,11 +38,15 @@ public:
     /// The NetworkManager connection type token, e.g. "802-11-wireless",
     /// "802-3-ethernet", "vpn".
     [[nodiscard]] QString connectionType() const;
+    [[nodiscard]] QString ssid() const;
+    [[nodiscard]] QString security() const;
+    [[nodiscard]] bool autoConnect() const;
 
 Q_SIGNALS:
     void idChanged();
     void uuidChanged();
     void connectionTypeChanged();
+    void settingsChanged();
 
 private Q_SLOTS:
     void _q_onUpdated();

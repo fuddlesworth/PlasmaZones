@@ -23,6 +23,11 @@ class PHOSPHORSERVICENETWORK_EXPORT NetworkDevice : public QObject
     Q_DISABLE_COPY_MOVE(NetworkDevice)
 
     Q_PROPERTY(QString interfaceName READ interfaceName NOTIFY interfaceNameChanged)
+    Q_PROPERTY(QString dbusPath READ dbusPath CONSTANT)
+    Q_PROPERTY(uint stateReason READ stateReason NOTIFY detailsChanged)
+    Q_PROPERTY(uint bitrate READ bitrate NOTIFY detailsChanged)
+    Q_PROPERTY(QString ipAddress READ ipAddress NOTIFY detailsChanged)
+    Q_PROPERTY(qint64 lastScan READ lastScan NOTIFY detailsChanged)
     Q_PROPERTY(DeviceType deviceType READ deviceType NOTIFY deviceTypeChanged)
     Q_PROPERTY(DeviceState state READ state NOTIFY stateChanged)
     Q_PROPERTY(bool managed READ managed NOTIFY managedChanged)
@@ -102,6 +107,10 @@ public:
     [[nodiscard]] DeviceState state() const;
     [[nodiscard]] bool managed() const;
     [[nodiscard]] QString activeAccessPointPath() const;
+    [[nodiscard]] uint stateReason() const;
+    [[nodiscard]] uint bitrate() const;
+    [[nodiscard]] QString ipAddress() const;
+    [[nodiscard]] qint64 lastScan() const;
 
 Q_SIGNALS:
     void interfaceNameChanged();
@@ -109,8 +118,10 @@ Q_SIGNALS:
     void stateChanged();
     void managedChanged();
     void activeAccessPointPathChanged();
+    void detailsChanged();
 
 private Q_SLOTS:
+    void _q_onIpChanged(const QString& iface, const QVariantMap& changed, const QStringList& invalidated);
     void _q_onPropertiesChanged(const QString& iface, const QVariantMap& changed, const QStringList& invalidated);
 
 private:

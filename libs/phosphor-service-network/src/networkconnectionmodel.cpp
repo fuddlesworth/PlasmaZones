@@ -8,6 +8,7 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QLoggingCategory>
+#include <QDBusServiceWatcher>
 
 Q_LOGGING_CATEGORY(lcNetworkConnectionModel, "phosphor.service.network.connectionmodel")
 
@@ -36,12 +37,30 @@ NetworkConnectionModel::NetworkConnectionModel(QObject* parent)
     if (!newOk || !removedOk)
         qCWarning(lcNetworkConnectionModel) << "subscription failed: new=" << newOk << " removed=" << removedOk;
 
+    auto* serviceWatcher =
+        new QDBusServiceWatcher(QLatin1String(kService), m_bus, QDBusServiceWatcher::WatchForOwnerChange, this);
+    connect(serviceWatcher, &QDBusServiceWatcher::serviceOwnerChanged, this,
+            [this](const QString&, const QString&, const QString& owner) {
+                ++m_generation;
+                while (!m_rows.isEmpty())
+                    removeConnection(m_rows.constFirst()->dbusPath());
+                if (!owner.isEmpty())
+                    refresh();
+            });
+    refresh();
+}
+
+void NetworkConnectionModel::refresh()
+{
+    const auto generation = ++m_generation;
     PhosphorDBus::Client client(m_bus, QLatin1String(kService), QLatin1String(kSettingsPath),
                                 &lcNetworkConnectionModel());
     auto* watcher = new QDBusPendingCallWatcher(
         client.asyncCall(QLatin1String(kSettingsIface), QStringLiteral("ListConnections")), this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* call) {
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, generation](QDBusPendingCallWatcher* call) {
         call->deleteLater();
+        if (generation != m_generation)
+            return;
         const QDBusPendingReply<QList<QDBusObjectPath>> reply = *call;
         if (reply.isError()) {
             qCWarning(lcNetworkConnectionModel) << "ListConnections failed:" << reply.error().message();
@@ -151,6 +170,11 @@ void NetworkConnectionModel::_q_onNewConnection(const QDBusObjectPath& path)
 void NetworkConnectionModel::_q_onConnectionRemoved(const QDBusObjectPath& path)
 {
     removeConnection(path.path());
+}
+
+NetworkConnection* NetworkConnectionModel::connectionAt(int index) const
+{
+    return index >= 0 && index < m_rows.size() ? m_rows.at(index) : nullptr;
 }
 
 } // namespace PhosphorServiceNetwork
