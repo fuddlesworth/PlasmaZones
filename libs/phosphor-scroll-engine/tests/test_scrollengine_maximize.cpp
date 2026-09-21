@@ -175,6 +175,8 @@ private Q_SLOTS:
     void namedVerbTogglesBackOnASecondPress();
     void maximizeSurvivesAModeRoundTripWithoutItsRestoreSlot();
     void expellingFromAMaximizedColumnDoesNotMaximizeTheExpelledTile();
+    void aWindowAddressedMaximizeExpelsTheActiveTabAndMaximizesItAlone();
+    void theFocusedColumnShortcutStillMaximizesAWholeTabGroup();
     void verbReportsWhetherTheStripActuallyChanged();
     void maximizedToEdgesRoundTripsThroughTheBlob();
     void maximizedToEdgesTransfersOnAFuzzyAppIdClaim();
@@ -222,6 +224,58 @@ void TestScrollEngineMaximize::expellingFromAMaximizedColumnDoesNotMaximizeTheEx
     // behind is the expel verb's business and not this slot's; the defect was
     // the COUNT, and a size assertion catches it without pinning that choice.
     QCOMPARE(maximizedInBatch(tiled).size(), 1);
+}
+
+// A WINDOW-addressed maximize (the compositor interception's dispatch: a
+// titlebar click, or a client maximizing itself) is about that window, not its
+// tab group. Applied to the column it maximized every tab, and the state
+// outlived the window that asked: a game opened as a tab in its launcher's
+// column, maximized itself on the way to fullscreen, left the strip, and the
+// launcher stayed stretched across the output. The active tab is expelled
+// first, so only it ends up maximized.
+void TestScrollEngineMaximize::aWindowAddressedMaximizeExpelsTheActiveTabAndMaximizesItAlone()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
+    engine->consumeWindowIntoColumn(QStringLiteral("S1"));
+    engine->toggleColumnTabbed(QStringLiteral("S1"));
+    // The asking window is the strip's ACTIVE one, as a just-opened game or a
+    // clicked titlebar is.
+    engine->windowFocused(QStringLiteral("app|b"), QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+
+    QVERIFY(engine->toggleMaximizeToEdges(QStringLiteral("S1"), QStringLiteral("app|b")));
+    QCoreApplication::processEvents();
+
+    QCOMPARE(windowsInBatch(tiled), (QSet<QString>{QStringLiteral("app|a"), QStringLiteral("app|b")}));
+    QCOMPARE(maximizedInBatch(tiled), (QSet<QString>{QStringLiteral("app|b")}));
+}
+
+// The other half of the rule above: the focused-column shortcut is a COLUMN
+// verb, so it must go on maximizing a tab group whole. An expel added to the
+// wrong arm is the mutation this pins.
+void TestScrollEngineMaximize::theFocusedColumnShortcutStillMaximizesAWholeTabGroup()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
+    engine->consumeWindowIntoColumn(QStringLiteral("S1"));
+    engine->toggleColumnTabbed(QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+
+    QVERIFY(engine->toggleMaximizeToEdges(QStringLiteral("S1")));
+    QCoreApplication::processEvents();
+
+    QCOMPARE(maximizedInBatch(tiled), (QSet<QString>{QStringLiteral("app|a"), QStringLiteral("app|b")}));
 }
 
 void TestScrollEngineMaximize::flagRidesTilesTheUserCannotSee()

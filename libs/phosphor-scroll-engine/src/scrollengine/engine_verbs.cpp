@@ -373,6 +373,32 @@ bool ScrollEngine::toggleMaximizeToEdges(const QString& screenId, const QString&
             return false;
         }
         const ScrollLayoutParams params = layoutParamsForKey(key);
+        // A WINDOW-addressed maximize is about that window, not its tab group.
+        // This arm is the compositor interception's target: the window's own
+        // request, a titlebar click or a client maximizing itself. Applied to
+        // the column it maximized every tab in it, and the state outlived the
+        // window that asked. Seen live: a game opens as a tab in its launcher's
+        // column, maximizes itself on the way to fullscreen, then leaves the
+        // strip, and the launcher is left stretched across the output. So the
+        // asking tab is expelled into its own column first and THAT column is
+        // maximized. The focused-column shortcut (the empty-id arm below) still
+        // maximizes a tab group whole.
+        //
+        // Only on the way IN: an un-maximize must reach the column that holds
+        // the state. Only for the strip's ACTIVE window: the expel acts on the
+        // active tile and moves focus to the new column, which is right for the
+        // window the user is looking at and wrong for a background tab, whose
+        // request keeps the old column-wide behaviour rather than stealing
+        // focus. The "quiet named path" contract above is about exactly that.
+        if (const int ownerIdx = state->strip().columnOfWindow(canonicalId); ownerIdx >= 0) {
+            const Column& owner = state->strip().columns().at(ownerIdx);
+            if (owner.display == ColumnDisplay::Tabbed && owner.tiles.size() > 1 && !owner.maximizedToEdges
+                && state->strip().activeWindowId() == canonicalId) {
+                qCInfo(lcScrollEngine) << "toggleMaximizeToEdges: expelling" << canonicalId
+                                       << "from its tabbed column before maximizing it alone";
+                state->strip().expelWindowFromColumn(params);
+            }
+        }
         const bool changed = state->strip().toggleMaximizeToEdgesForWindow(canonicalId, params);
         // The RESOLVED rect, not just the flag: "did the column end up covering
         // the raw work area" is the question a maximize report actually needs
