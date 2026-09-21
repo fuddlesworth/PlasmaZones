@@ -497,6 +497,20 @@ void Daemon::connectDesktopActivity()
                     engine->pruneStatesForDesktop(removedPosition);
                     engine->renumberDesktopsAfterRemoval(removedPosition);
                 }
+                // The window registry's desktop numbers shift with them, AFTER
+                // the engines: nothing re-pushes a survivor's number (see
+                // WindowRegistry::renumberDesktops), and a span still naming
+                // the old number reads as "left its desktop", so the membership
+                // reconcile released every window the shift had just kept. The
+                // count may or may not be committed yet, so the range runs one
+                // past it, which covers the old top either way.
+                if (m_windowRegistry && m_virtualDesktopManager) {
+                    QHash<int, int> oldToNew;
+                    for (int d = removedPosition + 1; d <= m_virtualDesktopManager->desktopCount() + 1; ++d) {
+                        oldToNew.insert(d, d - 1);
+                    }
+                    m_windowRegistry->renumberDesktops(oldToNew);
+                }
                 // The daemon's own desktop-keyed memo moves with them. It is
                 // the window order a mode toggle re-seeds from, so leaving it
                 // on the old numbering would hand the desktop that inherits a

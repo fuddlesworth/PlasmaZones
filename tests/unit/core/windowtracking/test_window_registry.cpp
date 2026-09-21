@@ -823,6 +823,52 @@ private Q_SLOTS:
 
         QVERIFY(reg.isNull());
     }
+
+    // A desktop removed from the middle shifts every higher number down one,
+    // and nothing re-pushes a surviving window's number, so the registry has
+    // to move them itself and announce each move.
+    void renumberDesktops_shiftsSingleAndSpanNumbers_emitsPerChangedRecord()
+    {
+        WindowRegistry reg;
+        WindowMetadata below = make(QStringLiteral("kate"));
+        below.virtualDesktop = 1;
+        WindowMetadata above = make(QStringLiteral("konsole"));
+        above.virtualDesktop = 3;
+        WindowMetadata span = make(QStringLiteral("dolphin"));
+        span.virtualDesktop = 1;
+        span.virtualDesktops = {1, 3};
+        WindowMetadata sticky = make(QStringLiteral("plasmashell"));
+        sticky.virtualDesktop = 0;
+        reg.upsert(QStringLiteral("below"), below);
+        reg.upsert(QStringLiteral("above"), above);
+        reg.upsert(QStringLiteral("span"), span);
+        reg.upsert(QStringLiteral("sticky"), sticky);
+
+        QSignalSpy changed(&reg, &WindowRegistry::metadataChanged);
+        reg.renumberDesktops({{3, 2}});
+
+        QCOMPARE(reg.metadata(QStringLiteral("below"))->virtualDesktop, 1);
+        QCOMPARE(reg.metadata(QStringLiteral("above"))->virtualDesktop, 2);
+        QCOMPARE(reg.metadata(QStringLiteral("span"))->virtualDesktop, 1);
+        QCOMPARE(reg.metadata(QStringLiteral("span"))->virtualDesktops, (QList<int>{1, 2}));
+        QCOMPARE(reg.metadata(QStringLiteral("sticky"))->virtualDesktop, 0);
+        // Only the two records that actually moved are announced.
+        QCOMPARE(changed.count(), 2);
+    }
+
+    void renumberDesktops_emptyMapping_isNoop()
+    {
+        WindowRegistry reg;
+        WindowMetadata meta = make(QStringLiteral("kate"));
+        meta.virtualDesktop = 3;
+        reg.upsert(QStringLiteral("w"), meta);
+
+        QSignalSpy changed(&reg, &WindowRegistry::metadataChanged);
+        reg.renumberDesktops({});
+
+        QCOMPARE(reg.metadata(QStringLiteral("w"))->virtualDesktop, 3);
+        QCOMPARE(changed.count(), 0);
+    }
 };
 
 QTEST_MAIN(TestWindowRegistry)

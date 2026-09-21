@@ -520,43 +520,11 @@ void Daemon::initializeWorkspaces()
                 // window's virtualDesktop stays on the pre-renumber number
                 // while the map and the engines have already shifted, and the
                 // controller's census then buckets windows onto the wrong
-                // desktop id. Remap here, same shape as the store transform
-                // above: 0 and below are the sticky/unknown sentinels.
+                // desktop id. The registry remaps its own records and re-emits
+                // metadataChanged for each, which is what re-keys the
+                // controller's census onto the new numbers.
                 if (m_windowRegistry) {
-                    const QStringList instanceIds = m_windowRegistry->instanceIds();
-                    for (const QString& instanceId : instanceIds) {
-                        const auto meta = m_windowRegistry->metadata(instanceId);
-                        if (!meta) {
-                            continue;
-                        }
-                        PhosphorEngine::WindowMetadata updated = *meta;
-                        bool changed = false;
-                        const int mapped = updated.virtualDesktop > 0
-                            ? oldToNew.value(updated.virtualDesktop, updated.virtualDesktop)
-                            : updated.virtualDesktop;
-                        if (mapped != updated.virtualDesktop) {
-                            updated.virtualDesktop = mapped;
-                            changed = true;
-                        }
-                        for (int& desktop : updated.virtualDesktops) {
-                            if (desktop <= 0) {
-                                continue;
-                            }
-                            const int mappedEntry = oldToNew.value(desktop, desktop);
-                            if (mappedEntry != desktop) {
-                                desktop = mappedEntry;
-                                changed = true;
-                            }
-                        }
-                        if (changed) {
-                            // upsert re-emits metadataChanged, which is what
-                            // re-keys the controller's census onto the new
-                            // numbers. WindowMetadata comparison is by value,
-                            // so an unchanged record would be a silent no-op
-                            // anyway; the guard just skips the copy.
-                            m_windowRegistry->upsert(instanceId, updated);
-                        }
-                    }
+                    m_windowRegistry->renumberDesktops(oldToNew);
                 }
             });
 
