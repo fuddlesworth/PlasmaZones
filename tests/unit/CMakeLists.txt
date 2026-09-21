@@ -143,6 +143,9 @@ add_test(NAME test_snap_state_focus_memory COMMAND test_snap_state_focus_memory)
 add_executable(test_snap_engine_restore core/snap/test_snap_engine_restore.cpp helpers/SnapEngineTestFixture.h)
 target_link_libraries(test_snap_engine_restore PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_snap_engine_restore COMMAND test_snap_engine_restore)
+add_executable(test_snap_restore_layout_context core/snap/test_snap_restore_layout_context.cpp helpers/SnapEngineTestFixture.h)
+target_link_libraries(test_snap_restore_layout_context PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_restore_layout_context COMMAND test_snap_restore_layout_context)
 
 # Exclusion half of the SnapEngine suite (exclude wiring, size exclusion,
 # entry-zone crossing).
@@ -1192,6 +1195,14 @@ add_executable(test_pretile_decisions ui/effect/test_pretile_decisions.cpp)
 target_link_libraries(test_pretile_decisions PRIVATE Qt6::Test Qt6::Core)
 target_include_directories(test_pretile_decisions PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
 add_test(NAME test_pretile_decisions COMMAND test_pretile_decisions)
+
+# Pure-logic test for the minimize-float qualifiers
+# (tilinghandler/minimizefloatmarks.h) — whether a restoring window's frame
+# can still be the tile it is about to get. Same header-only reach.
+add_executable(test_minimize_float_marks ui/effect/test_minimize_float_marks.cpp)
+target_link_libraries(test_minimize_float_marks PRIVATE Qt6::Test Qt6::Core)
+target_include_directories(test_minimize_float_marks PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
+add_test(NAME test_minimize_float_marks COMMAND test_minimize_float_marks)
 
 # Pure-geometry test for per-VS wallpaper cropping (PR #333). Pins the C++
 # cover-fit math against hand-worked expected rects so it can't silently

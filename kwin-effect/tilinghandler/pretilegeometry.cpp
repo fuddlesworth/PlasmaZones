@@ -125,7 +125,7 @@ void TilingHandler::saveAndRecordPreTileGeometry(const QString& windowId, const 
     // a window mid-unfloat sits in m_unfloatInFlight instead, and its frame
     // is still the tile rect until the restore lands — capturing during that
     // interval is the same poison.
-    if (isMinimizeFloated(windowId) && !m_untiledMinimizeFloats.contains(windowId)) {
+    if (isMinimizeFloated(windowId) && !m_minimizeFloatMarks.isUntiled(windowId)) {
         qCDebug(lcEffect) << "Skipped pre-autotile geometry for own minimize-float (frame is tile rect)" << windowId
                           << "on" << screenId;
         return;

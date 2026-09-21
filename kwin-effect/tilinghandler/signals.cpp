@@ -97,13 +97,13 @@ void TilingHandler::slotEnabledChanged(bool enabled)
             }
         }
         m_unfloatRetryAttempts.clear();
-        // The untiled markers go with the retry budgets: they qualify a
-        // minimize-float record this handler is handing away, and snap has no
-        // untiled fast path to receive them. Leaving them behind kept a stale
-        // qualifier for a record we no longer drive (the re-entry path
-        // re-inserts on its own), which is the one entry an otherwise
-        // exhaustive drain missed.
-        m_untiledMinimizeFloats.clear();
+        // The qualifier marks (untiled, displaced, peers) go with the retry
+        // budgets: they qualify a minimize-float record this handler is
+        // handing away, and snap has no fast path to receive them. Leaving
+        // them behind kept a stale qualifier for a record we no longer drive
+        // (the re-entry path re-inserts on its own), which is the one entry
+        // an otherwise exhaustive drain missed.
+        m_minimizeFloatMarks.clear();
         m_effect->updateAllDecorations();
     }
 }
