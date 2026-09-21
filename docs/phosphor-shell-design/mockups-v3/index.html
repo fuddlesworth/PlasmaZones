@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="appearance.css">
 <link rel="stylesheet" href="quick-settings.css">
 <link rel="stylesheet" href="system-stats.css">
+<link rel="stylesheet" href="system-tray.css">
 </head>
 <body>
 <header class="review-header">
@@ -24,7 +25,7 @@
 <div class="review-toolbar">
   <nav aria-label="Preview state" class="view-switch">
     <button data-view="desktop">Desktop</button><button data-view="overview">Window navigation</button>
-    <button data-view="controls">Quick settings</button><button data-view="stats">System stats</button><button data-view="notifications">Notifications</button><button data-view="datetime">Date & time</button><button data-view="launcher">Launcher</button><button data-view="lockscreen">Lock screen</button><button data-view="power">Power</button><button data-view="appearance">Appearance</button>
+    <button data-view="controls">Quick settings</button><button data-view="stats">System stats</button><button data-view="tray">System tray</button><button data-view="notifications">Notifications</button><button data-view="datetime">Date & time</button><button data-view="launcher">Launcher</button><button data-view="lockscreen">Lock screen</button><button data-view="power">Power</button><button data-view="appearance">Appearance</button>
   </nav>
   <label class="stress-control">Scrolling demo <select id="scroll-count" aria-label="Scrolling demo window count"><option value="4">4 windows</option><option value="10">10 windows</option><option value="20">20 windows</option></select></label>
   <button id="customize-toggle" aria-expanded="false">◈ &nbsp; Preview controls</button>
@@ -46,6 +47,7 @@
 </div>
 <div id="quick-preview-controls" class="quick-preview-controls hidden" aria-label="Quick settings prototype controls"></div>
 <div id="stats-preview-controls" class="stats-preview-controls hidden" aria-label="System stats prototype controls"></div>
+<div id="tray-preview-controls" class="tray-preview-controls hidden" aria-label="System tray prototype controls"></div>
 <div class="review-layout">
 <main class="frame" aria-label="Interactive desktop mock">
 <div id="desktop" class="desktop navigator">
@@ -92,6 +94,15 @@
 <symbol id="storage" viewBox="0 0 24 24"><path d="m6 3-4 11v6h20v-6L18 3Z M2 14h20m-5 3h2m-6 0h1"/></symbol>
 <symbol id="tune" viewBox="0 0 24 24"><path d="M3 6h5m4 0h9M3 18h9m4 0h5"/><circle cx="10" cy="6" r="2"/><circle cx="14" cy="18" r="2"/><path d="M3 12h11m4 0h3"/><circle cx="16" cy="12" r="2"/></symbol>
 <symbol id="pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+<symbol id="tray-icon" viewBox="0 0 24 24"><path d="M3 14h5l2 3h4l2-3h5v7H3zM5 10V4h14v6M9 7h6"/></symbol>
+<symbol id="cloud" viewBox="0 0 24 24"><path d="M6 18a5 5 0 1 1 .5-10A6 6 0 0 1 18 9a4.5 4.5 0 1 1 0 9Z"/><path d="m8 13 3 3 5-5"/></symbol>
+<symbol id="gamepad" viewBox="0 0 24 24"><path d="M7 7h10c3 0 4 6 4 9s-2 4-4 1l-2-2H9l-2 2c-2 3-4 2-4-1s1-9 4-9Z M6 10v4m-2-2h4m8-1h.1m3 2h.1"/></symbol>
+<symbol id="phone" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M10 5h4m-3 14h2"/></symbol>
+<symbol id="record" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></symbol>
+<symbol id="key" viewBox="0 0 24 24"><circle cx="8" cy="8" r="5"/><path d="m12 12 9 9m-5-5 3-3m-1 5 3-3"/></symbol>
+<symbol id="download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></symbol>
+<symbol id="more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+<symbol id="pin" viewBox="0 0 24 24"><path d="m8 3 9 2-2 6 3 4-6-1-4 4-2-2 4-4-1-6ZM8 16l-5 5"/></symbol>
 </defs></svg>
   <div class="wallpaper" aria-hidden="true"><div class="orb"></div><div class="landscape"></div><div class="contour"></div></div>
   <div class="desktop-watermark">PHOSPHOR<span>your windows, in place</span></div>
@@ -100,6 +111,7 @@
   <div class="stage-shade hidden" id="stage-shade"></div>
   <section id="overview" class="hidden" aria-label="Window navigation"></section>
   <section id="controls" class="hidden" aria-label="Quick settings"></section>
+  <section id="tray" class="hidden" aria-label="System tray"></section>
   <section id="stats" class="hidden" aria-label="System stats" role="dialog"></section>
   <section id="launcher" class="hidden" aria-label="Launcher"></section>
   <section id="datetime" class="hidden" aria-label="Date and time"></section>
@@ -152,6 +164,7 @@
 <script src="appearance.js"></script>
 <script src="quick-settings.js"></script>
 <script src="system-stats.js"></script>
+<script src="system-tray.js"></script>
 <script src="studies.js"></script>
 </body>
 </html>

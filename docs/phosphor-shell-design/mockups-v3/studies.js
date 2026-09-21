@@ -5,7 +5,7 @@
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const icon = name => `<svg class="icon" aria-hidden="true"><use href="#${name}"/></svg>`;
-const defaults = {...PhosphorStats.defaults,palette:'spectrum',material:'glass',edge:'top',density:'comfortable',radius:18,gap:16,glow:true,media:true,motion:true,visualizer:'ribbon',lockLayout:'split',lockMedia:false,lockNotifications:true,notificationGrouping:'app',notificationPreviews:true};
+const defaults = {...PhosphorStats.defaults,...PhosphorTray.defaults,palette:'spectrum',material:'glass',edge:'top',density:'comfortable',radius:18,gap:16,glow:true,media:true,motion:true,visualizer:'ribbon',lockLayout:'split',lockMedia:false,lockNotifications:true,notificationGrouping:'app',notificationPreviews:true};
 const presets = {
   phosphor:{...defaults},
   paper:{...defaults,palette:'wallpaper',material:'light',radius:24,gap:22,glow:false},
@@ -15,6 +15,7 @@ let settings = {...defaults};
 try {
   const saved = JSON.parse(localStorage.getItem('phosphor-design-settings') || 'null');
   if (saved) for (const key of Object.keys(defaults)) {
+    if(key.startsWith('tray')) { settings[key]=PhosphorTray.preferences(saved)[key]; continue; }
     const choices = {statsStyle:['traces','meters','numbers'],statsMemoryUnit:['percent','used'],statsInterval:[1,2,5],palette:['spectrum','wallpaper','ember'],material:['glass','solid','light'],edge:['top','bottom'],density:['comfortable','compact'],visualizer:['ribbon','bars','halo','off'],lockLayout:['split','centered'],notificationGrouping:['app','time']};
     if (choices[key]?.includes(saved[key])) settings[key] = saved[key];
     else if (typeof defaults[key] === 'boolean' && typeof saved[key] === 'boolean') settings[key] = saved[key];
@@ -61,9 +62,12 @@ const appearance = PhosphorAppearance.create({root:$('#appearance'),desktop,icon
   setSettings:(value,persist=false,redraw=true)=>{settings={...value};applySettings(persist,redraw);},presets,
   onClose:()=>setView('desktop'),notify});
 const quickSettings = PhosphorQuickSettings.create({root:$('#controls'),review:$('#quick-preview-controls'),icon,shared:state,
-  onRedraw:renderControls,onSummary:renderBar});
+  onRedraw:renderControls,onSummary:refreshBar});
 const systemStats = PhosphorStats.create({root:$('#stats'),review:$('#stats-preview-controls'),desktop,icon,getSettings:()=>settings,
   patchSettings:patch=>{settings={...settings,...patch};$('#preset').value='custom';applySettings(true,false);},onDismiss:()=>setView('desktop')});
+const systemTray = PhosphorTray.create({root:$('#tray'),review:$('#tray-preview-controls'),desktop,icon,getSettings:()=>settings,
+  patchSettings:patch=>{settings={...settings,...patch};$('#preset').value='custom';applySettings(true,false);},
+  onShow:()=>setView('tray'),onDismiss:()=>setView('desktop'),onBarChanged:refreshBar,notify});
 const currentWindows = () => windows.filter(w => w.workspace === state.workspace);
 const selectedWindow = () => windows.find(w => w.id === state.focused);
 const hue = index => ['var(--c1)','var(--c3)','var(--c4)','var(--c2)'][index % 4];
@@ -126,12 +130,19 @@ function renderBar() {
       </button>
       <div class="bar-workspaces">${workspaces.map((name,i)=>`<button data-workspace="${i}" aria-label="Switch to ${name}" aria-pressed="${i===state.workspace}">0${i+1}</button>`).join('')}</div>
     </div>
-    <div class="bar-right">${systemStats.barMarkup()}<button class="clock" data-view="datetime" aria-label="Open date and time" aria-expanded="${state.view==='datetime'}" aria-controls="datetime">Sat 12 &nbsp; <span style="color:var(--text)">10:24</span></button>
+    <div class="bar-right">${systemTray.barMarkup()}${systemStats.barMarkup()}
     <button class="bar-notifications" data-view="notifications" data-unread="${notificationCenter.unread()>0}" aria-label="Notifications, ${notificationCenter.unread()} unread" aria-expanded="${state.view==='notifications'&&notificationCenter.inboxOpen()}" aria-controls="notifications">${icon('bell')}</button>
-    <button class="status-cluster" data-view="controls" aria-label="Open quick settings" aria-expanded="${state.view==='controls'}">${icon('wifi')}${icon('volume')}<span>82%</span></button>
+    <button class="status-cluster" data-view="controls" aria-label="Open quick settings" aria-expanded="${state.view==='controls'}">${icon('wifi')}${icon('volume')}</button>
+    <button class="clock" data-view="datetime" aria-label="Open date and time" aria-expanded="${state.view==='datetime'}" aria-controls="datetime"><span class="clock-date">Sat 12 &nbsp; </span><span style="color:var(--text)">10:24</span></button>
     <button class="settings-trigger" data-view="appearance" aria-label="Open Appearance">◈</button>
     <button class="bar-power" data-view="power" aria-label="Open session menu" aria-expanded="${state.view==='power'}">${icon('power')}</button></div>`;
   syncVisualizer();
+}
+
+function refreshBar() {
+  renderBar();
+  appearance.render(state.view==='appearance');
+  systemTray.render(state.view==='tray');
 }
 
 function windowContent(w) {
@@ -239,7 +250,7 @@ function renderControls() {
   const connections = connectionRow('wifi','Wi-Fi',state.network,'wifi')+connectionRow('bluetooth','Bluetooth',quickSettings.bluetoothSummary(),'bluetooth');
   const pair = `<div class="quick-pair"><button data-toggle="dnd" aria-pressed="${state.dnd}">${icon('moon')} Focus ${state.dnd?'on':'off'}</button><button data-toggle="night" aria-pressed="${state.night}">${icon('sun')} Night light ${state.night?'on':'off'}</button></div>`;
   const levels = slider('volume','Volume','volume')+`<button class="device-button" data-detail="audio">${escapeHTML(state.device)} <span>Sound controls ›</span></button>`+slider('brightness','Brightness','sun');
-  el.innerHTML = `${heading}${connections}${pair}${levels}${mediaCard()}<div class="pane-footer"><span>Balanced power</span><button class="text-button" data-customize>Appearance ↗</button></div>`;
+  el.innerHTML = `${heading}${connections}${pair}${levels}${mediaCard()}<div class="pane-footer"><span>Balanced power</span><button class="text-button" data-view="appearance">Appearance ↗</button></div>`;
   syncVisualizer();
 }
 
@@ -275,6 +286,13 @@ function renderLauncher() {
 }
 
 function renderNotes() {
+  if(state.view==='tray') {
+    $('#study-kicker').textContent='H / SYSTEM TRAY';
+    $('#study-title').textContent='A little space for what stays running.';
+    $('#study-description').textContent='A restrained icon group opens into a compact app drawer. The shell’s glass, spectrum edge and inset selection give background apps a shared home. App menus sit beside the drawer or directly below their bar icon.';
+    $('#ux-description').textContent='Click an icon to open its app or its primary menu. Right-click, use its menu button, or press Shift+F10 for actions. Arrow keys navigate menus; Escape goes back. Arrange tray controls icon tint, order, visibility and a bounded number of bar icons.';
+    return;
+  }
   if(state.view==='stats') {
     $('#study-kicker').textContent='G / SYSTEM STATS';
     $('#study-title').textContent='A pulse on your desktop.';
@@ -400,7 +418,7 @@ function render() {
   desktop.classList.toggle('stage',state.study==='stage');
   desktop.classList.toggle('overview-open',state.view==='overview');
   desktop.classList.toggle('locked',state.view==='lockscreen');
-  for(const element of desktop.querySelectorAll(':scope > :is(#bar,#windows,#overview,#controls,#stats,#launcher,#datetime,#notifications,#notification-arrival,#osd,#toast)')) element.inert=['lockscreen','power','appearance'].includes(state.view);
+  for(const element of desktop.querySelectorAll(':scope > :is(#bar,#windows,#overview,#controls,#stats,#tray,#launcher,#datetime,#notifications,#notification-arrival,#osd,#toast)')) element.inert=['lockscreen','power','appearance'].includes(state.view);
   $('#stage-shade').classList.toggle('hidden',!(state.study==='stage'&&state.view==='overview'));
   renderBar();renderWindows();renderOverview();renderControls();renderLauncher();renderDateTime();renderPower();renderNotes();
   notificationCenter.render(state.view==='notifications');
@@ -408,6 +426,7 @@ function render() {
   lockscreen.render(state.view==='lockscreen');
   appearance.render(state.view==='appearance');
   systemStats.render(state.view==='stats');
+  systemTray.render(state.view==='tray');
   // Canvas gradients cache their colors; resample after the wallpaper palette.
   syncVisualizer();
   $$('[data-study]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.study===state.study));
@@ -449,12 +468,14 @@ function setView(view) {
   if (view==='notifications') notificationCenter.focus();
   if (view==='appearance') appearance.focus();
   if (view==='stats') systemStats.focus();
+  if (view==='tray') systemTray.focus();
   if (view==='controls') $('#controls [data-toggle="wifi"]')?.focus({preventScroll:true});
   if (view==='desktop') {
     if (previousView==='notifications') $('.bar-notifications').focus();
     else if (previousView==='datetime') $('.clock').focus();
     else if (previousView==='power') $('.bar-power').focus();
-    else if (previousView==='appearance') $('.settings-trigger')?.focus();
+    else if (previousView==='appearance') ($('.settings-trigger')||$('.status-cluster'))?.focus();
+    else if (previousView==='tray') systemTray.restoreFocus();
     else if (previousView==='stats') ($('.bar-stats')||$('.view-switch [data-view="stats"]'))?.focus();
     else if (previousView==='controls') $('.status-cluster')?.focus();
     else if (returnFocus?.isConnected) returnFocus.focus();
@@ -498,7 +519,7 @@ function focusWindow(id, dismiss=true) {
       el.style.cssText=`${rectStyle(r,settings.gap)};--hue:${hue(i)}`;
       el.querySelector('.window-focus-label').textContent=focused?'Selected · Enter to open':'Click to select';
     });
-    renderBar();renderOverview();
+    refreshBar();renderOverview();
   }
 }
 
@@ -545,7 +566,7 @@ document.addEventListener('click',e=>{
     }
     if(b.dataset.toggle){if(['wifi','bluetooth'].includes(b.dataset.toggle))quickSettings.toggleRadio(b.dataset.toggle);else{state[b.dataset.toggle]=!state[b.dataset.toggle];renderControls();}}
     if(b.dataset.detail)quickSettings.open(b.dataset.detail==='back'?null:b.dataset.detail);
-    if(b.hasAttribute('data-play')){state.playing=!state.playing;renderControls();renderBar();}
+    if(b.hasAttribute('data-play')){state.playing=!state.playing;renderControls();refreshBar();}
     if(b.dataset.filter){state.filter=b.dataset.filter;state.resultIndex=0;renderLauncher();$('#launcher-search').focus();}
     if(b.dataset.result!==undefined)runResult(Number(b.dataset.result));
     if(b.dataset.app)launchApp(b.dataset.app);
@@ -555,7 +576,7 @@ document.addEventListener('click',e=>{
   const win=e.target.closest('[data-select]');
   if(win){focusWindow(win.dataset.select,state.view!=='overview');return;}
   if(e.target.matches('.session-shade')){setView('desktop');return;}
-  if(e.target.closest('#desktop')&&!e.target.closest('#overview,#controls,#stats,#launcher,#datetime,#notifications,#notification-arrival,#session,#bar'))setView('desktop');
+  if(e.target.closest('#desktop')&&!e.target.closest('#overview,#controls,#stats,#tray,#launcher,#datetime,#notifications,#notification-arrival,#session,#bar'))setView('desktop');
 });
 
 document.addEventListener('dblclick',e=>{
@@ -606,6 +627,7 @@ document.addEventListener('keydown',e=>{
   if(lockscreen.handleKey(e))return;
   if(quickSettings.handleKey(e))return;
   if(systemStats.handleKey(e))return;
+  if(systemTray.handleKey(e))return;
   if(e.key==='Escape'){setView('desktop');return;}
   if(state.view==='power'&&!e.target.closest('.review-toolbar,.review-header,#customizer')&&!e.ctrlKey&&!e.metaKey&&!e.altKey) {
     if(['ArrowUp','ArrowDown','Tab'].includes(e.key)) {
@@ -654,7 +676,7 @@ new ResizeObserver(([entry])=>{
 }).observe($('.frame'));
 const [study,view,detail]=location.hash.slice(1).split('/');
 if(['navigator','stage'].includes(study))state.study=study;
-if(['desktop','overview','controls','launcher','datetime','notifications','lockscreen','power','appearance','stats'].includes(view))state.view=view;
+if(['desktop','overview','controls','launcher','datetime','notifications','lockscreen','power','appearance','stats','tray'].includes(view))state.view=view;
 $('#preset').value=Object.entries(presets).find(([,preset])=>JSON.stringify(preset)===JSON.stringify(settings))?.[0] || 'custom';
 applySettings();
 if(state.view==='controls'&&['wifi','bluetooth','audio'].includes(detail))quickSettings.open(detail);
@@ -663,3 +685,6 @@ if(state.view==='power')$('#session .selected')?.focus({preventScroll:true});
 if(state.view==='appearance')appearance.focus();
 
 if(state.view==='stats'&&['cpu','gpu','memory','network','storage','customize'].includes(detail))systemStats.open(detail);
+
+if(state.view==='tray'&&detail==='settings')systemTray.openSettings();
+if(state.view==='tray'&&detail==='menu')systemTray.openMenu('steam','bar');

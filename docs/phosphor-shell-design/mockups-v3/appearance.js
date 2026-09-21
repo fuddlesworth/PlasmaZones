@@ -15,8 +15,8 @@ window.PhosphorAppearance = (() => {
     {id:'graphite',name:'Fold',collection:'Abstract',description:'Light on a folded surface.',colors:['#a6b8c4','#a9abc0','#bba9bf','#ccb8b1'],size:'Scalable artwork'},
     {id:'linen',name:'First light',collection:'Abstract',description:'A pale canvas for your day.',colors:['#96afa9','#9eaec4','#c2a6b0','#d4bb98'],size:'Scalable artwork'}
   ];
-  const widgets = {launcher:['Launcher','grid'],focus:['Focused app','terminal'],media:['Media','music'],workspaces:['Workspaces','grid'],stats:['System stats','cpu'],clock:['Date & time','sun'],notifications:['Notifications','bell'],status:['Quick settings','wifi'],appearance:['Appearance','picture'],power:['Power','power']};
-  const initial = {display:'main',linked:false,displays:{main:{wall:'spectrum',fit:'fill'},secondary:{wall:'iris',fit:'fill'}},colorSource:'spectrum',accent:1,inset:16,font:'Noto Sans',numberFont:'monospace',interfaceScale:100,desktopStyle:true,surfaceEffect:'none',regions:{left:['launcher','focus','media'],center:['workspaces'],right:['stats','clock','notifications','status','appearance','power']}};
+  const widgets = {launcher:['Launcher','grid'],focus:['Focused app','terminal'],media:['Media','music'],workspaces:['Workspaces','grid'],stats:['System stats','cpu'],tray:['System tray','tray-icon'],clock:['Date & time','sun'],notifications:['Notifications','bell'],status:['Quick settings','wifi'],appearance:['Appearance','picture'],power:['Power','power']};
+  const initial = {display:'main',linked:false,displays:{main:{wall:'spectrum',fit:'fill'},secondary:{wall:'iris',fit:'fill'}},colorSource:'spectrum',accent:1,inset:16,font:'Noto Sans',numberFont:'monospace',interfaceScale:100,desktopStyle:true,surfaceEffect:'none',regions:{left:['launcher','focus','media'],center:['workspaces'],right:['tray','stats','notifications','status','clock','power']}};
   const styleKeys = ['palette','material','density','radius','gap','glow'];
   const options = {palette:['spectrum','wallpaper','ember'],material:['glass','solid','light'],density:['comfortable','compact'],edge:['top','bottom'],visualizer:['ribbon','bars','halo','off'],lockLayout:['split','centered'],notificationGrouping:['app','time']};
 
@@ -131,7 +131,7 @@ window.PhosphorAppearance = (() => {
         if(['radius','gap'].includes(key)&&(!Number.isFinite(s[key])||s[key]<(key==='gap'?6:4)||s[key]>30))throw Error('Invalid spacing setting.');
       }
       if(value.bar&&(!['top','bottom'].includes(value.bar.edge)||typeof value.bar.media!=='boolean'))throw Error('Invalid bar settings.');
-      return {kind:value.kind,version:1,name:value.name.trim(),settings:Object.fromEntries(styleKeys.map(key=>[key,s[key]])),appearance:validateData(value.appearance),wallpaper:!!value.wallpaper,bar:value.bar?{edge:value.bar.edge,media:value.bar.media,stats:PhosphorStats.preferences(value.bar.stats)}:null};
+      return {kind:value.kind,version:1,name:value.name.trim(),settings:Object.fromEntries(styleKeys.map(key=>[key,s[key]])),appearance:validateData(value.appearance),wallpaper:!!value.wallpaper,bar:value.bar?{edge:value.bar.edge,media:value.bar.media,stats:PhosphorStats.preferences(value.bar.stats),tray:PhosphorTray.preferences(value.bar.tray)}:null};
     }
 
     function persist() {
@@ -156,7 +156,7 @@ window.PhosphorAppearance = (() => {
       desktop.style.setProperty('--ap-type-scale',data.interfaceScale/100);
       desktop.style.fontFamily=`'${data.font}', sans-serif`;
       const bar=desktop.querySelector('#bar');
-      const selectors={launcher:'.launcher-mark',focus:'.bar-app',media:'.bar-media',workspaces:'.bar-center',stats:'.bar-stats',clock:'.clock',notifications:'.bar-notifications',status:'.status-cluster',appearance:'.settings-trigger',power:'.bar-power'};
+      const selectors={launcher:'.launcher-mark',focus:'.bar-app',media:'.bar-media',workspaces:'.bar-center',stats:'.bar-stats',tray:'.bar-tray',clock:'.clock',notifications:'.bar-notifications',status:'.status-cluster',appearance:'.settings-trigger',power:'.bar-power'};
       // The study renderer replaces the bar first. Reparent those real controls so
       // widget edits preserve their existing navigation and media interactions.
       if(!bar.querySelector('.ap-live-region')) {
@@ -285,7 +285,7 @@ window.PhosphorAppearance = (() => {
       if(dialog.imported){const name=root.querySelector('#ap-import-name').value.trim();if(!name||saved.some(item=>item.name.toLowerCase()===name.toLowerCase())){root.querySelector('#ap-import-error').textContent='Choose a unique name for this preset.';root.querySelector('#ap-import-name').focus();return;}p.name=name;}
       for(const k of ['colorSource','accent','font','numberFont','interfaceScale','desktopStyle','surfaceEffect'])data[k]=p.appearance[k];
       if(root.querySelector('#ap-load-wall')?.checked){data.displays=copy(p.appearance.displays);data.linked=p.appearance.linked;}
-      if(root.querySelector('#ap-load-bar')?.checked){data.regions=copy(p.appearance.regions);data.inset=p.appearance.inset;s.edge=p.bar.edge;s.media=p.bar.media;Object.assign(s,PhosphorStats.preferences(p.bar.stats));}
+      if(root.querySelector('#ap-load-bar')?.checked){data.regions=copy(p.appearance.regions);data.inset=p.appearance.inset;s.edge=p.bar.edge;s.media=p.bar.media;Object.assign(s,PhosphorStats.preferences(p.bar.stats),PhosphorTray.preferences(p.bar.tray));}
       if(dialog.imported){saved.push(copy(p));persist();}
       dialog=null;message=`Previewing ${p.name}`;setSettings(s,false);focus();
     }
@@ -335,7 +335,7 @@ window.PhosphorAppearance = (() => {
       const name=root.querySelector('#ap-preset-name').value.trim(),wallpaper=root.querySelector('#ap-include-wall').checked,bar=root.querySelector('#ap-include-bar').checked;
       if(!name||saved.some(p=>p.name.toLowerCase()===name.toLowerCase())){showDialog({type:'save',name,wallpaper,bar,error:name?'Choose a different name for this preset.':'Give your preset a name.'});return;}
       if(wallpaper&&Object.values(data.displays).some(d=>!walls.some(w=>w.id===d.wall))){showDialog({type:'save',name,wallpaper,bar,error:'Added images stay in this tab. Save the style without wallpapers, or choose a bundled wallpaper.'});return;}
-      saved.push(recipe(name,getSettings(),{wallpaper,bar:bar?{edge:getSettings().edge,media:getSettings().media,stats:PhosphorStats.preferences(getSettings())}:null}));persist();dialog=null;message='Preset saved to your collection';page='presets';draw();focus();
+      saved.push(recipe(name,getSettings(),{wallpaper,bar:bar?{edge:getSettings().edge,media:getSettings().media,stats:PhosphorStats.preferences(getSettings()),tray:PhosphorTray.preferences(getSettings())}:null}));persist();dialog=null;message='Preset saved to your collection';page='presets';draw();focus();
     });
 
     function imageColors(img) {
