@@ -97,6 +97,7 @@ set(phosphorshell_public_HDRS
 set(phosphorshell_SRCS
     src/shellloader.cpp
     src/shellengine.cpp
+    src/qmlregistration.cpp
     src/shellengine_watcher.cpp
     src/panelwindow.cpp
     src/perscreenpanels.cpp
