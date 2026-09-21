@@ -134,6 +134,8 @@ target_compile_features(PhosphorShellPickerQml PUBLIC cxx_std_20)
 target_include_directories(PhosphorShellPickerQml
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/PhosphorShellPicker
 )
 
 target_link_libraries(PhosphorShellPickerQml

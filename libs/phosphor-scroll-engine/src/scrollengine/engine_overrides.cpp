@@ -8,6 +8,7 @@
 // the engine's state handling.
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
+#include <PhosphorEngine/IWindowTrackingService.h>
 
 // Complete type needed for the qobject_cast in effectiveFocusNewWindows.
 // ScrollEngine.h includes it already (for the kDragScroll* defaults), but it
@@ -17,6 +18,7 @@
 #include <PhosphorScrollEngine/IScrollSettings.h>
 
 #include "enginelimits.h"
+#include "scrollenginelogging.h"
 
 #include <QList>
 #include <QMetaType>

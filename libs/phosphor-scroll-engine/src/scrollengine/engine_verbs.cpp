@@ -7,6 +7,7 @@
 #include <PhosphorEngine/WindowRegistry.h>
 
 #include "scrollverbresolve_p.h"
+#include "scrollenginelogging.h"
 
 #include <cmath>
 

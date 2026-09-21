@@ -9,6 +9,9 @@
 // issues in both unity and normal builds.
 
 #include <QScreen>
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusPendingCall>
 #include "core/platform/logging.h"
 #include "core/interfaces/settings_interfaces.h"
 #include "core/utils/utils.h"
@@ -20,6 +23,15 @@
 #include <optional>
 
 namespace PlasmaZones {
+
+inline void showKdeTextOsd(const QString& icon, const QString& text)
+{
+    QDBusMessage msg =
+        QDBusMessage::createMethodCall(QStringLiteral("org.kde.plasmashell"), QStringLiteral("/org/kde/osdService"),
+                                       QStringLiteral("org.kde.osdService"), QStringLiteral("showText"));
+    msg << icon << text;
+    QDBusConnection::sessionBus().asyncCall(msg);
+}
 
 inline DisabledReason toDaemonDisabledReason(PhosphorContext::DisabledReason reason)
 {

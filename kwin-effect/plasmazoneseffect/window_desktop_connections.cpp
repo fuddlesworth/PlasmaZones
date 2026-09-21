@@ -3,6 +3,7 @@
 
 #include "plasmazoneseffect.h"
 #include "compositor/effectlogging.h"
+#include "handlers/snaphandler.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
 

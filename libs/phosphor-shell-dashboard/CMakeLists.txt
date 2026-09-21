@@ -33,7 +33,7 @@ endif()
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick DBus)
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes DBus)
 
 # The surfaces import Phosphor.Theme (tokens) and Phosphor.Widgets (the
 # miniature and the text atoms). In-tree builds always have the sibling
@@ -115,6 +115,7 @@ qt_add_qml_module(PhosphorShellDashboardQml
 add_library(PhosphorShellDashboard::PhosphorShellDashboardQml ALIAS PhosphorShellDashboardQml)
 
 target_compile_features(PhosphorShellDashboardQml PUBLIC cxx_std_20)
+target_include_directories(PhosphorShellDashboardQml PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 target_link_libraries(PhosphorShellDashboardQml
     PUBLIC

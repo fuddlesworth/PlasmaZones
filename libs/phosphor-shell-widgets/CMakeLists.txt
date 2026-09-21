@@ -136,6 +136,7 @@ qt_add_qml_module(PhosphorShellWidgetsQml
 add_library(PhosphorShellWidgets::PhosphorShellWidgetsQml ALIAS PhosphorShellWidgetsQml)
 
 target_compile_features(PhosphorShellWidgetsQml PUBLIC cxx_std_20)
+target_include_directories(PhosphorShellWidgetsQml PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 target_link_libraries(PhosphorShellWidgetsQml
     PUBLIC
