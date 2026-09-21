@@ -10,7 +10,7 @@
                 "Fixed: A reopened window is only put back in its remembered zone when that zone belongs to the layout its desktop runs now (#1104)",
                 "Fixed: With \"Keep floating windows above\" on, a fullscreen game no longer stays on top after you Alt+Tab away from it (#1114)",
                 "Fixed: Old-style tray icons, such as those from Wine and Proton apps, no longer leave a glowing bordered square on the panel (#1115)",
-                "Fixed: On a scrolling screen, a game that opens fullscreen no longer joins its launcher's column as a tab or gets pulled out of fullscreen by a scrolling shortcut"
+                "Fixed: On a scrolling screen, a game that opens fullscreen no longer joins its launcher's column as a tab or gets pulled out of fullscreen by a scrolling shortcut (#1116)"
             ]
         },
         {
