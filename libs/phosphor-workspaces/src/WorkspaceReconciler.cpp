@@ -346,6 +346,9 @@ bool WorkspaceReconciler::applySettledCreate(const PendingOp& op, const QString&
     entry.desktopId = desktopId;
     entry.name = op.name;
     m_map.insert(op.screenId, op.sliceIndex, entry);
+    if (op.reserved) {
+        m_reservedDesktops.insert(desktopId);
+    }
     return true;
 }
 
@@ -371,18 +374,12 @@ void WorkspaceReconciler::onKwinDesktopCreated(const QString& desktopId)
             // and the echo. Inserting onto a screen the map no longer knows
             // would resurrect its slice (WorkspaceMap::insert re-appends an
             // unknown screen to the order), so fall back to normal adoption.
-            if (!m_map.knowsScreen(op.screenId)) {
-                qCWarning(lcWorkspaceRec) << "create echo for" << desktopId << "whose planned screen" << op.screenId
-                                          << "is gone — adopting instead";
-                if (adoptExternal(desktopId)) {
-                    bumpGeneration();
-                }
-                return;
+            // applySettledCreate realizes the planned entry (and its
+            // reservation) or, for a screen that is gone, refuses so the
+            // desktop is adopted like an external one.
+            if (!applySettledCreate(op, desktopId)) {
+                adoptExternal(desktopId);
             }
-            WorkspaceEntry entry;
-            entry.desktopId = desktopId;
-            entry.name = op.name;
-            m_map.insert(op.screenId, op.sliceIndex, entry);
             bumpGeneration();
             return;
         }
@@ -856,6 +853,9 @@ void WorkspaceReconciler::onPopulationChanged(const QString& desktopId, int wind
         return;
     }
     m_population.insert(desktopId, windowCount);
+    if (windowCount > 0) {
+        m_reservedDesktops.remove(desktopId);
+    }
     // The population is the usual reason KWin declines a removal, so any change
     // to it restores this desktop's refusal budget.
     m_removalRefusals.remove(desktopId);
@@ -933,6 +933,9 @@ void WorkspaceReconciler::scheduleDestroyCheck(const QString& desktopId)
             if (!entry.name.isEmpty()) {
                 return; // named: destroy-exempt
             }
+            if (m_reservedDesktops.contains(desktopId)) {
+                return; // reserved for a drop whose window is still on its way
+            }
             const auto entries = m_map.slice(owner);
             if (entries.size() <= 1) {
                 return; // a slice never becomes empty
@@ -950,7 +953,7 @@ void WorkspaceReconciler::scheduleDestroyCheck(const QString& desktopId)
     timer->start();
 }
 
-void WorkspaceReconciler::requestCreateAt(const QString& screenId, int sliceIndex, const QString& name)
+void WorkspaceReconciler::requestCreateAt(const QString& screenId, int sliceIndex, const QString& name, bool reserved)
 {
     // Refusal budget spent (see MaxCreateRefusals). Checked HERE rather than
     // only at the post-expiry re-drive, because maintainScreen also runs off
@@ -990,6 +993,7 @@ void WorkspaceReconciler::requestCreateAt(const QString& screenId, int sliceInde
     // ledger order; the two rankings disagree with concurrent Creates.
     op.globalPosition = static_cast<int>(globalPosition);
     op.name = name;
+    op.reserved = reserved;
     ledgerAdd(op);
     Q_EMIT requestCreateDesktop(globalPosition, name);
 }

@@ -188,6 +188,11 @@ QString SettingsAdaptor::getAllSettings()
     return QString::fromUtf8(QJsonDocument(settings).toJson());
 }
 
+QDBusContext* SettingsAdaptor::dbusContext() const
+{
+    return dynamic_cast<QDBusContext*>(parent());
+}
+
 QDBusVariant SettingsAdaptor::getSetting(const QString& key)
 {
     // An empty key is a caller bug in exactly the way an unknown one is, so it gets
@@ -196,8 +201,8 @@ QDBusVariant SettingsAdaptor::getSetting(const QString& key)
     // failing silently and the other loudly, which is how the silent one survives.
     if (key.isEmpty()) {
         qCDebug(lcDbusSettings) << "getSetting: empty key";
-        if (calledFromDBus()) {
-            sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("Empty setting key"));
+        if (QDBusContext* ctx = dbusContext(); ctx && ctx->calledFromDBus()) {
+            ctx->sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("Empty setting key"));
         }
         return QDBusVariant(QVariant());
     }
@@ -233,8 +238,8 @@ QDBusVariant SettingsAdaptor::getSetting(const QString& key)
     // is the real signal; logging it at warning level let any process on the session bus
     // fill the daemon's log with content of its own choosing, one key at a time.
     qCDebug(lcDbusSettings) << "getSetting: unknown key" << key;
-    if (calledFromDBus()) {
-        sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("Unknown setting key: %1").arg(key));
+    if (QDBusContext* ctx = dbusContext(); ctx && ctx->calledFromDBus()) {
+        ctx->sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("Unknown setting key: %1").arg(key));
     }
     // The return value is discarded once sendErrorReply has run; it matters only for
     // a direct (non-D-Bus) call, where an invalid variant is the honest answer.
@@ -489,8 +494,8 @@ void SettingsAdaptor::setPerScreenSetting(const QString& screenId, const QString
     // reply because these are also reachable as plain C++ calls in tests.
     const auto reject = [this](const QString& reason) {
         qCDebug(lcDbusSettings) << "setPerScreenSetting:" << reason;
-        if (calledFromDBus()) {
-            sendErrorReply(QDBusError::InvalidArgs, reason);
+        if (QDBusContext* ctx = dbusContext(); ctx && ctx->calledFromDBus()) {
+            ctx->sendErrorReply(QDBusError::InvalidArgs, reason);
         }
     };
     if (!m_settings) {
@@ -530,8 +535,8 @@ void SettingsAdaptor::clearPerScreenSettings(const QString& screenId, const QStr
     // Void slot, same reject-loudly contract as setPerScreenSetting above.
     const auto reject = [this](const QString& reason) {
         qCDebug(lcDbusSettings) << "clearPerScreenSettings:" << reason;
-        if (calledFromDBus()) {
-            sendErrorReply(QDBusError::InvalidArgs, reason);
+        if (QDBusContext* ctx = dbusContext(); ctx && ctx->calledFromDBus()) {
+            ctx->sendErrorReply(QDBusError::InvalidArgs, reason);
         }
     };
     if (!m_settings) {

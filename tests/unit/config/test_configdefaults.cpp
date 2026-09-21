@@ -12,7 +12,10 @@
 #include <QTest>
 
 #include "config/configdefaults.h"
+#include "../helpers/StubSettings.h"
 #include "core/interfaces/settings_interfaces.h" // ZoneSelectorConfig struct tripwire
+
+#include <QColor>
 
 using namespace PlasmaZones;
 
@@ -265,6 +268,21 @@ private Q_SLOTS:
             const QString once = ConfigDefaults::normalizeGpuDevice(s);
             QCOMPARE(ConfigDefaults::normalizeGpuDevice(once), once);
         }
+    }
+
+    /**
+     * ISettings carries defaulted getters for the Workspaces.Overview keys
+     * with literal bodies (its header does not see ConfigDefaults). The
+     * scalar twins are static_asserted in settings/workspaces.cpp; the
+     * backdrop string cannot be, so it is pinned here. A stub answering a
+     * different colour than the real Settings would be a silent split.
+     */
+    void testOverviewBackdropColor_matchesInterfaceDefault()
+    {
+        QCOMPARE(ConfigDefaults::overviewBackdropColor(), StubSettings().overviewBackdropColor());
+        QVERIFY(QColor::isValidColorName(ConfigDefaults::overviewBackdropColor()));
+        QVERIFY(ConfigDefaults::overviewZoom() >= ConfigDefaults::overviewZoomMin());
+        QVERIFY(ConfigDefaults::overviewZoom() <= ConfigDefaults::overviewZoomMax());
     }
 };
 

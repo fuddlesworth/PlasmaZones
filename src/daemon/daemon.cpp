@@ -28,6 +28,7 @@
 
 #include "overlayservice.h"
 #include "controllers/unifiedlayoutcontroller.h"
+#include "controllers/overviewcontroller.h"
 #include "controllers/shortcutmanager.h"
 #include "controllers/workspacecontroller.h"
 #include "rendering/surfaceshaderitem.h"

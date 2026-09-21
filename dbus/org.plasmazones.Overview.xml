@@ -1,0 +1,106 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+    "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+SPDX-FileCopyrightText: 2026 fuddlesworth
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+<node>
+    <!-- Workspace Overview Interface -->
+    <interface name="org.plasmazones.Overview">
+        <annotation name="org.gtk.GDBus.DocString" value="The workspace overview: a zoomed-out, per-monitor view of every workspace. The daemon is the layout authority (engines are the only source of where a non-current workspace's windows belong) and publishes a per-(screen, desktop) model while the overview is open; the KWin overview effect renders it and sends every mutation back as a verb. Verbs are fire-and-forget: every refusal is a debug log and no state change, and the effect learns the outcome from the next overviewModelChanged. Screen ids are the daemon's canonical physical ids; window ids are the daemon's composite window ids; desktop ids are KWin UUID strings as workspaceMap reports them."/>
+
+        <method name="setOverviewOpen">
+            <annotation name="org.gtk.GDBus.DocString" value="Streaming gate. The effect calls this with true BEFORE its first overviewModel() replay; while closed overviewModel() answers an empty string and overviewModelChanged never fires. Opening also suppresses the workspace OSD hints (snap-back, displaced) until closed. The daemon watches the caller's unique bus name and resets to closed when it vanishes, so a crashed effect cannot leave the model streaming. Only the caller that opened may close; a close from any other name is ignored."/>
+            <arg name="open" type="b" direction="in"/>
+        </method>
+
+        <method name="overviewModel">
+            <annotation name="org.gtk.GDBus.DocString" value="Replay half of overviewModelChanged. Empty while closed, while the workspaces feature is off, or before adoption."/>
+            <arg name="modelJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Versioned JSON object, v 1: {v, generation, workspaceMapGeneration, activity, screens: {screenId: {logicalSize: {w, h}, workspaces: {desktopId: {sliceIndex, index, name, current, mode, windows: [{id, rect: {x, y, w, h}, floating, minimized, sticky, column, tile}], strip?: {viewOffset, columns: [{rect, tabbed, activeTab, tiles: [{id, rect}]}]}}}}}}. Rects are workspace-local logical pixels (relative to the output&apos;s logical geometry origin), integers, unzoomed; a null rect (all zeros) means the daemon has no geometry for that entry. sliceIndex is the workspace&apos;s position in its screen&apos;s slice (JSON objects do not preserve order), index its live 1-based global desktop number, name its declared name or empty, current whether it is the screen&apos;s current workspace. mode is one of snapping, tiling, scrolling, none. The windows array is unordered; the effect sorts by stacking order. strip is present only for scrolling workspaces: its column and tile rects already include the view offset (a parked column lies outside the workspace), and viewOffset is the strip&apos;s viewport position for the pan verb. generation orders model payloads (a receiver drops non-increasing values); workspaceMapGeneration names the workspaceMap generation the model was built against and a receiver holding a different map must re-request workspaceMap() and then overviewModel(). Both counters restart with the daemon's service name."/>
+            </arg>
+        </method>
+
+        <signal name="overviewModelChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="The model changed while the overview is open. Change-gated (only a real payload difference fires) and coalesced to one emission per event-loop turn. Never fires while closed."/>
+            <arg name="modelJson" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Same shape as overviewModel()."/>
+            </arg>
+        </signal>
+
+        <signal name="overviewStateChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="The daemon's view of the open state changed (the setOverviewOpen gate, a watcher reset, or a feature teardown)."/>
+            <arg name="open" type="b"/>
+        </signal>
+
+        <signal name="toggleOverviewRequested">
+            <annotation name="org.gtk.GDBus.DocString" value="The overview toggle shortcut fired daemon-side. The effect toggles its state; the toggle is a no-op there when another fullscreen effect holds the slot or the keyboard grab fails, and the effect reports the actual outcome through setOverviewOpen."/>
+        </signal>
+
+        <signal name="closeOverviewRequested">
+            <annotation name="org.gtk.GDBus.DocString" value="The daemon asks the effect to close the overview without changing focus: the workspaces feature is being torn down, the current activity changed, or the daemon is exiting."/>
+        </signal>
+
+        <method name="reportOverviewState">
+            <annotation name="org.gtk.GDBus.DocString" value="The effect reports whether its toggle actually started or stopped the overview. A report of false while the daemon considers the overview open closes the gate the same way setOverviewOpen(false) would."/>
+            <arg name="open" type="b" direction="in"/>
+        </method>
+
+        <method name="focusWorkspace">
+            <annotation name="org.gtk.GDBus.DocString" value="Switch one screen to one of its own workspaces by desktop id. Refused when the desktop is not in that screen&apos;s slice. Deferred behind the reconciler&apos;s ledger like the delta verbs."/>
+            <arg name="screenId" type="s" direction="in"/>
+            <arg name="desktopId" type="s" direction="in"/>
+        </method>
+
+        <method name="moveWindowToWorkspace">
+            <annotation name="org.gtk.GDBus.DocString" value="Move a window to an existing workspace, handing it to the target context&apos;s placement engine through the cross-mode handoff with a drop intent. dropX/dropY are workspace-local logical pixels, unzoomed. In a scrolling target the drop point decides new column versus join column (stacked or tabbed); in a snapping target it decides the zone (no zone leaves the window free at its live frame); in a tiling target it decides the insert slot. Refused for sticky windows, unknown windows, and desktops not owned by the named screen. A window floating in the source arrives non-floating in the target; the overview never carries a float bit."/>
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="screenId" type="s" direction="in"/>
+            <arg name="desktopId" type="s" direction="in"/>
+            <arg name="dropX" type="i" direction="in"/>
+            <arg name="dropY" type="i" direction="in"/>
+        </method>
+
+        <method name="moveWindowToNewWorkspace">
+            <annotation name="org.gtk.GDBus.DocString" value="Move a window into a NEW workspace on a screen. sliceIndex is the 0-based gap index (0 = above the first workspace, sliceSize = below the trailing empty one). A gap at or past the trailing empty workspace reuses that workspace instead of inserting (niri&apos;s rule); a smaller index inserts a workspace there, reserved against the destroy debounce until the window arrives. dropX/dropY as in moveWindowToWorkspace; a new scrolling workspace always receives the window as its first column."/>
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="screenId" type="s" direction="in"/>
+            <arg name="sliceIndex" type="i" direction="in"/>
+            <arg name="dropX" type="i" direction="in"/>
+            <arg name="dropY" type="i" direction="in"/>
+        </method>
+
+        <method name="reorderWorkspace">
+            <annotation name="org.gtk.GDBus.DocString" value="Move a workspace to a new 0-based position inside its own screen&apos;s slice. A named workspace also rewrites its declaration position so the next re-apply agrees. Refused when the desktop is not owned by the screen or the index is out of range."/>
+            <arg name="screenId" type="s" direction="in"/>
+            <arg name="desktopId" type="s" direction="in"/>
+            <arg name="newSliceIndex" type="i" direction="in"/>
+        </method>
+
+        <method name="moveWorkspaceToScreen">
+            <annotation name="org.gtk.GDBus.DocString" value="Re-own a workspace to another screen at a 0-based slice index, windows riding along. Refused when the source slice would drop to zero, when the target screen is unknown to the map, or when the desktop is unowned. A pinned workspace rewrites its declaration output."/>
+            <arg name="desktopId" type="s" direction="in"/>
+            <arg name="targetScreenId" type="s" direction="in"/>
+            <arg name="sliceIndex" type="i" direction="in"/>
+        </method>
+
+        <method name="renameWorkspace">
+            <annotation name="org.gtk.GDBus.DocString" value="Rename a workspace. Capped at the workspace name length limit. A named workspace rewrites its declaration; a dynamic one pushes the name to KWin through the reconciler&apos;s name ledger."/>
+            <arg name="desktopId" type="s" direction="in"/>
+            <arg name="name" type="s" direction="in"/>
+        </method>
+
+        <method name="pinWorkspace">
+            <annotation name="org.gtk.GDBus.DocString" value="Pin (declare as a named workspace, so it survives being emptied) or unpin (remove the declaration) a workspace. Pinning appends a Workspaces.Named declaration built from the workspace&apos;s current KWin name (or a generated one), its owner screen and its slice index; unpinning removes the declaration whose name the workspace carries. Both go through the daemon&apos;s settings so the declaration list stays the single source of truth."/>
+            <arg name="desktopId" type="s" direction="in"/>
+            <arg name="pinned" type="b" direction="in"/>
+        </method>
+
+        <method name="panStrip">
+            <annotation name="org.gtk.GDBus.DocString" value="Pan a scrolling workspace&apos;s strip by a pixel delta along the strip. The screen&apos;s current workspace pans live; any other workspace pans its stored view, which shows the next time that workspace is focused. Ignored for non-scrolling workspaces."/>
+            <arg name="screenId" type="s" direction="in"/>
+            <arg name="desktopId" type="s" direction="in"/>
+            <arg name="deltaPx" type="i" direction="in"/>
+        </method>
+    </interface>
+</node>

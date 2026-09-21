@@ -178,6 +178,7 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         QStringLiteral("workspaces-behavior"),
         QStringLiteral("workspaces-named"),
         QStringLiteral("workspaces-shortcuts"),
+        QStringLiteral("workspaces-overview"),
     };
     static const QHash<QString, QSet<QString>> groups{
         {QStringLiteral("workspaces"), kWorkspacesLeaves},
@@ -261,6 +262,14 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
         {QStringLiteral("workspaces-named"),
          {
              {CD::workspacesNamedGroup(), CD::entriesKey()},
+         }},
+        {QStringLiteral("workspaces-overview"),
+         {
+             {CD::workspacesOverviewGroup(), CD::overviewZoomKey()},
+             {CD::workspacesOverviewGroup(), CD::overviewBackdropColorKey()},
+             {CD::workspacesOverviewGroup(), CD::overviewGestureEnabledKey()},
+             {CD::workspacesOverviewGroup(), CD::overviewWheelSwitchesWorkspacesKey()},
+             {CD::workspacesOverviewGroup(), CD::overviewShowWorkspaceNamesKey()},
          }},
         {QStringLiteral("workspaces-shortcuts"),
          [] {
@@ -830,6 +839,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("workspaces-behavior"),
         QStringLiteral("workspaces-named"),
         QStringLiteral("workspaces-shortcuts"),
+        QStringLiteral("workspaces-overview"),
         QStringLiteral("animations-simple"),
         QStringLiteral("animations-general"),
         QStringLiteral("animations-windows"),

@@ -50,8 +50,22 @@ private Q_SLOTS:
     void invalidWorkAreaAnswersInvalid();
     void gapsShareTheColumnCrossExtent();
     void livePreviewOmitsDraggedWindow();
+    // The key-taking overload (the workspace overview's read) and the two
+    // IOverviewModelSource views over it.
+    void keyOverloadMatchesCurrentContextAndFillsAbsRects();
+    void keyOverloadAnswersANonCurrentContext();
+    void keyOverloadPlacesAParkedColumnOutsideTheWorkArea();
+    void keyOverloadMutatesNeitherActiveColumnNorView();
+    void neverCreatedKeyAnswersInvalidAndNullopt();
+    void overviewWindowsListsTilesOnceWithIndicesAndFloats();
+    void overviewStripCarriesTheSnapshotRects();
 
 private:
+    static PhosphorEngine::PlacementStateKey keyFor(const QString& screenId, int desktop)
+    {
+        return PhosphorEngine::PlacementStateKey{screenId, desktop, QString()};
+    }
+
     static ScrollState* stateFor(ScrollEngine* engine, const QString& screenId)
     {
         return static_cast<ScrollState*>(engine->stateForScreen(screenId));
@@ -514,6 +528,269 @@ void TestScrollEngineSnapshot::livePreviewOmitsDraggedWindow()
     QCOMPARE(snapWithExclude.columns.at(1).tiles.at(0).windowId, QStringLiteral("c"));
     QCOMPARE(snapWithExclude.activeColumnIndex, snap.activeColumnIndex);
     engine->cancelDragInsertPreview();
+}
+
+void TestScrollEngineSnapshot::keyOverloadMatchesCurrentContextAndFillsAbsRects()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    // A stacked column too, so the cross-axis rects are exercised.
+    QVERIFY(stackUnder(state, 1, 1, QStringLiteral("c")));
+
+    const ScrollStripSnapshot byScreen = engine->stripSnapshot(QStringLiteral("S1"));
+    const ScrollStripSnapshot byKey = engine->stripSnapshot(keyFor(QStringLiteral("S1"), 1));
+    QVERIFY(byKey.valid);
+    QCOMPARE(byKey.activeColumnIndex, byScreen.activeColumnIndex);
+    QCOMPARE(byKey.columns.size(), byScreen.columns.size());
+    const QRect workArea = engineParams().workArea;
+    for (int ci = 0; ci < byKey.columns.size(); ++ci) {
+        const ScrollStripSnapshotColumn& kc = byKey.columns.at(ci);
+        const ScrollStripSnapshotColumn& sc = byScreen.columns.at(ci);
+        QCOMPARE(kc.tabbed, sc.tabbed);
+        QCOMPARE(kc.widthFraction, sc.widthFraction);
+        QCOMPARE(kc.tiles.size(), sc.tiles.size());
+        // The screenId overload leaves the absolute rects null; the key
+        // overload fills every one and they sit inside the work area for
+        // an unscrolled strip.
+        QVERIFY(sc.absRect.isNull());
+        QVERIFY(!kc.absRect.isNull());
+        QVERIFY(workArea.contains(kc.absRect));
+        for (int ti = 0; ti < kc.tiles.size(); ++ti) {
+            const ScrollStripSnapshotTile& kt = kc.tiles.at(ti);
+            const ScrollStripSnapshotTile& st = sc.tiles.at(ti);
+            QCOMPARE(kt.windowId, st.windowId);
+            QCOMPARE(kt.activeTab, st.activeTab);
+            QCOMPARE(kt.relRect, st.relRect);
+            QVERIFY(st.absRect.isNull());
+            QVERIFY(!kt.absRect.isNull());
+            QVERIFY(kc.absRect.contains(kt.absRect));
+        }
+    }
+    // The two stacked tiles split the column's cross extent, in order.
+    const ScrollStripSnapshotColumn& stacked = byKey.columns.at(1);
+    QCOMPARE(stacked.tiles.size(), 2);
+    QVERIFY(ScrollTestUtils::Ax::crossPos(stacked.tiles.at(1).absRect)
+            > ScrollTestUtils::Ax::crossPos(stacked.tiles.at(0).absRect));
+    QCOMPARE(byKey.viewX, state->strip().relayout(engineParams()).viewOffset);
+    QCOMPARE(byScreen.viewX, 0);
+}
+
+void TestScrollEngineSnapshot::keyOverloadAnswersANonCurrentContext()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 2);
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b")});
+    const ScrollStripSnapshot whileCurrent = engine->stripSnapshot(keyFor(QStringLiteral("S1"), 2));
+    QVERIFY(whileCurrent.valid);
+    QCOMPARE(whileCurrent.columns.size(), 2);
+
+    // Desktop 1 is current again: the screenId overload now describes an
+    // empty desktop 1, and only the key overload can still see desktop 2.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    QVERIFY(engine->stripSnapshot(QStringLiteral("S1")).columns.isEmpty());
+    const ScrollStripSnapshot hidden = engine->stripSnapshot(keyFor(QStringLiteral("S1"), 2));
+    QVERIFY(hidden.valid);
+    QCOMPARE(hidden.columns.size(), 2);
+    QCOMPARE(hidden.columns.at(0).tiles.at(0).windowId, QStringLiteral("a"));
+    QCOMPARE(hidden.columns.at(1).tiles.at(0).windowId, QStringLiteral("b"));
+    QCOMPARE(hidden.activeColumnIndex, whileCurrent.activeColumnIndex);
+    QCOMPARE(hidden.viewX, whileCurrent.viewX);
+    for (int ci = 0; ci < hidden.columns.size(); ++ci) {
+        QCOMPARE(hidden.columns.at(ci).absRect, whileCurrent.columns.at(ci).absRect);
+        QCOMPARE(hidden.columns.at(ci).tiles.at(0).absRect, whileCurrent.columns.at(ci).tiles.at(0).absRect);
+    }
+
+    // And the same answer once the context is current again.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 2);
+    const ScrollStripSnapshot again = engine->stripSnapshot(keyFor(QStringLiteral("S1"), 2));
+    QCOMPARE(again.columns.size(), hidden.columns.size());
+    QCOMPARE(again.viewX, hidden.viewX);
+    for (int ci = 0; ci < again.columns.size(); ++ci) {
+        QCOMPARE(again.columns.at(ci).absRect, hidden.columns.at(ci).absRect);
+    }
+}
+
+void TestScrollEngineSnapshot::keyOverloadPlacesAParkedColumnOutsideTheWorkArea()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    // Three half-width columns overflow the viewport by one column.
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    // Pan to the strip's far end. The result is not asserted: the centering
+    // policy may already have the view there after c opened, in which case
+    // the pan is refused and the first column is already parked.
+    state->strip().scrollViewBy(ScrollTestUtils::kMainExtent, engineParams());
+
+    const ScrollStripSnapshot snap = engine->stripSnapshot(keyFor(QStringLiteral("S1"), 1));
+    QVERIFY(snap.valid);
+    QCOMPARE(snap.columns.size(), 3);
+    const QRect workArea = engineParams().workArea;
+    const QRect parked = snap.columns.at(0).absRect;
+    QVERIFY(!parked.isNull());
+    // Outside the work area BEFORE its main-axis start: that is where a
+    // scrolled-past column lives in strip space, and the overview draws it
+    // there rather than at the compositor's park position.
+    QVERIFY(!parked.intersects(workArea));
+    QVERIFY(ScrollTestUtils::Ax::mainPos(parked) < ScrollTestUtils::Ax::mainPos(workArea));
+    QVERIFY(!snap.columns.at(0).tiles.at(0).absRect.intersects(workArea));
+    // The last column is on screen.
+    QVERIFY(workArea.contains(snap.columns.at(2).absRect));
+    // And the strip-space position round-trips through viewX.
+    QCOMPARE(ScrollTestUtils::Ax::mainPos(parked) + snap.viewX, ScrollTestUtils::Ax::mainPos(workArea));
+}
+
+void TestScrollEngineSnapshot::keyOverloadMutatesNeitherActiveColumnNorView()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    // Focus the first column so the view is somewhere other than the end,
+    // then detach it with a pan: a read that re-ran the centering policy
+    // would move it back.
+    engine->windowFocused(QStringLiteral("a"), QStringLiteral("S1"));
+    state->strip().scrollViewBy(100, engineParams());
+    const int activeBefore = state->strip().activeColumnIndex();
+    const int viewBefore = state->strip().relayout(engineParams()).viewOffset;
+    const QString focusBefore = state->strip().activeWindowId();
+
+    const ScrollStripSnapshot snap = engine->stripSnapshot(keyFor(QStringLiteral("S1"), 1));
+    QVERIFY(snap.valid);
+    const auto windows = engine->overviewWindowsFor(keyFor(QStringLiteral("S1"), 1));
+    const auto strip = engine->overviewStripFor(keyFor(QStringLiteral("S1"), 1));
+    QVERIFY(windows.has_value());
+    QVERIFY(strip.has_value());
+
+    QCOMPARE(state->strip().activeColumnIndex(), activeBefore);
+    QCOMPARE(state->strip().relayout(engineParams()).viewOffset, viewBefore);
+    QCOMPARE(state->strip().activeWindowId(), focusBefore);
+    QCOMPARE(snap.viewX, viewBefore);
+}
+
+void TestScrollEngineSnapshot::neverCreatedKeyAnswersInvalidAndNullopt()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a")});
+
+    // A desktop this screen never visited, and a screen the engine does
+    // not own. Neither read may create the state as a side effect, so the
+    // second read of each answers the same.
+    for (const PhosphorEngine::PlacementStateKey& key :
+         {keyFor(QStringLiteral("S1"), 7), keyFor(QStringLiteral("S9"), 1)}) {
+        for (int pass = 0; pass < 2; ++pass) {
+            QVERIFY(!engine->stripSnapshot(key).valid);
+            QVERIFY(!engine->overviewWindowsFor(key).has_value());
+            QVERIFY(!engine->overviewStripFor(key).has_value());
+        }
+    }
+    QCOMPARE(engine->desktopsWithActiveState(), (QSet<int>{1}));
+    // The real context is untouched by the misses.
+    QVERIFY(engine->overviewWindowsFor(keyFor(QStringLiteral("S1"), 1)).has_value());
+}
+
+void TestScrollEngineSnapshot::overviewWindowsListsTilesOnceWithIndicesAndFloats()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"),
+                {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c"), QStringLiteral("f")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    QVERIFY(stackUnder(state, 1, 1, QStringLiteral("c")));
+    engine->setWindowFloat(QStringLiteral("f"), true, QStringLiteral("S1"));
+    QVERIFY(state->isFloating(QStringLiteral("f")));
+
+    const auto entries = engine->overviewWindowsFor(keyFor(QStringLiteral("S1"), 1));
+    QVERIFY(entries.has_value());
+    QCOMPARE(entries->size(), 4);
+    // Strip model order: a (0,0), b (1,0), c (1,1), then the float.
+    QCOMPARE(entries->at(0).windowId, QStringLiteral("a"));
+    QCOMPARE(entries->at(0).column, 0);
+    QCOMPARE(entries->at(0).tile, 0);
+    QCOMPARE(entries->at(1).windowId, QStringLiteral("b"));
+    QCOMPARE(entries->at(1).column, 1);
+    QCOMPARE(entries->at(1).tile, 0);
+    QCOMPARE(entries->at(2).windowId, QStringLiteral("c"));
+    QCOMPARE(entries->at(2).column, 1);
+    QCOMPARE(entries->at(2).tile, 1);
+    const ScrollStripSnapshot snap = engine->stripSnapshot(keyFor(QStringLiteral("S1"), 1));
+    for (int i = 0; i < 3; ++i) {
+        const PhosphorEngine::OverviewWindowEntry& e = entries->at(i);
+        QVERIFY(!e.floating);
+        QVERIFY(!e.minimized);
+        QVERIFY(!e.rect.isNull());
+        QCOMPARE(e.rect, snap.columns.at(e.column).tiles.at(e.tile).absRect);
+    }
+    const PhosphorEngine::OverviewWindowEntry& floated = entries->at(3);
+    QCOMPARE(floated.windowId, QStringLiteral("f"));
+    QVERIFY(floated.floating);
+    QCOMPARE(floated.column, -1);
+    QCOMPARE(floated.tile, -1);
+    // Every window exactly once.
+    QSet<QString> seen;
+    for (const PhosphorEngine::OverviewWindowEntry& e : *entries) {
+        QVERIFY(!seen.contains(e.windowId));
+        seen.insert(e.windowId);
+    }
+}
+
+void TestScrollEngineSnapshot::overviewStripCarriesTheSnapshotRects()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    QVERIFY(stackUnder(state, 1, 1, QStringLiteral("c")));
+    QVERIFY(state->strip().toggleActiveColumnTabbed());
+    state->strip().scrollViewBy(100, engineParams());
+
+    const ScrollStripSnapshot snap = engine->stripSnapshot(keyFor(QStringLiteral("S1"), 1));
+    const auto strip = engine->overviewStripFor(keyFor(QStringLiteral("S1"), 1));
+    const auto windows = engine->overviewWindowsFor(keyFor(QStringLiteral("S1"), 1));
+    QVERIFY(strip.has_value());
+    QVERIFY(windows.has_value());
+    QCOMPARE(strip->viewOffset, snap.viewX);
+    QCOMPARE(strip->columns.size(), snap.columns.size());
+    const QRect workArea = engineParams().workArea;
+    for (int ci = 0; ci < strip->columns.size(); ++ci) {
+        const PhosphorEngine::OverviewStripColumn& oc = strip->columns.at(ci);
+        const ScrollStripSnapshotColumn& sc = snap.columns.at(ci);
+        QCOMPARE(oc.rect, sc.absRect);
+        QCOMPARE(oc.tabbed, sc.tabbed);
+        QCOMPARE(oc.tiles.size(), sc.tiles.size());
+        // The column's strip-space position is its rect's main position
+        // plus the view offset, and its on-screen position is the rect's.
+        QCOMPARE(ScrollTestUtils::Ax::mainPos(oc.rect) + strip->viewOffset - snap.viewX,
+                 ScrollTestUtils::Ax::mainPos(sc.absRect));
+        for (int ti = 0; ti < oc.tiles.size(); ++ti) {
+            QCOMPARE(oc.tiles.at(ti).windowId, sc.tiles.at(ti).windowId);
+            QCOMPARE(oc.tiles.at(ti).rect, sc.tiles.at(ti).absRect);
+            // And the same rect the window entry reports for that slot.
+            for (const PhosphorEngine::OverviewWindowEntry& e : *windows) {
+                if (e.column == ci && e.tile == ti) {
+                    QCOMPARE(e.rect, oc.tiles.at(ti).rect);
+                }
+            }
+        }
+    }
+    // The tabbed column: activeTab names the visible tab, and its hidden
+    // tab carries the shared rect rather than none.
+    const PhosphorEngine::OverviewStripColumn& tabbed = strip->columns.at(1);
+    QVERIFY(tabbed.tabbed);
+    QCOMPARE(tabbed.tiles.size(), 2);
+    QVERIFY(snap.columns.at(1).tiles.at(tabbed.activeTab).activeTab);
+    QCOMPARE(tabbed.tiles.at(0).rect, tabbed.tiles.at(1).rect);
+    QVERIFY(!tabbed.tiles.at(0).rect.isNull());
+    QVERIFY(workArea.intersects(tabbed.rect));
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngineSnapshot)

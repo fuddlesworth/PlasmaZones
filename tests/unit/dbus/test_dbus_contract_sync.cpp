@@ -60,6 +60,7 @@
 #include "dbus/controladaptor.h"
 #include "dbus/layoutadaptor/layoutadaptor.h"
 #include "dbus/overlayadaptor.h"
+#include "dbus/overviewadaptor.h"
 #include "dbus/settingsadaptor/settingsadaptor.h"
 #include "dbus/shaderadaptor.h"
 #include "dbus/snapadaptor/snapadaptor.h"
@@ -605,6 +606,11 @@ private Q_SLOTS:
         verifyContract(OverlayAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Overlay"));
     }
 
+    void testOverviewContract()
+    {
+        verifyContract(OverviewAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Overview"));
+    }
+
     void testSettingsContract()
     {
         verifyContract(SettingsAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Settings"));
@@ -647,21 +653,14 @@ private Q_SLOTS:
         // launch adaptors — see the header comment). A new XML added later
         // must not go silently unchecked.
         static const QSet<QString> covered = {
-            QStringLiteral("org.plasmazones.Autotile.xml"),
-            QStringLiteral("org.plasmazones.Tiling.xml"),
-            QStringLiteral("org.plasmazones.CompositorBridge.xml"),
-            QStringLiteral("org.plasmazones.Control.xml"),
-            QStringLiteral("org.plasmazones.LayoutRegistry.xml"),
-            QStringLiteral("org.plasmazones.Overlay.xml"),
-            QStringLiteral("org.plasmazones.Screen.xml"),
-            QStringLiteral("org.plasmazones.Settings.xml"),
-            QStringLiteral("org.plasmazones.Shader.xml"),
-            QStringLiteral("org.plasmazones.Scrolling.xml"),
-            QStringLiteral("org.plasmazones.Snap.xml"),
-            QStringLiteral("org.plasmazones.WindowDrag.xml"),
-            QStringLiteral("org.plasmazones.Rules.xml"),
-            QStringLiteral("org.plasmazones.WindowTracking.xml"),
-            QStringLiteral("org.plasmazones.ZoneDetection.xml"),
+            QStringLiteral("org.plasmazones.Autotile.xml"),         QStringLiteral("org.plasmazones.Tiling.xml"),
+            QStringLiteral("org.plasmazones.CompositorBridge.xml"), QStringLiteral("org.plasmazones.Control.xml"),
+            QStringLiteral("org.plasmazones.LayoutRegistry.xml"),   QStringLiteral("org.plasmazones.Overlay.xml"),
+            QStringLiteral("org.plasmazones.Overview.xml"),         QStringLiteral("org.plasmazones.Screen.xml"),
+            QStringLiteral("org.plasmazones.Settings.xml"),         QStringLiteral("org.plasmazones.Shader.xml"),
+            QStringLiteral("org.plasmazones.Scrolling.xml"),        QStringLiteral("org.plasmazones.Snap.xml"),
+            QStringLiteral("org.plasmazones.WindowDrag.xml"),       QStringLiteral("org.plasmazones.Rules.xml"),
+            QStringLiteral("org.plasmazones.WindowTracking.xml"),   QStringLiteral("org.plasmazones.ZoneDetection.xml"),
         };
         static const QSet<QString> documentedOutOfScope = {
             // App-internal single-slot launch forwarders; rationale in the

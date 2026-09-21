@@ -71,6 +71,9 @@ bool WorkspaceController::watchWindowMove(const QString& windowId, const QString
             m_windowMoveSequences.remove(watchKey);
             qCWarning(lcWorkspaceCtl) << "workspace move for window" << windowId << "to desktop" << targetDesktopId
                                       << "saw no arrival (effect not loaded, window closed, or handoff refused)";
+            // A workspace inserted for this very move (the overview's gap
+            // drop) must not outlive a move that never delivered.
+            m_reconciler.releaseReservation(targetDesktopId);
         }
     });
     return true;
@@ -264,37 +267,50 @@ void WorkspaceController::moveWorkspaceToOutput(const QString& screenId, const Q
 
         // Windows riding along are enumerated BEFORE the transfer (the census
         // keys by desktop id, unaffected by the map mutation).
-        const QString movingId = m_reconciler.currentDesktopIdOf(screenId);
-        QStringList riders;
-        for (auto it = m_windowCensusDesktopId.constBegin(); it != m_windowCensusDesktopId.constEnd(); ++it) {
-            if (it.value() == movingId) {
-                riders.append(it.key());
-            }
-        }
-
+        const QStringList riders = windowsOnWorkspace(m_reconciler.currentDesktopIdOf(screenId));
         const QString movedId = m_reconciler.transferCurrentWorkspace(screenId, targetScreen);
         if (movedId.isEmpty()) {
             return;
         }
-        const int desktop = m_vdm->desktopIndexOf(movedId);
-        if (desktop > 0) {
-            // The desktop keeps its identity; the windows change OUTPUT. The
-            // handoff verb re-homes each one's engine state and geometry on
-            // the target screen (same desktop int).
-            for (const QString& windowId : riders) {
-                // A sticky rider is on the moved desktop already and stays
-                // put; the remaining riders still cross to the new output.
-                if (!watchWindowMove(windowId, movedId)) {
-                    continue;
-                }
-                Q_EMIT windowWorkspaceMoveRequested(windowId, targetScreen, desktop, QString(), direction,
-                                                    /*moveOutput=*/true);
-            }
-            // niri semantics: the moved workspace gains focus on its new
-            // output (the source already snapped back inside the transfer).
-            m_reconciler.issueSetCurrent(targetScreen, movedId);
-        }
+        relocateRidersAndShow(riders, movedId, targetScreen, direction);
     });
+}
+
+QStringList WorkspaceController::windowsOnWorkspace(const QString& desktopId) const
+{
+    QStringList riders;
+    if (desktopId.isEmpty()) {
+        return riders;
+    }
+    for (auto it = m_windowCensusDesktopId.constBegin(); it != m_windowCensusDesktopId.constEnd(); ++it) {
+        if (it.value() == desktopId) {
+            riders.append(it.key());
+        }
+    }
+    return riders;
+}
+
+void WorkspaceController::relocateRidersAndShow(const QStringList& riders, const QString& desktopId,
+                                                const QString& targetScreen, const QString& direction)
+{
+    const int desktop = m_vdm->desktopIndexOf(desktopId);
+    if (desktop <= 0) {
+        return;
+    }
+    // The desktop keeps its identity; the windows change OUTPUT. The handoff
+    // verb re-homes each one's engine state and geometry on the target screen
+    // (same desktop int). A sticky rider is on the moved desktop already and
+    // stays put; the remaining riders still cross to the new output.
+    for (const QString& windowId : riders) {
+        if (!watchWindowMove(windowId, desktopId)) {
+            continue;
+        }
+        Q_EMIT windowWorkspaceMoveRequested(windowId, targetScreen, desktop, QString(), direction,
+                                            /*moveOutput=*/true);
+    }
+    // niri semantics: the moved workspace gains focus on its new output (the
+    // source already snapped back inside the transfer).
+    m_reconciler.issueSetCurrent(targetScreen, desktopId);
 }
 
 // ── Named workspaces ────────────────────────────────────────────────────────

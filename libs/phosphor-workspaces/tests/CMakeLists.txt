@@ -26,5 +26,6 @@ endfunction()
 
 pw_add_test(test_workspace_map test_workspace_map.cpp)
 pw_add_test(test_workspace_reconciler test_workspace_reconciler.cpp)
+pw_add_test(test_workspace_reconciler_overview test_workspace_reconciler_overview.cpp)
 pw_add_test(test_workspace_ledger test_workspace_ledger.cpp)
 pw_add_test(test_virtualdesktopmanager test_virtualdesktopmanager.cpp)

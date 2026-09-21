@@ -11,6 +11,8 @@
 
 #include "wta_convenience_fixture.h"
 
+#include <PhosphorEngine/HandoffIntent.h>
+
 #include <QScopeGuard>
 
 class TestWtaRouting : public QObject, protected WtaConvenienceFixture
@@ -47,6 +49,57 @@ private Q_SLOTS:
     }
 
     // ── Open routing: RouteToScreen / RouteToDesktop rules ──
+    /// The overview drop onto a snapping workspace: the zone under the drop
+    /// point on the target desktop's layout is the landing zone; a point
+    /// outside every zone leaves the window free (no zone, non-floating).
+    void testOverviewDrop_snapZoneUnderDropPoint()
+    {
+        const QString windowId = QStringLiteral("app|w1");
+        const QString screen = QStringLiteral("DP-1");
+        QVERIFY(m_zoneIds.size() >= 2);
+        SnapState* state = m_snapEngine->stateForWindowOnScreen(windowId, screen);
+        state->assignWindowToZone(windowId, m_zoneIds.at(0), screen, 1);
+        QVERIFY(m_snapEngine->isWindowTracked(windowId));
+
+        const QRect target = m_wta->service()->zoneGeometry(m_zoneIds.at(1), screen);
+        if (!target.isValid()) {
+            QSKIP("zone geometry does not resolve without a screen");
+        }
+        // The compositor's half of a desktop move. Snap state is per desktop,
+        // and the store a window LEFT is released by the membership pass once
+        // the compositor reports the window's new desktop set, which the daemon
+        // drives live and this fixture has to play by hand.
+        const auto compositorReportsDesktop = [this, &windowId](int desktop) {
+            m_snapEngine->reconcileWindowMemberships(windowId, [desktop](const QString&) {
+                PhosphorEngine::DesktopSpan span;
+                span.known = true;
+                span.desktops = {desktop};
+                return span;
+            });
+        };
+        PhosphorEngine::HandoffIntent intent;
+        intent.dropPos = target.center();
+        m_wta->moveWindowToWorkspaceWithIntent(windowId, screen, 2, QString(), intent);
+        // Desktop 2's own store, named outright: snap state is per desktop, and
+        // the screen still shows desktop 1, so the unpinned lookup would answer
+        // with the store in view rather than the one the move committed into.
+        SnapState* after = m_snapEngine->stateForWindowOnScreen(windowId, screen, 2);
+        QCOMPARE(after->zoneForWindow(windowId), m_zoneIds.at(1));
+        QCOMPARE(after->desktopForWindow(windowId), 2);
+        compositorReportsDesktop(2);
+        QVERIFY2(!m_snapEngine->stateForWindowOnScreen(windowId, screen, 2)->zoneForWindow(windowId).isEmpty(),
+                 "the destination desktop keeps the zone the drop chose");
+
+        // A drop outside every zone: no zone, and not floating either.
+        PhosphorEngine::HandoffIntent free;
+        free.dropPos = QPoint(-5000, -5000);
+        m_wta->moveWindowToWorkspaceWithIntent(windowId, screen, 1, QString(), free);
+        compositorReportsDesktop(1);
+        SnapState* freed = m_snapEngine->stateForWindowOnScreen(windowId, screen);
+        QVERIFY(freed->zoneForWindow(windowId).isEmpty());
+        QVERIFY(!freed->isFloating(windowId));
+    }
+
     void testApplyOpenRoutingForTiling_routesToAutotileScreenAndDesktop()
     {
         // DP-2 is an AUTOTILE screen; DP-1 (the spawn screen) stays snapping (the

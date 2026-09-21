@@ -279,6 +279,10 @@ const QHash<QString, ValueDescriptor>& descriptorTable()
         // bar renders it as a percentage for the same reason.
         t.insert(pairKey(CD::editorSnappingGroup(), CD::intervalXKey()), number(pct, 100.0));
         t.insert(pairKey(CD::editorSnappingGroup(), CD::intervalYKey()), number(pct, 100.0));
+        // The overview zoom is the fraction of the screen each workspace is
+        // drawn at (0.1-0.75); the Overview page's slider shows it as a
+        // percentage.
+        t.insert(pairKey(CD::workspacesOverviewGroup(), CD::overviewZoomKey()), number(pct, 100.0));
 
         // ── Pixel quantities ────────────────────────────────────────────────
         t.insert(pairKey(CD::snappingZonesBorderGroup(), CD::widthKey()), number(px));

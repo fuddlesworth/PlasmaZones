@@ -32,6 +32,35 @@ P_STORE_GET(bool, workspacesRebindKWinShortcuts, workspacesBehaviorGroup, rebind
 P_STORE_SET_BOOL(setWorkspacesRebindKWinShortcuts, workspacesBehaviorGroup, rebindKWinShortcutsKey,
                  workspacesRebindKWinShortcutsChanged)
 
+// Workspaces.Overview: the overview effect's look and input. Read by the
+// KWin effect over the settings wire (see the adaptor registry). ISettings
+// carries defaulted getters for these five (its header does not see
+// ConfigDefaults), so the agreement is pinned here the way scrolling.cpp
+// pins the tab indicator's; the backdrop string is checked in the
+// settings-defaults test since a QString cannot be a constant expression.
+static_assert(ConfigDefaults::overviewZoom() == 0.5,
+              "ISettings::overviewZoom defaults to 0.5 — update it with this default");
+static_assert(ConfigDefaults::overviewGestureEnabled(),
+              "ISettings::overviewGestureEnabled defaults to true — update it with this default");
+static_assert(ConfigDefaults::overviewWheelSwitchesWorkspaces(),
+              "ISettings::overviewWheelSwitchesWorkspaces defaults to true — update it with this default");
+static_assert(ConfigDefaults::overviewShowWorkspaceNames(),
+              "ISettings::overviewShowWorkspaceNames defaults to true — update it with this default");
+P_STORE_GET(qreal, overviewZoom, workspacesOverviewGroup, overviewZoomKey, double)
+P_STORE_SET_DOUBLE(setOverviewZoom, workspacesOverviewGroup, overviewZoomKey, overviewZoomChanged)
+P_STORE_GET(QString, overviewBackdropColor, workspacesOverviewGroup, overviewBackdropColorKey, QString)
+P_STORE_SET_STRING(setOverviewBackdropColor, workspacesOverviewGroup, overviewBackdropColorKey,
+                   overviewBackdropColorChanged)
+P_STORE_GET(bool, overviewGestureEnabled, workspacesOverviewGroup, overviewGestureEnabledKey, bool)
+P_STORE_SET_BOOL(setOverviewGestureEnabled, workspacesOverviewGroup, overviewGestureEnabledKey,
+                 overviewGestureEnabledChanged)
+P_STORE_GET(bool, overviewWheelSwitchesWorkspaces, workspacesOverviewGroup, overviewWheelSwitchesWorkspacesKey, bool)
+P_STORE_SET_BOOL(setOverviewWheelSwitchesWorkspaces, workspacesOverviewGroup, overviewWheelSwitchesWorkspacesKey,
+                 overviewWheelSwitchesWorkspacesChanged)
+P_STORE_GET(bool, overviewShowWorkspaceNames, workspacesOverviewGroup, overviewShowWorkspaceNamesKey, bool)
+P_STORE_SET_BOOL(setOverviewShowWorkspaceNames, workspacesOverviewGroup, overviewShowWorkspaceNamesKey,
+                 overviewShowWorkspaceNamesChanged)
+
 // Named-workspace declarations: whole-replace QVariantList composite, same
 // write shape as the trigger lists (read-back compare so a semantically
 // identical list swallows no signal).
@@ -63,6 +92,8 @@ void Settings::setWorkspacesNamedEntries(const QVariantList& entries)
 // ── Verb shortcuts (Shortcuts.Global leaves, like every other chord) ────────
 
 P_STORE_GET(QString, workspaceFocusUpShortcut, shortcutsGlobalGroup, workspaceFocusUpKey, QString)
+P_STORE_GET(QString, overviewToggleShortcut, shortcutsGlobalGroup, overviewToggleKey, QString)
+P_STORE_SET_STRING(setOverviewToggleShortcut, shortcutsGlobalGroup, overviewToggleKey, overviewToggleShortcutChanged)
 P_STORE_SET_STRING(setWorkspaceFocusUpShortcut, shortcutsGlobalGroup, workspaceFocusUpKey,
                    workspaceFocusUpShortcutChanged)
 P_STORE_GET(QString, workspaceFocusDownShortcut, shortcutsGlobalGroup, workspaceFocusDownKey, QString)
@@ -211,7 +242,7 @@ void Settings::setWorkspaceMoveSlotShortcut(int index, const QString& shortcut)
 // shared family signals, which is what their setters emit too.
 
 namespace {
-/// The ten verb chords, paired getter → NOTIFY, in one table so the snapshot
+/// The eleven verb chords, paired getter → NOTIFY, in one table so the snapshot
 /// and the emit walk the same order. Adding a verb means one row here, not two
 /// hand-kept lists.
 struct WorkspaceVerbChord
@@ -220,9 +251,9 @@ struct WorkspaceVerbChord
     void (Settings::*changed)();
 };
 
-const std::array<WorkspaceVerbChord, 10>& workspaceVerbChords()
+const std::array<WorkspaceVerbChord, 11>& workspaceVerbChords()
 {
-    static const std::array<WorkspaceVerbChord, 10> table{{
+    static const std::array<WorkspaceVerbChord, 11> table{{
         {&Settings::workspaceFocusUpShortcut, &Settings::workspaceFocusUpShortcutChanged},
         {&Settings::workspaceFocusDownShortcut, &Settings::workspaceFocusDownShortcutChanged},
         {&Settings::workspaceMoveWindowUpShortcut, &Settings::workspaceMoveWindowUpShortcutChanged},
@@ -233,6 +264,7 @@ const std::array<WorkspaceVerbChord, 10>& workspaceVerbChords()
         {&Settings::workspaceReorderDownShortcut, &Settings::workspaceReorderDownShortcutChanged},
         {&Settings::workspaceMoveToMonitorLeftShortcut, &Settings::workspaceMoveToMonitorLeftShortcutChanged},
         {&Settings::workspaceMoveToMonitorRightShortcut, &Settings::workspaceMoveToMonitorRightShortcutChanged},
+        {&Settings::overviewToggleShortcut, &Settings::overviewToggleShortcutChanged},
     }};
     return table;
 }

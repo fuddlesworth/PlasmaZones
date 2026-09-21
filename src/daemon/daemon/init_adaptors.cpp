@@ -84,6 +84,7 @@
 #include "dbus/shaderadaptor.h"
 #include "dbus/compositorbridgeadaptor.h"
 #include "dbus/controladaptor.h"
+#include "dbus/overviewadaptor.h"
 #include "dbus/ruleadaptor.h"
 
 namespace PlasmaZones {
@@ -128,6 +129,8 @@ void Daemon::initCoreAdaptors()
     m_zoneDetectionAdaptor = nullptr;
     delete m_overlayAdaptor;
     m_overlayAdaptor = nullptr;
+    delete m_overviewAdaptor;
+    m_overviewAdaptor = nullptr;
     delete m_compositorBridge;
     m_compositorBridge = nullptr;
     delete m_ruleAdaptor;
@@ -199,6 +202,11 @@ void Daemon::initCoreAdaptors()
     // Overlay adaptor - overlay visibility and highlighting
     m_overlayAdaptor = new OverlayAdaptor(m_overlayService.get(), m_zoneDetector.get(), m_layoutManager.get(),
                                           m_screenManager.get(), m_settings.get(), this);
+
+    // Overview adaptor - the workspace overview's model stream and verbs.
+    // Unconditional so the interface is always introspectable; the policy
+    // object attaches in initializeOverview while workspaces are on.
+    m_overviewAdaptor = new OverviewAdaptor(this);
 
     // PhosphorZones::Zone detection adaptor - zone detection queries
     m_zoneDetectionAdaptor = new ZoneDetectionAdaptor(m_zoneDetector.get(), m_layoutManager.get(),

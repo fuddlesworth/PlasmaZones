@@ -142,6 +142,16 @@ bool PlasmaZonesEffect::blocksDirectScanout() const
     return m_stripViewAnimator->hasActiveAnimations() || m_stripTransition.isRunning();
 }
 
+bool PlasmaZonesEffect::foreignFullScreenEffectActive() const
+{
+    // The whole window stack is still painted under a fullscreen effect's
+    // opaque view every frame, with full-screen damage, so skipping this
+    // effect's own passes is the primary GPU saving while one runs, not a
+    // belt. Our own claim (the desktop-switch blend) is not foreign.
+    const KWin::Effect* active = KWin::effects->activeFullScreenEffect();
+    return active && active != this;
+}
+
 KWin::RenderDevice* PlasmaZonesEffect::currentPassRenderDevice() const
 {
     return KWinCompat::renderDeviceOf(m_currentPassView);
@@ -226,7 +236,7 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     m_scrollTabPainted = false;
     m_scrollTabBlitIssued = false;
     m_scrollTabAboveAnchor.clear();
-    if (data.screen && m_scrollTabPainter->hasIndicators(data.screen)) {
+    if (data.screen && !foreignFullScreenEffectActive() && m_scrollTabPainter->hasIndicators(data.screen)) {
         const QRectF passOutputGeo = QRect(data.screen->geometry());
         for (KWin::EffectWindow* sw : KWin::effects->stackingOrder()) {
             // The paintability terms StripTransitionManager's above-strip
@@ -606,7 +616,8 @@ bool PlasmaZonesEffect::paintScreenImpl(const KWin::RenderTarget& renderTarget, 
     // decorate a frame nobody sees. When the strip pass paints (captures the
     // scene, runs the pack, returns true) the normal scene paint is skipped
     // the same way.
-    if (m_stripTransition.paintOutput(renderTarget, viewport, mask, deviceRegion, screen)) {
+    const bool foreignFullScreen = foreignFullScreenEffectActive();
+    if (!foreignFullScreen && m_stripTransition.paintOutput(renderTarget, viewport, mask, deviceRegion, screen)) {
         // As above: the strip pass took the frame and painted it, so this is a
         // success even though the normal scene walk never ran.
         return true;
@@ -653,8 +664,8 @@ bool PlasmaZonesEffect::paintScreenImpl(const KWin::RenderTarget& renderTarget, 
     // both treat the latch as load-bearing. Unreachable today — both of its
     // setters drive paintWindow directly and never call paintScreen — but the
     // asymmetry is the kind a future direct-drive caller falls into.
-    if (screen && m_scrollTabPaintAnchor && !m_scrollTabPainted && !m_capturingSnapshot && !m_directPaintCapture
-        && m_scrollTabPainter->hasIndicators(screen)) {
+    if (screen && !foreignFullScreen && m_scrollTabPaintAnchor && !m_scrollTabPainted && !m_capturingSnapshot
+        && !m_directPaintCapture && m_scrollTabPainter->hasIndicators(screen)) {
         paintScrollTabIndicators(renderTarget, viewport, deviceRegion);
     }
     // The pointer decoration chain composites over the FINISHED frame, so it
@@ -1291,6 +1302,10 @@ void PlasmaZonesEffect::postPaintScreen()
 
 void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data)
 {
+    if (foreignFullScreenEffectActive()) {
+        OffscreenEffect::prePaintWindow(view, w, data);
+        return;
+    }
     // Derived ONCE. This runs per window, per output, per frame, and the three
     // branches below (padded transform, SetOpacity, chain translucency) each used to
     // re-derive the id and re-look-up the same decoration entry.
@@ -1534,6 +1549,11 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
                                         KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
                                         KWin::WindowPaintData& data)
 {
+    if (foreignFullScreenEffectActive()) {
+        // Nothing of ours is visible under the foreign view: no decoration
+        // fold, no burn, no tab blit. Straight down the chain.
+        return notePaintOk(KWinCompat::paintWindowChecked(renderTarget, viewport, w, mask, deviceRegion, data));
+    }
     // Scrolling-strip boundary clip. A strip column legitimately straddles
     // its screen's edge (centering the active column pushes both neighbours
     // across it). In default clamp mode the engine clamps BOTH edges

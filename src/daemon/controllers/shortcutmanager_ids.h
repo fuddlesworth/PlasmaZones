@@ -49,6 +49,8 @@ inline constexpr auto kIdWorkspaceReorderUp = "workspace_reorder_up";
 inline constexpr auto kIdWorkspaceReorderDown = "workspace_reorder_down";
 inline constexpr auto kIdWorkspaceMoveToMonitorLeft = "workspace_move_to_monitor_left";
 inline constexpr auto kIdWorkspaceMoveToMonitorRight = "workspace_move_to_monitor_right";
+// The workspace overview toggle (part of the workspaces feature, same gate).
+inline constexpr auto kIdOverviewToggle = "overview_toggle";
 // Workspace quick-shortcut slots (settings-backed, unset by default). The
 // prefix joins the adhoc collision guard like the quick-layout/snap-to-zone
 // families.

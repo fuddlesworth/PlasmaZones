@@ -19,6 +19,11 @@
 # session (X11 test clients; see the flag site below for how to point a
 # client at the nested display).
 #
+# Set PZ_NESTED_PER_OUTPUT_DESKTOPS to any value to seed KWin's per-output
+# virtual desktops into the nested kwinrc (the dynamic-workspaces feature and
+# the workspace overview need it; a seeded plasmazones config.json then turns
+# the feature on without the daemon's consent write).
+#
 # Set PZ_NESTED_VISIBLE to any value to run the nested compositor as a
 # WINDOW on the host desktop instead of headless --virtual: same isolated
 # session, but you can watch it and interact with pointer/keyboard.
@@ -274,6 +279,13 @@ mkdir -p "$HOME_N/config" "$HOME_N/data" "$HOME_N/cache" "$HOME_N/state"
 # PZ_NESTED_DIR points somewhere world-traversable.
 chmod 700 "$NEST"
 
+# Both build-tree effect plugins: the main effect and the workspace overview
+# (kwin_effect_plasmazones_overview, a QuickSceneEffect that renders the
+# dynamic-workspaces map). The overview only draws once the daemon's
+# workspaces feature is on, which needs KWin's per-output virtual desktops;
+# PZ_NESTED_PER_OUTPUT_DESKTOPS opts the nested kwinrc into that mode so a
+# seeded config can enable the feature without the consent write.
+#
 # KWin keeps the virtual-desktop count and names in this same kwinrc
 # ([Desktops] Number= / Id_N=), and it preserves the [Plugins] group across
 # its own writes. Rewriting the file under keep-state would restart the
@@ -286,7 +298,15 @@ else
     cat > "$HOME_N/config/kwinrc" <<KWINRC
 [Plugins]
 kwin_effect_plasmazonesEnabled=true
+kwin_effect_plasmazones_overviewEnabled=true
 KWINRC
+    if [ -n "${PZ_NESTED_PER_OUTPUT_DESKTOPS:-}" ]; then
+        cat >> "$HOME_N/config/kwinrc" <<KWINRC
+
+[Windows]
+PerOutputVirtualDesktops=true
+KWINRC
+    fi
 fi
 
 export XDG_CONFIG_HOME="$HOME_N/config"

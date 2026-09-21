@@ -31,8 +31,9 @@ class Settings; // Forward declaration for concrete type
  *
  * Uses registry pattern for setSetting.
  */
-/// Inherits QDBusContext (like OverlayAdaptor) so getSetting can answer an
-/// UNKNOWN key with a real D-Bus error instead of a valid-but-empty value.
+/// Answers an UNKNOWN getSetting key with a real D-Bus error instead of a
+/// valid-but-empty value, through the call context Qt sets on the registered
+/// object (the Daemon, this adaptor's parent), read via dbusContext().
 /// That distinction is load-bearing: getSetting resolves keys through a
 /// hand-maintained registry, not through Qt property reflection, so a setting
 /// whose registration is forgotten is a live possibility — and while the miss
@@ -41,7 +42,7 @@ class Settings; // Forward declaration for concrete type
 /// value instead of failing. An error reply makes loadSettingAsync's
 /// reply.isValid() false, so the callback never runs and the caller keeps its
 /// own default. One central guard instead of a type-check at every call site.
-class PLASMAZONES_EXPORT SettingsAdaptor : public QDBusAbstractAdaptor, public QDBusContext
+class PLASMAZONES_EXPORT SettingsAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Settings")
@@ -249,6 +250,11 @@ Q_SIGNALS:
     void runningWindowsAvailable(const QString& json);
 
 private:
+    /// The call context of the registered object this adaptor hangs off
+    /// (Qt populates the context on the object, never on the adaptor); null
+    /// when the parent is not a QDBusContext. calledFromDBus() on it is false
+    /// for a direct in-process call, so every error reply below is guarded.
+    QDBusContext* dbusContext() const;
     void initializeRegistry();
     /// The per-mode slices of the registry, split into
     /// settingsadaptor_registry_snapping.cpp,

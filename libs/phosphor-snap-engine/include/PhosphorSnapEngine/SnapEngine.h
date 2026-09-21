@@ -572,6 +572,14 @@ public:
     /// enumerations (occupied zones, snapped/floating windows, flat-map views).
     QList<SnapState*> allSnapStates() const;
 
+    /// IOverviewModelSource: the windows the per-key store at @p key holds for
+    /// (key.screenId, key.desktop), each with its zone frame (the union of its
+    /// zones' geometries) or its float bit. Reads ONLY the per-key store: a key
+    /// with no store, and the global holder's empty-screen sentinel key, answer
+    /// std::nullopt. Never creates state, never mutates, never emits.
+    std::optional<QList<PhosphorEngine::OverviewWindowEntry>>
+    overviewWindowsFor(const PhosphorEngine::PlacementStateKey& key) const override;
+
     /// Resolve-or-register the state @p windowId's data belongs in for a write
     /// on @p screenId, and return it. With @p desktop pinned (>= 1) that is the
     /// store for (screen, desktop, activity), created and granted a membership

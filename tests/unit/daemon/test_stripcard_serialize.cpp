@@ -36,11 +36,13 @@ private Q_SLOTS:
         // absent-key coercion value).
         normal.tiles.append({.windowId = QStringLiteral("a"),
                              .relRect = QRectF(0.25, 0.5, 0.75, 0.5),
+                             .absRect = QRect(),
                              .minimized = false,
                              .hidden = false,
                              .activeTab = true});
         normal.tiles.append({.windowId = QStringLiteral("b"),
                              .relRect = QRectF(),
+                             .absRect = QRect(),
                              .minimized = false,
                              .hidden = false,
                              .activeTab = false});
@@ -49,11 +51,13 @@ private Q_SLOTS:
         tabbedColumn.tabbed = true;
         tabbedColumn.tiles.append({.windowId = QStringLiteral("c"),
                                    .relRect = QRectF(0, 0, 1, 1),
+                                   .absRect = QRect(),
                                    .minimized = false,
                                    .hidden = false,
                                    .activeTab = true});
         tabbedColumn.tiles.append({.windowId = QStringLiteral("d"),
                                    .relRect = QRectF(),
+                                   .absRect = QRect(),
                                    .minimized = false,
                                    .hidden = true,
                                    .activeTab = false});
@@ -120,6 +124,7 @@ private Q_SLOTS:
             column.widthFraction = f;
             column.tiles.append({.windowId = QStringLiteral("w"),
                                  .relRect = QRectF(0, 0, 1, 1),
+                                 .absRect = QRect(),
                                  .minimized = false,
                                  .hidden = false,
                                  .activeTab = true});
@@ -221,6 +226,7 @@ private Q_SLOTS:
         ScrollStripSnapshotColumn column;
         column.tiles.append({.windowId = QStringLiteral("a"),
                              .relRect = QRectF(0, 0, 1, 1),
+                             .absRect = QRect(),
                              .minimized = false,
                              .hidden = false,
                              .activeTab = true});
@@ -238,6 +244,7 @@ private Q_SLOTS:
             ScrollStripSnapshotColumn column;
             column.tiles.append({.windowId = QStringLiteral("w"),
                                  .relRect = QRectF(0, 0, 1, 1),
+                                 .absRect = QRect(),
                                  .minimized = false,
                                  .hidden = false,
                                  .activeTab = true});

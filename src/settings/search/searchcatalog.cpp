@@ -88,7 +88,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                             {PhosphorI18n::tr("split"), PhosphorI18n::tr("subdivide"), PhosphorI18n::tr("region"),
                              PhosphorI18n::tr("monitor")});
 
-    // Dynamic per-monitor workspaces (the three leaves under the "workspaces"
+    // Dynamic per-monitor workspaces (the four leaves under the "workspaces"
     // drill parent). Multi-word phrases included whole — the ranker matches
     // the query as one un-split needle. "niri" stays untranslated.
     //
@@ -127,6 +127,29 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                              PhosphorI18n::tr("quick shortcut"), PhosphorI18n::tr("move window")});
     addSection(search, QStringLiteral("workspaces-shortcuts"), QStringLiteral("workspaceQuickShortcuts"),
                PhosphorI18n::tr("Workspace quick shortcuts"));
+    search->setPageKeywords(QStringLiteral("workspaces-overview"),
+                            {PhosphorI18n::tr("workspace"), PhosphorI18n::tr("overview"), PhosphorI18n::tr("zoom out"),
+                             PhosphorI18n::tr("swipe"), PhosphorI18n::tr("gesture"), PhosphorI18n::tr("wheel"),
+                             PhosphorI18n::tr("backdrop"), PhosphorI18n::tr("workspace names")});
+    addSection(search, QStringLiteral("workspaces-overview"), QStringLiteral("overviewAppearance"),
+               PhosphorI18n::tr("Appearance"));
+    addSetting(search, QStringLiteral("workspaces-overview"), QStringLiteral("overviewZoom"), PhosphorI18n::tr("Zoom"),
+               {PhosphorI18n::tr("zoom"), PhosphorI18n::tr("scale"), PhosphorI18n::tr("size")});
+    addSetting(search, QStringLiteral("workspaces-overview"), QStringLiteral("overviewBackdropColor"),
+               PhosphorI18n::tr("Backdrop color"),
+               {PhosphorI18n::tr("backdrop"), PhosphorI18n::tr("background"), PhosphorI18n::tr("color")});
+    addSetting(search, QStringLiteral("workspaces-overview"), QStringLiteral("overviewShowWorkspaceNames"),
+               PhosphorI18n::tr("Show workspace names"),
+               {PhosphorI18n::tr("name"), PhosphorI18n::tr("label"), PhosphorI18n::tr("workspace names")});
+    addSection(search, QStringLiteral("workspaces-overview"), QStringLiteral("overviewInput"),
+               PhosphorI18n::tr("Input"));
+    addSetting(search, QStringLiteral("workspaces-overview"), QStringLiteral("overviewGestureEnabled"),
+               PhosphorI18n::tr("Touchpad gesture"),
+               {PhosphorI18n::tr("swipe"), PhosphorI18n::tr("gesture"), PhosphorI18n::tr("touchpad"),
+                PhosphorI18n::tr("four finger")});
+    addSetting(search, QStringLiteral("workspaces-overview"), QStringLiteral("overviewWheelSwitchesWorkspaces"),
+               PhosphorI18n::tr("Wheel switches workspaces"),
+               {PhosphorI18n::tr("wheel"), PhosphorI18n::tr("scroll"), PhosphorI18n::tr("mouse")});
     // The three per-mode library pages (the old tabbed Layouts page, split).
     // Each hosts the shared LayoutBrowserPage, whose LayoutManageCard
     // (import / open folder) carries the manageLayouts anchor on every view.

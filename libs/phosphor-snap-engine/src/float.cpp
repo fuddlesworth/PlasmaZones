@@ -744,10 +744,19 @@ void SnapEngine::handoffRelease(const QString& windowId)
     // still-snapping desktop until re-snapped by hand). The handed-off
     // context goes, and so does any membership whose own context has left
     // snapping.
+    //
+    // The handed-off context is the one in view OR the window's primary. For
+    // a window present on several desktops those are the same key, since the
+    // primary is the membership in view. They differ for a window that lives
+    // only on a BACKGROUND desktop, which the workspace overview can pick up
+    // and drop elsewhere: its one membership is the context being handed off,
+    // and keeping it left the window snapped on the desktop it was dragged
+    // out of, with the receive then carrying that zone to the new desktop.
     const QString canonical = canonicalWindowId(windowId);
+    const PhosphorEngine::PlacementStateKey primaryKey = m_states.keyForWindow(canonical);
     QList<PhosphorEngine::PlacementStateKey> kept;
     for (const PhosphorEngine::PlacementStateKey& key : m_states.membershipsForWindow(canonical)) {
-        const bool handedOff = (key == currentKeyForScreen(key.screenId));
+        const bool handedOff = (key == currentKeyForScreen(key.screenId)) || key == primaryKey;
         const bool stillSnapping = m_layoutManager && !key.screenId.isEmpty()
             && m_layoutManager->modeForScreen(key.screenId, key.desktop, key.activity)
                 == PhosphorZones::AssignmentEntry::Mode::Snapping;
