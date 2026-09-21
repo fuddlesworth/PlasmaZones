@@ -7,6 +7,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Moving a free window to another desktop snapped it into a zone**: on a layout with auto-assign turned on, sending a window to another virtual desktop with a KWin shortcut, the pager or Overview put it in the first empty zone there, even when you had floated it or placed it by hand. A desktop move now only fills a zone for a window that was snapped where it came from. A window that was free stays free and keeps its size and position. ([#1108](https://github.com/fuddlesworth/PlasmaZones/discussions/1108))
+
 ## [3.4.18] - 2026-09-12
 
 ### Added
