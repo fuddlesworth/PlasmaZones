@@ -86,6 +86,8 @@ set(phosphorshell_public_HDRS
     include/PhosphorShell/WallpaperService.h
     include/PhosphorShell/SystemClock.h
     include/PhosphorShell/SystemUsage.h
+    include/PhosphorShell/SystemStats.h
+    include/PhosphorShell/SystemStatsReader.h
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -118,6 +120,10 @@ set(phosphorshell_SRCS
     src/wallpaperservice.cpp
     src/systemclock.cpp
     src/systemusage.cpp
+    src/systemstats.cpp
+    src/systemstatsreader.cpp
+    src/systemstatsgpu.cpp
+    src/systemstatsgpu_p.h
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -252,3 +252,9 @@ set_tests_properties(test_phosphorshell_wallpaperservice PROPERTIES
     LABELS "phosphorshell"
     TIMEOUT 30
 )
+
+qt_add_executable(test_phosphorshell_systemstats test_systemstats.cpp)
+target_link_libraries(test_phosphorshell_systemstats PRIVATE Qt6::Test PhosphorShell::PhosphorShell)
+add_test(NAME test_phosphorshell_systemstats COMMAND test_phosphorshell_systemstats)
+phosphorshell_isolate_test(test_phosphorshell_systemstats "QT_QPA_PLATFORM=offscreen")
+set_tests_properties(test_phosphorshell_systemstats PROPERTIES LABELS "phosphorshell" TIMEOUT 30)

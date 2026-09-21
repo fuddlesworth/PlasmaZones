@@ -20,6 +20,7 @@
 #include <PhosphorShell/ShellGlobal.h>
 #include <PhosphorShell/SystemClock.h>
 #include <PhosphorShell/SystemUsage.h>
+#include <PhosphorShell/SystemStats.h>
 #include <PhosphorShell/Variants.h>
 
 #include <PhosphorWayland/IdleInhibitor.h>
@@ -109,6 +110,10 @@ void registerQmlTypes()
         // /proc in QML: the jiffy-delta arithmetic and the malformed-layout
         // handling are logic, not presentation.
         qmlRegisterType<SystemUsage>("Phosphor.Shell", 1, 0, "SystemUsage");
+        qmlRegisterSingletonType<SystemStats>("Phosphor.Shell", 1, 0, "SystemStats",
+                                              [](QQmlEngine* engine, QJSEngine*) -> QObject* {
+                                                  return new SystemStats(engine);
+                                              });
         // Surface-bound idle inhibition (zwp-idle-inhibit-v1): a QML window keeps
         // its own output awake while visible. This stays a foundation primitive.
         // Session-wide idle monitoring (ext-idle-notify-v1) is NOT registered here:
