@@ -396,18 +396,23 @@ void ActionRegistry::registerBuiltinsEngine()
         .slotFor = constantSlot(ActionSlot::RouteScreen),
         .validate =
             [](const QJsonObject& p) {
-                // A non-empty canonical screen id (physical or virtual). The id
-                // form is not validated against live screen state here — this lib
-                // has no view of connected outputs, and a rule targeting a
+                // A non-blank canonical screen id (physical or virtual), bounded
+                // and measured trimmed like the zone-name entries. The id form is
+                // not validated against live screen state here — this lib has no
+                // view of connected outputs, and a rule targeting a
                 // currently-absent monitor is legitimate (it fires when that
                 // monitor returns). The daemon's placement path no-ops a route
                 // whose target screen is not currently resolvable.
-                return hasNonEmptyString(p, ActionParam::TargetScreenId);
+                return hasNonBlankStringWithin(p, ActionParam::TargetScreenId, MaxScreenIdLength);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::TargetScreenId)},
         .domain = ActionDomain::Window,
-        .params = {P{.key = QString(ActionParam::TargetScreenId), .kind = QStringLiteral("screenId")}},
+        // The advisory `max` publishes the per-character cap so the settings
+        // editor reads the bound from the schema, matching zoneNames' shape.
+        .params = {P{.key = QString(ActionParam::TargetScreenId),
+                     .kind = QStringLiteral("screenId"),
+                     .max = static_cast<double>(MaxScreenIdLength)}},
         // No tags: RouteToScreen is daemon open-path routing only, not an
         // Effect / Border / Animation / Overlay / Gap action.
         .category = QStringLiteral("windowManagement"),
@@ -440,6 +445,35 @@ void ActionRegistry::registerBuiltinsEngine()
                      .max = static_cast<double>(MaxVirtualDesktopOrdinal)}},
         .category = QStringLiteral("windowManagement"),
         .displayOrder = 4,
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::RouteToWorkspace),
+        .slotFor = constantSlot(ActionSlot::RouteWorkspace),
+        .validate =
+            [](const QJsonObject& p) {
+                // A non-blank declared-workspace NAME, bounded and measured
+                // trimmed so this check and the daemon's trimmed-name resolution
+                // judge the same string. Like RouteToScreen's id, the name is
+                // not validated against live state here — a rule naming a
+                // not-currently-declared workspace is legitimate (it fires once
+                // the declaration exists); the daemon no-ops an unresolvable
+                // name at open time.
+                return hasNonBlankStringWithin(p, ActionParam::TargetWorkspaceName, MaxWorkspaceNameLength);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::TargetWorkspaceName)},
+        .domain = ActionDomain::Window,
+        // The advisory `max` publishes the per-character cap so the settings
+        // editor reads the bound from the schema, matching zoneNames' shape.
+        .params = {P{.key = QString(ActionParam::TargetWorkspaceName),
+                     .kind = QStringLiteral("workspaceName"),
+                     .max = static_cast<double>(MaxWorkspaceNameLength)}},
+        .category = QStringLiteral("windowManagement"),
+        // displayOrder is unique per category (pinned by
+        // testDisplayOrderUniqueWithinCategory), and windowManagement's slots
+        // span BOTH builtin files (0-5 here, 6-11 in the appearance file), so
+        // the next free ordinal is after the whole category's tail.
+        .displayOrder = 12,
     });
 
     // ── animation slots — event-scoped: "anim-shader:<event>" ──

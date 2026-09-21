@@ -230,6 +230,7 @@ void Daemon::start()
     connectScrollingShortcuts();
     initializeAutotile();
     initializeUnifiedController();
+    initializeWorkspaces();
     connectLayoutSignals();
     connectOverlaySignals();
 
@@ -1006,6 +1007,14 @@ void Daemon::stop()
     // swallows the first OSD of the new session.
     m_suppressResnapOsd = 0;
     m_screensSettlingUntil = {};
+
+    // Dynamic workspaces, torn down BEFORE the shortcut registry goes: the
+    // teardown unregisters the adhoc named chords and restores KWin's stolen
+    // desktop-switch chords, and both of those need a live Registry. Without
+    // this a stopped daemon kept a WorkspaceController wired to KWin and went
+    // on mutating virtual desktops, and the stolen chords stayed on "none"
+    // for as long as the daemon was down.
+    teardownWorkspaces();
 
     // Release the shortcut grabs and the Portal session with the connections:
     // registerShortcuts() on the next start() lazily recreates the registry

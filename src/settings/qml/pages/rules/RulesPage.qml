@@ -104,6 +104,32 @@ SettingsFlickable {
         // Backs the RouteToDesktop action's virtual-desktop picker.
         readonly property int virtualDesktopCount: settingsController.virtualDesktopCount
         readonly property var virtualDesktopNames: settingsController.virtualDesktopNames
+        // Backs the RouteToWorkspace action's named-workspace picker: the
+        // DECLARED names from Workspaces → Named Workspaces. Coerced and
+        // trimmed exactly like the twin shim on WorkspacesShortcutsPage, so
+        // both pickers offer the same set: a hand-edited config can carry a
+        // non-string name, and the trim matches how the schema canonicalizes
+        // a name before storing it (canonicalNamedEntries).
+        // Whether the workspaces feature is on at all. The RouteToWorkspace
+        // picker needs it to tell "you have not declared a workspace yet" from
+        // "workspaces are switched off, so this rule can never run" — the
+        // daemon installs the route resolver only inside the workspaces
+        // wiring, so the second case is inert no matter what the rule names.
+        readonly property bool workspacesEnabled: settingsController.settings.workspacesEnabled
+        // Read off settingsController.settings like every sibling here, NOT
+        // off the `appSettings` context property: a host that does not set one
+        // (the KCM / preview case this shim exists for) would get a
+        // ReferenceError at this property and nowhere else.
+        readonly property var workspaceNames: {
+            var entries = settingsController.settings.workspacesNamedEntries || [];
+            var names = [];
+            for (var i = 0; i < entries.length; ++i) {
+                var name = ("" + (entries[i].name || "")).trim();
+                if (name.length > 0)
+                    names.push(name);
+            }
+            return names;
+        }
         // `AnimationsPageController` — exposes `eventSections()` and
         // `availableShaderEffects()` for the animationEvent / shaderEffect
         // picker editors in ActionRow.

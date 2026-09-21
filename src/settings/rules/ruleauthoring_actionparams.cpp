@@ -376,6 +376,9 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::RouteToDesktop && key == ActionParam::TargetDesktop) {
         return PhosphorI18n::tr("Desktop");
     }
+    if (type == ActionType::RouteToWorkspace && key == ActionParam::TargetWorkspaceName) {
+        return PhosphorI18n::tr("Workspace");
+    }
     if (key == ActionParam::Event) {
         return PhosphorI18n::tr("Event");
     }
@@ -413,6 +416,11 @@ QString paramHint(const QString& type, const QString& key)
             "Zone names like “Editor, Terminal”, found in whichever layout is active. "
             "Give numbers, names, or both.");
     }
+    if (type == ActionType::RouteToWorkspace && key == ActionParam::TargetWorkspaceName) {
+        return PhosphorI18n::tr(
+            "If you later remove this workspace, the rule goes dormant instead of failing. "
+            "It works again as soon as a workspace with that name comes back.");
+    }
     if (type == ActionType::OverrideOverlayShader && key == ActionParam::LayoutId) {
         return PhosphorI18n::tr(
             "Global default changes the shader for every layout in the matched context. "
@@ -430,17 +438,16 @@ QString paramHint(const QString& type, const QString& key)
 /// read the same truth instead of each hardcoding the type ladder.
 bool actionAcceptsAccent(const QString& typeWire)
 {
-    return typeWire == QString(PhosphorRules::ActionType::SetBorderColorActive)
-        || typeWire == QString(PhosphorRules::ActionType::SetBorderColorInactive)
-        || typeWire == QString(PhosphorRules::ActionType::SetTintColor);
+    return typeWire == PhosphorRules::ActionType::SetBorderColorActive
+        || typeWire == PhosphorRules::ActionType::SetBorderColorInactive
+        || typeWire == PhosphorRules::ActionType::SetTintColor;
 }
 
 } // namespace
 
 QString paramEmptyValueLabel(const QString& typeWire, const QString& key)
 {
-    if (typeWire == QString(PhosphorRules::ActionType::SetTabIndicatorFontFamily)
-        && key == QString(PhosphorRules::ActionParam::Value)) {
+    if (typeWire == PhosphorRules::ActionType::SetTabIndicatorFontFamily && key == PhosphorRules::ActionParam::Value) {
         return PhosphorI18n::tr("System font");
     }
     if (typeWire == QString(PhosphorRules::ActionType::OverrideOverlayShader)) {
@@ -635,8 +642,9 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
         } else {
             // Picker kinds (snappingLayout, scrollingTemplate, tilingAlgorithm,
             // animationEvent, shaderEffect, overlayShader, curveEditor,
-            // screenId) and plain strings all start empty. The tab-indicator
-            // font family is a plain string rather than a picker, and empty is
+            // screenId, workspaceName) and plain strings all start empty. The
+            // tab-indicator font family is a plain string rather than a
+            // picker, and empty is
             // a meaningful value for it (it means the system font), so unlike
             // the pickers its seeded rule is already savable. The openTabGroup
             // name is the other plain string, and there empty is the reject

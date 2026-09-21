@@ -80,6 +80,16 @@ Item {
     // invalidate the map; reassigned whole on each publish so bindings re-run.
     property var delegateHeights: ({})
 
+    // The id of the row a keyboard reorder just moved. A consumer commits a
+    // move by REPLACING its `items` array, which the Repeater treats as a full
+    // model reset: every delegate is destroyed and rebuilt, and the one that
+    // had focus dies with it, so a second Alt+Up would go nowhere. Each rebuilt
+    // delegate checks this against its own id and takes focus back when it
+    // matches, which lands focus on the moved row at its NEW index. Cleared by
+    // the delegate that claims it, so an ordinary rebuild (a reload, a filter
+    // change) never steals focus from elsewhere in the page.
+    property string pendingFocusId: ""
+
     // Per-id expansion state, for consumers whose row content expands. Keyed by
     // id and held HERE rather than on the row for the same reason the height
     // cache is: an `items` reassignment is a full model reset, so per-delegate
@@ -121,6 +131,20 @@ Item {
             delegateHeights = next;
         if (keptExpanded !== Object.keys(expandedIds).length)
             expandedIds = nextExpanded;
+        // A pending focus restore whose row is gone from the model (removed
+        // rather than moved) can never be claimed, so drop it here instead of
+        // letting it sit and grab focus off a later unrelated rebuild.
+        if (pendingFocusId.length > 0 && next[pendingFocusId] === undefined && !_containsId(pendingFocusId))
+            pendingFocusId = "";
+    }
+
+    function _containsId(itemId) {
+        for (var i = 0; i < items.length; ++i) {
+            var item = items[i];
+            if (item !== undefined && item !== null && root.idOf(item) === itemId)
+                return true;
+        }
+        return false;
     }
 
     function isRowExpanded(itemId) {
@@ -184,6 +208,11 @@ Item {
     implicitHeight: totalHeight
     clip: true
 
+    // The rows announce themselves as ListItems, so the container announcing
+    // itself as a List is what lets assistive technology report "item 2 of 5"
+    // instead of five unrelated items.
+    Accessible.role: Accessible.List
+
     Repeater {
         model: root.items
 
@@ -232,6 +261,13 @@ Item {
 
             Component.onCompleted: {
                 root.setDelegateHeight(delegateRoot._itemId, actualHeight);
+                // Take back the focus a keyboard reorder lost when the commit
+                // reset the model (see root.pendingFocusId). Cleared first, so
+                // no later rebuild claims it a second time.
+                if (root.pendingFocusId.length > 0 && root.pendingFocusId === delegateRoot._itemId) {
+                    root.pendingFocusId = "";
+                    delegateRoot.forceActiveFocus(Qt.OtherFocusReason);
+                }
                 if (root.anchorPrefix.length > 0) {
                     Qt.callLater(function () {
                         // The coalesced callback can fire after this row has
@@ -265,8 +301,39 @@ Item {
             y: baseY + visualOffset
             z: dragArea.drag.active ? 100 : 0
             activeFocusOnTab: true
+
+            // Focus ring. The row is keyboard-reachable and Alt+Up/Down acts
+            // on whichever row holds focus, so without a visual there is no
+            // way to tell which row the next chord will move. Same recipe as
+            // SettingsCard's focusable header.
+            // Declared BEFORE the row content but stacked above it: every
+            // consumer's row is an ItemDelegate whose styled background fills
+            // the row on hover and press, which is exactly when the user is
+            // interacting, so a ring painting underneath would be dimmed or
+            // hidden at the only moment it matters.
+            Rectangle {
+                anchors.fill: parent
+                z: 1
+                visible: delegateRoot.activeFocus
+                color: "transparent"
+                radius: Kirigami.Units.smallSpacing
+                border.width: 1
+                border.color: Kirigami.Theme.focusColor
+            }
+
             Accessible.role: Accessible.ListItem
             Accessible.name: root.accessibleNameOf ? root.accessibleNameOf(modelData) : (root.idOf(modelData) || "")
+            // The row is keyboard-reachable and the chord that acts on it is
+            // not discoverable any other way, so it is announced with the row.
+            // A row that cannot be moved says so instead, rather than offering
+            // a chord that does nothing.
+            Accessible.description: {
+                if (!root.reorderingEnabled)
+                    return "";
+                if (!delegateRoot.reorderable)
+                    return i18n("This row cannot be reordered.");
+                return i18n("Position %1 of %2. Press Alt+Up or Alt+Down to move this row.", delegateRoot.index + 1, root.items.length);
+            }
 
             Keys.onPressed: event => {
                 if (!(event.modifiers & Qt.AltModifier))
@@ -289,7 +356,29 @@ Item {
                 } else {
                     return;
                 }
+                // Claimed by whichever rebuilt delegate carries this id, so
+                // the moved row keeps focus and the next Alt+Up/Down goes to
+                // the same row rather than nowhere.
+                root.pendingFocusId = delegateRoot._itemId;
                 root.moveRequested(from, to);
+                // A consumer may DECLINE the move: every one of them range-
+                // checks the indices against its own model first and returns
+                // without touching it. No rebuild follows a decline, so no
+                // delegate can ever claim the arm, and the prune above only
+                // drops an id that has left `items` — this one is still there.
+                // The arm would sit until some later, unrelated rebuild
+                // claimed it and yanked focus to that row. A commit always
+                // REPLACES `items` (that is what resets the Repeater and makes
+                // the whole restore necessary), so an unchanged array means
+                // the move did not happen: disarm. Guarded on the id as well,
+                // because a synchronous rebuild may already have claimed and
+                // cleared it, and re-clearing then would be harmless but the
+                // guard keeps the two halves honest. The `items` check MUST
+                // stay first: on a committed move this delegate is already
+                // destroyed, and `&&` short-circuits before the second half
+                // dereferences a dead object.
+                if (root.items === snapshot && root.pendingFocusId === delegateRoot._itemId)
+                    root.pendingFocusId = "";
             }
 
             RowLayout {
@@ -314,6 +403,11 @@ Item {
                         source: "handle-sort"
                         visible: delegateRoot.reorderable
                         opacity: dragArea.containsMouse || dragArea.drag.active ? 0.7 : 0.3
+
+                        // The grip is the only affordance for reordering and
+                        // nothing else names the keyboard alternative.
+                        ToolTip.visible: dragArea.containsMouse && !dragArea.drag.active
+                        ToolTip.text: i18n("Drag to reorder, or press Alt+Up or Alt+Down.")
                     }
 
                     // Pinned indicator for non-reorderable rows.
@@ -379,6 +473,14 @@ Item {
                     id: rowLoader
 
                     Layout.fillWidth: true
+                    // Top-aligned, never centered: a row SHORTER than the grip
+                    // column would otherwise render vertically centered while
+                    // collapsed and snap to the top the moment its expansion
+                    // makes it the tallest child — an upward jump on expand.
+                    // Rows taller than the grip (every pre-existing consumer)
+                    // are unaffected: the tallest child sits at the top either
+                    // way.
+                    Layout.alignment: Qt.AlignTop
 
                     property var rowModelData: delegateRoot.modelData
                     property int rowIndex: delegateRoot.index

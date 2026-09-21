@@ -87,6 +87,17 @@ inline const QSet<PhosphorRules::Field>& unanswerableWindowFields()
 /// every resolveCached caller on this path shares. Passed identically by all
 /// six so the memo they share stays coherent (see resolveCachedFiltered's
 /// precondition).
+///
+/// CONSEQUENCE FOR RULE AUTHORS: the open-routing channels
+/// (applyOpenDesktopRouting, applyOpenScreenRouting, applyOpenRoutingForTiling)
+/// resolve under this test, so a rule whose match references Field::Mode never
+/// applies its RouteToScreen / RouteToDesktop / RouteToWorkspace actions. The
+/// exclusion is not a local oversight: all six cached callers must pass an
+/// EQUIVALENT admit or the memo they share stops being coherent, so lifting it
+/// for three of them is not a valid change. Making Mode-scoped routing work
+/// means stamping Mode on all six (they do not all have the desktop and
+/// activity a mode lookup needs) or splitting the memo — a rules-library
+/// change, not a call-site one.
 inline bool admitScreenStamped(const PhosphorRules::Rule& rule)
 {
     return !rule.match.referencesAnyField(neverStampedFields())

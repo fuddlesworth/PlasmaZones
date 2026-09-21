@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// FILE-SIZE NOTE: over the 1000-line target, inside the 15% grace, and no
-// longer past the hard ceiling — splitting the template channel's blueprint
-// and cursor cases out to test_scrollengine_template.cpp is what brought it
-// back under. No exact figure is quoted here on purpose, since it goes stale
-// on the next slot added.
+// FILE-SIZE NOTE: over the 1000-line target and at the very top of the 15%
+// grace with NO headroom left, so a new case belongs in a sibling file. One
+// split has kept it inside the grace: the template channel's blueprint and
+// cursor cases (test_scrollengine_template.cpp). test_scrollengine_desktopreap
+// is a sibling for a NEW concern; nothing moved out of here for it.
 //
 // The case for keeping the rest together: this file's concern is a single
 // resolution cascade —
@@ -16,12 +16,11 @@
 // a one-screen assertion passes just as happily when the engine reads the
 // global everywhere. Splitting by channel would put the two halves of a
 // precedence pair in different files and leave neither able to state the
-// ordering it exists to pin. Splitting by default (width here, height there)
-// would duplicate the whole fixture layer and split the trio's per-slot
-// fall-back rule, which is one rule applying identically to both.
+// ordering it pins. Splitting by default (width here, height there) would
+// duplicate the fixture layer and split the trio's per-slot fall-back rule.
 //
-// If a channel is ever added that resolves INDEPENDENTLY of these three, it
-// takes a sibling rather than growing this file.
+// A case that is NOT a precedence claim in this cascade takes a sibling
+// instead, which is what both splits above were.
 
 // Per-screen default-width / default-height resolution.
 //
@@ -1029,10 +1028,10 @@ void TestScrollEnginePerScreen::tabIndicatorOverridesArePerProperty()
     QCOMPARE(ruled.lengthProportion, 0.5);
 
     // The two BOOL overrides applied positively — both are wired at
-    // engine_overrides but had no leg driving them, so either could be
-    // deleted with the suite still green: 965 above only asserts
-    // placeWithinColumn UNMOVED, and the round-trip case only flips
-    // hideWhenSingleTab.
+    // engine_overrides but had no leg driving them, so either could be deleted
+    // with the suite still green: the ruled leg above only asserts
+    // placeWithinColumn UNMOVED, and tabIndicatorRejectsGarbageNumericOverrides
+    // only flips hideWhenSingleTab.
     QVariantMap bools;
     bools.insert(ScrollPerScreenKeys::tabIndicatorEnabled(), false);
     bools.insert(ScrollPerScreenKeys::tabIndicatorPlaceWithinColumn(), true);
@@ -1052,9 +1051,8 @@ void TestScrollEnginePerScreen::tabIndicatorRejectsGarbageNumericOverrides()
 {
     // Each of the three numeric fields has a hand-written guard rather than a
     // shared macro, so each needs its own leg; without these the guards can be
-    // deleted with the suite still green. Gap and width fall back to the
-    // configured value on anything out of range; length falls back below its
-    // floor but CLAMPS above 1.0, which the legs below pin separately.
+    // deleted with the suite still green. All three are validate-then-fall-back
+    // at BOTH ends: an out-of-range override leaves the configured value.
     QObject owner;
     auto* settings = new StubScrollSettings(&owner);
     settings->tabIndicatorEnabled = true;
@@ -1064,9 +1062,8 @@ void TestScrollEnginePerScreen::tabIndicatorRejectsGarbageNumericOverrides()
     settings->tabIndicatorLengthProportion = 0.5;
     ScrollEngine* engine = makeEngine(&owner, settings);
 
-    // Length: a legal fraction lands; zero, negative and above 1.0 all leave
-    // the configured value alone (a sliver would resolve the indicator to
-    // nothing while every setting still reported it on).
+    // Length: a legal fraction lands; zero, negative and above 1.0 all leave the
+    // configured value (a sliver resolves the indicator to nothing on screen).
     QVariantMap m;
     m.insert(ScrollPerScreenKeys::tabIndicatorLengthProportion(), 0.25);
     engine->applyPerScreenConfig(kS1, m);
@@ -1080,21 +1077,24 @@ void TestScrollEnginePerScreen::tabIndicatorRejectsGarbageNumericOverrides()
     engine->applyPerScreenConfig(kS1, m);
     QCOMPARE(engine->tabIndicatorParamsForScreen(kS1).lengthProportion, 0.5);
 
-    // Over the ceiling falls back the same way as under the floor: the
-    // length is validate-then-fall-back like the gap and width below, not
-    // clamped, so one stance covers every key in the resolver.
+    // Over the ceiling falls back the same way as under the floor.
     m.insert(ScrollPerScreenKeys::tabIndicatorLengthProportion(), 4.0);
     engine->applyPerScreenConfig(kS1, m);
     QCOMPARE(engine->tabIndicatorParamsForScreen(kS1).lengthProportion, 0.5);
 
-    // Gap and width are bounded at this boundary too: an out-of-range override
-    // leaves the configured value rather than feeding the reservation
-    // arithmetic a number the config layer would never have produced.
+    // Gap and width are bounded here too. Each bad key is paired with a GOOD
+    // sibling in the SAME map, in both orders, so the leg tells a per-key
+    // rejection apart from the resolver throwing the whole map away.
     QVariantMap wild;
     wild.insert(ScrollPerScreenKeys::tabIndicatorGap(), 100000);
-    wild.insert(ScrollPerScreenKeys::tabIndicatorWidth(), -5);
+    wild.insert(ScrollPerScreenKeys::tabIndicatorWidth(), 7);
     engine->applyPerScreenConfig(kS2, wild);
     QCOMPARE(engine->tabIndicatorParamsForScreen(kS2).gap, 5);
+    QCOMPARE(engine->tabIndicatorParamsForScreen(kS2).width, 7);
+    wild.insert(ScrollPerScreenKeys::tabIndicatorGap(), 9);
+    wild.insert(ScrollPerScreenKeys::tabIndicatorWidth(), -5);
+    engine->applyPerScreenConfig(kS2, wild);
+    QCOMPARE(engine->tabIndicatorParamsForScreen(kS2).gap, 9);
     QCOMPARE(engine->tabIndicatorParamsForScreen(kS2).width, 4);
 
     // The two bools that no other case exercises still round-trip.

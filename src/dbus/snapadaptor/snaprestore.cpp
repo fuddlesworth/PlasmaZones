@@ -11,6 +11,8 @@
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 
+#include <QScopeGuard>
+
 namespace PlasmaZones {
 
 namespace {
@@ -216,6 +218,16 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
     // match a SnapToZone rule at all), so it must not sit behind the shouldSnap
     // early-return below.
     m_adaptor->applyOpenDesktopRouting(windowId, screenId);
+    // Whatever that wrote belongs to THIS open and nothing later. The placement
+    // builders take the record when they run, but not every path reaches one:
+    // a scrolling or tiling screen defers by mode, and a window carrying a
+    // cross-screen snapped record can report a snap without the zone builder
+    // running at all. A guard rather than a call at each exit, because this
+    // slot has several and the reader it would leak to (unfloatToZone, via the
+    // same placement builder) fires long after, on a Meta+F.
+    const auto routeRecordGuard = qScopeGuard([this, &windowId] {
+        m_adaptor->clearOpenWorkspaceRoute(windowId);
+    });
 
     const PhosphorEngine::WindowKind kind = PhosphorEngine::clampWindowKindFromWire(windowKind);
     SnapResult result = m_engine->resolveWindowRestore(windowId, screenId, sticky, kind);

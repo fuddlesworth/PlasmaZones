@@ -12,6 +12,18 @@
 //
 // The explicit adhoc release path is the intended purge and must keep
 // purging; the second case pins that the fix did not overreach.
+//
+// The same store is at risk from a second direction: parking a shortcut
+// family whose feature is switched off. That park routes through
+// IBackend::suspendShortcut, which releases the grab WITHOUT touching the
+// persistent record — the whole point of the separate verb. RecordingBackend
+// therefore records suspends apart from unregisters, so a park that
+// regressed into a purge shows up as a failure here rather than as a silent
+// wipe of the user's chords. Note the base class's default suspendShortcut
+// forwards to unregisterShortcut, which is right for the grab-only backends
+// (Portal, D-Bus) that own no persistent record but would be exactly the
+// wrong answer for KGlobalAccel — so this fake overrides it, as the real
+// KGlobalAccel backend does.
 
 #include "daemon/controllers/shortcutmanager.h"
 
@@ -39,9 +51,10 @@ class RecordingBackend : public PhosphorShortcuts::IBackend
 {
     Q_OBJECT
 public:
-    RecordingBackend(QStringList* registers, QStringList* unregisters)
+    RecordingBackend(QStringList* registers, QStringList* unregisters, QStringList* suspends)
         : m_registers(registers)
         , m_unregisters(unregisters)
+        , m_suspends(suspends)
     {
     }
 
@@ -61,6 +74,14 @@ public:
         m_unregisters->append(id);
     }
 
+    // Overridden away from the base default (which forwards to
+    // unregisterShortcut) so a park is distinguishable from a purge, the
+    // same split KGlobalAccelBackend implements.
+    void suspendShortcut(const QString& id) override
+    {
+        m_suspends->append(id);
+    }
+
     void flush() override
     {
         Q_EMIT ready();
@@ -69,6 +90,7 @@ public:
 private:
     QStringList* m_registers;
     QStringList* m_unregisters;
+    QStringList* m_suspends;
 };
 
 } // namespace
@@ -97,10 +119,22 @@ private Q_SLOTS:
         ShortcutManager manager(&settings);
         QStringList registers;
         QStringList unregisters;
-        manager.setBackendForTesting(std::make_unique<RecordingBackend>(&registers, &unregisters));
+        QStringList suspends;
+        manager.setBackendForTesting(std::make_unique<RecordingBackend>(&registers, &unregisters, &suspends));
 
         manager.registerShortcuts();
         QVERIFY2(!registers.isEmpty(), "expected the catalog to reach the backend on registerShortcuts()");
+
+        // Dynamic workspaces default to off, so that family parks on the
+        // first settle. Positive control: without this the next assertion
+        // would also pass if nothing had been parked at all.
+        QVERIFY2(!suspends.isEmpty(),
+                 "expected the disabled workspace family to be parked via suspendShortcut on registration");
+        QVERIFY2(unregisters.isEmpty(),
+                 qPrintable(QStringLiteral("parking a disabled family purged %1 persistent binding(s), e.g. \"%2\" — "
+                                           "a park must release the grab without touching the on-disk record")
+                                .arg(unregisters.size())
+                                .arg(unregisters.value(0))));
 
         manager.unregisterShortcuts();
         QVERIFY2(unregisters.isEmpty(),
@@ -116,7 +150,8 @@ private Q_SLOTS:
         ShortcutManager manager(&settings);
         QStringList registers;
         QStringList unregisters;
-        manager.setBackendForTesting(std::make_unique<RecordingBackend>(&registers, &unregisters));
+        QStringList suspends;
+        manager.setBackendForTesting(std::make_unique<RecordingBackend>(&registers, &unregisters, &suspends));
         manager.registerShortcuts();
 
         const QString id = QStringLiteral("pz.test.adhoc.escape");

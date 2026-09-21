@@ -6,6 +6,7 @@
 #include "daemon/overlayservice.h"
 #include "daemon/controllers/unifiedlayoutcontroller.h"
 #include "daemon/controllers/shortcutmanager.h"
+#include "daemon/controllers/workspacecontroller.h"
 #include "config/settingsconfigstore.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/LayoutComputeService.h>
@@ -464,6 +465,14 @@ void Daemon::connectDesktopActivity()
     // it has, that handler's out-of-range sweep finds nothing left over.
     connect(m_virtualDesktopManager.get(), &PhosphorWorkspaces::VirtualDesktopManager::desktopRemovedAt, this,
             [this](int removedPosition) {
+                // Gated like every other sweep in this handler family: when
+                // the workspace identity pass owns desktops, workspaces.cpp
+                // renumbers the engines from the identity map KWin's settled
+                // id list gives it, and running this count-blind shift too
+                // would decrement the same state a SECOND time.
+                if (workspaceIdentityPassOwnsDesktops()) {
+                    return;
+                }
                 // Same ordering the count handler documents: a live preview
                 // resolves its state through a create-if-missing lookup, so a
                 // cancel arriving after the prune would resurrect a state for
@@ -487,6 +496,20 @@ void Daemon::connectDesktopActivity()
                     }
                     engine->pruneStatesForDesktop(removedPosition);
                     engine->renumberDesktopsAfterRemoval(removedPosition);
+                }
+                // The window registry's desktop numbers shift with them, AFTER
+                // the engines: nothing re-pushes a survivor's number (see
+                // WindowRegistry::renumberDesktops), and a span still naming
+                // the old number reads as "left its desktop", so the membership
+                // reconcile released every window the shift had just kept. The
+                // count may or may not be committed yet, so the range runs one
+                // past it, which covers the old top either way.
+                if (m_windowRegistry && m_virtualDesktopManager) {
+                    QHash<int, int> oldToNew;
+                    for (int d = removedPosition + 1; d <= m_virtualDesktopManager->desktopCount() + 1; ++d) {
+                        oldToNew.insert(d, d - 1);
+                    }
+                    m_windowRegistry->renumberDesktops(oldToNew);
                 }
                 // The daemon's own desktop-keyed memo moves with them. It is
                 // the window order a mode toggle re-seeds from, so leaving it
@@ -562,14 +585,17 @@ void Daemon::connectDesktopActivity()
                 // within newCount. The desktopRemovedAt handler above is where that case is
                 // handled: it knows WHICH position went and re-keys the engines' per-desktop
                 // state, their per-output desktop maps and m_lastEngineOrders, so by the time
-                // this runs there is nothing above the count left to prune.
+                // this runs there is nothing above the count left to prune. Under dynamic
+                // workspaces the renumber fan-out in workspaces.cpp owns that job instead,
+                // remapping by the identity map KWin's settled id list gives us, which is
+                // what the gate below defers to.
                 //
                 // The disabled-desktop lists below are renumbered too, by the
                 // desktopRemovedAt handler above (renumberDisabledDesktopEntries), for the
                 // same reason the engine state is: they store the NUMBER, and nothing
                 // re-reports them. What is left for this handler is the genuine
                 // out-of-range case a removal at the END produces.
-                if (m_settings) {
+                if (m_settings && !workspaceIdentityPassOwnsDesktops()) {
                     // Prune both per-mode lists — a stale entry in either side leaks
                     // gates on now-deleted desktops just as effectively.
                     bool changed = false;
@@ -599,20 +625,44 @@ void Daemon::connectDesktopActivity()
                 // holding state — filter for anything past the new count and prune,
                 // avoiding the arbitrary upper bound of the old newCount+20 sweep. All
                 // THREE engines carry their own stores, so prune each.
-                for (PhosphorEngine::PlacementEngineBase* engine :
-                     {m_autotileEngine.get(), m_snapEngine.get(), m_scrollEngine.get()}) {
-                    if (!engine) {
-                        continue;
-                    }
-                    const QSet<int> active = engine->desktopsWithActiveState();
-                    for (int d : active) {
-                        if (d > newCount) {
-                            engine->pruneStatesForDesktop(d);
+                //
+                // NOT when dynamic workspaces are live: the WorkspaceController
+                // reaps by desktop IDENTITY (which desktop actually died) and
+                // renumbers the survivors on the settled id-list reply. This
+                // count sweep only knows numbers, so it would destroy the
+                // highest-numbered desktop's state even when a MIDDLE desktop
+                // was the one removed — exactly the state the identity pass is
+                // about to renumber into place.
+                if (!workspaceIdentityPassOwnsDesktops()) {
+                    for (PhosphorEngine::PlacementEngineBase* engine :
+                         {m_autotileEngine.get(), m_snapEngine.get(), m_scrollEngine.get()}) {
+                        if (!engine) {
+                            continue;
+                        }
+                        const QSet<int> active = engine->desktopsWithActiveState();
+                        for (int d : active) {
+                            if (d > newCount) {
+                                // reapDesktopState, not pruneStatesForDesktop:
+                                // the latter drops the engine's per-context
+                                // state but leaves the per-WINDOW desktop
+                                // values behind, so with dynamic workspaces
+                                // off those never got reaped at all. The reap
+                                // is a superset of the prune.
+                                engine->reapDesktopState(d);
+                            }
                         }
                     }
                 }
-                // Prune fallback assignment maps
-                pruneContextMapsForDesktop(newCount);
+                // Prune fallback assignment maps. Gated like its two siblings
+                // above, and it was not: it erases every m_lastEngineOrders key
+                // with desktop > newCount, and desktopCountChanged fires BEFORE
+                // the reconciler's reap and renumber — so on a mid-list removal
+                // it destroyed the TOP desktop's cached window order, which is
+                // exactly the entry the identity renumber pass is about to
+                // remap into place.
+                if (!workspaceIdentityPassOwnsDesktops()) {
+                    pruneContextMapsForDesktop(newCount);
+                }
 
                 // No diffActiveAssignments() here, deliberately. The published
                 // active-layout map is keyed by screen and resolved against each
@@ -627,8 +677,11 @@ void Daemon::connectDesktopActivity()
                 // re-reports that output's desktop; a diff here would read the
                 // same number. VirtualDesktopManager shifts that map itself on the
                 // desktopRemovedAt path above, silently, and the handler there does
-                // the re-diff the silence would otherwise cost. pruneContextMapsForDesktop
-                // touches only m_lastEngineOrders, which no resolution reads.
+                // the re-diff the silence would otherwise cost. The
+                // pruneContextMapsForDesktop call above touches only
+                // m_lastEngineOrders, which no resolution reads — and it is
+                // gated on the identity pass not owning desktops, like every
+                // other sweep in this handler.
             });
 
     // Set initial virtual desktop on components that maintain their own copy
@@ -772,6 +825,11 @@ void Daemon::connectDesktopActivity()
                     diffActiveAssignments();
                 });
     }
+}
+
+bool Daemon::workspaceIdentityPassOwnsDesktops() const
+{
+    return m_workspaceController && m_workspaceController->isAdopted();
 }
 
 void Daemon::pruneContextMapsForDesktop(int maxDesktop)

@@ -147,6 +147,12 @@ add_executable(test_snap_restore_layout_context core/snap/test_snap_restore_layo
 target_link_libraries(test_snap_restore_layout_context PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_snap_restore_layout_context COMMAND test_snap_restore_layout_context)
 
+# Dynamic-workspaces arms of the SnapEngine (identity reap / renumber of the
+# value-side desktop tags).
+add_executable(test_snap_engine_workspaces core/snap/test_snap_engine_workspaces.cpp helpers/SnapEngineTestFixture.h)
+target_link_libraries(test_snap_engine_workspaces PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_engine_workspaces COMMAND test_snap_engine_workspaces)
+
 # Exclusion half of the SnapEngine suite (exclude wiring, size exclusion,
 # entry-zone crossing).
 add_executable(test_snap_engine_exclude core/snap/test_snap_engine_exclude.cpp helpers/SnapEngineTestFixture.h)
@@ -298,6 +304,7 @@ p_add_test(test_autotile_engine_retry autotile/engine/test_autotile_engine_retry
 p_add_test(test_autotile_engine_order_cycling autotile/engine/test_autotile_engine_order_cycling.cpp)
 target_compile_definitions(test_autotile_engine_order_cycling PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 p_add_test(test_autotile_engine_class_mutation autotile/engine/test_autotile_engine_class_mutation.cpp)
+p_add_test(test_autotile_engine_workspaces autotile/engine/test_autotile_engine_workspaces.cpp)
 p_add_test(test_autotile_drag_insert autotile/behavior/test_autotile_drag_insert.cpp)
 target_compile_definitions(test_autotile_drag_insert PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 p_add_test(test_autotile_layer_switch autotile/behavior/test_autotile_layer_switch.cpp)
@@ -685,6 +692,7 @@ add_test(NAME test_autotile_seed_filter COMMAND test_autotile_seed_filter)
 add_executable(test_cheatsheet_compression
     daemon/test_cheatsheet_compression.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager_table.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager_adhoc.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager_catalog.cpp
 )
@@ -699,6 +707,7 @@ add_test(NAME test_cheatsheet_compression COMMAND test_cheatsheet_compression)
 add_executable(test_scrolling_shortcut_parity
     daemon/test_scrolling_shortcut_parity.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager_table.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager_adhoc.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager_catalog.cpp
 )
@@ -747,6 +756,7 @@ add_test(NAME test_unified_layout_controller_none COMMAND test_unified_layout_co
 add_executable(test_shortcutmanager_teardown
     daemon/test_shortcutmanager_teardown.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager_table.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shortcutmanager_adhoc.cpp
 )
 target_link_libraries(test_shortcutmanager_teardown

@@ -253,9 +253,13 @@ void WindowTrackingAdaptor::saveState()
         }
         m_sessionBackend->sync();
     }
+    // userSnappedArray is only filled when the DirtyUserSnapped bit was set, so
+    // logging its size unconditionally reported "0 user-snapped classes" for
+    // every save that did not touch them — a count the reader would take for
+    // the real one. Report the live figure instead.
     qCInfo(lcDbusWindow) << "Saved state: dirty=" << Qt::hex << dirty << Qt::dec
                          << "placements=" << m_service->placementStore().size()
-                         << "userSnapped=" << userSnappedArray.size();
+                         << "userSnapped=" << m_service->userSnappedClasses().size();
 }
 
 void WindowTrackingAdaptor::requestReapplyWindowGeometries()
