@@ -110,6 +110,14 @@ set(_phosphor_bar_qml_files
     qml/Phosphor/Bar/Widgets/Audio.qml
     qml/Phosphor/Bar/Widgets/Battery.qml
     qml/Phosphor/Bar/Widgets/Tray.qml
+    qml/Phosphor/Bar/Tray/TrayModel.qml
+    qml/Phosphor/Bar/Tray/TrayIcon.qml
+    qml/Phosphor/Bar/Tray/TrayButton.qml
+    qml/Phosphor/Bar/Tray/TrayTile.qml
+    qml/Phosphor/Bar/Tray/TrayMenu.qml
+    qml/Phosphor/Bar/Tray/TraySettings.qml
+    qml/Phosphor/Bar/Tray/TrayDrawer.qml
+    qml/Phosphor/Bar/Tray/TrayPanel.qml
     qml/Phosphor/Bar/Widgets/Media.qml
     qml/Phosphor/Bar/Widgets/ControlCenterButton.qml
     qml/Phosphor/Bar/Widgets/NotificationButton.qml
@@ -170,6 +178,7 @@ endforeach()
 set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dirs")
 
 set_source_files_properties(qml/Phosphor/Bar/Stats/StatsModel.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(qml/Phosphor/Bar/Tray/TrayModel.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 qt_add_qml_module(PhosphorShellBarQml
     URI Phosphor.Bar

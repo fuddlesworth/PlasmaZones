@@ -50,7 +50,9 @@ QVariantMap AppearanceLibrary::scopedSettings(const QVariantMap& values, bool wa
     if (bar)
         keys.append({QStringLiteral("barLayout"), QStringLiteral("barInset"), QStringLiteral("edge"),
                      QStringLiteral("media"), QStringLiteral("statsStyle"), QStringLiteral("statsMetrics"),
-                     QStringLiteral("statsMemoryUnit"), QStringLiteral("statsInterval"), QStringLiteral("statsGpuId")});
+                     QStringLiteral("statsMemoryUnit"), QStringLiteral("statsInterval"), QStringLiteral("statsGpuId"),
+                     QStringLiteral("trayIcons"), QStringLiteral("trayLimit"), QStringLiteral("trayAttention"),
+                     QStringLiteral("trayOrder"), QStringLiteral("trayVisibility")});
     QVariantMap result;
     for (const auto& key : keys) {
         if (values.contains(key))
@@ -83,10 +85,12 @@ QVariantList AppearanceLibrary::presets() const
             description = tr("Honey, clay and rose. A compact, grounded look.");
         }
         auto scoped = scopedSettings(settings, false, true);
-        // Built-in styles never replace user fonts, effects or current wallpaper colors.
-        for (const auto& key : {QStringLiteral("uiFont"), QStringLiteral("monoFont"), QStringLiteral("textScale"),
-                                QStringLiteral("wallpaperColors"), QStringLiteral("surfacePacks"),
-                                QStringLiteral("surfaceEffect"), QStringLiteral("desktopStyle")})
+        // Built-in styles preserve app visibility choices as well as user fonts, effects and wallpaper colors.
+        for (const auto& key :
+             {QStringLiteral("uiFont"), QStringLiteral("monoFont"), QStringLiteral("textScale"),
+              QStringLiteral("wallpaperColors"), QStringLiteral("surfacePacks"), QStringLiteral("surfaceEffect"),
+              QStringLiteral("desktopStyle"), QStringLiteral("trayIcons"), QStringLiteral("trayLimit"),
+              QStringLiteral("trayAttention"), QStringLiteral("trayOrder"), QStringLiteral("trayVisibility")})
             scoped.remove(key);
         result.append(QVariantMap{{Id, id},
                                   {RecipeName,

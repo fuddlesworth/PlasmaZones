@@ -37,6 +37,36 @@ RowLayout {
     // placement map). Handed down explicitly: the Window attached
     // property is not a reliable route to the PanelWindow's screen.
     property string screenName: ""
+    property real maximumWidth: 10000
+
+    // Budget adaptive widgets from their neighbours, without feeding their
+    // own width back into the size binding.
+    function roomFor(id: string): real {
+        void mountedCount;
+        let used = 0, populated = 0;
+        for (let g = 0; g < groups.length; ++g) {
+            const ids = typeof groups[g] === "string" ? [groups[g]] : groups[g];
+            let count = 0;
+            for (const widgetId of ids) {
+                const widget = cellFor(widgetId)?.widget;
+                if (widgetId === id) {
+                    ++count;
+                    continue;
+                }
+                if (widget && widget.implicitWidth > 0) {
+                    used += widget.implicitWidth;
+                    ++count;
+                }
+            }
+            if (count) {
+                used += Math.max(0, count - 1) * Tokens.spacing_s;
+                if (g > 0)
+                    used += 1 + Tokens.spacing_m;
+                ++populated;
+            }
+        }
+        return Math.max(0, maximumWidth - used - Math.max(0, populated - 1) * Tokens.spacing_m);
+    }
 
     // The cell under the pointer, or null.
     property Item hoveredCell: null
@@ -186,6 +216,8 @@ RowLayout {
                                     cell.widget.railT = Qt.binding(() => cell.railT);
                                 if (cell.widget.screenName !== undefined)
                                     cell.widget.screenName = Qt.binding(() => root.screenName);
+                                if (cell.widget.maximumWidth !== undefined)
+                                    cell.widget.maximumWidth = Qt.binding(() => root.roomFor(cell.modelData));
                             }
                             const cells = root._cells;
                             cells[cell.modelData] = cell;

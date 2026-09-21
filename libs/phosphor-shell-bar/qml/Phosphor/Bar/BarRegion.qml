@@ -34,6 +34,7 @@ Item {
         onWidthChanged: contentX = Math.max(0, Math.min(contentX, contentWidth - width))
         Slot {
             id: slot
+            maximumWidth: root.maximumWidth
             y: (viewport.height - height) / 2
         }
     }

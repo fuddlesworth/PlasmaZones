@@ -12,6 +12,7 @@
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QDBusMessage>
+#include <QDBusObjectPath>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDBusServiceWatcher>
@@ -57,6 +58,7 @@ public:
     StatusNotifierWatcher* watcher = nullptr;
     QString hostServiceName; ///< "org.kde.StatusNotifierHost-1234"
     QDBusServiceWatcher* nameWatcher = nullptr;
+    QDBusServiceWatcher* itemOwnerWatcher = nullptr;
 
     // Items in registration order. The model maps row → item by
     // index, so the storage MUST be ordered: earlier rev used a
@@ -69,6 +71,11 @@ public:
     // in lockstep.
     QList<StatusNotifierItem*> itemsList;
     QHash<QString, StatusNotifierItem*> itemsByCanonical;
+    QHash<QString, quint64> pendingItems;
+    QHash<QString, quint64> itemGenerations;
+    QHash<QString, QSet<QString>> itemsByService;
+    quint64 nextRegistration = 0;
+    quint64 nextSeed = 0;
 
     void connectToWatcher();
     void registerHost();
@@ -87,6 +94,18 @@ public:
 
 void StatusNotifierHost::Private::connectToWatcher()
 {
+    auto bus = QDBusConnection::sessionBus();
+    itemOwnerWatcher = new QDBusServiceWatcher(q);
+    itemOwnerWatcher->setConnection(bus);
+    itemOwnerWatcher->setWatchMode(QDBusServiceWatcher::WatchForOwnerChange);
+    QObject::connect(itemOwnerWatcher, &QDBusServiceWatcher::serviceOwnerChanged, q,
+                     [this](const QString& service, const QString& oldOwner, const QString& newOwner) {
+                         if (oldOwner.isEmpty() || oldOwner == newOwner)
+                             return;
+                         const auto canonicals = itemsByService.value(service);
+                         for (const auto& canonical : canonicals)
+                             onItemUnregistered(canonical);
+                     });
     // Spec dance: every shell tries to own the Watcher name. The
     // first one wins; the rest stay passive and route their items
     // through the winner. The winner ALSO runs the host so a
@@ -94,8 +113,6 @@ void StatusNotifierHost::Private::connectToWatcher()
     watcher = new StatusNotifierWatcher(q);
     qCInfo(lcSniHost) << "watcher owner?" << watcher->isServiceOwner()
                       << "(if false, another shell (likely plasma) is the canonical watcher)";
-
-    auto bus = QDBusConnection::sessionBus();
 
     // Wire item-registered / item-unregistered. If we own the watcher
     // service, prefer the in-process Qt signal (one direct call, no
@@ -242,6 +259,8 @@ void StatusNotifierHost::Private::seedExistingItems(bool skipZombieReap)
     // Read the property: items that registered before we started
     // need to be backfilled. Async to keep the constructor cheap.
     auto bus = QDBusConnection::sessionBus();
+    const quint64 seedGeneration = ++nextSeed;
+    const quint64 registrationCutoff = nextRegistration;
     QDBusMessage msg = QDBusMessage::createMethodCall(
         watcherService(), watcherPath(), QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
     msg << watcherInterface() << QStringLiteral("RegisteredStatusNotifierItems");
@@ -254,49 +273,56 @@ void StatusNotifierHost::Private::seedExistingItems(bool skipZombieReap)
     // is dropped once q is gone. Do not reparent the watcher off q without
     // switching the capture to a QPointer.
     auto* watcher = new QDBusPendingCallWatcher(pending, q);
-    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, q, [this, watcher, skipZombieReap] {
-        watcher->deleteLater();
-        QDBusPendingReply<QVariant> reply = *watcher;
-        if (reply.isError()) {
-            return;
-        }
-        const auto list = reply.value().toStringList();
-        qCInfo(lcSniHost) << "seedExistingItems found" << list.size() << "pre-existing tray item(s):" << list;
-        // Reconcile: reap zombies whose owners died while the prior
-        // watcher was down. The new watcher's authoritative set is the
-        // canonicals it just published; anything we still hold that's
-        // not in that set has lost its NameOwnerChanged signal source.
-        //
-        // EXCEPT after a passive→active promotion: the items we
-        // accumulated via bus-subscription belonged to the prior owner
-        // (Plasma), the freshly-queried list dispatches to our own
-        // watcher whose m_items is empty, and tray apps do not
-        // re-register on ownership change. Reaping under that
-        // condition would empty the tray. The promotion handler issues
-        // its seed with skipZombieReap set; only that seed skips.
-        if (!skipZombieReap) {
-            const QSet<QString> incoming(list.cbegin(), list.cend());
-            QStringList zombies;
-            for (auto it = itemsByCanonical.cbegin(); it != itemsByCanonical.cend(); ++it) {
-                if (!incoming.contains(it.key()))
-                    zombies.append(it.key());
-            }
-            for (const auto& canonical : zombies) {
-                qCInfo(lcSniHost) << "reaping zombie item after watcher respawn:" << canonical;
-                onItemUnregistered(canonical);
-            }
-        } else {
-            qCInfo(lcSniHost) << "skipping zombie reconciliation: this is a passive→active promotion seed";
-        }
-        for (const auto& canonical : list) {
-            onItemRegistered(canonical);
-        }
-    });
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, q,
+                     [this, watcher, skipZombieReap, seedGeneration, registrationCutoff] {
+                         watcher->deleteLater();
+                         if (seedGeneration != nextSeed)
+                             return;
+                         QDBusPendingReply<QVariant> reply = *watcher;
+                         if (reply.isError()) {
+                             return;
+                         }
+                         const auto list = reply.value().toStringList();
+                         qCInfo(lcSniHost)
+                             << "seedExistingItems found" << list.size() << "pre-existing tray item(s):" << list;
+                         // Reconcile: reap zombies whose owners died while the prior
+                         // watcher was down. The new watcher's authoritative set is the
+                         // canonicals it just published; anything we still hold that's
+                         // not in that set has lost its NameOwnerChanged signal source.
+                         //
+                         // EXCEPT after a passive→active promotion: the items we
+                         // accumulated via bus-subscription belonged to the prior owner
+                         // (Plasma), the freshly-queried list dispatches to our own
+                         // watcher whose m_items is empty, and tray apps do not
+                         // re-register on ownership change. Reaping under that
+                         // condition would empty the tray. The promotion handler issues
+                         // its seed with skipZombieReap set; only that seed skips.
+                         if (!skipZombieReap) {
+                             const QSet<QString> incoming(list.cbegin(), list.cend());
+                             QStringList zombies;
+                             for (auto it = itemGenerations.cbegin(); it != itemGenerations.cend(); ++it) {
+                                 // The snapshot predates arrivals received while Get was in
+                                 // flight. Only reconcile registrations it could have seen.
+                                 if (it.value() <= registrationCutoff && !incoming.contains(it.key()))
+                                     zombies.append(it.key());
+                             }
+                             for (const auto& canonical : zombies) {
+                                 qCInfo(lcSniHost) << "reaping zombie item after watcher respawn:" << canonical;
+                                 onItemUnregistered(canonical);
+                             }
+                         } else {
+                             qCInfo(lcSniHost)
+                                 << "skipping zombie reconciliation: this is a passive→active promotion seed";
+                         }
+                         for (const auto& canonical : list) {
+                             onItemRegistered(canonical);
+                         }
+                     });
 }
 
 void StatusNotifierHost::Private::onItemRegistered(const QString& canonical)
 {
-    if (itemsByCanonical.contains(canonical))
+    if (itemsByCanonical.contains(canonical) || pendingItems.contains(canonical))
         return;
     // Split canonical "service/path" back into (service, path).
     // Service starts with ':' (unique name) or 'o.' (well-known);
@@ -308,28 +334,67 @@ void StatusNotifierHost::Private::onItemRegistered(const QString& canonical)
     const QString path = canonical.mid(slash);
     // System boundary: the canonical arrives from an untrusted D-Bus peer
     // (any session process can call RegisterStatusNotifierItem). An empty
-    // service (canonical beginning with '/') would construct an item that
-    // issues calls against nothing; refuse loudly. The `path.startsWith('/')`
-    // term is belt-and-braces only: `path` is `canonical.mid(slash)` where
-    // `slash` is the first '/', so it already begins with '/' by construction
-    // (the `slash < 0` return above guarantees one exists). Kept so a future
-    // change to the derivation cannot silently admit a slashless path.
-    if (service.isEmpty() || !path.startsWith(QLatin1Char('/'))) {
+    // service (canonical beginning with '/') or invalid object path would
+    // construct an item that cannot issue valid calls. Reject both before
+    // installing owner watches or allocating the property proxy.
+    if (service.isEmpty() || QDBusObjectPath(path).path().isEmpty()) {
         qCWarning(lcSniHost) << "refusing malformed item canonical from bus:" << canonical;
         return;
     }
 
-    auto* item = new StatusNotifierItem(service, path, q);
-    itemsList.append(item);
-    itemsByCanonical.insert(canonical, item);
-    qCInfo(lcSniHost) << "item registered:" << canonical << "→ service" << service << "path" << path
-                      << "(total items now:" << itemsList.size() << ")";
-    Q_EMIT q->itemAdded(item);
-    Q_EMIT q->itemCountChanged();
+    // A remote watcher's seed or queued signal may name an already-dead
+    // process. Watch before querying so both sides of that race are covered.
+    if (!itemsByService.contains(service))
+        itemOwnerWatcher->addWatchedService(service);
+    itemsByService[service].insert(canonical);
+    const quint64 generation = ++nextRegistration;
+    pendingItems.insert(canonical, generation);
+    itemGenerations.insert(canonical, generation);
+    auto call =
+        QDBusMessage::createMethodCall(QStringLiteral("org.freedesktop.DBus"), QStringLiteral("/org/freedesktop/DBus"),
+                                       QStringLiteral("org.freedesktop.DBus"), QStringLiteral("NameHasOwner"));
+    call << service;
+    auto* check = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(call), q);
+    QObject::connect(check, &QDBusPendingCallWatcher::finished, q, [this, check, canonical, service, path, generation] {
+        check->deleteLater();
+        if (pendingItems.value(canonical) != generation)
+            return;
+        const QDBusPendingReply<bool> reply = *check;
+        if (reply.isError() || !reply.value()) {
+            onItemUnregistered(canonical);
+            return;
+        }
+        auto* item = new StatusNotifierItem(service, path, q);
+        // Initial property reads can dispatch owner loss before this
+        // constructor returns. Keep the registration cancellable until the
+        // fully initialized item is ready to publish.
+        if (pendingItems.value(canonical) != generation) {
+            item->deleteLater();
+            return;
+        }
+        pendingItems.remove(canonical);
+        itemsList.append(item);
+        itemsByCanonical.insert(canonical, item);
+        qCInfo(lcSniHost) << "item registered:" << canonical << "→ service" << service << "path" << path
+                          << "(total items now:" << itemsList.size() << ")";
+        Q_EMIT q->itemAdded(item);
+        Q_EMIT q->itemCountChanged();
+    });
 }
 
 void StatusNotifierHost::Private::onItemUnregistered(const QString& canonical)
 {
+    pendingItems.remove(canonical);
+    itemGenerations.remove(canonical);
+    const QString service = canonical.section(QLatin1Char('/'), 0, 0);
+    auto owner = itemsByService.find(service);
+    if (owner != itemsByService.end()) {
+        owner->remove(canonical);
+        if (owner->isEmpty()) {
+            itemsByService.erase(owner);
+            itemOwnerWatcher->removeWatchedService(service);
+        }
+    }
     auto* item = itemsByCanonical.take(canonical);
     if (!item)
         return;

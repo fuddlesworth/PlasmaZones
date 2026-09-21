@@ -477,6 +477,10 @@ Item {
     // granted keyboard focus cannot receive a keystroke at all — the field
     // would look editable and silently swallow everything typed into it.
     readonly property var widgetPanels: ({
+            "tray": {
+                "component": trayPanelComponent,
+                "keyboard": true
+            },
             "systemmetrics": {
                 "component": statsPanelComponent,
                 "keyboard": true
@@ -579,6 +583,13 @@ Item {
     }
 
     Component {
+        id: trayPanelComponent
+        TrayPanel {
+            onCloseRequested: Popouts.close(Popouts.handleFor("bar.panel.tray"))
+        }
+    }
+
+    Component {
         id: calendarPanelComponent
 
         CalendarPanel {
@@ -603,7 +614,8 @@ Item {
         // anchorCenterFor returns -1 when it cannot resolve one (a widget
         // with no window yet), which is NOT a coordinate: fall back to the
         // bar-centre anchor rather than pinning the panel to the left edge.
-        const centre = BarRegistry.anchorCenterFor(source);
+        const anchorSource = id === "tray" && source?.requestAnchor ? source.requestAnchor : source;
+        const centre = BarRegistry.anchorCenterFor(anchorSource);
         const anchored = centre >= 0;
         // Where the panel sits along the screen, 0..1. This is what binds
         // the panel's stroke and top band to the one screen-wide gradient
@@ -613,6 +625,19 @@ Item {
         // could not be resolved.
         const screen = BarRegistry.screenOf(source);
         const railT = anchored && screen && screen.width > 0 ? Math.max(0, Math.min(1, centre / screen.width)) : 0.5;
+        const directMenu = id === "tray" ? source?.requestedMenuKey || "" : "";
+        if (directMenu && Popouts.isOpen("bar.panel.tray"))
+            Popouts.close(Popouts.handleFor("bar.panel.tray"));
+        if (directMenu) {
+            const entry = TrayModel.lookup(directMenu);
+            if (!entry.menuPath || entry.menuPath === "/") {
+                const point = anchorSource.mapToGlobal(anchorSource.width / 2, anchorSource.height / 2);
+                source.requestedMenuKey = "";
+                Qt.callLater(() => TrayModel.context(entry, point));
+                return;
+            }
+        }
+        const rightAligned = id === "systemmetrics" || id === "tray";
         Popouts.toggle({
             "popoutId": "bar.panel." + id,
             "content": panel.component,
@@ -621,8 +646,8 @@ Item {
             // GC cannot delete the live screen when this wrapper is
             // collected. Do not reach for a QScreen any other way from QML.
             "targetScreen": screen,
-            "anchor": id === "notification" ? PhosphorPopout.Anchor.BarRight : anchored ? (id === "systemmetrics" ? PhosphorPopout.Anchor.BarItemRight : PhosphorPopout.Anchor.BarItem) : PhosphorPopout.Anchor.BarCenter,
-            "customAnchor": Qt.point(anchored ? centre + (id === "systemmetrics" ? source.width / 2 : 0) : 0, 0),
+            "anchor": id === "notification" ? PhosphorPopout.Anchor.BarRight : anchored ? (rightAligned ? PhosphorPopout.Anchor.BarItemRight : PhosphorPopout.Anchor.BarItem) : PhosphorPopout.Anchor.BarCenter,
+            "customAnchor": Qt.point(anchored ? centre + (rightAligned ? anchorSource.width / 2 : 0) : 0, 0),
             "exclusive": PhosphorPopout.ExclusiveMode.Cooperative,
             // Per panel; see widgetPanels above for why this is not one
             // shared value.
@@ -633,10 +658,16 @@ Item {
             // tile and does not vanish when you look elsewhere, and these
             // are glances.
             "dismissOnFocusLoss": true,
-            "props": {
+            "props": id === "tray" ? {
+                "railT": railT,
+                "sourceWidget": source,
+                "initialMenuKey": directMenu
+            } : {
                 "railT": railT
             }
         });
+        if (id === "tray" && source)
+            source.requestedMenuKey = "";
     }
 
     // The bar cannot see a transient — it is a layer surface the shell

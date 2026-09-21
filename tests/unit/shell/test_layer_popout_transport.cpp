@@ -379,12 +379,18 @@ void TestLayerPopoutTransport::controllerInitiatedCloseSuppressesTheCallback()
     // have passed this case.
     QPointer<QQuickWindow> window = m_wire->m_lastWindow;
     QVERIFY(window);
+    QCOMPARE(m_wire->m_lastArgs.keyboard, PhosphorLayer::KeyboardInteractivity::Exclusive);
+    // The mock records initial policy in attach args; live transports apply
+    // it when attaching. Seed that state before checking the close update.
+    m_wire->m_lastHandle->m_keyboard = m_wire->m_lastArgs.keyboard;
 
     // A controller-initiated close marks the entry `closing`, so the host's
     // eventual `dismissed` must tear the entry down WITHOUT reporting back —
     // the controller already knows. The host's dismissEmitter guarantees the
     // emission after its close duration; give it a generous window.
     transport.closeSurface(handle);
+    QCOMPARE(m_wire->m_lastHandle->m_keyboard, PhosphorLayer::KeyboardInteractivity::None);
+    QVERIFY(window->flags().testFlag(Qt::WindowTransparentForInput));
     QTest::qWait(kCloseAnimationCeilingMs);
     QVERIFY2(m_dismissed.isEmpty(), "controller-initiated close was reported back as a dismissal");
     QVERIFY2(window.isNull(), "the close really tore the surface down");

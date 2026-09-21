@@ -77,6 +77,9 @@ private:
     /// + registers the adaptor object on success. Called from the ctor
     /// and from onOwnershipReleased when the prior owner exits.
     bool tryClaimOwnership();
+    void queueRegistration(const QString& service, const QString& sender, bool host);
+    void acceptItem(const QString& canonical, const QString& sender);
+    void acceptHost(const QString& service, const QString& sender);
 
     QDBusServiceWatcher* m_busWatcher;
     /// Separate watcher for the org.kde.StatusNotifierWatcher well-known
@@ -98,6 +101,14 @@ private:
     QHash<QString, QStringList> m_byOwner; ///< unique name → canonicals it owns
 
     QHash<QString, QString> m_hosts; ///< canonical "host-pid" → unique name
+
+    struct PendingRegistration
+    {
+        QString owner;
+        quint64 generation;
+    };
+    QHash<QString, PendingRegistration> m_pendingRegistrations;
+    quint64 m_nextRegistration = 0;
 
     /// Sorted snapshot of m_items keys, rebuilt lazily on read after a
     /// register / unregister mutation. Without this, every DBus

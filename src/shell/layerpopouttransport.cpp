@@ -17,6 +17,7 @@
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickItem>
+#include <QQuickWindow>
 #include <QScreen>
 
 #include <utility>
@@ -490,6 +491,14 @@ void LayerPopoutTransport::closeSurface(const QString& handle)
         return;
     }
     it->closing = true;
+    // Input ownership ends immediately even while the dismiss animation
+    // remains visible. A tray action may hand off to an app-owned menu.
+    if (it->surface) {
+        it->surface->setKeyboardInteractivity(PhosphorLayer::KeyboardInteractivity::None);
+        if (auto* window = it->surface->window()) {
+            window->setFlag(Qt::WindowTransparentForInput, true);
+        }
+    }
 
     if (!it->hostItem) {
         // The host is already gone (surface failed, screen lost). Nothing to

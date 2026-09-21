@@ -40,6 +40,7 @@
 #include <PhosphorServiceMpris/QmlRegistration.h>
 #include <PhosphorServiceNetwork/QmlRegistration.h>
 #include <PhosphorServicePipeWire/QmlRegistration.h>
+#include <PhosphorServiceSni/QmlRegistration.h>
 #include <PhosphorServiceUPower/QmlRegistration.h>
 #include <PhosphorShell/QmlRegistration.h>
 
@@ -47,6 +48,7 @@
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQuickItem>
+#include <QRectF>
 #include <QTest>
 #include <QUrl>
 
@@ -63,6 +65,7 @@ private Q_SLOTS:
     void popoutHostCostsLittlePerOpen();
     void contentIsPlacedBeforeItCouldBeSeen();
     void rightAlignedWidgetAnchorStaysOnScreen();
+    void compositeContentBlursOnlyDeclaredRegions();
 
 private:
     std::unique_ptr<QQmlEngine> m_engine;
@@ -87,6 +90,7 @@ void TestPanelOpenCost::initTestCase()
     PhosphorServiceUPower::registerQmlTypes();
     PhosphorServiceMpris::registerQmlTypes();
     PhosphorServicePipeWire::registerQmlTypes();
+    PhosphorServiceSni::registerQmlTypes();
     PhosphorShell::registerQmlTypes();
 
     m_engine = std::make_unique<QQmlEngine>();
@@ -289,6 +293,83 @@ void TestPanelOpenCost::rightAlignedWidgetAnchorStaysOnScreen()
     host->setProperty("reservedTop", 0);
     host->setProperty("reservedBottom", 70);
     QCOMPARE(frame->y() + frame->height(), 828.0);
+}
+
+void TestPanelOpenCost::compositeContentBlursOnlyDeclaredRegions()
+{
+    QQmlComponent hostComponent(m_engine.get());
+    hostComponent.setData(R"(
+import QtQuick
+import Phosphor.Popout
+PopoutHost {
+    id: host
+    width: 1000
+    height: 700
+    placement: "custom"
+    customX: 80
+    customY: 50
+    readonly property rect recordedPrimary: effects.primary
+    readonly property rect recordedSecondary: effects.secondary
+    readonly property bool correctTarget: effects.correctTarget
+    surfaceEffects: QtObject {
+        id: effects
+        property rect primary: Qt.rect(0, 0, 0, 0)
+        property rect secondary: Qt.rect(0, 0, 0, 0)
+        property bool correctTarget: false
+        function setBlurBehind(target, first, second, radius) {
+            correctTarget = target === host;
+            primary = first;
+            secondary = second;
+        }
+    }
+}
+)",
+                          QUrl(QStringLiteral("qrc:/composite_blur_host.qml")));
+    std::unique_ptr<QObject> object(hostComponent.create());
+    auto* host = qobject_cast<QQuickItem*>(object.get());
+    QVERIFY2(host, qPrintable(hostComponent.errorString()));
+    QVERIFY(host->property("materialBlurred").toBool());
+
+    // Use the pre-built content path used by the native layer transport.
+    QQmlComponent contentComponent(m_engine.get());
+    contentComponent.setData(R"(
+import QtQuick
+Item {
+    implicitWidth: 432
+    implicitHeight: 310
+    property rect popoutBlurRect: Qt.rect(5, 7, 240, 280)
+    property rect popoutSecondaryBlurRect: Qt.rect(252, 80, 180, 170)
+}
+)",
+                             QUrl(QStringLiteral("qrc:/composite_blur_content.qml")));
+    auto* content = qobject_cast<QQuickItem*>(contentComponent.create());
+    QVERIFY2(content, qPrintable(contentComponent.errorString()));
+    content->setParent(host);
+    QVERIFY(host->setProperty("contentItem", QVariant::fromValue(content)));
+    QTRY_COMPARE(host->property("recordedPrimary").toRectF(), QRectF(85, 57, 240, 280));
+    QTRY_COMPARE(host->property("recordedSecondary").toRectF(), QRectF(332, 130, 180, 170));
+    QVERIFY(host->property("correctTarget").toBool());
+
+    // Updating just the secondary panel must republish the blur region too.
+    QVERIFY(content->setProperty("popoutSecondaryBlurRect", QRectF(252, 120, 180, 140)));
+    QTRY_COMPARE(host->property("recordedSecondary").toRectF(), QRectF(332, 170, 180, 140));
+    QCOMPARE(host->property("recordedPrimary").toRectF(), QRectF(85, 57, 240, 280));
+    QVERIFY(content->setProperty("popoutBlurRect", QRectF(20, 10, 230, 270)));
+    QTRY_COMPARE(host->property("recordedPrimary").toRectF(), QRectF(100, 60, 230, 270));
+
+    QVERIFY(host->setProperty("customX", 120.0));
+    QVERIFY(host->setProperty("customY", 90.0));
+    QTRY_COMPARE(host->property("recordedPrimary").toRectF(), QRectF(140, 100, 230, 270));
+    QTRY_COMPARE(host->property("recordedSecondary").toRectF(), QRectF(372, 210, 180, 140));
+
+    // An ordinary replacement has no override and must clear the old second region.
+    auto* ordinary = new QQuickItem;
+    ordinary->setParent(host);
+    ordinary->setImplicitWidth(200);
+    ordinary->setImplicitHeight(100);
+    QVERIFY(host->setProperty("contentItem", QVariant::fromValue(ordinary)));
+    QTRY_COMPARE(host->property("recordedPrimary").toRectF(), QRectF(120, 90, 200, 100));
+    QTRY_COMPARE(host->property("recordedSecondary").toRectF(), QRectF(0, 0, 0, 0));
 }
 
 QTEST_MAIN(TestPanelOpenCost)

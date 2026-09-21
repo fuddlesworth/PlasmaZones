@@ -104,12 +104,22 @@ FocusScope {
     property var surfaceEffects: null
     readonly property bool materialBlurred: Appearance.settings.material !== "solid"
     readonly property real materialRadius: Appearance.radius
-    readonly property rect materialRect: Qt.rect(contentFrame.x, contentFrame.y, contentFrame.width, contentFrame.height)
+    // Composite popups can leave transparent space between their panels.
+    // Blur only those panels, rather than their entire bounding rectangle.
+    readonly property rect materialRect: {
+        const region = contentFrame._visibleDelegate?.popoutBlurRect;
+        return region !== undefined ? Qt.rect(contentFrame.x + region.x, contentFrame.y + region.y, region.width, region.height) : Qt.rect(contentFrame.x, contentFrame.y, contentFrame.width, contentFrame.height);
+    }
+    readonly property rect secondaryMaterialRect: {
+        const region = contentFrame._visibleDelegate?.popoutSecondaryBlurRect;
+        return region !== undefined ? Qt.rect(contentFrame.x + region.x, contentFrame.y + region.y, region.width, region.height) : Qt.rect(0, 0, 0, 0);
+    }
     function applyMaterial() {
         if (surfaceEffects && !contentFrame.fullScreen)
-            surfaceEffects.setBlurBehind(root, materialBlurred ? materialRect : Qt.rect(0, 0, 0, 0), Qt.rect(0, 0, 0, 0), materialRadius);
+            surfaceEffects.setBlurBehind(root, materialBlurred ? materialRect : Qt.rect(0, 0, 0, 0), materialBlurred ? secondaryMaterialRect : Qt.rect(0, 0, 0, 0), materialRadius);
     }
     onMaterialRectChanged: Qt.callLater(applyMaterial)
+    onSecondaryMaterialRectChanged: Qt.callLater(applyMaterial)
     onSurfaceEffectsChanged: Qt.callLater(applyMaterial)
     onMaterialBlurredChanged: Qt.callLater(applyMaterial)
     onMaterialRadiusChanged: Qt.callLater(applyMaterial)

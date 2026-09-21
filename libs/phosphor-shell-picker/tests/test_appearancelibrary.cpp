@@ -15,6 +15,81 @@ class TestAppearanceLibrary : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void trayPreferencesTravelOnlyWithTheBarPreset()
+    {
+        QTemporaryDir dir;
+        AppearanceStore store(dir.filePath(QStringLiteral("appearance.json")));
+        AppearanceLibrary library(&store, dir.filePath(QStringLiteral("library")));
+        const QStringList keys{QStringLiteral("trayIcons"), QStringLiteral("trayLimit"),
+                               QStringLiteral("trayAttention"), QStringLiteral("trayOrder"),
+                               QStringLiteral("trayVisibility")};
+        const QVariantMap preferences{
+            {QStringLiteral("trayIcons"), QStringLiteral("color")},
+            {QStringLiteral("trayLimit"), 0},
+            {QStringLiteral("trayAttention"), false},
+            {QStringLiteral("trayOrder"), QVariantList{QStringLiteral("id:Nextcloud"), QStringLiteral("id:Steam")}},
+            {QStringLiteral("trayVisibility"),
+             QVariantMap{{QStringLiteral("id:Nextcloud"), QStringLiteral("pinned")},
+                         {QStringLiteral("id:Steam"), QStringLiteral("hidden")}}}};
+        for (auto it = preferences.cbegin(); it != preferences.cend(); ++it)
+            QVERIFY(store.setValue(it.key(), it.value()));
+        for (const auto& preset : {QStringLiteral("phosphor"), QStringLiteral("paper"), QStringLiteral("ember")}) {
+            QVERIFY(library.previewPreset(preset, false, true));
+            for (const auto& key : keys)
+                QCOMPARE(store.values().value(key), preferences.value(key));
+        }
+        for (const bool withBar : {false, true}) {
+            const auto name = withBar ? QStringLiteral("With tray") : QStringLiteral("Style only");
+            QVERIFY(library.savePreset(name, false, withBar));
+            const auto id = library.presets().last().toMap().value(QStringLiteral("id")).toString();
+            const auto url = QUrl::fromLocalFile(dir.filePath(name + QStringLiteral(".json")));
+            QVERIFY(library.exportPreset(id, url));
+            QFile file(url.toLocalFile());
+            QVERIFY(file.open(QIODevice::ReadOnly));
+            const auto exported =
+                QJsonDocument::fromJson(file.readAll()).object().value(QStringLiteral("settings")).toObject();
+            for (const auto& key : keys) {
+                QCOMPARE(exported.contains(key), withBar);
+                if (withBar)
+                    QCOMPARE(exported.value(key).toVariant(), preferences.value(key));
+                QVERIFY(store.setValue(key, AppearanceStore::defaults().value(key)));
+            }
+            const auto before = store.values();
+            QVERIFY(library.inspectImport(url));
+            QCOMPARE(store.values(), before);
+            QVERIFY(store.beginPreview());
+            QVERIFY(library.previewPreset(QStringLiteral("imported"), false, false));
+            for (const auto& key : keys)
+                QCOMPARE(store.values().value(key), before.value(key));
+            QVERIFY(library.previewPreset(QStringLiteral("imported"), false, true));
+            for (const auto& key : keys)
+                QCOMPARE(store.values().value(key), withBar ? preferences.value(key) : before.value(key));
+            store.endPreview();
+            QCOMPARE(store.values(), before);
+            for (auto it = preferences.cbegin(); it != preferences.cend(); ++it)
+                QVERIFY(store.setValue(it.key(), it.value()));
+        }
+        AppearanceLibrary reloaded(&store, dir.filePath(QStringLiteral("library")));
+        const auto saved = reloaded.presets().last().toMap().value(QStringLiteral("settings")).toMap();
+        for (const auto& key : keys)
+            QCOMPARE(saved.value(key), preferences.value(key));
+    }
+    void malformedTrayImportDoesNotAlterAppearance()
+    {
+        QTemporaryDir dir;
+        AppearanceStore store(dir.filePath(QStringLiteral("appearance.json")));
+        AppearanceLibrary library(&store, dir.filePath(QStringLiteral("library")));
+        QVERIFY(store.setValue(QStringLiteral("trayLimit"), 1));
+        const auto before = store.values();
+        QFile file(dir.filePath(QStringLiteral("broken-tray.json")));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("{\"version\":1,\"settings\":{\"trayVisibility\":{\"id:App\":\"unknown\"}}}");
+        file.close();
+        QVERIFY(!library.inspectImport(QUrl::fromLocalFile(file.fileName())));
+        QCOMPARE(store.values(), before);
+        QVERIFY(!library.previewPreset(QStringLiteral("imported"), false, true));
+        QCOMPARE(store.values(), before);
+    }
     void statsPreferencesTravelOnlyWithTheBarPreset()
     {
         QTemporaryDir dir;

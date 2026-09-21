@@ -16,6 +16,8 @@ Item {
     // hex color. Encode ordinary sRGB channels explicitly for the SVG renderer.
     readonly property string strokeColor: "#" + [color.r, color.g, color.b].map(channel => ("0" + Math.round(channel * 255).toString(16)).slice(-2)).join("")
     readonly property string drawing: {
+        if (source === "phosphor-tray")
+            return '<path d="M3 14 H8 L10 17 H14 L16 14 H21 V21 H3 Z M5 10 V4 H19 V10 M9 7 H15"/>';
         if (source === "cpu")
             return '<rect x="5" y="5" width="14" height="14" rx="3"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2 V5 M15 2 V5 M9 19 V22 M15 19 V22 M2 9 H5 M2 15 H5 M19 9 H22 M19 15 H22"/>';
         if (source === "video-card")

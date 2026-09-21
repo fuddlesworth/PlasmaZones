@@ -81,6 +81,17 @@ PanelWindow {
         value: BarRegistry.openPanelId === "clock"
         when: target !== null
     }
+    Binding {
+        target: {
+            void leftSlot.mountedCount;
+            void centerSlot.mountedCount;
+            void rightSlot.mountedCount;
+            return rightSlot.cellFor("tray")?.widget ?? centerSlot.cellFor("tray")?.widget ?? leftSlot.cellFor("tray")?.widget ?? null;
+        }
+        property: "expanded"
+        value: BarRegistry.openPanelId === "tray"
+        when: target !== null
+    }
 
     Connections {
         target: panel._mapWidget
@@ -231,9 +242,14 @@ PanelWindow {
 
     // Bar layout: each slot is a list of groups; each group is an array of
     // widget ids separated from its neighbours by a hairline.
-    property var leftGroups: Appearance.settings.barLayout.left.map(group => group.filter(id => panel.width >= 1100 || (id !== "focusedapp" && id !== "media"))).filter(group => group.length)
-    property var centerGroups: Appearance.settings.barLayout.center.map(group => group.filter(id => panel.width >= 1100 || (id !== "focusedapp" && id !== "media"))).filter(group => group.length)
-    property var rightGroups: Appearance.settings.barLayout.right.map(group => group.filter(id => panel.width >= 1100 || (id !== "focusedapp" && id !== "media"))).filter(group => group.length)
+    // Compare the layout value before replacing delegate models. Theme or
+    // tray preference changes must not destroy the widgets anchoring popups.
+    readonly property string _leftGroupsJson: JSON.stringify(Appearance.settings.barLayout.left.map(group => group.filter(id => panel.width >= 1100 || (id !== "focusedapp" && id !== "media"))).filter(group => group.length))
+    readonly property string _centerGroupsJson: JSON.stringify(Appearance.settings.barLayout.center.map(group => group.filter(id => panel.width >= 1100 || (id !== "focusedapp" && id !== "media"))).filter(group => group.length))
+    readonly property string _rightGroupsJson: JSON.stringify(Appearance.settings.barLayout.right.map(group => group.filter(id => panel.width >= 1100 || (id !== "focusedapp" && id !== "media"))).filter(group => group.length))
+    property var leftGroups: JSON.parse(_leftGroupsJson)
+    property var centerGroups: JSON.parse(_centerGroupsJson)
+    property var rightGroups: JSON.parse(_rightGroupsJson)
 
     // This screen's placement map, shared by the rail (which binds its
     // slice to the strip on a scrolling screen) and the map widget.

@@ -92,7 +92,7 @@ void TestBarWidgetTypes::theDefaultBarLayoutOnlyUsesRegisteredIds()
     // Evaluate the shipped bindings at both responsive widths. This checks
     // every branch and concat result, rather than assuming a literal array.
     static const QRegularExpression declaration(
-        QStringLiteral("property\\s+var\\s+(?:left|center|right)Groups\\s*:\\s*"));
+        QStringLiteral("readonly\\s+property\\s+string\\s+_(?:left|center|right)GroupsJson\\s*:\\s*"));
     QStringList layoutIds;
     int count = 0;
     auto declarations = declaration.globalMatch(source);
@@ -121,7 +121,7 @@ void TestBarWidgetTypes::theDefaultBarLayoutOnlyUsesRegisteredIds()
             auto panel = evaluator.newObject();
             panel.setProperty(QStringLiteral("width"), width);
             evaluator.globalObject().setProperty(QStringLiteral("panel"), panel);
-            const auto value = evaluator.evaluate(expression);
+            const auto value = evaluator.evaluate(QStringLiteral("JSON.parse(") + expression + QLatin1Char(')'));
             QVERIFY2(!value.isError(), qPrintable(value.toString()));
             QVERIFY(value.isArray());
             for (const auto& group : value.toVariant().toList()) {

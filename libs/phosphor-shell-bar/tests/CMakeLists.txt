@@ -7,18 +7,14 @@
 # Phosphor.Theme) and their plugin registrars so the QML engine can
 # resolve every import.
 #
-# The Slot cases drive the registry-agnostic seam with a fake provider,
-# so no Phosphor.Shell / Phosphor.Service.* runtime registration is needed
-# (BarHost and the real widgets are never instantiated here). One case
-# asserts a chip colour, which is the guard against the module's qmldir
-# shadowing the Phosphor.Theme singleton.
+# Tray interactions use real SNI/dbusmenu exports from a Python fixture.
+# Other cases do not launch it.
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes QuickTest)
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core DBus Gui Qml Quick QuickShapes QuickTest)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
-# Same private-bus isolation as libs/phosphor-shell/tests. Nothing in the
-# bar's QML touches D-Bus today, but this is a QtQuickTest that instantiates
-# real QML, and the moment a bar file imports a Phosphor.Service.* type it
-# would start reading the developer's session bus with no diff to signal it.
+# Same private-bus isolation as libs/phosphor-shell/tests. The tray tests
+# register their own watcher and fixture apps on this private session bus.
 # EXISTS-guarded explicit path, not a bare `include(PhosphorTestIsolation)`:
 # a bare module name resolves only through the root project's
 # CMAKE_MODULE_PATH, so a standalone configure of this library (which the
@@ -37,10 +33,15 @@ endif()
 add_executable(test_phosphor_shell_bar tst_bar.cpp)
 
 target_compile_features(test_phosphor_shell_bar PRIVATE cxx_std_20)
+target_compile_definitions(test_phosphor_shell_bar PRIVATE
+    PHOSPHOR_TRAY_FIXTURE_PYTHON="${Python3_EXECUTABLE}"
+    PHOSPHOR_TRAY_FIXTURE_PATH="${CMAKE_CURRENT_LIST_DIR}/../../../scripts/nested-shell/tray-fixture.py"
+)
 
 target_link_libraries(test_phosphor_shell_bar
     PRIVATE
         Qt6::Core
+        Qt6::DBus
         Qt6::Gui
         Qt6::Qml
         Qt6::Quick
@@ -58,6 +59,8 @@ target_link_libraries(test_phosphor_shell_bar
         PhosphorShellQmlplugin
         # registerQmlTypes() lives in the C++ library, not the QML module.
         PhosphorShell::PhosphorShell
+        PhosphorServiceSni::PhosphorServiceSni
+        PhosphorServiceIconTheme::PhosphorServiceIconTheme
         PhosphorShellWidgetsQml
         PhosphorShellWidgetsQmlplugin
         PhosphorThemeQml

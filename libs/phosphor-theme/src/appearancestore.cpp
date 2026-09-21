@@ -21,6 +21,18 @@
 #include <cmath>
 
 namespace PhosphorTheme {
+namespace {
+bool validTrayPreferenceKey(const QString& key)
+{
+    if (key.isEmpty() || key.size() > 512)
+        return false;
+    for (const auto c : key.toUcs4()) {
+        if (!QChar::isPrint(c))
+            return false;
+    }
+    return true;
+}
+}
 AppearanceStore* AppearanceStore::create(QQmlEngine*, QJSEngine*)
 {
     static QPointer<AppearanceStore> instance;
@@ -75,6 +87,11 @@ QVariantMap AppearanceStore::defaults()
             {QStringLiteral("statsMemoryUnit"), QStringLiteral("percent")},
             {QStringLiteral("statsInterval"), 2},
             {QStringLiteral("statsGpuId"), QString()},
+            {QStringLiteral("trayIcons"), QStringLiteral("symbolic")},
+            {QStringLiteral("trayLimit"), 2},
+            {QStringLiteral("trayAttention"), true},
+            {QStringLiteral("trayOrder"), QVariantList{}},
+            {QStringLiteral("trayVisibility"), QVariantMap{}},
             {QStringLiteral("visualizer"), QStringLiteral("ribbon")}};
 }
 AppearanceStore::AppearanceStore(QObject* parent)
@@ -142,6 +159,7 @@ bool AppearanceStore::validate(const QVariantMap& values, QVariantMap& result)
 {
     result = defaults();
     const QMap<QString, QStringList> enums{
+        {QStringLiteral("trayIcons"), {QStringLiteral("symbolic"), QStringLiteral("color")}},
         {QStringLiteral("statsStyle"), {QStringLiteral("traces"), QStringLiteral("meters"), QStringLiteral("numbers")}},
         {QStringLiteral("statsMemoryUnit"), {QStringLiteral("percent"), QStringLiteral("used")}},
         {QStringLiteral("surfaceEffect"), {QStringLiteral("none"), QStringLiteral("glass"), QStringLiteral("motes")}},
@@ -154,12 +172,43 @@ bool AppearanceStore::validate(const QVariantMap& values, QVariantMap& result)
         {QStringLiteral("lockLayout"), {QStringLiteral("split"), QStringLiteral("centered")}},
         {QStringLiteral("visualizer"),
          {QStringLiteral("ribbon"), QStringLiteral("bars"), QStringLiteral("halo"), QStringLiteral("off")}}};
+    QSet<QString> trayKeys;
     for (auto it = values.cbegin(); it != values.cend(); ++it) {
         if (!result.contains(it.key()))
             return false;
         if (enums.contains(it.key())) {
             if (it.value().metaType().id() != QMetaType::QString
                 || !enums.value(it.key()).contains(it.value().toString()))
+                return false;
+        } else if (it.key() == QLatin1String("trayOrder")) {
+            if (it.value().metaType().id() != QMetaType::QVariantList || it.value().toList().size() > 256)
+                return false;
+            QSet<QString> seen;
+            for (const auto& entry : it.value().toList()) {
+                const auto key = entry.toString();
+                if (entry.metaType().id() != QMetaType::QString || !validTrayPreferenceKey(key) || seen.contains(key))
+                    return false;
+                seen.insert(key);
+                trayKeys.insert(key);
+            }
+        } else if (it.key() == QLatin1String("trayVisibility")) {
+            if (it.value().metaType().id() != QMetaType::QVariantMap || it.value().toMap().size() > 256)
+                return false;
+            const auto policies = it.value().toMap();
+            const QStringList allowed{QStringLiteral("pinned"), QStringLiteral("auto"), QStringLiteral("overflow"),
+                                      QStringLiteral("hidden")};
+            for (auto policy = policies.cbegin(); policy != policies.cend(); ++policy) {
+                if (!validTrayPreferenceKey(policy.key()) || policy.value().metaType().id() != QMetaType::QString
+                    || !allowed.contains(policy.value().toString()))
+                    return false;
+                trayKeys.insert(policy.key());
+            }
+        } else if (it.key() == QLatin1String("trayLimit")) {
+            const auto type = it.value().metaType().id();
+            if (type != QMetaType::Int && type != QMetaType::Double && type != QMetaType::LongLong)
+                return false;
+            const auto limit = it.value().toDouble();
+            if (!std::isfinite(limit) || std::floor(limit) != limit || limit < 0 || limit > 4)
                 return false;
         } else if (it.key() == QLatin1String("statsMetrics")) {
             if (it.value().metaType().id() != QMetaType::QVariantList)
@@ -261,6 +310,8 @@ bool AppearanceStore::validate(const QVariantMap& values, QVariantMap& result)
         }
         result[it.key()] = it.value();
     }
+    if (trayKeys.size() > 256)
+        return false;
     // Keep every accepted setting document within the reader's size limit.
     return QJsonDocument(QJsonObject{{QStringLiteral("version"), 1},
                                      {QStringLiteral("settings"), QJsonObject::fromVariantMap(result)}})
@@ -473,7 +524,12 @@ bool AppearanceStore::applyPreset(const QString& preset)
                             QStringLiteral("statsMetrics"),
                             QStringLiteral("statsMemoryUnit"),
                             QStringLiteral("statsInterval"),
-                            QStringLiteral("statsGpuId")})
+                            QStringLiteral("statsGpuId"),
+                            QStringLiteral("trayIcons"),
+                            QStringLiteral("trayLimit"),
+                            QStringLiteral("trayAttention"),
+                            QStringLiteral("trayOrder"),
+                            QStringLiteral("trayVisibility")})
         next[key] = m_values.value(key);
     return commit(next);
 }

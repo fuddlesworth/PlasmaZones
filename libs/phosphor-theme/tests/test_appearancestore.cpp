@@ -5,6 +5,7 @@
 #include <QFile>
 #include <QImage>
 #include <cmath>
+#include <limits>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -13,6 +14,132 @@ class TestAppearanceStore : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void trayPreferencesPersistAcrossPresetsAndPreviewRollback()
+    {
+        QTemporaryDir dir;
+        const auto path = dir.filePath(QStringLiteral("appearance.json"));
+        AppearanceStore store(path);
+        QCOMPARE(store.values().value(QStringLiteral("trayIcons")).toString(), QStringLiteral("symbolic"));
+        QCOMPARE(store.values().value(QStringLiteral("trayLimit")).toInt(), 2);
+        QVERIFY(store.values().value(QStringLiteral("trayAttention")).toBool());
+        QVERIFY(store.values().value(QStringLiteral("trayOrder")).toList().isEmpty());
+        QVERIFY(store.values().value(QStringLiteral("trayVisibility")).toMap().isEmpty());
+        const auto cloud = QStringLiteral("id:Nextcloud"),
+                   fallback = QStringLiteral("fallback:música 🎵|/StatusNotifierItem");
+        const QVariantMap preferences{{QStringLiteral("trayIcons"), QStringLiteral("color")},
+                                      {QStringLiteral("trayLimit"), 4},
+                                      {QStringLiteral("trayAttention"), false},
+                                      {QStringLiteral("trayOrder"), QVariantList{fallback, cloud}},
+                                      {QStringLiteral("trayVisibility"),
+                                       QVariantMap{{cloud, QStringLiteral("hidden")},
+                                                   {fallback, QStringLiteral("pinned")},
+                                                   {QStringLiteral("id:Steam"), QStringLiteral("auto")},
+                                                   {QStringLiteral("id:Discord"), QStringLiteral("overflow")}}}};
+        for (auto it = preferences.cbegin(); it != preferences.cend(); ++it)
+            QVERIFY(store.setValue(it.key(), it.value()));
+        for (const auto& preset : {QStringLiteral("phosphor"), QStringLiteral("paper"), QStringLiteral("ember")}) {
+            QVERIFY(store.applyPreset(preset));
+            for (auto it = preferences.cbegin(); it != preferences.cend(); ++it)
+                QCOMPARE(store.values().value(it.key()), it.value());
+        }
+        const auto saved = store.values();
+        QCOMPARE(AppearanceStore(path).values(), saved);
+        const auto exported = QUrl::fromLocalFile(dir.filePath(QStringLiteral("tray.json")));
+        QVERIFY(store.exportPreset(exported));
+        AppearanceStore imported(dir.filePath(QStringLiteral("imported.json")));
+        QVERIFY(imported.importPreset(exported));
+        QCOMPARE(imported.values(), saved);
+
+        QVERIFY(store.beginPreview());
+        QVERIFY(store.setValue(QStringLiteral("trayLimit"), 0));
+        QVERIFY(store.setValue(QStringLiteral("trayVisibility"), QVariantMap{{cloud, QStringLiteral("pinned")}}));
+        QCOMPARE(AppearanceStore(path).values(), saved);
+        QCOMPARE(AppearanceStore::effectiveValues(path), store.values());
+        store.revertPreview();
+        QCOMPARE(store.values(), saved);
+        QVERIFY(store.setValue(QStringLiteral("trayOrder"), QVariantList{}));
+        store.endPreview();
+        QCOMPARE(store.values(), saved);
+        QCOMPARE(AppearanceStore(path).values(), saved);
+    }
+    void trayPreferencesRejectInvalidValues_data()
+    {
+        QTest::addColumn<QString>("key");
+        QTest::addColumn<QVariant>("value");
+        QTest::newRow("unknown-icons") << QStringLiteral("trayIcons") << QVariant(QStringLiteral("full-color"));
+        QTest::newRow("icons-type") << QStringLiteral("trayIcons") << QVariant(1);
+        QTest::newRow("attention-type") << QStringLiteral("trayAttention") << QVariant(QStringLiteral("true"));
+        QTest::newRow("negative-limit") << QStringLiteral("trayLimit") << QVariant(-1);
+        QTest::newRow("large-limit") << QStringLiteral("trayLimit") << QVariant(5);
+        QTest::newRow("fractional-limit") << QStringLiteral("trayLimit") << QVariant(2.5);
+        QTest::newRow("text-limit") << QStringLiteral("trayLimit") << QVariant(QStringLiteral("2"));
+        QTest::newRow("bool-limit") << QStringLiteral("trayLimit") << QVariant(true);
+        QTest::newRow("nan-limit") << QStringLiteral("trayLimit") << QVariant(std::numeric_limits<double>::quiet_NaN());
+        QTest::newRow("infinite-limit") << QStringLiteral("trayLimit")
+                                        << QVariant(std::numeric_limits<double>::infinity());
+        QTest::newRow("order-type") << QStringLiteral("trayOrder") << QVariant(QStringLiteral("id:app"));
+        QTest::newRow("order-entry-type") << QStringLiteral("trayOrder") << QVariant(QVariantList{1});
+        QTest::newRow("duplicate-order") << QStringLiteral("trayOrder")
+                                         << QVariant(QVariantList{QStringLiteral("id:app"), QStringLiteral("id:app")});
+        QTest::newRow("empty-order-key") << QStringLiteral("trayOrder") << QVariant(QVariantList{QString()});
+        QTest::newRow("control-order-key")
+            << QStringLiteral("trayOrder") << QVariant(QVariantList{QStringLiteral("id:bad\napp")});
+        QTest::newRow("long-order-key") << QStringLiteral("trayOrder") << QVariant(QVariantList{QString(513, u'a')});
+        QTest::newRow("visibility-type") << QStringLiteral("trayVisibility") << QVariant(QVariantList{});
+        QTest::newRow("policy-type") << QStringLiteral("trayVisibility")
+                                     << QVariant(QVariantMap{{QStringLiteral("id:app"), true}});
+        QTest::newRow("unknown-policy") << QStringLiteral("trayVisibility")
+                                        << QVariant(QVariantMap{{QStringLiteral("id:app"), QStringLiteral("never")}});
+        QTest::newRow("empty-policy-key")
+            << QStringLiteral("trayVisibility") << QVariant(QVariantMap{{QString(), QStringLiteral("hidden")}});
+        QTest::newRow("control-policy-key")
+            << QStringLiteral("trayVisibility")
+            << QVariant(QVariantMap{{QStringLiteral("id:bad\tapp"), QStringLiteral("hidden")}});
+        QTest::newRow("long-policy-key") << QStringLiteral("trayVisibility")
+                                         << QVariant(QVariantMap{{QString(513, u'a'), QStringLiteral("hidden")}});
+    }
+    void trayPreferencesRejectInvalidValues()
+    {
+        QFETCH(QString, key);
+        QFETCH(QVariant, value);
+        QTemporaryDir dir;
+        const auto path = dir.filePath(QStringLiteral("appearance.json"));
+        AppearanceStore store(path);
+        QVERIFY(store.setValue(QStringLiteral("trayLimit"), 1));
+        const auto before = store.values();
+        QVERIFY(!store.setValue(key, value));
+        QCOMPARE(store.values(), before);
+        QCOMPARE(AppearanceStore(path).values(), before);
+    }
+    void trayPreferenceBoundsCountUniqueApps()
+    {
+        QVariantMap result;
+        QVERIFY(AppearanceStore::validate({{QStringLiteral("trayLimit"), 0.0}}, result));
+        QVERIFY(AppearanceStore::validate({{QStringLiteral("trayLimit"), qlonglong(4)}}, result));
+        const auto longest = QString(512, u'a');
+        QVERIFY(AppearanceStore::validate(
+            {{QStringLiteral("trayOrder"), QVariantList{longest}},
+             {QStringLiteral("trayVisibility"), QVariantMap{{longest, QStringLiteral("hidden")}}}},
+            result));
+        QVariantList order;
+        QVariantMap visibility;
+        for (int i = 0; i < 256; ++i) {
+            const auto key = QStringLiteral("id:app-%1").arg(i);
+            order.append(key);
+            visibility[key] = QStringLiteral("auto");
+        }
+        QVERIFY(AppearanceStore::validate(
+            {{QStringLiteral("trayOrder"), order}, {QStringLiteral("trayVisibility"), visibility}}, result));
+        const auto extra = QStringLiteral("id:another-app");
+        QVERIFY(!AppearanceStore::validate(
+            {{QStringLiteral("trayOrder"), order},
+             {QStringLiteral("trayVisibility"), QVariantMap{{extra, QStringLiteral("hidden")}}}},
+            result));
+        order.append(extra);
+        visibility[extra] = QStringLiteral("hidden");
+        QVERIFY(!AppearanceStore::validate({{QStringLiteral("trayOrder"), order}}, result));
+        QVERIFY(!AppearanceStore::validate({{QStringLiteral("trayVisibility"), visibility}}, result));
+    }
     void statsPreferencesValidateAndPersist()
     {
         QTemporaryDir dir;

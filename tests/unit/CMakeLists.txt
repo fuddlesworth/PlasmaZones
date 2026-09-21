@@ -2565,6 +2565,7 @@ if(TARGET PhosphorShellBar::PhosphorShellBarQml AND TARGET PhosphorServiceNetwor
             PhosphorServiceUPower::PhosphorServiceUPower
             PhosphorServiceMpris::PhosphorServiceMpris
             PhosphorServicePipeWire::PhosphorServicePipeWire
+            PhosphorServiceSni::PhosphorServiceSni
             # The popout host is built per open by the transport, so it is
             # on the click path too and is measured alongside the panels.
             PhosphorPopout::PhosphorPopoutQml
