@@ -168,6 +168,44 @@ QStringList WindowRegistry::instanceIds() const
     return m_records.keys();
 }
 
+void WindowRegistry::renumberDesktops(const QHash<int, int>& oldToNew)
+{
+    if (oldToNew.isEmpty()) {
+        return;
+    }
+    // Keys snapshotted first: upsert() emits, and a subscriber may touch the
+    // record map while this walks it.
+    const QStringList ids = instanceIds();
+    for (const QString& instanceId : ids) {
+        const auto meta = metadata(instanceId);
+        if (!meta) {
+            continue;
+        }
+        WindowMetadata updated = *meta;
+        bool changed = false;
+        if (updated.virtualDesktop > 0) {
+            const int mapped = oldToNew.value(updated.virtualDesktop, updated.virtualDesktop);
+            if (mapped != updated.virtualDesktop) {
+                updated.virtualDesktop = mapped;
+                changed = true;
+            }
+        }
+        for (int& desktop : updated.virtualDesktops) {
+            if (desktop <= 0) {
+                continue;
+            }
+            const int mapped = oldToNew.value(desktop, desktop);
+            if (mapped != desktop) {
+                desktop = mapped;
+                changed = true;
+            }
+        }
+        if (changed) {
+            upsert(instanceId, updated);
+        }
+    }
+}
+
 bool WindowRegistry::contains(const QString& instanceId) const
 {
     return m_records.contains(instanceId);

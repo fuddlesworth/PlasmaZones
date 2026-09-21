@@ -190,6 +190,16 @@ public:
     /// derived per-window state at attach time rather than replaying history).
     /// Use contains() for the same record-backed question about one id.
     QStringList instanceIds() const;
+    /// Rewrite every record's desktop number(s) per @p oldToNew (absent =
+    /// unchanged; 0 and below are the sticky/unknown sentinels and never
+    /// move). The effect will not do this for us: a renumber mutates each
+    /// VirtualDesktop's x11DesktopNumber without touching any window's desktop
+    /// LIST, so no metadata re-push follows it (see virtualDesktop above).
+    /// Each changed record goes back through upsert(), so metadataChanged
+    /// fires and subscribers re-key. Call it AFTER the engines have been
+    /// renumbered, or the membership reconcile that signal drives reads a
+    /// correct span against engine keys still on the old numbers.
+    void renumberDesktops(const QHash<int, int>& oldToNew);
     bool contains(const QString& instanceId) const;
     int size() const;
     /// Remove every record and canonical mapping, firing windowDisappeared

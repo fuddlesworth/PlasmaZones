@@ -248,6 +248,9 @@ private:
     /// some — a failed refresh, never a compositor with zero desktops.
     QTimer m_refreshRetryTimer;
     int m_refreshRetries = 0;
+    /// A count KWin announced that is waiting on the settled desktop list
+    /// before it is published (0 = none). See onNumberOfDesktopsChanged.
+    int m_pendingKWinCount = 0;
     static constexpr int MaxRefreshRetries = 5;
     static constexpr int RefreshRetryMs = 400;
 };

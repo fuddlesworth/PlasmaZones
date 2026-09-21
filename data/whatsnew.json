@@ -19,7 +19,8 @@
                 "New: A window shown on all desktops keeps its own place on each one. It can hold a different column, tile or zone per desktop, and those placements survive desktop switches and a restart (#1103)",
                 "Fixed: Moving a floated or hand-placed window to another desktop no longer snaps it into the first empty zone there (#1108)",
                 "Fixed: A window restored from minimize goes straight into its tile instead of flashing at its old size over the other windows (#1110)",
-                "Fixed: A reopened window is only put back in its remembered zone when that zone belongs to the layout its desktop runs now (#1104)"
+                "Fixed: A reopened window is only put back in its remembered zone when that zone belongs to the layout its desktop runs now (#1104)",
+                "Fixed: With \"Keep floating windows above\" on, a fullscreen game no longer stays on top after you Alt+Tab away from it (#1114)"
             ]
         },
         {

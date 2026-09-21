@@ -290,11 +290,23 @@ void VirtualDesktopManager::applyDesktopListReply(const QDBusMessage& reply)
             // refresh has just failed, several times over, to confirm, and
             // dropping them is the conservative answer. It costs the user one
             // re-drag in a session where KWin is already not answering.
-            Q_EMIT desktopCountChanged(m_desktopCount);
+            //
+            // A count KWin announced while this refresh was pending was held
+            // back for the list that never came. It is the best answer left,
+            // so it is committed now, and setDesktopCount's own emit stands in
+            // for the re-announce when it changes the number.
+            const int heldCount = std::exchange(m_pendingKWinCount, 0);
+            if (heldCount > 0 && heldCount != m_desktopCount) {
+                setDesktopCount(heldCount);
+            } else {
+                Q_EMIT desktopCountChanged(m_desktopCount);
+            }
         }
         return;
     }
     m_refreshRetries = 0;
+    // The list below is the authority on the count, so a held one is spent.
+    m_pendingKWinCount = 0;
 
     const QStringList previousIds = m_desktopIds;
     const QStringList previousNames = m_desktopNames;
@@ -807,16 +819,30 @@ void VirtualDesktopManager::onNumberOfDesktopsChanged(uint count)
         return;
     }
 
+    // While the refresh is ASYNCHRONOUS the count is not published here. The
+    // settled list is what tells a middle removal from an end removal, and
+    // applyDesktopListReply emits desktopRemovedAt BEFORE it commits the count
+    // for exactly that reason: a position-keyed consumer has to drop the
+    // removed position and shift the rest down before anyone sweeps by count.
+    // Announcing the bare number first ran the daemon's "everything past
+    // newCount" sweep against state that had not been renumbered yet, which
+    // released the TOP desktop's windows on a middle removal and left
+    // desktopRemovedAt nothing to move. The number is held so a refresh that
+    // never settles still publishes it (see the give-up arm there).
+    if (m_useKWinDBus && m_running && m_kwinVDInterface && m_kwinVDInterface->isValid()) {
+        m_pendingKWinCount = newCount;
+        refreshFromKWin();
+        return;
+    }
+
     // setDesktopCount does the clamping and the announcement, in that order.
     // The NARROWED value, not the wire argument: `uint` is a boundary type
     // here and everything below this line is int.
     setDesktopCount(newCount);
 
     if (m_useKWinDBus) {
-        // Asynchronous once started: nothing has been re-read by the time
-        // the clamp above runs, and the full snapshot (ids, names, current)
-        // commits later in applyDesktopListReply, which re-clamps and
-        // re-emits change-gated against the values written here.
+        // Blocking on this path, so the list (and any desktopRemovedAt) has
+        // already been applied against the count written above.
         refreshFromKWin();
     }
 }

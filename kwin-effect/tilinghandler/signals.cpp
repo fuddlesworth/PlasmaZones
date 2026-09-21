@@ -587,6 +587,11 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         }
     }
     m_effect->removeWindowDecoration(windowId);
+    // Drain a keep-floating-above grant on this edge: keepFloatingAboveDefault
+    // answers false for a fullscreen window, and nothing else reconciles the
+    // layer until the next focus change, which is the very Alt+Tab the stale
+    // bit would hide the result of.
+    m_effect->reconcileRuleWindowLayer(windowId, w);
 }
 
 } // namespace PlasmaZones
