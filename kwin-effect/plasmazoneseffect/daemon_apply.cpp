@@ -34,6 +34,7 @@
 #include "handlers/navigationhandler.h"
 #include "handlers/snapassisthandler.h"
 #include "handlers/snaphandler.h"
+#include "window_query.h"
 
 #include <cstdlib>
 
@@ -960,9 +961,12 @@ void PlasmaZonesEffect::slotRunningWindowsRequested()
         // Include all normal, non-special windows (relaxed filter for the picker).
         // isCriticalNotification is a distinct KWin window type from isNotification,
         // so both must be rejected — a window flagged only critical-notification
-        // would otherwise show up in the app picker.
+        // would otherwise show up in the app picker. Bare override-redirect
+        // windows (tray proxies, see window_query.h) are client plumbing that
+        // no gate ever manages, so a rule authored against one could never act.
         if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isSkipSwitcher() || w->isNotification()
-            || w->isCriticalNotification() || w->isOnScreenDisplay() || w->isPopupWindow()) {
+            || w->isCriticalNotification() || w->isOnScreenDisplay() || w->isPopupWindow()
+            || windowIsBareOverrideRedirect(w)) {
             continue;
         }
 
