@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="quick-settings.css">
 <link rel="stylesheet" href="system-stats.css">
 <link rel="stylesheet" href="system-tray.css">
+<link rel="stylesheet" href="authentication.css">
 </head>
 <body>
 <header class="review-header">
@@ -25,7 +26,7 @@
 <div class="review-toolbar">
   <nav aria-label="Preview state" class="view-switch">
     <button data-view="desktop">Desktop</button><button data-view="overview">Window navigation</button>
-    <button data-view="controls">Quick settings</button><button data-view="stats">System stats</button><button data-view="tray">System tray</button><button data-view="notifications">Notifications</button><button data-view="datetime">Date & time</button><button data-view="launcher">Launcher</button><button data-view="lockscreen">Lock screen</button><button data-view="power">Power</button><button data-view="appearance">Appearance</button>
+    <button data-view="controls">Quick settings</button><button data-view="stats">System stats</button><button data-view="tray">System tray</button><button data-view="notifications">Notifications</button><button data-view="datetime">Date & time</button><button data-view="launcher">Launcher</button><button data-view="lockscreen">Lock screen</button><button data-view="authentication">Authentication</button><button data-view="power">Power</button><button data-view="appearance">Appearance</button>
   </nav>
   <label class="stress-control">Scrolling demo <select id="scroll-count" aria-label="Scrolling demo window count"><option value="4">4 windows</option><option value="10">10 windows</option><option value="20">20 windows</option></select></label>
   <button id="customize-toggle" aria-expanded="false">◈ &nbsp; Preview controls</button>
@@ -48,6 +49,7 @@
 <div id="quick-preview-controls" class="quick-preview-controls hidden" aria-label="Quick settings prototype controls"></div>
 <div id="stats-preview-controls" class="stats-preview-controls hidden" aria-label="System stats prototype controls"></div>
 <div id="tray-preview-controls" class="tray-preview-controls hidden" aria-label="System tray prototype controls"></div>
+<div id="auth-preview-controls" class="auth-preview-controls hidden" aria-label="Authentication prototype controls"></div>
 <div class="review-layout">
 <main class="frame" aria-label="Interactive desktop mock">
 <div id="desktop" class="desktop navigator">
@@ -122,6 +124,7 @@
   <div id="osd" class="osd hidden" role="status"></div>
   <div id="toast" class="toast material hidden" role="status"></div>
   <section id="lockscreen" class="lockscreen hidden" aria-label="Locked session"></section>
+  <section id="authentication" class="authentication-overlay hidden" aria-label="Authentication request"></section>
 </div>
 </main>
 <aside id="customizer" class="customizer hidden" aria-label="Shell customization">
@@ -165,6 +168,7 @@
 <script src="quick-settings.js"></script>
 <script src="system-stats.js"></script>
 <script src="system-tray.js"></script>
+<script src="authentication.js"></script>
 <script src="studies.js"></script>
 </body>
 </html>

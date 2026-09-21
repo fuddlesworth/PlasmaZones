@@ -68,6 +68,8 @@ const systemStats = PhosphorStats.create({root:$('#stats'),review:$('#stats-prev
 const systemTray = PhosphorTray.create({root:$('#tray'),review:$('#tray-preview-controls'),desktop,icon,getSettings:()=>settings,
   patchSettings:patch=>{settings={...settings,...patch};$('#preset').value='custom';applySettings(true,false);},
   onShow:()=>setView('tray'),onDismiss:()=>setView('desktop'),onBarChanged:refreshBar,notify});
+const authentication = PhosphorAuth.create({root:$('#authentication'),review:$('#auth-preview-controls'),desktop,icon,getSettings:()=>settings,
+  onDismiss:reason=>{setView('desktop');notify(reason==='success'?'Authentication complete.':'Authentication cancelled.');}});
 const currentWindows = () => windows.filter(w => w.workspace === state.workspace);
 const selectedWindow = () => windows.find(w => w.id === state.focused);
 const hue = index => ['var(--c1)','var(--c3)','var(--c4)','var(--c2)'][index % 4];
@@ -286,6 +288,13 @@ function renderLauncher() {
 }
 
 function renderNotes() {
+  if(state.view==='authentication') {
+    $('#study-kicker').textContent='I / AUTHENTICATION';
+    $('#study-title').textContent='Know what you’re allowing.';
+    $('#study-description').textContent='A focused card carries the Phosphor mark and spectrum edge. The requesting app, action, and account stay readable while the desktop recedes. Policy details expand only when needed.';
+    $('#ux-description').textContent='Type immediately and press Enter to authenticate. Incorrect responses clear the field and keep focus ready for retry. Cancel and Escape remain available while checking. Try account selection, verification codes, long requests, and an unavailable service above.';
+    return;
+  }
   if(state.view==='tray') {
     $('#study-kicker').textContent='H / SYSTEM TRAY';
     $('#study-title').textContent='A little space for what stays running.';
@@ -418,7 +427,7 @@ function render() {
   desktop.classList.toggle('stage',state.study==='stage');
   desktop.classList.toggle('overview-open',state.view==='overview');
   desktop.classList.toggle('locked',state.view==='lockscreen');
-  for(const element of desktop.querySelectorAll(':scope > :is(#bar,#windows,#overview,#controls,#stats,#tray,#launcher,#datetime,#notifications,#notification-arrival,#osd,#toast)')) element.inert=['lockscreen','power','appearance'].includes(state.view);
+  for(const element of desktop.querySelectorAll(':scope > :is(#bar,#windows,#overview,#controls,#stats,#tray,#launcher,#datetime,#notifications,#notification-arrival,#osd,#toast)')) element.inert=['lockscreen','power','appearance','authentication'].includes(state.view);
   $('#stage-shade').classList.toggle('hidden',!(state.study==='stage'&&state.view==='overview'));
   renderBar();renderWindows();renderOverview();renderControls();renderLauncher();renderDateTime();renderPower();renderNotes();
   notificationCenter.render(state.view==='notifications');
@@ -427,6 +436,7 @@ function render() {
   appearance.render(state.view==='appearance');
   systemStats.render(state.view==='stats');
   systemTray.render(state.view==='tray');
+  authentication.render(state.view==='authentication');
   // Canvas gradients cache their colors; resample after the wallpaper palette.
   syncVisualizer();
   $$('[data-study]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.study===state.study));
@@ -460,7 +470,7 @@ function setView(view) {
   if (view!=='desktop') returnFocus=document.activeElement;
   state.view=view;state.detail=null;
   if(view==='notifications')notificationCenter.showInbox();
-  if(view==='lockscreen') {clearTimeout(toastTimer);clearTimeout(osdTimer);$('#toast').classList.add('hidden');$('#osd').classList.add('hidden');}
+  if(view==='lockscreen'||view==='authentication') {clearTimeout(toastTimer);clearTimeout(osdTimer);$('#toast').classList.add('hidden');$('#osd').classList.add('hidden');}
   render();
   if (view==='launcher') $('#launcher-search').focus();
   if (view==='datetime') $('#datetime [aria-pressed=true]')?.focus({preventScroll:true});
@@ -469,6 +479,7 @@ function setView(view) {
   if (view==='appearance') appearance.focus();
   if (view==='stats') systemStats.focus();
   if (view==='tray') systemTray.focus();
+  if (view==='authentication') authentication.focus();
   if (view==='controls') $('#controls [data-toggle="wifi"]')?.focus({preventScroll:true});
   if (view==='desktop') {
     if (previousView==='notifications') $('.bar-notifications').focus();
@@ -499,6 +510,7 @@ function notify(message) {
 function customize(open=true) {
   $('#customizer').classList.toggle('hidden',!open);
   $('#customize-toggle').setAttribute('aria-expanded',open);
+  if(!open&&state.view==='authentication')authentication.focus();
 }
 
 function focusWindow(id, dismiss=true) {
@@ -625,6 +637,7 @@ document.addEventListener('input',e=>{
 document.addEventListener('keydown',e=>{
   if(appearance.handleKey(e))return;
   if(lockscreen.handleKey(e))return;
+  if(authentication.handleKey(e))return;
   if(quickSettings.handleKey(e))return;
   if(systemStats.handleKey(e))return;
   if(systemTray.handleKey(e))return;
@@ -676,7 +689,7 @@ new ResizeObserver(([entry])=>{
 }).observe($('.frame'));
 const [study,view,detail]=location.hash.slice(1).split('/');
 if(['navigator','stage'].includes(study))state.study=study;
-if(['desktop','overview','controls','launcher','datetime','notifications','lockscreen','power','appearance','stats','tray'].includes(view))state.view=view;
+if(['desktop','overview','controls','launcher','datetime','notifications','lockscreen','power','appearance','stats','tray','authentication'].includes(view))state.view=view;
 $('#preset').value=Object.entries(presets).find(([,preset])=>JSON.stringify(preset)===JSON.stringify(settings))?.[0] || 'custom';
 applySettings();
 if(state.view==='controls'&&['wifi','bluetooth','audio'].includes(detail))quickSettings.open(detail);
