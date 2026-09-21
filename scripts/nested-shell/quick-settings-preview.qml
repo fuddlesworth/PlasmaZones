@@ -11,6 +11,7 @@ Item {
     id: root
     property string view: "wifi"
     property var networkPanel: null
+    property var bluetoothPanel: null
     QtObject {
         id: wifi
         property bool available: true
@@ -106,20 +107,157 @@ Item {
             panelLayer: PanelWindow.LayerOverlay
             exclusiveZoneEnabled: false
             keyboardFocus: PanelWindow.Exclusive
-            NetworkPanel {
-                id: panel
+            Loader {
                 anchors.right: parent.right
                 anchors.rightMargin: 24
                 y: 96
-                width: implicitWidth
-                height: Math.min(implicitHeight, parent.height - 112)
-                serviceHost: wifi
-                pointModel: points
-                profileModel: profiles
-                onBackRequested: root.view = "back"
-                onCloseRequested: root.view = "closed"
-                Component.onCompleted: root.networkPanel = panel
+                width: 410
+                height: Math.min(item ? item.implicitHeight : 0, parent.height - 112)
+                sourceComponent: root.view === "bluetooth" ? bluetoothComponent : networkComponent
             }
+        }
+    }
+    Component {
+        id: networkComponent
+        NetworkPanel {
+            id: panel
+            serviceHost: wifi
+            pointModel: points
+            profileModel: profiles
+            onBackRequested: root.view = "back"
+            onCloseRequested: root.view = "closed"
+            Component.onCompleted: root.networkPanel = panel
+        }
+    }
+    Component {
+        id: bluetoothComponent
+        BluetoothPanel {
+            id: panel
+            serviceHost: bluetooth
+            onBackRequested: root.view = "back"
+            onCloseRequested: root.view = "closed"
+            Component.onCompleted: root.bluetoothPanel = panel
+        }
+    }
+    QtObject {
+        id: bluetooth
+        property int adapterCount: 1
+        property int deviceCount: 3
+        property var agent: pairingAgent
+        function adapterAt(i) {
+            return i === 0 ? bluetoothAdapter : null;
+        }
+        function deviceAt(i) {
+            return [headphones, mouse, keyboard][i];
+        }
+        function refresh() {
+            adapterCount = 1;
+        }
+    }
+    QtObject {
+        id: bluetoothAdapter
+        property string dbusPath: "/fixture/bluetooth"
+        property string name: "Phosphor Desktop"
+        property bool powered: true
+        property bool discoverable: false
+        property bool discovering: false
+        signal operationFinished(string operation, string errorName)
+        function setPowered(value) {
+            powered = value;
+        }
+        function setDiscoverable(value) {
+            discoverable = value;
+        }
+        function startDiscovery() {
+            discovering = true;
+        }
+        function stopDiscovery() {
+            discovering = false;
+        }
+        function removeDevice(path) {
+            headphones.paired = false;
+            headphones.connected = false;
+            operationFinished("RemoveDevice", "");
+        }
+    }
+    component FixtureBluetoothDevice: QtObject {
+        property string dbusPath: ""
+        property string adapter: "/fixture/bluetooth"
+        property string name: ""
+        property string icon: "network-bluetooth"
+        property bool paired: false
+        property bool connected: false
+        property int batteryPercentage: -1
+        property bool trusted: false
+        signal operationFinished(string operation, string errorName)
+        function pair() {
+            pairingAgent.confirmationRequested(dbusPath, 428163, 1);
+        }
+        function cancelPairing() {
+            operationFinished("Pair", "org.bluez.Error.AuthenticationCanceled");
+        }
+        function setTrusted(value) {
+            trusted = value;
+        }
+        function connectDevice() {
+            connected = true;
+            operationFinished("Connect", "");
+        }
+        function disconnectDevice() {
+            connected = false;
+            operationFinished("Disconnect", "");
+        }
+    }
+    FixtureBluetoothDevice {
+        id: headphones
+        dbusPath: "/fixture/headphones"
+        name: "Headphones"
+        icon: "audio-headphones"
+        paired: true
+        connected: true
+        batteryPercentage: 78
+    }
+    FixtureBluetoothDevice {
+        id: mouse
+        dbusPath: "/fixture/mouse"
+        name: "MX Master"
+        icon: "input-mouse"
+        paired: true
+        connected: true
+        batteryPercentage: 62
+    }
+    FixtureBluetoothDevice {
+        id: keyboard
+        dbusPath: "/fixture/keyboard"
+        name: "Orbit Keyboard"
+        icon: "input-keyboard"
+    }
+    QtObject {
+        id: pairingAgent
+        property bool available: true
+        property string response: ""
+        signal confirmationRequested(string path, int code, double id)
+        signal pinCodeRequested(string path, double id)
+        signal passkeyRequested(string path, double id)
+        signal authorizationRequested(string path, double id)
+        signal serviceAuthorizationRequested(string path, string uuid, double id)
+        signal pinCodeDisplayed(string path, string code)
+        signal passkeyDisplayed(string path, int code, int entered)
+        signal requestCancelled
+        signal released
+        function respondConfirmation(id, accepted) {
+            response = accepted ? "accepted" : "rejected";
+            keyboard.paired = accepted;
+            keyboard.operationFinished("Pair", accepted ? "" : "org.bluez.Error.Rejected");
+        }
+        function respondPinCode(id, pin) {
+            respondConfirmation(id, true);
+        }
+        function respondPasskey(id, key) {
+            respondConfirmation(id, true);
+        }
+        function rejectRequest(id) {
+            response = "rejected";
         }
     }
     IpcTarget {
@@ -127,10 +265,40 @@ Item {
         function state(): string {
             return JSON.stringify({
                 view: root.view,
-                connecting: root.networkPanel.connecting,
-                error: root.networkPanel.errorText,
-                connected: root.networkPanel.connected
+                connecting: root.networkPanel?.connecting ?? false,
+                error: root.networkPanel?.errorText ?? root.bluetoothPanel?.errorText ?? "",
+                connected: root.networkPanel?.connected ?? false,
+                bluetoothFlow: root.bluetoothPanel?.flow ?? "",
+                pairingResponse: pairingAgent.response,
+                keyboardConnected: keyboard.connected
             });
+        }
+        function show(name: string): bool {
+            root.view = name;
+            return true;
+        }
+        function bluetoothState(name: string): bool {
+            if (!root.bluetoothPanel)
+                return false;
+            root.bluetoothPanel.cancel();
+            bluetooth.adapterCount = 1;
+            bluetoothAdapter.powered = true;
+            keyboard.paired = false;
+            keyboard.connected = false;
+            pairingAgent.response = "";
+            if (name === "pair" || name === "pin" || name === "passkey" || name === "error")
+                root.bluetoothPanel.choose(keyboard);
+            if (name === "pin")
+                pairingAgent.pinCodeRequested(keyboard.dbusPath, 2);
+            if (name === "passkey")
+                pairingAgent.passkeyRequested(keyboard.dbusPath, 2);
+            if (name === "error")
+                keyboard.operationFinished("Pair", "org.bluez.Error.AuthenticationFailed");
+            if (name === "off")
+                bluetoothAdapter.powered = false;
+            if (name === "unavailable")
+                bluetooth.adapterCount = 0;
+            return true;
         }
         function wifiState(name: string): bool {
             root.networkPanel.cancel();

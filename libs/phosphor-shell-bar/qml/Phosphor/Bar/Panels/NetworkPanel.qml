@@ -346,6 +346,7 @@ QuickDetailFrame {
         visible: root.pendingAp !== null
         tone: 1
         titleSize: 16
+        kicker: root.connecting ? "" : qsTr("SECURED NETWORK")
         title: root.connecting ? qsTr("Connecting to %1").arg(root.pendingAp?.ssid ?? "") : qsTr("Connect to %1").arg(root.pendingAp?.ssid ?? "")
         description: root.connecting ? qsTr("Checking the connection. This may take a moment.") : qsTr("Enter the password for this network.")
         Basic.BusyIndicator {

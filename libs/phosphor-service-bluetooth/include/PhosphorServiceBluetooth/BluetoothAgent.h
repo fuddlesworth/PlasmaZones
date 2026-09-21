@@ -38,11 +38,15 @@ namespace PhosphorServiceBluetooth {
 class PHOSPHORSERVICEBLUETOOTH_EXPORT BluetoothAgent : public QObject, protected QDBusContext
 {
     Q_OBJECT
+    Q_PROPERTY(bool available READ available NOTIFY availableChanged)
     Q_CLASSINFO("D-Bus Interface", "org.bluez.Agent1")
 
 public:
     explicit BluetoothAgent(QObject* parent = nullptr);
     ~BluetoothAgent() override;
+    [[nodiscard]] bool available() const;
+    /// Internal registration state, updated by BluetoothHost.
+    void setAvailable(bool available);
 
     /// Object path the agent is exported at and registered under with
     /// `org.bluez.AgentManager1`.
@@ -86,6 +90,7 @@ public Q_SLOTS:
     void Cancel();
 
 Q_SIGNALS:
+    void availableChanged();
     /// A PIN code (legacy) is required for @p devicePath. Answer with
     /// respondPinCode(requestId, ...) or rejectRequest(requestId).
     void pinCodeRequested(const QString& devicePath, quint64 requestId);

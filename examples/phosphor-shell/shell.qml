@@ -483,7 +483,7 @@ Item {
             },
             "bluetooth": {
                 "component": bluetoothPanelComponent,
-                "keyboard": false
+                "keyboard": true
             },
             "audio": {
                 "component": audioPanelComponent,
@@ -522,7 +522,13 @@ Item {
     Component {
         id: bluetoothPanelComponent
 
-        BluetoothPanel {}
+        BluetoothPanel {
+            onBackRequested: {
+                Popouts.close(Popouts.handleFor("bar.panel.bluetooth"));
+                root.toggleControlCenter(root._lastPanelSource);
+            }
+            onCloseRequested: Popouts.close(Popouts.handleFor("bar.panel.bluetooth"))
+        }
     }
 
     Component {

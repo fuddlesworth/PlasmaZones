@@ -27,6 +27,13 @@ Button {
         border.width: root.grouped && !root.visualFocus ? 0 : 1
         border.color: root.visualFocus ? Appearance.text : Appearance.outline
     }
+    Rectangle {
+        anchors.bottom: parent.bottom
+        width: parent.width
+        height: 1
+        color: Appearance.outline
+        visible: root.grouped && root.parent && root.y + root.height < root.parent.height - 1
+    }
     contentItem: RowLayout {
         id: row
         spacing: 12

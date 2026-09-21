@@ -11,11 +11,16 @@ ControlCenter {
     provider: ControlCenterRegistry
     tileIds: ControlCenterRegistry.tileIds.filter(id => id !== "idle")
     detailPanels: ({
-            "network": networkPanel
+            "network": networkPanel,
+            "bluetooth": bluetoothPanel
         })
     Component {
         id: networkPanel
         NetworkPanel {}
+    }
+    Component {
+        id: bluetoothPanel
+        BluetoothPanel {}
     }
     MprisHost {
         id: media

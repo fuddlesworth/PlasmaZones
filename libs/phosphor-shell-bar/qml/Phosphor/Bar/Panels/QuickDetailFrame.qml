@@ -125,9 +125,10 @@ FocusScope {
             contentHeight: body.implicitHeight + root.bodyPadding * 2
             clip: true
             boundsBehavior: Flickable.StopAtBounds
-            interactive: contentHeight > height
+            interactive: contentHeight > height + 2
             Basic.ScrollBar.vertical: Basic.ScrollBar {
                 active: scroller.interactive
+                policy: scroller.interactive ? Basic.ScrollBar.AlwaysOn : Basic.ScrollBar.AlwaysOff
             }
             Column {
                 id: body

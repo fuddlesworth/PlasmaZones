@@ -39,6 +39,7 @@ public:
     bool blocked = false;
     bool connected = false;
     int rssi = 0;
+    int batteryPercentage = -1;
     QString adapter;
     QStringList uuids;
 
@@ -77,25 +78,36 @@ public:
         });
     }
 
+    void operation(const QString& iface, const QString& method, const QVariantList& arguments, const QString& name)
+    {
+        if (!bus.isConnected()) {
+            Q_EMIT owner->operationFinished(name, QStringLiteral("org.freedesktop.DBus.Error.Disconnected"));
+            return;
+        }
+        auto* watcher =
+            new QDBusPendingCallWatcher(PhosphorDBus::Client(bus, QLatin1String(kService), path, &lcBluetoothDevice())
+                                            .asyncCall(iface, method, arguments),
+                                        owner);
+        QObject::connect(watcher, &QDBusPendingCallWatcher::finished, owner,
+                         [this, name](QDBusPendingCallWatcher* call) {
+                             call->deleteLater();
+                             const QDBusPendingReply<> reply = *call;
+                             Q_EMIT owner->operationFinished(name, reply.isError() ? reply.error().name() : QString{});
+                         });
+    }
+
     // Fire-and-forget Properties.Set on the Device1 interface. The cached
     // value is not touched here; it moves only on the PropertiesChanged echo.
     void setDeviceProperty(const QString& property, const QVariant& value)
     {
-        if (!bus.isConnected())
-            return;
-        PhosphorDBus::Client client(bus, QLatin1String(kService), path, &lcBluetoothDevice());
-        client.fireAndForget(owner, QLatin1String(kPropsIface), QStringLiteral("Set"),
-                             {QString::fromLatin1(kDeviceIface), property, QVariant::fromValue(QDBusVariant(value))},
-                             QStringLiteral("setDeviceProperty"));
+        operation(QLatin1String(kPropsIface), QStringLiteral("Set"),
+                  {QString::fromLatin1(kDeviceIface), property, QVariant::fromValue(QDBusVariant(value))}, property);
     }
 
     // Fire-and-forget no-argument method call on the Device1 interface.
     void callDeviceMethod(const QString& method)
     {
-        if (!bus.isConnected())
-            return;
-        PhosphorDBus::Client client(bus, QLatin1String(kService), path, &lcBluetoothDevice());
-        client.fireAndForget(owner, QLatin1String(kDeviceIface), method, {}, method);
+        operation(QLatin1String(kDeviceIface), method, {}, method);
     }
 
     // Applies a Device1 property map. Works for both the initial map from the
@@ -263,6 +275,11 @@ void BluetoothDevice::cancelPairing()
 void BluetoothDevice::_q_onPropertiesChanged(const QString& interfaceName, const QVariantMap& changed,
                                              const QStringList& invalidated)
 {
+    if (interfaceName == QLatin1String("org.bluez.Battery1")) {
+        if (changed.contains(QStringLiteral("Percentage")) || invalidated.contains(QStringLiteral("Percentage")))
+            applyBattery(changed);
+        return;
+    }
     if (interfaceName != QLatin1String(kDeviceIface))
         return;
     d->applyProps(changed);
@@ -275,6 +292,18 @@ void BluetoothDevice::_q_onPropertiesChanged(const QString& interfaceName, const
         if (!onlyRssi)
             d->requestAll();
     }
+}
+
+int BluetoothDevice::batteryPercentage() const
+{
+    return d->batteryPercentage;
+}
+void BluetoothDevice::applyBattery(const QVariantMap& properties)
+{
+    bool valid = false;
+    const int value = properties.value(QStringLiteral("Percentage")).toInt(&valid);
+    d->setField(d->batteryPercentage, valid && value >= 0 && value <= 100 ? value : -1,
+                &BluetoothDevice::batteryPercentageChanged);
 }
 
 } // namespace PhosphorServiceBluetooth

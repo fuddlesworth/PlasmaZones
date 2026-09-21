@@ -7,6 +7,7 @@
 #include <QDBusMessage>
 #include <QDBusObjectPath>
 #include <QHash>
+#include <QMetaMethod>
 
 #include <optional>
 
@@ -37,6 +38,7 @@ public:
         QDBusConnection connection = QDBusConnection::sessionBus();
     };
 
+    bool available = false;
     quint64 nextId = 0;
     QHash<quint64, PendingRequest> pending;
 
@@ -94,7 +96,23 @@ BluetoothAgent::BluetoothAgent(QObject* parent)
 {
 }
 
-BluetoothAgent::~BluetoothAgent() = default;
+BluetoothAgent::~BluetoothAgent()
+{
+    const auto requests = d->pending.values();
+    for (const auto& request : requests)
+        Private::replyError(request, QLatin1String(kCanceledError), QStringLiteral("Pairing agent closed"));
+}
+bool BluetoothAgent::available() const
+{
+    return d->available;
+}
+void BluetoothAgent::setAvailable(bool available)
+{
+    if (d->available == available)
+        return;
+    d->available = available;
+    Q_EMIT availableChanged();
+}
 
 QString BluetoothAgent::agentPath()
 {
@@ -108,6 +126,7 @@ int BluetoothAgent::pendingRequestCount() const
 
 void BluetoothAgent::Release()
 {
+    setAvailable(false);
     // BlueZ no longer needs this agent (e.g. it was unregistered). Drop any
     // in-flight requests; they can no longer be answered meaningfully.
     d->pending.clear();
@@ -125,6 +144,8 @@ QString BluetoothAgent::RequestPinCode(const QDBusObjectPath& device)
     }
     const quint64 id = d->add(Private::RequestKind::PinCode, held, connection);
     Q_EMIT pinCodeRequested(device.path(), id);
+    if (calledFromDBus() && !isSignalConnected(QMetaMethod::fromSignal(&BluetoothAgent::pinCodeRequested)))
+        rejectRequest(id);
     return {}; // suppressed: the real reply is sent via respondPinCode
 }
 
@@ -144,6 +165,8 @@ uint BluetoothAgent::RequestPasskey(const QDBusObjectPath& device)
     }
     const quint64 id = d->add(Private::RequestKind::Passkey, held, connection);
     Q_EMIT passkeyRequested(device.path(), id);
+    if (calledFromDBus() && !isSignalConnected(QMetaMethod::fromSignal(&BluetoothAgent::passkeyRequested)))
+        rejectRequest(id);
     return 0; // suppressed: the real reply is sent via respondPasskey
 }
 
@@ -163,6 +186,8 @@ void BluetoothAgent::RequestConfirmation(const QDBusObjectPath& device, uint pas
     }
     const quint64 id = d->add(Private::RequestKind::Confirmation, held, connection);
     Q_EMIT confirmationRequested(device.path(), passkey, id);
+    if (calledFromDBus() && !isSignalConnected(QMetaMethod::fromSignal(&BluetoothAgent::confirmationRequested)))
+        rejectRequest(id);
 }
 
 void BluetoothAgent::RequestAuthorization(const QDBusObjectPath& device)
@@ -176,6 +201,8 @@ void BluetoothAgent::RequestAuthorization(const QDBusObjectPath& device)
     }
     const quint64 id = d->add(Private::RequestKind::Authorization, held, connection);
     Q_EMIT authorizationRequested(device.path(), id);
+    if (calledFromDBus() && !isSignalConnected(QMetaMethod::fromSignal(&BluetoothAgent::authorizationRequested)))
+        rejectRequest(id);
 }
 
 void BluetoothAgent::AuthorizeService(const QDBusObjectPath& device, const QString& uuid)
@@ -189,6 +216,8 @@ void BluetoothAgent::AuthorizeService(const QDBusObjectPath& device, const QStri
     }
     const quint64 id = d->add(Private::RequestKind::ServiceAuthorization, held, connection);
     Q_EMIT serviceAuthorizationRequested(device.path(), uuid, id);
+    if (calledFromDBus() && !isSignalConnected(QMetaMethod::fromSignal(&BluetoothAgent::serviceAuthorizationRequested)))
+        rejectRequest(id);
 }
 
 void BluetoothAgent::Cancel()
@@ -204,6 +233,10 @@ void BluetoothAgent::Cancel()
 
 void BluetoothAgent::respondPinCode(quint64 requestId, const QString& pinCode)
 {
+    if (pinCode.isEmpty() || pinCode.toUtf8().size() > 16) {
+        rejectRequest(requestId);
+        return;
+    }
     const auto request = d->take(requestId, Private::RequestKind::PinCode);
     if (!request)
         return;
@@ -212,6 +245,10 @@ void BluetoothAgent::respondPinCode(quint64 requestId, const QString& pinCode)
 
 void BluetoothAgent::respondPasskey(quint64 requestId, quint32 passkey)
 {
+    if (passkey > 999999) {
+        rejectRequest(requestId);
+        return;
+    }
     const auto request = d->take(requestId, Private::RequestKind::Passkey);
     if (!request)
         return;

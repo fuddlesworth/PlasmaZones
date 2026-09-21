@@ -72,26 +72,37 @@ public:
         });
     }
 
+    void operation(const QString& iface, const QString& method, const QVariantList& arguments, const QString& name)
+    {
+        if (!bus.isConnected()) {
+            Q_EMIT owner->operationFinished(name, QStringLiteral("org.freedesktop.DBus.Error.Disconnected"));
+            return;
+        }
+        auto* watcher =
+            new QDBusPendingCallWatcher(PhosphorDBus::Client(bus, QLatin1String(kService), path, &lcBluetoothAdapter())
+                                            .asyncCall(iface, method, arguments),
+                                        owner);
+        QObject::connect(watcher, &QDBusPendingCallWatcher::finished, owner,
+                         [this, name](QDBusPendingCallWatcher* call) {
+                             call->deleteLater();
+                             const QDBusPendingReply<> reply = *call;
+                             Q_EMIT owner->operationFinished(name, reply.isError() ? reply.error().name() : QString{});
+                         });
+    }
+
     // Fire-and-forget Properties.Set on the Adapter1 interface. The cached
     // value is NOT updated here; it moves only when BlueZ echoes the change
     // via PropertiesChanged, so the surface never reports an un-acked write.
     void setAdapterProperty(const QString& property, const QVariant& value)
     {
-        if (!bus.isConnected())
-            return;
-        PhosphorDBus::Client client(bus, QLatin1String(kService), path, &lcBluetoothAdapter());
-        client.fireAndForget(owner, QLatin1String(kPropsIface), QStringLiteral("Set"),
-                             {QString::fromLatin1(kAdapterIface), property, QVariant::fromValue(QDBusVariant(value))},
-                             QStringLiteral("setAdapterProperty"));
+        operation(QLatin1String(kPropsIface), QStringLiteral("Set"),
+                  {QString::fromLatin1(kAdapterIface), property, QVariant::fromValue(QDBusVariant(value))}, property);
     }
 
     // Fire-and-forget no-argument method call on the Adapter1 interface.
     void callAdapterMethod(const QString& method)
     {
-        if (!bus.isConnected())
-            return;
-        PhosphorDBus::Client client(bus, QLatin1String(kService), path, &lcBluetoothAdapter());
-        client.fireAndForget(owner, QLatin1String(kAdapterIface), method, {}, method);
+        operation(QLatin1String(kAdapterIface), method, {}, method);
     }
 
     // Applies an Adapter1 property map. Works for both the initial map from
@@ -199,9 +210,8 @@ void BluetoothAdapter::removeDevice(const QString& devicePath)
 {
     if (!d->bus.isConnected() || devicePath.isEmpty())
         return;
-    PhosphorDBus::Client client(d->bus, QLatin1String(kService), d->path, &lcBluetoothAdapter());
-    client.fireAndForget(this, QLatin1String(kAdapterIface), QStringLiteral("RemoveDevice"),
-                         {QVariant::fromValue(QDBusObjectPath(devicePath))}, QStringLiteral("removeDevice"));
+    d->operation(QLatin1String(kAdapterIface), QStringLiteral("RemoveDevice"),
+                 {QVariant::fromValue(QDBusObjectPath(devicePath))}, QStringLiteral("RemoveDevice"));
 }
 
 void BluetoothAdapter::_q_onPropertiesChanged(const QString& interfaceName, const QVariantMap& changed,

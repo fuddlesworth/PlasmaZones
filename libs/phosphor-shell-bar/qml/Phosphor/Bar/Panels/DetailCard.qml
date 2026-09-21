@@ -8,6 +8,8 @@ import Phosphor.Widgets
 Rectangle {
     id: root
     property string title: ""
+    property string kicker: ""
+    property bool showCompactTitle: true
     property string description: ""
     property string iconName: ""
     property string status: ""
@@ -15,9 +17,10 @@ Rectangle {
     property int tone: 0
     property int titleSize: 23
     property real padding: Appearance.compact ? 16 : 19
+    readonly property real contentPadding: compact ? 13 : padding
     default property alias content: extras.data
     width: parent ? parent.width : 0
-    implicitHeight: layout.implicitHeight + padding * 2
+    implicitHeight: layout.implicitHeight + contentPadding * 2
     radius: Appearance.radius * 0.72
     border.width: 1
     border.color: Qt.tint(Appearance.outline, Qt.alpha(Appearance.stops[tone], 0.24))
@@ -33,9 +36,9 @@ Rectangle {
     }
     ColumnLayout {
         id: layout
-        x: root.padding
-        y: root.padding
-        width: Math.max(0, root.width - root.padding * 2)
+        x: root.contentPadding
+        y: root.contentPadding
+        width: Math.max(0, root.width - root.contentPadding * 2)
         spacing: root.compact ? 0 : 12
         RowLayout {
             Layout.fillWidth: true
@@ -58,14 +61,14 @@ Rectangle {
                 }
             }
             DetailText {
-                visible: root.compact
+                visible: root.compact && root.showCompactTitle
                 Layout.fillWidth: true
                 text: root.title
                 size: 14
                 font.weight: Font.Medium
             }
             Item {
-                visible: !root.compact
+                visible: !root.compact || !root.showCompactTitle
                 Layout.fillWidth: true
             }
             Rectangle {
@@ -83,6 +86,14 @@ Rectangle {
                     size: 10
                 }
             }
+        }
+        DetailText {
+            visible: !root.compact && text !== ""
+            Layout.fillWidth: true
+            text: root.kicker
+            size: 9
+            muted: true
+            font.letterSpacing: 1.5
         }
         DetailText {
             visible: !root.compact && text !== ""
