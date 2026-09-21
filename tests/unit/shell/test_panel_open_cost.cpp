@@ -267,6 +267,7 @@ void TestPanelOpenCost::rightAlignedWidgetAnchorStaysOnScreen()
     auto* host = qobject_cast<QQuickItem*>(object.get());
     QVERIFY2(host, qPrintable(component.errorString()));
     auto* content = new QQuickItem;
+    content->setParent(host);
     content->setImplicitWidth(452);
     content->setImplicitHeight(700);
     host->setProperty("contentItem", QVariant::fromValue(content));

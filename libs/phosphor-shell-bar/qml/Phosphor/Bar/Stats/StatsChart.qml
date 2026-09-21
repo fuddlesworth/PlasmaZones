@@ -56,8 +56,10 @@ Item {
     }
     Shape {
         anchors.fill: parent
+        preferredRendererType: Shape.CurveRenderer
         ShapePath {
             strokeWidth: 0
+            strokeColor: "transparent"
             fillColor: Qt.alpha(root.tint, 0.09)
             PathSvg {
                 path: root.paths.area

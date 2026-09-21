@@ -86,7 +86,7 @@ QtObject {
                 gpu: "GPU",
                 memory: "RAM",
                 network: "NET",
-                storage: "SSD"
+                storage: qsTr("DISK")
             })[metric] || "";
     }
     function icon(metric: string): string {
