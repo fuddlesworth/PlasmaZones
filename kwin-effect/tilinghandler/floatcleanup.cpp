@@ -29,6 +29,42 @@
 
 namespace PlasmaZones {
 
+namespace {
+
+/// True for a window that is fullscreen by its OWN doing the first time the
+/// scrolling announce sees it: a game that maps fullscreen, or a window an
+/// OpenFullscreen rule just flipped. Such a window is not the strip's to tile.
+/// Announcing it seated it in a column (as a same-app TAB when a sibling such
+/// as its launcher was already tiled) behind a surface KWin would not let the
+/// strip move, and the first strip verb then pulled it out of fullscreen and
+/// fought its geometry. Seen live with a Proton game beside its launcher.
+///
+/// The two cases the scrolling fullscreen exemption exists for are told apart
+/// without daemon state, so they hold at effect bring-up where the membership
+/// hash is still empty:
+///  - a WINDOWED-FULLSCREEN column is fullscreen at its COLUMN rect, never at
+///    the output's fullscreen area, and its requested bit is only ever written
+///    for a window already in the membership hash;
+///  - a strip tile that went fullscreen later (F11, a video) was announced
+///    before it did, so it is already in the notified set.
+bool genuineFullscreenAtFirstContact(KWin::EffectWindow* w, bool alreadyNotified, bool windowedFullscreenMember)
+{
+    if (alreadyNotified || windowedFullscreenMember) {
+        return false;
+    }
+    if (!w->isFullScreen()) {
+        // Requested but not yet committed, and not the effect's own request.
+        return true;
+    }
+    if (!KWin::effects) {
+        return false;
+    }
+    const QRect fsArea = KWin::effects->clientArea(KWin::FullScreenArea, w).toRect();
+    return fsArea.isValid() && w->frameGeometry().toRect() == fsArea;
+}
+
+} // namespace
+
 bool TilingHandler::isEligibleForTilingNotify(KWin::EffectWindow* w, bool* rejectedOnlyBecauseMinimized) const
 {
     if (rejectedOnlyBecauseMinimized) {
@@ -71,7 +107,12 @@ bool TilingHandler::isEligibleForTilingNotify(KWin::EffectWindow* w, bool* rejec
     // exit signal, by which point neither bit is set.
     KWin::Window* kwFs = w->window();
     const bool fullScreen = w->isFullScreen() || (kwFs && kwFs->isRequestedFullScreen());
-    const bool fullscreenOnScrollingScreen = fullScreen && isScrollingScreen(m_effect->getWindowScreenId(w));
+    // First-contact genuine fullscreen is carved out of the exemption, so it
+    // takes the same reject the snapping and autotile screens give it and is
+    // re-announced by the exit-fullscreen slot. See the helper's comment.
+    const bool fullscreenOnScrollingScreen = fullScreen && isScrollingScreen(m_effect->getWindowScreenId(w))
+        && !genuineFullscreenAtFirstContact(w, m_notifiedWindows.contains(m_effect->getWindowId(w)),
+                                            m_effect->m_windowedFullscreenWindows.contains(m_effect->getWindowId(w)));
     if (!m_effect->shouldHandleWindow(w, nullptr, /*exemptFullscreen=*/fullscreenOnScrollingScreen)) {
         qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (not handleable)" << m_effect->getWindowId(w);
         return false;
@@ -98,11 +139,12 @@ bool TilingHandler::isEligibleForTilingNotify(KWin::EffectWindow* w, bool* rejec
     // triggers the batch. So a SCROLLING screen exempts fullscreen windows
     // wholesale — a restarted effect re-announces a flagged window, the
     // daemon's stash claim re-flags it, and the adopt-on-batch arm restores
-    // membership. A genuinely fullscreen window announced this way is the
-    // acceptable half of the trade: the strip tiles it behind the
-    // fullscreen surface (the daemon never untiles on fullscreen anyway),
-    // the geometry apply bails on its requested state, and its exit lands
-    // in an already-consistent strip instead of a never-announced limbo.
+    // membership. That wholesale exemption covers a flagged column and a
+    // strip tile that went fullscreen after it was announced (the daemon
+    // never untiles on fullscreen, and the geometry apply bails on its
+    // requested state). A window that is genuinely fullscreen at FIRST
+    // contact is carved back out above, because seating it in a column was
+    // not an acceptable trade after all: see genuineFullscreenAtFirstContact.
     // Snapping/autotile screens keep the reject in full.
     // The fullscreen term first so the overwhelmingly common non-fullscreen
     // window pays neither the id lookup nor the screen resolve. Reuses the
