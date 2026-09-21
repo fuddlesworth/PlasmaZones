@@ -58,10 +58,18 @@ FocusScope {
                 }
                 Text {
                     anchors.centerIn: parent
-                    text: root.userName ? Array.from(root.userName)[0] : "φ"
+                    visible: !!root.userName
+                    text: root.userName ? Array.from(root.userName)[0] : ""
                     color: Appearance.text
                     font.family: Tokens.font_family_ui
                     font.pixelSize: Math.round((26) * Appearance.textScale)
+                }
+                PhosphorMark {
+                    anchors.centerIn: parent
+                    visible: !root.userName
+                    width: 36
+                    height: 36
+                    color: Appearance.text
                 }
                 Rectangle {
                     anchors.right: parent.right

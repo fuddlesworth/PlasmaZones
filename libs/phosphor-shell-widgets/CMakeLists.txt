@@ -61,6 +61,7 @@ set(_phosphor_widgets_qml_files
     qml/Phosphor/Widgets/ShellButton.qml
     qml/Phosphor/Widgets/ShellComboBox.qml
     qml/Phosphor/Widgets/ShellIcon.qml
+    qml/Phosphor/Widgets/PhosphorMark.qml
     qml/Phosphor/Widgets/Keycap.qml
     qml/Phosphor/Widgets/WindowMapCard.qml
     qml/Phosphor/Widgets/MediaCard.qml
@@ -130,6 +131,9 @@ qt_add_qml_module(PhosphorShellWidgetsQml
         src/AudioSpectrum.h
         src/audiospectrum.cpp
     QML_FILES ${_phosphor_widgets_qml_files}
+    RESOURCES
+        assets/phosphor-mark.svg
+        assets/phosphor-mark-symbolic.svg
     OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/Phosphor/Widgets
 )
 

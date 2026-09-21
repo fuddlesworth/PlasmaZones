@@ -118,7 +118,7 @@ function renderBar() {
     return `<span class="${w.id===state.focused?'focused':''}" style="${rectStyle(r,3)};--hue:${hue(i)}"></span>`;
   }).join('');
   $('#bar').innerHTML = `
-    <button class="brand" data-view="launcher" aria-label="Open launcher">φ</button>
+    <button class="brand" data-view="launcher" aria-label="Open launcher"><span class="phosphor-mark" aria-hidden="true"></span></button>
     <span class="bar-separator"></span><span class="bar-app">${escapeHTML(selectedWindow()?.app || 'Desktop')} &nbsp; / &nbsp; ${escapeHTML(selectedWindow()?.title || 'Empty workspace')}</span>
     ${settings.media ? `<button class="bar-media" data-view="controls" aria-label="Open media controls">${icon('music')} A Walk ${settings.visualizer!=='off'?'<canvas class="bar-spectrum" data-visualizer="mini" width="80" height="32" aria-hidden="true"></canvas>':''}</button>` : ''}
     <div class="bar-center">

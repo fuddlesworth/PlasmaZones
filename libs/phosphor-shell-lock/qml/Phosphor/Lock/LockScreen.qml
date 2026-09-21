@@ -89,11 +89,9 @@ FocusScope {
             x: root.edgeInset
             y: 40
             spacing: 14
-            Text {
-                text: "φ"
-                color: Appearance.stops[0]
-                font.family: Tokens.font_family_ui
-                font.pixelSize: Math.round((31) * Appearance.textScale)
+            PhosphorMark {
+                width: 42
+                height: 42
             }
             Text {
                 anchors.verticalCenter: parent.verticalCenter

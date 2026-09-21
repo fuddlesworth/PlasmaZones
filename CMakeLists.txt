@@ -701,8 +701,7 @@ install(PROGRAMS scripts/plasmazones-report.sh
 )
 
 # Install icons (hicolor for dark themes, hicolor-light for light themes).
-# The phosphor-shell.svg icons are conditional on BUILD_PHOSPHOR_SHELL:
-# no point shipping the icon if the binary isn't built.
+# Phosphor's own mark is installed from the same assets used by its QML module.
 set(_plasmazones_dark_icons
     icons/hicolor/scalable/apps/plasmazones.svg
     icons/hicolor/scalable/apps/plasmazones-editor.svg
@@ -713,16 +712,28 @@ set(_plasmazones_light_icons
     icons/hicolor-light/scalable/apps/plasmazones-editor.svg
     icons/hicolor-light/scalable/apps/plasmazones-settings.svg
 )
-if(BUILD_PHOSPHOR_SHELL)
-    list(APPEND _plasmazones_dark_icons icons/hicolor/scalable/apps/phosphor-shell.svg)
-    list(APPEND _plasmazones_light_icons icons/hicolor-light/scalable/apps/phosphor-shell.svg)
-endif()
 install(FILES ${_plasmazones_dark_icons}
     DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/scalable/apps
 )
 install(FILES ${_plasmazones_light_icons}
     DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor-light/scalable/apps
 )
+if(BUILD_PHOSPHOR_SHELL)
+    foreach(_icon_theme hicolor hicolor-light)
+        install(FILES libs/phosphor-shell-widgets/assets/phosphor-mark.svg
+            DESTINATION ${KDE_INSTALL_ICONDIR}/${_icon_theme}/scalable/apps
+            RENAME phosphor-shell.svg
+        )
+        install(FILES libs/phosphor-shell-widgets/assets/phosphor-mark-symbolic.svg
+            DESTINATION ${KDE_INSTALL_ICONDIR}/${_icon_theme}/scalable/apps
+            RENAME phosphor-shell-symbolic.svg
+        )
+    endforeach()
+    install(FILES libs/phosphor-shell-widgets/assets/phosphor-mark-512.png
+        DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/512x512/apps
+        RENAME phosphor-shell.png
+    )
+endif()
 
 # Example demos and CLI acceptance harnesses are not part of the installed
 # product. The Nix flake builds from a source tree with examples/ stripped

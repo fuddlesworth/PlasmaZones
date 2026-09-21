@@ -85,12 +85,12 @@ ColumnLayout {
                         color: card.base
                         radius: Math.min(6, card.style.radius)
                         border.color: card.lookPalette.outline
-                        Text {
-                            x: 7
-                            y: 1
-                            text: "φ"
+                        PhosphorMark {
+                            x: 4
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 18
+                            height: 18
                             color: card.lookPalette.stops[0]
-                            font.pixelSize: 13
                         }
                         Rectangle {
                             x: parent.width * .45

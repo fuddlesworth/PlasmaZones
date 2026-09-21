@@ -37,12 +37,11 @@ LookImage {
         radius: 6
         color: Qt.alpha(Appearance.surface, 0.82)
         border.color: Appearance.outline
-        Text {
-            x: 9
+        PhosphorMark {
+            x: 5
             anchors.verticalCenter: parent.verticalCenter
-            text: "φ"
-            color: Appearance.stops[0]
-            font.pixelSize: root.miniature ? 12 : 17
+            width: root.miniature ? 16 : 22
+            height: width
         }
         Rectangle {
             x: 31

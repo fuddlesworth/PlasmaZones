@@ -160,18 +160,16 @@ FocusScope {
         }
     }
     Row {
-        x: 26
+        x: root.compact ? (root.sidebarWidth - 42) / 2 : 18
         y: 29
-        spacing: 12
-        Text {
-            text: "φ"
-            color: Appearance.stops[0]
-            font.pixelSize: 34
-            font.weight: Font.Light
+        spacing: 6
+        PhosphorMark {
+            width: 42
+            height: 42
         }
         Column {
             visible: !root.compact
-            y: 3
+            anchors.verticalCenter: parent.verticalCenter
             spacing: 5
             LookText {
                 text: "PHOSPHOR"

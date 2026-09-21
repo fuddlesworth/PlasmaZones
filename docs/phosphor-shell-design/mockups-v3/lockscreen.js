@@ -70,7 +70,7 @@ window.PhosphorLock = {
       root.innerHTML = `
         <div class="lock-atmosphere" aria-hidden="true"></div>
         <div class="lock-composition" aria-hidden="true"><i></i><i></i><i></i></div>
-        <header class="lock-header"><div class="lock-brand"><span>φ</span> PHOSPHOR</div>
+        <header class="lock-header"><div class="lock-brand"><span class="phosphor-mark" aria-hidden="true"></span> PHOSPHOR</div>
           <div class="lock-system"><span>${icon('lock')} Session locked</span><span>${icon('battery')} 82%</span></div>
         </header>
         <div class="lock-clock"><span class="lock-overline">SATURDAY, SEPTEMBER 12</span>

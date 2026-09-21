@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 import QtQuick
-import QtQuick.Controls
-import Phosphor.Theme
+import QtQuick.Controls.Basic
+import Phosphor.Widgets
 
 AbstractButton {
     signal activated
@@ -10,12 +10,11 @@ AbstractButton {
     implicitHeight: 34
     Accessible.name: qsTr("Open launcher")
     onClicked: activated()
-    contentItem: Text {
-        text: "φ"
-        color: Appearance.stops[0]
-        font.family: Tokens.font_family_ui
-        font.pixelSize: 24
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
+    contentItem: Item {
+        PhosphorMark {
+            anchors.centerIn: parent
+            width: 32
+            height: 32
+        }
     }
 }

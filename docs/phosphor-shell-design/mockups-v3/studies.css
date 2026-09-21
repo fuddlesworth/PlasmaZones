@@ -47,9 +47,10 @@ h1{font-size:25px;letter-spacing:-.8px;font-weight:500;margin:7px 0}
 .desktop-watermark{position:absolute;left:42px;bottom:35px;font-size:11px;letter-spacing:4px;color:#8da2c166}
 .desktop-watermark span{display:block;font-size:9px;letter-spacing:1px;margin-top:8px}
 .icon{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;vertical-align:middle;flex-shrink:0}
+.phosphor-mark{display:inline-block;flex:none;width:var(--phosphor-mark-size,32px);height:var(--phosphor-mark-size,32px);background:currentColor;-webkit-mask:url('assets/phosphor-mark-symbolic.svg') center/contain no-repeat;mask:url('assets/phosphor-mark-symbolic.svg') center/contain no-repeat;vertical-align:middle}
 .bar{position:absolute;top:12px;left:16px;right:16px;height:var(--bar-size);z-index:8;display:flex;align-items:center;padding:0 12px;gap:10px;border-radius:calc(var(--radius)*.65);box-shadow:0 8px 25px #0003,var(--glow)}
 .bar:before{content:'';position:absolute;left:14px;right:14px;top:-1px;height:2px;background:var(--spectrum);opacity:.8;border-radius:2px}
-.brand{font-size:24px;width:36px;height:34px;color:var(--c1);line-height:1}
+.brand{display:grid;place-items:center;width:36px;height:34px;padding:0;color:var(--c1);line-height:1}
 .bar-separator{height:20px;width:1px;background:var(--outline);margin:0 5px}
 .bar-app{font-size:11px;color:var(--muted);max-width:175px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bar-media{display:flex;align-items:center;gap:9px;font-size:10px;color:var(--muted);margin-left:12px}

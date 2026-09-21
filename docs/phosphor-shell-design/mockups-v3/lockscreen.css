@@ -24,7 +24,7 @@
 .lock-composition i:nth-child(3) { --pane-color:var(--c4); left:58.5%; top:47%; width:41.5%; height:53%; }
 .lock-header { position:absolute; top:40px; left:48px; right:48px; display:flex; align-items:center; justify-content:space-between; }
 .lock-brand { display:flex; align-items:center; gap:14px; color:var(--muted); font-size:10px; font-weight:500; letter-spacing:3.5px; }
-.lock-brand > span { color:var(--c1); font-size:31px; letter-spacing:0; line-height:1; }
+.lock-brand > .phosphor-mark { --phosphor-mark-size:42px; color:var(--c1); }
 .lock-system { display:flex; gap:28px; color:var(--muted); font-size:11px; }
 .lock-system > span { display:flex; align-items:center; gap:8px; }
 .lock-system .icon { width:16px; height:16px; }
