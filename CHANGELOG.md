@@ -7,6 +7,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Alt+Tab could not leave a fullscreen game**: with "Keep floating windows above" turned on, a fullscreen window that PlasmaZones had floated stayed on top of everything, even after you switched away from it. This happened to games whose minimum size is larger than the screen's work area, because a window that cannot fit is floated when it opens. Alt+Tab did switch to the other window, but it opened underneath the game where you could not see it. A fullscreen window is no longer kept above the others, and it goes back to being kept above as soon as it leaves fullscreen. ([#1114](https://github.com/fuddlesworth/PlasmaZones/pull/1114))
+
 ## [3.4.19] - 2026-09-21
 
 ### Added
