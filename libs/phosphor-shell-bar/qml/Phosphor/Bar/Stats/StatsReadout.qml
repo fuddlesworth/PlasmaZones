@@ -7,13 +7,14 @@ Row {
     id: root
     property var metrics: StatsModel.metrics
     property string style: StatsModel.style
+    property real cellWidth: 46
     spacing: 6
     Repeater {
         model: root.metrics
         Item {
             id: cell
             required property string modelData
-            width: Math.round(46 * Appearance.textScale)
+            width: Math.round(root.cellWidth * Appearance.textScale)
             height: root.style === "numbers" ? 16 : 25
             readonly property color tint: Appearance.stops[StatsModel.tone(modelData)]
             readonly property real reading: StatsModel.value(modelData)

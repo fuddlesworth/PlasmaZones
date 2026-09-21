@@ -10,10 +10,10 @@ AbstractButton {
     property real railT: 0.8
     property bool expanded: false
     signal activated
-    implicitWidth: readings.implicitWidth + 16
+    implicitWidth: readings.implicitWidth + 10
     implicitHeight: 34
-    leftPadding: 8
-    rightPadding: 8
+    leftPadding: 5
+    rightPadding: 5
     Accessible.name: qsTr("System stats. %1").arg(StatsModel.metrics.map(metric => StatsModel.label(metric) + " " + (metric === "network" ? StatsModel.rate(StatsModel.network.down) : StatsModel.reading(metric))).join(", "))
     onClicked: activated()
     onVisibleChanged: SystemStats.watch(root, visible)
@@ -28,6 +28,8 @@ AbstractButton {
     contentItem: Item {
         StatsReadout {
             id: readings
+            cellWidth: 37
+            spacing: 5
             anchors.centerIn: parent
         }
     }
