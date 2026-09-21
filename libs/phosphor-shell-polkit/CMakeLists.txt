@@ -3,15 +3,8 @@
 #
 # PhosphorShellPolkit, the Phosphor.Polkit authentication prompt.
 #
-# A pure-QML module: PolkitPrompt (the 360 px card hanging under a rose
-# band on the requesting window's top edge, A3 §9), PolkitAnchor (which
-# window and rect the card hangs from, through the placement map),
-# PolkitDim (the 20% dim of everything but the requester) and the text
-# action they share. The PolicyKit agent itself is
-# libs/phosphor-service-polkit; this module only draws for it, duck-typing
-# the agent so a fake stands in for the tests.
-#
-# Phase 4 deliverable per docs/phosphor-shell-design/identity/A3-surfaces.md §9.
+# The centered authentication surface and its controls. The controller and
+# PolicyKit conversation live in phosphor-service-polkit and the shell.
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -28,7 +21,7 @@ endif()
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes)
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes QuickControls2)
 
 if(NOT TARGET PhosphorTheme::PhosphorThemeQml)
     find_package(PhosphorTheme CONFIG QUIET)
@@ -49,7 +42,8 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(_phosphor_polkit_qml_files
     qml/Phosphor/Polkit/PolkitPrompt.qml
-    qml/Phosphor/Polkit/PolkitAnchor.qml
+    qml/Phosphor/Polkit/PolkitSurface.qml
+    qml/Phosphor/Polkit/PolkitPasswordField.qml
     qml/Phosphor/Polkit/PolkitDim.qml
     qml/Phosphor/Polkit/PolkitAction.qml
 )
@@ -76,6 +70,7 @@ qt_add_qml_module(PhosphorShellPolkitQml
         Phosphor.Theme
         Phosphor.Widgets
         QtQuick.Layouts
+        QtQuick.Controls.Basic
     SOURCES
         src/phosphorshellpolkit_qml_plugin.cpp
     QML_FILES ${_phosphor_polkit_qml_files}
@@ -92,6 +87,7 @@ target_link_libraries(PhosphorShellPolkitQml
         Qt6::Gui
         Qt6::Qml
         Qt6::Quick
+        Qt6::QuickControls2
 )
 
 if(TARGET PhosphorShellWidgets::PhosphorShellWidgetsQml)

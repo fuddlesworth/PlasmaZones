@@ -1,77 +1,39 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// Phosphor.Polkit.PolkitAction, a text action with a 2 px underline.
-//
-// Cancel and Authenticate on the prompt (A3 §9b): the word in rose, the
-// prompt's colour throughout, over the underline that IS the control (05
-// R2). `primary` rests the underline visible; the secondary action shows
-// it on hover. The underline ticks on activation.
-//
-//   PolkitAction { text: qsTr("Authenticate"); primary: true; onActivated: ... }
-
 import QtQuick
+import QtQuick.Controls.Basic
 import Phosphor.Theme
-import Phosphor.Widgets
 
-Item {
-    id: action
-
-    property string text: ""
+Button {
+    id: root
     property bool primary: false
-    // Rose: the prompt is an interruption that grants power (A3 §9e).
-    property real t: 1
-
-    signal activated
-
-    readonly property bool hovered: hover.hovered
-
-    implicitWidth: label.implicitWidth
-    implicitHeight: label.implicitHeight + Tokens.spacing_xxs + 2
-
-    Accessible.role: Accessible.Button
-    Accessible.name: action.text
-    Accessible.onPressAction: action.activated()
-
-    Text {
-        id: label
-
-        anchors.left: parent.left
-        anchors.top: parent.top
-        text: action.text
-        color: action.primary ? Spectrum.hot : (action.hovered ? Appearance.text : Appearance.muted)
+    implicitWidth: Math.max(primary ? 126 : 68, contentItem.implicitWidth + 30)
+    implicitHeight: Math.max(40, contentItem.implicitHeight + 16)
+    padding: 8
+    horizontalPadding: 15
+    opacity: enabled ? 1 : .4
+    Keys.onReturnPressed: event => {
+        if (enabled && !event.isAutoRepeat)
+            clicked();
+    }
+    Keys.onEnterPressed: event => {
+        if (enabled && !event.isAutoRepeat)
+            clicked();
+    }
+    background: Rectangle {
+        radius: Appearance.radius * .4
+        color: root.primary ? Qt.tint(Appearance.card, Qt.alpha(Appearance.accent, root.hovered ? .38 : .24)) : Qt.alpha(Appearance.card, root.hovered ? 1 : .35)
+        border.width: 1
+        border.color: root.visualFocus ? Appearance.text : root.primary ? Qt.tint(Appearance.outline, Qt.alpha(Appearance.accent, .46)) : Appearance.outline
+    }
+    contentItem: Text {
+        text: root.text
+        textFormat: Text.PlainText
+        color: Appearance.text
         font.family: Tokens.font_family_ui
-        font.pixelSize: Tokens.font_size_body_l
-        font.weight: action.primary ? Tokens.font_weight_demibold : Tokens.font_weight_medium
-
-        Behavior on color {
-            ColorAnimation {
-                duration: Motion.duration_enter_content
-                easing: Motion.reveal
-            }
-        }
-    }
-
-    SpectrumUnderline {
-        id: underline
-
-        anchors.left: parent.left
-        anchors.top: label.bottom
-        anchors.topMargin: Tokens.spacing_xxs
-        length: label.contentWidth
-        t: action.t
-        restOpacity: action.primary || action.hovered ? 1 : 0
-    }
-
-    HoverHandler {
-        id: hover
-
-        cursorShape: Qt.PointingHandCursor
-    }
-
-    TapHandler {
-        onTapped: {
-            underline.tick();
-            action.activated();
-        }
+        font.pixelSize: Math.round(12 * Appearance.textScale)
+        horizontalAlignment: Text.AlignHCenter
+        verticalAlignment: Text.AlignVCenter
+        wrapMode: Text.Wrap
     }
 }

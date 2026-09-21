@@ -667,7 +667,8 @@ FocusScope {
         // is the "it starts in the middle and pops into place" the panels
         // were doing.
         opacity: root.open && _placed ? 1 : 0
-        scale: root.open ? 1 : 0.96
+        // A full-output scrim must cover the edges throughout the transition.
+        scale: fullScreen || root.open ? 1 : 0.96
 
         // The surface pack's frame, wrapping the CONTENT FRAME rather than
         // the surface: this host's surface is full-bleed on the output, so
@@ -681,7 +682,8 @@ FocusScope {
         // dismiss path depends on.
         DecorationSlot {
             anchors.fill: parent
-            component: root.decoration
+            // Full-output content owns the smaller surfaces it decorates.
+            component: contentFrame.fullScreen ? null : root.decoration
             contentItem: contentFrame
             surfacePath: "shell.phosphor.popout"
             focused: root.open

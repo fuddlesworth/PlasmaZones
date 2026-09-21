@@ -268,37 +268,6 @@ Item {
         locked: sessionCoordinator.lock.state !== 0
     }
 
-    // The polkit dim, one per output (A3 §9c): while a request is open the
-    // screen it was placed on dims 20%, with the requester's window left
-    // clear. Pure feedback on a full-screen click-through Overlay panel,
-    // like the OSD's. The card itself is a popout (below), because a
-    // panel cannot take keyboard focus on demand after creation and the
-    // prompt must land focus in its field the moment it appears.
-    PerScreenPanels {
-        id: polkitDims
-
-        model: PhosphorShell.screens
-
-        delegate: PanelWindow {
-            id: polkitDimSurface
-
-            edge: PanelWindow.Top
-            alignment: PanelWindow.Fill
-            thickness: modelData.height
-            panelLayer: PanelWindow.LayerOverlay
-            exclusiveZoneEnabled: false
-            keyboardFocus: PanelWindow.None
-            inputRegion: []
-
-            PolkitDim {
-                anchors.fill: parent
-                readonly property string screenName: polkitDimSurface.screen ? polkitDimSurface.screen.name : ""
-                active: PolkitRegistry.activeRequest !== null && screenName !== "" && PolkitRegistry.promptScreen === screenName
-                hole: active && PolkitRegistry.anchorRect.width > 0 ? PolkitRegistry.anchorRect : null
-            }
-        }
-    }
-
     // The engine-placed pane's content, built FRESH on every open by
     // PanePopoutTransport against the engine's root context (so only
     // context properties, never ids from this file), and destroyed with
@@ -912,42 +881,43 @@ Item {
         }
     }
 
-    // The polkit prompt (A3 §9): a card hanging from the requesting
-    // window's top edge, built as a popout so it can appear on any output
-    // with keyboard focus landing in its field, and torn down with the
-    // request. Detached: it opens even while the power menu holds a
-    // modal, draws no scrim of its own (the per-screen PolkitDim above is
-    // the 20% dim with the requester left clear), and no other popout
-    // closes it. Same root-context rule as the launcher: everything it
-    // reads is a context property.
-    //
-    // Closing the popout any other way (the host's Escape, a hot reload)
-    // destroys this content; a request still open at that point is
-    // cancelled so polkit never waits on a card nobody can see.
+    // Each modal belongs to the request captured in its initial properties.
+    // Closing an older popup must not cancel a newer PolicyKit conversation.
+    property string polkitHandle: ""
+    property var polkitRequest: null
+
+    Connections {
+        target: Popouts
+        function onPopoutClosed(popoutId: string, handle: string): void {
+            if (popoutId !== "polkit" || handle !== root.polkitHandle)
+                return;
+            const request = root.polkitRequest;
+            root.polkitHandle = "";
+            root.polkitRequest = null;
+            // Also covers a lost output or failed surface before the card exists.
+            if (request && PolkitRegistry.activeRequest === request)
+                PolkitRegistry.cancel();
+        }
+    }
+
     Component {
         id: polkitComponent
-
-        PolkitPrompt {
+        PolkitSurface {
             agent: PolkitRegistry
             decoration: ShellChrome.decorationComponent
-            request: PolkitRegistry.activeRequest
-            requester: PolkitRegistry.requesterName
+            surfaceEffects: ShellEffects
+            keyboard: LockKeyboard {}
             errorText: PolkitRegistry.lastError
-            Component.onCompleted: forceActiveFocus()
             Component.onDestruction: {
-                if (PolkitRegistry.activeRequest)
+                if (request && PolkitRegistry.activeRequest === request)
                     PolkitRegistry.cancel();
             }
         }
     }
 
-    // Where the prompt goes: the requester's pid through the window
-    // tracker (a capability the dashboard work adds; probed, never
-    // assumed) to a window id, then across every output's placement map
-    // to the cell that shows it. Found: the band spans that window's top
-    // edge on that output. Not found: the screen's top edge, centred,
-    // under the bar, on the primary output.
+    // Prefer the requesting window's output; the card itself is centered.
     function openPolkitPrompt(): void {
+        const request = PolkitRegistry.activeRequest;
         const pid = PolkitRegistry.requesterPid;
         let windowId = "";
         if (pid > 0 && typeof WindowTracking !== "undefined" && WindowTracking && typeof WindowTracking.findWindowByPid === "function") {
@@ -955,7 +925,6 @@ Item {
             windowId = found === undefined || found === null ? "" : String(found);
         }
         let screenName = "";
-        let rect = Qt.rect(0, 0, 0, 0);
         if (windowId !== "") {
             const names = PolkitRegistry.screenNames();
             for (let i = 0; i < names.length; ++i) {
@@ -965,7 +934,6 @@ Item {
                 const r = map.cellRect(windowId);
                 if (r && r.width > 0 && r.height > 0) {
                     screenName = names[i];
-                    rect = r;
                     break;
                 }
             }
@@ -973,41 +941,54 @@ Item {
         // screenNamed marks the QScreen CppOwnership before returning it,
         // the same guard ControlCenterRegistry.screenOf relies on.
         const screen = PolkitRegistry.screenNamed(screenName);
-        if (!screen)
+        if (!screen) {
+            PolkitRegistry.cancel();
             return;
-        const anchored = rect.width > 0;
-        // PopoutHost caps a frame at the surface width minus its margins,
-        // so a band on a full-width window is centred within that cap.
-        const bandWidth = anchored ? Math.min(rect.width, screen.geometry.width - 2 * Tokens.spacing_l) : 360;
-        const x = anchored ? rect.x + (rect.width - bandWidth) / 2 : (screen.geometry.width - 360) / 2;
-        const y = anchored ? rect.y : Tokens.bar_thickness + Tokens.spacing_l;
-        PolkitRegistry.setPlacement(screen.name, anchored ? rect : Qt.rect(0, 0, 0, 0));
-        Popouts.open({
+        }
+        PolkitRegistry.setPlacement(screen.name, Qt.rect(0, 0, 0, 0));
+        const handle = Popouts.open({
             "popoutId": "polkit",
             "content": polkitComponent,
             "targetScreen": screen,
-            "anchor": PhosphorPopout.Anchor.Custom,
-            "customAnchor": Qt.point(x, y),
-            "exclusive": PhosphorPopout.ExclusiveMode.Detached,
+            "anchor": PhosphorPopout.Anchor.ScreenCenter,
+            "exclusive": PhosphorPopout.ExclusiveMode.Modal,
             "keyboardFocus": true,
-            // A password prompt holds the keyboard until it closes; Detached
-            // keeps it free of the Modal scrim, the flag adds the grab.
             "exclusiveKeyboard": true,
             "dismissOnFocusLoss": false,
             "props": {
-                "anchored": anchored,
-                "bandWidth": bandWidth
+                "request": request,
+                "requester": PolkitRegistry.requesterName,
+                "requesterProgram": PolkitRegistry.requesterProgram,
+                "resourceText": PolkitRegistry.requesterResource
             }
         });
+        if (handle === "") {
+            if (PolkitRegistry.activeRequest === request)
+                PolkitRegistry.cancel();
+        } else {
+            root.polkitHandle = handle;
+            root.polkitRequest = request;
+        }
+    }
+
+    Connections {
+        target: sessionCoordinator.lock
+        function onStateChanged(): void {
+            if (sessionCoordinator.lock.state !== 0)
+                PolkitRegistry.cancel();
+        }
     }
 
     Connections {
         target: PolkitRegistry
 
         function onActiveRequestChanged(): void {
-            if (PolkitRegistry.activeRequest)
-                root.openPolkitPrompt();
-            else
+            if (PolkitRegistry.activeRequest) {
+                if (sessionCoordinator.lock.state === 0)
+                    root.openPolkitPrompt();
+                else
+                    PolkitRegistry.cancel();
+            } else
                 // close() on an empty handle is a no-op.
                 Popouts.close(Popouts.handleFor("polkit"));
         }

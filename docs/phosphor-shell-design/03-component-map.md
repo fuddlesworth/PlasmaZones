@@ -29,7 +29,7 @@ libs/
   phosphor-shell-dashboard/  Phosphor.Dashboard: StageOverview, DesktopStage, Dashboard, Cheatsheet, FullMap
   phosphor-shell-picker/     Phosphor.Picker: Picker, WallpaperSurface, WallpaperCandidates,
                              RetintController, ThemePresets
-  phosphor-shell-polkit/     Phosphor.Polkit: PolkitPrompt, PolkitAnchor, PolkitDim
+  phosphor-shell-polkit/     Phosphor.Polkit: PolkitSurface, PolkitPrompt, PolkitPasswordField, PolkitDim
   phosphor-popout/           PopoutController, transports, PaneHost, PaneTether
   phosphor-shell-patterns/   Layer roles (Wallpaper, Hud, Modal, Floating, plus Panel(edge) and Toast(corner))
   phosphor-layer/ phosphor-surfaces/ phosphor-wayland/

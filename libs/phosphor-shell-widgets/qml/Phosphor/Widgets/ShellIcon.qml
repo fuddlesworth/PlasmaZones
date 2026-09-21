@@ -16,6 +16,14 @@ Item {
     // hex color. Encode ordinary sRGB channels explicitly for the SVG renderer.
     readonly property string strokeColor: "#" + [color.r, color.g, color.b].map(channel => ("0" + Math.round(channel * 255).toString(16)).slice(-2)).join("")
     readonly property string drawing: {
+        if (source === "security-high")
+            return '<path d="M12 2 L20 6 V12 Q20 18 12 22 Q4 18 4 12 V6 Z M12 7 V13 M12 17 V17.1"/>';
+        if (source === "view-visible")
+            return '<path d="M2 12 Q12 -1 22 12 Q12 25 2 12 Z"/><circle cx="12" cy="12" r="3"/>';
+        if (source === "dialog-ok-apply")
+            return '<path d="M5 12 L10 17 L20 6"/>';
+        if (source === "go-down" || source === "go-up")
+            return source === "go-down" ? '<path d="M6 9 L12 15 L18 9"/>' : '<path d="M6 15 L12 9 L18 15"/>';
         if (source === "phosphor-tray")
             return '<path d="M3 14 H8 L10 17 H14 L16 14 H21 V21 H3 Z M5 10 V4 H19 V10 M9 7 H15"/>';
         if (source === "cpu")
