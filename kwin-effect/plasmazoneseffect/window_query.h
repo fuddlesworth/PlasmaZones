@@ -31,7 +31,8 @@ bool windowIsTransient(KWin::EffectWindow* w);
 /// True if @p w is an override-redirect (unmanaged) X11 window OUTSIDE the
 /// transient family: a surface the window manager never manages and that
 /// declares no popup/menu type to explain itself. These are client plumbing,
-/// not application windows. The live case is xembedsniproxy's 32x32 container
+/// not application windows, rejected by the placement, animation and
+/// decoration gates alike. The live case is xembedsniproxy's 32x32 container
 /// for a legacy XEmbed tray icon (Wine / Proton apps such as Battle.net),
 /// which carries no _NET_WM_WINDOW_TYPE, so KWin reports it as neither
 /// special nor transient and every type-based reject misses it. A typed

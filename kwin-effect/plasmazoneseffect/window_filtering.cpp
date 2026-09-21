@@ -419,9 +419,10 @@ bool PlasmaZonesEffect::isStructurallyUnmanageableWindowType(KWin::EffectWindow*
     const bool fullScreenUnmanageable = !exemptFullscreen && w->isFullScreen()
         && (m_windowedFullscreenWindows.isEmpty() || w->isDeleted()
             || !m_windowedFullscreenWindows.contains(getWindowId(w)));
-    if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || fullScreenUnmanageable || w->isSkipSwitcher()) {
+    if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || fullScreenUnmanageable || w->isSkipSwitcher()
+        || windowIsBareOverrideRedirect(w)) {
         if (rejectReason) {
-            *rejectReason = QStringLiteral("special/desktop/dock/fullscreen/skipSwitcher window type");
+            *rejectReason = QStringLiteral("special/desktop/dock/fullscreen/skipSwitcher/bare override-redirect type");
         }
         return true;
     }
@@ -870,8 +871,7 @@ bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w,
     // (KWin's disjunction also takes in splash, toolbar, applet popup and
     // tooltip), so those are hard-excluded here with no toggle: a border on a
     // notification popup or a volume OSD is never sensible, which splits them
-    // off from the transient family below (which IS toggleable).
-    // windowIsBareOverrideRedirect: untyped tray proxies (xembedsniproxy), see window_query.h.
+    // off from the transient family below (which IS toggleable). Untyped tray proxies: see window_query.h.
     if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isFullScreen() || w->isSkipSwitcher()
         || windowIsBareOverrideRedirect(w)) {
         return false;

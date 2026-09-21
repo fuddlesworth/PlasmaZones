@@ -9,7 +9,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- **A glowing square over the system tray**: apps that still use the old style of tray icon, such as Battle.net and other Windows programs run through Wine or Proton, left a small bordered and glowing square sitting on the panel. The helper that shows those icons keeps a tiny hidden window behind each one, and PlasmaZones mistook it for an application window and drew your window decoration on it. Those helper windows are no longer decorated or animated. ([#1115](https://github.com/fuddlesworth/PlasmaZones/pull/1115))
+- **A glowing square over the system tray**: apps that still use the old style of tray icon, such as Battle.net and other Windows programs run through Wine or Proton, left a small bordered and glowing square sitting on the panel. The helper that shows those icons keeps a tiny hidden window behind each one, and PlasmaZones mistook it for an application window and drew your window decoration on it. PlasmaZones now leaves those helper windows alone, so they are not decorated or animated and are never offered to snapping or tiling. ([#1115](https://github.com/fuddlesworth/PlasmaZones/pull/1115))
 
 ## [3.4.19] - 2026-09-21
 
