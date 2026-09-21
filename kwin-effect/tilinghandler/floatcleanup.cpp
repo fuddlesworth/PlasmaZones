@@ -65,6 +65,30 @@ bool genuineFullscreenAtFirstContact(KWin::EffectWindow* w, bool alreadyNotified
 
 } // namespace
 
+/// True while @p w is in its OWN fullscreen (a game, F11, a video), as opposed
+/// to the windowed-fullscreen feature, whose state is the effect's doing.
+/// @p flaggedWindowed is the batch entry's wire flag, which leads the
+/// membership hash on the adopt batch.
+///
+/// The tile batch consults this before markWindowTiled.
+/// slotWindowFullScreenChanged's enter branch clears tiled membership on
+/// purpose and its exit branch restores it, but the daemon never untiles on
+/// fullscreen, so the very next batch re-marked the window while it was still
+/// fullscreen. Membership is what scrollManagedOutputFor resolves through, so
+/// the fullscreen surface became a strip member again. As the topmost one it
+/// was elected the tab-indicator paint anchor, and the pills were blitted right
+/// after it, over the game. Left unmarked it is an above-anchor occluder
+/// instead, and the pills land under it. Requested OR committed, as everywhere
+/// else: the committed bit lags a client round-trip.
+bool TilingHandler::isInOwnFullscreen(KWin::EffectWindow* w, const QString& windowId, bool flaggedWindowed) const
+{
+    if (!w || flaggedWindowed || m_effect->m_windowedFullscreenWindows.contains(windowId)) {
+        return false;
+    }
+    const KWin::Window* const kw = w->window();
+    return w->isFullScreen() || (kw && kw->isRequestedFullScreen());
+}
+
 bool TilingHandler::isEligibleForTilingNotify(KWin::EffectWindow* w, bool* rejectedOnlyBecauseMinimized) const
 {
     if (rejectedOnlyBecauseMinimized) {

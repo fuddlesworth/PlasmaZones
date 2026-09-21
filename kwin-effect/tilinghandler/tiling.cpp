@@ -1435,9 +1435,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                                   << "predicted=" << m_effect->constrainTileGeometry(snap.window, snap.geometry)
                                   << "x11=" << snap.window->isX11Client();
             }
-            // A window can only be tile-managed by one screen at a time —
-            // markWindowTiled enforces the single-owner sweep itself.
-            markWindowTiled(snap.screenId, snap.windowId);
+            if (!isInOwnFullscreen(snap.window, snap.windowId, snap.isWindowedFullscreen)) {
+                markWindowTiled(snap.screenId, snap.windowId);
+            }
             // NOTE: the parked-column visual-delta write for this entry
             // happens BELOW, after the windowed-fullscreen block, so its
             // fullscreen-bail term reads the membership this batch just

@@ -12,11 +12,12 @@
 // shared a file because the wheel settings that arm the chords are published
 // state and the chord reading them is not.
 //
-// The release has a second caller that is no wheel event at all: the daemon's
-// keyboard shortcut gate, which reaches it as slotLeaveNativeFullscreenRequested
-// over Scrolling.leaveNativeFullscreenRequested. That slot lives here rather
-// than beside the other D-Bus slots in state.cpp so it sits next to the
-// function it defers to.
+// The release's only caller is no wheel event at all: the daemon's
+// windowed-fullscreen toggle, which reaches it as
+// slotLeaveNativeFullscreenRequested over
+// Scrolling.leaveNativeFullscreenRequested. That slot lives here rather than
+// beside the other D-Bus slots in state.cpp so it sits next to the function it
+// defers to. The wheel chord itself no longer releases: it is navigation.
 
 #include "tilinghandler.h"
 #include "handlers/dragtracker.h"
@@ -238,7 +239,8 @@ bool TilingHandler::handleWheelChord(qreal delta, qint32 deltaV120, Qt::Orientat
     }
     const QLatin1String verb = focusMatch ? QLatin1String("focusColumn") : QLatin1String("scrollView");
     qCDebug(lcEffect) << "Wheel chord:" << verb << "step" << step << "x" << steps << "on" << screenId;
-    leaveNativeFullscreenTiles(screenId);
+    // No leaveNativeFullscreenTiles: focus and view scrolling are navigation,
+    // and navigation never takes a window out of its own fullscreen.
     // One verb per notch. The engine owns the step SIZE, so a two-notch event
     // is two single steps rather than one double-sized one, which keeps the
     // strip's own animation identical to scrolling those notches separately.
@@ -254,38 +256,41 @@ bool TilingHandler::handleWheelChord(qreal delta, qint32 deltaV120, Qt::Orientat
 }
 
 // Leaves the OWN fullscreen (a client F11, a video going fullscreen) of every
-// scroll-tracked tile on `screenId`, so a user strip verb never runs against a
-// window whose geometry the compositor is refusing. No-op when the screen holds
-// no such tile, which is the overwhelmingly common case.
+// scroll-tracked tile on `screenId`, so the windowed-fullscreen toggle never
+// runs against a window whose geometry the compositor is refusing. No-op when
+// the screen holds no such tile, which is the overwhelmingly common case.
 void TilingHandler::leaveNativeFullscreenTiles(const QString& screenId)
 {
-    // Scrolling a strip that holds a natively-fullscreen tile LEAVES that
-    // fullscreen first.
+    // The windowed-fullscreen toggle on a strip that holds a natively-fullscreen
+    // tile LEAVES that fullscreen first. NOTHING ELSE DOES.
     //
-    // A window in its OWN fullscreen (a client F11, a video going fullscreen —
-    // not the windowed-fullscreen feature, whose members are committed at their
-    // column rect on purpose) refuses every geometry commit through
-    // applyWindowGeometry's fullscreen bail. The engine does not know that, so
-    // it goes on scrolling and PARKING that column while the screen still shows
-    // the fullscreen window: the model says "parked off-strip", the user sees a
-    // video, and the two owners stay split for the whole hold. Measured live,
-    // one wheel notch at a time, the same window's target walked (8,54) ->
-    // (1924,54) -> the park (1932,2176), each answered "fullscreen, skipping".
+    // This used to run for every strip verb, the wheel chord included, because
+    // a window in its OWN fullscreen refuses every geometry commit through
+    // applyWindowGeometry's fullscreen bail while the engine goes on scrolling
+    // and PARKING its column: the model says "parked off-strip", the user sees
+    // a video. Measured live, one wheel notch at a time, the same window's
+    // target walked (8,54) -> (1924,54) -> the park (1932,2176), each answered
+    // "fullscreen, skipping". The cure was worse than the split. A plain
+    // focus-left dropped a fullscreen game to a window, and a fixed-size game
+    // then fought the column rect it was handed, which the maximize
+    // interception turned into a maximized column. The split is handled where
+    // it shows instead: the tile batch leaves a window in its own fullscreen
+    // out of strip membership (isInOwnFullscreen), so it is neither translated
+    // nor parked with its column, and the fullscreen-exit branch re-requests
+    // its rect from the engine.
     //
-    // Called from the VERB DISPATCH — the wheel chord here in the effect, and
-    // the daemon's keyboard shortcut gate over
-    // Scrolling.leaveNativeFullscreenRequested — rather than from the batch
-    // apply. A batch cannot tell a user verb from an insert-driven reflow, and
-    // gating the exit on the batch's own strip-motion fields (viewDelta /
-    // scrollEdge / hasVisualPos) dropped the fullscreen whenever an unrelated
-    // window merely OPENED and slid the strip — measured. A dispatch site
-    // carries no such ambiguity: something the user pressed is what reaches it.
+    // Called from the VERB DISPATCH — the daemon's windowed-fullscreen toggle
+    // over Scrolling.leaveNativeFullscreenRequested — rather than from the
+    // batch apply. A batch cannot tell a user verb from an insert-driven
+    // reflow, and gating the exit on the batch's own strip-motion fields
+    // (viewDelta / scrollEdge / hasVisualPos) dropped the fullscreen whenever
+    // an unrelated window merely OPENED and slid the strip — measured.
     //
-    // Both callers exit BEFORE their verb goes out, so the engine's own
-    // relayout already places a window the compositor will accept, rather than
-    // the exit racing a batch that was built against the fullscreen. That
-    // ordering is why this is a separate signal rather than a flag on the
-    // batch: a flag arrives with the geometry it was supposed to precede.
+    // The caller exits BEFORE its verb goes out, so the engine's own relayout
+    // already places a window the compositor will accept, rather than the exit
+    // racing a batch that was built against the fullscreen. That ordering is
+    // why this is a separate signal rather than a flag on the batch: a flag
+    // arrives with the geometry it was supposed to precede.
     //
     // SELECTED first, ACTED on second, and never with m_notifiedWindows under
     // an open iterator. setFullScreen emits windowFrameGeometryChanged and
