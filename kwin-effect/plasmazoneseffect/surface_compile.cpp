@@ -183,12 +183,18 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
         return nullptr;
     }
 
+    // BEFORE the cache slot is taken, not after. Its first call emits effectsChanged
+    // inline, and that handler clears m_compiledPacks — so a reference taken first
+    // would dangle for the rest of this function and for the `return &packState`
+    // every early-out below uses. Nothing here needs the slot, so the ordering is
+    // free; the same re-entrancy was already fixed in updateAllDecorations and
+    // rebuildChain, and this was the third site.
+    ensureSurfaceRegistryPaths();
+
     // Insert the cache slot up-front so every fail-closed early-return latches by
     // leaving shader=null on the cached entry. (The single
     // global path used member latch flags; the per-pack path latches on the slot.)
     CompiledSurfacePack& packState = m_compiledPacks[packId];
-
-    ensureSurfaceRegistryPaths();
 
     const PhosphorSurfaceShaders::SurfaceShaderEffect eff = m_surfaceShaderRegistry.effect(packId);
     if (eff.id.isEmpty() || eff.fragmentShaderPath.isEmpty()) {

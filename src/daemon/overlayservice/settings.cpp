@@ -134,19 +134,8 @@ void OverlayService::setSettings(ISettings* settings)
             // applyDecoration is null-safe per slot, so screens without a wired
             // slot are skipped. OSDs are intentionally omitted — they auto-dismiss
             // sub-second, so a live re-decorate has no observable effect.
-            connect(m_settings, &ISettings::decorationProfileTreeChanged, this, [this]() {
-                for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-                    const auto& state = it.value();
-                    if (m_zoneSelectorVisible)
-                        applyDecoration(state.zoneSelectorSlot(), QStringLiteral("popup.zoneSelector"));
-                    if (m_snapAssistVisible)
-                        applyDecoration(state.snapAssistSlot(), QStringLiteral("popup.snapAssist"));
-                    if (m_layoutPickerVisible)
-                        applyDecoration(state.layoutPickerSlot(), QStringLiteral("popup.layoutPicker"));
-                    if (m_cheatsheetVisible)
-                        applyDecoration(state.cheatsheetSlot(), QStringLiteral("popup.cheatsheet"));
-                }
-            });
+            connect(m_settings, &ISettings::decorationProfileTreeChanged, this,
+                    &OverlayService::reapplyVisiblePopupDecorations);
 
             // Zone-overlay shader tree: an assignment edit in the settings
             // app can flip a screen between rectangle and shader overlay

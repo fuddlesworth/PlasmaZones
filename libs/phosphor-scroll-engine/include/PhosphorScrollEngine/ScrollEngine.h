@@ -6,7 +6,9 @@
 // hoists (ScrollEngineTypes.h, ScrollStashTypes.h) already carried out the
 // split-by-concern work, and splitting the remaining single class would
 // scatter one interface across headers for line count alone. Same rationale
-// as its peers (SnapEngine.h, AutotileEngine.h, LayoutRegistry.h).
+// as its peers (SnapEngine.h, AutotileEngine.h, LayoutRegistry.h). Grew with
+// the per-desktop membership change: the adopt / release / drop helpers,
+// the per-context rect memos, their forget, and the adoption insert flag.
 
 #pragma once
 
@@ -790,12 +792,24 @@ public:
     void clearCurrentDesktopForScreen(const QString& screenId) override;
     void setCurrentActivity(const QString& activity) override;
     /// Pin screens whose managed windows are ALL sticky to their current
-    /// desktop before a desktop switch, and unpin (migrating the state to
-    /// the new desktop key) once a non-sticky window appears — the same
-    /// "virtualdesktopsonlyonprimary" contract as AutotileEngine: without
-    /// the pin a desktop switch resolves a fresh (screen, desktop) key and
-    /// the strip comes up empty while the sticky windows are still visible.
-    void updateStickyScreenPins(const std::function<bool(const QString&)>& isWindowSticky) override;
+    /// desktop, unpinning (and migrating the state to the new desktop key)
+    /// once a non-sticky window appears — the "virtualdesktopsonlyonprimary"
+    /// contract AutotileEngine also implements: without the pin a desktop
+    /// switch resolves a fresh key and the strip comes up empty while the
+    /// sticky windows are still visible. A screen that already holds a
+    /// strip on another desktop is never pinned: that is a screen the user
+    /// merely happens to be viewing with sticky windows on it, and once the
+    /// membership pass has given a sticky window a column on two desktops
+    /// the pin is redundant for it. See PhosphorEngine::StickyPinPhase.
+    void updateStickyScreenPins(const PhosphorEngine::StickyPredicate&, PhosphorEngine::StickyPinPhase) override;
+    /// Give a window present on several desktops a column in each of their
+    /// strips, so it can be placed and sized independently per desktop rather
+    /// than existing only in the context it opened in. Driven off the desktop
+    /// SPAN, so {1,2} is handled on the same terms as sticky.
+    PhosphorEngine::MembershipReconcileResult
+    reconcileDesktopMemberships(const QString& screenId, const PhosphorEngine::DesktopSpanQuery& spanOf) override;
+    PhosphorEngine::MembershipReconcileResult
+    reconcileWindowMemberships(const QString& windowId, const PhosphorEngine::DesktopSpanQuery& spanOf) override;
     QSet<int> desktopsWithActiveState() const override;
     void pruneStatesForDesktop(int removedDesktop) override;
     void renumberDesktopsAfterRemoval(int removedDesktop) override;
@@ -1169,7 +1183,15 @@ private:
     /// in-flight seed. Those callers run sweepStatelessScreenBookkeeping
     /// instead, which clears the same maps only once a screen has no state
     /// left at all. AutotileEngine's clearScreenOrderMaps flag is the twin.
-    void releaseScreenState(ScrollState* state, QStringList& releasedWindows, bool clearScreenBookkeeping = true);
+    ///
+    /// @p dyingContext names the one context being reaped, for those same two
+    /// prunes. Its per-context rect and parked-edge memories are dropped, and
+    /// a window that still holds a column in another LIVE state (one present
+    /// on several desktops) is left out of the release entirely: no placement
+    /// snapshot, no memo sweep, no entry in @p releasedWindows. Null for a
+    /// whole-screen release, where every context of the screen dies together.
+    void releaseScreenState(ScrollState* state, QStringList& releasedWindows, bool clearScreenBookkeeping = true,
+                            const PhosphorEngine::PlacementStateKey* dyingContext = nullptr);
     /// The per-window side-map sweep every release path owes AFTER its
     /// windowsReleased emit: exactly the two maps releaseScreenState
     /// deliberately keeps alive for the daemon's handler (see the contract
@@ -1339,9 +1361,44 @@ private:
     /// before a grouped join made the arrival its shown tab (empty on every
     /// other arm), so the caller's focus-new-windows rewind can put that tab
     /// back on show when the arrival declines focus.
+    /// @p adoption is true when the membership pass is giving a LIVE window a
+    /// column on another desktop: the float arms and the placement record
+    /// are skipped, because both already spoke for this window on the desktop
+    /// it came from and a live window must not consume cross-session memory.
     bool insertOpenedWindow(ScrollState* state, const QString& windowId, const QString& screenId, int minWidthIn,
                             int minHeightIn, ScrollOpenParams* outOpenParams = nullptr, bool migration = false,
-                            QString* outDisplacedTab = nullptr);
+                            QString* outDisplacedTab = nullptr, bool adoption = false);
+    // engine_membership.cpp
+    /// Point the container's primary resolution at currentKeyForScreen.
+    void installContextResolver();
+    /// One window's share of a membership pass.
+    struct PendingMembership;
+    void collectMembershipWork(const QString& windowId, const QString& screenId,
+                               const PhosphorEngine::PlacementStateKey& currentKey,
+                               const PhosphorEngine::DesktopSpan& span, bool adoptAllowed,
+                               QList<PendingMembership>& pending) const;
+    PhosphorEngine::MembershipReconcileResult applyMembershipWork(const QString& screenId,
+                                                                  const PhosphorEngine::PlacementStateKey& currentKey,
+                                                                  const QList<PendingMembership>& pending);
+    /// Add a column for @p windowId at @p key, keeping its other memberships.
+    /// The additive twin of the windowOpened migration, which moves instead.
+    bool adoptIntoContext(const QString& windowId, const PhosphorEngine::PlacementStateKey& key);
+    /// Drop @p windowId from @p key alone. NOT a float-back: it stays managed
+    /// on the desktops its span still covers, so nothing needs restoring.
+    void releaseMembership(const QString& windowId, const PhosphorEngine::PlacementStateKey& key);
+    /// Drop @p windowId from every context but @p keepKey (a default key
+    /// keeps none). For the paths on which the window leaves the engine or
+    /// its screen, all of which clean the context they resolved and then have
+    /// to take the window out of the OTHER desktops' strips too.
+    void dropFromOtherContexts(const QString& windowId, const PhosphorEngine::PlacementStateKey& keepKey);
+    /// Park the per-window applied-rect and parked-edge memos of the
+    /// multi-desktop windows on @p screenId under @p oldKey and restore
+    /// @p newKey's, on a context switch. See m_contextRectMemory.
+    void swapContextRectMemory(const QString& screenId, const PhosphorEngine::PlacementStateKey& oldKey,
+                               const PhosphorEngine::PlacementStateKey& newKey);
+    /// Drop @p windowId's parked memo under @p key, reaping the inner map when
+    /// it empties.
+    void forgetContextMemo(const PhosphorEngine::PlacementStateKey& key, const QString& windowId);
     /// Give a window that floats WITHOUT ever having been a strip tile
     /// (floated at open, or arriving already-floating over the handoff) the
     /// FloatRestore entry the clamp lives in while it floats. column stays
@@ -1523,17 +1580,24 @@ private:
     ///
     /// Armed wherever announceStripContextIfChanged actually fires, which is
     /// what pairs the two: on those paths a screen is forced when, and only
-    /// when, its consumer was just told to retire. Four sites do it — the
+    /// when, its consumer was just told to retire. Five sites do it — the
     /// identical-set branch of setActiveScreens, its added and stayer loops,
-    /// and the sticky-pin release in updateStickyScreenPins.
+    /// the sticky-pin release in updateStickyScreenPins, and the re-keyed
+    /// strips of renumberDesktopsAfterRemoval.
     ///
-    /// There is a FIFTH producer that is deliberately NOT announce-paired:
-    /// applyLayout promotes an m_pendingFocusEmitContexts entry into this set
-    /// once the context that armed it is the one on screen. Nothing retired
-    /// there — the arm exists because a background focus report moved the
-    /// strip's focus and anchor with only placementChanged emitted, so the
-    /// return owes a geometry batch the change gate would otherwise suppress.
-    /// See that member for the full contract.
+    /// Two further producers are deliberately NOT announce-paired. applyLayout
+    /// promotes an m_pendingFocusEmitContexts entry into this set once the
+    /// context that armed it is the one on screen. Nothing retired there —
+    /// the arm exists because a background focus report moved the strip's
+    /// focus and anchor with only placementChanged emitted, so the return
+    /// owes a geometry batch the change gate would otherwise suppress. See
+    /// that member for the full contract. And the membership pass
+    /// (engine_membership.cpp) arms the screen whose strip in view it
+    /// adopted a window into or released one from — dropFromOtherContexts,
+    /// on the close / handoff / prune / cross-output paths, is the same
+    /// producer for the strips it empties: the window's rect memory belongs
+    /// to another desktop's strip, so the change gate cannot be trusted to
+    /// notice.
     ///
     /// A screen ADDED to the set is armed too, and the reason is worth stating
     /// because the obvious argument for leaving it unarmed is wrong. That
@@ -1685,6 +1749,16 @@ private:
     /// the two deliberate rect-drop exceptions) is documented at the park
     /// sites in engine_apply.cpp.
     QHash<QString, QString> m_parkedScrollEdge;
+    /// The two memos above, parked per CONTEXT for windows that hold a
+    /// column in several of one screen's strips. Both are keyed by window
+    /// alone, and applyLayout reads the park / arrive discriminator from
+    /// them, so a multi-desktop window would otherwise compare one desktop's
+    /// relayout against the rect the other desktop applied. On a context
+    /// switch the leaving context's entries are copied here under its key
+    /// (the window-level one stays as the close-time poison guard) and the
+    /// entering context's are put back. Entries die with their membership.
+    QHash<PhosphorEngine::PlacementStateKey, QHash<QString, QRect>> m_contextRectMemory;
+    QHash<PhosphorEngine::PlacementStateKey, QHash<QString, QString>> m_contextParkedEdge;
     /// What a floated/minimized window's column held, so unfloat restores
     /// the slot AND the user's width/display intent (a Proportion/Preset
     /// column must not come back as the default width). Value type hoisted

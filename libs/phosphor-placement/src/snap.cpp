@@ -171,7 +171,7 @@ void WindowTrackingService::setSnapState(PhosphorSnapEngine::SnapState* state)
     resolver.forWindow = [state](const QString&) {
         return state;
     };
-    resolver.forWindowOnScreen = [state](const QString&, const QString&) {
+    resolver.forWindowOnScreen = [state](const QString&, const QString&, int) {
         return state;
     };
     resolver.forScreen = [state](const QString&) {
@@ -203,10 +203,18 @@ PhosphorSnapEngine::SnapState* WindowTrackingService::snapForWindow(const QStrin
     return m_snapResolver.forWindow ? m_snapResolver.forWindow(windowId) : nullptr;
 }
 
-PhosphorSnapEngine::SnapState* WindowTrackingService::snapForWindowOnScreen(const QString& windowId,
-                                                                            const QString& screenId)
+bool WindowTrackingService::snapHoldsWindow(const QString& windowId, const PhosphorSnapEngine::SnapState* state) const
 {
-    return m_snapResolver.forWindowOnScreen ? m_snapResolver.forWindowOnScreen(windowId, screenId) : nullptr;
+    if (m_snapResolver.holdsWindow) {
+        return m_snapResolver.holdsWindow(windowId, state);
+    }
+    return state && state == snapForWindow(windowId);
+}
+
+PhosphorSnapEngine::SnapState* WindowTrackingService::snapForWindowOnScreen(const QString& windowId,
+                                                                            const QString& screenId, int desktop)
+{
+    return m_snapResolver.forWindowOnScreen ? m_snapResolver.forWindowOnScreen(windowId, screenId, desktop) : nullptr;
 }
 
 PhosphorSnapEngine::SnapState* WindowTrackingService::snapForScreen(const QString& screenId) const

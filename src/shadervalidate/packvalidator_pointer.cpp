@@ -67,20 +67,19 @@ namespace {
 constexpr double kMinPreviewGate = 0.15;
 
 // The smallest reach, in logical px, a reachParam may let the user pick. The
-// damage rect is the trail's bounding box inflated by the reach, so a reach
-// this small clips a pack to a sliver around the path: nothing the pack
-// paints further out ever reaches the screen, and the user sees a broken
-// pack rather than a small one.
+// damage rect is the trail's bounding box inflated by the reach, so a reach this
+// small clips a pack to a sliver around the path and the user sees a broken pack
+// rather than a small one.
 //
-// A USABILITY floor, deliberately above the runtime's hard one. Load clamps
-// reach to PointerShaderEffect::kMinReach (1.0), which the library documents
-// as the smallest value that still turns a point into a region — so a reach
-// between the two draws, it is just clipped too tight to be worth shipping.
-// The lints below have to say that rather than claim the pack cannot draw.
+// A USABILITY floor, deliberately above the runtime's hard one. Load clamps reach
+// to PointerShaderEffect::kMinReach (1.0), the smallest value that still turns a
+// point into a region, so a reach between the two does draw, just clipped too
+// tight to be worth shipping. The lints below say that rather than claim the pack
+// cannot draw.
 //
-// Two bundled packs (ink, windtrail) declare a reachParam minimum of exactly
-// this value, so they pass on the strict `<` with no margin at all. Raising
-// the floor, or relaxing the comparison to `<=`, breaks both at once.
+// Two bundled packs (ink, windtrail) declare a reachParam minimum of exactly this
+// value, so they pass on the strict `<` with no margin. Raising the floor, or
+// relaxing to `<=`, breaks both at once.
 constexpr double kUsableReachFloor = 4.0;
 
 // GLSL smoothstep, so the lint computes the same number pointerSpeedGate does.
@@ -156,11 +155,11 @@ bool mentionsParam(const QString& source, const QString& id)
 // The `p_<id>` names a pack passes as the `activationSpeed` argument of
 // pointerSpeedGate() (its second argument) or of the pointerActivationGate()
 // wrapper (its only argument), which is what a pack whose threshold defaults
-// to 0 calls so the filtered walk is skipped there. Both are scanned, or a
-// pack moving to the wrapper would silently leave this lint's coverage.
-// Parsed rather than regexed because pointerSpeedGate's first argument is
-// routinely a call of its own (`pointerSpeedGate(length(v), p_speed)`), so
-// the split has to happen at the top-level comma.
+// to 0 calls so the filtered walk is skipped there. Both are scanned, or a pack
+// moving to the wrapper would silently leave this lint's coverage. Parsed rather
+// than regexed because pointerSpeedGate's first argument is routinely a call of
+// its own (`pointerSpeedGate(length(v), p_speed)`), so the split has to happen at
+// the top-level comma.
 QStringList speedGateParamNames(const QString& strippedSource)
 {
     struct Callee
@@ -264,28 +263,25 @@ QString readStage(const QString& path)
 // define block only: the compositor splices NO preamble into them (buffer
 // sources address parameters by raw customParams slot, by contract), so
 // splicing one here would pass a buffer that fails live.
-//
 // The splice order mirrors the runtime: each spliceAfterVersion lands its
 // block immediately below #version, so splicing the preamble first and the
 // define block second leaves the define block ABOVE the preamble, which is
 // what the compositor produces.
 //
-// COVERAGE BOUNDARY, the same one the animation arm records: the source is
-// handed to glslang with the pack's `#version 450` intact, while KWin
-// recompiles at the GL context's core version. A construct legal at 450 and
-// illegal there still passes here. The compositor also splices KWin's own
-// colour-management block ahead of the source, which is not reproduced
-// here, so an identifier colliding with that block passes here and fails
-// live. What this does cover is every identifier the two dialects disagree
-// on, which is the class that shipped uncaught while only the preview
-// branch was baked.
+// COVERAGE BOUNDARY, the same one the animation arm records: the source goes to
+// glslang with the pack's `#version 450` intact, while KWin recompiles at the GL
+// context's core version, so a construct legal at 450 and illegal there still
+// passes. KWin's own colour-management block is not reproduced here either, so an
+// identifier colliding with it passes and fails live. What IS covered is every
+// identifier the two dialects disagree on, the class that shipped uncaught while
+// only the preview branch was baked.
 //
 // INCLUDES are expanded the way the compositor expands them, through the
 // resolver with the registry roots alone: the angle form searches only those
-// roots, and only the quoted form looks beside the including file. The
-// preview bake (ShaderCompiler::expandSource) is more forgiving and lets an
-// angle include find a pack-local file, so a pack written that way baked
-// clean everywhere and then failed include expansion where it ships.
+// roots, and only the quoted form looks beside the including file. The preview
+// bake (ShaderCompiler::expandSource) is more forgiving and lets an angle include
+// find a pack-local file, so a pack written that way baked clean everywhere and
+// then failed include expansion where it ships.
 int bakeCompositorStage(QTextStream& out, const PointerShaderEffect& eff, const QString& path, const QString& label,
                         const QString& stage, const QStringList& includePaths, bool scaffold)
 {
@@ -352,13 +348,12 @@ int bakeCompositorStage(QTextStream& out, const PointerShaderEffect& eff, const 
 // Unlike the animation and surface arms, the compositor branch (`#define
 // PLASMAZONES_KWIN`, default-block uniforms) IS baked here, out of process
 // through glslang in default mode, and it is the bake that matters: every
-// shipping pointer pack compiles through that branch, while the Qt-RHI
-// #else branch is only the settings preview. The two branches declare
-// different identifiers (the preview's UBO carries qt_Matrix, qt_Opacity and
-// the rest of BaseUniforms), so a pack that bakes clean on the preview can
-// still fail on the path that ships. The preview bake stays too, since a
-// pack that previews as a compile error is broken in the browser where packs
-// are chosen.
+// shipping pointer pack compiles through that branch, while the Qt-RHI #else
+// branch is only the settings preview. The two declare different identifiers (the
+// preview's UBO carries qt_Matrix, qt_Opacity and the rest of BaseUniforms), so a
+// pack that bakes clean on the preview can still fail on the path that ships. The
+// preview bake stays too: a pack that previews as a compile error is broken in
+// the browser where packs are chosen.
 int validatePointerPack(const QString& packDir, QTextStream& out)
 {
     const QString name = QFileInfo(packDir).fileName();
@@ -441,9 +436,19 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
             continue;
         }
         seenParamIds.insert(id);
-        if (!kValidParamTypes.contains(type)) {
-            lints << QStringLiteral("unknown param type '%1' for '%2' (pointer params are %3)")
-                         .arg(type, id, kValidParamTypes.join(QLatin1String("/")));
+        // The POINTER vocabulary, not the shared `kValidParamTypes`, which
+        // includes the overlay-only `image`. The pointer loader drops an image
+        // parameter outright (textures live in the top-level `textures` array),
+        // so linting against the shared list let a pointer pack declare one,
+        // validate clean, and find the parameter absent at runtime. The animation
+        // and surface arms keep their own lists for the same reason.
+        static const QStringList kPointerParamTypes = {QStringLiteral("float"), QStringLiteral("int"),
+                                                       QStringLiteral("bool"), QStringLiteral("color")};
+        if (!kPointerParamTypes.contains(type)) {
+            lints << QStringLiteral(
+                         "unknown param type '%1' for '%2' (pointer params are %3; an image belongs in the "
+                         "top-level textures array, where it binds as uTexture<N>)")
+                         .arg(type, id, kPointerParamTypes.join(QLatin1String("/")));
         }
         if (!PhosphorShaders::isValidParamId(id)) {
             lints << QStringLiteral("invalid parameter id '%1' (not a GLSL identifier; skipped, no p_ define)").arg(id);
@@ -569,14 +574,13 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
     // and changes nothing. Nothing repairs this at load, which is why it needs
     // saying here: the pack works, and the control is dead.
     //
-    // Every stage is scanned, not just the fragment, since a parameter may
-    // legitimately be read only by a buffer pass or the vertex stage. A
-    // buffer pass gets no p_<id> preamble on any runtime, so it can only reach
-    // the parameters through their raw customParams / customColors lanes; a
-    // buffer stage that reads a pool by slot is therefore taken to read every
-    // parameter in that pool, because by-name attribution is impossible there
-    // and the alternative is a lint that fires on every multipass pack that
-    // does the only thing it can.
+    // Every stage is scanned, not just the fragment, since a parameter may legitimately be
+    // read only by a buffer pass or the vertex stage. A buffer pass gets no p_<id>
+    // preamble on any runtime, so it reaches the parameters only through their raw
+    // customParams / customColors lanes; a buffer stage that reads a pool by slot is
+    // therefore taken to read every parameter in that pool, because by-name attribution is
+    // impossible there and the alternative is a lint that fires on every multipass pack
+    // doing the only thing it can.
     if (anyStage) {
         const bool bufferReadsScalars = mentionsToken(bufferText, QStringLiteral("customParams"));
         const bool bufferReadsColors = mentionsToken(bufferText, QStringLiteral("customColors"));
@@ -614,14 +618,13 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
     // catches the opposite: a pack that loads perfectly, compiles cleanly, and
     // then draws nothing. pointerSpeedGate() is smoothstep(a, 2a, speed), so a
     // threshold whose DEFAULT sits above what the preview's pointer can reach
-    // leaves the gate shut across the whole lap, and the pack shows an empty
-    // stage in the browser where users pick packs. The windtrail pack shipped
-    // exactly that way, past a clean run of every other lint here.
+    // leaves the gate shut across the whole lap and the pack shows an empty stage
+    // in the browser. The windtrail pack shipped exactly that way.
     //
-    // Only the default is linted, not the range: a user who raises the
-    // threshold themselves has asked for a pack that waits for a fast flick.
-    // Scanned over the same assembled stage text as the parameter sweep, so a
-    // gate placed in a buffer pass or the vertex stage is seen too.
+    // Only the default is linted, not the range: a user who raises the threshold
+    // has asked for a pack that waits for a fast flick. Scanned over the same
+    // assembled stage text as the parameter sweep, so a gate in a buffer pass or
+    // the vertex stage is seen too.
     if (anyStage) {
         const QStringList gateIds = speedGateParamNames(allStages);
         for (const QString& gateId : gateIds) {
@@ -661,14 +664,13 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
     }
 
     // ── mirrored trailSeconds ──
-    // A pack that declares `kTrailSeconds` (as a const or a #define, in any
-    // stage) is mirroring the metadata trailSeconds, and nothing else ties
-    // the two together: a metadata edit alone would leave the pack fading
-    // against the wrong window and freezing its last frame when the host
-    // went quiet. Packs that fade on a constant of their own (halo's
-    // kIdleSeconds, afterglow's kIdleCutSeconds) keep a margin under the
-    // window by design and are not held here. Every declaration is checked,
-    // so two stages that disagree with each other are both reported.
+    // A pack that declares `kTrailSeconds` (as a const or a #define, in any stage)
+    // is mirroring the metadata trailSeconds, and nothing else ties the two
+    // together: a metadata edit alone would leave the pack fading against the
+    // wrong window and freezing its last frame when the host went quiet. Packs
+    // fading on a constant of their own (halo's kIdleSeconds, afterglow's
+    // kIdleCutSeconds) keep a deliberate margin and are not held here. Every
+    // declaration is checked, so two stages that disagree are both reported.
     if (anyStage) {
         static const QRegularExpression kMirror(
             QStringLiteral("(?:\\bconst\\s+float\\s+kTrailSeconds\\s*=\\s*|#\\s*define\\s+kTrailSeconds\\s+)"
@@ -783,19 +785,17 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
                 "every frame for nothing)");
         }
 
-        // samplesTrail decides whether this pack's trailSeconds gets a say in
-        // how the shared history ring is spaced, so a wrong answer is not
-        // cosmetic: declaring false while reading the trail leaves the pack
-        // drawing from slots spaced for somebody else, and declaring true (or
-        // saying nothing) while reading none of it coarsens the stroke of
-        // every trail pack chained beside it. Both directions are checked
-        // against the stage sources so the declaration cannot drift.
-        // The uniform itself appears only inside pointer_lib.glsl, which is
-        // spliced in at bake time and is not part of the pack's own sources,
-        // so looking for it alone would say "reads nothing" about every pack
-        // in the bundle. What a pack writes is one of the accessors. These are
-        // every helper in pointer_lib.glsl that reaches uPointerTrail, plus
-        // the uniform for a pack that indexes the array directly.
+        // samplesTrail decides whether this pack's trailSeconds gets a say in how
+        // the shared history ring is spaced, so a wrong answer is not cosmetic:
+        // declaring false while reading the trail leaves the pack drawing from
+        // slots spaced for somebody else, and declaring true (or saying nothing)
+        // while reading none of it coarsens the stroke of every trail pack chained
+        // beside it. Both directions are checked against the stage sources.
+        // The uniform itself appears only inside pointer_lib.glsl, spliced in at
+        // bake time and not part of the pack's own sources, so looking for it
+        // alone would say "reads nothing" about every bundled pack. What a pack
+        // writes is one of the accessors: every pointer_lib.glsl helper that
+        // reaches uPointerTrail, plus the uniform for a pack that indexes it.
         static const QLatin1String kTrailReaders[] = {
             QLatin1String("pointerTrailAt"),
             QLatin1String("pointerTrailCount"),
@@ -973,10 +973,10 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
             // single-buffer path, so a two-pass feedback pack persists on the
             // compositor and starts from black in the browser every frame.
             // Counted over the entries that survive the load, which means both
-            // filters fromJson applies: an empty entry is dropped there (and
-            // linted above), and everything past kMaxBufferPasses is dropped
-            // too. Without the cap a pack declaring three non-empty buffers
-            // was told it had three passes when only two ever run.
+            // filters fromJson applies: an empty entry is dropped there (and linted
+            // above), and everything past kMaxBufferPasses is dropped too. Without
+            // the cap a pack declaring three non-empty buffers was told it had
+            // three passes when two run.
             const auto nonEmpty =
                 std::count_if(declaredBuffers.cbegin(), declaredBuffers.cend(), [](const QJsonValue& v) {
                     return !v.toString().isEmpty();
@@ -1016,9 +1016,8 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
     // identifiers exist only in the preview's UBO branch: on the compositor
     // the stage fails to compile and the pack silently falls back to the
     // built-in vertex source, so the preview and the preview bake both pass
-    // while the declared stage is dead where the pack ships. The compositor
-    // bake below would fail it too, but with a bare undeclared-identifier
-    // error that does not say why.
+    // while the declared stage is dead where the pack ships. The compositor bake
+    // below would fail it too, but with a bare undeclared-identifier error.
     if (!vertText.isEmpty()
         && (mentionsToken(vertText, QStringLiteral("qt_Matrix"))
             || mentionsToken(vertText, QStringLiteral("qt_Opacity")))) {
@@ -1031,9 +1030,9 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
     }
 
     if (lints.isEmpty()) {
-        out << "  metadata       OK\n";
+        out << "  " << padLabel(QStringLiteral("metadata")) << "OK\n";
     } else {
-        out << "  metadata       ERROR\n";
+        out << "  " << padLabel(QStringLiteral("metadata")) << "ERROR\n";
         for (const QString& l : lints) {
             out << "    " << l << "\n";
             ++errors;
@@ -1044,8 +1043,9 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
     // plus the installed shared helpers.
     const QStringList includePaths = PointerShaderRegistry::includePathsFor(QDir(packDir).absolutePath());
     const QStringList paramNames = declaredParamNames(eff.parameters);
-    // Stages that get no p_<id> preamble cannot see any p_<id>, so the
-    // did-you-mean hint would only ever suggest a name they cannot use.
+    errors += reportRawPresetProblems(out, root);
+    errors += reportPresetProblems(out, packDir, eff.presets, eff.parameters);
+    // A stage with no p_<id> preamble cannot use any, so no did-you-mean hint.
     const QStringList noParams;
 
     // ── fragment stage, preview dialect (reproduce the runtime assembly) ──

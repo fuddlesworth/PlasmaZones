@@ -1009,9 +1009,11 @@ void TestNavigationCrossSurface::stickyPinnedScreen_explicitFocusResolvesPinnedS
     // tiledWindowsForFocusedScreen being sticky-pin aware.
     TwoOutputFixture fx;
     // Pin DP-1 (a1, a2 both "sticky"/on-all-desktops); DP-2 stays unpinned.
-    fx.engine->updateStickyScreenPins([](const QString& w) {
-        return w == QLatin1String("a1") || w == QLatin1String("a2");
-    });
+    fx.engine->updateStickyScreenPins(
+        [](const QString& w) {
+            return w == QLatin1String("a1") || w == QLatin1String("a2");
+        },
+        PhosphorEngine::StickyPinPhase::Acquire);
 
     // Switch desktops: DP-1 stays pinned to desktop 1; DP-2 follows to desktop 2.
     fx.engine->setCurrentDesktop(2);

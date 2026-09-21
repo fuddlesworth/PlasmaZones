@@ -5,7 +5,8 @@
 // Daemon composition root — every engine's construction, provider wiring and
 // signal fan-out in the one place the ordering contract between them can be
 // read top to bottom. Splitting by engine would scatter the cross-engine
-// defer/reciprocity wiring this file exists to keep adjacent.
+// defer/reciprocity wiring this file exists to keep adjacent. Grew with the
+// per-desktop membership change: the snap resolver's membership arm.
 
 #include "daemon/daemon.h"
 #include "helpers.h"
@@ -460,9 +461,9 @@ void Daemon::initEnginesAndWiring()
         snapResolver.forWindow = [e = QPointer(snapEngine)](const QString& id) -> PhosphorSnapEngine::SnapState* {
             return e ? e->stateForWindow(id) : nullptr;
         };
-        snapResolver.forWindowOnScreen =
-            [e = QPointer(snapEngine)](const QString& id, const QString& screenId) -> PhosphorSnapEngine::SnapState* {
-            return e ? e->stateForWindowOnScreen(id, screenId) : nullptr;
+        snapResolver.forWindowOnScreen = [e = QPointer(snapEngine)](const QString& id, const QString& screenId,
+                                                                    int desktop) -> PhosphorSnapEngine::SnapState* {
+            return e ? e->stateForWindowOnScreen(id, screenId, desktop) : nullptr;
         };
         snapResolver.forScreen = [e = QPointer(snapEngine)](const QString& screenId) -> PhosphorSnapEngine::SnapState* {
             return e ? static_cast<PhosphorSnapEngine::SnapState*>(e->stateForScreen(screenId)) : nullptr;
@@ -477,6 +478,10 @@ void Daemon::initEnginesAndWiring()
             if (e) {
                 e->forgetWindow(id);
             }
+        };
+        snapResolver.holdsWindow = [e = QPointer(snapEngine)](const QString& id,
+                                                              const PhosphorSnapEngine::SnapState* state) {
+            return e ? e->holdsWindowInState(id, state) : false;
         };
         m_windowTrackingAdaptor->service()->setSnapStateResolver(std::move(snapResolver));
     }
@@ -1212,10 +1217,7 @@ void Daemon::initEnginesAndWiring()
     m_tilingAdaptor->setWindowTrackingAdaptor(m_windowTrackingAdaptor);
     m_tilingAdaptor->setLifecycleEngines({autotileEngine, scrollEngine});
     // Snapping reconciles desktop membership but stays OUT of the lifecycle
-    // pipeline: it takes no part in window dispatch, the replay cache or the
-    // relay entry points. Its stake is zone occupancy, which is queried across
-    // every store, so a window that left a desktop has to stop being listed as
-    // an occupant of the zone it was snapped into there.
+    // pipeline (no dispatch, replay cache or relay); its stake is zone occupancy.
     m_tilingAdaptor->setMembershipEngines({snapEngine});
     // Desktop-membership reconcile: the registry's per-window desktop set is
     // the authority on which desktop a window belongs to, and the adaptor

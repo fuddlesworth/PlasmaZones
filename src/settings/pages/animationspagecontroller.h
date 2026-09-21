@@ -11,6 +11,9 @@
 // signature puts ShaderProfile inside a std::optional, which needs the
 // complete type at the point of declaration.
 #include <PhosphorAnimation/ShaderProfile.h>
+// By value rather than forward-declared: the m_shaderTreeCache member puts a
+// ShaderProfileTree inside a std::optional, which needs the complete type.
+#include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorControl/PageController.h>
 #include <QByteArray>
 #include <QHash>
@@ -25,9 +28,6 @@
 
 namespace PhosphorAnimationShaders {
 class AnimationShaderRegistry;
-// Forward-declared rather than included: only a const reference to it appears
-// in this header (paramsAreStaleAt), so the definition is a .cpp concern.
-class ShaderProfileTree;
 }
 
 namespace PlasmaZones {
@@ -326,12 +326,12 @@ public:
     // languages meant two places to keep in step. Each read is also taken once
     // per call here rather than once per reader, which is what let the card
     // drop its own per-path snapshot caches, and `divergentPathCount` reads
-    // the shader tree once for the whole group. Neither tree accessor is
-    // memoised — each rebuilds on every call — which is precisely why anything
-    // here must read one once and pass it down rather than call the accessor
-    // in a loop. And each is now
-    // directly testable without driving QML.
-    // Why it is not memoised is in animationspagecontroller_groupwrites.cpp.
+    // the shader tree once for the whole group. The shader tree IS memoised (see
+    // m_shaderTreeCache), so the accessor is cheap, but a per-path COPY is not,
+    // which is why anything here still reads one once and passes it down rather
+    // than calling the accessor in a loop. And each is now directly testable
+    // without driving QML.
+    // What the memo rests on is in animationspagecontroller_groupwrites.cpp.
     //
     // What deliberately stays in the card: the `_committing` /
     // `_committingShader` re-entrancy latches and the refresh that follows a
@@ -468,6 +468,61 @@ public:
     /// distinguish "refused" from "no-op" gets that from -1 alone.
     Q_INVOKABLE int setShaderParametersOnPaths(const QStringList& rawPaths, const QVariantMap& parameters);
 
+    /// Merge ONE parameter into every shader-capable path's own stored map,
+    /// leaving that path's pack, preset and other parameters exactly as stored.
+    ///
+    /// The slider path. Its sibling above REPLACES the whole map, which is right
+    /// for a Reset or a Randomize (both stage a complete map on purpose) and
+    /// wrong for a single-value edit, because a slider hands over the map the card
+    /// is DISPLAYING. That is safe only while the displayed map holds stored
+    /// values alone; the day it holds the preset-merged effective ones, a whole-map
+    /// write would pin every preset value as this assignment's own delta. Written
+    /// up in full beside the implementation.
+    ///
+    /// Same return contract as every sibling here, -1 included.
+    Q_INVOKABLE int setShaderParameterOnPaths(const QStringList& rawPaths, const QString& paramId,
+                                              const QVariant& value);
+
+    /// Point every shader-capable path in @p rawPaths at preset @p presetId,
+    /// WITHOUT touching which pack each uses or the parameter edits it carries.
+    ///
+    /// The third member of the family beside setShaderOverrideOnPaths and
+    /// setShaderParametersOnPaths, and split from them for the same reason they
+    /// are split from each other: a path that INHERITS its pack can carry a
+    /// preset of its own, and stamping the inherited id alongside would sever
+    /// the cascade the user is relying on.
+    ///
+    /// An empty @p presetId clears the reference, which is how "stop using a
+    /// preset here" lands. A path left with nothing engaged loses its override
+    /// outright rather than keeping an empty one.
+    ///
+    /// @return the number of paths written, or -1 for an over-long id (a caller
+    ///         bug, so it warns rather than toasts).
+    /// Write @p presetId to every path in the group.
+    ///
+    /// An EMPTY @p presetId means "no preset here", which has the same two readings
+    /// the pack axis's "None" does. With @p blockInherited false it clears this
+    /// path's own reference and lets an ancestor's flow in again; with it true it
+    /// stores the engaged-EMPTY sentinel, which blocks what an ancestor would have
+    /// supplied. The caller knows which, because it knows whether the preset it is
+    /// showing is this path's own or inherited — and the combo shows the RESOLVED
+    /// one, so on an inheriting event only the blocking reading does anything.
+    /// Write the engaged-EMPTY preset sentinel at @p rawPaths, unconditionally.
+    ///
+    /// Not the same call as `setShaderPresetOnPaths(paths, "", blockInherited)`, and the
+    /// difference is why this exists. That one's `blockInherited` is a HEURISTIC for the
+    /// interactive combo: it writes the sentinel only where nothing is stored, because
+    /// picking "None" on a path that already owns a preset means "clear mine". A motion
+    /// set apply has no heuristic to apply — it has to reproduce what the capture
+    /// recorded, and an empty `presetId` in a set IS the sentinel, so applying one onto a
+    /// path that owns a preset must store the block rather than reset the slot and let an
+    /// ancestor's preset back in.
+    ///
+    /// Returns the number of paths written, or -1 on refusal, like its sibling.
+    int setShaderPresetSentinelOnPaths(const QStringList& rawPaths);
+    Q_INVOKABLE int setShaderPresetOnPaths(const QStringList& rawPaths, const QString& presetId,
+                                           bool blockInherited = false);
+
     /// Number of DISTINCT shadowing descendant overrides beneath the paths in
     /// @p rawPaths, using the one definition of "shadowing descendant" that
     /// clearShaderOverrideDescendantsOnPaths clears — so the count a parent
@@ -475,11 +530,12 @@ public:
     /// than summed, so a group holding both an ancestor and its descendant
     /// cannot report an override twice that the clear removes once.
     ///
-    /// Exists because the per-path shaderOverrideDescendantCount rebuilds the
-    /// whole shader tree on every call (a store read, a JSON parse and a prune
-    /// walk; `rawShaderProfile` is not memoised), and a card called it once per
-    /// write path inside a refresh that runs at drag rate. That is precisely
-    /// the read-in-a-loop shape the block comment above forbids.
+    /// Exists because the per-path shaderOverrideDescendantCount walks the whole
+    /// shader tree on every call, and a card called it once per write path inside
+    /// a refresh that runs at drag rate. The tree read itself is memoised now
+    /// (m_shaderTreeCache), so the saving is the repeated descendant WALK rather
+    /// than a repeated parse, but it is the same read-in-a-loop shape the block
+    /// comment above forbids.
     /// @return the number of DISTINCT shadowing descendants, UNIONED across the
     /// group rather than summed, so one shared by two paths counts once. 0 with
     /// no ISettings, never negative: this reads and cannot be refused.
@@ -1004,6 +1060,29 @@ private:
     /// the shaderProfileTreeChanged lambda (live tree moved) and by
     /// refreshDirtyState() (committed baseline moved).
     mutable std::optional<bool> m_treeDirtyCache;
+
+    /// The shader profile tree, parsed once per change rather than once per read.
+    ///
+    /// `ISettings::shaderProfileTree()` rebuilds it from the config store on
+    /// every call, and since the tree's key gained a schema validator that read
+    /// is a full deep round trip (QVariantMap to QJsonObject to fromJson, a
+    /// per-path setOverride rebuild, back to QVariantMap) before the getter's own
+    /// fromJson and supported-path prune. Roughly seven traversals where it used
+    /// to be two. The group writers alone read it at fifteen sites, several
+    /// inside per-row QML evaluation, so a slider drag paid that several times
+    /// per frame.
+    ///
+    /// Invalidated on shaderProfileTreeChanged, which is the only thing that can
+    /// move it, a D-Bus write or a global reload included. Same shape as
+    /// DecorationPageController::m_treeCache, which needed one first.
+    mutable std::optional<PhosphorAnimationShaders::ShaderProfileTree> m_shaderTreeCache;
+
+    /// The live shader tree, from cache when warm. An empty tree with no settings.
+    ///
+    /// Read-only callers bind this by const reference. A MUTATOR still needs its
+    /// own copy, and takes it from here rather than from the store, so it pays
+    /// the copy without the parse.
+    const PhosphorAnimationShaders::ShaderProfileTree& shaderTree() const;
 
     /// Persist @p tree, marking the write as this controller's own.
     ///

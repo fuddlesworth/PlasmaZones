@@ -213,6 +213,28 @@ void PointerDecorationPass::cacheUniformLocations(KWin::GLShader* shader, const 
                             << "without needsCursor — sampler left unbound";
         out.uCursorSprite = -1;
     }
+    // Same hole, same fix, for the buffer-pass channels. The bind loop walks only
+    // the passes the pack actually declares, so an iChannel past that count is
+    // never bound and keeps its default of unit 0 — which at that moment holds the
+    // pack's first user texture, or, for a pack with no textures, whatever the
+    // scene walk last left there: arbitrary window content sampled into a
+    // screen-space overlay. iChannelResolution for those slots is never pushed
+    // either, so it reads 0 and a pack dividing by it gets a NaN.
+    //
+    // The live count is the pack's, not the current stage's: this function is
+    // shared by the main pass and every buffer stage, and a per-stage count would
+    // demote channels the later stages legitimately read.
+    const int liveBufferPasses =
+        eff.isMultipass ? std::min(static_cast<int>(eff.bufferShaderPaths.size()), PSC::kMaxBufferPasses) : 0;
+    for (int i = 0; i < 4; ++i) {
+        int& channelLoc = out.iChannel[static_cast<size_t>(i)];
+        if (channelLoc >= 0 && i >= liveBufferPasses) {
+            qCWarning(lcEffect) << "Pointer pack" << eff.id << "references" << kIChannelNames[static_cast<size_t>(i)]
+                                << "but declares only" << liveBufferPasses << "buffer pass(es) — sampler left unbound";
+            channelLoc = -1;
+            out.iChannelResolution[static_cast<size_t>(i)] = -1;
+        }
+    }
 }
 
 PointerDecorationPass::CompiledPointerPack* PointerDecorationPass::compiledPack(const EngagedLayer& layer)

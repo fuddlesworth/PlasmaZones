@@ -6,6 +6,7 @@
 #include <PhosphorPointer/phosphorpointer_export.h>
 
 #include <PhosphorShaders/CustomParamsKey.h>
+#include <PhosphorShaders/ShaderPresetParse.h>
 
 #include <QJsonObject>
 #include <QList>
@@ -26,6 +27,24 @@ namespace PhosphorPointerShaders {
  *
  * Field names of `ParameterInfo` and `TextureSlot` mirror the surface and
  * animation families so the settings app's ParameterEditor works unchanged.
+ *
+ * ## Where this type deliberately does NOT mirror its siblings
+ *
+ * No `operator==` and no `toJson`, unlike the animation and surface effects, and
+ * neither absence is a gap:
+ *
+ *  - Nothing compares two pointer effects. Reload change-detection is file-stat
+ *    based, through `effectContentSignature`, and the preset-change edge is
+ *    decided by `ShaderPreset::operator==` inside
+ *    `ShaderPresetRegistry::setPackPresets` — neither path needs effect equality.
+ *  - Nothing serializes one. The animation effect's `toJson` resolves image
+ *    parameters to ABSOLUTE paths while its `fromJson` re-reads them under
+ *    `AbsolutePathPolicy::Reject`, an asymmetry a pointer pack cannot hit because
+ *    it never makes the round trip.
+ *
+ * Adding either for symmetry alone would be churn with no consumer. Written down
+ * because a three-way asymmetry across otherwise parallel families reads as an
+ * omission until someone checks, and this is the record of that check.
  */
 struct PHOSPHORPOINTER_EXPORT PointerShaderEffect
 {
@@ -211,6 +230,17 @@ struct PHOSPHORPOINTER_EXPORT PointerShaderEffect
         }
     };
     QList<TextureSlot> textures;
+
+    /// Pack-declared named parameter presets: preset name -> { paramId -> value }.
+    /// Read-only tunings the pack author ships, offered in the same picker as
+    /// the user's own presets and resolved through the shared preset registry.
+    /// A preset names a subset of `parameters`; ids this effect does not declare
+    /// are inert at resolve time, so parsing keeps them and the offline pack
+    /// validator is where an author hears about a typo. That holds for a typo'd
+    /// id specifically — the validator lints this already-parsed struct, so it can
+    /// only report what parsing kept. A preset parsing drops outright (every value
+    /// a refused texture path) is reported in the runtime log instead.
+    PhosphorShaders::PackPresets presets;
 
     /// Parse a pack's `metadata.json` root. When @p sourceDir is non-empty
     /// every shader / texture / preview path is resolved against it and

@@ -102,6 +102,16 @@ double PointerHistory::speedOver(const QPointF& earlierPos, qint64 earlierMs, co
 
 void PointerHistory::notePointer(const QPointF& devicePx, qint64 nowMs)
 {
+    // Exported API, so the position is validated the way setTrailSeconds
+    // validates its own argument. A non-finite coordinate is not merely
+    // useless: QLineF::length() on it is not >= kMinSampleDistancePx, so it
+    // would be read as "did not move" and land as a rest slot, and from there
+    // it reaches the shader as a NaN vertex that poisons every span whose
+    // tangent touches it. Neither shipped host can produce one; the point is
+    // that this is the boundary where that is guaranteed.
+    if (!std::isfinite(devicePx.x()) || !std::isfinite(devicePx.y())) {
+        return;
+    }
     // Every speed here is read over the previous ACCEPTED motion event,
     // whether that one was appended or folded into the head. Before the
     // interval existed every event was a slot, so the previous slot was the
@@ -277,21 +287,30 @@ double PointerHistory::filteredSpeed() const
             }
         }
     }
-    // The same exponential filter the upstream windtrail effect runs on its
-    // own sampler (a = 0.46), seeded from that sample rather than 0 so a
-    // short stroke is not biased toward standing still.
+    // An exponential filter with a TIME constant, seeded from that sample
+    // rather than 0 so a short stroke is not biased toward standing still.
+    // Each sample's weight comes from the gap it actually spans, so the
+    // response is the same whatever the trail window spaced the ring at; see
+    // kSpeedFilterTauSeconds for why that matters.
     double filtered = sampleAt(seed).speed;
+    qint64 prevMs = sampleAt(seed).timeMs;
     for (int i = seed - 1; i >= newest; --i) {
         if (!sampleAt(i).motion) {
             continue;
         }
-        filtered = filtered * 0.54 + sampleAt(i).speed * 0.46;
+        const double dt = std::max(secondsBetween(sampleAt(i).timeMs, prevMs), 0.0);
+        const double a = 1.0 - std::exp(-dt / kSpeedFilterTauSeconds);
+        filtered = filtered * (1.0 - a) + sampleAt(i).speed * a;
+        prevMs = sampleAt(i).timeMs;
     }
     return std::max(filtered, 0.0);
 }
 
 void PointerHistory::seedPosition(const QPointF& devicePx, qint64 nowMs)
 {
+    if (!std::isfinite(devicePx.x()) || !std::isfinite(devicePx.y())) {
+        return;
+    }
     if (m_count > 0) {
         return;
     }
@@ -400,10 +419,13 @@ QRectF PointerHistory::damageRect(double reachDevicePx, qint64 nowMs, double tra
         maxX = std::max(maxX, p.x());
         maxY = std::max(maxY, p.y());
     };
+    std::array<QPointF, kCapacity> live{};
+    int liveCount = 0;
     for (int i = 0; i < m_count; ++i) {
         const Sample& sample = sampleAt(i);
         if (secondsBetween(nowMs, sample.timeMs) < trailSeconds) {
             include(sample.pos);
+            live[static_cast<size_t>(liveCount++)] = sample.pos;
         }
     }
     if (m_hasPress && secondsBetween(nowMs, m_pressMs) < trailSeconds) {
@@ -418,7 +440,33 @@ QRectF PointerHistory::damageRect(double reachDevicePx, qint64 nowMs, double tra
         // by the tests above, so this cannot be reached.
         return {};
     }
-    const double r = std::max(0.0, reachDevicePx);
+    // Every path pack strokes a Catmull-Rom curve through the SMOOTHED
+    // samples, not the straight chords between the raw ones this box is built
+    // from, and that curve is allowed to bulge outside them. The packs already
+    // pay for the overshoot in their own reject boxes (pointerCurveBulge in
+    // data/pointer/shared/pointer_lib.glsl); without the same allowance here
+    // the host repaints a rect the packs are entitled to paint outside of, and
+    // the stroke is cut flat at the damage edge on a fast curved sweep. It
+    // bites hardest on the packs whose paint limit IS the reach, which have no
+    // slack to absorb it.
+    //
+    // The bound: the curve leaves the box of its span's endpoints by at most
+    // tension/3 of the longer neighbour chord, |c2 - c0| or |c3 - c1|. Those
+    // are SMOOTHED points, and a smoothed point is a convex blend of three
+    // consecutive raw samples, so both chords lie inside the diameter of the
+    // five raw samples one span can reach -- indices no more than four apart.
+    // Taking the widest such pair holds for every smoothing setting, which is
+    // why this needs no knowledge of the packs' own parameters.
+    double widestSpan = 0.0;
+    for (int i = 0; i < liveCount; ++i) {
+        const int last = std::min(i + 4, liveCount - 1);
+        for (int j = i + 1; j <= last; ++j) {
+            widestSpan =
+                std::max(widestSpan, QLineF(live[static_cast<size_t>(i)], live[static_cast<size_t>(j)]).length());
+        }
+    }
+    const double curveAllowance = PointerShaderContract::kPointerCurveTension * (1.0 / 3.0) * widestSpan;
+    const double r = std::max(0.0, reachDevicePx) + curveAllowance;
     return QRectF(QPointF(minX, minY), QPointF(maxX, maxY)).adjusted(-r, -r, r, r);
 }
 

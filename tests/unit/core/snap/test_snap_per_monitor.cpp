@@ -448,8 +448,8 @@ private:
         resolver.forWindow = [e = m_engine](const QString& id) {
             return e->stateForWindow(id);
         };
-        resolver.forWindowOnScreen = [e = m_engine](const QString& id, const QString& s) {
-            return e->stateForWindowOnScreen(id, s);
+        resolver.forWindowOnScreen = [e = m_engine](const QString& id, const QString& s, int desktop) {
+            return e->stateForWindowOnScreen(id, s, desktop);
         };
         resolver.forScreen = [e = m_engine](const QString& s) {
             return static_cast<SnapState*>(e->stateForScreen(s));

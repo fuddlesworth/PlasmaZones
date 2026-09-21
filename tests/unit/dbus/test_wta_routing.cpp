@@ -65,17 +65,36 @@ private Q_SLOTS:
         if (!target.isValid()) {
             QSKIP("zone geometry does not resolve without a screen");
         }
+        // The compositor's half of a desktop move. Snap state is per desktop,
+        // and the store a window LEFT is released by the membership pass once
+        // the compositor reports the window's new desktop set, which the daemon
+        // drives live and this fixture has to play by hand.
+        const auto compositorReportsDesktop = [this, &windowId](int desktop) {
+            m_snapEngine->reconcileWindowMemberships(windowId, [desktop](const QString&) {
+                PhosphorEngine::DesktopSpan span;
+                span.known = true;
+                span.desktops = {desktop};
+                return span;
+            });
+        };
         PhosphorEngine::HandoffIntent intent;
         intent.dropPos = target.center();
         m_wta->moveWindowToWorkspaceWithIntent(windowId, screen, 2, QString(), intent);
-        SnapState* after = m_snapEngine->stateForWindowOnScreen(windowId, screen);
+        // Desktop 2's own store, named outright: snap state is per desktop, and
+        // the screen still shows desktop 1, so the unpinned lookup would answer
+        // with the store in view rather than the one the move committed into.
+        SnapState* after = m_snapEngine->stateForWindowOnScreen(windowId, screen, 2);
         QCOMPARE(after->zoneForWindow(windowId), m_zoneIds.at(1));
         QCOMPARE(after->desktopForWindow(windowId), 2);
+        compositorReportsDesktop(2);
+        QVERIFY2(!m_snapEngine->stateForWindowOnScreen(windowId, screen, 2)->zoneForWindow(windowId).isEmpty(),
+                 "the destination desktop keeps the zone the drop chose");
 
         // A drop outside every zone: no zone, and not floating either.
         PhosphorEngine::HandoffIntent free;
         free.dropPos = QPoint(-5000, -5000);
         m_wta->moveWindowToWorkspaceWithIntent(windowId, screen, 1, QString(), free);
+        compositorReportsDesktop(1);
         SnapState* freed = m_snapEngine->stateForWindowOnScreen(windowId, screen);
         QVERIFY(freed->zoneForWindow(windowId).isEmpty());
         QVERIFY(!freed->isFloating(windowId));

@@ -18,6 +18,8 @@
 #include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorZones/AssignmentEntry.h>
+#include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/LayoutUtils.h>
 
 #include "core/types/constants.h"
 #include "core/platform/logging.h"
@@ -225,8 +227,23 @@ void Daemon::handleEngineWindowsReleased(PhosphorEngine::IPlacementEngine* relea
             } else if (snapSnapped) {
                 const QString screen = wts->screenForWindow(windowId);
                 const QString restoreScreen = screen.isEmpty() ? rec->screenId : screen;
-                const QRect geo = wts->resolveZoneGeometry(snapSlot.zoneIds, restoreScreen);
-                if (geo.isValid()) {
+                // The remembered zone has to sit in the layout the returning
+                // context runs NOW: the layout may have been switched while
+                // the screen was tiling, and resolveZoneGeometry answers for
+                // whichever layout holds the id (discussion #1104). A stale
+                // zone leaves the window to the buffer resnap / free path.
+                const int restoreDesktop = rec->virtualDesktop > 0
+                    ? rec->virtualDesktop
+                    : m_layoutManager->currentVirtualDesktopForScreen(restoreScreen);
+                const bool layoutHoldsZones = PhosphorZones::LayoutUtils::contextLayoutHoldsZones(
+                    m_layoutManager.get(), restoreScreen, restoreDesktop, currentActivity(), snapSlot.zoneIds);
+                const QRect geo =
+                    layoutHoldsZones ? wts->resolveZoneGeometry(snapSlot.zoneIds, restoreScreen) : QRect();
+                if (!layoutHoldsZones) {
+                    qCInfo(lcDaemon) << "windowsReleased: not restoring snap-zone for" << windowId
+                                     << "zones=" << snapSlot.zoneIds << "— not in the layout desktop" << restoreDesktop
+                                     << "of" << restoreScreen << "runs";
+                } else if (geo.isValid()) {
                     qCInfo(lcDaemon) << "windowsReleased: restoring snap-zone for" << windowId
                                      << "zones=" << snapSlot.zoneIds << "screen=" << restoreScreen;
                     // Float is already cleared above for autotile-floated windows; this

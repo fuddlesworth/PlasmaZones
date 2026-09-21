@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Comet pointer shader — one bright head on the newest trail sample and a
-// tapered single-colour tail along the trail polyline, with hashed grain
+// tapered single-colour tail along the smoothed curve through the trail, with hashed grain
 // twinkling through the tail. Coverage is the max over segments. The head
 // itself fades with idle time so the whole comet is gone within the
 // metadata's trailSeconds even while the pointer rests.
@@ -37,7 +37,7 @@ vec4 pPointer(vec2 uv) {
     // reason the head fade ends there: the last live frame at a low refresh
     // rate lands just inside the window, and a tail still fading at the edge
     // would leave its last sliver frozen at 20 Hz and below.
-    float tailSeconds = clamp(p_length, 0.05, 0.9 * kTrailSeconds);
+    float tailSeconds = clamp(p_lifetime, 0.05, 0.9 * kTrailSeconds);
     // The smoothing kernel clamps its neighbours into the run it is told about,
     // so it has to be told the LIVE run rather than the whole ring (the rule
     // pointer_lib states on pointerSmoothedAt, and what ink and sparks do).
@@ -81,7 +81,7 @@ vec4 pPointer(vec2 uv) {
     //
     // On `count`, NOT on the live run. The head belongs to the pointer, not to
     // the tail the user sized: gating it on `live` would retire it as soon as
-    // the idle time passed `length`, so at the shortest length it vanished a
+    // the idle time passed `lifetime`, so at the shortest setting it vanished a
     // tenth of a second after the pointer stopped while idleFade below was
     // still at full strength, and would not be out for another six tenths.
     float idleFade = 1.0 - smoothstep(0.35 * kTrailSeconds, 0.9 * kTrailSeconds, idle);
@@ -96,29 +96,38 @@ vec4 pPointer(vec2 uv) {
 
     float tail = 0.0;
     float tailGrain = 0.0;
-    // The smoothed far end of one segment is the near end of the next, so it
-    // is carried across iterations rather than looked up twice per segment.
-    vec2 pa = headPos;
+    // Four-point window over the smoothed path. The span drawn this iteration
+    // is c1..c2 and c0 / c3 set its tangents; the window shifts by one per
+    // iteration, so each sample is smoothed once rather than four times. The
+    // head end passes its own position twice, so the head's tangent is the
+    // chord itself and the span leaves it straight.
+    vec2 c0 = headPos;
+    vec2 c1 = headPos;
+    vec2 c2 = pointerSmoothedAt(1, live, p_smoothing);
+    vec2 c3 = pointerSmoothedAt(2, live, p_smoothing);
     for (int i = 0; i < kPointerTrailCapacity - 1; ++i) {
         if (i + 1 >= live) {
             break;
         }
         vec4 a = pointerTrailAt(i);
         vec4 b = pointerTrailAt(i + 1);
-        if (a.z >= tailSeconds) {
-            break;
-        }
-        vec2 pb = pointerSmoothedAt(i + 1, live, p_smoothing);
-        vec2 lo = min(pa, pb) - reach;
-        vec2 hi = max(pa, pb) + reach;
+        // The box is over all four control points rather than the span's two
+        // ends. That is deliberately CONSERVATIVE, not required: the bulge
+        // already bounds the curve against the box of c1..c2 alone (see
+        // pointerCurveBulge), and c0 / c3 are not on the curve at all. Taking
+        // them in costs a slightly larger box and buys never having to think
+        // about the bound again.
+        float bulge = pointerCurveBulge(c0, c1, c2, c3);
+        vec2 lo = min(min(c0, c1), min(c2, c3)) - reach - bulge;
+        vec2 hi = max(max(c0, c1), max(c2, c3)) + reach + bulge;
         if (px.x < lo.x || px.y < lo.y || px.x > hi.x || px.y > hi.y) {
-            pa = pb;
+            pointerCurveAdvance(i + 3, live, p_smoothing);
             continue;
         }
 
         float t;
-        float d = pointerSegmentDistanceFrom(px, pa, pb, t);
-        pa = pb;
+        float d = pointerCurveDistanceFrom(px, c0, c1, c2, c3, t);
+        pointerCurveAdvance(i + 3, live, p_smoothing);
         float age = clamp(mix(a.z, b.z, t) / tailSeconds, 0.0, 1.0);
         float life = 1.0 - age;
         float w = radius * life;

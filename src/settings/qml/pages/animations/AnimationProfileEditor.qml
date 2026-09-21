@@ -116,15 +116,29 @@ ColumnLayout {
     property bool shaderOwnsPack: false
     /// True when this event inherits its PACK but owns every parameter VALUE.
     ///
-    /// A third state rather than a shade of the second, because the storage
-    /// really is three-valued and the difference is what the user needs to
-    /// know. `ShaderProfile::overlay` replaces the parameter map wholesale
-    /// rather than merging keys, so the moment a slider moves on an inheriting
-    /// event that event stops following the ancestor's parameter edits while
-    /// still following its pack. Reporting that as "Following the inherited
-    /// value" understated what the event owns, which is the same class of
-    /// mistake the remove button's label made.
+    /// A third state rather than a shade of the second, because the storage really is
+    /// three-valued and the difference is what the user needs to know.
+    /// `ShaderProfile::overlay` replaces the parameter map wholesale rather than merging
+    /// keys, so the moment a slider moves on an inheriting event it stops following the
+    /// ancestor's parameter edits while still following its pack. Reporting that as
+    /// "Following the inherited value" understated what the event owns.
     property bool shaderOwnsParamsOnly: false
+    /// True when this event stores only a PRESET of its own, still following its
+    /// pack and holding no parameters.
+    ///
+    /// The third independent axis. `setShaderPresetOnPaths` deliberately stores a preset on
+    /// an event that inherits its pack, and that IS an override which changes what renders,
+    /// so the caption says so rather than reporting pure inheritance. Supplied by the host,
+    /// like its two siblings, because this editor is fed the RESOLVED preset id and cannot
+    /// tell an inherited one from its own.
+    property bool shaderOwnsPresetOnly: false
+    /// True when this event stores a preset of its own, WHETHER OR NOT it also stores
+    /// parameters. The "only" sibling excludes the parameter case by construction,
+    /// which left the combined state unspoken: an event inheriting its pack and
+    /// storing both a preset and a slider nudge fell to the params-only arm, so the
+    /// caption said "with settings of its own" and never mentioned the preset. Two
+    /// clicks reach it — pick a preset on an inheriting event, then move a slider.
+    property bool shaderOwnsPreset: shaderOwnsPresetOnly
     /// True when this event stores a shader override of ANY shape, including
     /// the engaged-empty sentinel. Gates the revert affordance, which has to
     /// stay reachable in exactly the state where the pack row is hidden:
@@ -137,25 +151,23 @@ ColumnLayout {
     /// shape: a params-only override also renders empty once its ancestor's
     /// pack goes away, and that is not the same statement to make about it.
     property bool shaderBlocksInherited: false
-    /// Whether the remove control has a pack to remove.
-    ///
-    /// Distinct from `shaderOwnsPack`, which describes THIS event, because the
-    /// consumer may write a GROUP of paths and the control acts on all of them.
-    /// A caption is a statement about the event in front of the user; a button
-    /// label is a promise about what the click does. Feeding both from the same
-    /// property gave a group whose members disagree a label derived from one of
-    /// them and an action applied to every one.
-    ///
-    /// Defaults to tracking `shaderOwnsPack`, which states the single-path
-    /// contract for a consumer that writes exactly one path. No such consumer
-    /// exists today — AnimationEventCard always sets this explicitly, and
-    /// GlobalTimingDefaultsCard turns the shader leg off entirely — so the
-    /// default is documentation of the contract rather than a live code path.
     /// Whether this event's own parameter values were authored against a pack
     /// that no longer resolves here, so they apply to nothing. Only meaningful
     /// alongside `shaderOwnsParamsOnly`; the consumer supplies it because the
     /// answer needs the shader registry.
     property bool shaderParamsStale: false
+    /// Whether the remove control has a pack to remove.
+    ///
+    /// Distinct from `shaderOwnsPack`, which describes THIS event, because the
+    /// consumer may write a GROUP of paths and the control acts on all of them.
+    /// A caption states something about the event in front of the user, while a
+    /// button label promises what the click does. Feeding both from one property
+    /// gave a disagreeing group a label from one member and an action on all.
+    ///
+    /// The default tracks `shaderOwnsPack`, stating the single-path contract.
+    /// No consumer relies on it (AnimationEventCard always sets it explicitly,
+    /// GlobalTimingDefaultsCard turns the shader leg off), so it documents the
+    /// contract rather than being a live code path.
     property bool shaderPackRemovable: shaderOwnsPack
     /// Whether naming the shown pack on the remove control is accurate, i.e.
     /// every path the control writes holds THAT pack. False on a group whose
@@ -197,6 +209,29 @@ ColumnLayout {
     /// so the per-layer preview the chain editors show collapses here to
     /// previewing the pack that is picked.
     property QtObject shaderPreviewController: null
+    /// The animation family's `ShaderPresetBridge`, REQUIRED, and fed by the
+    /// consumer for the same reason the preview controller is: this editor does not
+    /// reach for a global context. Required rather than defaulted to null, the same
+    /// correction PackEditorBody and PresetRow carry one level down: a defaulted null
+    /// SATISFIES their `required presetBridge` (any binding does, including one
+    /// evaluating to null), so the null-as-feature-flag habit just moved up a level.
+    /// A host that means to go without binds `shaderSupportsPresets: false`.
+    required property QtObject shaderPresetBridge
+    /// Whether this host has a preset axis at all. Forwarded to PackEditorBody, so a
+    /// host with no preset support says so instead of passing a null bridge.
+    property bool shaderSupportsPresets: true
+    /// The event's current preset id, empty for none.
+    property string shaderPresetId: ""
+    /// The event's OWN stored shader parameter map, never a resolved one.
+    ///
+    /// Distinct from `shaderParams`, which the rows DISPLAY and which the per-event
+    /// card binds from `resolvedShaderProfile().parameters`, a tree walk-up. The
+    /// preset axis needs the own map: an event inheriting its pack and values and
+    /// storing only a `presetId` has no delta, and reading the resolved map as the
+    /// delta map reported it "Modified", marked every inherited row "Changed here",
+    /// and offered an Update-preset that would have written the ancestor's values
+    /// into the shared preset.
+    required property var shaderOwnParams
     // ── Computed ────────────────────────────────────────────────────
     /// Whether the shader section has anything to reveal (full
     /// description or a parameter editor). Mirrors the decoration
@@ -256,11 +291,17 @@ ColumnLayout {
     /// visible Label and the row's `Accessible.description` render it and a
     /// second spelling would drift.
     ///
-    /// Three states, because the storage has three. The first two reuse the
-    /// wording the curve and duration captions already use, so the axes read
-    /// as one convention. The third has no timing counterpart: only the shader
-    /// slot can own its values while still inheriting the thing those values
-    /// configure.
+    /// The first arm reuses the wording the curve and duration captions already use,
+    /// so the axes read as one convention. The rest have no timing counterpart: only
+    /// the shader slot can own something while still inheriting what it configures.
+    ///
+    /// The two preset arms were added because the storage already had them and this
+    /// caption did not. An event inheriting its pack and storing only a preset
+    /// reported "Following the inherited value", which is false — the preset changes
+    /// what renders, and the Override toggle counted the case while the caption
+    /// denied it. An event storing a preset AND a parameter fell to the params arm
+    /// and the preset went unmentioned, the same mistake one state along, so the
+    /// preset mention is additive now rather than exclusive.
     readonly property string _shaderOwnershipCaption: {
         if (shaderOwnsPack)
             return i18n("Overridden for this event");
@@ -274,8 +315,14 @@ ColumnLayout {
             if (shaderParamsStale)
                 return i18n("Following the inherited pack, with saved settings that no longer apply");
 
+            if (shaderOwnsPreset)
+                return i18n("Following the inherited pack, with a preset and settings of its own");
+
             return i18n("Following the inherited pack, with settings of its own");
         }
+
+        if (shaderOwnsPreset)
+            return i18n("Following the inherited pack, with a preset of its own");
 
         return i18n("Following the inherited value");
     }
@@ -336,6 +383,12 @@ ColumnLayout {
     /// snapshot the effect at user-action time and skip late writes
     /// against a stale effect.
     signal shaderParamWriteRequested(string effectId, string paramId, var value)
+    /// The user picked a different preset for this event. The consumer writes
+    /// it through setShaderPresetOnPaths.
+    signal shaderPresetWriteRequested(string presetId)
+    /// The event's own parameter edits should be dropped so every value goes
+    /// back to following its preset.
+    signal shaderPresetRevertRequested
     /// Randomize all params. The editor rolls a new map (honouring the lock set)
     /// and assigns it to `shaderParams` BEFORE emitting. The signal
     /// payload carries the rolled map so a consumer that wants to
@@ -933,9 +986,11 @@ ColumnLayout {
                 Layout.fillWidth: true
                 Layout.bottomMargin: Kirigami.Units.smallSpacing
                 packId: root.shaderEffectId
-                // Consumer-fed so this editor does not reach a global context;
-                // the consumer binds it to shaderParameters(shaderEffectId)
-                // with a registry-tick dependency.
+                // The pack's human name, so the preset combo names its pack rather than a
+                // raw machine id.
+                packDisplayName: root.shaderName
+                // Consumer-fed so this editor does not reach a global context; the
+                // consumer binds it to shaderParameters(shaderEffectId) with a tick dep.
                 parameters: root.shaderParamSchema
                 currentValues: root.shaderParams
                 enableLocking: root.enableLocking
@@ -945,12 +1000,24 @@ ColumnLayout {
                 previewKind: "animation"
                 previewController: root.shaderPreviewController
                 previewActive: shaderExpansionClip.effectiveExpanded
-                // The shared editor owns the lock map and hosts the colour
-                // dialog, so only the value-write and randomize signals need
-                // handling here. Lock state is working-state only and is not
-                // re-emitted: no consumer persists it, and forwarding signals
-                // nothing listens to only invites the next reader to hunt for
-                // the handler that does.
+                presetBridge: root.shaderPresetBridge
+                supportsPresets: root.shaderSupportsPresets
+                presetId: root.shaderPresetId
+                ownValues: root.shaderOwnParams
+                onPresetSelected: function (id) {
+                    root.shaderPresetWriteRequested(id);
+                }
+                // Clearing the reference is the same write as picking None on an
+                // assignment; the event keeps its own parameter values.
+                onPresetDeleted: function (id) {
+                    root.shaderPresetWriteRequested("");
+                }
+                onPresetRevertRequested: root.shaderPresetRevertRequested()
+                // The shared editor owns the lock map and hosts the colour dialog, so
+                // only the value-write and randomize signals need handling here. Lock
+                // state is working-state only and is not re-emitted: no consumer
+                // persists it, and forwarding a signal nothing listens to only invites
+                // the next reader to hunt for the handler that does.
                 onValueChanged: function (effectId, paramId, value) {
                     root.shaderParamWriteRequested(effectId, paramId, value);
                 }
@@ -1014,12 +1081,11 @@ ColumnLayout {
         }
 
         PZCommon.CategoryMenuButton {
-            // SettingsRow lays its default children out in a plain Row
-            // positioner, so Layout.* attached properties are inert here —
-            // size explicitly or the button sits at implicit width. Clamped
-            // to the same 45% of the row that SettingsRow caps its control
-            // slot at, measured against the INNER layout (inset by
-            // largeSpacing per side) so it cannot overhang the margin.
+            // SettingsRow lays its default children out in a plain Row positioner, so
+            // Layout.* attached properties are inert here: size explicitly or the
+            // button sits at implicit width. Clamped to the same 45% of the row that
+            // SettingsRow caps its control slot at, measured against the INNER layout
+            // (inset by largeSpacing per side) so it cannot overhang the margin.
             width: Math.min(Kirigami.Units.gridUnit * 16, Math.max(0, (setShaderRow.width - Kirigami.Units.largeSpacing * 2) * 0.45))
             // Bound straight to the consumer's property. The consumer owns the
             // registry-tick dependency and re-assigns this on every bump, so an

@@ -64,11 +64,11 @@ bool AutotileEngine::isWindowTiled(const QString& rawWindowId) const
     // Canonicalize for the lookup, symmetric with isWindowFloatingInAutotile() — both
     // are consulted from the same daemon mode-resolution path with the same id.
     const QString windowId = canonicalizeForLookup(rawWindowId);
-    auto it = m_states.windowKeys().constFind(windowId);
-    if (it == m_states.windowKeys().constEnd()) {
+    const auto key = m_states.windowKey(windowId);
+    if (!key) {
         return false;
     }
-    const PhosphorTiles::TilingState* state = m_states.stateForKey(it.value());
+    const PhosphorTiles::TilingState* state = m_states.stateForKey(*key);
     // Membership is required, not just a live key: windowOpened keys the
     // window BEFORE onWindowAdded can refuse it (shouldTileWindow false,
     // max-windows cap), and isFloating() answers false for a window the
@@ -81,12 +81,12 @@ bool AutotileEngine::isWindowTiled(const QString& rawWindowId) const
 bool AutotileEngine::isWindowFloatingInAutotile(const QString& rawWindowId) const
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);
-    auto it = m_states.windowKeys().constFind(windowId);
-    if (it == m_states.windowKeys().constEnd()) {
+    const auto key = m_states.windowKey(windowId);
+    if (!key) {
         return false;
     }
     // containsWindow for the same phantom-key reason as isWindowTiled.
-    const PhosphorTiles::TilingState* state = m_states.stateForKey(it.value());
+    const PhosphorTiles::TilingState* state = m_states.stateForKey(*key);
     return state && state->containsWindow(windowId) && state->isFloating(windowId);
 }
 
@@ -144,6 +144,7 @@ void AutotileEngine::setCurrentDesktopForScreen(const QString& screenId, int des
         qCInfo(PhosphorTileEngine::lcTileEngine)
             << "Switching autotile context for screen" << screenId << "desktop" << previous << "->" << desktop;
         m_isDesktopContextSwitch |= change.armSwitch;
+        retileIfDirtyBackground(screenId);
         // A pending initial order is keyed by bare SCREEN id but was probed —
         // and is consumed — against the screen's CONTEXT. A context change
         // between those two points would apply one desktop's saved order to
@@ -211,6 +212,9 @@ void AutotileEngine::setCurrentActivity(const QString& activity)
         qCInfo(PhosphorTileEngine::lcTileEngine)
             << "Switching autotile context: activity" << previous << "->" << activity;
         m_isDesktopContextSwitch |= change.armSwitch;
+        for (const QString& screenId : std::as_const(m_autotileScreens)) {
+            retileIfDirtyBackground(screenId);
+        }
         // Every screen's seed, for the reason the per-screen desktop switch
         // gives: activity is the other half of the context key, so this moves
         // every screen's context at once.
@@ -221,7 +225,29 @@ void AutotileEngine::setCurrentActivity(const QString& activity)
     }
 }
 
-void AutotileEngine::updateStickyScreenPins(const std::function<bool(const QString&)>& isWindowSticky)
+namespace {
+// Whether `screenId` holds a non-empty state on any desktop but `desktop`. A
+// screen under "virtualdesktopsonlyonprimary" has no desktop dimension, so it
+// never does — which separates it from a screen the user merely happens to be
+// viewing with sticky windows on it. Only the former may be pinned: the pin
+// outranks the per-output desktop in currentKeyForScreen, so while it is held
+// every other desktop's state on that screen is unreachable. Placeholders a
+// transient lookup minted are empty, so they are not evidence.
+bool hasStateOnOtherDesktop(const QHash<PhosphorEngine::PlacementStateKey, PhosphorTiles::TilingState*>& states,
+                            const QString& screenId, int desktop)
+{
+    for (auto it = states.cbegin(); it != states.cend(); ++it) {
+        if (it.key().screenId == screenId && it.key().desktop != desktop && it.value()
+            && !(it.value()->tiledWindows().isEmpty() && it.value()->floatingWindows().isEmpty())) {
+            return true;
+        }
+    }
+    return false;
+}
+} // namespace
+
+void AutotileEngine::updateStickyScreenPins(const PhosphorEngine::StickyPredicate& isSticky,
+                                            PhosphorEngine::StickyPinPhase phase)
 {
     for (const QString& screenId : std::as_const(m_autotileScreens)) {
         const auto key = currentKeyForScreen(screenId);
@@ -234,19 +260,29 @@ void AutotileEngine::updateStickyScreenPins(const std::function<bool(const QStri
         const QStringList floating = state->floatingWindows();
 
         if (tiled.isEmpty() && floating.isEmpty()) {
+            // A pinned state that has been emptied (its last sticky window
+            // left the desktop, or closed) has nothing to keep the pin for,
+            // and left standing the pin would key every later open on this
+            // screen under a desktop the user is not on. Take it; there is
+            // nothing to migrate.
+            if (phase == PhosphorEngine::StickyPinPhase::Release && m_context.hasStickyPin(screenId)) {
+                const int pinnedDesktop = m_context.takeStickyPin(screenId);
+                qCInfo(PhosphorTileEngine::lcTileEngine)
+                    << "Unpinning screen" << screenId << "from desktop" << pinnedDesktop << "(pinned state is empty)";
+            }
             continue;
         }
 
         bool allSticky = true;
         for (const QString& wid : tiled) {
-            if (!isWindowSticky(wid)) {
+            if (!isSticky(wid)) {
                 allSticky = false;
                 break;
             }
         }
         if (allSticky) {
             for (const QString& wid : floating) {
-                if (!isWindowSticky(wid)) {
+                if (!isSticky(wid)) {
                     allSticky = false;
                     break;
                 }
@@ -254,7 +290,8 @@ void AutotileEngine::updateStickyScreenPins(const std::function<bool(const QStri
         }
 
         if (allSticky) {
-            if (!m_context.hasStickyPin(screenId)) {
+            if (phase == PhosphorEngine::StickyPinPhase::Acquire && !m_context.hasStickyPin(screenId)
+                && !hasStateOnOtherDesktop(m_states.states(), screenId, key.desktop)) {
                 // Pin to current effective desktop (which is the desktop where
                 // the PhosphorTiles::TilingState actually lives).
                 m_context.setStickyPin(screenId, key.desktop);
@@ -263,7 +300,7 @@ void AutotileEngine::updateStickyScreenPins(const std::function<bool(const QStri
                     << (tiled.size() + floating.size()) << "windows sticky)";
             }
         } else {
-            if (m_context.hasStickyPin(screenId)) {
+            if (phase == PhosphorEngine::StickyPinPhase::Release && m_context.hasStickyPin(screenId)) {
                 int pinnedDesktop = m_context.takeStickyPin(screenId);
                 qCInfo(PhosphorTileEngine::lcTileEngine)
                     << "Unpinning screen" << screenId << "from desktop" << pinnedDesktop;
@@ -274,6 +311,11 @@ void AutotileEngine::updateStickyScreenPins(const std::function<bool(const QStri
                 // effective desktop — its per-output virtual desktop under Plasma
                 // 6.7 (#648), else the global current desktop. Identical to the
                 // global current desktop when per-output desktops aren't in use.
+                //
+                // Correct only because the Release phase runs AFTER the caller
+                // has moved the context. Before the move this resolves to the
+                // desktop being LEFT, and the migration then lands the pinned
+                // state on that desktop's live state.
                 const int targetDesktop = currentKeyForScreen(screenId).desktop;
                 if (pinnedDesktop != targetDesktop) {
                     const TilingStateKey oldKey{screenId, pinnedDesktop, m_context.currentActivity()};
@@ -455,8 +497,9 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
                         // key entry, a window closing before the effect's
                         // windowOpened round-trip hits onWindowRemoved's
                         // empty-stored-key early return and stays a permanent
-                        // ghost the layout retiles around.
-                        m_states.setKeyForWindow(windowId, stateKey);
+                        // ghost the layout retiles around. ADD: a window that
+                        // holds a place on other desktops keeps it.
+                        m_states.addMembership(windowId, stateKey);
                         // Restore floating state from the unified record (single source
                         // of truth). Without this, windows added from pending orders lose
                         // their floating state because windowOpened's floating restore is
@@ -545,7 +588,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
             // toggle-off/on round trip keeps the user's manual tile adjustments
             // instead of laying out from scratch.
             stashScriptState(key, state);
-            if (releaseScreenStateForTeardown(key.screenId, state, releasedWindows)) {
+            if (releaseScreenStateForTeardown(key, state, releasedWindows)) {
                 placementChangedScreens.insert(key.screenId);
             }
             // Toggle-off drops only the resolver's IN-MEMORY overrides (they are
@@ -561,8 +604,12 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     // Clean up reverse-map entries for released windows BEFORE emitting the
     // signal. Signal handlers (the daemon's handleEngineWindowsReleased) check zone
     // assignments and floating state — stale mappings would cause them to see
-    // phantom candidates.
+    // phantom candidates. A released window leaves this engine on the screen
+    // it is on, so the screen's OTHER desktops' states give it up too (with
+    // the hook pairing); dropping the memberships alone would leave those
+    // states holding a tile nothing reaps.
     for (const QString& windowId : std::as_const(releasedWindows)) {
+        dropFromOtherContexts(windowId, TilingStateKey{});
         m_states.removeWindow(windowId);
     }
 
@@ -669,7 +716,7 @@ bool AutotileEngine::migrateStateKey(const PhosphorEngine::PlacementStateKey& ol
         // silent loss no test would see, since the release list and the emit
         // come from the state's own window lists either way.
         QStringList releasedWindows;
-        releaseScreenStateForTeardown(newKey.screenId, existing, releasedWindows, /*drainOverflow=*/false,
+        releaseScreenStateForTeardown(newKey, existing, releasedWindows, /*drainOverflow=*/false,
                                       /*clearScreenOrderMaps=*/false);
         m_states.takeState(newKey);
         m_states.removeWindowsIf([&](const QString&, const PhosphorEngine::PlacementStateKey& key) {
@@ -806,6 +853,16 @@ void AutotileEngine::renumberDesktopsAfterRemoval(int removedDesktop)
     // The pins and the per-output desktop map index the same numbering, so they
     // shift with the states or they name a position whose content moved.
     m_context.renumberDesktopsAfterRemoval(removedDesktop);
+    // The dirty-background memo indexes it too.
+    QSet<TilingStateKey> shiftedDirty;
+    for (const TilingStateKey& key : std::as_const(m_dirtyBackgroundContexts)) {
+        if (key.desktop == removedDesktop) {
+            continue;
+        }
+        shiftedDirty.insert(key.desktop > removedDesktop ? TilingStateKey{key.screenId, key.desktop - 1, key.activity}
+                                                         : key);
+    }
+    m_dirtyBackgroundContexts = std::move(shiftedDirty);
 
     if (!touchedScreens.isEmpty()) {
         qCInfo(PhosphorTileEngine::lcTileEngine)

@@ -5,11 +5,14 @@
 
 #include <QHashFunctions>
 #include <QLatin1StringView>
-#include <functional>
 #include <QList>
 #include <QRect>
+#include <QSet>
 #include <QString>
 #include <QStringList>
+
+#include <functional>
+#include <utility>
 
 namespace PhosphorEngine {
 
@@ -226,6 +229,83 @@ enum class StickyWindowHandling {
     TreatAsNormal = 0,
     RestoreOnly = 1,
     IgnoreAll = 2
+};
+
+/// Answers whether a window is on all desktops. The sticky-pin pass takes it
+/// from the caller rather than reading a tracker, so an engine needs no
+/// window-tracking dependency to maintain its pins.
+using StickyPredicate = std::function<bool(const QString&)>;
+
+/// The contexts a window occupies, as the per-desktop membership pass reads
+/// them: which desktops (x11 numbering, the numbering the state keys use) and
+/// which activity.
+///
+/// `known` separates "on every desktop" from "the registry has not stamped a
+/// desktop yet". The two used to share one spelling (an empty set), and
+/// reading an unknown desktop as sticky adopted a window into every desktop
+/// the user visited. An unknown span adopts nothing and releases nothing.
+struct DesktopSpan
+{
+    bool known = false; ///< false: no desktop information yet — leave memberships alone
+    bool sticky = false; ///< on every desktop
+    QSet<int> desktops; ///< when !sticky: the desktops it occupies (a span such as {1,2})
+    QString activity; ///< empty: every activity, or unknown
+
+    /// Whether the span reaches desktop @p desktop.
+    bool coversDesktop(int desktop) const
+    {
+        return known && (sticky || desktops.contains(desktop));
+    }
+    /// Whether the span reaches activity @p other. An empty activity on either
+    /// side means "every activity" and never mismatches.
+    bool coversActivity(const QString& other) const
+    {
+        return activity.isEmpty() || other.isEmpty() || activity == other;
+    }
+    /// Whether the span reaches the context @p key names.
+    bool coversKey(const PlacementStateKey& key) const
+    {
+        return coversDesktop(key.desktop) && coversActivity(key.activity);
+    }
+};
+
+/// Answers a window's DesktopSpan. The same query drives per-desktop
+/// membership for spans and for sticky windows without either being a special
+/// case.
+using DesktopSpanQuery = std::function<DesktopSpan(const QString&)>;
+
+/// What a membership pass did, so the caller can drive the bookkeeping the
+/// engines cannot reach: the placement re-capture and the effect's per-window
+/// zone mirror for a snap release, and the adaptor-level untrack for a window
+/// that holds no context at all any more.
+struct MembershipReconcileResult
+{
+    /// (windowId, key) memberships taken back because the span stopped
+    /// covering them.
+    QList<std::pair<QString, PlacementStateKey>> released;
+    /// (windowId, key) memberships granted.
+    QList<std::pair<QString, PlacementStateKey>> adopted;
+
+    bool isEmpty() const
+    {
+        return released.isEmpty() && adopted.isEmpty();
+    }
+};
+
+/// Which half of the sticky-screen pin pass to run. The halves resolve a
+/// screen's context key against OPPOSITE sides of a context change, so they
+/// cannot share a call site.
+///
+/// Acquire runs BEFORE the context moves: it decides whether to pin from the
+/// state under the key the screen resolves to now. Release runs AFTER: it
+/// migrates the pinned state onto the key the screen resolves to with the pin
+/// gone. Run Release early and that key still names the OUTGOING desktop, so
+/// the migration lands on the strip the user is leaving and force-releases
+/// every window it held. The pin is what keeps the split safe — while it is
+/// held the key resolves to the pinned desktop from either side.
+enum class StickyPinPhase {
+    Acquire,
+    Release
 };
 
 inline constexpr QLatin1StringView RestoreSentinel("__restore__");

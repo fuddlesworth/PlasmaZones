@@ -25,7 +25,11 @@ void SnapEngine::toggleWindowFloat(const QString& windowId, const QString& scree
 {
     SnapState* state = stateForWindow(windowId);
     const bool currentlyFloating = isFloating(windowId);
-    const bool currentlySnapped = state && state->isWindowSnapped(windowId);
+    // Managed here means snapped in the primary store OR held anywhere: a
+    // window adopted into the desktop in view without being snapped there
+    // (its zone is on another desktop) is this engine's, and Meta+F floats
+    // it the way it floated the single-store window before adoption existed.
+    const bool currentlySnapped = (state && state->isWindowSnapped(windowId)) || heldKeyForWindow(windowId).has_value();
 
     if (!currentlyFloating && !currentlySnapped) {
         // Report instead of absorbing the press silently: every other
@@ -66,8 +70,12 @@ void SnapEngine::toggleWindowFloat(const QString& windowId, const QString& scree
         // never recorded the float, the chrome said floating, and the next
         // toggle read "not floating". With the own-write applied the WTS call
         // is a no-op whenever the routing agrees; it stays for the unwired
-        // legacy path's bookkeeping.
-        setFloating(windowId, true);
+        // legacy path's bookkeeping. With a screen in hand the float records
+        // its residence too: a window adopted into this desktop without ever
+        // being snapped here has no screen/desktop in the store, and a bare
+        // float bit would leave the capture screenless and the cross-desktop
+        // focus walk blind to it.
+        setFloatingWithResidence(windowId, screenId);
         m_windowTracker->setWindowFloating(windowId, true);
         Q_EMIT windowFloatingChanged(windowId, true, screenId);
         applyFloatGeometryUnlessMinimized(windowId, screenId);
@@ -138,8 +146,9 @@ void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat, const
         // confinement can never fire because home == live by construction.
         m_windowTracker->unsnapForFloat(windowId);
         // Own store first — see toggleWindowFloat's float branch for why the
-        // routed WTS write alone cannot be trusted to land here.
-        setFloating(windowId, true);
+        // routed WTS write alone cannot be trusted to land here, and why the
+        // residence is recorded with it.
+        setFloatingWithResidence(windowId, screenId);
         m_windowTracker->setWindowFloating(windowId, true);
         Q_EMIT windowFloatingChanged(windowId, true, screenId);
         // Guarded: the minimize path reaches here via setWindowFloatingForScreen
@@ -389,9 +398,18 @@ UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const 
         // resolveWindowRestore's take(), never this path.
         if (const auto rec = m_windowTracker->placementStore().peekExact(windowId)) {
             const PhosphorEngine::EngineSlot slot = rec->slotFor(engineId());
-            if (!slot.zoneIds.isEmpty()
+            // A window present on several desktops has one home per desktop,
+            // and the flat zoneIds is whichever desktop was in view at the
+            // last capture. Its home HERE is the map's entry for the desktop
+            // the unfloat lands on; with none, the window was unsnapped on
+            // this desktop and there is nothing to return it to.
+            QStringList recordZones = slot.zoneIds;
+            if (m_states.membershipsForWindow(canonicalWindowId(windowId)).size() > 1) {
+                recordZones = slot.zonesByDesktop.value(currentKeyForScreen(fallbackScreen).desktop);
+            }
+            if (!recordZones.isEmpty()
                 && (slot.state == WindowPlacement::stateFloating() || slot.state == WindowPlacement::stateSnapped())) {
-                zoneIds = slot.zoneIds;
+                zoneIds = recordZones;
                 // Home-screen hint. Exact for a stale SNAPPED slot (captured as the
                 // snap screen); an approximation for a FLOATING slot, whose record
                 // screen is the screen the window was floating on at capture time —
@@ -609,7 +627,9 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
                     setFloating(ctx.windowId, false);
                     m_windowTracker->setWindowFloating(ctx.windowId, false);
                 }
-                SnapState* targetState = stateForWindowOnScreen(ctx.windowId, ctx.toScreenId);
+                // Pinned to the destination desktop's store (see
+                // stateForWindowOnScreen): the handoff names it.
+                SnapState* targetState = stateForWindowOnScreen(ctx.windowId, ctx.toScreenId, ctx.toDesktop);
                 if (ctx.sourceZoneIds.size() > 1) {
                     targetState->assignWindowToZones(ctx.windowId, ctx.sourceZoneIds, ctx.toScreenId, ctx.toDesktop);
                 } else {
@@ -667,7 +687,11 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
         // the screen-assignment write the deliberate free adoption read as a
         // REFUSAL and the window bounced straight back to the source engine.
         // handoffRelease clears this symmetrically (clearScreenAndDesktop).
-        stateForWindowOnScreen(ctx.windowId, ctx.toScreenId)
+        // Pinned to the destination desktop when the handoff names one, so
+        // the residence lands in the store whose key says that desktop (an
+        // unpinned resolve minted the membership under the VIEWED desktop
+        // and the next membership pass released it).
+        stateForWindowOnScreen(ctx.windowId, ctx.toScreenId, ctx.toDesktop)
             ->recordResidence(ctx.windowId, ctx.toScreenId, currentDesktop);
         // Own store first (a re-adoption of a window snap once floated could
         // still carry the bit); the routed WTS clear follows for the shared
@@ -677,7 +701,7 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
         Q_EMIT windowFloatingChanged(ctx.windowId, false, ctx.toScreenId);
         return;
     }
-    stateForWindowOnScreen(ctx.windowId, ctx.toScreenId)
+    stateForWindowOnScreen(ctx.windowId, ctx.toScreenId, ctx.toDesktop)
         ->setFloatingOnScreen(ctx.windowId, ctx.toScreenId, currentDesktop);
     m_windowTracker->setWindowFloating(ctx.windowId, true);
     Q_EMIT windowFloatingChanged(ctx.windowId, true, ctx.toScreenId);
@@ -690,33 +714,72 @@ void SnapEngine::handoffRelease(const QString& windowId)
     }
     qCInfo(PhosphorSnapEngine::lcSnapEngine) << "SnapEngine::handoffRelease:" << windowId;
 
-    // Plain statement, no conditional: stateForWindow is NEVER null (the
-    // globals holder is constructed in the ctor — see the accessor's
-    // contract), and every query below answers empty/false for an untracked
-    // window, so the operations no-op harmlessly.
-    SnapState* state = stateForWindow(windowId);
-    if (state->isWindowSnapped(windowId)) {
-        const QStringList removedZones = state->zonesForWindow(windowId);
-        state->unassignWindow(windowId);
-        syncGlobalLastUsedForRemovedZones(removedZones);
+    // Clear one store's data for the window: zone (with the last-used
+    // coupling), floating bit, and the residence entries. The residence goes
+    // unconditionally: unassignWindow clears it, but only for a SNAPPED
+    // window; a merely FLOATING one kept the screen/desktop that
+    // setFloatingOnScreen wrote, and raw store scans (windowsOnScreenAndDesktop
+    // feeds tryCrossDesktopFocus) would offer a window the destination engine
+    // now owns. The pre-float capture is deliberately PRESERVED (see
+    // testHandoffRelease_preservesPreFloatCapture): a return handoff may
+    // consult it for size restoration.
+    const auto releaseFrom = [this, &windowId](SnapState* state) {
+        if (state->isWindowSnapped(windowId)) {
+            const QStringList removedZones = state->zonesForWindow(windowId);
+            state->unassignWindow(windowId);
+            syncGlobalLastUsedForRemovedZones(removedZones);
+        }
+        if (state->isFloating(windowId)) {
+            state->setFloating(windowId, false);
+        }
+        state->clearScreenAndDesktop(windowId);
+    };
+
+    // Per CONTEXT, not per window. The destination engine took the window in
+    // the context its screen is showing. A membership on another desktop
+    // whose context is still snapping is kept, zone and all: the window is
+    // still snapped there, and the switch to that desktop re-applies it
+    // (seen live without this: a sticky window snapped on two desktops,
+    // one desktop flipped to tiling, sat at its tile rect on the other,
+    // still-snapping desktop until re-snapped by hand). The handed-off
+    // context goes, and so does any membership whose own context has left
+    // snapping.
+    //
+    // The handed-off context is the one in view OR the window's primary. For
+    // a window present on several desktops those are the same key, since the
+    // primary is the membership in view. They differ for a window that lives
+    // only on a BACKGROUND desktop, which the workspace overview can pick up
+    // and drop elsewhere: its one membership is the context being handed off,
+    // and keeping it left the window snapped on the desktop it was dragged
+    // out of, with the receive then carrying that zone to the new desktop.
+    const QString canonical = canonicalWindowId(windowId);
+    const PhosphorEngine::PlacementStateKey primaryKey = m_states.keyForWindow(canonical);
+    QList<PhosphorEngine::PlacementStateKey> kept;
+    for (const PhosphorEngine::PlacementStateKey& key : m_states.membershipsForWindow(canonical)) {
+        const bool handedOff = (key == currentKeyForScreen(key.screenId)) || key == primaryKey;
+        const bool stillSnapping = m_layoutManager && !key.screenId.isEmpty()
+            && m_layoutManager->modeForScreen(key.screenId, key.desktop, key.activity)
+                == PhosphorZones::AssignmentEntry::Mode::Snapping;
+        if (!handedOff && stillSnapping) {
+            kept.append(key);
+            continue;
+        }
+        if (SnapState* state = m_states.stateForKey(key)) {
+            releaseFrom(state);
+        }
+        m_states.removeMembership(canonical, key);
     }
-    if (state->isFloating(windowId)) {
-        state->setFloating(windowId, false);
+    // The global holder carries the screenless float bookkeeping no
+    // membership names (and is the store an untracked window resolves to).
+    releaseFrom(m_globals);
+    if (kept.isEmpty()) {
+        // Nothing of the window is snapping's any more: drop the reverse-map
+        // record so this engine no longer claims it.
+        forgetWindow(windowId);
+        return;
     }
-    // Residence entries go unconditionally. unassignWindow clears them, but it
-    // only runs for a SNAPPED window; a window that was merely FLOATING kept
-    // the screen/desktop that setFloatingOnScreen wrote, and those survive
-    // forgetWindow. Reverse-map reads never saw them, but raw store scans do —
-    // windowsOnScreenAndDesktop feeds tryCrossDesktopFocus, so snap could
-    // offer and activate a window the destination engine now owns.
-    state->clearScreenAndDesktop(windowId);
-    // The destination engine now owns the window. The calls above cleared its
-    // zone, screen, desktop and floating bit — but NOT the pre-float capture,
-    // which is deliberately PRESERVED (see
-    // testHandoffRelease_preservesPreFloatCapture): a future return handoff may
-    // consult it for size restoration. Finally drop the reverse-map ownership
-    // record so this engine no longer claims the window.
-    forgetWindow(windowId);
+    qCInfo(PhosphorSnapEngine::lcSnapEngine) << "SnapEngine::handoffRelease:" << windowId << "keeps" << kept.size()
+                                             << "snapping context(s) on other desktops";
 }
 
 QString SnapEngine::screenForTrackedWindow(const QString& windowId) const
@@ -735,13 +798,18 @@ bool SnapEngine::isWindowTracked(const QString& windowId) const
     // assignment is never empty, so a non-empty result means "present".
     // Plain statement, no null-check: stateForWindow is NEVER null (see the
     // accessor's contract, which names this function as the tracked/untracked
-    // test). The trailing facade-level isFloating is NOT redundant — the
-    // state's own isFloating consults only the owning store, while the facade
-    // sweeps every store, catching a float recorded outside the reverse map's
-    // target.
+    // test). The facade-level isFloating is NOT redundant — the state's own
+    // isFloating consults only the owning store, while the facade also reads
+    // the global holder, catching a screenless float recorded there.
+    // The trailing heldKeyForWindow is the multi-desktop arm: a window
+    // present on several desktops is adopted into the desktop in view with a
+    // membership and NO data, so its primary store answers false on every
+    // predicate above while a background store genuinely holds it. Tracked
+    // means "some store of this engine holds the window", in any context.
     const SnapState* state = stateForWindow(windowId);
     return state->isWindowSnapped(windowId) || state->isFloating(windowId)
-        || !state->screenForWindow(windowId).isEmpty() || isFloating(windowId);
+        || !state->screenForWindow(windowId).isEmpty() || isFloating(windowId)
+        || heldKeyForWindow(windowId).has_value();
 }
 
 } // namespace PhosphorSnapEngine

@@ -41,10 +41,29 @@ struct EngineSlot
     QString state; ///< engine-defined token: snap "snapped"/"floating"; autotile "tiled"/"floating" ("free" retired)
     QStringList zoneIds; ///< snap slot — zone UUIDs (first is primary); empty for autotile
     int order = -1; ///< autotile slot — tile index within the screen; -1 for snap
+    /// Snap slot — the zones this window occupies on EACH desktop it is
+    /// present on, keyed by x11 desktop number. A window on one desktop
+    /// leaves this empty and is described by `zoneIds` alone; a window on
+    /// several (sticky, or a {1,2} span) can be snapped somewhere different
+    /// on each, and one zone list cannot say that.
+    ///
+    /// Held INSIDE the engine slot rather than as sibling records, because
+    /// the store keeps at most one record per live instance and the restore
+    /// paths depend on that uniqueness. Per-desktop zones are the snap
+    /// engine's business, and the slot is exactly where per-engine business
+    /// belongs. The tiling engines keep no per-desktop analogue: a tile
+    /// order restores into one desktop and the membership pass places the
+    /// window afresh on the others, which is a graceful degradation rather
+    /// than a wrong placement, since a tile order is only meaningful against
+    /// the layout it was captured in.
+    ///
+    /// `zoneIds` stays populated with the current context's zones, so every
+    /// reader that predates this field keeps working unchanged.
+    QHash<int, QStringList> zonesByDesktop;
 
     bool operator==(const EngineSlot& o) const
     {
-        return state == o.state && zoneIds == o.zoneIds && order == o.order;
+        return state == o.state && zoneIds == o.zoneIds && order == o.order && zonesByDesktop == o.zonesByDesktop;
     }
     bool operator!=(const EngineSlot& o) const
     {
@@ -209,7 +228,8 @@ struct WindowPlacement
     /// Whether this record carries anything worth restoring. True when the window
     /// has a captured free/float geometry, OR a MANAGED slot (`snapped`/`tiled`,
     /// which restore by zone/tile reference), OR a slot that still references a zone
-    /// (`zoneIds` — a floated-from-snap window's pre-float zones) or a tile order.
+    /// (`zoneIds` — a floated-from-snap window's pre-float zones, or a zone on
+    /// another desktop in `zonesByDesktop`) or a tile order.
     ///
     /// A bare slot with no geometry, no zone reference, and no tile order — whether
     /// `floating` (a never-snapped floated window captured frame-less) or the retired
@@ -230,7 +250,7 @@ struct WindowPlacement
             if (s.state == stateSnapped() || s.state == stateTiled()) {
                 return true;
             }
-            if (!s.zoneIds.isEmpty() || s.order >= 0) {
+            if (!s.zoneIds.isEmpty() || s.order >= 0 || !s.zonesByDesktop.isEmpty()) {
                 return true;
             }
         }
@@ -336,6 +356,26 @@ struct WindowPlacement
             if (s.order >= 0) {
                 so[QLatin1String("order")] = s.order;
             }
+            if (!s.zonesByDesktop.isEmpty()) {
+                // Desktop number as the key, stringified because JSON objects
+                // take no integer keys. Only written when the window actually
+                // spans desktops, so an ordinary record is byte-identical to
+                // what it was before this field existed.
+                QJsonObject byDesktop;
+                for (auto d = s.zonesByDesktop.constBegin(); d != s.zonesByDesktop.constEnd(); ++d) {
+                    if (d.value().isEmpty()) {
+                        continue;
+                    }
+                    QJsonArray dz;
+                    for (const QString& id : d.value()) {
+                        dz.append(id);
+                    }
+                    byDesktop[QString::number(d.key())] = dz;
+                }
+                if (!byDesktop.isEmpty()) {
+                    so[QLatin1String("zonesByDesktop")] = byDesktop;
+                }
+            }
             eng[it.key()] = so;
         }
         if (!eng.isEmpty()) {
@@ -393,6 +433,30 @@ struct WindowPlacement
                 }
             }
             s.order = so.value(QLatin1String("order")).toInt(-1);
+            const QJsonObject byDesktop = so.value(QLatin1String("zonesByDesktop")).toObject();
+            for (auto d = byDesktop.constBegin(); d != byDesktop.constEnd(); ++d) {
+                bool ok = false;
+                const int desktop = d.key().toInt(&ok);
+                // Desktop numbers are 1-based and bounded the same way the
+                // record-level desktop above is; a key outside that range is a
+                // corrupt or hand-edited file and is dropped rather than
+                // resurrected as desktop 0, which no context resolves to, or
+                // as a number that would mint a per-desktop store nothing
+                // else ever prunes.
+                if (!ok || desktop < 1 || desktop > MAX_PLAUSIBLE_VIRTUAL_DESKTOP) {
+                    continue;
+                }
+                QStringList zones;
+                for (const QJsonValue& v : d.value().toArray()) {
+                    const QString z = v.toString();
+                    if (!z.isEmpty()) {
+                        zones.append(z);
+                    }
+                }
+                if (!zones.isEmpty()) {
+                    s.zonesByDesktop.insert(desktop, zones);
+                }
+            }
             if (!s.isEmpty()) {
                 p.engines.insert(it.key(), s);
             }

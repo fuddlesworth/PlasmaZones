@@ -133,6 +133,42 @@ ColumnLayout {
     /// re-publish the schema on each uniform write even though both sources
     /// above are now stable.
     readonly property string _shaderActionType: (row.action.type === "overrideAnimationShader" || row.action.type === "overrideOverlayShader") ? row.action.type : ""
+    /// Which of the row's params names the PACK a preset would belong to. The
+    /// two shader actions spell it the same way today, but naming it once here
+    /// keeps the preset combo from re-deriving the action-type ladder.
+    readonly property string _shaderPresetPackKey: "effectId"
+    /// The family's `ShaderPresetBridge` for whichever shader action is being
+    /// edited, or null before `appSettings` resolves.
+    ///
+    /// Named once here because TWO children need it now: the preset combo
+    /// (ActionPresetEditor) and the uniform editor, which has to merge the preset
+    /// under the rule's own deltas or every slider sits at the pack defaults and the
+    /// preset looks inert.
+    readonly property QtObject _shaderPresetBridge: {
+        if (!row.appSettings || row._shaderActionType.length === 0)
+            return null;
+        return row._shaderActionType === "overrideOverlayShader" ? row.appSettings.overlayPresets : row.appSettings.animationPresets;
+    }
+    /// The preset id this action stores, or empty for none. A `string` so its change
+    /// signal fires on a VALUE change: `_withParam` replaces the whole `row.action`
+    /// object on every uniform write, so a binding reading `row.action.presetId`
+    /// directly would re-fire on each one — the same reason
+    /// `_animationShaderEffectId` exists.
+    readonly property string _shaderPresetId: row.action.presetId || ""
+
+    // The preset editor is its own type (ActionPresetEditor.qml) rather than one
+    // more Component inside ActionParamEditors.qml, which is past the size
+    // ceiling. Its one-line adapter lives here, next to the dispatch that uses
+    // it, instead of pushing that file further over.
+    Component {
+        id: shaderPresetEditorComponent
+
+        ActionPresetEditor {
+            row: row
+            modelData: parent.modelData
+        }
+    }
+
     readonly property var _activeShaderParamSchema: {
         if (row._shaderActionType === "overrideAnimationShader")
             return row._shaderParamSchema;
@@ -224,6 +260,10 @@ ColumnLayout {
     // keys once here keeps the two halves from drifting onto different literals.
     readonly property string _decorationChainKey: "chain"
     readonly property string _decorationParamsKey: "params"
+    /// Per-pack preset references on an OverrideDecorationChain action:
+    /// `{packId: presetId}`. Its own key rather than the scalar `presetId` the two
+    /// other shader actions carry, so one key never means two JSON types.
+    readonly property string _decorationPresetsKey: "presetIds"
     // The SnapToZone action payload has two target lists, ordinals under
     // "zones" and names under "zoneNames" (PhosphorRules::ActionParam). Each
     // editor's empty guard has to read the OTHER list to know whether clearing
@@ -475,7 +515,13 @@ ColumnLayout {
             delegate: Loader {
                 required property var modelData
 
-                Layout.fillWidth: true
+                // A null source still occupies a slot in the RowLayout, so a kind this row
+                // deliberately renders nothing for (a decoration-chain action's
+                // `shaderPreset`, whose presets are authored per layer in the ChainEditor
+                // below) would otherwise leave one inter-item spacing gap behind. Collapse
+                // to zero width instead of fighting it with a negative margin.
+                Layout.fillWidth: sourceComponent !== null
+                Layout.preferredWidth: sourceComponent !== null ? -1 : 0
                 Layout.alignment: Qt.AlignVCenter
                 sourceComponent: {
                     if (modelData.kind === "enum")
@@ -507,6 +553,17 @@ ColumnLayout {
 
                     if (modelData.kind === "overlayShader")
                         return paramEditors._overlayShaderEditor;
+
+                    // Gated on the SCALAR shader actions, not on the kind alone.
+                    // OverrideDecorationChain also declares a `shaderPreset` param
+                    // (for paramKeyOfKind discovery), but its payload is a nested
+                    // `{packId: presetId}` map and its pack comes from the chain
+                    // rather than from an `effectId` param, so this combo had no pack
+                    // to read: it rendered permanently disabled, reading "None",
+                    // beside a ChainEditor where the real per-layer presets are
+                    // authored.
+                    if (modelData.kind === "shaderPreset")
+                        return row._shaderActionType.length > 0 ? shaderPresetEditorComponent : null;
 
                     if (modelData.kind === "curveEditor")
                         return paramEditors._curveEditorEditor;

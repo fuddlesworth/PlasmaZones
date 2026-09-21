@@ -966,9 +966,8 @@ void TestScrollEngineTemplate::anUnpinMigrationMovesOverridesOverAnEmptyMap()
     ScrollEngine* engine = makeEngine(&owner, settings);
 
     // Desktop 2 first: a real map, then the daemon's "nothing to say" push
-    // that replaces it with an EMPTY one. (An empty push onto a key that
-    // holds nothing is a no-op, so this replace is the only way an empty map
-    // ever comes to sit at a key.)
+    // that replaces it with an EMPTY one. An empty push onto a key holding
+    // nothing is a no-op, so this replace is the only way one ever sits there.
     engine->setCurrentDesktop(2);
     QVariantMap other = twoEntryTemplate();
     other.insert(ScrollPerScreenKeys::defaultColumnWidthValue(), 0.15);
@@ -981,17 +980,18 @@ void TestScrollEngineTemplate::anUnpinMigrationMovesOverridesOverAnEmptyMap()
     engine->applyPerScreenConfig(kS1, twoEntryTemplate());
     engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
     QCoreApplication::processEvents();
-    engine->updateStickyScreenPins([](const QString&) {
-        return true;
-    });
+    bool sticky = true;
+    const PhosphorEngine::StickyPredicate isSticky = [&sticky](const QString&) {
+        return sticky;
+    };
+    engine->updateStickyScreenPins(isSticky, PhosphorEngine::StickyPinPhase::Acquire);
 
     // Switch to desktop 2 (the pin keeps the strip resolving desktop 1) and
     // then unpin: the strip migrates to desktop 2, and its overrides must
     // come with it over the empty map that was already sitting there.
     engine->setCurrentDesktop(2);
-    engine->updateStickyScreenPins([](const QString&) {
-        return false;
-    });
+    sticky = false;
+    engine->updateStickyScreenPins(isSticky, PhosphorEngine::StickyPinPhase::Release);
     QCoreApplication::processEvents();
 
     QVERIFY(columnExists(engine, kS1, QStringLiteral("app|a")));

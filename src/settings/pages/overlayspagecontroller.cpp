@@ -24,11 +24,23 @@ namespace PlasmaZones {
 
 namespace {
 
+/// An overlay preset id is a UUID or a pack-declared preset name. Bounded like
+/// every other string this controller lets reach disk; the schema sanitizer
+/// bounds it again on the way in, and an id naming no preset resolves to the
+/// node own parameters, so dropping one degrades rather than breaks.
+constexpr int kMaxOverlayPresetIdChars = 1024;
+
 QVariantMap profileToMap(const OverlayShaderProfile& profile)
 {
     QVariantMap map;
     map.insert(QLatin1String("shaderId"), profile.shaderId);
     map.insert(QLatin1String("parameters"), profile.parameters);
+    // The preset reference, without which the whole overlay preset row was
+    // inert: the card derives its selected preset from this map, so picking one
+    // persisted correctly and then snapped straight back to "None", with Revert,
+    // Update, Rename and Delete all hidden because the row believed no preset
+    // was set. Emitted unconditionally, like `parameters`.
+    map.insert(QLatin1String("presetId"), profile.presetId);
     return map;
 }
 
@@ -219,7 +231,66 @@ void OverlaysPageController::setShaderOverride(const QString& path, const QStrin
         return;
     }
     OverlayShaderTree tree = m_settings->overlayShaderTree();
-    const OverlayShaderProfile node{effectId, params};
+    // What the path RESOLVES to, not its direct override. For an inheriting layout the
+    // direct override is a default-constructed profile, so the carry below could never
+    // fire and promoting such a layout destroyed the preset it was resolving with —
+    // which the card reaches on every slider edit AND from its Revert control, the one
+    // documented as "every value then resolves from the preset again". This tree is
+    // whole-node and one step, so resolve() is the baseline for an un-overridden path,
+    // exactly as setShaderPreset already seeds from it.
+    const OverlayShaderProfile stored = path.isEmpty() ? tree.baseline() : tree.resolve(path);
+    OverlayShaderProfile node{effectId, params};
+    // Carry the preset reference across, but ONLY while the pack is unchanged.
+    // This writer is how a parameter edit lands as well as how a pack is
+    // picked, so rebuilding the node without this would silently drop the
+    // preset the moment a slider moved. When the pack DOES change the
+    // reference has to go: presets are keyed by pack, so one belonging to the
+    // old pack would resolve to nothing against the new one.
+    if (stored.shaderId == effectId)
+        node.presetId = stored.presetId;
+    if (path.isEmpty())
+        tree.setBaseline(node);
+    else
+        tree.setOverride(path, node);
+    writeTreeAnnouncing(tree, path);
+}
+
+void OverlaysPageController::setShaderPreset(const QString& path, const QString& presetId)
+{
+    if (!m_settings)
+        return;
+    if (presetId.size() > kMaxOverlayPresetIdChars) {
+        qCWarning(lcConfig) << "OverlaysPageController: refusing an over-long preset id for path" << path;
+        return;
+    }
+    OverlayShaderTree tree = m_settings->overlayShaderTree();
+    // Seed from what the layout RESOLVES to, not from its direct override, when it
+    // has none. `directOverride` answers a default-constructed profile for an
+    // unoverridden layout, so engaging only `presetId` on it stored
+    // `{shaderId: "", presetId: X}` — and an empty shaderId is the "None" sentinel
+    // that SUPPRESSES the baseline shader for that layout (see
+    // acceptableShaderEffectId). Picking a preset on a card that was showing the
+    // inherited shader therefore turned that layout's overlay off. The card offers
+    // the preset row whenever a shader resolves, inherited or not, so this was
+    // reachable in one click.
+    //
+    // `resolve()` is one step on this tree — an override or the baseline — so this
+    // carries the pack and its parameters down from the baseline exactly as the card
+    // was already displaying them, which is what the user is tuning.
+    OverlayShaderProfile node = path.isEmpty() ? tree.baseline() : tree.resolve(path);
+    // Nothing to do when the id already matches, whether the layout is overridden or
+    // not. An `|| tree.hasOverride(path)` conjunct used to gate this, which made the
+    // early return unreachable for an INHERITING layout: the write then engaged an override
+    // carrying the baseline's pack and parameters, pinning a layout that had been
+    // following the baseline, for a call that changed nothing. The card's
+    // `onPresetDeleted` reaches here with an empty id unconditionally, so deleting a
+    // preset while viewing an inheriting card was enough to pin it.
+    if (node.presetId == presetId)
+        return;
+    // The pack and the parameter edits are left exactly as stored: this call
+    // carries a preset and nothing else, and the parameters become deltas on
+    // top of it rather than being replaced by it.
+    node.presetId = presetId;
     if (path.isEmpty())
         tree.setBaseline(node);
     else

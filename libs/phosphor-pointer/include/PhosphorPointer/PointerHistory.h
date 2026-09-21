@@ -130,6 +130,24 @@ public:
     /// Past it the pointer is parked and the next sample starts fresh: a 5 px
     /// move after ten idle seconds is a fresh move, not 0.5 px/s.
     static constexpr qint64 kVelocityHoldMs = 100;
+    /// Time constant of the speed filter (`filteredSpeed()`), in seconds.
+    ///
+    /// A TIME constant, not a per-sample blend factor. The filter used to fold
+    /// each sample in with a fixed weight, which made its response depend on
+    /// how far apart the samples happened to be, and the sampler spaces them
+    /// by the trail window (see the sampling rule above). The same hand
+    /// movement therefore filtered over about 49 ms at a 0.9 s window and
+    /// about 210 ms at a 4 s one, so `activationSpeed` and every other gate
+    /// read from this figure behaved differently depending on a setting in a
+    /// pack that may not even be the one being gated. Weighting by the real
+    /// gap removes that: the figure now answers to the pointer, not to the
+    /// window it is being watched through.
+    ///
+    /// 50 ms reproduces what the old blend did at the common 0.9 s window,
+    /// where samples land about 30 ms apart: 1 - exp(-0.030 / 0.050) = 0.45,
+    /// against the 0.46 the fixed blend used. So the default setting behaves
+    /// as it always has and only the other windows move.
+    static constexpr double kSpeedFilterTauSeconds = 0.05;
 
     PointerHistory();
 
@@ -139,17 +157,21 @@ public:
     /// above). 0 (the default, and what a chain of packs that read nothing
     /// gives) means the `kMinSampleGapMs` floor alone. Survives `reset()`.
     void setTrailSeconds(double seconds);
+    /// The window currently in force. Read by the tests that pin the sampling
+    /// arithmetic; the hosts set it and do not read it back.
     [[nodiscard]] double trailSeconds() const
     {
         return m_trailSeconds;
     }
-    /// Minimum gap between two appended samples, in ms.
+    /// Minimum gap between two appended samples, in ms. Derived from
+    /// `trailSeconds()`, and like it read by the tests rather than the hosts.
     [[nodiscard]] qint64 sampleIntervalMs() const
     {
         return m_sampleIntervalMs;
     }
 
     /// Record a pointer position at @p nowMs (see the sampling rule above).
+    /// A non-finite position is dropped: see the note in the implementation.
     void notePointer(const QPointF& devicePx, qint64 nowMs);
 
     /// Give an EMPTY ring a position without recording motion: the slot
@@ -188,8 +210,9 @@ public:
     [[nodiscard]] bool isLive(qint64 nowMs, double trailSeconds) const;
 
     /// Bounding box of the trail samples, press and release points younger
-    /// than @p trailSeconds, inflated by @p reachDevicePx on every side.
-    /// Null when not live.
+    /// than @p trailSeconds, inflated by @p reachDevicePx on every side plus
+    /// the overshoot the packs' curve is allowed outside the straight path
+    /// between those samples. Null when not live.
     [[nodiscard]] QRectF damageRect(double reachDevicePx, qint64 nowMs, double trailSeconds) const;
 
     void reset();

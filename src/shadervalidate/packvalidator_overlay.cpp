@@ -37,6 +37,8 @@
 
 #include <rhi/qshader.h>
 
+#include <optional>
+
 using PhosphorRendering::ShaderCompiler;
 using PhosphorShaders::ShaderRegistry;
 
@@ -331,7 +333,19 @@ int validatePack(const QString& packDir, QTextStream& out)
     // file EXISTS, so linting the parsed struct could never fire.
     {
         const QString declaredVert = rawRoot.value(QLatin1String("vertexShader")).toString();
-        if (!declaredVert.isEmpty() && !QFile::exists(QDir(packDir).filePath(declaredVert))) {
+        // Containment FIRST, and through the shared guard. This was the one path join
+        // left unconfined in src/shadervalidate, and the escape was unreported rather
+        // than merely unresolved: `parsePackMetadata` only assigns vertexShaderPath
+        // when resolveWithinPack succeeded, so an escaping value left it empty and the
+        // confine further down passed vacuously, while the raw existence check below
+        // SUCCEEDED on the escaping join and so did not fire either. The pack was told
+        // only that its vert was "ignored at load". The other three arms all report
+        // this, and a validator laxer than its siblings on the same field is the shape
+        // that signs a pack off.
+        const auto confinedVert = declaredVert.isEmpty() ? std::nullopt : confinedPackPath(packDir, declaredVert);
+        if (!declaredVert.isEmpty() && !confinedVert) {
+            lints << QStringLiteral("vertexShader path escapes the pack directory: %1").arg(declaredVert);
+        } else if (confinedVert && !QFile::exists(*confinedVert)) {
             lints << QStringLiteral("vertex shader missing: %1").arg(declaredVert);
         }
         // A custom-named vertexShader is silently ignored by the zone
@@ -363,14 +377,21 @@ int validatePack(const QString& packDir, QTextStream& out)
     }
 
     if (lints.isEmpty()) {
-        out << "  metadata       OK\n";
+        out << "  " << padLabel(QStringLiteral("metadata")) << "OK\n";
     } else {
-        out << "  metadata       ERROR\n";
+        out << "  " << padLabel(QStringLiteral("metadata")) << "ERROR\n";
         for (const QString& l : lints) {
             out << "    " << l << "\n";
             ++errors;
         }
     }
+
+    // Preset lint: every preset key must name a declared parameter, and every value
+    // must match that parameter's declared type and range. AFTER the metadata block,
+    // matching the other three arms. Run before it, this printed `presets ERROR`
+    // above `metadata OK`.
+    errors += reportRawPresetProblems(out, rawRoot);
+    errors += reportPresetProblems(out, packDir, info.presets, info.parameters);
 
     // ── stage compiles (reproduce the runtime assembly) ──
     const QString packsRoot = QFileInfo(packDir).absolutePath();
@@ -409,9 +430,24 @@ int validatePack(const QString& packDir, QTextStream& out)
     // here would compile a stage the runtime never touches, so a pack with a
     // broken custom vert would pass CI while its real (shared) vertex stage went
     // unchecked. So resolve the sibling zone.vert, else the shared zone.vert.
+    //
+    // The shared fallback probes every include root rather than only `packsRoot`.
+    // An INSTALLED overlay pack (`<data root>/plasmazones/overlays/<id>`) usually has
+    // no sibling shared/ at all — the helpers ship once into the system prefix — so a
+    // packsRoot-only join found nothing and the vertex stage was silently not baked,
+    // with no stage line and no diagnostic, in exactly the layout `packSharedRoots`
+    // was widened to cover. The surface and pointer arms both loop their include
+    // paths for this; this arm was the one that did not.
     QString vertPath = QFileInfo(info.sourcePath).absolutePath() + QStringLiteral("/zone.vert");
     if (!QFile::exists(vertPath)) {
-        vertPath = packsRoot + QStringLiteral("/shared/zone.vert");
+        vertPath.clear();
+        for (const QString& root : includePaths) {
+            const QString candidate = root + QStringLiteral("/zone.vert");
+            if (QFile::exists(candidate)) {
+                vertPath = candidate;
+                break;
+            }
+        }
     }
     if (QFile::exists(vertPath)) {
         errors += compileStage(out, QFileInfo(vertPath).fileName(), vertPath, QShader::VertexStage, includePaths,

@@ -374,7 +374,7 @@ bool PlasmaZonesEffect::windowSurfaceAnimates(const QString& windowId)
             pack = &cacheIt->second;
         } else {
             if (!profile) {
-                profile = m_decorationTree.resolve(resolveSurfacePathFor(windowId));
+                profile = resolveDecorationProfile(resolveSurfacePathFor(windowId));
             }
             pack = compiledPack(packId, *profile);
         }

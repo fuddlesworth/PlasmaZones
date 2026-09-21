@@ -173,6 +173,24 @@ inline constexpr int kMaxBufferPasses = 2;
 /// Maximum number of declared parameters a pack may carry across both pools.
 inline constexpr int kMaxDeclaredParameters = 48;
 
+/// Catmull-Rom tension used by every path pack's curve, mirroring
+/// `kPointerCurveTension` in data/pointer/shared/pointer_lib.glsl. The
+/// textbook value is 0.5; the packs use half of it, which halves how far the
+/// curve can bulge outside the box of its span's endpoints while still
+/// visibly rounding the corners.
+///
+/// It lives here for the reason kMaxTrailPoints does: the host has to know it
+/// too. PointerHistory sizes its damage rect for the overshoot the curve is
+/// allowed, and the unit tests reconstruct the drawn path to pin it. Both
+/// would otherwise carry their own retyped copy of a number that lives in a
+/// GLSL file neither of them compiles, and a retune of the curve would leave
+/// them silently measuring the old one.
+inline constexpr double kPointerCurveTension = 0.25;
+
+/// Straight pieces each path pack walks per curve span, mirroring
+/// `kPointerCurveSteps` in data/pointer/shared/pointer_lib.glsl.
+inline constexpr int kPointerCurveSteps = 4;
+
 /// The "none this session" sentinel for the seconds-since lanes of
 /// `uPointerPress.z`, `uPointerRelease.z` and `uPointerState.y`: what the
 /// tail carries before the first press, release or motion. Large enough that

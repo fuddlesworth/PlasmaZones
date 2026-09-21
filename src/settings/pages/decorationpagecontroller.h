@@ -232,6 +232,16 @@ public:
     /// tree write instead of one per parameter. For "" edits the baseline.
     Q_INVOKABLE void setChainParams(const QString& path, const QString& packId, const QVariantMap& params);
 
+    /// Point @p packId's layer at preset @p presetId, on the chain at @p path.
+    ///
+    /// Per-pack, like `setChainParam`, so one chain can carry a preset on one
+    /// layer and hand-tuned values on the next. The layer's own parameters are
+    /// left alone: they become DELTAS on top of the preset, so a value the user
+    /// set stays set while everything they never touched follows the preset.
+    ///
+    /// An empty @p presetId drops the reference for that layer only.
+    Q_INVOKABLE void setChainPreset(const QString& path, const QString& packId, const QString& presetId);
+
     /// The effective (resolved) set of chain packs toggled OFF at @p path.
     /// Pairs with chainAt(): the editor renders every declared pack and
     /// greys the ones listed here; the renderers exclude them.

@@ -394,6 +394,25 @@ public:
     /// keeps its slot; that persistence is exactly what login restore reads.
     bool releaseEngineSlot(const QString& windowId, const QString& engineId);
 
+    /// Drop one desktop's entry from an engine slot's zonesByDesktop map.
+    ///
+    /// The counterpart to that map being MERGED by record(): a capture that
+    /// stops naming a desktop does not forget it, so a window that genuinely
+    /// left one has to say so here. Without this the stale zone survives every
+    /// later save and a restart puts the window back on a desktop it no longer
+    /// occupies. Returns true when an entry was actually removed.
+    bool forgetDesktopZones(const QString& windowId, const QString& engineId, int desktop);
+
+    /// Drop @p removedDesktop from every slot's zonesByDesktop map and shift
+    /// the entries above it down by one, and shift the record-level desktop
+    /// the same way (a record ON the removed desktop reads as unknown),
+    /// because Plasma renumbers x11 desktops when one in the middle is
+    /// deleted. The persisted fields have to follow the same renumbering the
+    /// engines apply to their live stores, or a restart seeds a zone under a
+    /// number that now belongs to another desktop. Returns the number of
+    /// records changed.
+    int renumberDesktopZones(int removedDesktop);
+
     /// Apply an in-place mutation to every record; @p fn returns true when it changed
     /// the record. Returns the number changed. For bulk rewrites that keep the appId
     /// bucketing (e.g. virtual-screen id remap of freeGeometryByScreen keys). Does NOT

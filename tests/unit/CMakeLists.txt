@@ -49,6 +49,10 @@ p_add_test(test_window_tracking_snap core/windowtracking/test_window_tracking_sn
 p_add_test(test_window_tracking_float core/windowtracking/test_window_tracking_float.cpp)
 p_add_test(test_window_placement_store core/windowtracking/test_window_placement_store.cpp)
 p_add_test(test_window_placement_store_collapse core/windowtracking/test_window_placement_store_collapse.cpp)
+# The per-desktop zone map of a snap slot: merge on record, forget, renumber
+# on desktop removal, the save / load round trip and the restorable-content
+# predicates. Its own suite because the store suite sits at its size baseline.
+p_add_test(test_window_placement_store_desktops core/windowtracking/test_window_placement_store_desktops.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Session Persistence Tests
@@ -139,6 +143,9 @@ add_test(NAME test_snap_state_focus_memory COMMAND test_snap_state_focus_memory)
 add_executable(test_snap_engine_restore core/snap/test_snap_engine_restore.cpp helpers/SnapEngineTestFixture.h)
 target_link_libraries(test_snap_engine_restore PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_snap_engine_restore COMMAND test_snap_engine_restore)
+add_executable(test_snap_restore_layout_context core/snap/test_snap_restore_layout_context.cpp helpers/SnapEngineTestFixture.h)
+target_link_libraries(test_snap_restore_layout_context PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_restore_layout_context COMMAND test_snap_restore_layout_context)
 
 # Dynamic-workspaces arms of the SnapEngine (identity reap / renumber of the
 # value-side desktop tags).
@@ -165,6 +172,14 @@ add_test(NAME test_snap_engine_exclude COMMAND test_snap_engine_exclude)
 add_executable(test_snap_per_monitor core/snap/test_snap_per_monitor.cpp)
 target_link_libraries(test_snap_per_monitor PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_snap_per_monitor COMMAND test_snap_per_monitor)
+
+# The snap engine's per-desktop membership arm: adoption grants a store of
+# its own on the desktop in view, the persisted per-desktop zone map, and the
+# close / release / restore paths over every member store. Same fixture shape
+# as test_snap_per_monitor (QTEST_MAIN so zone geometry resolves).
+add_executable(test_snap_desktop_membership core/snap/test_snap_desktop_membership.cpp)
+target_link_libraries(test_snap_desktop_membership PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_desktop_membership COMMAND test_snap_desktop_membership)
 
 # resolveFallbackUnfloatGeometry on-success coverage. QTEST_MAIN (not GUILESS) so a
 # QGuiApplication + offscreen primary screen exists and zoneGeometry() resolves —
@@ -347,6 +362,10 @@ p_add_test(test_autotile_ext_algoswitch autotile/behavior/test_autotile_ext_algo
 target_compile_definitions(test_autotile_ext_algoswitch PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 p_add_test(test_autotile_script_state_stash autotile/state/test_autotile_script_state_stash.cpp)
 target_compile_definitions(test_autotile_script_state_stash PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+# The tiling engine's per-desktop membership arm: adopt on switch, the
+# per-window release, and the close / handoff paths over every member state.
+p_add_test(test_autotile_desktop_membership autotile/state/test_autotile_desktop_membership.cpp)
+target_sources(test_autotile_desktop_membership PRIVATE helpers/AutotileFakes.h)
 # The split-tree case needs a screen with real geometry: the restore hangs off
 # recalculateLayout, which bails before it without one. Same fake provider
 # test_autotile_virtual uses.
@@ -1225,6 +1244,14 @@ target_link_libraries(test_pretile_decisions PRIVATE Qt6::Test Qt6::Core)
 target_include_directories(test_pretile_decisions PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
 add_test(NAME test_pretile_decisions COMMAND test_pretile_decisions)
 
+# Pure-logic test for the minimize-float qualifiers
+# (tilinghandler/minimizefloatmarks.h) — whether a restoring window's frame
+# can still be the tile it is about to get. Same header-only reach.
+add_executable(test_minimize_float_marks ui/effect/test_minimize_float_marks.cpp)
+target_link_libraries(test_minimize_float_marks PRIVATE Qt6::Test Qt6::Core)
+target_include_directories(test_minimize_float_marks PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
+add_test(NAME test_minimize_float_marks COMMAND test_minimize_float_marks)
+
 # Pure-geometry test for per-VS wallpaper cropping (PR #333). Pins the C++
 # cover-fit math against hand-worked expected rects so it can't silently
 # drift from the GLSL wallpaperUv helper it mirrors.
@@ -1391,6 +1418,16 @@ target_compile_definitions(test_connect_sweep_ordering
                            PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 target_link_libraries(test_connect_sweep_ordering PRIVATE Qt6::Test Qt6::Core)
 add_test(NAME test_connect_sweep_ordering COMMAND test_connect_sweep_ordering)
+
+# Same shape and same reason as the sweep-ordering guard above: OverlayService cannot be
+# stood up in a fixture (QGuiApplication plus a Wayland transport), and the behaviour it
+# pins — setPresetRegistry applying at set time, not only subscribing — fires only on a
+# second init(), so the suite could not see it either way. The file states that limitation.
+add_executable(test_preset_registry_wiring daemon/test_preset_registry_wiring.cpp)
+target_compile_definitions(test_preset_registry_wiring
+                           PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+target_link_libraries(test_preset_registry_wiring PRIVATE Qt6::Test Qt6::Core)
+add_test(NAME test_preset_registry_wiring COMMAND test_preset_registry_wiring)
 
 # XML ↔ adaptor contract tripwire: the dbus/*.xml files are the installed
 # public contract while the adaptors are handwritten — this compares each
@@ -2127,6 +2164,30 @@ target_link_libraries(test_decoration_sets_validation
 )
 add_test(NAME test_decoration_sets_validation COMMAND test_decoration_sets_validation)
 
+# The WRITE half of the shader-preset feature: ShaderPresetBridge, the
+# `presetBridge` every pack editor binds. The library half (parse, resolve,
+# loader, store) is covered by phosphor-shaders' own test_shaderpresets. Compiles
+# the bridge source directly rather than pulling in the settings app, so no
+# controller is constructed. plasmazones_core still comes in, for PhosphorI18n and
+# the logging categories the bridge uses; the test never builds a config store.
+add_executable(test_shaderpresetbridge
+    settings/stores/test_shaderpresetbridge.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/stores/shaderpresetbridge.cpp
+)
+target_link_libraries(test_shaderpresetbridge
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorShaders::PhosphorShaders
+        plasmazones_core
+)
+# P_SOURCE_DIR for the presetBridge QML-reachability guard, which scrapes the
+# settings QML tree the way the decoration preview's previewController guard
+# scrapes its own.
+target_compile_definitions(test_shaderpresetbridge PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+add_test(NAME test_shaderpresetbridge COMMAND test_shaderpresetbridge)
+
 # Settings profiles: the ProfileStore delta / inheritance-resolution engine
 # behind ProfilePageController::bridge. Driven with stub config closures, so it
 # links only the store itself (no PhosphorConfig::Store needed).
@@ -2389,9 +2450,19 @@ add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
 #                              authoring models
 #   test_pointer_pack_validator: the same for the pointer model, split out when
 #                              the shared file passed the size ceiling
+#   test_surface_pack_validator: the same for the surface model, which had NO
+#                              harness at all until this was added
 #   test_animation_pack_bakes: the animation stage bakes on both hosts, and the
 #                              multipass buffer passes
 #   test_pack_model_detection: the shared/ marker lookup and include roots
+#
+# That topology is worth one honest sentence, because its shape caused a real
+# gap: the split above followed the file-size ceiling rather than the family
+# boundary, and since every executable here compiles all four arms, a lint
+# deleted from one family's arm broke no test and failed no link. The SURFACE
+# arm had no slots at all and nothing made that visible. One executable per
+# family over the shared helpers is the structure that would; until then, the
+# rule is that a new arm gets its own file here on the day it is written.
 # ═══════════════════════════════════════════════════════════════════════════════
 # The bundled-pack gates (shader_validate_*) only prove the shipped packs are
 # clean; these build deliberately-broken packs in a temp dir and assert the
@@ -2413,8 +2484,8 @@ set(_pack_validator_arms
     ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_surface.cpp
     ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_pointer.cpp
     ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidatorcommon.cpp)
-foreach(_pv_test IN ITEMS test_pack_validators test_pointer_pack_validator test_animation_pack_bakes
-                          test_pack_model_detection)
+foreach(_pv_test IN ITEMS test_pack_validators test_pointer_pack_validator test_surface_pack_validator
+                          test_animation_pack_bakes test_pack_model_detection)
     add_executable(${_pv_test} shadervalidate/${_pv_test}.cpp
                    shadervalidate/packvalidatortesthelpers.h
                    ${_pack_validator_arms})
@@ -2432,6 +2503,8 @@ foreach(_pv_test IN ITEMS test_pack_validators test_pointer_pack_validator test_
             Qt6::ShaderToolsPrivate
     )
     target_compile_definitions(${_pv_test} PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+    # No isolation call here on purpose: the directory-wide loop at the bottom of
+    # this file picks up every add_test registered above it, these included.
     add_test(NAME ${_pv_test} COMMAND ${_pv_test})
 endforeach()
 unset(_pack_validator_arms)
@@ -2723,6 +2796,10 @@ if(TARGET PhosphorTheme::PhosphorTheme)
             Qt6::DBus
             Qt6::Gui
             PhosphorProtocol::PhosphorProtocol
+            # Declared rather than taken transitively through PhosphorSurface:
+            # ShellChrome.h includes <PhosphorShaders/ShaderPresetStore.h> and holds
+            # the store by unique_ptr, so the edge belongs to this target too.
+            PhosphorShaders::PhosphorShaders
             PhosphorSurface::PhosphorSurface
             PhosphorTheme::PhosphorTheme
     )

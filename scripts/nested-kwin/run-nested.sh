@@ -42,6 +42,15 @@
 # and capture-output.py. Set PZ_NESTED_BUILD to use a configure dir other
 # than build/ (daemon.sh honours the same variable via env.sh).
 #
+# Every run wipes the XDG homes for a clean slate. PZ_NESTED_KEEP_STATE
+# (any value) keeps them, which is the only way to probe session restore:
+# daemon.sh restarts the daemon but not the effect, so a login-shaped restore
+# needs a full nested restart with the session.json the daemon reads still on
+# disk. No PZ_NESTED_FORCE is needed after a clean exit: kwin unlinks its
+# wayland socket and dbus-run-session removes its bus socket, so neither
+# live-session guard fires. FORCE also skips the liveness probe, so use it
+# only if a guard refuses a session you know has been stopped.
+#
 # PZ_NESTED_SOCKET (default pznested) names the wayland socket. Two nested
 # sessions cannot share one — kwin locks on the name and the second dies with
 # "could not add wayland socket" — so to run one per worktree give each its
@@ -217,7 +226,23 @@ case "$NEST" in
         ;;
 esac
 
-rm -rf "$HOME_N"
+# PZ_NESTED_KEEP_STATE keeps the previous run's XDG homes. Any non-empty
+# value, like every other toggle in this script (FORCE, XWAYLAND, VISIBLE):
+# a probe that sets it to "yes" and has its state wiped reads exactly like a
+# broken restore. The default wipe gives every session a clean slate, which
+# is what nearly every probe wants — but it also destroys the one thing a
+# session-restore probe needs, the session.json the daemon reads at start.
+# Restarting only the daemon does not exercise the effect's own startup, so a
+# login-shaped restore test has to go through a full nested restart, and that
+# is only possible if the state home survives it. Control files under $NEST
+# are still reset below either way.
+KEEP_STATE=0
+if [ -n "${PZ_NESTED_KEEP_STATE:-}" ] && [ -d "$HOME_N" ]; then
+    KEEP_STATE=1
+    echo "keeping previous state home $HOME_N (PZ_NESTED_KEEP_STATE set)" >&2
+else
+    rm -rf "$HOME_N"
+fi
 # Stale control files must not survive into the new run: a daemon.sh run
 # against a previous session's env.sh would target a dead bus.
 #
@@ -240,7 +265,15 @@ if [ -f "$NEST/daemon.pid" ]; then
         [ -d "/proc/$OLDPID" ] && kill -9 "$OLDPID" 2>/dev/null || true
     fi
 fi
-rm -f "$NEST/env.sh" "$NEST/daemon.pid" "$NEST/daemon.log"
+rm -f "$NEST/env.sh" "$NEST/daemon.pid"
+# The previous daemon's log is the record of what it persisted, which is the
+# evidence a restore probe compares the new session against; under keep-state
+# it is rotated rather than deleted.
+if [ "$KEEP_STATE" = "1" ] && [ -f "$NEST/daemon.log" ]; then
+    mv -f "$NEST/daemon.log" "$NEST/daemon.log.prev"
+else
+    rm -f "$NEST/daemon.log" "$NEST/daemon.log.prev"
+fi
 mkdir -p "$HOME_N/config" "$HOME_N/data" "$HOME_N/cache" "$HOME_N/state"
 # env.sh carries the session bus address; keep the tree private even when
 # PZ_NESTED_DIR points somewhere world-traversable.
@@ -252,17 +285,28 @@ chmod 700 "$NEST"
 # workspaces feature is on, which needs KWin's per-output virtual desktops;
 # PZ_NESTED_PER_OUTPUT_DESKTOPS opts the nested kwinrc into that mode so a
 # seeded config can enable the feature without the consent write.
-cat > "$HOME_N/config/kwinrc" <<KWINRC
+#
+# KWin keeps the virtual-desktop count and names in this same kwinrc
+# ([Desktops] Number= / Id_N=), and it preserves the [Plugins] group across
+# its own writes. Rewriting the file under keep-state would restart the
+# session with one desktop, which is precisely what a per-desktop restore
+# probe cannot survive: every membership on desktop 2 and up would land on a
+# desktop that no longer exists. Only a fresh home gets the seed file.
+if [ "$KEEP_STATE" = "1" ] && [ -f "$HOME_N/config/kwinrc" ]; then
+    echo "keeping previous kwinrc (desktop count and names)" >&2
+else
+    cat > "$HOME_N/config/kwinrc" <<KWINRC
 [Plugins]
 kwin_effect_plasmazonesEnabled=true
 kwin_effect_plasmazones_overviewEnabled=true
 KWINRC
-if [ -n "${PZ_NESTED_PER_OUTPUT_DESKTOPS:-}" ]; then
-    cat >> "$HOME_N/config/kwinrc" <<KWINRC
+    if [ -n "${PZ_NESTED_PER_OUTPUT_DESKTOPS:-}" ]; then
+        cat >> "$HOME_N/config/kwinrc" <<KWINRC
 
 [Windows]
 PerOutputVirtualDesktops=true
 KWINRC
+    fi
 fi
 
 export XDG_CONFIG_HOME="$HOME_N/config"

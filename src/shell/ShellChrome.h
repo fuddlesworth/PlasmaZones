@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include <PhosphorShaders/ShaderPresetStore.h>
+
+#include <QHash>
 #include <PhosphorSurface/DecorationProfileTree.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 
@@ -72,6 +75,16 @@ public:
     /// resolved chain ({source, vertexSource, preamble, params, animated,
     /// ...} as SurfaceDecoration reads them). Empty when undecorated.
     [[nodiscard]] Q_INVOKABLE QVariantList chainFor(const QString& surfacePath) const;
+    /// `m_tree.resolve(path)` with every layer's preset flattened in, memoised per path
+    /// for the life of one revision.
+    ///
+    /// QML calls `chainFor` AND `outerPaddingFor` for every surface on each `revision`
+    /// bump (a palette change, a settings refetch, a pack reload, a preset retune), and
+    /// each used to run its own tree walk plus its own preset flatten. The cache is
+    /// cleared in `bump()`, which is the one place anything either of them reads can
+    /// change, so a stale entry is not reachable: the revision IS the invalidation.
+    [[nodiscard]] const PhosphorSurfaceShaders::DecorationProfile& resolvedProfile(const QString& surfacePath) const;
+
     /// The chain's largest declared outer margin, logical px, clamped.
     [[nodiscard]] Q_INVOKABLE double outerPaddingFor(const QString& surfacePath) const;
 
@@ -95,6 +108,23 @@ private:
     void subscribeToDaemon();
 
     std::unique_ptr<PhosphorSurfaceShaders::SurfaceShaderRegistry> m_registry;
+    /// Named parameter presets for the SURFACE family, so a shell surface whose
+    /// assignment names one renders with that preset's values.
+    ///
+    /// The shell is a decoration consumer like any other, and without this it was the
+    /// one that silently was not: `chainFor` and `outerPaddingFor` read
+    /// `effectiveParameters()` on an UNFLATTENED profile, so a shell surface (or an
+    /// ancestor it inherits from) that named a preset rendered with the preset's values
+    /// MISSING and with the pack's declared min/max unenforced, since that clamp only
+    /// happens inside `resolveParams`. Every other surface consumer — the compositor's
+    /// decorations, the daemon's OSD, the pointer pass — flattens.
+    ///
+    /// Declared AFTER m_registry: the seeding connection below reads the registry, and
+    /// reverse member destruction tears this down first.
+    std::unique_ptr<PhosphorShaders::ShaderPresetStore> m_presetStore;
+    /// Flattened profiles for this revision; see `resolvedProfile`. Mutable because both
+    /// readers are const and the cache is a memo, not state a caller can observe.
+    mutable QHash<QString, PhosphorSurfaceShaders::DecorationProfile> m_resolvedCache;
     PhosphorSurfaceShaders::DecorationProfileTree m_tree;
     QPointer<PhosphorTheme::PaletteStore> m_palette;
     QPointer<QObject> m_decorationComponent;

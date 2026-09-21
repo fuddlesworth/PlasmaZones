@@ -861,9 +861,9 @@ public:
     ///
     /// For releases that do NOT run through SnapEngine::uncommitSnap — today
     /// that is TilingAdaptor::reconcileWindowMembership dropping a window from
-    /// a context it has left. Those go through IPlacementEngine::
-    /// releaseFromContext, which deliberately emits no windowSnapStateChanged:
-    /// that signal also clears the tiling engines' float markers, and those
+    /// a context it has left. Those come out of the engine's membership pass
+    /// (SnapEngine::applyMembershipWork), which deliberately emits no
+    /// windowSnapStateChanged: that signal also clears the tiling engines' float markers, and those
     /// sets are per-window rather than per-context, so it would pull a window
     /// legitimately floating on the desktop it moved TO back into the layout.
     /// The two consumers that ARE right for a context release are driven

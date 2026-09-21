@@ -177,6 +177,7 @@ public:
     /// window is unknown or the field was never delivered. Accepts either a
     /// bare instance id or a composite appId|instanceId window id.
     std::optional<bool> minimizedState(const QString& windowId) const override;
+    std::optional<WindowDesktopContext> desktopContext(const QString& windowId) const override;
     /// Every instance currently recorded under @p appId, in UNSPECIFIED order
     /// (QMultiHash bucket order, not insertion or arrival order). Callers that
     /// need a deterministic sequence — anything FIFO-shaped — must sort or

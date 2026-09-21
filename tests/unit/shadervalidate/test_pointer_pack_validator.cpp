@@ -817,6 +817,37 @@ private Q_SLOTS:
                      qPrintable(r.report));
         }
     }
+
+    /// The preset lint runs on THIS arm too.
+    ///
+    /// `reportPresetProblems` is wired into all four validator arms, and every test
+    /// that exercised it drove the animation or overlay one, so deleting the call from
+    /// the pointer arm left the whole suite green. Every executable here compiles all
+    /// four arms, so that deletion also failed no link.
+    void thePointerArmLintsPresetsToo()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_POINTER_FIXTURE(tmp);
+
+        QJsonObject obj =
+            pointerPack(QStringLiteral("pt-presets"),
+                        QJsonArray{pointerParam(QStringLiteral("speed"), QStringLiteral("float"), 1.0, 0.0, 2.0)});
+        QJsonObject presets;
+        presets.insert(QStringLiteral("Undeclared"), QJsonObject{{QStringLiteral("noSuchThing"), 1.0}});
+        presets.insert(QStringLiteral("TooFast"), QJsonObject{{QStringLiteral("speed"), 99.0}});
+        presets.insert(QStringLiteral("Tidy"), QJsonObject{{QStringLiteral("speed"), 1.5}});
+        obj.insert(QStringLiteral("presets"), presets);
+
+        const PackResult r = validatePointer(tmp, QStringLiteral("pt-presets"), obj,
+                                             pointerBodyReadingScalars({QStringLiteral("speed")}));
+        QVERIFY2(r.report.contains(QStringLiteral("presets        ERROR")), qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("which the pack does not declare")), qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("above its declared maximum")), qPrintable(r.report));
+        // The well-formed preset beside them is silent, so neither check is firing on
+        // every value it sees.
+        QVERIFY2(!r.report.contains(QStringLiteral("preset 'Tidy'")), qPrintable(r.report));
+        QVERIFY(r.errors >= 2);
+    }
 };
 
 QTEST_MAIN(TestPointerPackValidator)

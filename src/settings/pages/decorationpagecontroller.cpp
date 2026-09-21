@@ -33,6 +33,14 @@ using PhosphorSurfaceShaders::DecorationProfileTree;
 
 namespace {
 
+/// A decoration preset id is a UUID or a pack-declared preset name. Bounded on
+/// the way in like its two siblings (`kMaxOverlayPresetIdChars` on the overlay
+/// page, `MaxShaderPresetIdLength` in the rules vocabulary). The schema
+/// sanitizer bounds it again on the read path, and an id naming no preset
+/// resolves to the layer's own parameters, so dropping one degrades rather than
+/// breaks.
+constexpr int kMaxChainPresetIdChars = 1024;
+
 /// The built-in seed layer `Settings::decorationProfileTree()` overlays on
 /// every read. Built once: it is a pure function of compiled-in literals, and
 /// the readers below run for every visible card on every tree write (each
@@ -72,6 +80,12 @@ bool isUntouchedSeedInjection(const DecorationProfileTree& tree, const QString& 
     if (mine.chain && mine.chain != seed.chain)
         return false;
     if (mine.parameters && mine.parameters != seed.parameters)
+        return false;
+    // The preset slot is compared on the same terms as the other three. Without
+    // it, a seeded path whose ONLY user edit was picking a preset still read as
+    // an untouched seed, so the parent card's shadowing count missed it and
+    // clearOverrideDescendants would not clear it.
+    if (mine.presetIds && mine.presetIds != seed.presetIds)
         return false;
     return !(mine.disabledPacks && mine.disabledPacks != seed.disabledPacks);
 }
@@ -133,7 +147,21 @@ QVariantMap paramsFilteredToChain(const QVariantMap& params, const QStringList& 
 QVariantMap inheritedParamsForChain(const DecorationProfileTree& tree, const QString& path)
 {
     const DecorationProfile resolved = tree.resolve(path);
-    return paramsFilteredToChain(resolved.effectiveParameters(), resolved.effectiveChain());
+    // storedParameters(): this is EDIT-facing. The page shows and writes what this
+    // node stores of its own, and a flattened map would make every inherited preset
+    // value look like a local edit the next write would pin.
+    return paramsFilteredToChain(resolved.storedParameters(), resolved.effectiveChain());
+}
+
+/// The preset twin of inheritedParamsForChain, and there for the same reason:
+/// DecorationProfile::overlay replaces the presetIds map wholesale, so engaging
+/// a direct override from an empty map at an inheriting path would silently
+/// drop every sibling layer's inherited preset. Filtered to the resolved chain
+/// so a pack no longer in it cannot be carried back in.
+QVariantMap inheritedPresetIdsForChain(const DecorationProfileTree& tree, const QString& path)
+{
+    const DecorationProfile resolved = tree.resolve(path);
+    return paramsFilteredToChain(resolved.effectivePresetIds(), resolved.effectiveChain());
 }
 
 /// Write @p profile back as the DIRECT profile at @p path (baseline for the
@@ -429,6 +457,21 @@ void DecorationPageController::setChain(const QString& path, const QStringList& 
         }
         profile.parameters = params;
     }
+    // Same pruning for the per-layer preset references. Without this a removed
+    // pack's preset reference survived forever and came back on re-add with its
+    // parameter deltas already gone — the exact stale state the parameter prune
+    // above exists to prevent — and the orphans accumulated across every
+    // add/remove cycle.
+    if (profile.presetIds) {
+        QVariantMap presets = *profile.presetIds;
+        for (auto it = presets.begin(); it != presets.end();) {
+            if (!chain.contains(it.key()))
+                it = presets.erase(it);
+            else
+                ++it;
+        }
+        profile.presetIds = presets;
+    }
     // Same pruning for the per-layer disable set: a removed pack's toggle
     // state dies with it, so re-adding starts enabled (the default).
     if (profile.disabledPacks) {
@@ -474,7 +517,8 @@ void DecorationPageController::setChain(const QString& path, const QStringList& 
         if (profile.parameters) {
             allParams = *profile.parameters;
         } else {
-            allParams = paramsFilteredToChain(tree.resolve(path).effectiveParameters(), chain);
+            // storedParameters(), for the reason given on the read above.
+            allParams = paramsFilteredToChain(tree.resolve(path).storedParameters(), chain);
         }
         bool seeded = false;
         for (const QString& packId : chain) {
@@ -617,7 +661,7 @@ void DecorationPageController::setChainParam(const QString& path, const QString&
 
 void DecorationPageController::setChainParams(const QString& path, const QString& packId, const QVariantMap& params)
 {
-    if (!m_settings || packId.isEmpty() || params.isEmpty())
+    if (!m_settings || packId.isEmpty())
         return;
     if (!path.isEmpty() && !PhosphorSurfaceShaders::decorationSurfaceSupported(path))
         return;
@@ -625,11 +669,48 @@ void DecorationPageController::setChainParams(const QString& path, const QString
     DecorationProfile profile = directProfileAt(tree, path);
     // Engage-from-resolved, same rationale as setChainParam above.
     QVariantMap allParams = profile.parameters ? *profile.parameters : inheritedParamsForChain(tree, path);
-    QVariantMap packParams = allParams.value(packId).toMap();
-    for (auto it = params.constBegin(); it != params.constEnd(); ++it)
-        packParams.insert(it.key(), it.value());
-    allParams.insert(packId, packParams);
+    if (params.isEmpty()) {
+        // An empty map CLEARS this layer's deltas, matching the contract the
+        // animation writer documents for the same gesture. It used to early-
+        // return, and because the loop below merges rather than replaces there
+        // was no input of any shape that could clear a layer — so "Revert to
+        // preset" was a silent no-op for decoration and pointer, the two
+        // families whose only way back to the preset's own values is this call.
+        allParams.remove(packId);
+    } else {
+        QVariantMap packParams = allParams.value(packId).toMap();
+        for (auto it = params.constBegin(); it != params.constEnd(); ++it)
+            packParams.insert(it.key(), it.value());
+        allParams.insert(packId, packParams);
+    }
     profile.parameters = allParams;
+    writeDirectProfile(m_settings, tree, path, profile);
+}
+
+void DecorationPageController::setChainPreset(const QString& path, const QString& packId, const QString& presetId)
+{
+    if (!m_settings || packId.isEmpty())
+        return;
+    if (!path.isEmpty() && !PhosphorSurfaceShaders::decorationSurfaceSupported(path))
+        return;
+    DecorationProfileTree tree = this->tree();
+    DecorationProfile profile = directProfileAt(tree, path);
+    // Engage from the RESOLVED map, not an empty one, for the same reason
+    // setChainParam does: DecorationProfile::overlay replaces the map
+    // wholesale, so a first preset pick at an inheriting path would otherwise
+    // materialize an override naming only this pack and drop every other
+    // layer's inherited preset.
+    if (presetId.size() > kMaxChainPresetIdChars) {
+        qCWarning(lcConfig) << "DecorationPageController: refusing an over-long preset id for pack" << packId
+                            << "at path" << path;
+        return;
+    }
+    QVariantMap presets = profile.presetIds ? *profile.presetIds : inheritedPresetIdsForChain(tree, path);
+    if (presetId.isEmpty())
+        presets.remove(packId);
+    else
+        presets.insert(packId, presetId);
+    profile.presetIds = presets;
     writeDirectProfile(m_settings, tree, path, profile);
 }
 
@@ -701,7 +782,10 @@ bool DecorationPageController::clearUndecorated(const QString& path)
     // chain-only marker, so in practice there is nothing else to keep; this is
     // the slot-scoped write regardless, not a whole-override drop.
     profile.chain.reset();
-    if (!profile.parameters && !profile.disabledPacks)
+    // `presetIds` counts as content worth keeping, like the other two slots. A
+    // profile whose only remaining engaged slot was its preset references used
+    // to take the clearOverride branch and lose them.
+    if (!profile.parameters && !profile.disabledPacks && !profile.presetIds)
         tree.clearOverride(path);
     else
         tree.setOverride(path, profile);

@@ -161,6 +161,50 @@ QtObject {
         }
     }
 
+    /// Merge ONE parameter into every write path's stored map, leaving each
+    /// path's pack, preset and other parameters as stored.
+    ///
+    /// What the sliders use. `_setShaderParamsOnAll` above replaces the whole map,
+    /// which is what a Reset or a Randomize wants — each stages a complete map on
+    /// purpose — and is a hazard for a single-value edit, because the map a slider
+    /// has to hand over is the one the card is DISPLAYING. That holds stored values
+    /// only because `currentShaderParams` comes from a tree walk-up that never
+    /// consults the preset registry; bind it to the effective map instead, or move
+    /// the flatten into that walk-up the way the daemon side already does, and one
+    /// nudge would pin every value the preset supplies as this event's own.
+    function _setShaderParamOnAll(paramId, value) {
+        card._committingShader = true;
+        try {
+            return settingsController.animationsPage.setShaderParameterOnPaths(card._writePaths, paramId, value) >= 0;
+        } finally {
+            card._committingShader = false;
+            card.refreshShaderFromTree();
+            card.refreshFromTree(true);
+        }
+    }
+
+    /// Point every write path at @p presetId, leaving each path's pack and its
+    /// own parameter edits alone.
+    ///
+    /// An empty @p presetId means "no preset here", and which of its two readings
+    /// applies is decided HERE rather than in the controller, because only the card
+    /// knows whether the preset it is showing is this event's own or inherited: the
+    /// combo is fed the RESOLVED id. On an event that stores none of its own, None
+    /// has to BLOCK what the ancestor supplies, or it is a dead control — the write
+    /// would clear a reference the path does not have, and the refresh would
+    /// re-resolve the ancestor's and snap the combo back with no feedback.
+    function _setShaderPresetOnAll(presetId) {
+        card._committingShader = true;
+        const blockInherited = presetId.length === 0 && card._primaryPresetId.length === 0 && card.currentShaderPresetId.length > 0;
+        try {
+            return settingsController.animationsPage.setShaderPresetOnPaths(card._writePaths, presetId, blockInherited) >= 0;
+        } finally {
+            card._committingShader = false;
+            card.refreshShaderFromTree();
+            card.refreshFromTree(true);
+        }
+    }
+
     /// Clear the shader override on every write path, returning the event to
     /// inheritance. Distinct from writing the engaged-empty sentinel, which is
     /// an explicit "None" that BLOCKS inheritance — that is the picker's job,

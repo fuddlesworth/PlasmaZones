@@ -166,6 +166,15 @@ public:
     /// layout; on "" it clears the global default.
     Q_INVOKABLE void setShaderOverride(const QString& path, const QString& effectId, const QVariantMap& params);
 
+    /// Point the node at @p path at preset @p presetId, leaving its pack and
+    /// its own parameter edits alone. Those edits become DELTAS on top of the
+    /// preset, so a value the user set stays set while everything they never
+    /// touched follows the preset.
+    ///
+    /// An empty @p presetId clears the reference, which leaves the node
+    /// rendering exactly the values it already holds.
+    Q_INVOKABLE void setShaderPreset(const QString& path, const QString& presetId);
+
     /// Drop the override at @p path so the layout inherits the baseline
     /// again. Rejected for "" (clear the baseline via setShaderOverride
     /// with an empty effectId). @return true when an override was removed.

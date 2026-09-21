@@ -2,7 +2,7 @@
     "$schema": "http://json-schema.org/draft-07/schema#",
     "$id": "urn:plasmazones:schema:pointer-metadata",
     "title": "PlasmaZones Pointer Shader Metadata",
-    "description": "metadata.json for a bundled or user pointer shader pack (trails, halos, click ripples, sparks). Core identity and the parameter contract are enforced. Optional placement and multipass keys (layer, reach, reachParam, trailSeconds, needsCursor, multipass, bufferShaders, bufferFeedback, bufferScale, animated, vertexShader, textures) and descriptive metadata (description, author, version, category, preview) are allowed through.",
+    "description": "metadata.json for a bundled or user pointer shader pack (trails, halos, click ripples, sparks). Core identity and the parameter contract are enforced. Optional placement and multipass keys (layer, reach, reachParam, trailSeconds, needsCursor, multipass, bufferShaders, bufferFeedback, bufferScale, animated, vertexShader, textures), named parameter presets and descriptive metadata (description, author, version, category, preview) are allowed through.",
     "type": "object",
     "required": ["id", "name", "fragmentShader", "parameters"],
     "additionalProperties": false,
@@ -80,6 +80,16 @@
                 }
             }
         },
+        "presets": {
+            "type": "object",
+            "maxProperties": 64,
+            "description": "Named parameter presets. Each value is a map of parameter id to value, naming a subset of the pack's declared parameters. A preset id is its key here, and it is also the label the picker shows, so it has to read as a name. That rules out control and bidi-formatting characters, and anything longer than a label can show. Unlike a user preset id it never becomes a filename, because duplicating a pack preset mints a fresh UUID. A null value is allowed and means the preset says nothing about that parameter, so it keeps the pack's default; the loader drops the entry. Those rules are checked by plasmazones-shader-validate rather than here, because the vendored JSON-schema validator rejects every name under a propertyNames rule, legitimate ones included.",
+            "additionalProperties": {
+                "type": "object",
+                "maxProperties": 48,
+                "additionalProperties": { "type": ["number", "string", "boolean", "null"] }
+            }
+        },
         "parameters": {
             "type": "array",
             "minItems": 0,
@@ -108,8 +118,8 @@
                 "group": { "type": "string" },
                 "type": {
                     "type": "string",
-                    "enum": ["float", "int", "bool", "color", "image"],
-                    "description": "Marshalling type of the uniform (image binds a texture slot). An unknown type cannot be bound, so it is rejected."
+                    "enum": ["float", "int", "bool", "color"],
+                    "description": "Marshalling type of the uniform. An unknown type cannot be bound, so it is rejected. No image type here: the pointer loader refuses one because neither the slot translator nor the preamble maps it, so declare a texture in the top-level textures array instead, where it binds as uTexture<N>."
                 },
                 "default": {
                     "type": ["number", "string", "boolean"],

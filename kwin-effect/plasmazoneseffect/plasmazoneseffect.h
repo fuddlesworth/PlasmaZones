@@ -40,6 +40,7 @@
 // this block sits with the other project includes rather than after the Qt /
 // KDE ones (own header → project → KDE → Qt).
 #include "effect_state.h"
+#include "kwincompat.h" // KWinCompat::PaintResult — the paint hooks' return type per KWin version
 #include "shader_resolve.h"
 #include "types.h"
 
@@ -82,6 +83,7 @@
 namespace KWin {
 class SurfaceItem;
 class LogicalOutput;
+class RenderDevice;
 struct PointerMotionEvent;
 struct PointerButtonEvent;
 }
@@ -201,19 +203,36 @@ public:
     // a desktop blend replaces the scene wholesale, so a strip pass under it
     // would decorate a frame nobody sees. Otherwise this chains straight
     // through.
-    void paintScreen(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport, int mask,
-                     const KWin::Region& deviceRegion, KWin::LogicalOutput* screen) override;
-    void paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
-                     KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
-                     KWin::WindowPaintData& data) override;
+    //
+    // KWin 6.8 turned the three paint hooks into bool: false means the paint
+    // FAILED (a GPU reset, typically) and upstream's contract is that the effect
+    // stops rendering immediately. 6.7 returns void and cannot report failure.
+    //
+    // So the overrides are ADAPTERS of KWinCompat::PaintResult (bool or void),
+    // and all the logic lives in the *Impl methods below, which always return
+    // bool and are compiled once for both versions. Each Impl returns the result
+    // of the call it chains into, and a false from that chain skips whatever this
+    // effect would otherwise have drawn afterwards — every one of those trailing
+    // steps issues raw GL against a context that may already be gone. A frame
+    // this effect deliberately replaces (a desktop or strip transition) is a
+    // SUCCESS and returns true. On 6.7 the chained calls always report success,
+    // so the failure arms are simply never taken there.
+    KWinCompat::PaintResult paintScreen(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                        int mask, const KWin::Region& deviceRegion,
+                                        KWin::LogicalOutput* screen) override;
+    KWinCompat::PaintResult paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                        KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
+                                        KWin::WindowPaintData& data) override;
     // Border render path (implemented in decorations.cpp). A static bordered window
     // is rendered through the offscreen border shader PASSIVELY here: we bind the
     // border shader + push its uniforms, then let OffscreenEffect::drawWindow
     // re-blit the redirected FBO through it on EVERY composite (idle included),
     // with no FBO re-render and no forced per-frame repaints — the
     // KDE-Rounded-Corners model. paintWindow no longer touches the border.
-    void drawWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport, KWin::EffectWindow* w,
-                    int mask, const KWin::Region& deviceRegion, KWin::WindowPaintData& data) override;
+    KWinCompat::PaintResult drawWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                       KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
+                                       KWin::WindowPaintData& data) override;
+
     void grabbedKeyboardEvent(QKeyEvent* e) override;
     /// Pointer events delivered while this effect holds the mouse
     /// interception — which it does for exactly the span the pointer is over
@@ -279,6 +298,12 @@ protected:
     enum class ShaderBranchOutcome {
         Handled,
         Continue,
+        /// The branch's own present draw FAILED (KWin 6.8 onwards reports it; a
+        /// GPU reset in practice). Distinct from Handled because the caller must
+        /// report the failure out of paintWindow rather than treat the window as
+        /// painted, and distinct from Continue because the chain must not be
+        /// entered a second time after a failed draw.
+        Failed,
     };
 
     /// The shader-transition branch of paintWindow, extracted verbatim
@@ -1008,7 +1033,7 @@ private:
      * resolving against the animator's rect would cancel the relocation applied
      * just above and put the predicate right back at the destination.
      *
-     * SEVEN consumers, and they must stay in lockstep or a column blinks or
+     * The consumers, which must stay in lockstep or a column blinks or
      * burns: prePaintWindow withholds the TRANSFORMED flag (so KWin's own
      * culling is free to skip the window instead of being forced to paint
      * it), paintWindow skips the backdrop capture / decoration fold / draw,
@@ -1104,6 +1129,16 @@ private:
      */
     void paintScrollTabIndicators(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                                   const KWin::Region& deviceRegion);
+
+    /// The render device of the output pass currently executing, for the callers
+    /// that hand a scene item to an ItemRenderer themselves (KWin 6.8 keys those
+    /// renderers by device). Never guess one instead: guessing means the primary
+    /// GPU, which is the wrong renderer for an output rendering on a secondary one.
+    ///
+    /// Null both outside a pass bracket AND always on 6.7, which has no
+    /// render-device concept — so null does NOT mean "cannot draw"; pass it to
+    /// KWinCompat::sceneRenderer and let that decide. See m_currentPassView.
+    KWin::RenderDevice* currentPassRenderDevice() const;
 
     TilingHandler* tilingHandler() const
     {
@@ -1419,24 +1454,11 @@ private:
     /// decorations.cpp with the rest of the chain-resolution code.
     bool hasDecorationTreeContent() const;
 
-    /// True when a placement-state change could change SOME window's resolved
-    /// rule outcome, so the per-window invalidation path has to run at all.
-    ///
-    /// The exclusion set is a separate term from the three appearance ones on
-    /// purpose. It is not an animation rule, sets no appearance default and
-    /// leaves no decoration-tree content, so an Exclude-only configuration makes
-    /// all three false — yet isExcludedBySnappingRule caches its verdict per
-    /// (windowId, rule-set revision), neither of which moves on a placement flip,
-    /// and that verdict gates shouldHandleWindow / shouldDecorateWindow. Folding
-    /// it in here is what stops `Exclude WHEN IsFloating` (and, since the
-    /// ActiveLayout wire, `WHEN ActiveLayout = X`) freezing at its first consult.
-    /// Callers still gate the expensive appearance work on the three predicates
-    /// separately — this only decides whether the path is entered.
-    bool hasPlacementSensitiveRuleWork() const
-    {
-        return !m_shaderManager.animationRuleSet().isEmpty() || hasWindowAppearanceDefault()
-            || hasDecorationTreeContent() || !m_snappingExclusionRuleSet.isEmpty();
-    }
+    // There is deliberately NO hasPlacementSensitiveRuleWork() helper here. One
+    // existed with a doc asserting callers gated on it and had none: a copy of the live
+    // gate in rule_invalidation.cpp that had fallen two terms behind
+    // (m_decorationExclusionRuleSet, effectVerdictRuleSet), both of which that file
+    // explains are load-bearing. The gate lives at its one call site.
 
     /// Evaluate a config-default appearance scope token against a live window.
     /// "tiled" → the window is snapped or autotile-managed; "normal" → its
@@ -1638,9 +1660,10 @@ private:
     /// live animation is drawing from (the compositeTexId-0 class of bug). @p target
     /// must be the EXACT window, never a fuzzy same-app sibling.
     ///
-    /// Three other sites erase m_surfaceMultipass directly, and each is deliberate:
-    ///   - lifecycle_wiring.cpp's surface-pack hot-reload clears the WHOLE map, because every
-    ///     compiled pack is about to be recompiled and no composite survives it;
+    /// A few other sites erase m_surfaceMultipass directly, and each is deliberate:
+    ///   - lifecycle_wiring.cpp's surface-pack hot-reload clears the WHOLE map: every compiled
+    ///     pack is about to be recompiled (its PRESET sibling invalidates the fold flags
+    ///     instead, so a corpse keeps the frozen frame its close leg needs);
     ///   - lifecycle_wiring.cpp's windowDeleted backstop, which runs after the window is gone
     ///     and there is nothing left to animate;
     ///   - surface_capture.cpp's ensureSurfaceTargets, which on an allocation failure
@@ -1785,11 +1808,39 @@ private:
                                     const QStringList& chain, SurfaceMultipassState& state,
                                     const CompiledPackResolver& compiledPackLazy, bool inTransition);
 
+    /// Drive @p windows through this effect's OWN paintWindow with the
+    /// direct-capture latch held, invoking @p afterWindow (when set) after each
+    /// one paints. The shared body of the two screen-level transition
+    /// composites — the desktop switch's outgoing reconstruction and the strip
+    /// pass's above-strip set. Returns false at the first window whose paint
+    /// reported failure, having also set m_currentPassPaintFailed. Defined in
+    /// paint_capture.cpp.
+    [[nodiscard]] bool compositeWindowsDirect(const KWin::RenderTarget& renderTarget,
+                                              const KWin::RenderViewport& viewport,
+                                              const QList<KWin::EffectWindow*>& windows,
+                                              const std::function<void(KWin::EffectWindow*)>& afterWindow = {});
+
+    /// How densely the backdrop must be captured for @p deco's chain: 0.0 when no
+    /// compiled pack reads the backdrop, 1.0 when a MAIN pass samples it sharp,
+    /// otherwise the largest bufferScale among the buffer passes that link it (a
+    /// blur pyramid reads through normalized uvs, so capturing past its density
+    /// stores texels the samplers stride over; max rather than min, because a
+    /// chain with two blur packs must satisfy the denser reader).
+    ///
+    /// Resolves through the SAME lazy compile the fold uses, so the gate and the
+    /// fold agree within one frame — needsBackdrop is metadata and over-reports
+    /// when the linker dropped every backdrop uniform. Defined in
+    /// surface_capture.cpp, beside the rest of the fold's input side.
+    qreal chainBackdropScale(const WindowDecoration& deco, const QString& decoWindowId, KWin::EffectWindow* w);
+
     /// Capture the raw window surface for the fold to read as uTexture0. The single
     /// most expensive step of the fold — it re-enters KWin's whole draw chain — and the
-    /// reason SurfaceMultipassState::captureValid exists. Defined in surface_capture.cpp.
-    void captureWindowSurface(KWin::EffectWindow* w, SurfaceMultipassState& state, const QRectF& logicalGeometry,
-                              qreal captureScale, bool intoCaptureTex, qreal captureOpacity);
+    /// reason SurfaceMultipassState::captureValid exists. Returns false when the draw
+    /// chain reported failure (6.8 only), meaning the target holds only the clear and
+    /// the caller must abandon the fold. Defined in surface_capture.cpp.
+    [[nodiscard]] bool captureWindowSurface(KWin::EffectWindow* w, SurfaceMultipassState& state,
+                                            const QRectF& logicalGeometry, qreal captureScale, bool intoCaptureTex,
+                                            qreal captureOpacity);
 
     /// Shell surfaces only: derive the VISIBLE content rect of the freshly
     /// captured surface from its alpha, inside the frame rect. A Plasma panel's
@@ -2025,13 +2076,13 @@ private:
 
     /// Surface-shader pack registry (the "surface" category: window border /
     /// rounded corners / glow / …). Discovers data/surface packs; the effect
-    /// compiles each pack a resolved decoration chain references. Search paths
-    /// populated lazily via ensureSurfaceRegistryPaths.
+    /// compiles each pack a resolved decoration chain references.
     PhosphorSurfaceShaders::SurfaceShaderRegistry m_surfaceShaderRegistry;
     bool m_surfaceRegistryPathsAdded = false; ///< one-shot guard for the search-path population
+    quint64 m_decorationSweepGeneration = 0; ///< updateAllDecorations re-entry counter; rationale at that call site
 
     /// Per-surface decoration profile tree, delivered by the daemon as
-    /// `decorationProfileTreeJson` (Settings::decorationProfileTree). resolve()
+    /// `decorationProfileTreeJson` (Settings::decorationProfileTree), whose resolve()
     /// over a window's surface path (window.tiled / window.snapped /
     /// window.floating) yields the DecorationProfile that drives the window's
     /// surface-pack chain and the per-pack parameters that style it (border
@@ -2040,11 +2091,20 @@ private:
     /// (seedDecorationTreeBaseline) — nothing is auto-inserted, because border
     /// and title-bar appearance resolve through resolveEffectiveWindowAppearance
     /// rather than through this tree; replaced wholesale when the setting
-    /// arrives. Do not read this as "populated by default":
-    /// hasDecorationTreeContent() is false until the user has actually applied
-    /// surface packs, which is load-bearing for the invalidation gates that
-    /// consult it.
+    /// arrives. NOT "populated by default": hasDecorationTreeContent() is false until the
+    /// user has applied surface packs, which the invalidation gates depend on.
     PhosphorSurfaceShaders::DecorationProfileTree m_decorationTree;
+
+    /// `m_decorationTree.resolve(path)` with each layer's preset flattened in. Every
+    /// consumer that reads PARAMETERS goes through here, so "what does this surface render
+    /// with" has one answer; the tree raw skips the preset (hasDecorationTreeContent reads
+    /// raw, correctly: no preset gates a chain). @p family is `Pointer` for the cursor chain.
+    PhosphorSurfaceShaders::DecorationProfile
+    resolveDecorationProfile(const QString& path,
+                             PhosphorShaders::ShaderFamily family = PhosphorShaders::ShaderFamily::Surface) const;
+    /// The POINTER pair spelled once: the family argument above defaults to Surface, so a
+    /// caller omitting it resolves the cursor chain against the wrong family, silently.
+    [[nodiscard]] PhosphorSurfaceShaders::DecorationProfile resolvedPointerProfile() const;
 
     /// Compiled surface-shader packs keyed by pack id (CompiledSurfacePack holds
     /// the main MapTexture shader, contract uniform locations, pack-declared
@@ -2058,7 +2118,7 @@ private:
     /// Per-pack CLAMPED bufferScale (clampedBufferScale() — the user's global
     /// multiplier already folded in), cached off the registry's by-value
     /// SurfaceShaderEffect lookup for the per-frame backdrop-density resolve
-    /// (chainBackdropScale in paint_pipeline.cpp). Metadata only — the
+    /// (chainBackdropScale in surface_capture.cpp). Metadata only — the
     /// linked-uniform verdicts are compile state and deliberately NOT cached
     /// here (see that lambda's comment for the two bugs a raw probe caused).
     /// Cleared wherever m_compiledPacks clears (a registry hot-reload can
@@ -2169,45 +2229,47 @@ private:
     /// maximize for a window.maximize pack. Only names WE
     /// unloaded are recorded, so clearing the pack (or unloading this effect)
     /// loads back exactly what the user had — never an effect KWin left
-    /// disabled in kwinrc. Accepted edge: disabling a builtin in the Desktop
-    /// Effects KCM WHILE the suppression holds it unloaded leaves its name
-    /// recorded (the KCM apply is a no-op on the already-unloaded effect), so
-    /// the eventual restore re-loads it for the rest of the session; the next
-    /// session honours kwinrc, which the suppression never writes. Querying
-    /// kwinrc from the effect to close this would add a config dependency the
-    /// plugin doesn't otherwise need.
+    /// disabled in kwinrc. Accepted edge: disabling a builtin in the Desktop Effects
+    /// KCM WHILE the suppression holds it unloaded leaves its name recorded (the KCM
+    /// apply is a no-op on the already-unloaded effect), so the eventual restore
+    /// re-loads it for the rest of the session. The next session honours kwinrc, which
+    /// the suppression never writes, and querying kwinrc from the effect to close this
+    /// would add a config dependency the plugin does not otherwise need.
     QStringList m_suppressedStockEffects;
-    /// Set by the aboutToQuit latch (constructor): distinguishes a runtime
-    /// unload of this effect from compositor shutdown in the destructor's
-    /// suppressed-effect restore. See ~PlasmaZonesEffect.
+    /// Set by the aboutToQuit latch (constructor): distinguishes a runtime unload of
+    /// this effect from compositor shutdown in the destructor's suppressed-effect
+    /// restore. See ~PlasmaZonesEffect.
     bool m_compositorShuttingDown = false;
     /// Coalescing latch for scheduleEffectAudioSync: many decoration/settings
-    /// callbacks can fire in one event-loop turn (a focus change removes then
-    /// re-adds a decoration); collapsing them to one syncEffectAudioState keeps
-    /// the blocking cava stop()/start() off the synchronous path and avoids a
-    /// kill+respawn when a decoration is immediately re-added.
+    /// callbacks can fire in one event-loop turn (a focus change removes then re-adds
+    /// a decoration), and collapsing them to one syncEffectAudioState keeps the
+    /// blocking cava stop()/start() off the synchronous path.
     bool m_audioSyncScheduled = false;
-    /// Warn once, not every sync, when an audio pack wants CAVA but `cava` is not
-    /// installed. Reset when audio is torn down so a later install can re-warn.
+    /// Warn once, not every sync, when an audio pack wants CAVA but it is not
+    /// installed. Reset on audio teardown so a later install can re-warn.
     bool m_audioUnavailableWarned = false;
 
-    /// Deliver a fresh spectrum from m_audioProvider: store it, stamp the
-    /// change time, mark the texture dirty, and prime a repaint so audio-reactive
-    /// borders pick it up.
+    /// Deliver a fresh spectrum from m_audioProvider: store it, stamp the change time,
+    /// mark the texture dirty, and prime a repaint so audio-reactive borders see it.
     void onEffectAudioSpectrum(const QVector<float>& spectrum);
 
     /// Start/stop/reconfigure the effect's cava instance to match the run gate
-    /// (m_enableAudioVisualizer && (hasAudioReactiveDecoration() ||
-    /// hasAudioReactiveAnimation())). Lazily creates m_audioProvider on first
-    /// run. Prefer scheduleEffectAudioSync from high-frequency callers
-    /// (decoration refresh, settings replies).
+    /// (m_enableAudioVisualizer && (hasAudioReactiveDecoration() || hasAudioReactiveAnimation())).
+    /// Lazily creates m_audioProvider; prefer scheduleEffectAudioSync from hot callers.
     void syncEffectAudioState();
 
-    /// Coalesced, deferred syncEffectAudioState: sets a pending latch and posts a
-    /// single queued evaluation, so a remove-then-readd (focus change) or the two
-    /// async settings replies settle to ONE net decision at event-loop return and
-    /// the compositor thread never blocks on cava stop()+respawn mid-refresh.
+    /// Coalesced, deferred syncEffectAudioState: latch plus one queued evaluation, so a
+    /// remove-then-readd or the two async settings replies settle to ONE net decision at
+    /// event-loop return, off the compositor thread's synchronous path.
     void scheduleEffectAudioSync();
+
+    /// The in-handler re-seed flag and the two sweep latches; see `schedulePresetSweep`.
+    bool m_seedingPresetsInline = false;
+    bool m_surfacePresetSweepScheduled = false;
+    bool m_pointerPresetSweepScheduled = false;
+    void schedulePresetSweep(PhosphorShaders::ShaderFamily family);
+    void applySurfacePresetSweep();
+    void applyPointerPresetSweep();
 
     /// Unload the KWin stock effects whose event one of OUR packs owns, and
     /// load back exactly the ones WE unloaded when that stops holding. Three
@@ -2562,6 +2624,63 @@ private:
     /// m_capturingSnapshot instead. With the latch null the suppression does
     /// not engage (fails open).
     KWin::LogicalOutput* m_currentPassOutput = nullptr;
+    /// The RenderView of the pass named by m_currentPassOutput, latched and
+    /// cleared in the same two places for the same bracket. KWin 6.8 keeps one
+    /// ItemRenderer per RenderDevice rather than one per scene, and the view is
+    /// the only per-output route to that device — so anything drawing a scene
+    /// item by hand (currently just the cursor sprite) has to ask this pass's
+    /// view which device it is rendering on. Reading the compositor's PRIMARY
+    /// device instead would be wrong on a multi-GPU desktop, where an output can
+    /// render on a secondary one. Latched and cleared at the same two sites as
+    /// m_currentPassOutput. ScreenPrePaintData::screen and ::view are independent
+    /// fields, so this is not the same condition as that latch being null; it is
+    /// the same bracket.
+    KWin::RenderView* m_currentPassView = nullptr;
+    /// Whether a chained paint reported FAILURE during this pass. 6.8 only: the
+    /// 6.7 wrappers always answer true, so this never becomes true there.
+    ///
+    /// Exists because a transition pass that discovers the failure cannot report
+    /// it through its own bool — paintOutput's false already means "I did not
+    /// take this frame", and the caller answers that by running the normal scene
+    /// walk. Without a second channel the effect would issue a SECOND full
+    /// effects->paintScreen against a context KWin has just declared lost, and
+    /// would then report whatever that second walk said, silently swallowing the
+    /// first failure whenever the retry happened to succeed.
+    ///
+    /// Set at the sites whose failure ABANDONS a pass, cleared in prePaintScreen beside
+    /// the two latches above. Read by paintScreenImpl (to bail instead of
+    /// re-walking) and by postPaintScreen, which per KWin 6.8's contract still
+    /// runs after a failed paint and must not book a discarded frame as painted.
+    bool m_currentPassPaintFailed = false;
+
+    /// The three paint hooks' actual bodies, version-independent: true when the
+    /// paint succeeded (or was deliberately skipped), false when the chained call
+    /// reported failure. See the override declarations near the top of the class.
+    ///
+    /// Private: the only callers are the three overrides, which are members. They
+    /// exist solely so the version-conditional return type lives in the adapters
+    /// and nowhere else, and they are not part of the plugin's surface.
+    [[nodiscard]] bool paintScreenImpl(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                       int mask, const KWin::Region& deviceRegion, KWin::LogicalOutput* screen);
+    [[nodiscard]] bool paintWindowImpl(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                       KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
+                                       KWin::WindowPaintData& data);
+    [[nodiscard]] bool drawWindowImpl(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                      KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
+                                      KWin::WindowPaintData& data);
+
+    /// Record @p ok on the pass and hand it straight back, so a chained result can
+    /// be returned and latched in one expression. For the tail returns of
+    /// paintWindowImpl, whose value goes to KWin through the window walk while the
+    /// pill blit's scope guard — which runs AFTER the return value is computed —
+    /// can only see the latch.
+    [[nodiscard]] bool notePaintOk(bool ok)
+    {
+        if (!ok) {
+            m_currentPassPaintFailed = true;
+        }
+        return ok;
+    }
     /// Per-pass memo for scrollManagedOutputFor: prePaintWindow and
     /// paintWindow each probe the predicate for every window, and its chain
     /// (id lookup, tiled-bucket scan, float check, output resolve) is not
@@ -3158,10 +3277,11 @@ private:
     bool m_vertexSnappingDisabled = false;
 
     /// True while a direct-drive caller runs paintWindow OUTSIDE KWin's chain
-    /// walk. TWO setters: DesktopTransitionManager::compositeWindowsInto —
-    /// the shared tail of both desktop captures, captureDesktop (the switch
-    /// legs) and capturePeekWindowsScene (the peek's windows layer) — and
-    /// StripTransitionManager's top-composite, which draws the above-strip
+    /// walk. ONE setter, compositeWindowsDirect, which both screen-level
+    /// transition composites go through: DesktopTransitionManager's
+    /// compositeWindowsInto (the shared tail of captureDesktop for the switch
+    /// legs and capturePeekWindowsScene for the peek's windows layer), and
+    /// StripTransitionManager's compositeSharp, which draws the above-strip
     /// windows onto the SCREEN target after its quad (not a capture, and
     /// per-frame for the whole leg). paintWindow's tail then terminates
     /// with effects->drawWindow instead of continuing the paintWindow chain:
@@ -3217,7 +3337,8 @@ private:
     /// refreshFullscreenSuppression() and empty whenever the setting is off, so
     /// every consumer is a plain set lookup rather than a stacking-order walk.
     /// Never dereferenced — only compared — so a stale entry cannot crash, but
-    /// onScreenRemoved refreshes anyway to keep it honest.
+    /// onScreenRemoved erases the dying output anyway, so a hotplug landing at
+    /// the same address cannot inherit its suppression.
     QSet<KWin::LogicalOutput*> m_fullscreenSuppressedOutputs;
 
     /// Multiplier on each pack's declared buffer-pass bufferScale

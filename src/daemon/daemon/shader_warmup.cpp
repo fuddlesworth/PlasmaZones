@@ -14,6 +14,7 @@
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
+#include <PhosphorShaders/ShaderPresetStore.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 
@@ -105,6 +106,131 @@ void Daemon::setupSurfaceShaderEffects()
     // registry's teardown.
     if (m_overlayService) {
         m_overlayService->setSurfaceShaderRegistry(m_surfaceShaderRegistry.get());
+    }
+}
+
+void Daemon::setupShaderPresets()
+{
+    // Clear every borrow and sever every connection BEFORE replacing the store,
+    // the order stop() is careful about. make_unique destroys the previous store —
+    // and the registry it holds by value — while OverlayService may still be
+    // holding a pointer to that registry, and load() below touches the filesystem,
+    // so the window is not one that can be argued away as event-loop-free. Only
+    // reachable on an init() re-run, which this daemon documents as supported.
+    if (m_overlayService) {
+        m_overlayService->setPresetRegistry(nullptr);
+    }
+    // The overlay sync connection used to be severed sixty lines and one load()
+    // below this point, which left its lambda live across the replacement holding a
+    // reference into the store being destroyed. stop() does it in this order
+    // already; this is the same discipline on the re-init path.
+    // All THREE sync connections are held and severed, not just the overlay one. The
+    // other two used to be left unheld on the argument that their senders are
+    // recreated each init — true today only because init() happens to call
+    // setupAnimationShaderEffects() and setupSurfaceShaderEffects() immediately
+    // before this, and those two `make_unique` their registries. Nothing enforces
+    // that ordering; these are three independent private phase methods, and the very
+    // next phase in this file takes the opposite stance for the same reason ("a
+    // caller reaching this function outside that ordering must skip rather than
+    // crash"). Re-running this one alone double-connected both, and a double seed is
+    // idempotent but emits presetsChanged twice, which in the daemon is two
+    // refreshVisibleWindows and two animator rebuilds per pack reload.
+    for (QMetaObject::Connection* held :
+         {&m_overlayPresetSyncConnection, &m_animationPresetSyncConnection, &m_surfacePresetSyncConnection}) {
+        if (*held) {
+            disconnect(*held);
+            *held = {};
+        }
+    }
+    m_presetStore = std::make_unique<PhosphorShaders::ShaderPresetStore>(nullptr);
+    // Scans the user preset directories with live reload, and imports any
+    // presets left by the old zone-only save path on the way past.
+    // The three families the daemon resolves, named for the reason the
+    // compositor names its own: an unlisted family costs a watcher and a
+    // directory re-parse on every preset the user saves. The daemon serves
+    // animation, surface and overlay; pointer is compositor-only.
+    m_presetStore->load(PhosphorShaders::standardUserPresetRoot(),
+                        {PhosphorShaders::ShaderFamily::Animation, PhosphorShaders::ShaderFamily::Surface,
+                         PhosphorShaders::ShaderFamily::Overlay});
+
+    // Pack-declared presets are not the store's to scan — they live in each
+    // pack's metadata.json, which only that family's pack registry parses. Push
+    // what each registry has now, and again whenever it reloads, so a pack
+    // dropped in or updated on disk brings its presets with it.
+    //
+    // Seeded immediately rather than waiting for the first reload signal: the
+    // registries have already scanned by the time this runs, and a signal that
+    // never comes would leave every pack-declared preset invisible until the
+    // user happened to edit a pack.
+    // The projection is PhosphorShaders::seedPackPresets, shared with the
+    // compositor and the settings app. These three were the same loop written
+    // three times over, differing only in registry pointer, element type and
+    // family enum — so a fourth family meant a fourth copy, and a fix to the
+    // projection meant three edits here plus two elsewhere. What is left per
+    // family is the only thing that genuinely differs: which registry to ask,
+    // and the null guard, because each of these registries is nullable at a
+    // different point in the daemon's lifecycle.
+    //
+    // Each lambda reaches the store through `m_presetStore` and checks it, rather
+    // than capturing a reference into its registry. These are connected with `this`
+    // as context, so Qt severs them in ~QObject — after `m_presetStore` has already
+    // been reset — and a captured `ShaderPresetRegistry&` would then name freed
+    // memory. Today the order of stop() keeps that unreachable, but safety resting
+    // on a teardown order two files away is not the same as safety the guard can
+    // see. Asking the owning pointer each time is what the settings controller does,
+    // and for the same reason.
+    const auto syncOverlayPresets = [this]() {
+        if (m_presetStore && m_shaderRegistry) {
+            PhosphorShaders::seedPackPresets(m_presetStore->registry(), PhosphorShaders::ShaderFamily::Overlay,
+                                             m_shaderRegistry->availableShaders());
+        }
+    };
+    const auto syncAnimationPresets = [this]() {
+        if (m_presetStore && m_animationShaderRegistry) {
+            PhosphorShaders::seedPackPresets(m_presetStore->registry(), PhosphorShaders::ShaderFamily::Animation,
+                                             m_animationShaderRegistry->availableEffects());
+        }
+    };
+    const auto syncSurfacePresets = [this]() {
+        if (m_presetStore && m_surfaceShaderRegistry) {
+            PhosphorShaders::seedPackPresets(m_presetStore->registry(), PhosphorShaders::ShaderFamily::Surface,
+                                             m_surfaceShaderRegistry->availableEffects());
+        }
+    };
+
+    syncOverlayPresets();
+    syncAnimationPresets();
+    syncSurfacePresets();
+
+    // The overlay registry is CTOR-OWNED and survives stop(), unlike the
+    // animation and surface ones below, which stop() resets — so their
+    // connections die with their senders and this one does not. It is therefore
+    // held in a member and severed explicitly, the same discipline
+    // m_zoneWarmBakeConnection follows on the same sender: without it a
+    // shadersChanged arriving after stop() would run this lambda against a
+    // preset store that has already been reset, and an init() re-run would stack
+    // a second copy on top of the first. The severing itself happens at the TOP of
+    // this function, before the store is replaced, because that is the window the
+    // stale handle was live across.
+    if (m_shaderRegistry) {
+        m_overlayPresetSyncConnection =
+            connect(m_shaderRegistry.get(), &ShaderRegistry::shadersChanged, this, syncOverlayPresets);
+    }
+    if (m_animationShaderRegistry) {
+        m_animationPresetSyncConnection =
+            connect(m_animationShaderRegistry.get(), &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged,
+                    this, syncAnimationPresets);
+    }
+    if (m_surfaceShaderRegistry) {
+        m_surfacePresetSyncConnection =
+            connect(m_surfaceShaderRegistry.get(), &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
+                    syncSurfacePresets);
+    }
+
+    // The overlay service resolves an assignment's presetId through this, and
+    // refreshes visible windows when a preset changes.
+    if (m_overlayService) {
+        m_overlayService->setPresetRegistry(&m_presetStore->registry());
     }
 }
 

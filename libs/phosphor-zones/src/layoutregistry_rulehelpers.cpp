@@ -14,6 +14,8 @@
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/Rule.h>
 
+#include <algorithm>
+
 namespace PhosphorZones::RuleHelpers {
 
 namespace CRB = PhosphorRules::ContextRuleBridge;
@@ -275,6 +277,52 @@ int nextAssignmentPriority(const QList<PWR::Rule>& rules)
         return PWR::ContextRuleBridge::kContextBandBase + 99;
     }
     return maxPriority + 1;
+}
+
+bool contextIsNarrowerThan(const ContextDims& narrow, const ContextDims& broad)
+{
+    if (narrow.screenId != broad.screenId) {
+        return false;
+    }
+    if (broad.virtualDesktop != 0 && narrow.virtualDesktop != broad.virtualDesktop) {
+        return false;
+    }
+    if (!broad.activity.isEmpty() && narrow.activity != broad.activity) {
+        return false;
+    }
+    const bool moreDesktop = broad.virtualDesktop == 0 && narrow.virtualDesktop != 0;
+    const bool moreActivity = broad.activity.isEmpty() && !narrow.activity.isEmpty();
+    return moreDesktop || moreActivity;
+}
+
+QList<QUuid> liftNarrowerAssignmentsAbove(QList<PWR::Rule>& rules, const PWR::Rule& written)
+{
+    if (!isContextAssignmentRule(written)) {
+        return {};
+    }
+    const ContextDims writtenDims = decodeDims(written.match);
+    // Candidates in list order (the tie-break order), so the lift keeps
+    // their relative standing.
+    QList<int> shadowed;
+    for (int i = 0; i < rules.size(); ++i) {
+        const PWR::Rule& rule = rules.at(i);
+        if (rule.id == written.id || !isContextAssignmentRule(rule) || rule.priority > written.priority) {
+            continue;
+        }
+        if (contextIsNarrowerThan(decodeDims(rule.match), writtenDims)) {
+            shadowed.append(i);
+        }
+    }
+    std::stable_sort(shadowed.begin(), shadowed.end(), [&rules](int a, int b) {
+        return rules.at(a).priority < rules.at(b).priority;
+    });
+    QList<QUuid> lifted;
+    int next = written.priority + 1;
+    for (int index : shadowed) {
+        rules[index].priority = next++;
+        lifted.append(rules.at(index).id);
+    }
+    return lifted;
 }
 
 } // namespace PhosphorZones::RuleHelpers

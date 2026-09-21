@@ -40,6 +40,10 @@ ColumnLayout {
     /// editor self-updates it on toggle. Consumers may assign it (e.g. to
     /// clear locks when the selected effect changes).
     property var lockedParams: ({})
+    /// Forwarded to ParameterEditor: which parameter ids hold the asking
+    /// assignment's OWN value rather than the selected preset's. See the
+    /// property there for why the distinction needs showing at all.
+    property var overriddenParams: ({})
     property bool enableLocking: true
     property bool enableRandomize: true
     /// Forwarded to the inner editor's reset-all-to-defaults button.
@@ -84,6 +88,7 @@ ColumnLayout {
         parameters: root.parameters
         currentValues: root.currentValues
         lockedParams: root.lockedParams
+        overriddenParams: root.overriddenParams
         enableLocking: root.enableLocking
         enableRandomize: root.enableRandomize
         enableReset: root.enableReset

@@ -58,6 +58,13 @@ private Q_SLOTS:
     void testTrailWindowEdgeValuesFallBackToTheFloor();
     void testClockStepDoesNotLatchAcrossFollowingEvents();
     void testRestingPointerEventuallyEvictsEveryMotionSample();
+    void testButtonMaskCarriesEveryHeldButton();
+    void testSimultaneousPressReportsTheDocumentedPrecedence();
+    void testFrameStateCarriesTheCanvasScale();
+    void testDamageRectDropsAPressOlderThanTheWindow();
+    void testSpeedFilterRespondsTheSameAtAnyTrailWindow();
+    void testDamageRectAllowsForTheCurveOvershoot();
+    void testDamageRectSurvivesANegativeReach();
 };
 
 void TestPointerHistory::testFreshHistoryIsNotLive()
@@ -230,10 +237,11 @@ void TestPointerHistory::testVelocityDecaysWhenPointerStops()
 
 void TestPointerHistory::testFilterSeedsFromTheFirstScoredSample()
 {
-    // A short stroke after a park, where the seed choice moves the answer
-    // by hundreds of px/s: the start is scored 0 and must be the boundary,
-    // the first scored sample the seed. Seeding from the 0 would give 92
-    // here; seeding from the first scored sample gives 100*0.54 + 200*0.46.
+    // A short stroke after a park, where the seed choice moves the answer by
+    // hundreds of px/s: the start is scored 0 and must be the boundary, the
+    // first scored sample the seed. Seeding from the 0 would give around 60
+    // here. Seeding from the first scored sample, and weighting the 200 by
+    // the 50 ms it spans (1 - exp(-0.050 / 0.050) = 0.632), gives 163.
     PointerHistory history;
     history.notePointer(QPointF(0.0, 0.0), 0);
     history.notePointer(QPointF(1000.0, 0.0), 5000); // park, then the start (speed 0)
@@ -242,8 +250,9 @@ void TestPointerHistory::testFilterSeedsFromTheFirstScoredSample()
     const PointerFrameState state = history.frameState(5100, 1.0);
     QCOMPARE(state.trailSize(), 4);
     QCOMPARE(state.trailAt(2).w(), 0.0f); // the start
-    QVERIFY2(std::abs(state.filteredSpeed - 146.0) < 1.0,
-             qPrintable(QStringLiteral("filtered %1, expected 146").arg(state.filteredSpeed)));
+    const double seeded = 100.0 * std::exp(-1.0) + 200.0 * (1.0 - std::exp(-1.0));
+    QVERIFY2(std::abs(state.filteredSpeed - seeded) < 1.0,
+             qPrintable(QStringLiteral("filtered %1, expected %2").arg(state.filteredSpeed).arg(seeded)));
 
     // A start that a later in-interval event refreshed carries that event's
     // scored speed and seeds: at a 4 s window (130 ms interval) the start
@@ -260,7 +269,10 @@ void TestPointerHistory::testFilterSeedsFromTheFirstScoredSample()
     const PointerFrameState two = refreshed.frameState(5140, 1.0);
     QCOMPARE(two.trailSize(), 3);
     QCOMPARE(qRound(two.trailAt(1).w()), 100);
-    const double expected = 100.0 * 0.54 + (30.0 / 0.09) * 0.46;
+    // The refresh moved the start slot's stamp to 5050, so the newer sample
+    // spans 90 ms and is weighted 1 - exp(-0.090 / 0.050).
+    const double a = 1.0 - std::exp(-0.090 / PointerHistory::kSpeedFilterTauSeconds);
+    const double expected = 100.0 * (1.0 - a) + (30.0 / 0.09) * a;
     QVERIFY2(std::abs(two.filteredSpeed - expected) < 1.0,
              qPrintable(QStringLiteral("filtered %1, expected %2").arg(two.filteredSpeed).arg(expected)));
 }
@@ -458,10 +470,13 @@ void TestPointerHistory::testStationaryAppendsAreNotMotion()
     history.setTrailSeconds(0.5);
     history.notePointer(QPointF(0.0, 0.0), 0);
     history.notePointer(QPointF(100.0, 0.0), 50);
+    // Captured BEFORE the rest: filteredSpeed() takes no nowMs and reads only
+    // the ring, so reading it after the loop would compare the figure to
+    // itself and hold for any implementation at all.
+    const double movingSpeed = history.frameState(50, 1.0).filteredSpeed;
     for (qint64 t = 66; t <= 1050; t += 16) {
         history.notePointer(QPointF(100.0, 0.0), t);
     }
-    const PointerFrameState moving = history.frameState(50, 1.0);
     const PointerFrameState resting = history.frameState(1050, 1.0);
     QVERIFY2(resting.trailSize() > 2, "the stationary samples still land in the ring");
     QVERIFY2(resting.idleSeconds >= 1.0, qPrintable(QStringLiteral("idle %1").arg(resting.idleSeconds)));
@@ -470,7 +485,7 @@ void TestPointerHistory::testStationaryAppendsAreNotMotion()
     // The stationary samples are skipped by the filter, so the figure HOLDS
     // across the rest, as it does on the compositor where no sample lands at
     // all; the packs' idle fades end the drawing, not a decaying gate.
-    QCOMPARE(resting.filteredSpeed, moving.filteredSpeed);
+    QCOMPARE(resting.filteredSpeed, movingSpeed);
     QVERIFY(resting.filteredSpeed > 0.0);
 
     // The pairing stayed put too: the next real move pairs with the 50 ms
@@ -502,21 +517,35 @@ void TestPointerHistory::testStrokeBoundaryIsIndependentOfTheSampleInterval()
         history.notePointer(QPointF(x, 0.0), t);
     }
     const PointerFrameState state = history.frameState(t - 10, 1.0);
+    // A boundary placed at the sample interval would restart the filter at
+    // the newest slot and hand back exactly the head speed. It does not: the
+    // older slots still carry weight, so the two differ.
+    //
+    // Only slightly, and that is expected rather than a weak assertion. The
+    // filter has a 50 ms time constant and this window spaces the slots 130 ms
+    // apart, so each one is more than two constants from the last and the
+    // newest legitimately dominates. What is being pinned here is that the
+    // stroke was not CUT at the interval, which is a yes or no question; how
+    // much smoothing a 130 ms spacing buys is a different one, and the exact
+    // walk below pins that.
     const double head = state.newestTrail().w();
-    QVERIFY2(std::abs(state.filteredSpeed - head) > 300.0,
+    QVERIFY2(std::abs(state.filteredSpeed - head) > 1.0,
              qPrintable(QStringLiteral("filtered %1 collapsed to the head's %2").arg(state.filteredSpeed).arg(head)));
-    // Pinned to the walk itself: the exponential filter (a = 0.46) over the
-    // slots' speeds, oldest to newest, exactly as the frame state exposes
-    // them. The ring's oldest slot is the stroke's start (the first event,
-    // scored 0), which is the boundary and not the seed, so the walk seeds
-    // from the slot before it. The seed rule itself is pinned by
-    // testFilterSeedsFromTheFirstScoredSample on a ring short enough for the
-    // choice to matter; here the difference has decayed below the tolerance.
+    // Pinned to the walk itself: the exponential filter over the slots'
+    // speeds, oldest to newest, each weighted by the time it spans, exactly as
+    // the frame state exposes them. The ring's oldest slot is the stroke's
+    // start (the first event, scored 0), which is the boundary and not the
+    // seed, so the walk seeds from the slot before it. The seed rule itself is
+    // pinned by testFilterSeedsFromTheFirstScoredSample on a ring short enough
+    // for the choice to matter; here the difference has decayed below the
+    // tolerance.
     const int last = state.trailSize() - 1;
     const int seed = state.trailAt(last).w() <= 0.0f ? last - 1 : last;
     double expected = state.trailAt(seed).w();
     for (int i = seed - 1; i >= 0; --i) {
-        expected = expected * 0.54 + state.trailAt(i).w() * 0.46;
+        const double dt = double(state.trailAt(i + 1).z()) - double(state.trailAt(i).z());
+        const double a = 1.0 - std::exp(-std::max(dt, 0.0) / PointerHistory::kSpeedFilterTauSeconds);
+        expected = expected * (1.0 - a) + double(state.trailAt(i).w()) * a;
     }
     QVERIFY2(std::abs(state.filteredSpeed - expected) < 1.0,
              qPrintable(QStringLiteral("filtered %1, walk gives %2").arg(state.filteredSpeed).arg(expected)));
@@ -672,11 +701,16 @@ void TestPointerHistory::testTrailWindowChangeMidStreamRespacesTheRing()
     QCOMPARE(history.sampleIntervalMs(), qint64(26)); // ceil(800 / 31)
 
     qint64 t = 0;
-    for (int i = 0; i < 40; ++i) {
+    for (int i = 0; i < 20; ++i) {
         t += 30;
         history.notePointer(QPointF(double(i) * 20.0, 0.0), t);
     }
-    QCOMPARE(history.frameState(t, 0.8).trailSize(), PointerShaderContract::kMaxTrailPoints);
+    // Deliberately NOT filled to capacity: trailSize saturates at kCapacity,
+    // so on a full ring the refresh assertion below would read 32 == 32 and
+    // hold even for an implementation that appended on every event.
+    const int filled = history.frameState(t, 0.8).trailSize();
+    QVERIFY2(filled > 2 && filled < PointerShaderContract::kMaxTrailPoints,
+             qPrintable(QStringLiteral("filled %1").arg(filled)));
 
     // Grow the window. The interval widens, and the slots already in the ring
     // keep their absolute anchors, so the next append simply waits longer.
@@ -800,6 +834,154 @@ void TestPointerHistory::testRestingPointerEventuallyEvictsEveryMotionSample()
         history.notePointer(QPointF(100.0, 0.0), t);
     }
     QCOMPARE(history.frameState(t, 0.5).filteredSpeed, 0.0);
+}
+
+void TestPointerHistory::testButtonMaskCarriesEveryHeldButton()
+{
+    // The mask is a bitmask (1 left, 2 right, 4 middle) and is published to
+    // every pack, but nothing asserted a nonzero value, so an implementation
+    // that reused the 1/2/3 button-code encoding passed the whole suite.
+    PointerHistory history;
+    history.noteButtons(Qt::LeftButton | Qt::MiddleButton, Qt::NoButton, QPointF(10.0, 10.0), 0);
+    QCOMPARE(history.frameState(0, 1.0).buttons, 5);
+
+    PointerHistory middle;
+    middle.noteButtons(Qt::MiddleButton, Qt::NoButton, QPointF(10.0, 10.0), 0);
+    QCOMPARE(middle.frameState(0, 1.0).buttons, 4);
+}
+
+void TestPointerHistory::testSimultaneousPressReportsTheDocumentedPrecedence()
+{
+    // Left, then right, then middle when several land at once. Reversing the
+    // scan would change which button code every multi-button press reports.
+    PointerHistory history;
+    history.noteButtons(Qt::RightButton | Qt::LeftButton, Qt::NoButton, QPointF(5.0, 5.0), 0);
+    QCOMPARE(history.frameState(0, 1.0).pressButton, 1);
+
+    PointerHistory rightAndMiddle;
+    rightAndMiddle.noteButtons(Qt::MiddleButton | Qt::RightButton, Qt::NoButton, QPointF(5.0, 5.0), 0);
+    QCOMPARE(rightAndMiddle.frameState(0, 1.0).pressButton, 2);
+}
+
+void TestPointerHistory::testFrameStateCarriesTheCanvasScale()
+{
+    // Every other call site in this file passes 1.0, so the field had no
+    // coverage at all: dropping the assignment passed the suite.
+    PointerHistory history;
+    history.notePointer(QPointF(0.0, 0.0), 0);
+    QCOMPARE(history.frameState(0, 1.75).scale, 1.75);
+}
+
+void TestPointerHistory::testDamageRectDropsAPressOlderThanTheWindow()
+{
+    // The mixed case: a stale click with a live trail. Without the window test
+    // on the press the rect would span from any old click position for the
+    // rest of the session, which is the cost this class exists to avoid.
+    PointerHistory history;
+    history.setTrailSeconds(1.0);
+    history.noteButtons(Qt::LeftButton, Qt::NoButton, QPointF(2000.0, 2000.0), 0);
+    history.notePointer(QPointF(100.0, 100.0), 5000);
+    history.notePointer(QPointF(140.0, 100.0), 5040);
+    const QRectF damage = history.damageRect(10.0, 5040, 1.0);
+    QVERIFY(!damage.isEmpty());
+    QVERIFY2(!damage.contains(QPointF(2000.0, 2000.0)),
+             "a press older than the window must not hold the damage rect open");
+    QVERIFY(damage.contains(QPointF(140.0, 100.0)));
+}
+
+void TestPointerHistory::testSpeedFilterRespondsTheSameAtAnyTrailWindow()
+{
+    // The filter's response belongs to the pointer, not to the trail window.
+    // It used to fold each sample in with a fixed weight, and the sampler
+    // spaces samples by the window, so the same hand movement settled in about
+    // 49 ms at a 0.9 s window and about 210 ms at a 4 s one -- and the window
+    // is set by the LONGEST-lived pack in the chain, so a pack could have its
+    // speed gate retuned by a slider belonging to a different pack.
+    //
+    // Same events, same stamps, two windows: after a step in speed and a
+    // settling time of several time constants, both must have arrived.
+    const auto runStep = [](double trailSeconds) {
+        PointerHistory history;
+        history.setTrailSeconds(trailSeconds);
+        qint64 t = 0;
+        double x = 0.0;
+        // A second at 200 px/s, events every 10 ms.
+        for (int i = 0; i < 100; ++i, t += 10) {
+            x += 2.0;
+            history.notePointer(QPointF(x, 0.0), t);
+        }
+        // Then 250 ms at 2000 px/s, which is five time constants.
+        for (int i = 0; i < 25; ++i, t += 10) {
+            x += 20.0;
+            history.notePointer(QPointF(x, 0.0), t);
+        }
+        return history.frameState(t - 10, 1.0).filteredSpeed;
+    };
+
+    const double quick = runStep(0.9); // 30 ms sample spacing
+    const double slow = runStep(4.0); // 130 ms sample spacing
+    // Five time constants is over 99% of the way there at either spacing. The
+    // fixed-weight filter reached only about 70% at the 4 s window, so it
+    // missed this by hundreds of px/s.
+    QVERIFY2(std::abs(quick - 2000.0) < 100.0, qPrintable(QStringLiteral("0.9 s window settled at %1").arg(quick)));
+    QVERIFY2(std::abs(slow - 2000.0) < 100.0, qPrintable(QStringLiteral("4 s window settled at %1").arg(slow)));
+    QVERIFY2(std::abs(quick - slow) < 50.0,
+             qPrintable(QStringLiteral("windows disagree: %1 vs %2").arg(quick).arg(slow)));
+}
+
+void TestPointerHistory::testDamageRectAllowsForTheCurveOvershoot()
+{
+    // The packs stroke a curve through the smoothed samples, which is allowed
+    // to leave the straight path between the raw ones, so the rect has to cover
+    // more than the reach around the sample box. Without the allowance a fast
+    // curved sweep is cut flat at the damage edge, and the packs whose paint
+    // limit IS their reach have no slack of their own to hide it.
+    PointerHistory history;
+    history.setTrailSeconds(0.9);
+    // A right-angle corner, the shape with the most overshoot to cover.
+    history.notePointer(QPointF(0.0, 0.0), 0);
+    history.notePointer(QPointF(0.0, 120.0), 30);
+    history.notePointer(QPointF(120.0, 120.0), 60);
+    history.notePointer(QPointF(240.0, 120.0), 90);
+
+    const double reach = 10.0;
+    const QRectF damage = history.damageRect(reach, 90, 0.9);
+    QVERIFY(!damage.isEmpty());
+
+    // The raw sample box is 240 x 120, so reach alone would give 260 x 140.
+    const QRectF bare = QRectF(QPointF(0.0, 0.0), QPointF(240.0, 120.0)).adjusted(-reach, -reach, reach, reach);
+    QVERIFY2(damage.width() > bare.width() + 1.0,
+             qPrintable(QStringLiteral("width %1, reach alone gives %2").arg(damage.width()).arg(bare.width())));
+    QVERIFY(damage.contains(bare));
+
+    // And it is an allowance, not a blanket: a run with no gaps to curve
+    // through gets the reach and nothing more.
+    PointerHistory still;
+    still.setTrailSeconds(0.9);
+    still.notePointer(QPointF(50.0, 50.0), 0);
+    const QRectF parked = still.damageRect(reach, 0, 0.9);
+    QCOMPARE(parked.width(), 2.0 * reach);
+}
+
+void TestPointerHistory::testDamageRectSurvivesANegativeReach()
+{
+    // A negative reach would invert the rect through adjusted(), and QRectF
+    // does not normalise, so isEmpty() would report true and the pass would
+    // silently stop repainting.
+    // The run has area of its own, so this measures the clamp rather than
+    // whatever else happens to inflate the rect: two collinear samples give a
+    // zero-height box that any inflation at all would rescue.
+    PointerHistory history;
+    history.setTrailSeconds(1.0);
+    history.notePointer(QPointF(100.0, 100.0), 0);
+    history.notePointer(QPointF(160.0, 150.0), 40);
+    // The magnitude has to exceed the curve allowance this run earns (about
+    // 6.5 px), or the allowance alone keeps the rect the right way up and the
+    // clamp could be removed without this noticing.
+    const QRectF damage = history.damageRect(-100.0, 40, 1.0);
+    QVERIFY(!damage.isEmpty());
+    QVERIFY2(damage.width() >= 60.0 && damage.height() >= 50.0,
+             qPrintable(QStringLiteral("%1 x %2").arg(damage.width()).arg(damage.height())));
 }
 
 QTEST_MAIN(TestPointerHistory)

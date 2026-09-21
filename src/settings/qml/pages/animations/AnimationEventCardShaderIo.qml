@@ -56,14 +56,23 @@ QtObject {
         if (effectId !== card.currentShaderEffectId)
             return;
 
+        // The local display map still gets the whole-map assign, because that is
+        // what the controls are bound to and they have to show the new value now.
         var next = Object.assign({}, card.currentShaderParams || {});
         next[paramId] = value;
         card.currentShaderParams = next;
-        // Params-only: never restate the pack. `effectId` above is the RESOLVED
-        // id, so on a leaf that inherits its pack, writing it would pin that
-        // pack here and sever the cascade. It is still read for the stale-effect
-        // guard above, which is the only thing it is good for on this path.
-        card._setShaderParamsOnAll(next);
+        // The WRITE carries one key. Handing over `next` was correct only while
+        // `currentShaderParams` holds stored values alone — it comes from a tree
+        // walk-up that never consults the preset registry — and the day it holds
+        // the preset-merged effective values, a whole-map write would pin every
+        // one of the preset's values here as this event's own delta, with no
+        // signal. One key cannot, whatever the display holds.
+        //
+        // Params-only either way: never restate the pack. `effectId` above is the
+        // RESOLVED id, so on a leaf that inherits its pack, writing it would pin
+        // that pack here and sever the cascade. It is still read for the
+        // stale-effect guard above, which is all it is good for on this path.
+        card._setShaderParamOnAll(paramId, value);
     }
 
     /// Whether EVERY write path is already showing @p defaults and owns no
@@ -154,6 +163,10 @@ QtObject {
 
         card.currentShaderEffectId = nextEffectId;
         card.currentShaderParams = (resolved && resolved.parameters) ? resolved.parameters : ({});
+        // The preset the event points at, resolved through the same walk-up as
+        // the pack and the parameters, so an event inheriting its preset shows
+        // the one it actually renders with.
+        card.currentShaderPresetId = (resolved && resolved.presetId) ? resolved.presetId : "";
         // Computed HERE, not in refreshFromTree, because it reads the id
         // assigned on the line above. Component.onCompleted runs refreshFromTree
         // FIRST and this second, so computing it there would evaluate it against

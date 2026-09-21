@@ -105,6 +105,15 @@ Item {
     // resolved chain (so the user previews "what they'd start from").
     property var _chain: []
     property var _params: ({})
+    /// What this surface stores of its own, with NO fallback to the inherited
+    /// map. `_params` deliberately falls back so an unlatched card previews the
+    /// values it draws with; the preset axis needs the unfallen-back map.
+    property var _ownParams: ({})
+    /// Per-pack preset ids for this surface's chain, resolved the same way
+    /// `_params` is: the direct override when engaged, else what the surface
+    /// inherits, so a card with no override of its own still shows the presets
+    /// it is actually drawing with.
+    property var _presetIds: ({})
     property var _disabledPacks: []
     property string _parentChainText: ""
     // Parent-node only: count of descendant surfaces with their own override
@@ -157,6 +166,8 @@ Item {
         // effective chain, on first edit — display-equivalent, since the
         // editor only indexes per-pack entries for packs in the chain).
         root._params = (root._raw && root._raw.parameters) ? root._raw.parameters : ((root._resolved && root._resolved.parameters) ? root._resolved.parameters : ({}));
+        root._ownParams = (root._raw && root._raw.parameters) ? root._raw.parameters : ({});
+        root._presetIds = (root._raw && root._raw.presetIds) ? root._raw.presetIds : ((root._resolved && root._resolved.presetIds) ? root._resolved.presetIds : ({}));
         root._disabledPacks = root.bridge.disabledPacksAt(root.surfacePath);
         root._parentChainText = root._computeParentChainText();
         root._shadowingChildrenCount = root.bridge.overrideDescendantCount(root.surfacePath);
@@ -324,6 +335,16 @@ Item {
                     availableShaders: root._effects
                     chain: root._chain
                     packParameters: root._params
+                    // Own-only, with no fallback to the resolved map: the
+                    // preset axis asks "what does THIS surface store", and
+                    // `_params` answers "what does it draw with".
+                    packOwnParameters: root._ownParams
+                    packPresetIds: root._presetIds
+                    // The pointer surface draws from the pointer pack family,
+                    // every other surface from the surface family. Presets are
+                    // keyed by family, so handing over the wrong bridge would
+                    // offer tunings that cannot resolve.
+                    presetBridge: root._isPointer ? settingsController.pointerPresets : settingsController.surfacePresets
                     disabledPacks: root._disabledPacks
                     // Live preview inside each expanded layer row: the same
                     // stand-in card the pack browser shows, on this page's
@@ -359,8 +380,25 @@ Item {
                             root.bridge.setChainParams(root.surfacePath, packId, rolled);
                     }
                     onParamsResetRequested: function (packId, defaults) {
+                        if (!root.bridge)
+                            return;
+                        // With a preset engaged on this layer the baseline is the
+                        // PRESET, which is what the rows are showing. Writing the
+                        // pack defaults would pin every parameter over a preset
+                        // that stays selected. An empty map clears this layer's
+                        // deltas, the same write the revert below makes.
+                        const engaged = root._presetIds && root._presetIds[packId] !== undefined && String(root._presetIds[packId]).length > 0;
+                        root.bridge.setChainParams(root.surfacePath, packId, engaged ? ({}) : defaults);
+                    }
+                    onPresetChangeRequested: function (packId, presetId) {
                         if (root.bridge)
-                            root.bridge.setChainParams(root.surfacePath, packId, defaults);
+                            root.bridge.setChainPreset(root.surfacePath, packId, presetId);
+                    }
+                    onPresetRevertRequested: function (packId) {
+                        // Dropping this layer's deltas is the whole revert:
+                        // every value then resolves from the preset again.
+                        if (root.bridge)
+                            root.bridge.setChainParams(root.surfacePath, packId, ({}));
                     }
                 }
             }

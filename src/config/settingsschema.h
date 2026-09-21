@@ -53,6 +53,30 @@ QVariant canonicalWheelTriggerList(const QVariant& v);
 /// colours, the tab indicator's three, and the drop indicator's two.
 QVariant canonicalThemeFallbackColor(const QVariant& v);
 
+/// Bound the animation-shader assignment tree at the persistence boundary:
+/// string lengths, parameter-map size and value shapes, override count. The
+/// twin of sanitizeOverlayShaderTree, sharing its bounds; see
+/// settingsschema_shadertrees.cpp for why the motion keys beside it cannot get
+/// the same treatment.
+QVariant sanitizeShaderProfileTree(const QVariant& v);
+
+/// The decoration-tree twin of the above. Its parameter map is nested one
+/// level deeper ({packId -> {paramId -> value}}), so only the inner level is
+/// bounded scalar-only.
+QVariant sanitizeDecorationProfileTree(const QVariant& v);
+
+/// The MOTION tree's read-side bound, which simply runs the same canonicaliser its
+/// setter does (`canonicalMotionProfileTree`, settings/profiletrees.cpp).
+///
+/// Registered because the setter cannot be the only boundary: configmigration_v8 writes
+/// this key directly into the JSON document, outside the store, and config.json is
+/// hand-editable, so neither path ever passed through a setter. Sharing one function is
+/// what keeps the "canonicalise and bound on one pass" property the setter relies on.
+QVariant sanitizeMotionProfileTree(const QVariant& v);
+
+/// The motion tree's persistence form, shared by the setter and the sanitizer above.
+QVariantMap canonicalMotionProfileTree(const QVariantMap& tree);
+
 void appendShadersSchema(PhosphorConfig::Schema& schema);
 void appendOverlayShadersSchema(PhosphorConfig::Schema& schema);
 void appendAppearanceSchema(PhosphorConfig::Schema& schema);
