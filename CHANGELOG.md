@@ -7,10 +7,6 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Fixed
-
-- **Alt+Tab could not leave a fullscreen game**: with "Keep floating windows above" turned on, a fullscreen window that PlasmaZones had floated stayed on top of everything, even after you switched away from it. This happened to games whose minimum size is larger than the screen's work area, because a window that cannot fit is floated when it opens. Alt+Tab did switch to the other window, but it opened underneath the game where you could not see it. A fullscreen window is no longer kept above the others, and it goes back to being kept above as soon as it leaves fullscreen. ([#1114](https://github.com/fuddlesworth/PlasmaZones/pull/1114))
-
 ## [3.4.19] - 2026-09-21
 
 ### Added
@@ -22,6 +18,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Moving a free window to another desktop snapped it into a zone**: on a layout with auto-assign turned on, sending a window to another virtual desktop with a KWin shortcut, the pager or Overview put it in the first empty zone there, even when you had floated it or placed it by hand. A desktop move now only fills a zone for a window that was snapped where it came from. A window that was free stays free and keeps its size and position. ([#1108](https://github.com/fuddlesworth/PlasmaZones/discussions/1108))
 - **A restored window flashed at its old size before tiling**: minimize the only window on a tiling screen, open a few more, then bring the first one back. It appeared at the full work area it used to have, covering the others for the length of the restore animation, and then jumped into its tile. PlasmaZones waits for that animation before retiling, which is invisible when the layout has not moved and wrong when it has. It now notices that the screen's tiled windows changed while the window was away, or that the window was moved to another screen, and places it straight into its tile. ([#1110](https://github.com/fuddlesworth/PlasmaZones/pull/1110))
 - **A reopened window no longer lands in a layout its desktop does not run**: PlasmaZones remembers the zone a window was snapped into and puts it back there when the window reopens. It put it back by zone alone, without asking which layout the desktop in front of you actually runs, so a window snapped into Focus on one desktop and reopened on a desktop set to Master + Stack came back at the Focus zone's size and place, as if a second layout were haunting that desktop. The same happened on a desktop whose layout you had switched while the window was closed, and when a window came back after a screen returned from tiling to snapping. A remembered zone is now applied only when it belongs to the layout in force for that screen and desktop. Otherwise the window opens like any new window and follows that desktop's layout. ([#1104](https://github.com/fuddlesworth/PlasmaZones/discussions/1104))
+- **Alt+Tab could not leave a fullscreen game**: with "Keep floating windows above" turned on, a fullscreen window that PlasmaZones had floated stayed on top of everything, even after you switched away from it. This happened to games whose minimum size is larger than the screen's work area, because a window that cannot fit is floated when it opens. Alt+Tab did switch to the other window, but it opened underneath the game where you could not see it. A fullscreen window is no longer kept above the others, and it goes back to being kept above as soon as it leaves fullscreen. ([#1114](https://github.com/fuddlesworth/PlasmaZones/pull/1114))
 
 ## [3.4.18] - 2026-09-12
 
