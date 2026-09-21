@@ -70,6 +70,9 @@ const systemTray = PhosphorTray.create({root:$('#tray'),review:$('#tray-preview-
   onShow:()=>setView('tray'),onDismiss:()=>setView('desktop'),onBarChanged:refreshBar,notify});
 const authentication = PhosphorAuth.create({root:$('#authentication'),review:$('#auth-preview-controls'),desktop,icon,getSettings:()=>settings,
   onDismiss:reason=>{setView('desktop');notify(reason==='success'?'Authentication complete.':'Authentication cancelled.');}});
+const shortcuts = PhosphorShortcuts.create({root:$('#shortcuts'),review:$('#shortcuts-preview-controls'),icon,
+  getContext:()=>({mode:state.mode,workspace:workspaces[state.workspace]}),
+  onContextMode:mode=>{state.mode=mode;state.modes[state.workspace]=mode;renderBar();renderWindows();},onDismiss:()=>setView('desktop')});
 const currentWindows = () => windows.filter(w => w.workspace === state.workspace);
 const selectedWindow = () => windows.find(w => w.id === state.focused);
 const hue = index => ['var(--c1)','var(--c3)','var(--c4)','var(--c2)'][index % 4];
@@ -260,7 +263,7 @@ function getResults() {
   const q = state.query.toLowerCase();
   const open = windows.map(w=>({label:w.title,sub:`${w.app} · ${workspaces[w.workspace]}`,icon:w.icon,kind:'windows',id:w.id}));
   const apps = [{label:'Firefox',sub:'Web browser',icon:'globe'},{label:'Kate',sub:'Text editor',icon:'terminal'},{label:'Dolphin',sub:'File manager',icon:'folder'},{label:'Konsole',sub:'Terminal',icon:'terminal'}].map(a=>({...a,kind:'apps',id:a.label}));
-  const actions = [{label:'Customize shell',sub:'Colors, material, geometry',icon:'sun',kind:'actions',id:'customize'},{label:'Toggle do not disturb',sub:'Silence interruptions',icon:'moon',kind:'actions',id:'dnd'}];
+  const actions = [{label:'Customize shell',sub:'Colors, material, geometry',icon:'sun',kind:'actions',id:'customize'},{label:'Keyboard shortcuts',sub:'Search keys, actions, and placement modes',icon:'keyboard',kind:'actions',id:'shortcuts'},{label:'Toggle do not disturb',sub:'Silence interruptions',icon:'moon',kind:'actions',id:'dnd'}];
   return [...open,...apps,...actions].filter(r=>(state.filter==='all'||r.kind===state.filter)&&`${r.label} ${r.sub}`.toLowerCase().includes(q)).slice(0,7);
 }
 
@@ -288,6 +291,13 @@ function renderLauncher() {
 }
 
 function renderNotes() {
+  if(state.view==='shortcuts') {
+    $('#study-kicker').textContent='J / KEYBOARD SHORTCUTS';
+    $('#study-title').textContent='A little less remembering.';
+    $('#study-description').textContent='A field guide for each placement mode and a searchable reference beside it. Directional and numbered families fold into readable keycaps. Open a row for every binding and its explanation. Color, material, corners, and density follow your shell.';
+    $('#ux-description').textContent='Start in the current workspace’s mode, browse without changing your layout, and search actions or key names. Assigned only hides unbound actions. Try custom bindings, alternatives, an unavailable catalog, and large text above. Meta means Super. The preview never runs the displayed shortcuts.';
+    return;
+  }
   if(state.view==='authentication') {
     $('#study-kicker').textContent='I / AUTHENTICATION';
     $('#study-title').textContent='Know what you’re allowing.';
@@ -427,7 +437,7 @@ function render() {
   desktop.classList.toggle('stage',state.study==='stage');
   desktop.classList.toggle('overview-open',state.view==='overview');
   desktop.classList.toggle('locked',state.view==='lockscreen');
-  for(const element of desktop.querySelectorAll(':scope > :is(#bar,#windows,#overview,#controls,#stats,#tray,#launcher,#datetime,#notifications,#notification-arrival,#osd,#toast)')) element.inert=['lockscreen','power','appearance','authentication'].includes(state.view);
+  for(const element of desktop.querySelectorAll(':scope > :is(#bar,#windows,#overview,#controls,#stats,#tray,#launcher,#datetime,#notifications,#notification-arrival,#osd,#toast)')) element.inert=['lockscreen','power','appearance','authentication','shortcuts'].includes(state.view);
   $('#stage-shade').classList.toggle('hidden',!(state.study==='stage'&&state.view==='overview'));
   renderBar();renderWindows();renderOverview();renderControls();renderLauncher();renderDateTime();renderPower();renderNotes();
   notificationCenter.render(state.view==='notifications');
@@ -437,6 +447,7 @@ function render() {
   systemStats.render(state.view==='stats');
   systemTray.render(state.view==='tray');
   authentication.render(state.view==='authentication');
+  shortcuts.render(state.view==='shortcuts');
   // Canvas gradients cache their colors; resample after the wallpaper palette.
   syncVisualizer();
   $$('[data-study]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.study===state.study));
@@ -470,7 +481,7 @@ function setView(view) {
   if (view!=='desktop') returnFocus=document.activeElement;
   state.view=view;state.detail=null;
   if(view==='notifications')notificationCenter.showInbox();
-  if(view==='lockscreen'||view==='authentication') {clearTimeout(toastTimer);clearTimeout(osdTimer);$('#toast').classList.add('hidden');$('#osd').classList.add('hidden');}
+  if(['lockscreen','authentication','shortcuts'].includes(view)) {clearTimeout(toastTimer);clearTimeout(osdTimer);$('#toast').classList.add('hidden');$('#osd').classList.add('hidden');}
   render();
   if (view==='launcher') $('#launcher-search').focus();
   if (view==='datetime') $('#datetime [aria-pressed=true]')?.focus({preventScroll:true});
@@ -480,6 +491,7 @@ function setView(view) {
   if (view==='stats') systemStats.focus();
   if (view==='tray') systemTray.focus();
   if (view==='authentication') authentication.focus();
+  if (view==='shortcuts') shortcuts.focus();
   if (view==='controls') $('#controls [data-toggle="wifi"]')?.focus({preventScroll:true});
   if (view==='desktop') {
     if (previousView==='notifications') $('.bar-notifications').focus();
@@ -489,6 +501,7 @@ function setView(view) {
     else if (previousView==='tray') systemTray.restoreFocus();
     else if (previousView==='stats') ($('.bar-stats')||$('.view-switch [data-view="stats"]'))?.focus();
     else if (previousView==='controls') $('.status-cluster')?.focus();
+    else if (previousView==='shortcuts') $('.view-switch [data-view="shortcuts"]')?.focus();
     else if (returnFocus?.isConnected) returnFocus.focus();
     else $('.map-trigger')?.focus();
   }
@@ -511,6 +524,7 @@ function customize(open=true) {
   $('#customizer').classList.toggle('hidden',!open);
   $('#customize-toggle').setAttribute('aria-expanded',open);
   if(!open&&state.view==='authentication')authentication.focus();
+  if(!open&&state.view==='shortcuts')shortcuts.focus();
 }
 
 function focusWindow(id, dismiss=true) {
@@ -546,6 +560,7 @@ function runResult(index) {
   if(r.kind==='windows')focusWindow(r.id);
   else if(r.kind==='apps')launchApp(r.id);
   else if(r.id==='customize')setView('appearance');
+  else if(r.id==='shortcuts')setView('shortcuts');
   else {state.dnd=!state.dnd;setView('desktop');notify(`Do not disturb ${state.dnd?'on':'off'}`);}
 }
 
@@ -638,6 +653,7 @@ document.addEventListener('keydown',e=>{
   if(appearance.handleKey(e))return;
   if(lockscreen.handleKey(e))return;
   if(authentication.handleKey(e))return;
+  if(shortcuts.handleKey(e))return;
   if(quickSettings.handleKey(e))return;
   if(systemStats.handleKey(e))return;
   if(systemTray.handleKey(e))return;
@@ -689,7 +705,7 @@ new ResizeObserver(([entry])=>{
 }).observe($('.frame'));
 const [study,view,detail]=location.hash.slice(1).split('/');
 if(['navigator','stage'].includes(study))state.study=study;
-if(['desktop','overview','controls','launcher','datetime','notifications','lockscreen','power','appearance','stats','tray','authentication'].includes(view))state.view=view;
+if(['desktop','overview','controls','launcher','datetime','notifications','lockscreen','power','appearance','stats','tray','authentication','shortcuts'].includes(view))state.view=view;
 $('#preset').value=Object.entries(presets).find(([,preset])=>JSON.stringify(preset)===JSON.stringify(settings))?.[0] || 'custom';
 applySettings();
 if(state.view==='controls'&&['wifi','bluetooth','audio'].includes(detail))quickSettings.open(detail);
