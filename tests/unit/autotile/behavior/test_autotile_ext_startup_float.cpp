@@ -8,9 +8,18 @@
 
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include "helpers/AutotileTestHelpers.h"
+#include "helpers/IsolatedConfigGuard.h"
+#include "helpers/LayoutRegistryTestHelpers.h"
+#include "helpers/WindowPlacementBuilders.h"
+#include <PhosphorEngine/WindowPlacement.h>
+#include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingState.h>
+#include <PhosphorZones/LayoutRegistry.h>
+
+#include <QSet>
+#include <memory>
 
 using namespace PlasmaZones;
 using namespace PhosphorTileEngine;
@@ -100,6 +109,58 @@ private Q_SLOTS:
     // =========================================================================
     // Float/unfloat
     // =========================================================================
+
+    // #1106 on a tiling screen: a second instance floated at open by a Float
+    // rule, beside a tiled sibling, comes up at the sibling's tile size (the
+    // app saved it). It gets the sibling's remembered free size back where it
+    // stands, from the earliest live sibling with a usable rect.
+    void testFloatAtOpen_secondInstanceGetsSiblingFreeSize()
+    {
+        PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
+        std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
+        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), nullptr, nullptr);
+        QSet<QString> liveInstances{QStringLiteral("first")};
+        wts.placementStore().setLiveInstanceProbe(PlasmaZones::TestHelpers::liveInstanceProbe(liveInstances));
+
+        AutotileEngine engine(nullptr, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("DP-1");
+        engine.setAutotileScreens({screen});
+        engine.setFloatPredicate([](const QString& windowId, const QString&) {
+            return windowId == QStringLiteral("app|second");
+        });
+
+        // The tiled sibling's record: an autotile TILED slot plus the free
+        // rect it had before it was tiled.
+        const QRect siblingFree(100, 100, 700, 500);
+        auto sibling = PlasmaZones::TestHelpers::makePlacement(QStringLiteral("app|first"), QStringLiteral("app"),
+                                                               PhosphorEngine::WindowPlacement::stateTiled(),
+                                                               engine.engineId(), screen);
+        sibling.freeGeometryByScreen.insert(screen, siblingFree);
+        QVERIFY(wts.placementStore().record(sibling));
+        engine.windowOpened(QStringLiteral("app|first"), screen);
+        QCoreApplication::processEvents();
+
+        QSignalSpy geoSpy(&engine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested);
+        QSignalSpy sizeSpy(&engine, &PhosphorEngine::PlacementEngineBase::sizeRestoreRequested);
+        engine.windowOpened(QStringLiteral("app|second"), screen);
+        QCoreApplication::processEvents();
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        QVERIFY(state);
+        QVERIFY(state->isFloating(QStringLiteral("app|second")));
+        QVERIFY2(wts.placementStore().contains(QStringLiteral("app|first")), "the live sibling keeps its record");
+        QCOMPARE(geoSpy.count(), 0);
+        QCOMPARE(sizeSpy.count(), 1);
+        const QList<QVariant> args = sizeSpy.takeFirst();
+        QCOMPARE(args.at(0).toString(), QStringLiteral("app|second"));
+        QCOMPARE(args.at(1).toSize(), siblingFree.size());
+        QCOMPARE(args.at(2).toString(), screen);
+        // The tile-size refusal needs laid-out tile rects, which this guiless
+        // fixture never produces; the scroll suite pins that arm with real
+        // column rects, and the shared helper's refusal is pinned by the snap
+        // suite with real zone rects.
+    }
 
     void testToggleWindowFloat_crossScreenFallback()
     {

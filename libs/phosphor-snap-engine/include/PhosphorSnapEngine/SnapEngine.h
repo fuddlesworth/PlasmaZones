@@ -1069,7 +1069,8 @@ Q_SIGNALS:
 private:
     PhosphorEngine::ISnapSettings* snapSettings() const;
 
-    /// The size-only half of a float verdict (#1106); contract at the definition.
+    /// The snap arm of PlacementEngineBase::restoreFreeSizeWhereItStands (#1106):
+    /// supplies the zone and span sizes and the available area, then delegates.
     void restoreFreeSizeForUnplaced(const QString& windowId, const QString& screenId,
                                     PhosphorEngine::RestoreReason reason);
 

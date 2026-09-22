@@ -7,6 +7,7 @@
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <phosphorengine_export.h>
 
+#include <QList>
 #include <QObject>
 #include <QPointer>
 #include <QRect>
@@ -18,6 +19,7 @@
 namespace PhosphorEngine {
 
 struct LayerSwitchResult;
+class IWindowTrackingService;
 
 /// Abstract base class for placement engines.
 ///
@@ -91,16 +93,50 @@ protected:
     /// self-activation echo queue) happens BEFORE calling this.
     void announceLayerSwitch(const LayerSwitchResult& result, const QString& action, const QString& screenId);
 
+    /// The size-only half of a float verdict, shared by every engine (#1106).
+    ///
+    /// A window an engine leaves floating at open sits where the compositor
+    /// placed it, at the size the client asked for. KDE apps save their window
+    /// size to their own config on every resize, and a snap or a tile is a
+    /// resize, so an app with a managed window opens its next window at the
+    /// zone's, tile's or column's size. Nothing else undoes that: the position
+    /// restore is gated and moves only a window with its own screen-local
+    /// record, and a fresh second instance has no record at all. The size
+    /// comes from, in order, the window's OWN record (a reopen whose managed
+    /// record was declined, or whose floated record restored without a move,
+    /// re-bound to the live id before this runs), else the earliest-recorded
+    /// LIVE SIBLING's record with a usable rect.
+    ///
+    /// A rect is usable only when it lies on @p screenId (screen-local, like
+    /// the position restore) and its size is not within two pixels of any of
+    /// @p managedSizes, the sizes a managed window on that screen can have
+    /// (zones and live spans for snap, the live tile or column rects for the
+    /// tiling engines): a sibling the engine placed at open carries the
+    /// managed-sized spawn frame as its own "free" rect, which is the very
+    /// size this exists to undo, and record order alone cannot tell such a
+    /// sibling from the first instance. The size is clamped to
+    /// @p availableSize when that is valid.
+    ///
+    /// Gated on @p reason: only a first placement may resize (Open, the
+    /// pending sweep that performs an open the readiness gate refused, and
+    /// the desktop-arrival continuation of a parked open). Unminimize and the
+    /// daemon-restart sweep act on a window the user is looking at and leave
+    /// it alone. Emits sizeRestoreRequested; the adaptor relays it as a
+    /// size-only apply the effect performs as a teleport under first-frame
+    /// suppression. Callers guard against repeats with their own
+    /// already-floating checks. No-op without @p tracker.
+    void restoreFreeSizeWhereItStands(IWindowTrackingService* tracker, const QString& windowId, const QString& screenId,
+                                      RestoreReason reason, const QList<QSize>& managedSizes,
+                                      const QSize& availableSize);
+
 Q_SIGNALS:
     void geometryRestoreRequested(const QString& windowId, const QRect& geometry, const QString& screenId);
     /// Resize @p windowId to @p size where it stands, leaving the position to
     /// the compositor. The size-only sibling of geometryRestoreRequested: a
     /// window nothing places is given back its remembered free size, not its
     /// remembered spot. Relayed to the effect as a size-only apply. Emitted
-    /// by the snap engine only, and wired for it only: the tiling engines
-    /// place every window they keep, and their float arms restore the full
-    /// float-back rect instead. Declared here so the relay stays
-    /// mode-agnostic the day another engine needs it.
+    /// by restoreFreeSizeWhereItStands from every engine's float-at-open arm
+    /// and wired for all three.
     void sizeRestoreRequested(const QString& windowId, const QSize& size, const QString& screenId);
 
     void navigationFeedback(bool success, const QString& action, const QString& reason, const QString& sourceId,

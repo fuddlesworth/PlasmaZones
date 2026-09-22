@@ -261,6 +261,9 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // floating accept has no desktop term). Tier 3 already carries this
     // guard through insertShouldFloat; tier 2 needs its own.
     const bool migrationReAdd = m_migrationArrival && m_migrationArrival->windowId == windowId;
+    // Whether the record restore below moved the window (full rect, size
+    // included), which makes the size-only arm at the tail redundant.
+    bool movedByRecord = false;
     if (!inserted && hasStableAppId && m_windowTracker && !migrationReAdd) {
         using PhosphorEngine::WindowPlacement;
         // takeForReopen carries the shared accept predicate (floating slot:
@@ -306,6 +309,7 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
                     if (freeGeo.isValid() && restorePosition
                         && (!m_windowTracker || m_windowTracker->geometryBelongsToScreen(freeGeo, restoreScreen))) {
                         Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
+                        movedByRecord = true;
                     }
                     qCInfo(PhosphorTileEngine::lcTileEngine)
                         << "insertWindow: float-restore for" << windowId << "to" << freeGeo << "on" << restoreScreen
@@ -334,6 +338,33 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // then emits windowFloatingStateSynced so the daemon mirrors the state.
     if (!state->isFloating(windowId) && insertShouldFloat(windowId, screenId)) {
         state->setFloating(windowId, true);
+    }
+
+    // A window this engine leaves floating at open, and did not move to its
+    // remembered free spot, stays where the compositor put it at the size
+    // the client asked for: for a KDE app whose sibling is tiled that is the
+    // tile's size (#1106). Give it its free size back where it stands, from
+    // its own record or a live sibling's, refusing a rect of any live tile's
+    // size. Never on a migration re-add: that window is already placed. This
+    // runs inside windowOpened, ahead of the float-state sync onWindowAdded
+    // emits, so the size-only apply precedes the sync on the wire.
+    if (state->isFloating(windowId) && !movedByRecord && !migrationReAdd && m_windowTracker) {
+        QList<QSize> tileSizes;
+        for (const QString& tiled : state->tiledWindows()) {
+            const QRect rect = lastManagedRect(tiled);
+            if (rect.isValid()) {
+                tileSizes.append(rect.size());
+            }
+        }
+        QSize available;
+        if (m_screenManager) {
+            const QRect avail = m_screenManager->screenAvailableGeometry(screenId);
+            if (avail.isValid()) {
+                available = avail.size();
+            }
+        }
+        restoreFreeSizeWhereItStands(m_windowTracker, windowId, screenId, PhosphorEngine::RestoreReason::Open,
+                                     tileSizes, available);
     }
 
     // A pre-seeded window placed by a LATER tier (the advisory fall-through)

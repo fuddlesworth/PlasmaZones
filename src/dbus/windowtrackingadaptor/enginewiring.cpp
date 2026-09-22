@@ -64,6 +64,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         disconnect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this, nullptr);
         disconnect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::crossModeFocusRequested, this, nullptr);
         disconnect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this, nullptr);
+        disconnect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::sizeRestoreRequested, this, nullptr);
     }
     // Drop the cross-desktop move relay from BOTH outgoing engines before
     // reassigning (same anti-duplicate-connection reason as the float relay).
@@ -80,14 +81,15 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     // Drop the common float-restore geometry relay from BOTH outgoing engines
     // before reassigning, so a re-wire (mode toggle / daemon teardown) can't
     // accumulate duplicate connections.
+    // The size-only twin is dropped on the same rewire, so a same-pointer
+    // setEngines cannot deliver two size applies per emit.
     if (m_snapEngine) {
         disconnect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this, nullptr);
-        // The size-only twin is snap-only today; dropped on the same rewire so
-        // a same-pointer setEngines cannot deliver two size applies per emit.
         disconnect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::sizeRestoreRequested, this, nullptr);
     }
     if (m_autotileEngine) {
         disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this, nullptr);
+        disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::sizeRestoreRequested, this, nullptr);
     }
     // Drop the cross-mode handoff slots (move + swap) from BOTH outgoing engines —
     // same anti-duplicate-connection rule. Without this, a rewire with the same
@@ -460,38 +462,37 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     // Gated on the MEMBERS, like every sibling connect in this method: they were
     // assigned from these same parameters above, and being QPointers they also
     // read null for an engine destroyed between assignment and here.
+    // Size-only twin: every engine gives a window it leaves floating at open
+    // its remembered free size back (a second instance that inherited a
+    // managed sibling's zone, tile or column size from the app's own config,
+    // #1106). sizeOnly=true makes the effect keep the window where KWin
+    // placed it.
+    const auto sizeRestoreRelay = [this](const QString& windowId, const QSize& size, const QString& screenId) {
+        if (size.isEmpty()) {
+            return;
+        }
+        // The frame shadow is the effect's, but it is what the open-time
+        // RouteToScreen translation reads NEXT, inside this same resolve, and
+        // the effect's own flush of the resized frame arrives only after the
+        // configure lands. Left alone, a routed window carried the un-restored
+        // managed size onto its target monitor. The position stays the
+        // effect's; only the size is what this relay restored. A client that
+        // refuses the resize leaves the shadow at the requested size until
+        // its next real move, which is the free size the window is meant to
+        // have anyway.
+        if (const auto shadow = m_frameGeometry.find(shadowWindowId(windowId)); shadow != m_frameGeometry.end()) {
+            shadow->setSize(size);
+        }
+        Q_EMIT applyGeometryRequested(windowId, 0, 0, size.width(), size.height(), QString(), screenId, true);
+    };
     if (m_snapEngine) {
         connect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this, floatRestoreRelay);
-        // Size-only twin: the snap engine gives a window it leaves floating its
-        // remembered free size back (a second instance that inherited a snapped
-        // sibling's zone size from the app's own config, #1106). sizeOnly=true
-        // makes the effect keep the window where KWin placed it.
-        connect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::sizeRestoreRequested, this,
-                [this](const QString& windowId, const QSize& size, const QString& screenId) {
-                    if (size.isEmpty()) {
-                        return;
-                    }
-                    // The frame shadow is the effect's, but it is what the
-                    // open-time RouteToScreen translation reads NEXT, inside
-                    // this same resolve, and the effect's own flush of the
-                    // resized frame arrives only after the configure lands.
-                    // Left alone, a routed window carried the un-restored
-                    // zone size onto its target monitor. The position stays
-                    // the effect's; only the size is what this relay restored.
-                    // A client that refuses the resize leaves the shadow at
-                    // the requested size until its next real move, which is
-                    // the free size the window is meant to have anyway.
-                    if (const auto shadow = m_frameGeometry.find(shadowWindowId(windowId));
-                        shadow != m_frameGeometry.end()) {
-                        shadow->setSize(size);
-                    }
-                    Q_EMIT applyGeometryRequested(windowId, 0, 0, size.width(), size.height(), QString(), screenId,
-                                                  true);
-                });
+        connect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::sizeRestoreRequested, this, sizeRestoreRelay);
     }
     if (m_autotileEngine) {
         connect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this,
                 floatRestoreRelay);
+        connect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::sizeRestoreRequested, this, sizeRestoreRelay);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -524,6 +525,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                 &WindowTrackingAdaptor::handleCrossModeFocus, Qt::DirectConnection);
         connect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this,
                 floatRestoreRelay);
+        connect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::sizeRestoreRequested, this, sizeRestoreRelay);
         if (auto* scroll = m_cachedScrollEngine.data()) {
             // DELIBERATE SCOPE NOTE: of the injections the scroll engine
             // takes, THIS seam owns three — the float predicate, the

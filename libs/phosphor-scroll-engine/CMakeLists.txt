@@ -51,6 +51,7 @@ add_library(PhosphorScrollEngine SHARED
     src/scrollengine/drag_autoscroll.cpp
     src/scrollengine/drag_preview.cpp
     src/scrollengine/engine_lifecycle.cpp
+    src/scrollengine/engine_float_open.cpp
     src/scrollengine/engine_focus.cpp
     src/scrollengine/engine_minsize.cpp
     src/scrollengine/engine_reopen.cpp
