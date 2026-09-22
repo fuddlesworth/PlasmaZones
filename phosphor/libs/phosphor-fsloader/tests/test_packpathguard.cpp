@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Direct coverage for `resolveWithinDirectory`, the shared containment guard
-// four pack parsers in three other libraries depend on.
+// every pack parser in the animation, surface, pointer and shader libraries
+// depends on, along with the pack validator.
 //
 // It had none when it landed, and the case that slipped through was the one a
 // table like this catches on the first run: a symlink out of the directory whose
@@ -202,22 +203,34 @@ private Q_SLOTS:
                  "a dangling symlink out of the directory was accepted");
     }
 
-    /// A symlink CYCLE is accepted, and that is correct — it is not an escape.
+    /// A symlink CYCLE is refused, on every Qt.
     ///
-    /// Worth pinning because it looks like the dangling case above and is not: a
-    /// self-referential link canonicalises to ITSELF, which is inside the
-    /// directory, so containment genuinely holds. Opening through it fails with
-    /// ELOOP, and existence/readability is explicitly not this guard's job (see the
-    /// header). Refusing it here would mean refusing a contained path for a reason
-    /// the guard does not own.
-    void acceptsASymlinkCycleBecauseItStaysContained()
+    /// This used to pin the opposite, on the grounds that a self-referential
+    /// link canonicalises to ITSELF and so stays contained. That was a Qt
+    /// behaviour, not a property of the guard: up to 6.11
+    /// `canonicalFilePath()` answers a cycle with its own spelling, and from
+    /// 6.12 it answers empty, which lands in the guard's unresolvable-symlink
+    /// refusal. The same pack was accepted or refused depending on the Qt the
+    /// library was built against. The guard now refuses a "canonical" result
+    /// that is still a symlink, so both agree. Nothing usable is lost: a path
+    /// through a cycle can never be opened (ELOOP).
+    ///
+    /// Both spellings, because the link sits at a different depth in each.
+    /// For the bare link it is the LEAF of the canonical result. For the path
+    /// through it, the leaf is a plain missing file and the link is its
+    /// parent, so a leaf-only probe of the canonical result accepted it on
+    /// 6.11 (verified before this test landed). On 6.12 both spellings fail
+    /// to canonicalise and are refused by the ancestor climb instead.
+    void refusesASymlinkCycleOnEveryQt()
     {
         const QString link = m_pack->filePath(QStringLiteral("loop"));
         QVERIFY(QFile::link(QStringLiteral("loop"), link));
-        const auto resolved =
-            resolveWithinDirectory(QStringLiteral("loop/effect.frag"), m_pack->path(), AbsolutePathPolicy::Reject);
-        QVERIFY2(resolved.has_value(), "a cycle resolves inside the directory, so containment holds");
-        QVERIFY(resolved->startsWith(QDir::cleanPath(m_pack->path())));
+        QVERIFY2(
+            !resolveWithinDirectory(QStringLiteral("loop"), m_pack->path(), AbsolutePathPolicy::Reject).has_value(),
+            "a self-referential symlink was accepted");
+        QVERIFY2(!resolveWithinDirectory(QStringLiteral("loop/effect.frag"), m_pack->path(), AbsolutePathPolicy::Reject)
+                      .has_value(),
+                 "a path through a self-referential symlink was accepted");
     }
 
     /// THE ONE THAT FAILED OPEN. A symlinked directory out of the pack, with a

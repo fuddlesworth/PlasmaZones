@@ -24,7 +24,6 @@
 #include "helpers.h"
 
 #include "daemon/controllers/shortcutmanager.h"
-#include "dbus/scrollingadaptor/scrollingadaptor.h"
 #include "core/resolve/screenmoderouter.h"
 
 #include <PhosphorScrollEngine/ScrollEngine.h>

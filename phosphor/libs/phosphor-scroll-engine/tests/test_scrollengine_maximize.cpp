@@ -184,6 +184,8 @@ private Q_SLOTS:
     void aStackedColumnsActiveTileIsExpelledToo();
     void anAlreadyMaximizedTabGroupIsUnmaximizedWhole();
     void theFocusedColumnShortcutStillMaximizesAWholeTabGroup();
+    void closingTheExpelledTabLeavesTheLauncherUnmaximized();
+    void theFrontTabOfANonActiveColumnStillMaximizesItsWholeColumn();
     void verbReportsWhetherTheStripActuallyChanged();
     void maximizedToEdgesRoundTripsThroughTheBlob();
     void maximizedToEdgesTransfersOnAFuzzyAppIdClaim();
@@ -233,13 +235,6 @@ void TestScrollEngineMaximize::expellingFromAMaximizedColumnDoesNotMaximizeTheEx
     QCOMPARE(maximizedInBatch(tiled).size(), 1);
 }
 
-// A WINDOW-addressed maximize (the compositor interception's dispatch: a
-// titlebar click, or a client maximizing itself) is about that window, not its
-// tab group. Applied to the column it maximized every tab, and the state
-// outlived the window that asked: a game opened as a tab in its launcher's
-// column, maximized itself on the way to fullscreen, left the strip, and the
-// launcher stayed stretched across the output. The active tab is expelled
-// first, so only it ends up maximized.
 namespace {
 
 /// One TABBED column on S1 holding app|a and app|b, showing @p shownTab. The
@@ -258,6 +253,13 @@ void buildATwoTabColumn(ScrollEngine* engine, const QString& shownTab)
 
 } // namespace
 
+// A WINDOW-addressed maximize (the compositor interception's dispatch: a
+// titlebar click, or a client maximizing itself) is about that window, not its
+// tab group. Applied to the column it maximized every tab, and the state
+// outlived the window that asked: a game opened as a tab in its launcher's
+// column, maximized itself on the way to fullscreen, left the strip, and the
+// launcher stayed stretched across the output. The active tab is expelled
+// first, so only it ends up maximized.
 void TestScrollEngineMaximize::aWindowAddressedMaximizeExpelsTheActiveTabAndMaximizesItAlone()
 {
     QObject owner;
@@ -325,9 +327,6 @@ void TestScrollEngineMaximize::aBackgroundTabsMaximizeTakesTheWholeColumn()
     QCOMPARE(shownTabOf(engine, QStringLiteral("app|b")), QStringLiteral("app|a"));
 }
 
-// The expel is for the way IN only. A tabbed column that is already maximized
-// holds the state the request is un-doing, so the active tab's press must
-// reach that column rather than leave it behind still maximized.
 // The expel is not a tab feature: a stacked column's active tile asked to
 // maximize leaves its stack the same way, since the request names the window
 // and not the column it shares.
@@ -355,6 +354,9 @@ void TestScrollEngineMaximize::aStackedColumnsActiveTileIsExpelledToo()
     QVERIFY(!columnFlagged(engine, QStringLiteral("app|a")));
 }
 
+// The expel is for the way IN only. A tabbed column that is already maximized
+// holds the state the request is un-doing, so the active tab's press must
+// reach that column rather than leave it behind still maximized.
 void TestScrollEngineMaximize::anAlreadyMaximizedTabGroupIsUnmaximizedWhole()
 {
     QObject owner;
@@ -393,6 +395,55 @@ void TestScrollEngineMaximize::theFocusedColumnShortcutStillMaximizesAWholeTabGr
     QCoreApplication::processEvents();
 
     QCOMPARE(maximizedInBatch(tiled), (QSet<QString>{QStringLiteral("app|a"), QStringLiteral("app|b")}));
+}
+
+// The headline symptom: the launcher must not inherit the maximize when the
+// expelled game closes, on the wire or in the strip.
+void TestScrollEngineMaximize::closingTheExpelledTabLeavesTheLauncherUnmaximized()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+    buildATwoTabColumn(engine, QStringLiteral("app|b"));
+    QCOMPARE(columnCountOn(engine), 1);
+    QVERIFY(engine->toggleMaximizeToEdges(QStringLiteral("S1"), QStringLiteral("app|b")));
+    QCoreApplication::processEvents();
+    QCOMPARE(columnCountOn(engine), 2);
+    QVERIFY(columnFlagged(engine, QStringLiteral("app|b")));
+
+    engine->windowClosed(QStringLiteral("app|b"));
+    QCoreApplication::processEvents();
+    QCOMPARE(columnCountOn(engine), 1);
+    QVERIFY(!columnFlagged(engine, QStringLiteral("app|a")));
+    QCOMPARE(windowsInBatch(tiled), (QSet<QString>{QStringLiteral("app|a")}));
+    QVERIFY(maximizedInBatch(tiled).isEmpty());
+}
+
+// The strip's expel acts on the ACTIVE column only, so a front tab of a
+// non-active shared column takes the column-wide arm.
+void TestScrollEngineMaximize::theFrontTabOfANonActiveColumnStillMaximizesItsWholeColumn()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    buildATwoTabColumn(engine, QStringLiteral("app|b"));
+    // A second column takes the focus, so the tabbed column is NOT the active one.
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    engine->windowFocused(QStringLiteral("app|c"), QStringLiteral("S1"));
+    QCoreApplication::processEvents();
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    QCOMPARE(columnCountOn(engine), 2);
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|c"));
+    QCOMPARE(shownTabOf(engine, QStringLiteral("app|b")), QStringLiteral("app|b"));
+    QVERIFY(state->strip().columnOfWindow(QStringLiteral("app|b")) != state->strip().activeColumnIndex());
+
+    QVERIFY(engine->toggleMaximizeToEdges(QStringLiteral("S1"), QStringLiteral("app|b")));
+    QCoreApplication::processEvents();
+    QCOMPARE(columnCountOn(engine), 2);
+    QVERIFY(columnFlagged(engine, QStringLiteral("app|a")));
+    QVERIFY(columnFlagged(engine, QStringLiteral("app|b")));
+    QVERIFY(!columnFlagged(engine, QStringLiteral("app|c")));
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|c"));
 }
 
 void TestScrollEngineMaximize::flagRidesTilesTheUserCannotSee()

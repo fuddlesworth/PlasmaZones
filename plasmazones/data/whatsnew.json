@@ -12,12 +12,15 @@
                 "Fixed: Old-style tray icons, such as those from Wine and Proton apps, no longer leave a glowing bordered square on the panel (#1115)",
                 "Changed: The daemon and the KWin effect must be the same build, since the way a fullscreen window leaves the scrolling strip changed on the wire (#1116)",
                 "Fixed: A window that was fullscreen on a scrolling screen no longer comes back the size of the screen when it floats (#1116)",
-                "Fixed: Going fullscreen on a scrolling screen no longer shows a floated notification or puts the window's saved size back over the fullscreen picture (#1116)",
                 "Fixed: On a scrolling screen, a window that is already fullscreen when it opens is left alone and joins the strip only if it later leaves fullscreen. With same-application tab grouping turned on, a game no longer lands as a tab in its launcher's column (#1116)",
-                "Fixed: On a scrolling screen, moving around the strip by shortcut or by the wheel leaves a fullscreen window in fullscreen. This reverses the 3.4.5 and 3.4.6 behaviour on purpose, because the window now leaves the strip instead (#1116)",
-                "Fixed: On a scrolling screen, a tiled window that goes fullscreen by itself leaves the strip, so the tab bar no longer draws over it, and it returns to its column slot when it leaves fullscreen (#1116)",
-                "Fixed: On a scrolling screen, maximizing the window in front in a shared column moves that window into its own column and maximizes it alone. Meta+Alt+M still maximizes the focused column with all of its tabs (#1116)",
-                "Fixed: Windowed fullscreen no longer turns off the decorations on the panels and the other windows on that monitor (#1116)"
+                "Fixed: On a scrolling screen, moving around the strip by shortcut or by the wheel, or resizing a column, leaves a fullscreen window in fullscreen. This reverses the 3.4.5 and 3.4.6 behaviour on purpose, because the window now leaves the strip instead (#1116)",
+                "Fixed: On a scrolling screen, a tiled window that goes fullscreen by itself leaves the strip quietly, with no floated notification and no size change, so the tab bar no longer draws over it, and it returns to its column slot when it leaves fullscreen (#1116)",
+                "Fixed: On a scrolling screen, maximizing the window in front of the focused column, when that column holds other windows, moves it into its own column and maximizes it alone. Meta+Alt+M still maximizes the focused column with all of its tabs (#1116)",
+                "Fixed: Windowed fullscreen no longer turns off the decorations on the panels and the other windows on that monitor (#1116)",
+                "Fixed: On a scrolling screen, a fullscreen window returns to its column and gets its decoration back when it leaves fullscreen after a desktop round trip, instead of waiting for a second switch (#1116)",
+                "Fixed: A window that left fullscreen after the KWin effect restarted no longer gets the screen size saved as the size it floats at (#1116)",
+                "Fixed: The shell's placement map no longer shows another mode's cells after a mode change, and a drag on a scrolling screen no longer makes that screen's other maps re-read their layout on each step (#1116)",
+                "Fixed: On a scrolling screen, a window that goes fullscreen right after being restored from minimize is left alone instead of being placed on the strip (#1116)"
             ]
         },
         {

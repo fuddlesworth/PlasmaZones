@@ -515,7 +515,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
                             }
                         }
                         // Same "Float this app" admission insertWindow applies
-                        // at line ~292: a float-ruled window seeded tiled would
+                        // (insert.cpp): a float-ruled window seeded tiled would
                         // hold a tile its open-time rule says it must not, and
                         // the containsWindow short-circuit on its re-announce
                         // means nothing later corrects it.
@@ -530,8 +530,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
                         // Announce on the passive channel via the canonical
                         // insert-time sync (floating only: it announces a
                         // restored-floating seed and says nothing for a tiled
-                        // one). The
-                        // later windowOpened for this already-present window
+                        // one). The later windowOpened for this already-present window
                         // is a tracked no-op insert whose float sync is
                         // skipped, so without this the seed's float state is
                         // never broadcast — subscribers (and the adaptor's

@@ -1302,7 +1302,10 @@ add_test(NAME test_wta_rule_context COMMAND test_wta_rule_context)
 add_executable(test_wta_capture_guards dbus/test_wta_capture_guards.cpp
                ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
 target_include_directories(test_wta_capture_guards PRIVATE ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests)
-target_link_libraries(test_wta_capture_guards PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+# Links PhosphorScrollEngine directly for the same reason test_wta_routing does:
+# the close-during-hold case constructs a real ScrollEngine.
+target_link_libraries(test_wta_capture_guards PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                                                      PhosphorScrollEngine::PhosphorScrollEngine)
 add_test(NAME test_wta_capture_guards COMMAND test_wta_capture_guards)
 
 # WindowTrackingAdaptor windowScreenChanged tests — the stored-screen

@@ -284,25 +284,22 @@ bool ScrollEngine::toggleMaximizeColumn(const QString& screenId, const QString& 
     // call arrived. Nothing in tree dispatches this verb from the compositor
     // any more (that is toggleMaximizeToEdges below), but the answer is the
     // same question a scripted caller has to ask, and the twins are kept
-    // identical on purpose, with TWO deliberate exceptions. The twin logs its
+    // identical on purpose, with THREE deliberate exceptions. The twin logs its
     // refusal and this verb does not, because the twin's refusal answers a
     // button press the user watched do nothing while this one answers a
     // scripted D-Bus call that reads the false it gets back. See the note at
-    // that log. And the twin expels the asking active tile of a shared column
+    // that log. The twin expels the asking active tile of a shared column
     // before it toggles, where this width verb always acts on the column
-    // whole.
+    // whole. And the twin carries an isInfoEnabled diagnostic block before its
+    // toggle that this verb does not.
     if (!canonicalId.isEmpty()) {
         PhosphorEngine::PlacementStateKey key;
         ScrollState* state = stateForWindow(canonicalId, &key);
         if (!state || state->strip().isEmpty() || key.screenId.isEmpty()) {
             return false;
         }
-        // Resolved from the window's SCREEN: layoutParamsForScreen has no
-        // context parameter and answers for that screen's current desktop and
-        // activity. The gaps and per-screen overrides of a background context
-        // can differ, and this is the same approximation every other
-        // window-keyed strip mutation on this engine lives with; the values
-        // that matter to the toggle (work area, axis) are per-screen.
+        // Resolved from the window's OWN context (layoutParamsForKey), so a
+        // background-context toggle uses that context's gaps and overrides.
         const ScrollLayoutParams params = layoutParamsForKey(key);
         const bool changed = state->strip().toggleMaximizeColumnForWindow(canonicalId, params);
         if (changed) {
@@ -349,10 +346,11 @@ bool ScrollEngine::toggleMaximizeToEdges(const QString& screenId, const QString&
     // separate rather than folded into one helper because the shared prologue
     // would have to live on ScrollEngine's private interface to reach
     // stateForWindow and applyLayout, and it earns less than it costs at two
-    // call sites. They must stay in step by hand, with the two recorded
+    // call sites. They must stay in step by hand, with the three recorded
     // exceptions below: the refusal here is LOGGED and the twin's is not, for
-    // the reason the log itself gives, and the asking active tab of a tabbed
-    // column is expelled first.
+    // the reason the log itself gives, the asking active tab of a tabbed
+    // column is expelled first, and the isInfoEnabled diagnostic block runs
+    // here only.
     //
     // The changed-reporting answer matters MOST here: this verb is what the
     // maximize interception dispatches, and the effect no longer writes KWin's
@@ -972,39 +970,17 @@ void ScrollEngine::switchFocusBetweenFloatingAndTiling(const QString& screenId)
 // crossed the size ceiling. None uses P_SCROLL_VERB (each hand-expands its
 // resolve for its own feedback/guard shape), so they sit after the #undef.
 
-ScrollEngine::WindowedFullscreenGuard ScrollEngine::windowedFullscreenGuard(const QString& screenId, QString* outScreen,
-                                                                            ScrollState** outState) const
+void ScrollEngine::toggleWindowedFullscreen(const QString& screenId)
 {
+    // Hand-expanded (not P_SCROLL_VERB) for toggleColumnTabbed's reason: the
+    // op is layout-neutral and never reads layout params, but the two diverge
+    // downstream, since this verb's feedback carries the resulting state as
+    // the reason token, and the OSD has dedicated arms for it.
     const QString screen = resolveOperationScreen(screenId);
     // m_states directly, the const spelling stateForScreen() const uses:
     // stateForKey is non-const for its create arm, which this never wants.
     ScrollState* state = screen.isEmpty() ? nullptr : m_states.stateForKey(currentKeyForScreen(screen));
-    if (outScreen) {
-        *outScreen = screen;
-    }
-    if (outState) {
-        *outState = state;
-    }
     if (!state || state->strip().isEmpty()) {
-        return WindowedFullscreenGuard::NoWindows;
-    }
-    if (state->floatingHasFocus()) {
-        return WindowedFullscreenGuard::FloatHasFocus;
-    }
-    return state->strip().activeWindowId().isEmpty() ? WindowedFullscreenGuard::NoActiveWindow
-                                                     : WindowedFullscreenGuard::Ok;
-}
-
-void ScrollEngine::toggleWindowedFullscreen(const QString& screenId)
-{
-    // Hand-expanded (not P_SCROLL_VERB): the op is layout-neutral and never
-    // reads layout params, the refusals come from one guard that names each
-    // arm, and the feedback carries the resulting state as the reason token,
-    // for which the OSD has dedicated arms.
-    QString screen;
-    ScrollState* state = nullptr;
-    const WindowedFullscreenGuard guard = windowedFullscreenGuard(screenId, &screen, &state);
-    if (guard == WindowedFullscreenGuard::NoWindows) {
         // Logged for toggleMaximizeToEdges' reason: this answers a KEYPRESS,
         // and both refusal arms are otherwise silent. The OSD feedback below
         // is not a substitute — it is suppressed on some surfaces and never
@@ -1022,7 +998,7 @@ void ScrollEngine::toggleWindowedFullscreen(const QString& screenId)
     // mirror in moveFocusedToTiling inverts the identical test; the source
     // slot names the floating window that actually holds focus, so the OSD
     // refers to what the user is looking at.
-    if (guard == WindowedFullscreenGuard::FloatHasFocus) {
+    if (state->floatingHasFocus()) {
         // The likeliest reason a user reports that this shortcut "does
         // nothing": focus is on a FLOATING window, which owns no column, so
         // the verb declines rather than acting on the strip's stale active
@@ -1034,9 +1010,9 @@ void ScrollEngine::toggleWindowedFullscreen(const QString& screenId)
                                   state->lastFloatingFocus(), QString(), screen);
         return;
     }
-    // NoActiveWindow falls through on purpose: the strip op refuses an empty
-    // active id itself, and the log and no_target feedback below are that
-    // refusal's report.
+    // An empty active id falls through on purpose: the strip op refuses it
+    // itself, and the log and no_target feedback below are that refusal's
+    // report.
     const QString sourceWindow = state->strip().activeWindowId();
     const bool changed = state->strip().toggleActiveWindowedFullscreen();
     // Read once and reused by the success reason below, so the log and the
@@ -1111,7 +1087,9 @@ void ScrollEngine::reapplyWindowGeometry(const QString& windowId)
     // full-area frame, and as a toggle-off restoring a window to its old
     // PARK spot off-screen). Evicting the memory makes the next relayout
     // treat the rect as new and re-emit. Background-context guard as in
-    // clearWindowedFullscreen: a background strip re-emits on activation.
+    // clearWindowedFullscreen: a background strip re-emits on activation. That
+    // is the one no-op: a fullscreen hold returned on a non-current desktop
+    // gets no re-emit until the desktop returns.
     m_lastAppliedRect.remove(id);
     if (!key.screenId.isEmpty() && key == currentKeyForScreen(key.screenId)) {
         applyLayout(key.screenId, false);

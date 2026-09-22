@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // FILE-SIZE EXCEPTION (sanctioned): TilingHandler is one class declaration,
-// and the implementation is already partitioned across the thirteen TUs in
+// and the implementation is already partitioned across the fourteen TUs in
 // this directory (tiling.cpp, tilinghandler.cpp, state.cpp, wiring.cpp,
 // signals.cpp, windowedfullscreen.cpp, pretilegeometry.cpp, floatcleanup.cpp,
 // minimizefloat.cpp, outputchange.cpp, screenschanged.cpp, scrolltabs.cpp,
-// wheelchord.cpp) —
+// wheelchord.cpp, fullscreenhold.cpp) —
 // every one of those TUs calls back
 // through this single declaration, which C++ requires to be whole. Most of the
 // length is the per-member invariant prose the split files depend on: the
@@ -1357,8 +1357,8 @@ private:
 
     /**
      * @brief Cancel every pending minimize→float and unminimize→unfloat
-     * commit and drop the own-fullscreen float records (engine disable, daemon
-     * loss and bring-up): none may act against an engine that is gone.
+     * commit and drop the own-fullscreen float records (engine disable and
+     * bring-up): none may act against an engine that is gone.
      */
     void clearAllPendingMinimizeFloats();
 
@@ -1596,11 +1596,15 @@ private:
     /// strip, not the one holding focus.
     QString wheelTargetScreen() const;
 
-    /// Return a strip tile held out for its own fullscreen (attempt 0 first;
-    /// three attempts on a failed reply, a refused one is final).
-    void dispatchFullscreenUnfloat(const QString& windowId, const QString& screenId, int attempt);
-    /// Desktop-return re-track: send the return a demoted hold could not.
+    /// Return a held tile (attempt 0 mints the generation; three attempts on error, a refusal is final).
+    void dispatchFullscreenUnfloat(const QString& windowId, const QString& screenId, int attempt,
+                                   quint64 generation = 0);
+    /// Desktop-return re-track: send the return a demoted hold could not. No decoration sweep.
     void settleParkedFullscreenHold(KWin::EffectWindow* w, const QString& windowId, const QString& screenId);
+    /// Desktop-switch demotion of a held tile (record kept, tracking dropped, id parked). True if held.
+    bool parkFullscreenHoldForDesktopSwitch(const QString& windowId);
+    /// Drop every own-fullscreen record for @p windowId (record, unanswered return, stamp).
+    void dropFullscreenHoldRecords(const QString& windowId);
 
     /// Drop any banked sub-notch remainder. Called from every path that stops
     /// claiming axis events, so a partial notch cannot outlive the gesture
@@ -1846,10 +1850,14 @@ private:
     /// lambda consuming the newer hop's map entry.
     QHash<QString, quint64> m_crossScreenRestoreGen;
     QSet<QString> m_minimizeFloatedWindows;
-    /// Strip tiles WE held out for their own fullscreen (signals.cpp enter/exit; untrack and session drain drop).
+    /// Strip tiles WE held out for their own fullscreen. Dropped by the exit branch, the refused-hold
+    /// reply and the echo-drop arm (signals.cpp), settleParkedFullscreenHold, dropFullscreenHoldRecords
+    /// (the cleanupAutotileTracking and mode-toggle funnels), the bring-up reset and clearAllPendingMinimizeFloats.
     QSet<QString> m_fullscreenFloatedWindows;
     /// Returns dispatched and not yet answered; a re-enter inside one is still floated out.
     QSet<QString> m_fullscreenUnfloatInFlight;
+    /// Latest hold or return dispatch per window; a reply or retry with a stale stamp is superseded.
+    QHash<QString, quint64> m_fullscreenHoldGeneration;
     /// Ownership after an unfloat dispatch and before its authoritative echo.
     /// The generation rejects completions from a countermanded older request.
     /// A re-minimize countermand moves the window back to the active set.
@@ -1924,6 +1932,7 @@ private:
     /// Non-const because it evicts an expired entry as it reads.
     bool maximizeToggleInFlight(const QString& windowId);
     quint64 m_unfloatRequestGeneration = 0;
+    quint64 m_fullscreenHoldRequestGeneration = 0;
     QHash<QString, int> m_unfloatRetryAttempts;
     /// Qualifiers on m_minimizeFloatedWindows entries whose unminimize commits
     /// immediately instead of through the deferred animation grace.

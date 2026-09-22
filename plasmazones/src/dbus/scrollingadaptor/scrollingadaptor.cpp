@@ -88,7 +88,8 @@ ScrollingAdaptor::ScrollingAdaptor(PhosphorScrollEngine::ScrollEngine* engine, Q
                 Q_EMIT stripContextChanged(screenId, epoch, debugLabel);
             });
     // Strip wake-ups for anyone rendering the strip (the settings app's
-    // Monitors thumbnail and the Phosphor shell's placement map). Relayed straight through: placementChanged
+    // Monitors thumbnail and the Phosphor shell's placement map). Relayed
+    // straight through: placementChanged
     // IS the engine's change gate, and the reasons this adaptor does not add
     // a second, payload-level one are on the signal's declaration.
     //

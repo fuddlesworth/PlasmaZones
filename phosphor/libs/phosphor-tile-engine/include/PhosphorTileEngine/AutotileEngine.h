@@ -1385,8 +1385,8 @@ Q_SIGNALS:
 
     // windowFloatingStateSynced and windowsBatchFloated are inherited from
     // PlacementEngineBase. Autotile-specific documentation: windowFloatingStateSynced
-    // is emitted when the engine's TilingState::isFloating diverges from WTS's view
-    // (e.g. a newly-inserted window carries stale snap-mode float state). The
+    // is emitted when the engine floats a window on its own initiative (a Float
+    // rule or a restored float at insert) and the daemon must mirror it. The
     // downstream handler updates WTS bookkeeping without geometry restore.
     // windowsBatchFloated is emitted when overflow windows are batch-floated
     // during applyTiling; the daemon handler updates WTS state directly.
@@ -1431,10 +1431,10 @@ private Q_SLOTS:
 private:
     void connectSignals();
     bool insertWindow(const QString& windowId, const QString& screenId);
-    // Passive float-state sync after insertWindow() places a window: notify the
-    // daemon it opened floating (matched Float rule / restored saved float), or
-    // clear a stale WTS float when it was placed tiled. Shared by onWindowAdded
-    // and backfillWindows so the two cannot diverge.
+    // Passive float-state sync after insertWindow() places a window FLOATING
+    // (matched Float rule / restored saved float); a tiled placement announces
+    // nothing. Shared by onWindowAdded and backfillWindows so the two cannot
+    // diverge.
     void emitInsertFloatStateSync(const QString& windowId, const QString& screenId);
     /// Add @p windowId to @p state at the position dictated by the
     /// insertion-order setting (End / AfterFocused / AsMaster). Shared by

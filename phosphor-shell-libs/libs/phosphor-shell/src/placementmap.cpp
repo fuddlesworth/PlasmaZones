@@ -60,6 +60,9 @@ PlacementMapScreen::PlacementMapScreen(const QString& screenName, int desktopInd
     m_stripRefetch.setSingleShot(true);
     m_stripRefetch.setInterval(kStripRefetchSettleMs);
     connect(&m_stripRefetch, &QTimer::timeout, this, &PlacementMapScreen::fetchStrip);
+    m_modeRefetch.setSingleShot(true);
+    m_modeRefetch.setInterval(kStripRefetchSettleMs);
+    connect(&m_modeRefetch, &QTimer::timeout, this, &PlacementMapScreen::refreshMode);
 
     if (Workspaces* ws = m_map->workspaces()) {
         connect(ws, &Workspaces::activeChanged, this, &PlacementMapScreen::desktopsChanged);
@@ -147,6 +150,7 @@ void PlacementMapScreen::reseed()
     // In-flight strip replies carry the old generation and are dropped, so
     // the read they would have finished has to be forgotten here.
     m_stripRefetch.stop();
+    m_modeRefetch.stop();
     m_stripFetchInFlight = false;
     m_stripRefetchWanted = false;
     m_focusedWindowId.clear();
@@ -166,6 +170,7 @@ void PlacementMapScreen::serviceLost()
     m_sourceLens = QRectF();
     m_sourceStripExtentPx = 0;
     m_stripRefetch.stop();
+    m_modeRefetch.stop();
     m_stripFetchInFlight = false;
     m_stripRefetchWanted = false;
     // Same reset reseed() performs. Left out here, the strip keeps drawing
@@ -264,6 +269,12 @@ void PlacementMapScreen::setMode(int mode)
     if (mode != Snapping) {
         unregisterDropProxy();
     }
+    if (mode != Scrolling) {
+        // A strip re-read armed for the mode just left must not land on this
+        // one; an answer already in flight is dropped by applyStrip's guard.
+        m_stripRefetch.stop();
+        m_stripRefetchWanted = false;
+    }
     Q_EMIT modeChanged();
     schedulePublish();
 }
@@ -301,14 +312,22 @@ void PlacementMapScreen::fetchModeData()
 
 void PlacementMapScreen::fetchSnappingLayout()
 {
+    // Mode-guarded replies: a late getLayout answer after a mode flip must not
+    // publish zone cells under Tiling or None.
     call<QString>(
         Iface::LayoutRegistry, QStringLiteral("getLayoutForScreen"), {m_screenId}, [this](const QString& layoutId) {
+            if (m_mode != Snapping || isPinned()) {
+                return;
+            }
             if (layoutId.isEmpty() || layoutId == NoneLayout || layoutId.startsWith(AutotilePrefix)) {
                 m_source.clear();
                 rebuildFromSource();
                 return;
             }
             call<QString>(Iface::LayoutRegistry, QStringLiteral("getLayout"), {layoutId}, [this](const QString& json) {
+                if (m_mode != Snapping || isPinned()) {
+                    return;
+                }
                 m_source = parseSnappingLayout(json, m_workArea.size());
                 m_sourceLens = QRectF();
                 rebuildFromSource();
@@ -318,6 +337,10 @@ void PlacementMapScreen::fetchSnappingLayout()
 
 void PlacementMapScreen::fetchStrip()
 {
+    // The timer slot can fire after a mode flip inside the settle.
+    if (m_mode != Scrolling || isPinned()) {
+        return;
+    }
     // One read in flight at a time: each stripModelJson answer costs the
     // daemon a relayout, so a wake-up that lands mid-read is remembered and
     // re-armed once the reply is in rather than stacked behind it.
@@ -339,9 +362,7 @@ void PlacementMapScreen::fetchStrip()
             applyStrip(parseStripModel(json));
         },
         [this](const QDBusError& error) {
-            if (error.type() == QDBusError::UnknownMethod) {
-                m_map->m_caps.stripModel = false;
-            }
+            latchUnknownMethod(m_map->m_caps.stripModel, error);
             fetchVisibleStrip();
         });
 }
@@ -369,6 +390,13 @@ void PlacementMapScreen::stripFetchFinished()
 
 void PlacementMapScreen::applyStrip(const StripParse& parse)
 {
+    if (m_mode != Scrolling || isPinned()) {
+        // A reply for the mode this screen has left: finish the read without
+        // re-arming it and leave the current mode's source alone.
+        m_stripRefetchWanted = false;
+        stripFetchFinished();
+        return;
+    }
     stripFetchFinished();
     m_source = parse.cells;
     m_sourceLens = parse.lens;
@@ -482,18 +510,26 @@ void PlacementMapScreen::tilingChanged()
 
 void PlacementMapScreen::stripChanged()
 {
-    if (m_mode == Scrolling) {
-        // A wake-up, not a payload (see the signal's contract): coalesce it.
-        if (isPinned()) {
-            m_pinnedRefetch.start();
-        } else {
-            m_stripRefetch.start();
-        }
-    } else {
-        // A context epoch change can mean the desktop switched onto a
-        // scrolling context; the mode read is what settles it.
-        refreshMode();
+    // A wake-up, not a payload (see the signal's contract). The live arm
+    // coalesces on the settle timer; the pinned arm re-reads on the next
+    // event-loop turn, which folds a burst delivered in one turn.
+    if (m_mode == Scrolling && !isPinned()) {
+        m_stripRefetch.start();
+        return;
     }
+    if (isPinned()) {
+        // A pinned snapping or tiling desktop cannot change from a strip step.
+        if (m_mode == Scrolling) {
+            m_pinnedRefetch.start();
+        }
+        return;
+    }
+    // A context epoch change can mean the desktop switched onto a scrolling
+    // context; the mode read is what settles it. Coalesced like the strip
+    // read: PlacementMap fans a strip signal out to every map of that screen
+    // id (its pinned-desktop maps included), so a drag step must not cost
+    // each of them a mode round trip per step.
+    m_modeRefetch.start();
 }
 
 void PlacementMapScreen::occupancyChanged()

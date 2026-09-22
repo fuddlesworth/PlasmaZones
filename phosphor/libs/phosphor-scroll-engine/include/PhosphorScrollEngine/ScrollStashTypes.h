@@ -239,7 +239,12 @@ struct FloatRestore
     ColumnDisplay display = ColumnDisplay::Normal;
     /// Taken by the compositor for the window's OWN fullscreen
     /// (ScrollEngine::setWindowFullscreenFloat), not by the user; only that
-    /// verb may undo it, and any other unfloat consumes the slot with it.
+    /// verb may undo it, and any other unfloat consumes the slot with it. Set
+    /// only on an entry floatWindowInternal captured, so it is never true
+    /// beside windowedFullscreen (which the float capture leaves false). A
+    /// held window is floating, so it is absent from the mode-round-trip
+    /// stash and the persisted strip blob: the slot is lost across a mode
+    /// round trip or a login, and the window re-enters as a fresh open.
     bool fullscreenHold = false;
     /// Whether this window was the tab that decided its TABBED column's cross
     /// extent when it left. Carried because leaving hands the ownership to the

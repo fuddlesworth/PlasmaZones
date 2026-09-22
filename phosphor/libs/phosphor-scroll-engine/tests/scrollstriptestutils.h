@@ -4,7 +4,7 @@
 #pragma once
 
 // Shared fixture helpers for the PhosphorScrollEngine suites that fixture
-// against a screen — the four strip-model files and the ten engine files.
+// against a screen — the strip-model files and the engine files.
 // (test_stripaxis and test_scrollpark stand alone: they exercise the mapper
 // and the park geometry directly and need no screen fixture.) One definition of the
 // 1200x800 geometry, because a work area that drifts between files quietly

@@ -858,14 +858,14 @@ void Daemon::stop()
         concreteAutotile->setContextGapProvider({});
         concreteAutotile->setScrollingModeResolver({});
     }
-    // Scroll twin of the clear above: its context-gap provider captures the
-    // same Daemon `this` (init_engines.cpp) and honours the same
-    // clear-before-destroy contract (ScrollEngine.h documents it).
+    // Scroll twin of the clear above: every closure below captures Daemon `this`
+    // (init_engines.cpp) under the same clear-before-destroy contract.
     if (auto* concreteScroll = qobject_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get())) {
         concreteScroll->setContextGapProvider({});
         concreteScroll->setSnappingModeResolver({});
         concreteScroll->setScrollingModeResolver({});
         concreteScroll->setAutotileModeResolver({});
+        concreteScroll->setPersistenceDelegate({}, {});
     }
 
     // Sever the snap adaptor's cross-screen reclaim hook BEFORE the engines

@@ -264,7 +264,7 @@ void TilingHandler::loadSettings()
                 }
             });
 
-    // Bring-up fetches for the two pure ruleQuery inputs. Each grants itself
+    // Bring-up fetches for the pure ruleQuery inputs. Each grants itself
     // a fresh bounded retry budget per loadSettings run: a post-daemonReady
     // Get failure otherwise leaves Mode stamps wrong or ActiveLayout rules
     // held out until the next live signal or a daemon restart.
@@ -571,7 +571,7 @@ void TilingHandler::fetchActiveLayouts()
 // BEFORE the strips so the first rebuild already layers them; the slot is
 // last-writer per screen, so a live signal landing mid-flight simply wins.
 //
-// Both tab fetches carry the same two guards as their three siblings above.
+// Both tab fetches carry the same two guards as their four siblings above.
 // The per-dispatch GENERATION guard is not optional here even though the slot
 // is per-key: across a daemon restart two loadSettings runs put two Gets in
 // flight, and a late reply from the DEAD session would re-install a payload
