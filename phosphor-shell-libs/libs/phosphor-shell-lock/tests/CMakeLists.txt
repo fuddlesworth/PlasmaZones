@@ -26,8 +26,8 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickTest Test)
 # per-target XDG sandbox (so nothing writes into the developer's real
 # ~/.config/plasmazones). EXISTS-guarded explicit path so a standalone
 # configure of this library still generates.
-if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../../cmake/PhosphorTestIsolation.cmake")
-    include(${CMAKE_CURRENT_LIST_DIR}/../../../cmake/PhosphorTestIsolation.cmake)
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/PhosphorTestIsolation.cmake")
+    include(${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/PhosphorTestIsolation.cmake)
     set(_phosphorshelllock_have_isolation TRUE)
 else()
     set(_phosphorshelllock_have_isolation FALSE)

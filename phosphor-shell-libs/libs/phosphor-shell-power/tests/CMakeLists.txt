@@ -14,8 +14,8 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Test Qml Quick)
 # phosphor_append_test_environment — a bare `set_tests_properties(...
 # ENVIRONMENT ...)` after the isolation call would replace the whole list and
 # drop the XDG sandbox.
-if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../../cmake/PhosphorTestIsolation.cmake")
-    include(${CMAKE_CURRENT_LIST_DIR}/../../../cmake/PhosphorTestIsolation.cmake)
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/PhosphorTestIsolation.cmake")
+    include(${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/PhosphorTestIsolation.cmake)
     set(_phosphorshellpower_have_isolation TRUE)
 else()
     set(_phosphorshellpower_have_isolation FALSE)

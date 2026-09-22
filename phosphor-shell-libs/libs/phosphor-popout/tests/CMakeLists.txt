@@ -19,8 +19,8 @@ find_package(Qt6 REQUIRED COMPONENTS Test)
 # EXISTS-guarded explicit path like the sibling shell-tier test trees: a hard
 # include of a path outside the extracted subtree would fail a standalone
 # `git subtree split` configure at generate time.
-if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../../cmake/PhosphorTestIsolation.cmake")
-    include(${CMAKE_CURRENT_LIST_DIR}/../../../cmake/PhosphorTestIsolation.cmake)
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/PhosphorTestIsolation.cmake")
+    include(${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/PhosphorTestIsolation.cmake)
     set(_phosphorpopout_have_isolation TRUE)
 else()
     set(_phosphorpopout_have_isolation FALSE)
