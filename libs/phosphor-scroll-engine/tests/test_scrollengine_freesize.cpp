@@ -18,6 +18,7 @@
 #include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorIdentity/WindowId.h>
 
+#include <QJsonObject>
 #include <QSet>
 #include <QSignalSpy>
 #include <QStringList>
@@ -88,6 +89,15 @@ class TestScrollEngineFreeSize : public QObject
     }
 
 private Q_SLOTS:
+    void initTestCase()
+    {
+        // The out-of-band half of the axis vacuity guard: pse_add_test runs
+        // this binary twice and fails the vertical arm on a printed
+        // "axis=horizontal", which only works if the suite prints the axis it
+        // actually resolved.
+        AX_GUARD_SUITE();
+    }
+
     void init()
     {
         m_live.clear();
@@ -261,6 +271,37 @@ private Q_SLOTS:
         floatOnly(rig.engine, QStringLiteral("app|second"));
         rig.engine->windowOpened(QStringLiteral("app|second"), kS1, 0, 0);
         QCOMPARE(order, (QStringList{QStringLiteral("size"), QStringLiteral("float")}));
+    }
+
+    // A float exit consumes the window's stashed tile, and when that tile was
+    // the entry's last one it must hand the stash's blueprint cursor to the
+    // state BEFORE retiring the entry. Without the handover the cursor dies
+    // with the stash and the next fresh open restarts the template from the
+    // live column count.
+    void floatExit_consumesStashTileAndCarriesTheBlueprintCursor()
+    {
+        Rig rig;
+        build(rig);
+        // One tiled window, stashed, then re-opened floating by rule so the
+        // float exit is the path that consumes its tile.
+        rig.engine->windowOpened(QStringLiteral("app|only"), kS1, 0, 0);
+        ScrollState* before = stateOn(rig.engine, kS1);
+        QVERIFY(before);
+        QVERIFY(before->strip().containsWindow(QStringLiteral("app|only")));
+        before->setBlueprintCursor(3);
+        const QJsonObject blob = rig.engine->serializeStripState();
+        rig.engine->windowClosed(QStringLiteral("app|only"));
+
+        // A fresh engine restores the stash, so the cursor lives only there.
+        Rig second;
+        build(second);
+        second.engine->restoreStripState(blob);
+        floatOnly(second.engine, QStringLiteral("app|only"));
+        second.engine->windowOpened(QStringLiteral("app|only"), kS1, 0, 0);
+        ScrollState* after = stateOn(second.engine, kS1);
+        QVERIFY(after);
+        QVERIFY(after->isFloating(QStringLiteral("app|only")));
+        QCOMPARE(after->blueprintCursor(), 3);
     }
 
     // A window that would float on its recorded home screen is not pulled

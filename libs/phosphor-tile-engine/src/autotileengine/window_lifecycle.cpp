@@ -284,8 +284,14 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
     // The dispatch already ran every engine's claim for this arrival and all
     // declined: the record's engine has answered, so this gate must adopt
     // rather than defer to it a second time (noteCrossScreenClaimsExhausted).
-    const bool claimsExhausted = m_crossScreenClaimsExhausted.remove(windowId) > 0;
-    if (!screenId.isEmpty() && m_windowTracker && m_layoutManager && !trackedInState && !claimsExhausted) {
+    //
+    // Consumed inside the gate, not ahead of it: an open that fails one of
+    // the other preconditions never asks the question, and burning the
+    // one-shot there would let a later re-announce of the same window defer
+    // after all.
+    const bool gateApplies = !screenId.isEmpty() && m_windowTracker && m_layoutManager && !trackedInState;
+    const bool claimsExhausted = gateApplies && m_crossScreenClaimsExhausted.remove(windowId) > 0;
+    if (gateApplies && !claimsExhausted) {
         const QString appId = currentAppIdFor(windowId);
         if (PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
             // Shared predicate with the other engines' reciprocal gates

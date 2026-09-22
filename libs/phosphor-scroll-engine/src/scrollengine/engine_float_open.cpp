@@ -61,26 +61,30 @@ void ScrollEngine::finishFloatedOpen(ScrollState* state, const QString& windowId
     // claim, and a float that left it standing was fuzzy-claimable by the
     // next same-app window and persisted as a ghost slot after the close.
     consumePendingInitialOrder(screenId, windowId);
-    consumeStripStashTileForFloat(currentKeyForScreen(screenId), windowId);
+    consumeStripStashTileForFloat(state, currentKeyForScreen(screenId), windowId);
     // A migration re-entry (the window changed screen or desktop while this
     // engine tracked it) re-establishes the float mark for a window that is
     // already placed: the user is looking at it, and neither the remembered
     // position nor the remembered size may move it. The record consume is
     // what keeps a user-floated window floating across the move, so it runs
     // either way; only the geometry follows the gate.
+    // A migration WITH a record needs neither arm: the caller already
+    // consumed it, and a migration moves nothing.
     if (!migration) {
-        const bool moved = record ? emitGatedFloatGeometryRestore(windowId, *record, screenId)
-                                  : restoreFloatRecordForOpen(windowId, screenId);
+        // Resolved ONCE for the move gate and the size arm, which ask the
+        // same question of it. Keyed to screenId, which is the record's own
+        // screen in both arms — takeForReopen's accept requires the match.
+        const QList<QSize> managedSizes = managedSizesOnScreen(screenId);
+        const bool moved = record ? emitGatedFloatGeometryRestore(windowId, *record, screenId, managedSizes)
+                                  : restoreFloatRecordForOpen(windowId, screenId, managedSizes);
         // A float that moved nowhere still gets its free SIZE back where it
         // stands, unless the window is oversized: the clamp would then ask
         // for less than the client's own minimum on the axis that made it
         // oversized, and the client keeps the frame it has.
         if (!moved && !oversized) {
-            restoreFreeSizeForFloatedOpen(windowId, screenId, placedBefore);
+            restoreFreeSizeForFloatedOpen(windowId, screenId, placedBefore, managedSizes);
         }
-    } else if (record) {
-        // The consume already happened in the caller; nothing to move.
-    } else {
+    } else if (!record) {
         // Consume the record for the mode marker's sake without applying
         // its position: restoreFloatRecordForOpen's move is gated by the
         // same helper, so a migration takes the consume and declines the
@@ -99,7 +103,7 @@ void ScrollEngine::finishFloatedOpen(ScrollState* state, const QString& windowId
 }
 
 bool ScrollEngine::emitGatedFloatGeometryRestore(const QString& windowId, const PhosphorEngine::WindowPlacement& record,
-                                                 const QString& screenId)
+                                                 const QString& screenId, const QList<QSize>& managedSizes)
 {
     // SCREEN-LOCAL recorded position only, for autotile's documented reason: a
     // rect captured on a different screen would teleport the window while the
@@ -127,14 +131,15 @@ bool ScrollEngine::emitGatedFloatGeometryRestore(const QString& windowId, const 
     // the move is refused and the size arm finds a real source instead.
     if (freeGeo.isValid() && restorePosition
         && (!m_windowTracker || m_windowTracker->geometryBelongsToScreen(freeGeo, restoreScreen))
-        && !isManagedSize(managedSizesOnScreen(restoreScreen), freeGeo.size())) {
+        && !isManagedSize(managedSizes, freeGeo.size())) {
         Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
         return true;
     }
     return false;
 }
 
-bool ScrollEngine::restoreFloatRecordForOpen(const QString& windowId, const QString& screenId)
+bool ScrollEngine::restoreFloatRecordForOpen(const QString& windowId, const QString& screenId,
+                                             const QList<QSize>& managedSizes)
 {
     // Registry answer, not a parse: a canonical id frozen before KWin resolved
     // the class has no appId to parse, and this gate would then silently skip
@@ -151,7 +156,7 @@ bool ScrollEngine::restoreFloatRecordForOpen(const QString& windowId, const QStr
     if (!record) {
         return false;
     }
-    return emitGatedFloatGeometryRestore(windowId, *record, screenId);
+    return emitGatedFloatGeometryRestore(windowId, *record, screenId, managedSizes);
 }
 
 QList<QSize> ScrollEngine::managedSizesOnScreen(const QString& screenId) const
@@ -203,7 +208,8 @@ QList<QSize> ScrollEngine::managedSizesOnScreen(const QString& screenId) const
     return sizes;
 }
 
-void ScrollEngine::restoreFreeSizeForFloatedOpen(const QString& windowId, const QString& screenId, bool placedBefore)
+void ScrollEngine::restoreFreeSizeForFloatedOpen(const QString& windowId, const QString& screenId, bool placedBefore,
+                                                 const QList<QSize>& managedSizes)
 {
     // A window this engine leaves floating at open, and did not move to its
     // remembered free spot, stays where the compositor put it at the size the
@@ -214,10 +220,11 @@ void ScrollEngine::restoreFreeSizeForFloatedOpen(const QString& windowId, const 
     // clamp is the tracker's available area, the same bound the other
     // engines use, not the gap-inset strip work area.
     restoreFreeSizeWhereItStands(m_windowTracker, windowId, screenId, PhosphorEngine::RestoreReason::Open, placedBefore,
-                                 managedSizesOnScreen(screenId));
+                                 managedSizes);
 }
 
-void ScrollEngine::consumeStripStashTileForFloat(const PhosphorEngine::PlacementStateKey& key, const QString& windowId)
+void ScrollEngine::consumeStripStashTileForFloat(ScrollState* state, const PhosphorEngine::PlacementStateKey& key,
+                                                 const QString& windowId)
 {
     const auto it = m_stripStash.find(key);
     if (it == m_stripStash.end()) {
@@ -228,6 +235,24 @@ void ScrollEngine::consumeStripStashTileForFloat(const PhosphorEngine::Placement
         return;
     }
     StashedStrip& stashStrip = it.value();
+    // The blueprint carry comes BEFORE the tile claim, exactly as
+    // restoreFromStripStash does it and for the same reason: the cursor is
+    // owed to the state whether or not this arrival claims a tile, and the
+    // claim below can retire the whole entry. A float that consumed the
+    // entry's last tile would otherwise take the stashed cursor down with it
+    // and leave the next fresh open to restart the template from the live
+    // column count. Raised, never assigned: a window that opened fresh
+    // alongside the restore has already advanced the cursor past the stash.
+    if (state) {
+        state->setBlueprintCursor(qMax(state->blueprintCursor(), stashStrip.blueprintCursor));
+        // Only a VALID stash identity, and only onto a state that has none:
+        // a null identity is what a persistence-staged entry carries, and
+        // stamping it would make the consumption site read a blueprint swap
+        // and reset the cursor just handed over (see restoreFromStripStash).
+        if (stashStrip.blueprintIdentity.isValid() && !state->hasBlueprintIdentity()) {
+            state->setBlueprintIdentity(stashStrip.blueprintIdentity);
+        }
+    }
     // A cursor-only entry has no tile to consume; restoreFromStripStash
     // retires it on the next tiled arrival, which is the payload it exists
     // for, so a float leaves it alone.

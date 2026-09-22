@@ -78,8 +78,13 @@ void SnapEngine::restoreFreeSizeForUnplaced(const QString& windowId, const QStri
                                  managedSizesOnScreen(screenId, desktop));
 }
 
+bool SnapEngine::wasPlacedByPreviousLineage(const QString& windowId) const
+{
+    return m_windowTracker && placedByPreviousLineage(m_windowTracker->placementStore(), windowId);
+}
+
 void SnapEngine::applyNoMatchFloatDefault(const QString& windowId, const QString& screenId,
-                                          PhosphorEngine::RestoreReason reason)
+                                          PhosphorEngine::RestoreReason reason, bool placedBefore)
 {
     // The default-float terminal, callable by the SnapAdaptor when a
     // tile-defer verdict (SnapResult::deferredToTilingEngine) was returned
@@ -112,14 +117,20 @@ void SnapEngine::applyNoMatchFloatDefault(const QString& windowId, const QString
     // A deferredToTilingEngine verdict implies the placement rule was
     // admissible for this window (the defer gate requires !deferredByMode),
     // so the routed open desktop resolves here exactly as it did in the
-    // resolve that deferred. Nothing was consumed on that pass (a declined
-    // reclaim consumes nothing either), so the lineage snapshot is still
-    // exact here.
+    // resolve that deferred.
+    //
+    // The lineage snapshot is the CALLER'S, not one taken here: a declined
+    // claim does not always leave the store as it found it. An autotile or
+    // scroll claim calls windowOpened on the recorded home BEFORE it verifies
+    // membership, and that open reaches takeForReopen, which re-binds the
+    // consumed record under this uuid with the claiming engine's slot. When
+    // the membership check then refuses the adoption, the claim returns false
+    // with that slot-bearing record still standing, and a snapshot taken at
+    // this point reads "already placed" for a window no engine ever placed.
     const int routed = routedOpenDesktop(windowId, screenId);
     const int openDesktop = routed >= 1 ? routed : currentVirtualDesktopForScreen(screenId);
     stateForWindowOnScreen(windowId, screenId, openDesktop)->setFloatingOnScreen(windowId, screenId, openDesktop);
-    restoreFreeSizeForUnplaced(windowId, screenId, openDesktop, reason,
-                               m_windowTracker && placedByPreviousLineage(m_windowTracker->placementStore(), windowId));
+    restoreFreeSizeForUnplaced(windowId, screenId, openDesktop, reason, placedBefore);
     Q_EMIT windowFloatingChanged(windowId, true, screenId);
     qCInfo(PhosphorSnapEngine::lcSnapEngine)
         << "applyNoMatchFloatDefault:" << windowId << "reclaim declined — defaulting to floated on" << screenId;

@@ -571,10 +571,13 @@ public Q_SLOTS:
 
     /**
      * @brief Pre-computed zone geometries for pending restore entries.
-     * @return JSON object: { appId: {x, y, width, height}, ... }
+     * @return JSON object, one ARRAY per app, newest record first:
+     *         { appId: [ {x, y, width, height, screenId, windowId}, ... ], ... }
      *
-     * The effect caches these so that slotWindowAdded can teleport windows
-     * to their zone position immediately, without waiting for a D-Bus round-trip.
+     * The effect caches these so slotWindowAdded can teleport windows to their
+     * zone position without a D-Bus round trip. It takes an app's first entry
+     * whose instance is not already live, so a second window of a snapped app
+     * is never handed the rect its open sibling still uses.
      */
     QString getPendingRestoreGeometries();
 
@@ -1157,12 +1160,11 @@ public:
 
     /// Engine-neutral RouteToDesktop: if a matched rule pins @p windowId to
     /// a virtual desktop, emit windowDesktopMoveRequested so the compositor moves
-    /// it there on open. Independent of snapping/tiling. Called from the snap
+    /// it there on open. Independent of snapping/tiling, called from the snap
     /// open-path facade for first placements only. Pins @p screenId so a
-    /// ScreenId-scoped rule resolves; reuses the per-window evaluator cache.
+    /// ScreenId-scoped rule resolves.
     /// Returns whether a RouteToDesktop rule MATCHED, true even when its target
-    /// failed the 1-based guard and no move was emitted (the routing tests
-    /// assert it; no production caller reads it).
+    /// failed the 1-based guard and no move was emitted (the routing tests assert it).
     bool applyOpenDesktopRouting(const QString& windowId, const QString& screenId);
 
     /// Tiling-family open-path routing. Emits RouteToDesktop (as
@@ -1751,15 +1753,13 @@ private:
     // Frame-geometry shadow: populated via setFrameGeometry D-Bus pushes from
     // the compositor plugin, removed on windowClosed, read by daemon-local
     // shortcut handlers (float toggle, etc.) without a round trip. Keyed on
-    // CANONICAL window ids: captureWindowPlacement reads it with canonical ids
-    // on the engine-relay path, so writes and reads go through shadowWindowId().
+    // CANONICAL ids, so writes and reads go through shadowWindowId().
     QHash<QString, QRect> m_frameGeometry;
 
     // What the open path just asked the effect to apply (a float-position
-    // rect, or a free-size restore's size, #1106), until the effect's next
-    // frame report or the close. The RouteToScreen translation in the same
-    // resolve reads these ahead of the shadow, which stays the effect's own
-    // account of where the window is. Canonical ids, like the shadow.
+    // rect, or a free-size restore's size, #1106), until the next frame
+    // report or the close. The RouteToScreen translation in the same resolve
+    // reads these ahead of the shadow. Canonical ids, like the shadow.
     QHash<QString, QRect> m_pendingOpenGeometry;
     QHash<QString, QSize> m_pendingOpenSize;
 

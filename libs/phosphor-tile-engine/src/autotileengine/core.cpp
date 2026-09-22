@@ -82,6 +82,18 @@ int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
             ++it;
         }
     }
+    // The cross-screen claims-exhausted one-shot ages out here too: it is
+    // normally consumed by the very next windowOpened or reaped by
+    // windowClosed, but a window that dies without either leaves its id
+    // standing for the session.
+    for (auto it = m_crossScreenClaimsExhausted.begin(); it != m_crossScreenClaimsExhausted.end();) {
+        if (!aliveWindowIds.contains(*it)) {
+            it = m_crossScreenClaimsExhausted.erase(it);
+            ++pruned;
+        } else {
+            ++it;
+        }
+    }
     // Engine tracking sweep — the contract this override exists for ("window
     // died without a windowClosed signal"): a dead window's TilingState
     // membership is otherwise permanent, since windowOpened's ghost-removal

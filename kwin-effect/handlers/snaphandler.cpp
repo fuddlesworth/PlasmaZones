@@ -276,7 +276,7 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
     const bool firstPlacement = isOpenPath || reason == PhosphorEngine::RestoreReason::PendingSweep
         || reason == PhosphorEngine::RestoreReason::DesktopArrival;
     if (firstPlacement) {
-        m_openResolveInFlight.insert(windowId);
+        ++m_openResolveInFlight[windowId];
     }
     auto snapApplied = std::make_shared<bool>(false);
     std::function<void(const QString&, const QString&)> markApplied;
@@ -286,7 +286,7 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
         };
     }
     const std::function<void()> completeWithOutcome = [this, windowId, onComplete, snapApplied, firstPlacement]() {
-        if (firstPlacement) {
+        if (firstPlacement && --m_openResolveInFlight[windowId] <= 0) {
             m_openResolveInFlight.remove(windowId);
         }
         if (onComplete) {

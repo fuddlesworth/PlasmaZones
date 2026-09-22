@@ -12,9 +12,10 @@
 // short-circuits on the null tracker before the resolved value is ever used.
 //
 // Everything else answers the empty/false/no-op value. The placement store is
-// a real (empty) WindowPlacementStore: the open path consults it for a
-// float-reopen record, and an empty store is exactly the "no record" case
-// these suites want.
+// a real WindowPlacementStore, which most suites leave empty (the open path
+// consults it for a float-reopen record, and empty is exactly the "no record"
+// case they want) and the free-size suites populate directly to drive the
+// record and live-sibling tiers.
 
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorEngine/IWindowTrackingService.h>

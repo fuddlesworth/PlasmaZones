@@ -9,7 +9,7 @@
 // as AutotileEngine.h / daemon.h / windowtrackingadaptor.h. Grew with the
 // per-desktop membership change: the membership pass and its helpers, the
 // per-desktop seed / restore-desktop resolution, the window-scoped resnap,
-// the pinned-desktop store resolution and the float residence helper (#1106).
+// the pinned-desktop store resolution and the float residence helper.
 
 #pragma once
 
@@ -197,18 +197,16 @@ public:
 
     /**
      * @brief Predicate consulted in `resolveWindowRestore` to decide whether a
-     *        FLOATED window should have its previous global position restored on
-     *        open. (Snapping is two-state — snapped or floated; "floated" is the
-     *        only unsnapped state.)
+     *        FLOATED window should have its previous global position restored
+     *        on open. (Snapping is two-state: snapped, or floated.)
      *
      * Keyed by the live windowId so the daemon closure can evaluate the
      * per-window RestorePosition rule from its WindowRegistry, falling back to
-     * the `snappingRestoreFloatedWindowsOnLogin` setting; the engine stays
-     * settings-agnostic (LGPL boundary). Returns true to restore the position.
-     * The gate governs ONE thing for FLOATED records: the geometry MOVE. A
-     * floated record ALWAYS re-marks the window floating, but its position is
+     * the `snappingRestoreFloatedWindowsOnLogin` setting. Returns true to
+     * restore the position, the ONE thing it governs for a FLOATED record:
+     * such a record always re-marks the window floating, but its position is
      * re-applied only when the predicate opts in and the rect is not a managed
-     * size (a zone-sized "free" rect is a spawn frame). A declined or refused
+     * size (a zone-sized "free" rect is a spawn frame); a declined or refused
      * move still gets a first placement its free SIZE.
      *
      * When the predicate is UNSET (default), the engine preserves its historical
@@ -471,22 +469,20 @@ public:
     /**
      * @brief Resolve auto-snap for a newly opened window
      *
-     * A matched SnapToZone placement rule (chain level 1) has highest priority
-     * and overrides any stored placement (the store still re-binds the record
-     * first, so the float-back geometry survives). Otherwise the unified
-     * WindowPlacementStore reopens the window from its snapped (may cross
-     * screens) or floated (screen-local) record. With neither, levels 2 (empty
-     * zone) and 3 (last-used zone) run. A window nothing places is FLOATED, by
-     * a matched Float rule before the chain or by the no-match default after
-     * it; a first-placement float that does not move the window gets its free
-     * size back (restoreFreeSizeForUnplaced). An already-floating window is skipped.
+     * A matched SnapToZone rule (chain level 1) outranks any stored placement
+     * (the store still re-binds the record first, so the float-back geometry
+     * survives). Otherwise the WindowPlacementStore reopens the window from
+     * its snapped (may cross screens) or floated (screen-local) record. With
+     * neither, levels 2 (empty zone) and 3 (last-used zone) run. A window
+     * nothing places is FLOATED, by a matched Float rule before the chain or
+     * the no-match default after it; a first-placement float that does not
+     * move gets its free size back. An already-floating window is skipped.
      *
      * @param windowId Window identifier
      * @param screenId Screen where the window appeared
      * @param sticky Whether the window is on all desktops
-     * @param kind Structural kind of the opening window. Accepted for D-Bus
-     *             wire-compatibility but no longer gates restore — the matched
-     *             WindowPlacement record carries its own kind.
+     * @param kind Accepted for D-Bus wire-compatibility but no longer gates
+     *             restore — the matched record carries its own kind.
      * @param reason Why this resolve runs; gates the size restore only.
      * @return PhosphorEngine::SnapResult with geometry and zone info, or PhosphorEngine::SnapResult::noSnap()
      */
@@ -658,9 +654,15 @@ public:
     /// the SnapAdaptor when a deferredToTilingEngine verdict's reclaim was then
     /// DECLINED; without it the window ended the open with no state in any
     /// engine. No-op with a definite snap state, snapping off, or empty args.
-    /// Pins the residence and restores the free size like the in-line terminals.
+    /// Pins the residence and restores the free size like the in-line
+    /// terminals. @p placedBefore is the caller's pre-reclaim snapshot.
     void applyNoMatchFloatDefault(const QString& windowId, const QString& screenId,
-                                  PhosphorEngine::RestoreReason reason = PhosphorEngine::RestoreReason::Open);
+                                  PhosphorEngine::RestoreReason reason = PhosphorEngine::RestoreReason::Open,
+                                  bool placedBefore = false);
+
+    /// That snapshot. A tiling claim reaching takeForReopen re-binds the record
+    /// under this uuid with its own slot and leaves it there on a decline.
+    bool wasPlacedByPreviousLineage(const QString& windowId) const;
 
     /// Primary zone of @p windowId across the per-screen stores (empty if none).
     /// Used by the cross-mode handoff to read a snap partner's slot.
@@ -683,8 +685,7 @@ public:
 
     /// Inject the cross-surface resolver (neighbour output / desktop lookup),
     /// threaded into the navigation target resolver so a no-adjacent-zone
-    /// boundary crosses into the neighbouring output instead of failing.
-    /// Not owned; a raw borrow, cleared with nullptr at daemon teardown.
+    /// boundary crosses into the neighbouring output. Not owned.
     void setCrossSurfaceResolver(PhosphorEngine::ICrossSurfaceResolver* resolver) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1059,8 +1060,7 @@ Q_SIGNALS:
     /// single operation. The engine itself only ever emits action="rotate";
     /// the SnapAdaptor layer attaches "resnap" / "vs_reconfigure" when it
     /// relays its own batches over the same WTA D-Bus signal ("snap_all"
-    /// batches never cross the wire — the effect builds those locally). The
-    /// @p action label disambiguates the cause downstream.
+    /// batches never cross the wire — the effect builds those locally).
     void applyGeometriesBatch(const PhosphorProtocol::WindowGeometryList& geometries, const QString& action);
 
 private:
@@ -1069,7 +1069,7 @@ private:
     /// The snap arm of PlacementEngineBase::restoreFreeSizeWhereItStands (#1106); @p desktop is the restore desktop.
     void restoreFreeSizeForUnplaced(const QString& windowId, const QString& screenId, int desktop,
                                     PhosphorEngine::RestoreReason reason, bool placedBefore);
-    /// The sizes a snapped window on @p screenId can have in @p desktop's context (zones and live rects).
+    /// The sizes a snapped window on @p screenId can have in @p desktop's context.
     QList<QSize> managedSizesOnScreen(const QString& screenId, int desktop) const;
     /// The RouteToDesktop target of the rule matching an opening window (0 = none); the float terminals pin to it.
     int routedOpenDesktop(const QString& windowId, const QString& screenId) const;

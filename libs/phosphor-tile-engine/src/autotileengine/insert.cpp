@@ -39,6 +39,7 @@
 #include <QVarLengthArray>
 #include <algorithm>
 #include <cmath>
+#include <optional>
 
 namespace PhosphorTileEngine {
 
@@ -291,6 +292,19 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // can re-bind a FIFO-matched sibling record under this uuid (see
     // PlacementEngineBase::placedByPreviousLineage).
     const bool placedBefore = m_windowTracker && placedByPreviousLineage(m_windowTracker->placementStore(), windowId);
+    // The managed-size list for THIS screen, resolved at most once per open
+    // and shared by the float-restore move gate and the size arm at the tail,
+    // which ask the same question of it. Lazy rather than eager: an ordinary
+    // tiled open reaches neither arm and must not pay the walk. In the gate's
+    // branch the take() accept makes the record's restoreScreen equal to
+    // screenId (noted at the hint below), so one list serves both.
+    std::optional<QList<QSize>> managedSizesHere;
+    const auto managedSizesForScreen = [&]() -> const QList<QSize>& {
+        if (!managedSizesHere) {
+            managedSizesHere = managedSizesOnScreen(screenId);
+        }
+        return *managedSizesHere;
+    };
     if (!inserted && hasStableAppId && m_windowTracker && !migrationReAdd) {
         using PhosphorEngine::WindowPlacement;
         // takeForReopen carries the shared accept predicate (floating slot:
@@ -341,7 +355,7 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
                     // source instead.
                     if (freeGeo.isValid() && restorePosition
                         && (!m_windowTracker || m_windowTracker->geometryBelongsToScreen(freeGeo, restoreScreen))
-                        && !isManagedSize(managedSizesOnScreen(restoreScreen), freeGeo.size())) {
+                        && !isManagedSize(managedSizesForScreen(), freeGeo.size())) {
                         Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
                         movedByRecord = true;
                     }
@@ -387,7 +401,7 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // apply precedes the sync on the wire.
     if (state->isFloating(windowId) && !movedByRecord && !migrationReAdd) {
         restoreFreeSizeWhereItStands(m_windowTracker, windowId, screenId, PhosphorEngine::RestoreReason::Open,
-                                     placedBefore, managedSizesOnScreen(screenId));
+                                     placedBefore, managedSizesForScreen());
     }
 
     // A pre-seeded window placed by a LATER tier (the advisory fall-through)

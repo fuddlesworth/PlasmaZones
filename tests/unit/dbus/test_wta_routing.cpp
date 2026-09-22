@@ -339,6 +339,102 @@ private Q_SLOTS:
         QCOMPARE(drive(RestoreReason::DesktopArrival), 0);
     }
 
+    // A tiling claim that DECLINES leaves the window to the snap engine's
+    // float default, and two things have to survive that round trip: the
+    // record's reclaim credit (so a later desktop arrival can still claim
+    // it) and the lineage snapshot the free-size restore gates on.
+    //
+    // The snapshot is the subtle one. A claim that got as far as takeForReopen
+    // re-binds the consumed record under the OPENING window's uuid with the
+    // claiming engine's slot, and a claim that then declines on its membership
+    // check leaves that record standing. Recomputing the snapshot inside the
+    // float default would read "already placed" for a window no engine ever
+    // placed, and silently skip the resize (#1106). The hook below reproduces
+    // exactly that store mutation.
+    void testDeclinedTilingReclaim_keepsCreditAndStillRestoresTheFreeSize()
+    {
+        using PhosphorEngine::WindowPlacement;
+        const QString appId = QStringLiteral("reclaimapp");
+        const QString opener = QStringLiteral("reclaimapp|second");
+
+        auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
+        m_wta->setWindowRegistry(registry);
+        m_wta->setWindowMetadata(QStringLiteral("second"), appId, QString(), QString(), QString(), 0, 0, QString(), 0,
+                                 QVariantMap());
+        const auto teardown = qScopeGuard([this] {
+            m_wta->setWindowRegistry(nullptr);
+            m_snapAdaptor->setCrossScreenTileReclaim({});
+        });
+
+        // DP-2 runs autotile, so a record tiled there is a cross-screen
+        // tiling record and the snap engine defers rather than placing.
+        PhosphorZones::AssignmentEntry autotile;
+        autotile.mode = PhosphorZones::AssignmentEntry::Autotile;
+        autotile.tilingAlgorithm = QStringLiteral("dwindle");
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), autotile);
+
+        PhosphorEngine::WindowPlacementStore& store = m_wta->service()->placementStore();
+        // The record that earns the defer: tiled on the autotile screen.
+        WindowPlacement tiledElsewhere;
+        tiledElsewhere.windowId = QStringLiteral("reclaimapp|old");
+        tiledElsewhere.appId = appId;
+        tiledElsewhere.screenId = QStringLiteral("DP-2");
+        PhosphorEngine::EngineSlot tiledSlot;
+        tiledSlot.state = QString(WindowPlacement::stateTiled());
+        tiledElsewhere.engines.insert(QString(WindowPlacement::autotileEngineId()), tiledSlot);
+        QVERIFY(store.record(tiledElsewhere));
+        // A closed sibling carrying the free size the opener should inherit.
+        const QRect siblingFree(80, 60, 910, 620);
+        WindowPlacement closedSibling;
+        closedSibling.windowId = QStringLiteral("reclaimapp|closed");
+        closedSibling.appId = appId;
+        closedSibling.screenId = m_screenId;
+        closedSibling.freeGeometryByScreen.insert(m_screenId, siblingFree);
+        QVERIFY(store.record(closedSibling));
+
+        // The claim: consumes and re-binds under the opener's uuid, exactly
+        // as takeForReopen does, then declines.
+        bool hookRan = false;
+        m_snapAdaptor->setCrossScreenTileReclaim([&](const QString& windowId, const QString&, int, int) {
+            hookRan = true;
+            WindowPlacement reBound;
+            reBound.windowId = windowId;
+            reBound.appId = appId;
+            reBound.screenId = m_screenId;
+            PhosphorEngine::EngineSlot slot;
+            slot.state = QString(WindowPlacement::stateTiled());
+            reBound.engines.insert(QString(WindowPlacement::autotileEngineId()), slot);
+            reBound.freeGeometryByScreen.clear();
+            return store.record(reBound) && false;
+        });
+
+        QSignalSpy sizeSpy(m_snapEngine, &PhosphorEngine::PlacementEngineBase::sizeRestoreRequested);
+        QSignalSpy floatSpy(m_snapEngine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+        int x = 0;
+        int y = 0;
+        int w = 0;
+        int h = 0;
+        bool shouldSnap = false;
+        m_snapAdaptor->resolveWindowRestore(
+            opener, m_screenId, false, static_cast<int>(PhosphorEngine::WindowKind::Unknown),
+            static_cast<int>(PhosphorEngine::RestoreReason::Open), 0, 0, x, y, w, h, shouldSnap);
+
+        QVERIFY2(hookRan, "the cross-screen tiling reclaim must be offered for a deferred open");
+        QVERIFY(!shouldSnap);
+        QVERIFY2(m_snapEngine->isFloating(opener), "a declined claim falls back to the snap float default");
+        QCOMPARE(floatSpy.count(), 1);
+        QCOMPARE(sizeSpy.count(), 1);
+        const QList<QVariant> args = sizeSpy.takeFirst();
+        QCOMPARE(args.at(0).toString(), opener);
+        QCOMPARE(args.at(1).toSize(), siblingFree.size());
+
+        // And the deferred record keeps its credit, so the desktop-arrival
+        // continuation can still reclaim it.
+        const auto kept = store.peekExact(QStringLiteral("reclaimapp|old"));
+        QVERIFY(kept);
+        QVERIFY2(kept->reclaimEligible, "a declined claim must not spend the open's reclaim credit");
+    }
+
     void testEmitRouteToDesktop_matchedButUnusableTargetStillReportsAMatch()
     {
         // A matched RouteToDesktop owns this window's desktop whether or not its

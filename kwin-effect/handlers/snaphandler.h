@@ -265,7 +265,7 @@ public:
     /// unsnap, which keeps the top-left; the two ride one signal.
     bool hasOpenResolveInFlight(const QString& windowId) const
     {
-        return m_openResolveInFlight.contains(windowId);
+        return m_openResolveInFlight.value(windowId, 0) > 0;
     }
 
     /// Cancel a pending deferred unminimize→unfloat commit. No-op if no timer
@@ -404,9 +404,16 @@ private:
     // position, undoing any move the user had made since.
     QSet<QString> m_awaitingDesktopArrivalRestore;
     // Windows whose first-placement resolve has been dispatched and not yet
-    // answered (see hasOpenResolveInFlight). Erased by every reply arm, on
-    // close, and on daemon loss.
-    QSet<QString> m_openResolveInFlight;
+    // answered (see hasOpenResolveInFlight). Decremented by every reply arm,
+    // erased on close and on daemon loss.
+    //
+    // COUNTED, not a set: the three first-placement drivers are independent,
+    // and the pending sweep re-resolves a window the daemon does not yet
+    // track — which an open resolve still in flight has not made tracked. A
+    // set let the first reply clear the mark while the second call was still
+    // out, and a size-only apply landing in that gap took the drag-out
+    // top-left branch instead of recentring the fresh window.
+    QHash<QString, int> m_openResolveInFlight;
     // Pending debounced minimize→float commits. Shares the compositor's
     // spurious minimize-pair window with the shader and autotile paths.
     DeferredWindowCommits m_pendingMinimizeFloat{this};

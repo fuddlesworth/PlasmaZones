@@ -324,8 +324,6 @@ private Q_SLOTS:
     // Daemon-driven navigation: daemon computes geometry/target and emits these signals
     void slotApplyGeometryRequested(const QString& windowId, int x, int y, int width, int height, const QString& zoneId,
                                     const QString& screenId, bool sizeOnly);
-    void applySizeOnlyRestore(KWin::EffectWindow* w, const QString& liveWindowId, const QString& screenId,
-                              const QSize& size, bool freshOpen);
     void slotActivateWindowRequested(const QString& windowId);
     void slotWindowDesktopMoveRequested(const QString& windowId, int desktop);
     void slotWindowOutputMoveExpected(const QString& windowId, const QString& targetScreenId,
@@ -862,6 +860,10 @@ private:
     /// Exact id, else the same INSTANCE under another prefix; never a sibling.
     KWin::EffectWindow* findWindowByInstanceId(const QString& windowId) const;
 
+    /// The size-only half of slotApplyGeometryRequested (#1106); NOT a slot (moc would publish it by name).
+    void applySizeOnlyRestore(KWin::EffectWindow* w, const QString& liveWindowId, const QString& screenId,
+                              const QSize& size, bool freshOpen);
+
     /**
      * @brief All windows matching windowId (exact or same appId).
      * Used by autotile to disambiguate when multiple windows share an appId (e.g. two Firefox).
@@ -906,11 +908,10 @@ private:
     /// otherwise identical — the id is the ONLY thing the overloads differ on.
     QString getWindowScreenId(KWin::EffectWindow* w, const QString& windowId) const;
     /// The KWin output a window sits on by POSITION (centre containment),
-    /// falling back to w->screen() only when no output contains the centre:
-    /// KWin can assign the wrong one of two identical outputs (Discussion #724).
+    /// falling back to w->screen() only when no output contains the centre
+    /// (KWin can pick the wrong one of two identical outputs, #724).
     KWin::LogicalOutput* windowOutput(KWin::EffectWindow* w) const;
-    /// The KWin output carrying a (physical or virtual) screen id, nullptr when
-    /// no connected output matches. The counterpart to outputScreenId.
+    /// The KWin output carrying a (physical or virtual) screen id, else nullptr. Counterpart to outputScreenId.
     KWin::LogicalOutput* outputForScreenId(const QString& screenId) const;
     /// The output a scroll-strip window is managed by, or nullptr when the
     /// window is not a strip column (or is exempt: user move/resize, floating,
@@ -3099,8 +3100,7 @@ private:
     // it opens; endRestoreSuppression releases it once it has settled into
     // its zone / tile (or on the hard deadline). See RestoreSuppression.
     void beginRestoreSuppression(KWin::EffectWindow* window);
-    /// Re-arm a suppressed window's deadline (no-op otherwise): a decision
-    /// deferred past the deadline must not flash the window mid-route.
+    /// Re-arm a suppressed window's deadline (no-op otherwise), so a decision deferred past it cannot flash.
     void refreshRestoreSuppressionDeadline(KWin::EffectWindow* window);
     /// Consume (single-shot) and, when valid for a snap-mode screen, apply the
     /// app's instant snap-restore cache entry. True when teleported. Sole

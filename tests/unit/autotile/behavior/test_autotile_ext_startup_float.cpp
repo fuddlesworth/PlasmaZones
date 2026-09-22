@@ -120,8 +120,11 @@ private Q_SLOTS:
         PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
         std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
             PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
-        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), nullptr, nullptr);
+        // Declared BEFORE the service: the probe captures it by reference and
+        // lives in the store, so the set has to outlive it
+        // (WindowPlacementBuilders.h).
         QSet<QString> liveInstances{QStringLiteral("first")};
+        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), nullptr, nullptr);
         wts.placementStore().setLiveInstanceProbe(PlasmaZones::TestHelpers::liveInstanceProbe(liveInstances));
 
         AutotileEngine engine(nullptr, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
@@ -170,8 +173,9 @@ private Q_SLOTS:
         PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
         std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
             PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
-        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), nullptr, nullptr);
+        // Declared BEFORE the service, as above: the probe holds a reference.
         QSet<QString> liveInstances;
+        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), nullptr, nullptr);
         wts.placementStore().setLiveInstanceProbe(PlasmaZones::TestHelpers::liveInstanceProbe(liveInstances));
         AutotileEngine engine(nullptr, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("DP-1");

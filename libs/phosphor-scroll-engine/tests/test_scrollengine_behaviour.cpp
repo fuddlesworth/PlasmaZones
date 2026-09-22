@@ -954,10 +954,12 @@ void TestScrollEngineBehaviour::floatAtOpenGetsSiblingFreeSizeWhereItStands()
     // floating beside a column sibling comes up at the column's size (the
     // app saved it). It gets the sibling's remembered free size back where
     // it stands, never a rect of a live column's size.
+    // Declared BEFORE the owner that parents the tracker: the probe captures
+    // it by reference and dies with the store, so it must outlive both.
+    QSet<QString> live{QStringLiteral("first")};
     QObject owner;
     auto* settings = new StubScrollSettings(&owner);
     auto* tracker = new StubWindowTracking(&owner);
-    QSet<QString> live{QStringLiteral("first")};
     tracker->placementStore().setLiveInstanceProbe([&live](const QString& windowId) {
         return live.contains(PhosphorIdentity::WindowId::extractInstanceId(windowId));
     });

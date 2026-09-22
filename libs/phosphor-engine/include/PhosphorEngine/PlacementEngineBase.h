@@ -146,7 +146,8 @@ protected:
     /// effect performs as a teleport under first-frame suppression. The snap
     /// and tile callers guard against repeats with their own already-floating
     /// checks; the scroll caller's same-key early return does the same, and
-    /// its migration re-entry skips the arm. No-op without @p tracker.
+    /// its migration re-entry skips the arm. No-op without @p tracker, or
+    /// with an empty @p windowId or @p screenId.
     void restoreFreeSizeWhereItStands(IWindowTrackingService* tracker, const QString& windowId, const QString& screenId,
                                       RestoreReason reason, bool placedBefore, const QList<QSize>& managedSizes);
 

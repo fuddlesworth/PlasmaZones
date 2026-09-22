@@ -65,6 +65,6 @@ inline std::function<bool(const QString&)> liveInstanceProbe(const QSet<QString>
     };
 }
 // A temporary set would dangle behind the reference the probe keeps.
-std::function<bool(const QString&)> liveInstanceProbe(QSet<QString>&&) = delete;
+inline std::function<bool(const QString&)> liveInstanceProbe(QSet<QString>&&) = delete;
 
 } // namespace PlasmaZones::TestHelpers

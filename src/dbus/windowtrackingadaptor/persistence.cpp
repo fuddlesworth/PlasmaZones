@@ -92,9 +92,15 @@ PhosphorProtocol::PreTileGeometryList WindowTrackingAdaptor::getPreTileGeometrie
     // not apply here — mirroring the snap engine's floating-branch policy in
     // SnapEngine::resolveWindowRestore.
     for (const PhosphorEngine::WindowPlacement& p : m_service->placementStore().records()) {
-        // A live window's record is its own, not a seed for a same-app
-        // window the effect keys by appId (the #1106 shape on this path).
-        if (m_service->placementStore().isLiveInstance(p.windowId)) {
+        // LIVE records only. The consumer (TilingHandler's pre-tile fetch)
+        // keys each entry by appId, matches it against the live windows on
+        // the screen and skips when more than one matches — so the only entry
+        // it can ever apply belongs to a window that is open right now. A
+        // dead sibling's record reaching it is the cross-instance borrow
+        // getValidatedPreTileGeometry refuses by construction, handed to the
+        // live window as its own pre-tile rect; a live window's own record is
+        // exactly what the seed is for.
+        if (!m_service->placementStore().isLiveInstance(p.windowId)) {
             continue;
         }
         for (auto it = p.freeGeometryByScreen.constBegin(); it != p.freeGeometryByScreen.constEnd(); ++it) {

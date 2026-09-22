@@ -1286,9 +1286,9 @@ private:
     void applyLayout(const QString& screenId, bool focusWindowAfter = false);
     // engine_lifecycle.cpp
     /// Place an arriving window into @p state: floated (oversized, rule,
-    /// sticky-excluded, or a floating placement record) or tiled through the stash / seed /
-    /// recorded-slot / plain-insert ladder. Returns false only when every
-    /// insert was refused — today that means the strip already holds the
+    /// sticky-excluded, or a floating record) or tiled through the stash /
+    /// seed / recorded-slot / plain-insert ladder. Returns false only when
+    /// every insert was refused — today, the strip already holds the
     /// window — in which case nothing about the placement changed and the
     /// caller must not announce one. @p outOpenParams, when given, receives
     /// the per-window open-rule verdict resolved inside (default-constructed
@@ -1341,26 +1341,25 @@ private:
     /// it empties.
     void forgetContextMemo(const PhosphorEngine::PlacementStateKey& key, const QString& windowId);
     // engine_float_open.cpp
-    /// The FloatRestore entry (clamp only, column -1) for a window that floats
-    /// without ever having been a tile; a real slot only has its clamp refreshed.
+    /// The FloatRestore entry (clamp only, column -1) for a never-tiled float.
     void seedFloatRestoreForOpen(const QString& windowId, int minWidth, int minHeight);
-    /// The shared tail of insertOpenedWindow's two float exits (see the
-    /// definition): no move or size on a @p migration, no size when @p oversized.
+    /// The shared tail of the two float exits: no move or size on a @p migration, no size when @p oversized.
     void finishFloatedOpen(ScrollState* state, const QString& windowId, const QString& screenId, int minWidth,
                            int minHeight, bool migration, bool oversized, bool placedBefore,
                            const PhosphorEngine::WindowPlacement* record);
-    /// Consume the FLOATING record of an engine-decided float and apply the
-    /// gated float-back position restore. True: moved.
-    bool restoreFloatRecordForOpen(const QString& windowId, const QString& screenId);
+    /// Consume an engine-decided float's FLOATING record, apply the gated position. True: moved.
+    bool restoreFloatRecordForOpen(const QString& windowId, const QString& screenId, const QList<QSize>& managedSizes);
     /// Emit geometryRestoreRequested for @p record's free rect when the gate allows (see the definition).
     bool emitGatedFloatGeometryRestore(const QString& windowId, const PhosphorEngine::WindowPlacement& record,
-                                       const QString& screenId);
-    /// The scroll arm of PlacementEngineBase::restoreFreeSizeWhereItStands.
-    void restoreFreeSizeForFloatedOpen(const QString& windowId, const QString& screenId, bool placedBefore);
+                                       const QString& screenId, const QList<QSize>& managedSizes);
+    /// The scroll arm of restoreFreeSizeWhereItStands; @p managedSizes is finishFloatedOpen's.
+    void restoreFreeSizeForFloatedOpen(const QString& windowId, const QString& screenId, bool placedBefore,
+                                       const QList<QSize>& managedSizes);
     /// The sizes a column tile on @p screenId can have, every context (resolved plus applied rects).
     QList<QSize> managedSizesOnScreen(const QString& screenId) const;
-    /// Mark @p windowId's EXACT stash tile consumed on a float exit (mirrors restoreFromStripStash).
-    void consumeStripStashTileForFloat(const PhosphorEngine::PlacementStateKey& key, const QString& windowId);
+    /// Consume @p windowId's EXACT stash tile on a float exit, mirroring restoreFromStripStash's blueprint carry.
+    void consumeStripStashTileForFloat(ScrollState* state, const PhosphorEngine::PlacementStateKey& key,
+                                       const QString& windowId);
     bool floatWindowInternal(ScrollState* state, const PhosphorEngine::PlacementStateKey& key, const QString& windowId,
                              const QString& screenId);
     bool unfloatWindowInternal(ScrollState* state, const QString& windowId, const QString& screenId,
@@ -1495,8 +1494,8 @@ private:
     QSet<QString> m_declinedOpenFocus;
     /// Arrival-burst bracket depth (IPlacementEngine::beginArrivalBurst).
     /// While positive, windowOpened defers its per-arrival applyLayout into
-    /// m_burstPendingApplies (context key → whether any deferred arrival took
-    /// focus) and the outermost endArrivalBurst applies once per screen.
+    /// m_burstPendingApplies (context key → whether a deferred arrival took
+    /// focus); the outermost endArrivalBurst applies once per screen.
     int m_arrivalBurstDepth = 0;
     QHash<PhosphorEngine::PlacementStateKey, bool> m_burstPendingApplies;
     /// One-shot from the dispatch (noteCrossScreenClaimsExhausted); consumed by the defer gate.

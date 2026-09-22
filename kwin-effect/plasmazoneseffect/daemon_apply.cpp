@@ -86,26 +86,23 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
     // it to a single desktop here would silently un-sticky it. Directional
     // cross-desktop move is meaningless for an everywhere window — leave it.
     // Checked BEFORE the range arm below: a sticky window is present on every
-    // desktop, so it was never displaced and is not waiting to be placed, and
-    // driving the recovery restore at it (for a 0 "all desktops" sentinel, say)
-    // would re-place a window that went nowhere, the same unsolicited
-    // re-placement the arrival arm in window_desktop_connections.cpp goes to
-    // some length to avoid for the grew / un-stuck cases.
+    // desktop, so it was never displaced, and driving the recovery restore at
+    // it (for a 0 "all desktops" sentinel, say) would re-place a window that
+    // went nowhere — the unsolicited re-placement the arrival arm in
+    // window_desktop_connections.cpp avoids for the grew / un-stuck cases.
     if (w->isOnAllDesktops()) {
         qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: window is on all desktops, ignoring" << windowId;
         return;
     }
     // Refusing the move is not the end of it. On the open path a RouteToDesktop
     // rule emits this ahead of the same round trip's resolve, and the snap
-    // engine then pins the window's float residence to the ROUTED desktop
-    // (the placement it made for the window assumes the move happened). If
-    // the move never happens, the window sits on its spawn desktop with its
-    // state filed under another, so each refusal below hands it to the
+    // engine then pins the window's float residence to the ROUTED desktop.
+    // If the move never happens, the window sits on its spawn desktop with
+    // its state filed under another, so each refusal below hands it to the
     // arrival restore instead, which re-drives the resolve for the desktop
-    // it is actually on (the re-drive returns at the engine's already-placed
-    // guards for a window whose residence is already right). The
-    // out-of-range case is the concrete one: a user who removed a virtual
-    // desktop has rules naming a desktop that no longer exists.
+    // it is actually on (returning at the engine's already-placed guards
+    // when the residence is already right). The concrete case: a user who
+    // removed a virtual desktop has rules naming one that no longer exists.
     const auto placeWhereItIs = [this, w]() {
         m_snapHandler->armDesktopArrivalRestore(getWindowId(w));
         m_snapHandler->slotDesktopChangedRestoreArrivals();
@@ -181,6 +178,10 @@ void PlasmaZonesEffect::slotWindowOutputMoveExpected(const QString& windowId, co
 void PlasmaZonesEffect::applySizeOnlyRestore(KWin::EffectWindow* w, const QString& liveWindowId,
                                              const QString& screenId, const QSize& size, bool freshOpen)
 {
+    // Guarded like every window entry point here; the deref below is first.
+    if (!w || w->isDeleted()) {
+        return;
+    }
     // Integer-aligned like every other frame compare in this file: on a
     // fractional output the qreal frame carries sub-pixel residue.
     const QRect frameInt = w->frameGeometry().toRect();
@@ -238,6 +239,8 @@ void PlasmaZonesEffect::applySizeOnlyRestore(KWin::EffectWindow* w, const QStrin
     // A window that mapped maximized (or is going fullscreen) keeps its
     // frame whatever size is asked; nothing on this path unmaximizes, unlike
     // a zone commit's demote. The free size lands when the user restores it.
+    // Like the two skips above, the first-frame suppression is left to its
+    // owners (resolve reply, announce reply, paint deadline).
     if (KWin::Window* kw = w->window();
         kw && (kw->requestedMaximizeMode() != KWin::MaximizeRestore || kw->isRequestedFullScreen())) {
         qCDebug(lcEffect) << "slotApplyGeometryRequested: size-only restore skipped, window maximized:" << liveWindowId;

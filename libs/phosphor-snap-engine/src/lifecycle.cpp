@@ -687,9 +687,12 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 // window on whatever monitor it was really captured on, while
                 // the floating-on-screen tracking says restoreScreen — the
                 // visible/state desync the comment at the read warns about.
+                // Resolved ONCE for the two arms below, which ask the same
+                // question of the same (screen, desktop).
+                const QList<QSize> managedSizes = managedSizesOnScreen(restoreScreen, restoreDesktop);
                 const bool moveRestored = restoreFloatedPosition && freeGeo.isValid()
                     && (!m_windowTracker || m_windowTracker->geometryBelongsToScreen(freeGeo, restoreScreen))
-                    && !isManagedSize(managedSizesOnScreen(restoreScreen, restoreDesktop), freeGeo.size());
+                    && !isManagedSize(managedSizes, freeGeo.size());
                 if (moveRestored) {
                     Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
                 } else if (!alreadyFloating) {
@@ -698,7 +701,11 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                     // snapped that is the zone's size (#1106), exactly as on
                     // the fresh-window terminals below: give the size back
                     // from the record just re-bound above, position untouched.
-                    restoreFreeSizeForUnplaced(windowId, restoreScreen, restoreDesktop, reason, placedBefore);
+                    // Straight to the shared arm, reusing the list resolved
+                    // above rather than paying restoreFreeSizeForUnplaced's
+                    // second walk for the same answer.
+                    restoreFreeSizeWhereItStands(m_windowTracker, windowId, restoreScreen, reason, placedBefore,
+                                                 managedSizes);
                 }
                 // The window is floating regardless of whether a position was
                 // recorded — tell the compositor (matching toggleWindowFloat /
@@ -871,6 +878,14 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // already-snapped guards above all return earlier, and the non-snap-caller
     // short-circuit returns before the empty/last-zone chain — so this is always a
     // genuine snap-mode window with no zone match.
+    //
+    // This is the one float terminal NOT carrying an explicit !deferredByMode
+    // guard, and it does not need one only because the mode short-circuit
+    // above returns first for every window a tiling engine owns (a
+    // deferredByMode verdict implies a non-null m_layoutManager, so that
+    // branch is always evaluated). Anything that makes that short-circuit
+    // conditional has to add the guard here, or a tiling-screen window
+    // acquires a snap float verdict.
     stateForWindowOnScreen(windowId, screenId, openDesktop)->setFloatingOnScreen(windowId, screenId, openDesktop);
     // Floating where KWin put it, but at the size the app remembers, which
     // for an app with a snapped window is the zone's. Give it its free size,

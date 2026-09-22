@@ -156,19 +156,25 @@ private Q_SLOTS:
         const QList<QSize> managed{QSize(800, 600)};
         const QString s1 = QStringLiteral("S1");
 
+        // Returns the record outcome rather than asserting it: a QVERIFY here
+        // would return from the LAMBDA, letting the slot run on and fail
+        // later at a count mismatch instead of at the real cause.
         const auto restoreWith = [&](const QRect& siblingRect) {
-            QVERIFY(tracker.placementStore().record(floatingRecord(QStringLiteral("app|sib"), siblingRect)));
+            if (!tracker.placementStore().record(floatingRecord(QStringLiteral("app|sib"), siblingRect))) {
+                return false;
+            }
             engine.restoreFreeSizeWhereItStands(&tracker, QStringLiteral("app|new"), s1, RestoreReason::Open,
                                                 /*placedBefore=*/false, managed);
+            return true;
         };
-        restoreWith(QRect(0, 0, 802, 602));
+        QVERIFY(restoreWith(QRect(0, 0, 802, 602)));
         QCOMPARE(sizeSpy.count(), 0);
-        restoreWith(QRect(0, 0, 798, 598));
+        QVERIFY(restoreWith(QRect(0, 0, 798, 598)));
         QCOMPARE(sizeSpy.count(), 0);
-        restoreWith(QRect(0, 0, 803, 600));
+        QVERIFY(restoreWith(QRect(0, 0, 803, 600)));
         QCOMPARE(sizeSpy.count(), 1);
         QCOMPARE(sizeSpy.takeFirst().at(1).toSize(), QSize(803, 600));
-        restoreWith(QRect(0, 0, 800, 603));
+        QVERIFY(restoreWith(QRect(0, 0, 800, 603)));
         QCOMPARE(sizeSpy.count(), 1);
         QCOMPARE(sizeSpy.takeFirst().at(1).toSize(), QSize(800, 603));
     }

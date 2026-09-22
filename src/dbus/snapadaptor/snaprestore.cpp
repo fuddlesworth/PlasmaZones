@@ -320,6 +320,13 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         // on the wrong monitor for the whole session.
         const bool mayReclaim = isOpen || reason == PhosphorEngine::RestoreReason::DesktopArrival;
         if (result.deferredToTilingEngine && !routed) {
+            // Taken BEFORE the reclaim runs. A claim that reaches
+            // takeForReopen re-binds the consumed record under this uuid with
+            // the claiming engine's slot, and a claim that then declines on
+            // its membership check leaves that record standing — so the
+            // float default below must be told what the store looked like
+            // before the attempt, not after it.
+            const bool placedBefore = m_engine->wasPlacedByPreviousLineage(windowId);
             const bool reclaimed = mayReclaim && m_crossScreenTileReclaim
                 && m_crossScreenTileReclaim(windowId, screenId, qMax(0, minWidth), qMax(0, minHeight));
             reclaimedByTiling = reclaimed;
@@ -333,7 +340,7 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
                 // left with its credit, so a desktop-arrival continuation
                 // can still reclaim it (see burnOpenCredit).
                 creditLeftForArrival = true;
-                m_engine->applyNoMatchFloatDefault(windowId, screenId, reason);
+                m_engine->applyNoMatchFloatDefault(windowId, screenId, reason, placedBefore);
             }
         }
         // A matched route is deliberately NOT followed by the float default:
