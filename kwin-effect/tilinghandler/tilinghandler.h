@@ -1104,13 +1104,6 @@ public Q_SLOTS:
     /// against KWin's own current desktop. @p debugLabel is logged only.
     void slotStripContextChanged(const QString& screenId, const QString& epoch, const QString& debugLabel);
 
-    /// The daemon is about to dispatch the windowed-fullscreen toggle on
-    /// @p screenId and wants any natively-fullscreen tile there released first.
-    /// Thin: defers to leaveNativeFullscreenTiles, which skips FLOATING windows,
-    /// so a tile the enter branch floated out is not reached by it.
-    /// Safe on an unmanaged screen, and on one holding no fullscreen tile.
-    void slotLeaveNativeFullscreenRequested(const QString& screenId);
-
     void slotScrollEffectBehaviourChanged(const QVariantMap& behaviour);
 
     /// The scroll cap's blocked-window list changed. Its own signal rather
@@ -1603,15 +1596,11 @@ private:
     /// strip, not the one holding focus.
     QString wheelTargetScreen() const;
 
-    /// Leaves the OWN fullscreen (a client F11, a video going fullscreen — NOT
-    /// the windowed-fullscreen feature) of every scroll-tracked, NON-FLOATING
-    /// tile on @p screenId. The enter branch now floats such a tile out of the
-    /// strip, so this reaches only one that float did not take (closed gate).
-    ///
-    /// PRIVATE: its one caller is slotLeaveNativeFullscreenRequested, ahead of
-    /// the daemon's windowed-fullscreen toggle. Not callable from the batch
-    /// apply — see the site comment in wheelchord.cpp.
-    void leaveNativeFullscreenTiles(const QString& screenId);
+    /// Return a strip tile held out for its own fullscreen (attempt 0 first;
+    /// three attempts on a failed reply, a refused one is final).
+    void dispatchFullscreenUnfloat(const QString& windowId, const QString& screenId, int attempt);
+    /// Desktop-return re-track: send the return a demoted hold could not.
+    void settleParkedFullscreenHold(KWin::EffectWindow* w, const QString& windowId, const QString& screenId);
 
     /// Drop any banked sub-notch remainder. Called from every path that stops
     /// claiming axis events, so a partial notch cannot outlive the gesture
@@ -1857,8 +1846,10 @@ private:
     /// lambda consuming the newer hop's map entry.
     QHash<QString, quint64> m_crossScreenRestoreGen;
     QSet<QString> m_minimizeFloatedWindows;
-    /// Strip tiles WE floated for their own fullscreen (signals.cpp enter/exit; untrack and session drain drop).
+    /// Strip tiles WE held out for their own fullscreen (signals.cpp enter/exit; untrack and session drain drop).
     QSet<QString> m_fullscreenFloatedWindows;
+    /// Returns dispatched and not yet answered; a re-enter inside one is still floated out.
+    QSet<QString> m_fullscreenUnfloatInFlight;
     /// Ownership after an unfloat dispatch and before its authoritative echo.
     /// The generation rejects completions from a countermanded older request.
     /// A re-minimize countermand moves the window back to the active set.

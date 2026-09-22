@@ -1008,12 +1008,12 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                 if (m_savedNotifiedForDesktopReturn.contains(windowId) || m_notifiedWindows.contains(windowId)) {
                     // Previously tracked — re-add without re-notifying the
                     // daemon. Restore the SCREEN record too: the demotion
-                    // dropped both, and a window tracked with an empty
-                    // screen record never detects cross-monitor / cross-VS
-                    // transfers again (handleWindowOutputChanged
-                    // early-returns on an unknown old screen).
+                    // dropped both, and a window tracked with an empty screen
+                    // record never detects cross-monitor / cross-VS transfers
+                    // (handleWindowOutputChanged bails on an unknown old screen).
                     m_notifiedWindows.insert(windowId);
                     m_notifiedWindowScreens[windowId] = screenId;
+                    settleParkedFullscreenHold(w, windowId, screenId);
                 } else {
                     // Genuinely new window opened while this desktop was
                     // not active — notify daemon so it's added to PhosphorTiles::TilingState
@@ -1080,13 +1080,13 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                         // other desktop's windows into this strip and destroys
                         // the column order.
                         //
-                        // The `added`-keyed re-track loop above does the same
-                        // thing, but `added` is empty on an identical-set
-                        // switch — every desktop assigned the same mode, which
-                        // is the ordinary multi-desktop scrolling setup — so
-                        // this scan is the only pass those windows reach.
+                        // The `added`-keyed re-track loop above does the same,
+                        // but `added` is empty on an identical-set switch (every
+                        // desktop the same mode, the ordinary setup), so this
+                        // scan is the only pass those windows reach.
                         m_notifiedWindows.insert(windowId);
                         m_notifiedWindowScreens[windowId] = screenId;
+                        settleParkedFullscreenHold(w, windowId, screenId);
                     } else if (!m_notifiedWindows.contains(windowId)) {
                         // Restore preserved pre-autotile geometry so float-restore
                         // returns to the original position, not the tiled frame from

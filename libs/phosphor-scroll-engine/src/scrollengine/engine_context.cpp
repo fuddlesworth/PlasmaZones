@@ -485,9 +485,8 @@ void ScrollEngine::finishDisplacedRelease(QStringList& displacedWindows, const Q
         });
     }
     if (!displacedWindows.isEmpty()) {
-        // A displaced window leaves the engine, so every context it held on
-        // other desktops goes too; removeWindowsIf below drops only the
-        // memberships, and the strips would keep the tiles.
+        // A displaced window leaves the engine, so every context it held on other
+        // desktops goes too (removeWindowsIf drops only the memberships).
         for (const QString& wid : std::as_const(displacedWindows)) {
             dropFromOtherContexts(wid, PhosphorEngine::PlacementStateKey{});
         }
@@ -495,6 +494,7 @@ void ScrollEngine::finishDisplacedRelease(QStringList& displacedWindows, const Q
         m_states.removeWindowsIf([&displacedSet](const QString& wid, const PhosphorEngine::PlacementStateKey&) {
             return displacedSet.contains(wid);
         });
+        announceReleasedFullscreenHolds();
         Q_EMIT windowsReleased(displacedWindows, displacedScreens);
         // Only NOW may the per-window side maps go — the handler above has
         // consumed the float markers and the last-applied rects (same
@@ -1051,13 +1051,12 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
         m_activeScreen.clear();
     }
     if (!releasedWindows.isEmpty()) {
+        announceReleasedFullscreenHolds();
         Q_EMIT windowsReleased(releasedWindows, releasedScreens);
     }
     // Only NOW may the per-window side maps go: the handler above has consumed
-    // the float markers and the last-applied rects, and nothing else answers
-    // for a departed screen's windows. releasedWindows is the same list
-    // releaseScreenState built from each state's managedWindows, so there is
-    // no second collection to keep in step with it.
+    // the float markers and the last-applied rects, and nothing else answers for
+    // a departed screen's windows (releasedWindows is releaseScreenState's own list).
     for (const QString& windowId : std::as_const(releasedWindows)) {
         m_lastAppliedRect.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
@@ -1088,16 +1087,17 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     // Only the unfloat-slot memory dies here. The float markers and the
     // last-applied rects are inputs to the daemon's windowsReleased handler,
     // which has not run yet — see the contract on the declaration.
-    // The pending self-activation entries and the declined-open marks go
-    // too, for windowClosed's reason: a released window's echo can never be
-    // answered while the screen sits in another mode, and a stale entry (or
-    // mark) would eat the first genuine focus report when the window comes
-    // back to scrolling. The parked-edge and windowed-fullscreen memories go
-    // for the eviction symmetry every other exit path holds: neither is an
-    // input to windowsReleased, windowClosed cannot sweep them later
-    // (stateForWindow answers null after this), and pruneStaleWindows only
-    // runs once per session at bring-up.
+    // The pending self-activation entries and the declined-open marks go too,
+    // for windowClosed's reason: a released window's echo can never be answered
+    // in another mode, and a stale entry would eat the first genuine focus
+    // report on the way back. The parked-edge and windowed-fullscreen memories
+    // go for eviction symmetry: neither feeds windowsReleased, and nothing can
+    // sweep them later. A fullscreen HOLD is remembered for
+    // announceReleasedFullscreenHolds, since its slot dies here.
     for (const QString& windowId : windows) {
+        if (m_floatRestore.value(windowId).fullscreenHold) {
+            m_releasedFullscreenHolds.append(windowId);
+        }
         m_floatRestore.remove(windowId);
         m_pendingSelfActivations.removeAll(windowId);
         m_pendingSelfActivationQueuedAt.remove(windowId);

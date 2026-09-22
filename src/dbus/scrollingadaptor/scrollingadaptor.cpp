@@ -454,6 +454,18 @@ void ScrollingAdaptor::reapplyWindowGeometry(const QString& windowId)
     m_engine->reapplyWindowGeometry(windowId);
 }
 
+bool ScrollingAdaptor::setWindowFullscreenFloat(const QString& windowId, const QString& screenId, bool floating)
+{
+    // clearWindowedFullscreen's wire-boundary policy: a reconciliation call
+    // reporting what the compositor has already done, so no ownership or
+    // context gate. The engine refuses an untracked window and a float it
+    // does not own.
+    if (!m_engine || windowId.isEmpty()) {
+        return false;
+    }
+    return m_engine->setWindowFullscreenFloat(windowId, floating, screenId);
+}
+
 QString ScrollingAdaptor::visibleStripJson(const QString& screenId) const
 {
     // isEmpty kept for the same wire-boundary reason as in focusColumn.

@@ -222,11 +222,12 @@ public:
     /// Windowed fullscreen (niri toggle-windowed-fullscreen) on the active
     /// window: layout-neutral per-tile flag, see Tile::windowedFullscreen.
     void toggleWindowedFullscreen(const QString& screenId);
-    /// Whether toggleWindowedFullscreen would ACT right now, through the guard
-    /// the verb itself runs. @p resolvedScreen receives the verb's screen.
-    bool canToggleWindowedFullscreen(const QString& screenId, QString* resolvedScreen = nullptr) const;
-    /// Compositor-driven reconciliation: the client left fullscreen on its
-    /// own, so drop the flag and re-apply that window's screen.
+    /// Compositor-driven: hold a strip tile out for its OWN fullscreen or return it, with a
+    /// user float's slot memory but a PASSIVE announcement (no OSD, no free-geometry
+    /// restore). False when the window already floats or the float is not this verb's to undo.
+    bool setWindowFullscreenFloat(const QString& windowId, bool floating, const QString& screenId);
+    bool isFullscreenFloated(const QString& windowId) const;
+    /// Compositor-driven reconciliation: the client left fullscreen on its own.
     void clearWindowedFullscreen(const QString& windowId);
     /// Compositor-driven repair: the compositor moved this window behind
     /// the engine's back (KWin's fullscreen-exit restore), so evict its
@@ -236,23 +237,17 @@ public:
     void cycleColumnPresetWidth(int delta, const QString& screenId);
     /// deltaPercent of the work area's MAIN extent (e.g. +10 / -10).
     void adjustColumnWidth(qreal deltaPercent, const QString& screenId);
-    /// Toggle the maximized state of a column on @p screenId. An empty
-    /// @p windowId targets the ACTIVE column (the keyboard shortcut's
-    /// meaning); a named window targets the column owning it and refuses when
-    /// the strip does not hold it (the compositor's maximize interception
-    /// names one window, often not the active column's).
-    /// Answers whether the strip actually CHANGED. The interception dispatches
-    /// toggleMaximizeToEdges below, and both twins answer alike so the wire
-    /// shape does not fork. False means the engine did nothing (no state, an
-    /// empty strip, an unheld window, a refused column) and no batch is coming,
-    /// so it is the effect's cue to put the bit back where the engine had it.
+    /// Toggle the maximized state of a column on @p screenId. An empty @p windowId
+    /// targets the ACTIVE column; a named window targets the column owning it and
+    /// refuses when the strip does not hold it. Answers whether the strip CHANGED, like
+    /// its twin below: false means no batch is coming, so the effect puts KWin's bit back.
     bool toggleMaximizeColumn(const QString& screenId, const QString& windowId = QString());
     /// Toggle a column's maximize-to-edges state (full raw work area on both
     /// axes, gap-free; niri maximize-window-to-edges generalized to the
-    /// column). Addressing and return as toggleMaximizeColumn. A named ACTIVE
-    /// tab of a tabbed column is first expelled into its own column. This is the
-    /// verb the compositor's maximize interception dispatches, and the KWin
-    /// maximize bit mirrors THIS state alone.
+    /// column). Addressing and return as toggleMaximizeColumn. A named window
+    /// that is the active tile of a SHARED column is first expelled into its own
+    /// column. This is the verb the compositor's maximize interception
+    /// dispatches, and the KWin maximize bit mirrors THIS state alone.
     bool toggleMaximizeToEdges(const QString& screenId, const QString& windowId = QString());
     void expandColumnToAvailableWidth(const QString& screenId);
     /// Equal shares of the viewport for every fully visible column
@@ -1109,8 +1104,7 @@ private:
         NoActiveWindow,
         Ok
     };
-    /// Read-only guard shared by the verb and canToggleWindowedFullscreen; the
-    /// out-params may be null.
+    /// Read-only guard toggleWindowedFullscreen runs; the out-params may be null.
     WindowedFullscreenGuard windowedFullscreenGuard(const QString& screenId, QString* outScreen,
                                                     ScrollState** outState) const;
     /// Tear down one context state: appends its windows to
@@ -1353,16 +1347,22 @@ private:
     /// Without it an engine-decided float leaves the record stale in the
     /// FIFO and forgets the remembered position autotile restores.
     void restoreFloatRecordForOpen(const QString& windowId, const QString& screenId);
-    /// Emit geometryRestoreRequested for @p record's remembered free rect, if
-    /// the restore gate allows it and the rect belongs to the screen the window
-    /// is opening on. Shared by the two float-restore entry points; see the
-    /// definition for the gate and the screen-local rule.
+    /// Emit geometryRestoreRequested for @p record's free rect when the gate allows it (see the definition).
     void emitGatedFloatGeometryRestore(const QString& windowId, const PhosphorEngine::WindowPlacement& record,
                                        const QString& screenId);
+    /// Active = user float (windowFloatingChanged), Passive = engine-initiated (windowFloatingStateSynced).
+    enum class FloatAnnounce : quint8 {
+        Active,
+        Passive
+    };
+    void announceFloat(FloatAnnounce announce, const QString& windowId, bool floating, const QString& screenId);
+    /// Holds found by releaseScreenState, announced clear right before windowsReleased.
+    QStringList m_releasedFullscreenHolds;
+    void announceReleasedFullscreenHolds();
     bool floatWindowInternal(ScrollState* state, const PhosphorEngine::PlacementStateKey& key, const QString& windowId,
-                             const QString& screenId);
+                             const QString& screenId, FloatAnnounce announce = FloatAnnounce::Active);
     bool unfloatWindowInternal(ScrollState* state, const QString& windowId, const QString& screenId,
-                               bool applyAfter = true);
+                               bool applyAfter = true, FloatAnnounce announce = FloatAnnounce::Active);
     // engine_navigation.cpp
     /// Move the active window off the strip's boundary onto the adjacent
     /// output in @p direction. Scroll→scroll crossings migrate internally;

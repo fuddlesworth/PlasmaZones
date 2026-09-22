@@ -237,6 +237,10 @@ struct FloatRestore
     int column = -1;
     ColumnWidth width;
     ColumnDisplay display = ColumnDisplay::Normal;
+    /// Taken by the compositor for the window's OWN fullscreen
+    /// (ScrollEngine::setWindowFullscreenFloat), not by the user; only that
+    /// verb may undo it, and any other unfloat consumes the slot with it.
+    bool fullscreenHold = false;
     /// Whether this window was the tab that decided its TABBED column's cross
     /// extent when it left. Carried because leaving hands the ownership to the
     /// tab that came on show, so coming back has to take it again or the

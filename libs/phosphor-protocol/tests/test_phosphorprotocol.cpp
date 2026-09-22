@@ -388,8 +388,13 @@ private Q_SLOTS:
         // on, while an old daemon sends no stamp and leaves the effect unable
         // to tell a late announce for the desktop it just left from a fresh one
         // for the desktop it is on.
-        QCOMPARE(Service::ApiVersion, 9);
-        QCOMPARE(Service::MinPeerApiVersion, 9);
+        // v10 replaces that signal with Scrolling.setWindowFullscreenFloat: the
+        // effect holds a tile out of the strip for its own fullscreen through a
+        // passive-channel float instead of a user float, so the toggle has no
+        // fullscreen tile left to release. An old effect calling the missing
+        // method errors on the wire; an old daemon's signal goes unheard.
+        QCOMPARE(Service::ApiVersion, 10);
+        QCOMPARE(Service::MinPeerApiVersion, 10);
     }
 
     // ── Environment switches ─────────────────────────────────────────────

@@ -636,6 +636,14 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         // so it survives to re-position an unrelated later open. No-op when
         // the screen carries no seed, which is the usual case here.
         consumePendingInitialOrder(screenId, windowId);
+        // A re-announce of a window held out for its OWN fullscreen: the
+        // compositor left fullscreen after an effect restart (no record there,
+        // so it announces instead of returning). Put it back in its slot.
+        if (isFullscreenFloated(windowId)) {
+            qCInfo(lcScrollEngine) << "windowOpened: re-announce of fullscreen-floated" << windowId
+                                   << "— returning it to the strip";
+            setWindowFullscreenFloat(windowId, false, screenId);
+        }
         return;
     }
 

@@ -558,8 +558,25 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       is indistinguishable from a fresh one, and it would install a managed
 //       set computed for one desktop while filtering windows by another. The
 //       stamp makes the announce self-describing.
-inline constexpr int ApiVersion = 9;
-inline constexpr int MinPeerApiVersion = 9;
+//
+//   v10: Scrolling gains setWindowFullscreenFloat (s s b -> b), the hold the
+//       KWin effect sends when a strip tile enters or leaves its OWN
+//       fullscreen, and LOSES leaveNativeFullscreenRequested. The effect used
+//       to float such a tile through WindowTracking.setWindowFloatingForScreen,
+//       which the daemon treats as a USER float: every F11 raised a "floated"
+//       navigation OSD and restored free geometry over the fullscreen surface.
+//       The new verb floats with the same slot memory but announces on the
+//       engine's passive channel. With the tile out of the strip for the whole
+//       hold, the windowed-fullscreen toggle never finds a fullscreen tile to
+//       release, so the v9 signal had nothing left to do and is removed rather
+//       than kept as dead wire. Both are REQUIRED changes with the silent
+//       failure mode the ledger keeps refusing: an old effect calling a method
+//       the daemon lacks gets a D-Bus error and leaves the tile in the strip,
+//       and an old daemon emitting a signal the effect no longer connects
+//       simply goes unheard.
+
+inline constexpr int ApiVersion = 10;
+inline constexpr int MinPeerApiVersion = 10;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

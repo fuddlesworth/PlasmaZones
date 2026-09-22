@@ -288,7 +288,7 @@ bool ScrollEngine::toggleMaximizeColumn(const QString& screenId, const QString& 
     // refusal and this verb does not, because the twin's refusal answers a
     // button press the user watched do nothing while this one answers a
     // scripted D-Bus call that reads the false it gets back. See the note at
-    // that log. And the twin expels the asking active tab of a tabbed column
+    // that log. And the twin expels the asking active tile of a shared column
     // before it toggles, where this width verb always acts on the column
     // whole.
     if (!canonicalId.isEmpty()) {
@@ -399,8 +399,8 @@ bool ScrollEngine::toggleMaximizeToEdges(const QString& screenId, const QString&
         // minimized active tile and would let the expel take a different
         // window than the one asking. A background tab's request keeps the
         // column-wide behaviour rather than moving the strip's active column.
-        // Only for a TABBED column, because that is where a single visible
-        // window stands in for the group; a stacked column is maximized whole.
+        // For ANY shared column, tabbed or stacked: the request names one
+        // window, and the neighbours it shares a column with did not ask.
         // Only with a real work area: that is the toggle's one remaining
         // refusal, so checking it here means an expel is always followed by a
         // toggle that takes. The result is folded into `changed` regardless,
@@ -415,12 +415,12 @@ bool ScrollEngine::toggleMaximizeToEdges(const QString& screenId, const QString&
         if (const int ownerIdx = state->strip().columnOfWindow(canonicalId);
             ownerIdx >= 0 && ownerIdx == state->strip().activeColumnIndex()) {
             const Column& owner = state->strip().columns().at(ownerIdx);
-            if (owner.display == ColumnDisplay::Tabbed && owner.tiles.size() > 1 && !owner.maximizedToEdges
-                && owner.activeTileIdx >= 0 && owner.activeTileIdx < owner.tiles.size()
+            if (owner.tiles.size() > 1 && !owner.maximizedToEdges && owner.activeTileIdx >= 0
+                && owner.activeTileIdx < owner.tiles.size()
                 && owner.tiles.at(owner.activeTileIdx).windowId == canonicalId
                 && params.axis.mainSize(params.workArea) > 0) {
                 qCInfo(lcScrollEngine) << "toggleMaximizeToEdges: expelling" << canonicalId
-                                       << "from its tabbed column before maximizing it alone";
+                                       << "from its shared column before maximizing it alone";
                 expelled = state->strip().expelWindowFromColumn(params);
             }
         }
@@ -995,17 +995,12 @@ ScrollEngine::WindowedFullscreenGuard ScrollEngine::windowedFullscreenGuard(cons
                                                      : WindowedFullscreenGuard::Ok;
 }
 
-bool ScrollEngine::canToggleWindowedFullscreen(const QString& screenId, QString* resolvedScreen) const
-{
-    return windowedFullscreenGuard(screenId, resolvedScreen, nullptr) == WindowedFullscreenGuard::Ok;
-}
-
 void ScrollEngine::toggleWindowedFullscreen(const QString& screenId)
 {
     // Hand-expanded (not P_SCROLL_VERB): the op is layout-neutral and never
-    // reads layout params, the refusals come from a guard shared with
-    // canToggleWindowedFullscreen, and the feedback carries the resulting
-    // state as the reason token, for which the OSD has dedicated arms.
+    // reads layout params, the refusals come from one guard that names each
+    // arm, and the feedback carries the resulting state as the reason token,
+    // for which the OSD has dedicated arms.
     QString screen;
     ScrollState* state = nullptr;
     const WindowedFullscreenGuard guard = windowedFullscreenGuard(screenId, &screen, &state);

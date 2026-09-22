@@ -14,6 +14,10 @@
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
+#include <QTimer>
+
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <window.h>
@@ -428,6 +432,17 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
             }
         };
         if (!m_notifiedWindows.contains(windowId)) {
+            if (ownedFullscreenFloat && m_savedNotifiedForDesktopReturn.contains(windowId)) {
+                // Demoted on a desktop switch, not untracked: the daemon still
+                // holds the hold, and the screen record is gone, so the return
+                // cannot be routed from here. Keep the record; the desktop-return
+                // re-track (screenschanged.cpp) sends the return once the
+                // window is back on a managed screen.
+                m_fullscreenFloatedWindows.insert(windowId);
+                qCInfo(lcEffect) << "Fullscreen hold ended while parked for desktop return, settling later:"
+                                 << windowId;
+                return;
+            }
             logDroppedFullscreenFloat("never-tracked");
             // Never-tracked window: a window that OPENED fullscreen was
             // rejected by isEligibleForTilingNotify (fullscreen guard) and
@@ -490,14 +505,8 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         // closed daemon gate leaves the window floating, which the floating arm
         // handles; the bulk reset has already dropped the record by then.
         if (ownedFullscreenFloat && isScrollingScreen(screenId) && m_effect->m_daemonGate.serviceRegistered) {
-            qCInfo(lcEffect) << "Strip tile left its own fullscreen, unfloating back into its slot:" << windowId;
-            PhosphorProtocol::ClientHelpers::fireAndForget(
-                m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
-                QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, false},
-                QStringLiteral("setWindowFloatingForScreen"));
-            PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Scrolling,
-                                                           QStringLiteral("reapplyWindowGeometry"), {windowId},
-                                                           QStringLiteral("reapplyWindowGeometry"));
+            qCInfo(lcEffect) << "Strip tile left its own fullscreen, returning it to its slot:" << windowId;
+            dispatchFullscreenUnfloat(windowId, screenId, 0);
             // Membership BEFORE the sweep, the order the tiled tail below takes:
             // the window is returning to the strip, the enter branch removed
             // its decoration, and the sweep is what puts it back. Without this
@@ -650,35 +659,53 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         }
     }
     // A scrolling strip tile entering its OWN fullscreen LEAVES the strip for
-    // the hold, by floating. Left seated, the daemon kept a column reserved
-    // behind the fullscreen surface: the neighbours did not close up, focus
-    // verbs could land on it, and a game that shares its launcher's class sat
-    // there as a TAB in the launcher's column. Floating rather than releasing,
-    // because the engine's float path remembers the slot and the exit branch's
-    // unfloat restores column, width and tab group, where a release would
-    // re-insert it as a fresh open. The float's geometry apply is inert: it
-    // takes applyWindowGeometry's fullscreen bail.
+    // the hold. Left seated, the daemon kept a column reserved behind the
+    // fullscreen surface: the neighbours did not close up, focus verbs could
+    // land on it, and a game that shares its launcher's class sat there as a
+    // TAB in the launcher's column. Scrolling.setWindowFullscreenFloat floats
+    // it with the slot memory a user float keeps, so the exit branch's return
+    // restores column and width where a release would re-insert it as a fresh
+    // open, but it announces on the engine's PASSIVE channel: no float OSD and
+    // no free-geometry restore, which the user-float route raised on every F11.
     //
     // Windowed-fullscreen members never reach here (they returned above). An
     // already-floating window is skipped so its float keeps its owner, exactly
     // as the minimize-float claim does, and so is one this handler holds as a
-    // minimize-float. Keyed on the NOTIFIED screen rather than on tiled
-    // membership: a window that fullscreens between its announce and its first
-    // batch has no membership yet but is in the daemon's strip all the same.
-    // Recorded only when the request is actually sent, so a closed daemon gate
-    // cannot leave a record the exit would answer with an unfloat the daemon
-    // never had a float for.
+    // minimize-float. The one floating window NOT skipped is one whose return
+    // from a previous hold is still unanswered: the cache reads floating for
+    // the round trip, and a quick exit/re-enter must not leave the tile seated.
+    // Keyed on the NOTIFIED screen rather than on tiled membership: a window
+    // that fullscreens between its announce and its first batch has no
+    // membership yet but is in the daemon's strip all the same. The record is
+    // dropped again on a refused or failed reply, so the exit never answers a
+    // hold the engine never took.
     const QString notifiedScreen = m_notifiedWindowScreens.value(windowId);
     if (m_notifiedWindows.contains(windowId) && isScrollingScreen(notifiedScreen)
         && m_managedScreens.contains(notifiedScreen) && m_effect->m_daemonGate.serviceRegistered
-        && !m_effect->isWindowFloating(windowId) && !isMinimizeFloated(windowId)) {
+        && (!m_effect->isWindowFloating(windowId) || m_fullscreenUnfloatInFlight.contains(windowId))
+        && !isMinimizeFloated(windowId)) {
         m_fullscreenFloatedWindows.insert(windowId);
-        qCInfo(lcEffect) << "Strip tile entered its own fullscreen, floating it out of the strip:" << windowId << "on"
+        // This hold supersedes any unanswered return: its reply and retry
+        // lambdas bail on a missing in-flight entry, so a retried return can
+        // never undo the hold just taken.
+        m_fullscreenUnfloatInFlight.remove(windowId);
+        qCInfo(lcEffect) << "Strip tile entered its own fullscreen, holding it out of the strip:" << windowId << "on"
                          << notifiedScreen;
-        PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
-                                                       QStringLiteral("setWindowFloatingForScreen"),
-                                                       {windowId, notifiedScreen, true},
-                                                       QStringLiteral("setWindowFloatingForScreen"));
+        auto* watcher = new QDBusPendingCallWatcher(
+            PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Scrolling,
+                                                       QStringLiteral("setWindowFullscreenFloat"),
+                                                       {windowId, notifiedScreen, true}),
+            this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher* call) {
+            call->deleteLater();
+            const QDBusPendingReply<bool> reply = *call;
+            if (reply.isError() || !reply.value()) {
+                if (m_fullscreenFloatedWindows.remove(windowId)) {
+                    qCInfo(lcEffect) << "Fullscreen hold not taken by the engine for" << windowId
+                                     << (reply.isError() ? reply.error().message() : QStringLiteral("refused"));
+                }
+            }
+        });
     }
     m_effect->removeWindowDecoration(windowId);
     // Drain a keep-floating-above grant on this edge: keepFloatingAboveDefault
@@ -686,6 +713,87 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
     // layer until the next focus change, which is the very Alt+Tab the stale
     // bit would hide the result of.
     m_effect->reconcileRuleWindowLayer(windowId, w);
+}
+
+void TilingHandler::dispatchFullscreenUnfloat(const QString& windowId, const QString& screenId, int attempt)
+{
+    // Reply-checked, unlike the old fire-and-forget: the record is consumed
+    // before the send, so a lost request had nothing left to re-drive it and
+    // the window stayed floating while this side called it tiled. A D-Bus
+    // error is retried on a short delay; a false reply is the engine saying
+    // the hold is not its to undo (a user unfloat took it over, or the window
+    // left the engine), which is final. The in-flight set lets a re-enter
+    // inside the round trip take a fresh hold (see the enter branch).
+    constexpr int kFullscreenUnfloatRetries = 3;
+    constexpr int kFullscreenUnfloatRetryMs = 250;
+    if (!m_effect->m_daemonGate.serviceRegistered) {
+        m_fullscreenUnfloatInFlight.remove(windowId);
+        qCWarning(lcEffect) << "Fullscreen hold return declined for" << windowId << "(daemon gate closed)";
+        return;
+    }
+    m_fullscreenUnfloatInFlight.insert(windowId);
+    auto* watcher =
+        new QDBusPendingCallWatcher(PhosphorProtocol::ClientHelpers::asyncCall(
+                                        PhosphorProtocol::Service::Interface::Scrolling,
+                                        QStringLiteral("setWindowFullscreenFloat"), {windowId, screenId, false}),
+                                    this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, windowId, screenId, attempt](QDBusPendingCallWatcher* call) {
+                call->deleteLater();
+                if (!m_fullscreenUnfloatInFlight.contains(windowId)) {
+                    return; // countermanded by close or a session drain
+                }
+                const QDBusPendingReply<bool> reply = *call;
+                if (reply.isError()) {
+                    if (attempt + 1 < kFullscreenUnfloatRetries) {
+                        qCWarning(lcEffect) << "Fullscreen hold return failed for" << windowId << ':'
+                                            << reply.error().message() << "- retrying";
+                        QTimer::singleShot(kFullscreenUnfloatRetryMs, this, [this, windowId, screenId, attempt] {
+                            if (m_fullscreenUnfloatInFlight.contains(windowId)) {
+                                dispatchFullscreenUnfloat(windowId, screenId, attempt + 1);
+                            }
+                        });
+                        return;
+                    }
+                    qCWarning(lcEffect) << "Fullscreen hold return gave up for" << windowId << ':'
+                                        << reply.error().message();
+                }
+                m_fullscreenUnfloatInFlight.remove(windowId);
+                if (reply.isError() || !reply.value()) {
+                    return;
+                }
+                // KWin restores the PRE-fullscreen rect a client round trip
+                // later than the return's own batch, and the engine's
+                // emit-on-change gate would not correct it unprompted.
+                PhosphorProtocol::ClientHelpers::fireAndForget(
+                    m_effect, PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("reapplyWindowGeometry"),
+                    {windowId}, QStringLiteral("reapplyWindowGeometry"));
+            });
+}
+
+void TilingHandler::settleParkedFullscreenHold(KWin::EffectWindow* w, const QString& windowId, const QString& screenId)
+{
+    // A hold whose window left fullscreen while demoted for a desktop switch
+    // kept its record (signals.cpp, never-tracked arm): the screen record was
+    // gone, so the return could not be routed. Now the window is re-tracked on
+    // a managed screen, so send it if the window is indeed out of fullscreen.
+    if (!m_fullscreenFloatedWindows.contains(windowId) || !w || w->isFullScreen()) {
+        return;
+    }
+    m_fullscreenFloatedWindows.remove(windowId);
+    if (!isScrollingScreen(screenId)) {
+        qCInfo(lcEffect) << "Parked fullscreen hold for" << windowId << "returns on a non-scrolling screen" << screenId
+                         << "- record dropped";
+        return;
+    }
+    if (!m_effect->m_daemonGate.serviceRegistered) {
+        qCInfo(lcEffect) << "Parked fullscreen hold for" << windowId << "cannot return, daemon gate closed";
+        return;
+    }
+    qCInfo(lcEffect) << "Settling parked fullscreen hold for" << windowId << "on" << screenId;
+    dispatchFullscreenUnfloat(windowId, screenId, 0);
+    markWindowTiled(screenId, windowId);
+    m_effect->updateAllDecorations();
 }
 
 } // namespace PlasmaZones

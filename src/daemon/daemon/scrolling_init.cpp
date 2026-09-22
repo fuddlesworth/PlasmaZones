@@ -101,11 +101,9 @@ void Daemon::connectScrollingShortcuts()
         // fullscreen game out of fullscreen on a plain focus-left, and a
         // fixed-size game then fought the column rect it was handed. A
         // fullscreen window now stays fullscreen until the user asks otherwise:
-        // the effect FLOATS it out of the strip for the hold, so it owns no
-        // column to translate or park, and the fullscreen-exit branch unfloats
-        // it back into the strip. The one verb that still
-        // releases is the windowed-fullscreen toggle below, which is a request
-        // about that very state.
+        // the effect holds it out of the strip for the hold
+        // (Scrolling.setWindowFullscreenFloat), so it owns no column to
+        // translate or park, and the fullscreen-exit branch returns it.
         if (outScreenId) {
             *outScreenId = screenId;
         }
@@ -172,22 +170,10 @@ void Daemon::connectScrollingShortcuts()
     wire(&ShortcutManager::scrollFocusTabRequested, intVerb([](Scroll* s, const QString& id, int ordinal) {
         s->focusTab(ordinal, id);
     }));
-    wire(&ShortcutManager::scrollToggleWindowedFullscreenRequested, plainVerb([this](Scroll* s, const QString& id) {
-        // BEFORE the verb, so the native-fullscreen exit is already in flight
-        // when the relayout is built. A signal, so fire-and-forget: the
-        // compositor is the only party that knows what is fullscreen, and its
-        // receiver no-ops when nothing is.
-        //
-        // Only when the verb is going to ACT. It refuses on an empty strip, a
-        // focused float or no active window, and a press it refuses must not
-        // pull some other tile out of fullscreen on its way to doing nothing.
-        // The engine answers through the verb's own guard and hands back the
-        // screen the verb will resolve, so the release names the strip the
-        // toggle then runs on.
-        QString target;
-        if (m_scrollingAdaptor && s->canToggleWindowedFullscreen(id, &target)) {
-            Q_EMIT m_scrollingAdaptor->leaveNativeFullscreenRequested(target);
-        }
+    wire(&ShortcutManager::scrollToggleWindowedFullscreenRequested, plainVerb([](Scroll* s, const QString& id) {
+        // No native-fullscreen release ahead of this verb any more: a tile in
+        // its own fullscreen is held out of the strip (setWindowFullscreenFloat),
+        // so the toggle never finds one to build its relayout against.
         s->toggleWindowedFullscreen(id);
     }));
     wire(&ShortcutManager::scrollCycleColumnWidthRequested, intVerb([](Scroll* s, const QString& id, int delta) {

@@ -766,6 +766,7 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId)
     m_minimizeFloatMarks.remove(windowId);
     m_unfloatInFlight.remove(windowId);
     m_fullscreenFloatedWindows.remove(windowId);
+    m_fullscreenUnfloatInFlight.remove(windowId);
     // Same reasoning as the retry budget below: a dead id's entry must not
     // outlive the window. Ids are unique per window, so the entry is a leak
     // rather than a misattribution, and a window closing inside its own round
@@ -1276,6 +1277,7 @@ void TilingHandler::clearPerSessionDaemonState()
     clearAllPendingMinimizeFloats();
     m_minimizeFloatedWindows.clear();
     m_fullscreenFloatedWindows.clear();
+    m_fullscreenUnfloatInFlight.clear();
     m_unfloatInFlight.clear();
     m_unfloatRetryAttempts.clear();
     m_minimizeFloatMarks.clear();

@@ -72,9 +72,6 @@ void TilingHandler::connectSignals()
                    QStringLiteral("scrollFocusScrollBlockedWindowsChanged"), this,
                    SLOT(slotScrollFocusScrollBlockedWindowsChanged(QStringList)));
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                   PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("leaveNativeFullscreenRequested"),
-                   this, SLOT(slotLeaveNativeFullscreenRequested(QString)));
-    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                    PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("activeLayoutsChanged"), this,
                    SLOT(slotActiveLayoutsChanged(QVariantMap)));
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
@@ -118,14 +115,6 @@ void TilingHandler::connectSignals()
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                 PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("scrollEffectBehaviourChanged"), this,
                 SLOT(slotScrollEffectBehaviourChanged(QVariantMap)));
-
-    // The daemon's windowed-fullscreen toggle asks for the native-fullscreen
-    // release ahead of its verb. It is the only trigger: the wheel chords and
-    // the other strip verbs are navigation and release nothing. See
-    // leaveNativeFullscreenTiles.
-    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("leaveNativeFullscreenRequested"), this,
-                SLOT(slotLeaveNativeFullscreenRequested(QString)));
 
     // The scroll cap's blocked-window list, on its own signal because it fires
     // on every relayout that moves the answer while the map above fires when

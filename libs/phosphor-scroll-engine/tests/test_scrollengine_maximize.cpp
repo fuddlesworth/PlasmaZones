@@ -15,10 +15,9 @@
 // window-addressed tab expel), and the compositions no single-step test
 // covers.
 //
-// Two neighbours ride along. canToggleWindowedFullscreen's slot sits here
-// because it arrived with the same fullscreen change and the verbs suite has
-// no room. The three stash-latch slots at the tail (shown tab and extent owner
-// across a mode round trip) share this file's tabbed-column fixtures.
+// Three neighbours ride along: the stash-latch slots at the tail (shown tab
+// and extent owner across a mode round trip) share this file's tabbed-column
+// fixtures.
 //
 // The blob and float arms of the same concern live here too: the persisted
 // per-column key (round trip and the absent-key fallback), the cross-session
@@ -182,8 +181,8 @@ private Q_SLOTS:
     void expellingFromAMaximizedColumnDoesNotMaximizeTheExpelledTile();
     void aWindowAddressedMaximizeExpelsTheActiveTabAndMaximizesItAlone();
     void aBackgroundTabsMaximizeTakesTheWholeColumn();
+    void aStackedColumnsActiveTileIsExpelledToo();
     void anAlreadyMaximizedTabGroupIsUnmaximizedWhole();
-    void canToggleWindowedFullscreenMatchesTheVerb();
     void theFocusedColumnShortcutStillMaximizesAWholeTabGroup();
     void verbReportsWhetherTheStripActuallyChanged();
     void maximizedToEdgesRoundTripsThroughTheBlob();
@@ -329,6 +328,33 @@ void TestScrollEngineMaximize::aBackgroundTabsMaximizeTakesTheWholeColumn()
 // The expel is for the way IN only. A tabbed column that is already maximized
 // holds the state the request is un-doing, so the active tab's press must
 // reach that column rather than leave it behind still maximized.
+// The expel is not a tab feature: a stacked column's active tile asked to
+// maximize leaves its stack the same way, since the request names the window
+// and not the column it shares.
+void TestScrollEngineMaximize::aStackedColumnsActiveTileIsExpelledToo()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    const QString s1 = QStringLiteral("S1");
+    engine->windowOpened(QStringLiteral("app|a"), s1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), s1, 0, 0);
+    engine->windowFocused(QStringLiteral("app|a"), s1);
+    engine->consumeWindowIntoColumn(s1);
+    engine->windowFocused(QStringLiteral("app|b"), s1);
+    QCoreApplication::processEvents();
+    ScrollState* state = stateFor(engine, s1);
+    QVERIFY(state);
+    QCOMPARE(columnCountOn(engine), 1);
+    QCOMPARE(state->strip().columns().first().display, ColumnDisplay::Normal);
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|b"));
+
+    QVERIFY(engine->toggleMaximizeToEdges(s1, QStringLiteral("app|b")));
+    QCoreApplication::processEvents();
+    QCOMPARE(columnCountOn(engine), 2);
+    QVERIFY(columnFlagged(engine, QStringLiteral("app|b")));
+    QVERIFY(!columnFlagged(engine, QStringLiteral("app|a")));
+}
+
 void TestScrollEngineMaximize::anAlreadyMaximizedTabGroupIsUnmaximizedWhole()
 {
     QObject owner;
@@ -345,66 +371,6 @@ void TestScrollEngineMaximize::anAlreadyMaximizedTabGroupIsUnmaximizedWhole()
     QCOMPARE(columnCountOn(engine), 1);
     QVERIFY(!columnFlagged(engine, QStringLiteral("app|a")));
     QVERIFY(!columnFlagged(engine, QStringLiteral("app|b")));
-}
-
-// canToggleWindowedFullscreen answers through the verb's own guard. The daemon
-// asks it before telling the compositor to release native fullscreen, so each
-// refusal arm must read false and the acting case true, and the answer must
-// agree with what the verb then does.
-void TestScrollEngineMaximize::canToggleWindowedFullscreenMatchesTheVerb()
-{
-    QObject owner;
-    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
-    const QString s1 = QStringLiteral("S1");
-
-    // Empty strip.
-    QString resolved;
-    QVERIFY(!engine->canToggleWindowedFullscreen(s1, &resolved));
-    QCOMPARE(resolved, s1);
-
-    engine->windowOpened(QStringLiteral("app|a"), s1, 0, 0);
-    engine->windowOpened(QStringLiteral("app|b"), s1, 0, 0);
-    engine->windowFocused(QStringLiteral("app|b"), s1);
-    QCoreApplication::processEvents();
-    ScrollState* state = stateFor(engine, s1);
-    QVERIFY(state);
-
-    // The acting case, and the verb agrees. A const query changes nothing.
-    QVERIFY(engine->canToggleWindowedFullscreen(s1));
-    QVERIFY(!state->strip().isWindowedFullscreen(QStringLiteral("app|b")));
-    engine->toggleWindowedFullscreen(s1);
-    QVERIFY(state->strip().isWindowedFullscreen(QStringLiteral("app|b")));
-    engine->toggleWindowedFullscreen(s1);
-    QVERIFY(!state->strip().isWindowedFullscreen(QStringLiteral("app|b")));
-
-    // The float layer holds focus.
-    engine->moveFocusedToFloating(s1);
-    QVERIFY(state->floatingHasFocus());
-    QVERIFY(!engine->canToggleWindowedFullscreen(s1));
-    QSignalSpy feedback(engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
-    engine->toggleWindowedFullscreen(s1);
-    QCOMPARE(feedback.count(), 1);
-    QCOMPARE(feedback.last().at(0).toBool(), false);
-    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
-    engine->moveFocusedToTiling(s1);
-    QVERIFY(!state->floatingHasFocus());
-    QVERIFY(engine->canToggleWindowedFullscreen(s1));
-
-    // No active window: a sole column whose only tile is minimized. Driven on
-    // the strip, since the daemon models minimize as a float and the engine
-    // has no minimize verb.
-    ScrollEngine* lone = makeProviderEngine(&owner, {s1});
-    lone->windowOpened(QStringLiteral("app|m"), s1, 0, 0);
-    QCoreApplication::processEvents();
-    ScrollState* loneState = stateFor(lone, s1);
-    QVERIFY(loneState);
-    QVERIFY(lone->canToggleWindowedFullscreen(s1));
-    QVERIFY(loneState->strip().setWindowMinimized(QStringLiteral("app|m"), true, ScrollTestUtils::defaultParams()));
-    QVERIFY(!loneState->strip().isEmpty());
-    QVERIFY(loneState->strip().activeWindowId().isEmpty());
-    QVERIFY(!lone->canToggleWindowedFullscreen(s1));
-    lone->toggleWindowedFullscreen(s1);
-    QVERIFY(!loneState->strip().isWindowedFullscreen(QStringLiteral("app|m")));
 }
 
 // The other half of the rule above: the focused-column shortcut is a COLUMN

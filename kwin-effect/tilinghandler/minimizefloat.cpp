@@ -76,6 +76,7 @@ void TilingHandler::clearAllPendingMinimizeFloats()
     // way an exit that found the record would send an unfloat for a float the
     // daemon does not have.
     m_fullscreenFloatedWindows.clear();
+    m_fullscreenUnfloatInFlight.clear();
 }
 
 bool TilingHandler::beginUnminimizeUnfloat(const QString& windowId)

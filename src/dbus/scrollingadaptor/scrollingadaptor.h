@@ -43,8 +43,8 @@ namespace PlasmaZones {
  * the stripContextChanged announcement of which strip a screen is
  * currently showing, the compositor-owned behaviour map and the
  * focus-follows-mouse blocked-window list with their change signals, and the
- * leaveNativeFullscreenRequested release sent ahead of the windowed-fullscreen
- * toggle.
+ * setWindowFullscreenFloat hold the effect sends when a strip tile enters or
+ * leaves its own fullscreen.
  * Window lifecycle and tile-request traffic for
  * scrolling screens deliberately stays on org.plasmazones.Tiling — the
  * effect keeps ONE engine-managed screen set and one geometry pipeline
@@ -378,10 +378,10 @@ public Q_SLOTS:
      * The width verb above no longer has any wire mirror.
      *
      * One addressing difference from the twin: a NAMED window that is the
-     * active tab of the active, not yet maximized TABBED column is first
-     * expelled into a column of its own, and that column is maximized. The
-     * request is about the window, not its tab group. A background tab, a
-     * stacked column and the empty (focused-column) spelling all toggle the
+     * active tile of the active, not yet maximized SHARED column (tabbed or
+     * stacked) is first expelled into a column of its own, and that column is
+     * maximized. The request is about the window, not the column it shares. A
+     * background tile and the empty (focused-column) spelling toggle the
      * column whole, and the way back out toggles whichever column holds the
      * window without regrouping it.
      *
@@ -447,6 +447,31 @@ public Q_SLOTS:
      * @param windowId Window to re-emit; an empty string is ignored
      */
     void reapplyWindowGeometry(const QString& windowId);
+
+    /**
+     * @brief Hold a strip tile out of the strip for its OWN fullscreen, or
+     *        return it (compositor-driven)
+     *
+     * The KWin effect calls this with @p floating true when a tiled window
+     * goes fullscreen by itself (a client F11, a video) and false when it
+     * leaves fullscreen. The engine floats the window with the same slot
+     * memory a user float keeps, so the return lands in the same column and
+     * width, but announces on its PASSIVE channel: no float OSD, no free
+     * geometry restore. A float of an already-floating window and a return
+     * of a window this call did not float both answer false, so a user float
+     * is never taken over or undone.
+     *
+     * Same wire-boundary policy as clearWindowedFullscreen: a reconciliation
+     * call, so neither ownership- nor context-gated. The engine's own lookup
+     * rejects an untracked window.
+     *
+     * @param windowId Window to hold out or return; an empty string answers false
+     * @param screenId Screen hint for the announcement; the engine uses the
+     *        window's own tracked screen
+     * @param floating true to hold the window out of the strip, false to return it
+     * @return true when the strip changed
+     */
+    bool setWindowFullscreenFloat(const QString& windowId, const QString& screenId, bool floating);
 
     /**
      * @brief The strip as it currently looks on a screen, for previews
@@ -617,33 +642,6 @@ Q_SIGNALS:
     /// changing a single visible tile. Receivers should also coalesce — a
     /// drag or a burst of opens emits per step.
     void stripChanged(const QString& screenId);
-
-    /// The windowed-fullscreen toggle is about to run on @p screenId, so the
-    /// compositor must leave the OWN fullscreen of every scroll-tracked tile
-    /// there first. Only that verb emits this. It used to precede every keyboard
-    /// strip verb, which took a fullscreen game out of fullscreen on a plain
-    /// focus-left; navigation now leaves a fullscreen window alone.
-    ///
-    /// A window in its own fullscreen (a client F11, a video going fullscreen —
-    /// NOT the windowed-fullscreen feature, whose members are committed at their
-    /// column rect on purpose) refuses every geometry commit through the
-    /// effect's fullscreen bail. The effect normally floats such a window out
-    /// of the strip for the hold, so this release is for a tile that is still
-    /// strip-tracked while fullscreen, which the toggle's relayout would
-    /// otherwise be built against.
-    ///
-    /// Emitted from that verb's handler immediately BEFORE the verb is
-    /// dispatched, which is the whole point of a separate signal rather than a
-    /// flag on the geometry batch: the exit has to land first, so the relayout
-    /// the verb produces is built against a window the compositor will accept.
-    /// A flag would arrive with the geometry it was meant to precede.
-    ///
-    /// Emitted only when the verb is going to act
-    /// (ScrollEngine::canToggleWindowedFullscreen: a strip with windows, focus
-    /// not on the float layer, an active window), and for the screen the verb
-    /// resolves. Whether any tile is actually fullscreen is NOT checked — only
-    /// the compositor knows that, and the receiver no-ops in the common case.
-    void leaveNativeFullscreenRequested(const QString& screenId);
 
 private:
     PhosphorScrollEngine::ScrollEngine* m_engine = nullptr;
