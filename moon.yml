@@ -58,3 +58,33 @@ tasks:
     deps:
       - '~:conventions'
       - '~:schemas'
+
+  # Whole-tree install, the moon equivalent of `make install`. It lives here
+  # rather than on the tiers because CMake cannot install a subset: none of
+  # the 319 install() rules declares a COMPONENT, so
+  # `cmake --install build --component <tier>` would install nothing. Giving
+  # each tier its own install verb means tagging every rule with a component
+  # first, which is a change of its own.
+  #
+  # Installing to the default prefix needs root, so this is a task you run,
+  # not one the build depends on. Override the destination without root with
+  # `DESTDIR=/tmp/stage moon run repo:install`, which is what the packagers
+  # do. Run repo:post-install afterwards to refresh the KDE service cache.
+  install:
+    command: 'cmake'
+    args:
+      - '--install'
+      - 'build'
+    deps:
+      - 'plasmazones:build'
+    options:
+      cache: false
+      runInCI: false
+
+  post-install:
+    command: 'sh'
+    args:
+      - 'cmake/post-install-sycoca.sh'
+    options:
+      cache: false
+      runInCI: false
