@@ -454,7 +454,7 @@
                 "New: Per-monitor gaps. Pick a monitor on the Gaps card to set its gaps on their own (#699)",
                 "New: Focused and unfocused border colors are now set separately, each with its own color swatch (#699)",
                 "Changed: Window Rules is now just Rules, since rules cover gaps, layout, and animation too. Your rules carry over automatically, and any appearance or gap settings you had customized are migrated into rules on upgrade (#699)",
-                "New: The managed default rules for borders, title bars, and gaps live in a System section on the Rules page and can't be deleted (#699)",
+                "New: The managed default rules for borders, title bars, and gaps stay pinned at the bottom of the Rules page and can't be deleted (#699)",
                 "Changed: The rule editor's action and condition pickers are alphabetized and grouped so they are easier to scan (#699)",
                 "New: A new Theater tiling layout keeps one window centered at a width you set per monitor, and with more windows the focused one moves to a centered spotlight while the rest line up on rails down both sides. It starts hidden, so turn it on from the Tiling → Library page to try it (#704)",
                 "New: Peeking at the desktop can now play a full-screen animation. Pick a pack for the new Peeked at Desktop event on the Animations → Transitions → Desktop page. Three new packs ship with it, Peek Recede, Peek Blinds, and Phosphor Peek, and every desktop transition pack works there too (#777)",
@@ -1121,7 +1121,7 @@
             "version": "2.0.0",
             "date": "2026-03-10",
             "highlights": [
-                "New: Autotiling engine with 10 algorithms including Master+Stack, BSP, Dwindle, and Spiral",
+                "New: Autotiling engine with 11 algorithms including Master+Stack, BSP, Dwindle, and Spiral",
                 "New: Per-screen algorithm selection with independent settings",
                 "New: Hide title bars on tiled windows with configurable focus border",
                 "New: Translate-only slide animations with staggered cascading",

@@ -1552,7 +1552,12 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // committed-ack re-assert in slotWindowFullScreenChanged
                     // applies.
                     m_effect->m_windowedFullscreenWindows.insert(snap.windowId, snap.geometry);
-                    if (!kwFs->isFullScreen()) {
+                    if (kwFs->isFullScreen()) {
+                        // Already committed fullscreen (effect restart): no
+                        // fullscreen edge will re-run the cover walk, so tell
+                        // it the member no longer covers its output.
+                        m_effect->refreshFullscreenSuppression();
+                    } else {
                         // Seed KWin's fullscreen restore rect with the COLUMN
                         // rect before the state flips: setFullScreen captures
                         // fullscreenGeometryRestore from moveResizeGeometry()
