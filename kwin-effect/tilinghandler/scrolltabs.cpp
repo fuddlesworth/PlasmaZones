@@ -812,7 +812,7 @@ QString TilingHandler::scrollTabPillAt(const QPointF& pos) const
     // paintedLastPass: a model can exist with nothing blitted (every column
     // parked, a teardown race) and input must answer for the PIXELS, not the
     // model — a pill nothing drew must neither show the hand nor eat a click.
-    if (!painter->hasIndicators(out) || !painter->paintedLastPass(out)) {
+    if (!painter || !painter->hasIndicators(out) || !painter->paintedLastPass(out)) {
         return QString();
     }
     // The same offset the blit applies: a pill mid-leg is where it is DRAWN,

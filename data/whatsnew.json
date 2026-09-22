@@ -9,7 +9,18 @@
                 "Fixed: A window restored from minimize goes straight into its tile instead of flashing at its old size over the other windows (#1110)",
                 "Fixed: A reopened window is only put back in its remembered zone when that zone belongs to the layout its desktop runs now (#1104)",
                 "Fixed: With \"Keep floating windows above\" on, a fullscreen game no longer stays on top after you Alt+Tab away from it (#1114)",
-                "Fixed: Old-style tray icons, such as those from Wine and Proton apps, no longer leave a glowing bordered square on the panel (#1115)"
+                "Fixed: Old-style tray icons, such as those from Wine and Proton apps, no longer leave a glowing bordered square on the panel (#1115)",
+                "Changed: The daemon and the KWin effect must be the same build, since the way a fullscreen window leaves the scrolling strip changed on the wire (#1116)",
+                "Fixed: A window that was fullscreen on a scrolling screen no longer comes back the size of the screen when it floats (#1116)",
+                "Fixed: On a scrolling screen, a window that is already fullscreen when it opens is left alone and joins the strip only if it later leaves fullscreen. With same-application tab grouping turned on, a game no longer lands as a tab in its launcher's column (#1116)",
+                "Fixed: On a scrolling screen, moving around the strip by shortcut or by the wheel, or resizing a column, leaves a fullscreen window in fullscreen. This reverses the 3.4.5 and 3.4.6 behaviour on purpose, because the window now leaves the strip instead (#1116)",
+                "Fixed: On a scrolling screen, a tiled window that goes fullscreen by itself leaves the strip quietly, with no floated notification and no size change, so the tab bar no longer draws over it, and it returns to its column slot when it leaves fullscreen (#1116)",
+                "Fixed: On a scrolling screen, maximizing the window in front of the focused column, when that column holds other windows, moves it into its own column and maximizes it alone. Meta+Alt+M still maximizes the focused column with all of its tabs (#1116)",
+                "Fixed: Windowed fullscreen no longer turns off the decorations on the panels and the other windows on that monitor (#1116)",
+                "Fixed: On a scrolling screen, a fullscreen window returns to its column and gets its decoration back when it leaves fullscreen after a desktop round trip, instead of waiting for a second switch (#1116)",
+                "Fixed: A window that left fullscreen after the KWin effect restarted no longer gets the screen size saved as the size it floats at (#1116)",
+                "Fixed: The shell's placement map no longer shows another mode's cells after a mode change, and a drag on a scrolling screen no longer makes that screen's other maps re-read their layout on each step (#1116)",
+                "Fixed: On a scrolling screen, a window that goes fullscreen right after being restored from minimize is left alone instead of being placed on the strip (#1116)"
             ]
         },
         {
@@ -28,12 +39,12 @@
                 "New: PlasmaZones builds against Plasma 6.8 as well as 6.7 from the same source, so your package keeps building whichever one your distribution ships (#1096)",
                 "New: Four more pointer packs. Prism spreads the brand spectrum across the stroke as you speed up, Echo stamps your real cursor sprite along the path, Charge banks speed and spends it as a pulse, and Filament runs bright nodes up a Phosphor Trail tube. Seventeen packs ship now (#1093)",
                 "Changed: A pointer pack's trail window is called Lifetime in every pack that has one. If you had changed that slider on Comet, WindTrail, Sparks or Burst, it goes back to its default (#1093)",
-                "Fixed: A pointer pack that reads a buffer channel without declaring a buffer no longer samples the wrong thing (#1093)",
-                "Fixed: Snap assist stays on the fast thumbnail path instead of falling back to the slow one after two capture failures (#1093)",
-                "Fixed: The pointer no longer goes missing when a scrolling leg gives up on a frame (#1093)",
+                "Fixed: A pointer pack that reads a buffer channel without declaring a buffer no longer samples the wrong thing (#1096)",
+                "Fixed: Snap assist stays on the fast thumbnail path instead of falling back to the slow one after two capture failures (#1096)",
+                "Fixed: The pointer no longer goes missing when a scrolling leg gives up on a frame (#1096)",
                 "Fixed: Pointer trails follow a curve rather than a polygon (#1093)",
                 "Fixed: Pointer decorations stop when a software KVM or a program hides the cursor, and the last frame is erased instead of staying frozen on screen (#1094)",
-                "Fixed: A window dragged to the end of a scrolling strip centers straight away when \"center focused column\" is set to Always (#1095)"
+                "Fixed: A window dragged to the end of a scrolling strip centers straight away when \"Center the focused column\" is set to Always (#1095)"
             ]
         },
         {
@@ -124,7 +135,7 @@
             "version": "3.4.9",
             "date": "2026-09-02",
             "highlights": [
-                "New: A scroll key under Settings → Scrolling → Window can now be a single mouse button as well as a modifier combination, so a spare button plus the wheel moves you along the strip (#1042)",
+                "New: A scroll key under Settings → Placement → Scrolling → Window can now be a single mouse button as well as a modifier combination, so a spare button plus the wheel moves you along the strip (#1042)",
                 "Fixed: Clicking a taskbar entry for a window on another desktop's scrolling strip now centers the strip on it instead of leaving it off screen (#1040)",
                 "Fixed: Closing a scrolling window moves the neighbours in immediately, with the closing window's animation drawn above the settling strip the way niri does (#1041)"
             ]
@@ -239,22 +250,22 @@
                 "New: Scrolling is a full third mode with its own settings section and enable switch, and the mode toggle shortcut cycles through all three modes. Rule actions let an app open at a chosen width or in a tabbed column, or join the focused column directly (#852)",
                 "New: Scrolling columns cycle through width presets, maximize, or grow into the empty space on screen, and the windows in a column share it between them or show one at a time as tabs. Consume and expel shortcuts move windows between columns, all on the Meta+Alt family (#852)",
                 "New: Hold Meta and scroll the mouse wheel on a scrolling screen to move through columns, the same way niri binds Mod+wheel (#852)",
-                "New: The scrolling strip can run top to bottom. Columns become full-width rows stacked down the screen, and everything else works as before, including parking, tabs, the drop indicator and the strip shaders. Pick the direction under Settings → Scrolling → Window, app-wide or per monitor, or set it from a rule per screen, desktop, or activity. It matches the screen shape by default, so a monitor taller than it is wide switches on its own, and Side to side keeps the strip horizontal everywhere (#923)",
-                "New: A scrolling column that is only partly on screen is resized to fit the space it has, so nothing overhangs onto a neighbouring monitor. A Crop columns at the screen edge switch under Settings → Scrolling → Window keeps the full-size look instead by cutting the drawing at the edge (#885)",
+                "New: The scrolling strip can run top to bottom. Columns become full-width rows stacked down the screen, and everything else works as before, including parking, tabs, the drop indicator and the strip shaders. Pick the direction under Settings → Placement → Scrolling → Window, app-wide or per monitor, or set it from a rule per screen, desktop, or activity. It matches the screen shape by default, so a monitor taller than it is wide switches on its own, and Side to side keeps the strip horizontal everywhere (#923)",
+                "New: A scrolling column that is only partly on screen is resized to fit the space it has, so nothing overhangs onto a neighbouring monitor. A Crop columns at the screen edge switch under Settings → Placement → Scrolling → Window keeps the full-size look instead by cutting the drawing at the edge (#885)",
                 "New: Scrolling screens get their own templates, managed on the Scrolling → Templates page. A template sets the starting columns, the default width for later ones, and the presets the width and height cycling shortcuts step through. Three starters ship built in, and the layout picker, quick digits, and rules assign them per screen (#887)",
                 "New: Scrolling templates open in the layout editor. The starting columns show as a strip of bands, laid out the way the strip runs on the screen the template is for. Drag a column's edge to size it, use its buttons to reorder it, switch it between stacked and tabbed, or remove it, and undo any of it with the usual shortcuts (#918)",
                 "New: Scrolling templates take a priority order. A Priority page under Scrolling → Configuration sets the order templates cycle and list in, the same drag-to-reorder page the other two modes have (#926)",
                 "New: The indicator marking a tabbed column's windows is fully configurable, matching niri's tab-indicator options. Pick which edge it sits on, its thickness, how much of the edge it spans, the gaps, the corner radius and the tab colors, or switch from the segment bar to titled chips that label each window. Click a tab to switch to it (#871)",
-                "New: Switching tabs in a scrolling column can blend the tab you left into the one you picked, in place. Eight tab shaders ship, six generics (fade, slide, wipe, dissolve, flip, zoom) and the Phosphor-branded Transfer and Iris. Pick one, and set the curve and the duration, under Settings → Animations → Motion → Scrolling (#908)",
+                "New: Switching tabs in a scrolling column can blend the tab you left into the one you picked, in place. Eight tab shaders ship, six generics (fade, slide, wipe, dissolve, flip, zoom) and the Phosphor-branded Transfer and Iris. Pick one, and set the curve and the duration, under Settings → Appearance → Animations → Motion → Scrolling (#908)",
                 "New: PlasmaZones follows the compositor's attention-demanding state, so a tab whose window is asking for attention stands out even while another tab is showing (#871)",
                 "New: Drag a window over a scrolling screen to put it back into the strip. A drop indicator shows where it will land, between two columns or joining one as a stack, and dropping anywhere else leaves it floating (#873)",
-                "New: Dragging a window to the edge of a scrolling screen opens a strip-mode popup, the scrolling counterpart of the snapping zone selector. It shows the strip itself, one card per column, so you can aim the drop: the leading half of a card prepends, the trailing half appends, a gap opens a new column, and a tabbed card takes the window as a tab. It has its own Strip Selector page under Settings → Scrolling, with per-monitor overrides and a rule action to offer or suppress it per screen (#915)",
-                "New: The scroll strip now slides as one piece. Focusing another column used to move every window on screen separately, so a fast scroll could visibly shear and a column leaving the view blinked out instead of travelling off the edge. The columns now hold their spacing for the whole slide, and the motion has its own entry under Settings → Animations → Motion → Scrolling (#890)",
-                "New: The scrolling strip can take a shader. A strip shader runs once per screen while the strip is sliding, driven by how far and how fast it moves, and stops the moment it settles. Five packs ship, from motion blur to the Phosphor-styled edge gates, and there is no default so scrolling stays a plain slide until you pick one. Settings → Animations → Motion → Scrolling (#891)",
+                "New: Dragging a window to the edge of a scrolling screen opens a strip-mode popup, the scrolling counterpart of the snapping zone selector. It shows the strip itself, one card per column, so you can aim the drop: the leading half of a card prepends, the trailing half appends, a gap opens a new column, and a tabbed card takes the window as a tab. It has its own Strip Selector page under Settings → Placement → Scrolling, with per-monitor overrides and a rule action to offer or suppress it per screen (#915)",
+                "New: The scroll strip now slides as one piece. Focusing another column used to move every window on screen separately, so a fast scroll could visibly shear and a column leaving the view blinked out instead of travelling off the edge. The columns now hold their spacing for the whole slide, and the motion has its own entry under Settings → Appearance → Animations → Motion → Scrolling (#890)",
+                "New: The scrolling strip can take a shader. A strip shader runs once per screen while the strip is sliding, driven by how far and how fast it moves, and stops the moment it settles. Five packs ship, from motion blur to the Phosphor-styled edge gates, and there is no default so scrolling stays a plain slide until you pick one. It is set under Settings → Appearance → Animations → Motion → Scrolling (#891)",
                 "New: Windowed fullscreen for the scroll strip. Meta+Alt+Shift+F tells the focused window it is fullscreen while it keeps its place in its column, so a video player hides its controls and a game picks its fullscreen mode while the strip keeps scrolling around it. Press it again or leave fullscreen from inside the application to go back, and floating or minimizing the window ends it too. The window cannot be dragged or resized with the mouse while this is on, and the keyboard verbs keep working. This matches niri's toggle-windowed-fullscreen (#895)",
                 "New: More of scrolling is rulable. New open rules start a matched window maximized, decide whether it takes focus as it opens, or put it into fullscreen (and the off position blocks an app's own fullscreen request). A Set scroll speed rule multiplies wheel and touchpad speed inside matching windows, the seven scrolling behavior toggles gain per-context actions so each can differ per monitor, desktop or activity, and the on-screen displays can be ruled off for a projector or recording monitor (#901)",
                 "New: Tab labels can use a font of your own. The labels on a tabbed column's chips used to follow the zone label font from Snapping → Overlay → Appearance, so changing one changed the other. Scrolling → Tabs now has a Font row where you pick the typeface, weight, italic, underline and strikeout for tab labels alone. Their size comes from the Thickness row rather than a size setting of its own, and a reset button puts the row back to the system font in bold (#938)",
-                "New: Focus follows mouse can stop short of a long scroll. On a scrolling screen, moving the pointer onto a column that is partly off screen scrolls the whole strip to bring it in, so brushing past the edge of the screen can carry the view somewhere you never meant to go. A Limit how far the strip scrolls slider under Settings → Scrolling → Window caps that scroll, and past the cap the pointer is ignored and focus stays where it is. It starts at 100%, which never ignores anything, and a rule action sets it per screen, desktop, or activity (#977)",
+                "New: Focus follows mouse can stop short of a long scroll. On a scrolling screen, moving the pointer onto a column that is partly off screen scrolls the whole strip to bring it in, so brushing past the edge of the screen can carry the view somewhere you never meant to go. A Limit how far the strip scrolls slider under Settings → Placement → Scrolling → Window caps that scroll, and past the cap the pointer is ignored and focus stays where it is. It starts at 100%, which never ignores anything, and a rule action sets it per screen, desktop, or activity (#977)",
                 "New: A window that closed while floating on a scrolling screen reopens floating at its remembered spot instead of being tiled back into the strip (#886)",
                 "New: Snapping and Tiling screens can use no layout at all. The layout picker carries a None card on every screen, and picking it opts that screen out of layouts entirely. A Snapping screen then has no zones, so windows float freely and dragging to the edges snaps to nothing, and a Tiling screen stops tiling and leaves new windows where they open (#934)",
                 "New: The Snap to zone rule action can target zones by name as well as by number. A zone name is looked up in whichever layout is active on the screen the window is placed on, so a rule that sends an editor to the zone called Editor keeps working when you switch to a layout that numbers its zones differently. Type names in the new Zone names field, or pick them from the names your layouts already use, and mix them with numbers if you like (#924)",
@@ -267,7 +278,7 @@
                 "New: Settings pages show a loading indicator. Opening a heavy page for the first time used to leave the viewport empty while it built in the background, which read as a hang. A centered spinner with a short caption now covers that area until the page is ready (#930)",
                 "Changed: Every color setting follows your color scheme until you pick one. The zone overlay and window border colors show the scheme color they follow, picking one pins it, and a Reset on each row puts it back to following the scheme. The all-or-nothing system accent color switch is gone, so one pinned color no longer stops the rest from tracking your theme (#899)",
                 "Changed: Continuously animated decoration packs now animate only the window you are working in, and unfocused windows hold their last frame. The Animate only the active window switch under Settings → Appearance → Decorations → General, shown when the advanced settings are on, turns the old behavior back on (#872)",
-                "Changed: The rule action picker groups everything that acts on a window under one Window entry, in named submenus for Placement, Scrolling, Appearance, Animation, Behavior and the two indicator color families. Animation and Appearance used to sit beside Window as top-level entries of their own. The New Rule dialog's quick starts are down from thirteen tiles to eight, keeping the monitor and desktop assignments and the per-app rules people open the dialog to write (#947)",
+                "Changed: The rule action picker groups everything that acts on a window under one Window entry, in named submenus for Placement, Scrolling, Appearance, Animation, Behavior and the two indicator color families. Animation and Appearance used to sit beside Window as top-level entries of their own. The New Rule dialog's quick starts are down from ten tiles to eight, keeping the monitor and desktop assignments and the per-app rules people open the dialog to write (#947)",
                 "Changed: The tabbed Layouts page under Display is gone, along with the Display category. Each mode now manages its own artifacts on its own library page: Snapping → Layouts, Tiling → Library and Scrolling → Templates, and Virtual Screens moved to the top level of the sidebar. A saved --page layouts deep link no longer resolves (#914)",
                 "Changed: The pywal and JSON color import buttons are gone from the Snapping overlay appearance page. The import ran once and kept no link to the file, so a wallpaper change left the zone colors behind. Every color it could set has its own picker on the same page, and those pickers follow your color scheme until you pin one (#904)",
                 "Fixed: Window animations no longer force a full repaint of every monitor on every frame, and a decorated window's cached content survives the animation instead of being re-rendered each frame. This matters most on laptops and other machines with integrated graphics, and the zone overlay also frees its graphics memory once a drag ends (#872)",
@@ -360,7 +371,7 @@
             "date": "2026-07-23",
             "highlights": [
                 "New: Settings profiles. Save your whole configuration and rules as a named profile and switch between them, with a diff of exactly what will change before it is applied and nothing written until you confirm (#793)",
-                "New: A simple settings mode that flattens the sidebar into one list and trims each page to the settings most people need, with an advanced toggle in the sidebar footer for the full set (#822)",
+                "New: The settings app has a simple mode that flattens the sidebar into one list and trims each page to the settings most people need, with an advanced toggle in the sidebar footer for the full set (#822)",
                 "New: The whole settings interface is translatable now and translated into German, Georgian, Swedish, Dutch, Polish, and Russian. The QML strings were never being pulled into the catalog before, so the interface fell back to English in every language (#840)",
                 "Changed: Turning on a per-event animation timing override now changes only the field you edit, instead of quietly pinning the inherited duration and curve so the event stopped following the global defaults (#837)",
                 "New: Keyboard shortcuts that grow and shrink a window's zone span. Ctrl+Alt+Arrows extends the window into the neighbouring zone in that direction, and once it reaches the edge the same key pulls the opposite side back in, so one set of keys both grows and shrinks (#838)",
@@ -444,19 +455,19 @@
             "version": "3.2.0",
             "date": "2026-07-17",
             "highlights": [
-                "Changed: Window borders, title bars, and gaps are now window rules. A new Windows page (under Appearance) edits the defaults, and you can override them per window or per context on the Rules page (#699)",
+                "Changed: Window borders, title bars, and gaps are now window rules. A new General page under Appearance → Decorations edits the defaults, and you can override them per window or per context on the Rules page (#699)",
                 "New: Mode condition. A rule can match snapped or tiled windows, so snapping and tiling can have different gaps or appearance (#699)",
                 "New: Per-monitor gaps. Pick a monitor on the Gaps card to set its gaps on their own (#699)",
                 "New: Focused and unfocused border colors are now set separately, each with its own color swatch (#699)",
                 "Changed: Window Rules is now just Rules, since rules cover gaps, layout, and animation too. Your rules carry over automatically, and any appearance or gap settings you had customized are migrated into rules on upgrade (#699)",
-                "New: The managed default rules for borders, title bars, and gaps live in a System section on the Rules page and can't be deleted (#699)",
+                "New: The managed default rules for borders, title bars, and gaps stay pinned at the bottom of the Rules page and can't be deleted (#699)",
                 "Changed: The rule editor's action and condition pickers are alphabetized and grouped so they are easier to scan (#699)",
                 "New: A new Theater tiling layout keeps one window centered at a width you set per monitor, and with more windows the focused one moves to a centered spotlight while the rest line up on rails down both sides. It starts hidden, so turn it on from the Tiling → Library page to try it (#704)",
                 "New: Peeking at the desktop can now play a full-screen animation. Pick a pack for the new Peeked at Desktop event on the Animations → Transitions → Desktop page. Three new packs ship with it, Peek Recede, Peek Blinds, and Phosphor Peek, and every desktop transition pack works there too (#777)",
                 "New: Window decoration effects. A Decoration category adds glass, blur, glow, shadow, and animated border packs that draw behind and around your windows. Pick them from a browser and save your own sets (#624)",
                 "New: Switching virtual desktops can play a full-screen transition. Turn it on for the new desktop switch event on the Animations page and pick from eleven packs such as Fade, Slide, Wipe, and Cube (#747)",
-                "New: Audio-reactive window borders that move with your music, with the full CAVA audio settings to tune them (#624, #763)",
-                "New: Rule actions to keep a window above or below others and to tune a screen or desktop's tiling on its own, plus a Tiled window count condition so a rule can switch algorithm as the number of tiled windows grows (#733, #759, #703)",
+                "New: Window borders can react to audio and move with your music, and the full CAVA audio settings are there to tune them (#624, #763)",
+                "New: Rule actions can keep a window above or below others and tune a screen or desktop's tiling on its own, and a Tiled window count condition lets a rule switch algorithm as the number of tiled windows grows (#733, #759, #703)",
                 "New: The settings app now remembers the pages you visit, so you can step back and forward through them (#749)",
                 "Fixed: Dragging a window could briefly stutter at the start and end of a drag on some systems, because a shortcut config file was rewritten on every drag. That write is gone, so dragging stays smooth (#714)"
             ]
@@ -502,7 +513,7 @@
                 "New: Each rule matches windows by class, title, role, app ID, desktop, activity, and screen, and now also by transient/notification kind, window size, and focus. Match terms combine with AND, OR, and NOT, then the rule applies snapping, tiling, animation, appearance (borders, title bars, corner radius, accent color, gaps, opacity), or exclusion actions",
                 "Changed: Your existing assignments, animation app rules, and per-monitor / per-desktop / per-activity disable settings were migrated automatically on first launch. If something looks off, your old configuration is preserved on disk and can be restored manually",
                 "New: Snapping gains the focus options autotiling has. A window can take focus when it snaps into a zone on open, and focus can follow the mouse over snapped windows (both off by default)",
-                "New: Per-window appearance for snapping. Borders, corner radius, hidden title bars, and accent colors, mirroring the tiling options (this is the page now at Snapping → Overlay → Appearance)",
+                "New: Per-window appearance for snapping. Borders, corner radius, hidden title bars, and accent colors, mirroring the tiling options (these settings now live on Appearance → Decorations → General)",
                 "New: Zone span toggle mode. Tap the span modifier to start and stop spanning instead of holding it down for the whole drag",
                 "New: Unsnapped windows now return to the monitor and spot they closed on after you log back in (on by default, and can be turned off globally or per app)",
                 "Changed: Smoother animations. Window move, resize, and snap now play a shader-driven morph, and the on-screen popups fade and scale in and out",
@@ -563,7 +574,7 @@
             "highlights": [
                 "Fixed: Focus follows mouse activating tiled windows underneath an active emoji picker, notification popup, or krunner. Focus follows mouse now pauses until a tileable window becomes active (#461, #521)",
                 "Fixed: Stale pending-restore entries for excluded apps growing session.json and logging on every daemon start (#461, #521)",
-                "Fixed: Drag artifacts, post-snap flicker, and a gray decoration ring during snap drags on hybrid Intel+NVIDIA setups (#516, #523)",
+                "Fixed: Drag artifacts, post-snap flicker, and a gray decoration ring during snap drags on hybrid Intel+NVIDIA setups (#523)",
                 "Changed: Redundant layer-shell setter messages are skipped across virtual-desktop switches (#522)"
             ]
         },
@@ -627,8 +638,8 @@
                 "Fixed: Windows on disabled monitors / desktops still being tracked and resurrected after restart (#461)",
                 "Fixed: Re-enabling a disabled virtual desktop sometimes silently failing after a screen redetect (#461)",
                 "Fixed: Popup menus and Steam image previews being snapped to weird zones (#461)",
-                "Fixed: Stale snap assignments from deleted layouts lingering across first-launch (and dangling zone IDs in multi-zone windows) (#461)",
-                "Fixed: Critical-notification windows triggering focus tracking and appearing in the app picker (#461)"
+                "Fixed: Stale snap assignments from deleted layouts lingering across first-launch (and dangling zone IDs in multi-zone windows) (#500)",
+                "Fixed: Critical-notification windows triggering focus tracking and appearing in the app picker (#500)"
             ]
         },
         {
@@ -686,16 +697,16 @@
                 "New: Virtual screens for ultrawide monitors. Subdivide a physical monitor into independent logical screens, each with its own layouts, autotile state, snap assist, OSDs, shortcuts, and per-desktop or per-activity assignments. New swap and rotate actions with a confirmation OSD",
                 "New: Animation App Rules let you assign motion curves, shader overrides, and per-event timings to specific apps. A two-layer resolver with leaf seeds gives widgets distinctive tunings even when they share a parent rule",
                 "New: A new animation engine with vertex-shader plumbing and live-texture sampling, plus 47 ported transition shaders: 28 from niri, 9 from Burn-My-Windows, 10 BMW-inspired originals, an audio-reactive neon-city cityscape, a Matrix rain port, a 3D chrome-protocol rewrite, and user-texture support",
-                "Changed: The OSDs, snap assist, layout picker, zone selector and zone overlay all draw in one click-through surface now, each animating on its own and stacking in a defined order",
+                "New: The OSDs, snap assist, layout picker, zone selector and zone overlay all draw in one click-through surface now, each animating on its own and stacking in a defined order",
                 "New: Krohnkite-style autotile. Drag a tiled window onto another to reorder slots live, and a new Unlimited overflow lets the stack grow past the algorithm's natural cap instead of evicting windows",
-                "Changed: Animations settings overhauled into drill-down sub-pages with motion sets for themed override bundles, a per-event shader picker, a generic shader browser, and a separate Snapping Shaders page",
-                "Changed: Layout ordering for cycling. Cycle shortcuts follow a user-configurable order set per-mode under Settings → Snapping or Tiling → Configuration → Priority, instead of the implicit save-time order",
+                "New: Animations settings overhauled into drill-down sub-pages with motion sets for themed override bundles, a per-event shader picker, a generic shader browser, and a separate Snapping Shaders page",
+                "New: Layout ordering for cycling. Cycle shortcuts follow a user-configurable order set per-mode under Settings → Snapping or Tiling → Configuration → Priority, instead of the implicit save-time order",
                 "New: Per-mode disable lists. Snapping and autotiling each have their own exclusion lists for monitors, virtual desktops, and activities, with the disabled-context OSD pointing you at the right toggle",
-                "Changed: Hold and toggle controls now work in always-active mode. A binding like Right Mouse Button activates when always-active is off and deactivates when on, FancyZones-style (#249)",
+                "New: Hold and toggle controls now work in always-active mode. A binding like Right Mouse Button activates when always-active is off and deactivates when on, FancyZones-style (#249)",
                 "New: Global \"auto-assign new windows for all layouts\" master toggle (#370) and a separate \"Desktop switch OSD\" toggle (#372)",
                 "Changed: Drag protocol rewritten so the daemon owns all drag routing decisions (#310), eliminating the ~40s dead-drag stalls reported when settings reload mid-drag",
                 "Changed: The Meta+F float toggle now runs daemon-local (#310), so it toggles in under 50 ms instead of stalling on D-Bus backpressure across four hops",
-                "Changed: Native-feeling wheel scroll across every settings page (#405) using Kirigami.WheelHandler for Plasma-aware scroll speed",
+                "New: Native-feeling wheel scroll across every settings page (#405) using Kirigami.WheelHandler for Plasma-aware scroll speed",
                 "New: A Phosphor SDK. Core services are extracted into reusable LGPL libraries covering engine, layout-api, animation, shaders, workspaces, placement, tiles, zones, screens, snap-engine, tile-engine, config, fsloader, shell-patterns, wayland, and layer. A new phosphor-compositor SDK lets third-party Wayland compositors host the placement, tiling, and overlay services without depending on KWin",
                 "Fixed: Brand-new virtual desktops not picking up the user's default mode and layout (#368)",
                 "Fixed: Snap assist showing windows from other virtual desktops as occupied (#323)",
@@ -725,7 +736,7 @@
             "date": "2026-04-11",
             "highlights": [
                 "Fixed: Emby and other Electron/CEF apps silently breaking after mid-session WM_CLASS rename (#271). Float toggle, focus navigation, and snap operations now survive class mutations",
-                "New: PlasmaZones follows an application's identity as it changes, instead of remembering whatever it called itself the first time it was seen"
+                "Fixed: PlasmaZones follows an application's identity as it changes, instead of remembering whatever it called itself the first time it was seen"
             ]
         },
         {
@@ -776,11 +787,11 @@
             "date": "2026-04-07",
             "highlights": [
                 "New: Support report generator for quick bug report archives",
-                "Fixed: Autotiled windows now survive layout switches, mode toggles, and daemon restarts",
+                "New: Autotiled windows now survive layout switches, mode toggles, and daemon restarts",
                 "New: Visual OSD feedback when toggling on a disabled desktop or screen",
                 "Changed: Config migrated to v2 nested schema with automatic migration from v1",
                 "Changed: Assignments and session state split to dedicated files for cleaner configs",
-                "Changed: Daemon toggle now enables systemd service for autostart on login",
+                "New: Daemon toggle now enables systemd service for autostart on login",
                 "Fixed: Assignment persistence and tiling order across daemon restarts",
                 "Fixed: Window restore after config v2 migration"
             ]
@@ -966,7 +977,7 @@
             "date": "2026-03-21",
             "highlights": [
                 "Fixed: Resnap buffer empty on layout change",
-                "New: Per-screen mode toggle and layout cycle scoped to target screen",
+                "Fixed: Per-screen mode toggle and layout cycle scoped to target screen",
                 "Changed: Layout changes now resnap through one shared path"
             ]
         },
@@ -1071,7 +1082,7 @@
             "date": "2026-03-14",
             "highlights": [
                 "Fixed: Primary screen detection on Wayland",
-                "New: Complete German translations"
+                "Changed: Complete German translations"
             ]
         },
         {
@@ -1116,7 +1127,7 @@
             "version": "2.0.0",
             "date": "2026-03-10",
             "highlights": [
-                "New: Autotiling engine with 10 algorithms including Master+Stack, BSP, Dwindle, and Spiral",
+                "New: Autotiling engine with 11 algorithms including Master+Stack, BSP, Dwindle, and Spiral",
                 "New: Per-screen algorithm selection with independent settings",
                 "New: Hide title bars on tiled windows with configurable focus border",
                 "New: Translate-only slide animations with staggered cascading",
@@ -1450,7 +1461,7 @@
             "highlights": [
                 "New: Shader preset load/save in editor",
                 "New: Preview shader effects in zone editor",
-                "Fixed: A window's size is restored immediately when it is dragged between zones",
+                "New: A window's size is restored immediately when it is dragged between zones",
                 "Fixed: The zone overlay moves to the monitor you drag onto, instead of staying on the one the drag started from"
             ]
         },
@@ -1560,7 +1571,7 @@
             "version": "1.3.1",
             "date": "2026-02-02",
             "highlights": [
-                "New: Debian releases now include debug symbol packages"
+                "Fixed: Debian releases now include debug symbol packages"
             ]
         },
         {

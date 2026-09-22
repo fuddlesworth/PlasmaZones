@@ -52,9 +52,10 @@ void AutotileEngine::emitInsertFloatStateSync(const QString& windowId, const QSt
     if (!state) {
         return;
     }
-    // Sync floating state to daemon. Float state is per-mode:
-    // - Restored as floating from autotile's saved set → notify daemon to set WTS floating
-    // - Inserted as tiled but WTS says floating (stale snap-mode float) → clear WTS floating
+    // Sync floating state to daemon. Float state is per-mode, and this is ONE
+    // direction only: restored as floating from autotile's saved set → notify
+    // the daemon to set WTS floating. The not-floating direction was removed;
+    // the note below the branch says why.
     //
     // Use windowFloatingStateSynced (not windowFloatingChanged): this is a
     // passive state-sync on window insertion, not a user float toggle. The

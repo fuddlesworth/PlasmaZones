@@ -50,7 +50,11 @@ void ScrollEngine::windowMinSizeUpdated(const QString& rawWindowId, int minWidth
     const QString windowId = canonicalizeForLookup(rawWindowId);
     // While the window floats there is no tile to write to, and unfloat
     // re-applies the captured clamp — so without this write-through the
-    // restore puts back whatever the client reported at float time.
+    // restore puts back whatever the client reported at float time. The
+    // compositor's fullscreen return re-inserts with this clamp and does not
+    // re-run the oversized verdict below; a client that pinned fullscreen-size
+    // hints during the hold seats oversized until the next min-size report
+    // re-floats it through the active channel.
     if (const auto it = m_floatRestore.find(windowId); it != m_floatRestore.end()) {
         // Clamped like seedFloatRestoreForOpen: a negative floor flows from
         // here into insertWindowIntoColumnAt and on to Tile::minWidth/

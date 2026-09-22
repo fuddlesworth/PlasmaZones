@@ -107,8 +107,8 @@ void Daemon::initializeAutotile()
         connect(m_autotileEngine.get(), &PhosphorEngine::PlacementEngineBase::windowFloatingChanged, this,
                 &Daemon::syncAutotileFloatState);
 
-        // Passive float state sync for engine-internal state divergence (e.g. a
-        // newly-inserted window carrying stale snap-mode float state). Routes to
+        // Passive float state sync for a float the engine takes on its own (a
+        // Float rule or a restored float at insert). Routes to
         // a handler that updates WTS bookkeeping without calling
         // applyGeometryForFloat — the window already has a valid position and
         // must not be teleported to a stored pre-tile rect.

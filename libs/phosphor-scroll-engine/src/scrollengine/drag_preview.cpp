@@ -139,6 +139,7 @@ bool ScrollEngine::beginDragInsertPreview(const QString& rawWindowId, const QStr
     if (windowId.isEmpty() || screenId.isEmpty() || !isActiveOnScreen(screenId)) {
         return false;
     }
+    m_closedFullscreenHolds.remove(windowId); // any re-entry ends the closed-hold answer
     if (m_dragInsertPreview) {
         cancelDragInsertPreview();
     }
@@ -388,6 +389,10 @@ void ScrollEngine::commitDragInsertPreview()
         // true must not leak in through the degrade arm — a future unfloat
         // that honoured the field would resurrect fullscreen on a float.
         carried.windowedFullscreen = false;
+        // The same exclusivity for the compositor's hold: a drag that degrades
+        // to a float is a USER float, and a carried hold would let the
+        // fullscreen-exit return undo it.
+        carried.fullscreenHold = false;
         m_floatRestore.insert(p.windowId, carried);
         // Mode marker: this is a scroll-decided float, same as every other
         // float-producing exit (begin removed the marker on the way in).

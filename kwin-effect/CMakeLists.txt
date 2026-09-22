@@ -172,6 +172,7 @@ set(plasmazones_effect_SRCS
     tilinghandler/wiring.cpp
     tilinghandler/wheelchord.cpp
     tilinghandler/scrolltabs.cpp
+    tilinghandler/fullscreenhold.cpp
     handlers/snaphandler.cpp
     handlers/snaphandler.h
     handlers/navigationhandler.cpp

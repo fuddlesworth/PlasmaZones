@@ -66,6 +66,11 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
             ++it;
         }
     }
+    // The closed-hold memory is a belt for a close the daemon never captured
+    // (a lost windowClosed relay); aliveness is its only other reaper.
+    m_closedFullscreenHolds.removeIf([&aliveWindowIds](const QString& id) {
+        return !aliveWindowIds.contains(id);
+    });
     QStringList dead;
     // One entry per window: the teardown below drops every membership, so a
     // multi-desktop window must not appear twice in the dead list.
@@ -338,32 +343,27 @@ bool ScrollEngine::migrateStateKey(const PhosphorEngine::PlacementStateKey& oldK
         return false;
     }
     if (ScrollState* existing = m_states.stateForKey(newKey)) {
-        // Normally a placeholder a transient lookup created,
-        // and empty. If it is NOT, its windows are real and
-        // discarding the state silently would leave them
-        // tracked at a key nothing holds, with no
-        // windowsReleased for the daemon's restore consumers.
-        // Hand them back through the FULL release, matching
-        // pruneStatesForRemovedScreen: the placement-record
-        // snapshot and the unfloat-slot drop happen inside
-        // releaseScreenState, the float markers and
-        // last-applied rects survive for the handler, and the
-        // emit + final sweep run after the loop.
+        // Normally a placeholder a transient lookup created, and empty. If it
+        // is NOT, its windows are real and discarding the state silently would
+        // leave them tracked at a key nothing holds, with no windowsReleased
+        // for the daemon's restore consumers. Hand them back through the FULL
+        // release, matching pruneStatesForRemovedScreen: the placement-record
+        // snapshot and the unfloat-slot drop happen inside releaseScreenState,
+        // the float markers and last-applied rects survive for the handler,
+        // and the emit + final sweep run after the loop.
         if (!existing->managedWindows().isEmpty()) {
             qCWarning(lcScrollEngine) << "updateStickyScreenPins: releasing" << existing->managedWindows().size()
                                       << "window(s) held by the state the unpin migration displaced on" << screenId;
             displacedScreens.insert(screenId);
         }
-        // RELEASE FIRST, then unhook. releaseScreenState's
-        // placement snapshot goes through capturePlacement ->
-        // stateForWindow, which resolves the window's reverse-map
-        // key and then looks THAT key up in the forward map. Take
-        // the state out first and every one of those lookups
-        // misses, so capturePlacement returns nullopt for every
-        // displaced window and not one record is written — the
-        // exact loss the comment above says this arm prevents.
-        // removeStatesIf documents the same ordering ("invoke
-        // onRemove BEFORE dropping the entry") for its callers.
+        // RELEASE FIRST, then unhook. releaseScreenState's placement snapshot
+        // goes through capturePlacement -> stateForWindow, which resolves the
+        // window's reverse-map key and then looks THAT key up in the forward
+        // map. Take the state out first and every one of those lookups misses,
+        // so capturePlacement returns nullopt for every displaced window and
+        // not one record is written — the exact loss the comment above says
+        // this arm prevents. removeStatesIf documents the same ordering
+        // ("invoke onRemove BEFORE dropping the entry") for its callers.
         releaseScreenState(existing, displacedWindows);
         m_states.takeState(newKey);
     }
@@ -380,35 +380,30 @@ bool ScrollEngine::migrateStateKey(const PhosphorEngine::PlacementStateKey& oldK
         m_contextParkedEdge.insert(newKey, m_contextParkedEdge.take(oldKey));
     }
     m_contextParkedEdge.remove(oldKey);
-    // The stash maps are keyed by context too — left at the
-    // old key they become unreachable (no live context
-    // resolves it) until a prune reaps them, and a restore
-    // for the new key finds nothing. Move-only-if-vacant:
-    // the new key can already hold a stash awaiting
-    // re-adoption, and clobbering it would lose those
-    // pending restores — in that case the old-key entry
-    // stays for the prunes, exactly the pre-fix behaviour.
-    // "Vacant" means no STRUCTURE: a cursor-only carrier at
-    // the new key (an all-floating exit's stash) holds no
-    // windows to lose, so a structural stash moves over it and
-    // absorbs its cursor with qMax rather than dropping it —
-    // and the blueprint IDENTITY that cursor was counting
-    // against, when the moved entry hands none over of its own.
-    // The two are only meaningful together (StashedStrip::
-    // blueprintIdentity): keeping the displaced entry's cursor
-    // while dropping its identity leaves the consumption site
-    // unable to tell a resumed template from a swapped one.
+    // The stash maps are keyed by context too — left at the old key they
+    // become unreachable (no live context resolves it) until a prune reaps
+    // them, and a restore for the new key finds nothing. Move-only-if-vacant:
+    // the new key can already hold a stash awaiting re-adoption, and
+    // clobbering it would lose those pending restores — in that case the
+    // old-key entry stays for the prunes, exactly the pre-fix behaviour.
+    // "Vacant" means no STRUCTURE: a cursor-only carrier at the new key (an
+    // all-floating exit's stash) holds no windows to lose, so a structural
+    // stash moves over it and absorbs its cursor with qMax rather than
+    // dropping it — and the blueprint IDENTITY that cursor was counting
+    // against, when the moved entry hands none over of its own. The two are
+    // only meaningful together (StashedStrip::blueprintIdentity): keeping the
+    // displaced entry's cursor while dropping its identity leaves the
+    // consumption site unable to tell a resumed template from a swapped one.
     if (m_stripStash.contains(oldKey) && m_stripStash.value(newKey).isEmpty()) {
         StashedStrip moved = m_stripStash.take(oldKey);
         const StashedStrip displaced = m_stripStash.value(newKey);
-        // Absorb the displaced cursor ONLY when the two cursors
-        // are counting against the same blueprint — either the
-        // identities match, or the moved entry has none of its
-        // own and takes the displaced one below. Two entries
-        // with DIFFERENT valid identities are counting against
-        // different templates, and a qMax across them would pair
-        // this entry's identity with the other's progress, which
-        // is the pairing the paragraph above says must hold.
+        // Absorb the displaced cursor ONLY when the two cursors are counting
+        // against the same blueprint — either the identities match, or the
+        // moved entry has none of its own and takes the displaced one below.
+        // Two entries with DIFFERENT valid identities are counting against
+        // different templates, and a qMax across them would pair this entry's
+        // identity with the other's progress, the pairing the paragraph above
+        // says must hold.
         const bool sameBlueprint = !moved.blueprintIdentity.isValid() || !displaced.blueprintIdentity.isValid()
             || moved.blueprintIdentity == displaced.blueprintIdentity;
         if (sameBlueprint) {
@@ -446,27 +441,23 @@ bool ScrollEngine::migrateStateKey(const PhosphorEngine::PlacementStateKey& oldK
             m_stripStashConsumed.insert(newKey, mergedConsumed);
         }
     }
-    // The mid-burst deferred-apply marker is context-keyed too:
-    // left at the old key it can never drain (endArrivalBurst
-    // resolves live keys), silently dropping the deferred apply
-    // and its focusWindowAfter. Same move-only-if-vacant rule
-    // as the stash.
+    // The mid-burst deferred-apply marker is context-keyed too: left at the
+    // old key it can never drain (endArrivalBurst resolves live keys), silently
+    // dropping the deferred apply and its focusWindowAfter. Same
+    // move-only-if-vacant rule as the stash.
     if (m_burstPendingApplies.contains(oldKey) && !m_burstPendingApplies.contains(newKey)) {
         m_burstPendingApplies.insert(newKey, m_burstPendingApplies.take(oldKey));
     }
-    // The per-context rule/template overrides move with the
-    // state for the same reason: left at the old key the
-    // migrated strip resolves no template, no preset
-    // vocabulary and no axis override until the daemon's next
-    // per-pass push re-seeds them, and its blueprint identity
-    // compare meets an empty blueprint in the meantime. Same
-    // move-only-if-vacant rule as the stash above — a map
-    // already sitting at the new key was resolved FOR that
-    // context and outranks the one being migrated into it.
-    // An EMPTY map counts as vacant: the daemon pushes {} for
-    // every scrolling context that resolves nothing, so
-    // presence alone no longer says the context was resolved
-    // to anything worth outranking the migrated map.
+    // The per-context rule/template overrides move with the state for the
+    // same reason: left at the old key the migrated strip resolves no
+    // template, no preset vocabulary and no axis override until the daemon's
+    // next per-pass push re-seeds them, and its blueprint identity compare
+    // meets an empty blueprint in the meantime. Same move-only-if-vacant rule
+    // as the stash above — a map already sitting at the new key was resolved
+    // FOR that context and outranks the one being migrated into it. An EMPTY
+    // map counts as vacant: the daemon pushes {} for every scrolling context
+    // that resolves nothing, so presence alone no longer says the context was
+    // resolved to anything worth outranking the migrated map.
     if (m_perScreenOverrides.contains(oldKey) && m_perScreenOverrides.value(newKey).isEmpty()) {
         m_perScreenOverrides.insert(newKey, m_perScreenOverrides.take(oldKey));
     }
@@ -485,9 +476,8 @@ void ScrollEngine::finishDisplacedRelease(QStringList& displacedWindows, const Q
         });
     }
     if (!displacedWindows.isEmpty()) {
-        // A displaced window leaves the engine, so every context it held on
-        // other desktops goes too; removeWindowsIf below drops only the
-        // memberships, and the strips would keep the tiles.
+        // A displaced window leaves the engine, so every context it held on other
+        // desktops goes too (removeWindowsIf drops only the memberships).
         for (const QString& wid : std::as_const(displacedWindows)) {
             dropFromOtherContexts(wid, PhosphorEngine::PlacementStateKey{});
         }
@@ -495,6 +485,7 @@ void ScrollEngine::finishDisplacedRelease(QStringList& displacedWindows, const Q
         m_states.removeWindowsIf([&displacedSet](const QString& wid, const PhosphorEngine::PlacementStateKey&) {
             return displacedSet.contains(wid);
         });
+        announceReleasedFullscreenHolds();
         Q_EMIT windowsReleased(displacedWindows, displacedScreens);
         // Only NOW may the per-window side maps go — the handler above has
         // consumed the float markers and the last-applied rects (same
@@ -506,6 +497,11 @@ void ScrollEngine::finishDisplacedRelease(QStringList& displacedWindows, const Q
             m_parkedScrollEdge.remove(windowId);
             m_scrollFloatedWindows.remove(windowId);
         }
+    } else {
+        // Drain even when the re-entrant filter emptied the set: an id this
+        // release collected must not carry to an unrelated later one, where
+        // the daemon would clear a re-held window's marker.
+        announceReleasedFullscreenHolds();
     }
 }
 
@@ -587,6 +583,7 @@ void ScrollEngine::dropWindowBookkeeping(const PhosphorEngine::PlacementStateKey
         m_lastAppliedWindowedFs.remove(windowId);
         m_lastAppliedMaximizedToEdges.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
+        rememberReleasedFullscreenHold(windowId); // announced at the end of the silent prune
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
         // The dying context's windows can never answer their queued echoes;
@@ -679,6 +676,7 @@ void ScrollEngine::pruneStatesForDesktop(int removedDesktop)
     m_states.removeWindowsIf([removedDesktop](const QString&, const PhosphorEngine::PlacementStateKey& key) {
         return key.desktop == removedDesktop;
     });
+    announceReleasedFullscreenHolds(); // a silently pruned hold still clears the daemon's float bit
     m_context.pruneDesktop(removedDesktop);
     sweepStatelessScreenBookkeeping(touchedScreens);
     sweepStripStash([removedDesktop](const PhosphorEngine::PlacementStateKey& key) {
@@ -891,6 +889,7 @@ void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
     m_states.removeWindowsIf([&stale](const QString&, const PhosphorEngine::PlacementStateKey& key) {
         return stale(key.activity);
     });
+    announceReleasedFullscreenHolds(); // a silently pruned hold still clears the daemon's float bit
     sweepStatelessScreenBookkeeping(touchedScreens);
     sweepStripStash([&stale](const PhosphorEngine::PlacementStateKey& key) {
         return stale(key.activity);
@@ -1051,13 +1050,12 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
         m_activeScreen.clear();
     }
     if (!releasedWindows.isEmpty()) {
+        announceReleasedFullscreenHolds();
         Q_EMIT windowsReleased(releasedWindows, releasedScreens);
     }
     // Only NOW may the per-window side maps go: the handler above has consumed
-    // the float markers and the last-applied rects, and nothing else answers
-    // for a departed screen's windows. releasedWindows is the same list
-    // releaseScreenState built from each state's managedWindows, so there is
-    // no second collection to keep in step with it.
+    // the float markers and the last-applied rects, and nothing else answers for
+    // a departed screen's windows (releasedWindows is releaseScreenState's own list).
     for (const QString& windowId : std::as_const(releasedWindows)) {
         m_lastAppliedRect.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
@@ -1088,16 +1086,15 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     // Only the unfloat-slot memory dies here. The float markers and the
     // last-applied rects are inputs to the daemon's windowsReleased handler,
     // which has not run yet — see the contract on the declaration.
-    // The pending self-activation entries and the declined-open marks go
-    // too, for windowClosed's reason: a released window's echo can never be
-    // answered while the screen sits in another mode, and a stale entry (or
-    // mark) would eat the first genuine focus report when the window comes
-    // back to scrolling. The parked-edge and windowed-fullscreen memories go
-    // for the eviction symmetry every other exit path holds: neither is an
-    // input to windowsReleased, windowClosed cannot sweep them later
-    // (stateForWindow answers null after this), and pruneStaleWindows only
-    // runs once per session at bring-up.
+    // The pending self-activation entries and the declined-open marks go too,
+    // for windowClosed's reason: a released window's echo can never be answered
+    // in another mode, and a stale entry would eat the first genuine focus
+    // report on the way back. The parked-edge and windowed-fullscreen memories
+    // go for eviction symmetry: neither feeds windowsReleased, and nothing can
+    // sweep them later. A fullscreen HOLD is remembered for
+    // announceReleasedFullscreenHolds, since its slot dies here.
     for (const QString& windowId : windows) {
+        rememberReleasedFullscreenHold(windowId);
         m_floatRestore.remove(windowId);
         m_pendingSelfActivations.removeAll(windowId);
         m_pendingSelfActivationQueuedAt.remove(windowId);

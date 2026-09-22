@@ -8,31 +8,23 @@
 
 #include "tilinghandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
-#include "compositor/windowanimator.h"
 #include "handlers/navigationhandler.h"
 #include "compositor/effectlogging.h"
-#include "handlers/snaphandler.h" // cross-mode minimize-float adoption
+#include "handlers/snaphandler.h" // retry-budget hand-off on disable
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
-#include <PhosphorIdentity/WindowId.h>
 
-#include <effect/effect.h> // Effect::animationTime, the deferred-unfloat grace
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <window.h>
 #include <workspace.h>
 
-#include <QDBusConnection>
-#include <QDBusMessage>
-#include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QLoggingCategory>
 #include <QPointer>
 #include <QScopeGuard>
-#include <QTimer>
 
-#include <chrono> // std::chrono::milliseconds for Effect::animationTime
 #include <utility> // std::as_const over the surviving minimize-float markers
 
 namespace PlasmaZones {
@@ -144,16 +136,34 @@ void TilingHandler::slotWindowFloatingChanged(const QString& windowId, bool isFl
     if (!isFloating) {
         // Guarded: m_navigationHandler is declared AFTER m_tilingHandler on the
         // effect and so is destroyed first during teardown, the exact hazard
-        // wiring.cpp guards m_snapHandler for. This slot runs on an arbitrary
-        // D-Bus dispatch, which can land inside that window. The float-state
-        // cache it holds dies with it, so skipping the write costs nothing.
+        // wiring.cpp guards m_snapHandler for. No D-Bus dispatch can land
+        // inside member destruction (no event loop spins there), so this and
+        // the KWin::effects checks below are defensive against synchronous
+        // re-entry during teardown only. The float-state cache it holds dies
+        // with it, so skipping the write costs nothing.
         if (m_effect->m_navigationHandler) {
             m_effect->m_navigationHandler->setWindowFloating(liveId, false);
+        }
+        // An unfloat echo for a window WE hold, arriving while it is still
+        // fullscreen, is not ours: our own returns travel the passive channel
+        // (windowFloatingStateSynced), which never reaches this slot, so this
+        // is the user (or a rule) unfloating during the hold. Drop the record,
+        // or the exit would undo a float they chose. Read off the
+        // fuzzy-resolved window on purpose: the record is keyed by liveId,
+        // which is that window's id.
+        if (resolvedWin && m_fullscreenFloatedWindows.contains(liveId)) {
+            const KWin::Window* const kwHold = resolvedWin->window();
+            if (resolvedWin->isFullScreen() || (kwHold && kwHold->isRequestedFullScreen())) {
+                m_fullscreenFloatedWindows.remove(liveId);
+                qCInfo(lcEffect) << "Fullscreen-floated window unfloated during its hold, dropping the record:"
+                                 << liveId;
+            }
         }
         KWin::EffectWindow* unfloatWin = resolvedWin;
         // Showing-desktop guard: this refocus is automatic (daemon float-state
         // signal), and activateWindow() would synchronously cancel a peek.
-        if (unfloatWin && unfloatWin == KWin::effects->activeWindow() && !PlasmaZonesEffect::isShowingDesktop()) {
+        if (KWin::effects && unfloatWin && unfloatWin == KWin::effects->activeWindow()
+            && !PlasmaZonesEffect::isShowingDesktop()) {
             m_pendingAutotileFocusWindowId = liveId;
             KWin::effects->activateWindow(unfloatWin);
         }
@@ -164,7 +174,8 @@ void TilingHandler::slotWindowFloatingChanged(const QString& windowId, bool isFl
         KWin::EffectWindow* floatWin = resolvedWin;
         if (!floatWin) {
             qCDebug(lcEffect) << "Autotile: window not found for float raise:" << windowId;
-        } else if (floatWin == KWin::effects->activeWindow() && !PlasmaZonesEffect::isShowingDesktop()) {
+        } else if (KWin::effects && floatWin == KWin::effects->activeWindow()
+                   && !PlasmaZonesEffect::isShowingDesktop()) {
             // Showing-desktop guard mirrors the unfloat branch above. The
             // == activeWindow() predicate usually covers this (peek focuses
             // the desktop window), but with no desktop window to take focus
@@ -323,9 +334,8 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
                 // The bracket swallowed any outputChanged this move emitted, so
                 // the detector never ran its own tracker write. Re-seed it,
                 // the same pairing rule the bracketed applies in the sibling
-                // files follow (screenschanged.cpp has two,
-                // windowedfullscreen.cpp five, pretilegeometry.cpp one; this
-                // file has only this one). For this branch the window is a windowed-
+                // files follow (screenschanged.cpp, windowedfullscreen.cpp,
+                // pretilegeometry.cpp). For this branch the window is a windowed-
                 // fullscreen member and therefore normally strip-tracked, so
                 // the value read back is the engine-authoritative screen rather
                 // than a position re-detect. Where tracking has already lapsed
@@ -393,10 +403,12 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         return;
     }
     if (!w->isFullScreen()) {
-        // EXIT fullscreen: a window the daemon still tiles (it stayed in
-        // m_notifiedWindows the whole time — the daemon never untiles on
-        // fullscreen) returns to its tiled rect, so re-establish the
-        // decoration claim and border tracking the enter-path released.
+        // EXIT fullscreen: a window the daemon still tracks (it stayed in
+        // m_notifiedWindows the whole time) returns to its tiled rect, so
+        // re-establish the decoration claim and border tracking the enter-path
+        // released. On an autotile screen the daemon kept it tiled throughout;
+        // on a scrolling screen the enter branch floated it out of the strip
+        // and the owned-float arm below unfloats it back.
         // EVERY exit path below must re-drive decorations, not just the
         // tracked-retile one: the ENTER branch unconditionally removed this
         // window's decoration, and shouldDecorateWindow's fullscreen reject
@@ -406,15 +418,56 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         // windowActivated for an already-active window on fullscreen exit,
         // so nothing else heals it.
         const QString screenId = m_notifiedWindowScreens.value(windowId);
+        // Taken unconditionally, before any arm can return: whichever way this
+        // exit resolves, the fullscreen hold the record describes is over.
+        const bool ownedFullscreenFloat = m_fullscreenFloatedWindows.remove(windowId);
+        // An owned record dropped by an arm that sends no unfloat leaves the
+        // daemon holding the float; say which arm, so the strand is legible.
+        const auto logDroppedFullscreenFloat = [&](const char* arm) {
+            if (ownedFullscreenFloat) {
+                qCInfo(lcEffect) << "Fullscreen-float record dropped without an unfloat for" << windowId
+                                 << "- arm:" << arm;
+            }
+        };
         if (!m_notifiedWindows.contains(windowId)) {
+            if (ownedFullscreenFloat && m_savedNotifiedForDesktopReturn.contains(windowId)) {
+                // Demoted on a desktop switch, not untracked: the daemon still
+                // holds the hold. Back on its own desktop and a managed
+                // scrolling screen, re-track it here and send the return now:
+                // the desktop-return loops gate on shouldHandleWindow, which a
+                // window that is STILL fullscreen fails, so nothing else would
+                // pick it up until the user left and came back once more.
+                // Elsewhere keep it parked (record + saved) for that re-track.
+                m_fullscreenFloatedWindows.insert(windowId);
+                const QString currentScreen = m_effect->getWindowScreenId(w);
+                if (w->isOnCurrentDesktop() && w->isOnCurrentActivity() && isScrollingScreen(currentScreen)) {
+                    m_savedNotifiedForDesktopReturn.remove(windowId);
+                    m_notifiedWindows.insert(windowId);
+                    m_notifiedWindowScreens[windowId] = currentScreen;
+                    settleParkedFullscreenHold(w, windowId, currentScreen);
+                } else {
+                    qCInfo(lcEffect) << "Fullscreen hold ended while parked for desktop return, settling later:"
+                                     << windowId;
+                }
+                // The maximize claims stay unpaid until the return's batch; the
+                // decoration sweep is owed by EVERY exit path (branch header).
+                m_effect->updateAllDecorations();
+                return;
+            }
+            logDroppedFullscreenFloat("never-tracked");
             // Never-tracked window: a window that OPENED fullscreen was
             // rejected by isEligibleForTilingNotify (fullscreen guard) and
-            // never announced. Now that it has a normal frame, announce it so
-            // the daemon tiles it (notifyWindowAdded re-checks eligibility,
-            // including the current desktop/activity).
+            // never announced. Announce it now so the daemon tiles it
+            // (notifyWindowAdded re-checks eligibility). Its frame is NOT free
+            // geometry yet: KWin restores the pre-fullscreen rect a client
+            // round trip later, so at this edge it still holds the output
+            // rect. knownFreeFloating=false, with the spawn marker cleared so
+            // the announce cannot re-derive true, makes the pre-tile capture
+            // skip rather than store the output rect with overwrite.
             const QString currentScreen = m_effect->getWindowScreenId(w);
             if (m_managedScreens.contains(currentScreen)) {
-                notifyWindowAdded(w, /*knownFreeFloating=*/true);
+                m_pendingFreshWindows.remove(windowId);
+                notifyWindowAdded(w, /*knownFreeFloating=*/false);
             }
             // Pay any maximize claim before leaving. This is an OWNERSHIP exit:
             // the untrack funnel already dropped m_notifiedWindows, so the
@@ -428,6 +481,7 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
             return;
         }
         if (screenId.isEmpty()) {
+            logDroppedFullscreenFloat("no notified screen");
             unmaximizeMonocleWindow(windowId);
             releaseMaximizedToEdges(windowId, w);
             m_effect->updateAllDecorations();
@@ -439,6 +493,17 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         // onto a no-longer-autotiled screen would hide the title bar with no
         // retile coming — demote the stale tracking and release instead.
         if (!m_managedScreens.contains(screenId)) {
+            if (ownedFullscreenFloat) {
+                // A sticky or multi-desktop held tile is skipped by the
+                // desktop-switch demotion, so this is where it lands: park it
+                // in the same representation, and the desktop-return re-track
+                // sends the return.
+                m_fullscreenFloatedWindows.insert(windowId);
+                parkFullscreenHoldForDesktopSwitch(windowId);
+                m_effect->updateAllDecorations();
+                return;
+            }
+            logDroppedFullscreenFloat("screen no longer managed");
             unmaximizeMonocleWindow(windowId);
             releaseMaximizedToEdges(windowId, w);
             m_notifiedWindows.remove(windowId);
@@ -446,6 +511,41 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
             m_effect->updateAllDecorations();
             return;
         }
+        // A strip tile WE floated for its own fullscreen (the enter branch)
+        // returns to the strip. The engine's float path kept its slot, so the
+        // unfloat puts it back in the same column, width and tab group, and
+        // the daemon's batch re-marks it tiled. (A cross-output hop during the
+        // hold drops the record via cleanupAutotileTracking, so the exit takes
+        // the never-tracked arm and the window re-enters as a fresh column;
+        // the explicit move-to-screen verb is covered by the reply's
+        // false-answer arm.) No minimized check: a held window minimized from
+        // the taskbar that leaves fullscreen while minimized is re-inserted
+        // hidden, the minimized-window-tiled shape, which predates the hold.
+        // Checked BEFORE the floating arm, as the local
+        // float cache still reads true here: the unfloat's broadcast has not
+        // come back yet. The reapply follows the
+        // unfloat on the same connection for the reason the tiled tail gives:
+        // KWin restores the PRE-fullscreen rect a client round-trip later, and
+        // the engine's emit-on-change gate would not correct it unprompted. A
+        // closed daemon gate leaves the window floating, which the floating arm
+        // handles; the bulk reset has already dropped the record by then.
+        if (ownedFullscreenFloat && isScrollingScreen(screenId) && m_effect->m_daemonGate.serviceRegistered) {
+            qCInfo(lcEffect) << "Strip tile left its own fullscreen, returning it to its slot:" << windowId;
+            dispatchFullscreenUnfloat(windowId, screenId, 0);
+            // Membership BEFORE the sweep, the order the tiled tail below takes:
+            // the window is returning to the strip, the enter branch removed
+            // its decoration, and the sweep is what puts it back. Without this
+            // the re-mark waited for the daemon's batch, after the sweep. Marked
+            // before the reply: a maximize press inside the round trip is
+            // dispatched to a column the engine has not rebuilt yet and refused
+            // (column -1), so the click is lost, consistently.
+            markWindowTiled(screenId, windowId);
+            m_effect->updateAllDecorations();
+            return;
+        }
+        // The owned-float gate failed (not a scrolling screen any more, or the
+        // daemon gate is closed): the arms below send no unfloat either.
+        logDroppedFullscreenFloat("unfloat gate closed");
         // Floating windows stay untracked: a window floated while fullscreen
         // (manual toggle, minimize-float, overflow batch-float — all keep
         // m_notifiedWindows intact) is free-floating on exit.
@@ -586,6 +686,73 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
             }
         }
     }
+    // A scrolling strip tile entering its OWN fullscreen LEAVES the strip for
+    // the hold. Left seated, the daemon kept a column reserved behind the
+    // fullscreen surface: the neighbours did not close up, focus verbs could
+    // land on it, and a game that shares its launcher's class sat there as a
+    // TAB in the launcher's column. Scrolling.setWindowFullscreenFloat floats
+    // it with the slot memory a user float keeps, so the exit branch's return
+    // restores column and width where a release would re-insert it as a fresh
+    // open, but it announces on the engine's PASSIVE channel: no float OSD and
+    // no free-geometry restore, which the user-float route raised on every F11.
+    //
+    // Windowed-fullscreen members never reach here (they returned above). An
+    // already-floating window is skipped so its float keeps its owner, exactly
+    // as the minimize-float claim does, and so is one this handler holds as a
+    // minimize-float (one that went fullscreen inside the unminimize grace is
+    // skipped too: its owner bailed on shouldHandleWindow, so it stays
+    // floating after the exit, a shape that predates the hold). The one
+    // floating window NOT skipped is one whose return from a previous hold is
+    // still unanswered: the cache reads floating for the round trip, and a
+    // quick exit/re-enter must not leave the tile seated. Keyed on the
+    // NOTIFIED screen rather than on tiled membership: a window that
+    // fullscreens between its announce and its first batch has no membership
+    // yet but is in the daemon's strip all the same. A window demoted for a
+    // desktop switch (saved, no screen record) takes the hold too, on its live
+    // screen; the engine's background-context guard covers the off-view
+    // apply. The record is dropped again on a refused or failed reply, so the
+    // exit never answers a hold the engine never took: the tile stays seated
+    // and the residual paint guard covers it. A hold sent while the daemon
+    // still defers the open (its startup queue) is refused that way too. On an
+    // autotile screen there is no arm at all: that engine has no slot memory
+    // to float into, and the residual paint guard covers the hold while the
+    // neighbours stay put.
+    const bool trackedHere = m_notifiedWindows.contains(windowId) || m_savedNotifiedForDesktopReturn.contains(windowId);
+    const QString notifiedScreen =
+        m_notifiedWindows.contains(windowId) ? m_notifiedWindowScreens.value(windowId) : m_effect->getWindowScreenId(w);
+    if (trackedHere && isScrollingScreen(notifiedScreen) && m_effect->m_daemonGate.serviceRegistered
+        && (!m_effect->isWindowFloating(windowId) || m_fullscreenUnfloatInFlight.contains(windowId))
+        && !isMinimizeFloated(windowId)) {
+        m_fullscreenFloatedWindows.insert(windowId);
+        // This hold supersedes any unanswered return: its reply and retry
+        // lambdas bail on a missing in-flight entry or a stale generation, so
+        // a retried return can never undo the hold just taken, and an OLDER
+        // hold's late reply cannot drop this one's record either.
+        m_fullscreenUnfloatInFlight.remove(windowId);
+        const quint64 generation = ++m_fullscreenHoldRequestGeneration;
+        m_fullscreenHoldGeneration[windowId] = generation;
+        qCInfo(lcEffect) << "Strip tile entered its own fullscreen, holding it out of the strip:" << windowId << "on"
+                         << notifiedScreen;
+        auto* watcher = new QDBusPendingCallWatcher(
+            PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Scrolling,
+                                                       QStringLiteral("setWindowFullscreenFloat"),
+                                                       {windowId, notifiedScreen, true}),
+            this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                [this, windowId, generation](QDBusPendingCallWatcher* call) {
+                    call->deleteLater();
+                    if (m_fullscreenHoldGeneration.value(windowId) != generation) {
+                        return; // a newer hold or return owns the record
+                    }
+                    const QDBusPendingReply<bool> reply = *call;
+                    if (reply.isError() || !reply.value()) {
+                        if (m_fullscreenFloatedWindows.remove(windowId)) {
+                            qCInfo(lcEffect) << "Fullscreen hold not taken by the engine for" << windowId
+                                             << (reply.isError() ? reply.error().message() : QStringLiteral("refused"));
+                        }
+                    }
+                });
+    }
     m_effect->removeWindowDecoration(windowId);
     // Drain a keep-floating-above grant on this edge: keepFloatingAboveDefault
     // answers false for a fullscreen window, and nothing else reconciles the
@@ -593,5 +760,7 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
     // bit would hide the result of.
     m_effect->reconcileRuleWindowLayer(windowId, w);
 }
+
+// The hold's return, park and record drops live in fullscreenhold.cpp.
 
 } // namespace PlasmaZones

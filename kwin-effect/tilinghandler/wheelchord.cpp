@@ -1,22 +1,18 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Wheel-chord dispatch and the native-fullscreen release that precedes a user
-// strip verb.
+// Wheel-chord dispatch: the two configurable wheel chords, their per-axis
+// accumulators and the cursor-resolved target screen, and the tab wheel over
+// an indicator.
 //
 // Split out of state.cpp, which holds the per-session state the daemon
 // publishes and this side consumes. Nothing here is such state: this is the
-// effect's own input path (the two configurable wheel chords, their per-axis
-// accumulators and the cursor-resolved target screen) plus the release both
-// user-verb dispatch sites run before their verb goes out. The two only ever
-// shared a file because the wheel settings that arm the chords are published
-// state and the chord reading them is not.
-//
-// The release has a second caller that is no wheel event at all: the daemon's
-// keyboard shortcut gate, which reaches it as slotLeaveNativeFullscreenRequested
-// over Scrolling.leaveNativeFullscreenRequested. That slot lives here rather
-// than beside the other D-Bus slots in state.cpp so it sits next to the
-// function it defers to.
+// effect's own input path. The chords are navigation and never take a window
+// out of its own fullscreen (a strip tile in its own fullscreen is held out of
+// the strip by slotWindowFullScreenChanged). Every focus verb with focusAfter,
+// keyboard or wheel, still activates the strip under a held game, which
+// scrolling_init.cpp records as intended, and a focus-guarded verb refuses
+// with a no_target OSD naming the game while it holds focus.
 
 #include "tilinghandler.h"
 #include "handlers/dragtracker.h"
@@ -29,18 +25,12 @@
 #include <PhosphorProtocol/ServiceConstants.h>
 
 #include <effect/effectwindow.h>
-// KWin::Window is only forward-declared through the effect header; the release
-// below needs isRequestedFullScreen and setFullScreen on the complete type.
-#include <window.h>
 
 #include <QLoggingCategory>
 #include <QPointF>
-#include <QScopeGuard>
-#include <QStringList>
 
 #include <cmath>
 #include <optional>
-#include <utility> // std::as_const over the collected exit list
 
 namespace PlasmaZones {
 
@@ -238,7 +228,8 @@ bool TilingHandler::handleWheelChord(qreal delta, qint32 deltaV120, Qt::Orientat
     }
     const QLatin1String verb = focusMatch ? QLatin1String("focusColumn") : QLatin1String("scrollView");
     qCDebug(lcEffect) << "Wheel chord:" << verb << "step" << step << "x" << steps << "on" << screenId;
-    leaveNativeFullscreenTiles(screenId);
+    // Focus and view scrolling are navigation, and navigation never takes a
+    // window out of its own fullscreen.
     // One verb per notch. The engine owns the step SIZE, so a two-notch event
     // is two single steps rather than one double-sized one, which keeps the
     // strip's own animation identical to scrolling those notches separately.
@@ -251,147 +242,6 @@ bool TilingHandler::handleWheelChord(qreal delta, qint32 deltaV120, Qt::Orientat
                                                        {screenId, step}, verbName);
     }
     return true;
-}
-
-// Leaves the OWN fullscreen (a client F11, a video going fullscreen) of every
-// scroll-tracked tile on `screenId`, so a user strip verb never runs against a
-// window whose geometry the compositor is refusing. No-op when the screen holds
-// no such tile, which is the overwhelmingly common case.
-void TilingHandler::leaveNativeFullscreenTiles(const QString& screenId)
-{
-    // Scrolling a strip that holds a natively-fullscreen tile LEAVES that
-    // fullscreen first.
-    //
-    // A window in its OWN fullscreen (a client F11, a video going fullscreen —
-    // not the windowed-fullscreen feature, whose members are committed at their
-    // column rect on purpose) refuses every geometry commit through
-    // applyWindowGeometry's fullscreen bail. The engine does not know that, so
-    // it goes on scrolling and PARKING that column while the screen still shows
-    // the fullscreen window: the model says "parked off-strip", the user sees a
-    // video, and the two owners stay split for the whole hold. Measured live,
-    // one wheel notch at a time, the same window's target walked (8,54) ->
-    // (1924,54) -> the park (1932,2176), each answered "fullscreen, skipping".
-    //
-    // Called from the VERB DISPATCH — the wheel chord here in the effect, and
-    // the daemon's keyboard shortcut gate over
-    // Scrolling.leaveNativeFullscreenRequested — rather than from the batch
-    // apply. A batch cannot tell a user verb from an insert-driven reflow, and
-    // gating the exit on the batch's own strip-motion fields (viewDelta /
-    // scrollEdge / hasVisualPos) dropped the fullscreen whenever an unrelated
-    // window merely OPENED and slid the strip — measured. A dispatch site
-    // carries no such ambiguity: something the user pressed is what reaches it.
-    //
-    // Both callers exit BEFORE their verb goes out, so the engine's own
-    // relayout already places a window the compositor will accept, rather than
-    // the exit racing a batch that was built against the fullscreen. That
-    // ordering is why this is a separate signal rather than a flag on the
-    // batch: a flag arrives with the geometry it was supposed to precede.
-    //
-    // SELECTED first, ACTED on second, and never with m_notifiedWindows under
-    // an open iterator. setFullScreen emits windowFrameGeometryChanged and
-    // outputChanged SYNCHRONOUSLY on XWayland, and the exit restores the
-    // window's pre-fullscreen rect — for a strip column that is routinely a
-    // park rect on the neighbouring output, so outputChanged genuinely fires.
-    // Its handler reaches handleWindowOutputChanged and, on a cross-mode arm,
-    // cleanupAutotileTracking, which removes from the very set a range-for
-    // would be walking. The collect/act split is the same one this file
-    // already takes for maximizeClaimsLeavingScrolling, and for the same
-    // stated reason.
-    //
-    // Floating tracked windows are excluded outright: a float holds no column,
-    // so the engine is not parking one out from under it and there is nothing
-    // for a scroll to reconcile.
-    QStringList fullscreenTilesToExit;
-    for (const QString& tiledId : m_notifiedWindows) {
-        if (m_notifiedWindowScreens.value(tiledId) != screenId) {
-            continue;
-        }
-        if (m_effect->m_windowedFullscreenWindows.contains(tiledId)) {
-            continue;
-        }
-        if (m_effect->isWindowFloating(tiledId)) {
-            continue;
-        }
-        KWin::EffectWindow* fsWin = m_effect->findWindowByIdExact(tiledId);
-        if (!fsWin || fsWin->isDeleted() || !fsWin->isFullScreen()) {
-            continue;
-        }
-        KWin::Window* kwFs = fsWin->window();
-        if (!kwFs || !kwFs->isRequestedFullScreen()) {
-            continue;
-        }
-        fullscreenTilesToExit.append(tiledId);
-    }
-    for (const QString& tiledId : std::as_const(fullscreenTilesToExit)) {
-        // Re-resolved per entry rather than carried as a pointer: an earlier
-        // entry's synchronous exit can have destroyed a later one, and
-        // isDeleted() on a dangling EffectWindow* is undefined rather than a
-        // guard (the QPointer note on maximizeClaimsLeavingScrolling above).
-        KWin::EffectWindow* fsWin = m_effect->findWindowByIdExact(tiledId);
-        if (!fsWin || fsWin->isDeleted()) {
-            continue;
-        }
-        KWin::Window* kwFs = fsWin->window();
-        if (!kwFs) {
-            continue;
-        }
-        qCInfo(lcEffect) << "Strip verb on a screen holding a fullscreen tile — leaving fullscreen for" << tiledId;
-        {
-            // Own inGeometryApply bracket, exactly as releaseWindowedFullscreenState
-            // takes one around the same call: none of the handlers that answer
-            // the synchronous frame/output change is suppressed by the
-            // fullscreen-changed counter, and ungated they re-enter the
-            // cross-screen migration paths for a move the effect itself made.
-            // Save/restore rather than set/clear, so a caller already inside an
-            // apply is handed its own state back.
-            const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
-            m_effect->m_daemonGate.inGeometryApply = true;
-            const auto geomGuard = qScopeGuard([this, prevInApply] {
-                m_effect->m_daemonGate.inGeometryApply = prevInApply;
-            });
-            // Suppressed, so our own slotWindowFullScreenChanged does not read the
-            // effect's write as a user toggle. setFullScreen flips the REQUESTED
-            // state synchronously while the committed isFullScreen() lags a client
-            // round-trip, so the bail in applyWindowGeometry — which reads that same
-            // pair — already resolves false for the batch this scroll produces.
-            applyFullScreenSuppressed(kwFs, false);
-        }
-        // The suppression above bought re-entrancy safety at the cost of the
-        // exit branch's own repair, so deliver that repair here. The ENTER
-        // branch shed this window's tiled tracking (clearWindowTiledAllScreens)
-        // and its decoration, and neither comes back on its own: the verb below
-        // only produces a batch when the engine's rects actually move, and a
-        // focusColumn or scrollView at the end of the strip moves nothing. The
-        // window would then sit at whatever rect KWin restored — for a column
-        // that was parked during the hold, off the union entirely — untiled and
-        // undecorated for the rest of the session.
-        markWindowTiled(screenId, tiledId);
-        // Re-seed the tracker the bracket's swallowed outputChanged would have
-        // written, the pairing rule every bracketed apply follows. AFTER the
-        // re-mark, so getWindowScreenId answers from the engine-authoritative
-        // override rather than resolving a still-parked frame positionally.
-        m_effect->m_trackedScreenPerWindow[fsWin] = m_effect->getWindowScreenId(fsWin);
-        // Same dispatch the fullscreen-exit branch makes, for the same reason:
-        // KWin re-applies the PRE-fullscreen rect a client round-trip later and
-        // the engine's emit-on-change gate stays silent because its own rects
-        // never moved, so nothing else corrects the stray frame.
-        //
-        // Both of its gates hold on either caller's path, by different means.
-        // The wheel chord resolved this screen through wheelTargetScreen, which
-        // tests isScrollingScreen and refuses a closed daemon gate. The keyboard
-        // caller cannot reach here at all unless the daemon is up and its own
-        // shortcut gate found the screen in scrolling mode, and a screen this
-        // process holds no tile for selects nothing above.
-        PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Scrolling,
-                                                       QStringLiteral("reapplyWindowGeometry"), {tiledId},
-                                                       QStringLiteral("reapplyWindowGeometry"));
-    }
-    if (!fullscreenTilesToExit.isEmpty()) {
-        // shouldDecorateWindow's fullscreen reject has lifted for these
-        // windows, and the enter branch's removeWindowDecoration is what left
-        // them bare. Once per scroll, not once per window.
-        m_effect->updateAllDecorations();
-    }
 }
 
 void TilingHandler::resetWheelAccumulators()
@@ -493,6 +343,12 @@ bool TilingHandler::handleTabWheel(const QPointF& pos, qreal delta, qint32 delta
         return true;
     }
     const ScrollTabIndicatorPainter* painter = m_effect->m_scrollTabPainter.get();
+    if (!painter) {
+        // Defensive consistency only: scrollTabPillAt answered non-empty
+        // above, which already required the painter.
+        resetTabWheelAccumulators();
+        return false;
+    }
     // Anchor the walk on the tab the COLUMN is showing, NEVER on the pill
     // under the cursor. Activating a tab recolours the pills but does not
     // reorder them, so the cursor keeps naming the same pill for the whole
@@ -573,22 +429,6 @@ QString TilingHandler::wheelTargetScreen() const
         return QString();
     }
     return screenId;
-}
-
-void TilingHandler::slotLeaveNativeFullscreenRequested(const QString& screenId)
-{
-    // The keyboard twin of the wheel chord's own call. The daemon emits this
-    // immediately before dispatching a strip verb, so the exit lands ahead of
-    // the relayout rather than racing it.
-    //
-    // No screen filtering here: leaveNativeFullscreenTiles already selects by
-    // m_notifiedWindowScreens, so a screen this process holds no tiles for
-    // selects nothing. Guarding on isScrollingScreen as well would only add a
-    // second answer to the same question, which can disagree.
-    if (screenId.isEmpty()) {
-        return;
-    }
-    leaveNativeFullscreenTiles(screenId);
 }
 
 } // namespace PlasmaZones
