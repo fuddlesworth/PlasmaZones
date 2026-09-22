@@ -33,7 +33,12 @@ endif()
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick DBus)
+# QuickShapes is not imported by this module's own QML; it is found here in
+# THIS directory scope so the static plugin's dependency walk resolves the
+# Qt6::QuickShapes target that Phosphor.Widgets links (its PhosphorRipple
+# Shape) without a configure warning. Same reason the lock, power, launcher
+# and control-center modules find it.
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes DBus)
 
 # The surfaces import Phosphor.Theme (tokens) and Phosphor.Widgets (the
 # miniature and the text atoms). In-tree builds always have the sibling

@@ -1,10 +1,17 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
+.pragma library
+//
+// KEEP `.pragma library` ABOVE THE DESCRIPTION. qt_add_qml_module scans only
+// the first 128 bytes of a .js file for that line (file(STRINGS ... REGEX
+// "^\.pragma library$" LIMIT_INPUT 128) in Qt6QmlMacros.cmake). Below the
+// paragraph that follows, it lands past the window and Qt emits an author
+// warning claiming the file is re-evaluated per importing document. It is
+// not, but the warning is indistinguishable from a real one.
 //
 // The largest empty region of a placement map (A3 §6 b): where the lock
 // screen puts its clock, date and auth field. Pure geometry, no QML, so it
 // is unit-testable and reusable by any surface that wants free space.
-.pragma library
 
 var Epsilon = 1e-6;
 
