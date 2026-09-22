@@ -597,6 +597,85 @@ private Q_SLOTS:
         QVERIFY2(x >= 1920 && x < 3840, "the window must land within DP-2's geometry");
     }
 
+    // The open path may have asked the effect for a free SIZE moments ago,
+    // inside this very resolve, and the frame shadow cannot know yet. The
+    // route must translate the RESTORED size onto the target monitor.
+    //
+    // The case that matters is shadow-EMPTY: the snap handler seeds the
+    // shadow only on an Open, so a pending sweep or a desktop arrival reaches
+    // the route with nothing there, the registry metadata supplies the rect,
+    // and that metadata still carries the un-restored managed size. Applying
+    // the pending size only when the shadow was already populated left those
+    // drivers routing the very size the restore had just replaced.
+    void testApplyOpenScreenRouting_pendingFreeSizeWinsOverMetadata()
+    {
+        PhosphorScreens::FakeScreenProvider fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080), QStringLiteral("DP-1"));
+        fake.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080), QStringLiteral("DP-2"));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        auto* snap = new SnapEngine(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        wta->service()->setSnapState(snap->snapState());
+        wta->service()->setSnapEngine(snap);
+        wta->setEngines(snap, nullptr, nullptr);
+
+        auto* registry = new PhosphorEngine::WindowRegistry(&parent);
+        wta->setWindowRegistry(registry);
+        // Metadata carries the ZONE-sized frame the app opened at — the size
+        // the free-size restore exists to undo. It reaches the registry
+        // through the extended map, the same way the effect pushes it.
+        namespace MetaKey = PhosphorProtocol::Service::WindowMetadataKey;
+        QVariantMap frame;
+        frame.insert(QString(MetaKey::PositionX), 100);
+        frame.insert(QString(MetaKey::PositionY), 100);
+        frame.insert(QString(MetaKey::Width), 960);
+        frame.insert(QString(MetaKey::Height), 1040);
+        wta->setWindowMetadata(QStringLiteral("inst7"), QStringLiteral("sizeapp"), QString(), QString(), QString(), 0,
+                               0, QString(), 0, frame);
+
+        using namespace PhosphorRules;
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.enabled = true;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("sizeapp"));
+        RuleAction route;
+        route.type = QString(ActionType::RouteToScreen);
+        route.params.insert(QString(ActionParam::TargetScreenId), QStringLiteral("DP-2"));
+        rule.actions = {route};
+        RuleStore store(ConfigDefaults::rulesFilePath(), &parent);
+        QVERIFY(store.addRule(rule));
+        wta->setRuleStore(&store);
+        const auto teardown = qScopeGuard([wta, snap] {
+            wta->setRuleStore(nullptr);
+            wta->setWindowRegistry(nullptr);
+            wta->service()->setSnapEngine(nullptr);
+            wta->service()->setSnapState(nullptr);
+            delete snap;
+        });
+
+        // No setFrameGeometry: this is the driver that pushes no seed. The
+        // engine's size restore lands through the ordinary relay first.
+        const QString w = QStringLiteral("sizeapp|inst7");
+        const QSize restored(880, 640);
+        Q_EMIT snap->sizeRestoreRequested(w, restored, QStringLiteral("DP-1"));
+
+        QSignalSpy geomSpy(wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        QVERIFY(wta->applyOpenScreenRouting(w, QStringLiteral("DP-1")));
+
+        // The relay's own size-only apply, then the route's free placement.
+        QVERIFY(geomSpy.count() >= 1);
+        const auto args = geomSpy.last();
+        QCOMPARE(args.at(0).toString(), w);
+        QCOMPARE(args.at(6).toString(), QStringLiteral("DP-2"));
+        QVERIFY2(!args.at(7).toBool(), "the route's own apply is a full placement, not size-only");
+        QCOMPARE(QSize(args.at(3).toInt(), args.at(4).toInt()), restored);
+    }
+
     // A rule carrying BOTH SnapToZone and RouteToScreen is still moved by
     // applyOpenScreenRouting. Its only caller reaches it exclusively under
     // !shouldSnap — the placement directive already declined (a non-snapping

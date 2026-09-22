@@ -12,6 +12,9 @@
 
 #include "wta_convenience_fixture.h"
 
+#include <PhosphorProtocol/AutotileTypes.h>
+#include <QScopeGuard>
+
 class TestWtaConvenience : public QObject, protected WtaConvenienceFixture
 {
     Q_OBJECT
@@ -145,6 +148,44 @@ private Q_SLOTS:
     // =====================================================================
     // float-restore — close-while-floating → reopen-floating (unified store)
     // =====================================================================
+
+    // getPreTileGeometries answers LIVE records only. Its sole consumer keys
+    // each entry by appId and applies it to an OPEN window of that app, so a
+    // closed instance's rect reaching it would be handed to a window that
+    // never recorded it — the cross-instance borrow the per-window read
+    // refuses by construction.
+    void testGetPreTileGeometries_liveRecordsOnly()
+    {
+        using PhosphorEngine::WindowPlacement;
+        auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
+        m_wta->setWindowRegistry(registry);
+        // Only this instance is registered, so only it is live.
+        m_wta->setWindowMetadata(QStringLiteral("liveinst"), QStringLiteral("pretile"), QString(), QString(), QString(),
+                                 0, 0, QString(), 0, QVariantMap());
+        const auto teardown = qScopeGuard([this] {
+            m_wta->setWindowRegistry(nullptr);
+        });
+
+        PhosphorEngine::WindowPlacementStore& store = m_wta->service()->placementStore();
+        const QRect liveRect(40, 50, 900, 700);
+        WindowPlacement live;
+        live.windowId = QStringLiteral("pretile|liveinst");
+        live.appId = QStringLiteral("pretile");
+        live.screenId = m_screenId;
+        live.freeGeometryByScreen.insert(m_screenId, liveRect);
+        QVERIFY(store.record(live));
+        WindowPlacement dead;
+        dead.windowId = QStringLiteral("pretile|deadinst");
+        dead.appId = QStringLiteral("pretile");
+        dead.screenId = m_screenId;
+        dead.freeGeometryByScreen.insert(m_screenId, QRect(0, 0, 320, 240));
+        QVERIFY(store.record(dead));
+
+        const PhosphorProtocol::PreTileGeometryList entries = m_wta->getPreTileGeometries();
+        QCOMPARE(entries.size(), 1);
+        QCOMPARE(entries.at(0).appId, QStringLiteral("pretile"));
+        QCOMPARE(QRect(entries.at(0).x, entries.at(0).y, entries.at(0).width, entries.at(0).height), liveRect);
+    }
 
     // An engine's size-only restore (#1106) reaches the wire as a size-only
     // applyGeometryRequested: zero origin, the size, no zone, the screen,
@@ -419,6 +460,13 @@ private Q_SLOTS:
         wta->service()->setSnapState(snap->snapState());
         wta->service()->setSnapEngine(snap);
         wta->setEngines(snap, nullptr, nullptr);
+        // Detached on EVERY exit, including a mid-slot QVERIFY abort, so the
+        // service never outlives the engine it borrows.
+        const auto teardown = qScopeGuard([wta, snap] {
+            wta->service()->setSnapEngine(nullptr);
+            wta->service()->setSnapState(nullptr);
+            delete snap;
+        });
 
         const QRect floatedGeo(120, 90, 760, 540); // inside screenRect
         const QString w1 = QStringLiteral("settings|orphan-float");
@@ -438,12 +486,6 @@ private Q_SLOTS:
         // The live float geometry is persisted despite the engine's empty screenId,
         // keyed by the screen resolved from the frame's position.
         QCOMPARE(rec->freeGeometryFor(screenId), floatedGeo);
-
-        // Tear down the engine before the parent destructor deletes wta so the
-        // service never dereferences a dangling snap engine/state.
-        wta->service()->setSnapEngine(nullptr);
-        wta->service()->setSnapState(nullptr);
-        delete snap;
     }
 
     void testFloatRestore_tiledFrameNeverPoisonsSnapFloatBack()
@@ -507,11 +549,6 @@ private Q_SLOTS:
         QVERIFY(rec.has_value());
         QCOMPARE(rec->freeGeometryFor(screenId), goodFloat);
         QVERIFY(rec->freeGeometryFor(screenId) != tileRect);
-
-        wta->service()->setEngineTiledPredicate({});
-        wta->service()->setSnapEngine(nullptr);
-        wta->service()->setSnapState(nullptr);
-        delete snap;
     }
 
     // =====================================================================
