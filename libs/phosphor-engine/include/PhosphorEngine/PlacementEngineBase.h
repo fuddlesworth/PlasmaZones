@@ -92,6 +92,11 @@ protected:
 
 Q_SIGNALS:
     void geometryRestoreRequested(const QString& windowId, const QRect& geometry, const QString& screenId);
+    /// Resize @p windowId to @p size where it stands, leaving the position to
+    /// the compositor. The size-only sibling of geometryRestoreRequested: a
+    /// window nothing places is given back its remembered free size, not its
+    /// remembered spot. Relayed to the effect as a size-only apply.
+    void sizeRestoreRequested(const QString& windowId, const QSize& size, const QString& screenId);
 
     void navigationFeedback(bool success, const QString& action, const QString& reason, const QString& sourceId,
                             const QString& targetId, const QString& screenId);

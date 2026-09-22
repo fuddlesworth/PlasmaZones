@@ -459,6 +459,18 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     // read null for an engine destroyed between assignment and here.
     if (m_snapEngine) {
         connect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this, floatRestoreRelay);
+        // Size-only twin: the snap engine gives a window it leaves floating its
+        // remembered free size back (a second instance that inherited a snapped
+        // sibling's zone size from the app's own config, #1106). sizeOnly=true
+        // makes the effect keep the window where KWin placed it.
+        connect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::sizeRestoreRequested, this,
+                [this](const QString& windowId, const QSize& size, const QString& screenId) {
+                    if (!size.isValid() || size.isEmpty()) {
+                        return;
+                    }
+                    Q_EMIT applyGeometryRequested(windowId, 0, 0, size.width(), size.height(), QString(), screenId,
+                                                  true);
+                });
     }
     if (m_autotileEngine) {
         connect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this,

@@ -665,13 +665,13 @@ public:
     void setFloating(const QString& windowId, bool floating);
     QStringList floatingWindows() const;
 
-    /// The no-match float-default terminal of resolveWindowRestore, callable
-    /// by the SnapAdaptor when a SnapResult::deferredToTilingEngine verdict
-    /// was returned and the offered reclaim then DECLINED — without this
-    /// fallback a defer-then-decline left the window with no state in any
-    /// engine. No-op when the window already has a definite snap state, when
-    /// snapping is disabled, or on empty arguments.
+    /// The no-match float-default terminal of resolveWindowRestore, callable by
+    /// the SnapAdaptor when a deferredToTilingEngine verdict's reclaim was then
+    /// DECLINED; without it the window ended the open with no state in any
+    /// engine. No-op with a definite snap state, snapping off, or empty args.
     void applyNoMatchFloatDefault(const QString& windowId, const QString& screenId);
+    /// Give a window left floating its remembered free SIZE (see definition, #1106).
+    void restoreFreeSizeForUnplaced(const QString& windowId, const QString& screenId);
 
     /// Primary zone of @p windowId across the per-screen stores (empty if none).
     /// Used by the cross-mode handoff to read a snap partner's slot.

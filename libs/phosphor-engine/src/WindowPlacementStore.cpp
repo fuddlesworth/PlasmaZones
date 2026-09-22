@@ -545,23 +545,59 @@ std::optional<WindowPlacement> WindowPlacementStore::take(const QString& windowI
             // consume the record it claimed at open, and may not consume one a
             // SIBLING claimed. Without it an already-home window consumed its
             // sibling's record here and the sibling never restored.
+            // Neither pass consumes a record bound to a still-open sibling
+            // (see the header): a claim is released on the re-bind, so the
+            // record of a window restored moments ago is unclaimed and,
+            // without the probe, the next same-app open took it.
+            const auto consumable = [&](const WindowPlacement& p) {
+                if (!matches(p) || !pairingAllows(windowId, p)) {
+                    return false;
+                }
+                return !m_liveInstanceProbe || !m_liveInstanceProbe(p.windowId)
+                    || sameWindowInstance(p.windowId, windowId);
+            };
             // First pass: oldest entry satisfying accept AND preferred.
             if (preferred) {
                 for (int i = 0; i < bucket.size(); ++i) {
-                    if (matches(bucket.at(i)) && preferred(bucket.at(i)) && pairingAllows(windowId, bucket.at(i))) {
+                    if (consumable(bucket.at(i)) && preferred(bucket.at(i))) {
                         return consumeAt(i);
                     }
                 }
             }
             // Second pass: oldest merely-accepted entry.
             for (int i = 0; i < bucket.size(); ++i) {
-                if (matches(bucket.at(i)) && pairingAllows(windowId, bucket.at(i))) {
+                if (consumable(bucket.at(i))) {
                     return consumeAt(i);
                 }
             }
         }
     }
     return std::nullopt;
+}
+
+std::optional<WindowPlacement> WindowPlacementStore::peekLiveSibling(const QString& windowId,
+                                                                     const QString& appId) const
+{
+    if (appId.isEmpty() || !m_liveInstanceProbe) {
+        return std::nullopt;
+    }
+    const auto bucket = m_byApp.constFind(appId);
+    if (bucket == m_byApp.constEnd()) {
+        return std::nullopt;
+    }
+    const WindowPlacement* best = nullptr;
+    for (const WindowPlacement& p : bucket.value()) {
+        if (sameWindowInstance(p.windowId, windowId) || !m_liveInstanceProbe(p.windowId)) {
+            continue;
+        }
+        if (!best || p.sequence > best->sequence) {
+            best = &p;
+        }
+    }
+    if (!best) {
+        return std::nullopt;
+    }
+    return *best;
 }
 
 namespace {

@@ -61,9 +61,28 @@ public:
     /// whatever state it holds. Lets a caller restore the most meaningful record
     /// (e.g. a snapped placement) ahead of a contentless free/floating sibling that
     /// is merely older in the FIFO.
+    ///
+    /// The appId branch never consumes a record bound to a still-LIVE sibling
+    /// (per the live-instance probe), the same exclusion takeForReopen and
+    /// claimForOpen apply. Such a record describes a different, open window,
+    /// never this one's history: a second Dolphin opened beside a snapped
+    /// first one used to take the first's record, snap-restore into the same
+    /// zone and re-bind the record under its own id, stripping the live
+    /// sibling of its float-back. Unwired (tests) means no exclusion.
     std::optional<WindowPlacement> take(const QString& windowId, const QString& appId,
                                         const std::function<bool(const WindowPlacement&)>& accept = {},
                                         const std::function<bool(const WindowPlacement&)>& preferred = {});
+
+    /// The NEWEST record in @p appId's bucket bound to a live window OTHER than
+    /// @p windowId's instance, or nullopt. Non-consuming. This is the record a
+    /// fresh same-app window inherits its free SIZE from when nothing places
+    /// it: KDE apps write their window size to their own config on every
+    /// resize, a snap is a resize, so a second instance opened beside a snapped
+    /// sibling comes up at the zone's size (discussion #1106). The sibling's
+    /// record still carries the free geometry the sibling had before its snap.
+    /// Answers nullopt without a live-instance probe, since liveness cannot be
+    /// established.
+    std::optional<WindowPlacement> peekLiveSibling(const QString& windowId, const QString& appId) const;
 
     /// Reopen resolve: the shared consumption pattern the TILING engines'
     /// open-time restores use (SnapEngine::resolveWindowRestore keeps its own

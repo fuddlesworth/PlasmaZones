@@ -174,9 +174,15 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
 
     // Whether this window is a snap-restore candidate — it may be
     // teleported into a saved zone moments after opening (instantly from
-    // cache, or after an async daemon resolve). Stricter than
-    // tileableAppWindow: also excludes multi-instance siblings.
-    bool canSnapRestore = tileableAppWindow && !hasOtherWindowOfClassWithDifferentPid(w);
+    // cache, or after an async daemon resolve). This used to also exclude a
+    // window with a same-class sibling of another pid
+    // (hasOtherWindowOfClassWithDifferentPid), to stop a second instance
+    // taking the first's record. That belongs to the daemon, whose placement
+    // store now refuses a live sibling's record, and the exclusion cost every
+    // multi-process app (Dolphin, Ark, Okular) its second window's open
+    // resolve entirely: never floated, never tracked until focus, never given
+    // its free size back (discussion #1106).
+    bool canSnapRestore = tileableAppWindow;
     // window.open shader transition. Gate on the animation filter
     // (shouldAnimateWindow, enforced inside tryBeginShaderForEvent) — NOT on
     // tiling eligibility. isTileableWindow() rejects every transient / dialog /
@@ -262,7 +268,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     if (m_shaderManager.hasOpenFullscreenRules()) {
         tileableWindow = shouldHandleWindow(w) && isTileableWindow(w);
         tileableAppWindow = tileableWindow && !w->isMinimized();
-        canSnapRestore = tileableAppWindow && !hasOtherWindowOfClassWithDifferentPid(w);
+        canSnapRestore = tileableAppWindow;
     }
 
     // One-tick settle defer: EVERY tileable window routes through the

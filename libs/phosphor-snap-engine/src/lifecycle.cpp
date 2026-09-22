@@ -736,6 +736,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         stateForWindowOnScreen(windowId, screenId)
             ->setFloatingOnScreen(windowId, screenId, currentVirtualDesktopForScreen(screenId));
         Q_EMIT windowFloatingChanged(windowId, true, screenId);
+        restoreFreeSizeForUnplaced(windowId, screenId);
         qCInfo(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore:" << windowId << "floated by rule";
         return SnapResult::noSnap();
     }
@@ -796,9 +797,47 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     stateForWindowOnScreen(windowId, screenId)
         ->setFloatingOnScreen(windowId, screenId, currentVirtualDesktopForScreen(screenId));
     Q_EMIT windowFloatingChanged(windowId, true, screenId);
+    // Floating where KWin put it, but at the size the app remembers, which
+    // for an app with a snapped window is the zone's. Give it its free size.
+    restoreFreeSizeForUnplaced(windowId, screenId);
     qCInfo(PhosphorSnapEngine::lcSnapEngine)
         << "resolveWindowRestore:" << windowId << "no snap match — defaulting to floated on" << screenId;
     return SnapResult::noSnap();
+}
+
+void SnapEngine::restoreFreeSizeForUnplaced(const QString& windowId, const QString& screenId)
+{
+    if (!m_windowTracker || windowId.isEmpty() || screenId.isEmpty()) {
+        return;
+    }
+    const auto& store = m_windowTracker->placementStore();
+    // The window's own record first: a reopen whose snapped record the
+    // managed gate, the #1104 layout gate or a disabled context declined was
+    // re-bound to the live id above, free geometry included.
+    QRect freeGeo;
+    QString source;
+    if (const auto own = store.peekExact(windowId)) {
+        freeGeo = own->freeGeometryFor(screenId);
+        source = QStringLiteral("own record");
+    }
+    if (!freeGeo.isValid()) {
+        const QString appId = m_windowTracker->currentAppIdFor(windowId);
+        if (const auto sibling = store.peekLiveSibling(windowId, appId)) {
+            freeGeo = sibling->freeGeometryFor(screenId);
+            source = QStringLiteral("live sibling ") + sibling->windowId;
+        }
+    }
+    // Screen-local, like the floated restore's move: a rect captured on
+    // another monitor says nothing about this one's usable size.
+    if (!freeGeo.isValid() || freeGeo.isEmpty() || !m_windowTracker->geometryBelongsToScreen(freeGeo, screenId)) {
+        qCDebug(PhosphorSnapEngine::lcSnapEngine)
+            << "restoreFreeSizeForUnplaced:" << windowId << "no free size for" << screenId
+            << "(source=" << (source.isEmpty() ? QStringLiteral("none") : source) << "rect=" << freeGeo << ")";
+        return;
+    }
+    qCInfo(PhosphorSnapEngine::lcSnapEngine)
+        << "restoreFreeSizeForUnplaced:" << windowId << "->" << freeGeo.size() << "from" << source;
+    Q_EMIT sizeRestoreRequested(windowId, freeGeo.size(), screenId);
 }
 
 void SnapEngine::applyNoMatchFloatDefault(const QString& windowId, const QString& screenId)
@@ -834,6 +873,7 @@ void SnapEngine::applyNoMatchFloatDefault(const QString& windowId, const QString
     stateForWindowOnScreen(windowId, screenId)
         ->setFloatingOnScreen(windowId, screenId, currentVirtualDesktopForScreen(screenId));
     Q_EMIT windowFloatingChanged(windowId, true, screenId);
+    restoreFreeSizeForUnplaced(windowId, screenId);
     qCInfo(PhosphorSnapEngine::lcSnapEngine)
         << "applyNoMatchFloatDefault:" << windowId << "reclaim declined — defaulting to floated on" << screenId;
 }

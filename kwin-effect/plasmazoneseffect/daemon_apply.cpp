@@ -227,11 +227,21 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
             QRect sizeOnlyGeo(qRound(currentFrame.x()), qRound(currentFrame.y()), width, height);
             qCInfo(lcEffect) << "slotApplyGeometryRequested: size-only restore for" << windowId << width << "x"
                              << height;
-            // Drag-out unsnap: the daemon kept us at the drop position but restored pre-snap
-            // dimensions. Logically a snap-out (the window is leaving zone-managed sizing),
-            // not an in-zone resize.
-            applyWindowGeometry(w, sizeOnlyGeo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
-                                PhosphorAnimation::ProfilePaths::WindowPlaceOut);
+            // Two producers: the drag-out unsnap (the daemon kept us at the drop
+            // position but restored pre-snap dimensions, logically a snap-out,
+            // not an in-zone resize) and the open-path free-size restore (a
+            // fresh window that inherited a snapped sibling's zone size from
+            // its app config, #1106). The latter arrives under first-frame
+            // suppression, before the window has painted, so it is applied as
+            // a teleport: an animated shrink would play over the open shader
+            // from a size the user never saw.
+            const bool freshOpen = m_restoreSuppress.contains(w);
+            if (freshOpen && currentFrame.size().toSize() == sizeOnlyGeo.size()) {
+                qCDebug(lcEffect) << "slotApplyGeometryRequested: size-only restore already at size for" << windowId;
+            } else {
+                applyWindowGeometry(w, sizeOnlyGeo, /*allowDuringDrag=*/false, /*skipAnimation=*/freshOpen,
+                                    PhosphorAnimation::ProfilePaths::WindowPlaceOut);
+            }
             // Drag-out unsnap: the window left zone-managed sizing.
             m_snapHandler->clearWindowSnapped(liveWindowId);
         } else {
