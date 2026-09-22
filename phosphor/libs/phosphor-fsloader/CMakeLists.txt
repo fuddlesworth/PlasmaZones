@@ -70,11 +70,14 @@ if(PHOSPHORFSLOADER_USE_SYSTEM_VALIJSON)
             "or unset the option to use the committed vendored tarball.")
     endif()
 else()
-    # extern/ lives at the repository root; ../../extern resolves there whether
-    # this lib is configured as a subdirectory of the main project or built
-    # standalone for its own tests.
+    # extern/ lives at the phosphor tier root; ../../extern resolves there
+    # whether this lib is configured as a subdirectory of the main project or
+    # built standalone for its own tests. Keep the relative spelling: a
+    # ${CMAKE_SOURCE_DIR}-anchored path works in-tree but points at
+    # <lib>/phosphor/extern under a standalone configure, which is the mode
+    # this else() branch exists to serve.
     set(_pz_valijson_tarball
-        "${CMAKE_SOURCE_DIR}/phosphor/extern/valijson-${PHOSPHORFSLOADER_VALIJSON_VERSION}.tar.gz")
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../extern/valijson-${PHOSPHORFSLOADER_VALIJSON_VERSION}.tar.gz")
     if(NOT EXISTS "${_pz_valijson_tarball}")
         message(FATAL_ERROR
             "Vendored valijson tarball missing at ${_pz_valijson_tarball}. It is "

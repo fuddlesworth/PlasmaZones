@@ -35,11 +35,17 @@ tasks:
     extends: 'configure'
     command: 'cmake --preset release'
 
+  # The checker walks every tracked file, so the input set has to be just as
+  # wide or moon serves a cached PASS for a change it never inspected. cmake/
+  # and the rest of scripts/ carry SPDX headers the spdx and license rules
+  # police, and the checker itself reads CMakePresets.json's siblings.
   conventions:
     command: 'python3 scripts/check-conventions.py'
     inputs:
-      - 'scripts/check-conventions.py'
-      - 'scripts/oversize-baseline.json'
+      - 'scripts/**/*'
+      - 'cmake/**/*'
+      - 'CMakeLists.txt'
+      - 'CMakePresets.json'
       - 'CLAUDE.md'
       - 'phosphor/**/*'
       - 'phosphor-shell-libs/**/*'
@@ -75,8 +81,15 @@ tasks:
     args:
       - '--install'
       - 'build'
+    # phosphor-shell is last in the tier graph (its moon.yml dependsOn phosphor,
+    # phosphor-shell-libs and plasmazones), so this one edge builds all four
+    # through `^:build`. Depending on plasmazones alone is not enough: the debug
+    # preset sets BUILD_PHOSPHOR_SHELL=ON, so the configure generates install
+    # rules for shell-tier targets, and `phosphor_tier_target()` collects only
+    # targets declared under its own directory — `cmake --install` would then
+    # hit `file(INSTALL)` on binaries that were never built.
     deps:
-      - 'plasmazones:build'
+      - 'phosphor-shell:build'
     options:
       cache: false
       runInCI: false

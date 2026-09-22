@@ -2595,7 +2595,7 @@ add_executable(test_surface_decoration_orientation
     rendering/test_surface_decoration_orientation.cpp
 )
 target_compile_definitions(test_surface_decoration_orientation PRIVATE
-    PLASMAZONES_SOURCE_ROOT="${CMAKE_SOURCE_DIR}")
+    PLASMAZONES_SOURCE_ROOT="${CMAKE_SOURCE_DIR}/plasmazones")
 target_link_libraries(test_surface_decoration_orientation
     PRIVATE
         Qt6::Test

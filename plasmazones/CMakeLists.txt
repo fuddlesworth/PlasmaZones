@@ -223,3 +223,15 @@ install(FILES ${_plasmazones_light_icons}
 # Aggregate target for the moon workspace: `cmake --build build --target plasmazones-tier`.
 include(PhosphorTier)
 phosphor_tier_target(plasmazones-tier)
+
+# The .qm catalogs are this tier's artifact, but the lrelease target cannot be
+# collected automatically: cmake/PhosphorTranslations.cmake is include()d from
+# the ROOT CMakeLists, so its targets belong to the root directory scope, and
+# phosphor_tier_target() only walks from this directory down. Even relocating
+# the include would not be enough — qt_add_lrelease() produces custom targets,
+# which the collector skips by TYPE UTILITY. So attach it explicitly, or
+# `moon run plasmazones:build` produces no catalogs and `moon run repo:install`
+# then fails on install(FILES ${QM_FILES}) with nothing to install.
+if(TARGET release_translations)
+    add_dependencies(plasmazones-tier release_translations)
+endif()

@@ -279,17 +279,17 @@ file(GLOB_RECURSE ALL_CLANG_FORMAT_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect/*.hpp
     ${CMAKE_SOURCE_DIR}/plasmazones/tests/*.cpp
     ${CMAKE_SOURCE_DIR}/plasmazones/tests/*.h
-    ${CMAKE_SOURCE_DIR}/phosphor/libs/*.
+    ${CMAKE_SOURCE_DIR}/phosphor/libs/*.cpp
     ${CMAKE_SOURCE_DIR}/phosphor-shell-libs/libs/*.cpp
-    ${CMAKE_SOURCE_DIR}/phosphor/libs/*.
+    ${CMAKE_SOURCE_DIR}/phosphor/libs/*.h
     ${CMAKE_SOURCE_DIR}/phosphor-shell-libs/libs/*.h
-    ${CMAKE_SOURCE_DIR}/phosphor/libs/*.
+    ${CMAKE_SOURCE_DIR}/phosphor/libs/*.hpp
     ${CMAKE_SOURCE_DIR}/phosphor-shell-libs/libs/*.hpp
-    ${CMAKE_SOURCE_DIR}/phosphor-shell-libs/examples/*.
+    ${CMAKE_SOURCE_DIR}/phosphor-shell-libs/examples/*.cpp
     ${CMAKE_SOURCE_DIR}/phosphor-shell/*.cpp
-    ${CMAKE_SOURCE_DIR}/phosphor-shell-libs/examples/*.
+    ${CMAKE_SOURCE_DIR}/phosphor-shell-libs/examples/*.h
     ${CMAKE_SOURCE_DIR}/phosphor-shell/*.h
-    ${CMAKE_SOURCE_DIR}/phosphor-shell-libs/examples/*.
+    ${CMAKE_SOURCE_DIR}/phosphor-shell-libs/examples/*.hpp
     ${CMAKE_SOURCE_DIR}/phosphor-shell/*.hpp
 )
 kde_clang_format(${ALL_CLANG_FORMAT_SOURCE_FILES})
@@ -301,9 +301,9 @@ file(GLOB_RECURSE ALL_QML_FILES
     ${CMAKE_SOURCE_DIR}/plasmazones/src/*.qml
     ${CMAKE_SOURCE_DIR}/phosphor-shell/cli/*.qml
     ${CMAKE_SOURCE_DIR}/plasmazones/kcm/*.qml
-    ${CMAKE_SOURCE_DIR}/phosphor/libs/*.
+    ${CMAKE_SOURCE_DIR}/phosphor/libs/*.qml
     ${CMAKE_SOURCE_DIR}/phosphor-shell-libs/libs/*.qml
-    ${CMAKE_SOURCE_DIR}/phosphor-shell-libs/examples/*.
+    ${CMAKE_SOURCE_DIR}/phosphor-shell-libs/examples/*.qml
     ${CMAKE_SOURCE_DIR}/phosphor-shell/*.qml
 )
 if(QMLFORMAT AND ALL_QML_FILES)

@@ -24,11 +24,15 @@ inheritedBy:
 fileGroups:
   cmake:
     - '/CMakeLists.txt'
+    - '/CMakePresets.json'
     - '/cmake/**/*'
     - 'CMakeLists.txt'
     - '**/CMakeLists.txt'
     - '**/*.cmake'
     - '**/*.cmake.in'
+  # Every directory a tier builds or installs from. icons/, translations/ and
+  # scripts/ feed install rules, so leaving them out means a shipped artifact
+  # can change with nothing marked affected.
   sources:
     - 'src/**/*'
     - 'libs/**/*'
@@ -41,6 +45,9 @@ fileGroups:
     - 'dbus/**/*'
     - 'extern/**/*'
     - 'examples/**/*'
+    - 'icons/**/*'
+    - 'translations/**/*'
+    - 'scripts/**/*'
   tests:
     - 'tests/**/*'
     - 'libs/*/tests/**/*'
@@ -107,7 +114,13 @@ tasks:
       - '6'
     deps:
       - '~:build'
+    # @group(cmake) matters here as much as it does for `build`: affected-ness
+    # does not propagate from a dependency to its dependent, so without it a
+    # change confined to CMake — registering a test, editing a TEST_LAUNCHER,
+    # touching cmake/PhosphorTestIsolation.cmake — leaves `moon run :test
+    # --affected` with nothing to do, and it exits 0 having run no tests.
     inputs:
+      - '@group(cmake)'
       - '@group(sources)'
       - '@group(tests)'
     env:
