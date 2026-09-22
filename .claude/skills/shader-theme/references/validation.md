@@ -18,19 +18,28 @@ repo's `plasmazones/data/` layout, with the shared pieces symlinked in:
 
 ```bash
 T=scratchpad/<theme>
-mkdir -p $T/data/{animations,overlays,surface,curves} $T/renders $T/sets/{motionsets,decorationsets,overlaysets}
-ln -sfn ../../../data/schemas $T/data/schemas
-for f in animations overlays surface; do ln -sfn ../../../../data/$f/shared $T/data/$f/shared; done
+mkdir -p $T/plasmazones/data/{animations,overlays,surface,curves} $T/phosphor/data \
+         $T/renders $T/sets/{motionsets,decorationsets,overlaysets}
+ln -sfn ../../../../phosphor/data/schemas    $T/phosphor/data/schemas
+ln -sfn ../../../../plasmazones/data/schemas $T/plasmazones/data/schemas
+for f in animations overlays surface; do ln -sfn ../../../../../plasmazones/data/$f/shared $T/plasmazones/data/$f/shared; done
 ```
 
-Packs go in `$T/data/<family>/<id>/`, curves in `$T/data/curves/`, set files in
-`$T/sets/<kind>/`. Every gate below is written against `$P`, which is `$T/data` while the
-packs are in the scratchpad (the default, and the whole run for `--into user`) and `data`
-after they have been copied into the repo for `--into repo`:
+Two schema roots, not one: the shader, animation, surface, pointer, curve and layout
+schemas live in `phosphor/data/schemas/`, while `plasmazones/data/schemas/` holds only the
+scrolling-template and whatsnew ones. `validate-json-schemas.py` checks every mapped
+schema exists before it filters to the files you named, so a single missing root fails the
+gate outright rather than skipping.
+
+Packs go in `$T/plasmazones/data/<family>/<id>/`, curves in
+`$T/plasmazones/data/curves/`, set files in `$T/sets/<kind>/`. Every gate below is written
+against `$P`, which is `$T/plasmazones/data` while the packs are in the scratchpad (the
+default, and the whole run for `--into user`) and `plasmazones/data` after they have been
+copied into the repo for `--into repo`:
 
 ```bash
-P=$T/data      # scratchpad, or --into user
-P=data         # after the --into repo copy
+P=$T/plasmazones/data      # scratchpad, or --into user
+P=plasmazones/data         # after the --into repo copy
 ```
 
 ## 1. Schema (fast, author-time)
@@ -41,10 +50,10 @@ python3 scripts/validate-json-schemas.py --root $T plasmazones/data/animations/<
 This is the one gate that does NOT take `$P`: the script resolves a relative file argument
 against `--root`, not against the working directory, so the paths are written `plasmazones/data/...`
 whichever root is in force (`--root $T` for the scratchpad; drop the flag once the packs are
-in the repo's `plasmazones/data/`). A scratchpad-phase `$P/` prefix (`$T/data/...`), or any other cwd-relative
+in the repo's `plasmazones/data/`). A scratchpad-phase `$P/` prefix (`$T/plasmazones/data/...`), or any other cwd-relative
 path outside `plasmazones/data/<family>/`, is resolved under the root, lands outside every mapped glob,
-and is silently dropped; once `P=data` the two spellings coincide. The last line of output reads `OK (N file(s) validated)`:
-N MUST equal the number of files you passed. A file outside `<root>/data/<family>/*/` is
+and is silently dropped; once `P=plasmazones/data` the two spellings coincide. The last line of output reads `OK (N file(s) validated)`:
+N MUST equal the number of files you passed. A file outside `<root>/plasmazones/data/<family>/*/` is
 skipped without a message, so `0 file(s)` means the paths or the layout are wrong, not that
 the files are fine. With no file args and no `--root` it validates every mapped file under
 the repo's `plasmazones/data/`.

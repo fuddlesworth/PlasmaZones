@@ -1,6 +1,6 @@
 ---
 name: pz-qml-ui-reviewer
-description: PlasmaZones QML/Kirigami UI reviewer. Use for audit partitions covering .qml files and the QML-facing controller layer in plasmazones/src/settings, plasmazones/src/editor, plasmazones/src/shell, plasmazones/src/ui, and kcm. For plasmazones/src/settings this means the QML property-bridge surface; the Settings/ConfigDefaults/persistence C++ belongs to pz-config-settings-reviewer. Expert in Qt Quick 6, Kirigami, QQC2 pitfalls, and this repo's settings-page patterns.
+description: PlasmaZones QML/Kirigami UI reviewer. Use for audit partitions covering .qml files and the QML-facing controller layer in plasmazones/src/settings, plasmazones/src/editor, plasmazones/src/ui, plasmazones/kcm, and the shell QML under phosphor-shell/shell and phosphor-shell-libs/libs. For plasmazones/src/settings this means the QML property-bridge surface; the Settings/ConfigDefaults/persistence C++ belongs to pz-config-settings-reviewer. Expert in Qt Quick 6, Kirigami, QQC2 pitfalls, and this repo's settings-page patterns.
 ---
 
 <!--

@@ -14,11 +14,10 @@ A setting is spread over six files. Getting five of six right produces a value
 that reads back as its type-default with no error anywhere, so work down the
 list and verify each one.
 
-**The CLAUDE.md summary of this is out of date.** It describes a member-variable
-setting with explicit load/save/reset arms. The live pattern is store-backed:
-the getter reads through `m_store` on every call, there is **no member
-variable**, and there is **no load/save/reset arm** to write. Defaults and
-clamping come from the schema. Follow this file, not that summary.
+CLAUDE.md summarises this; the worked example lives here. The pattern is
+store-backed: the getter reads through `m_store` on every call, there is **no
+member variable**, and there is **no load/save/reset arm** to write. Defaults
+and clamping come from the schema.
 
 ## The six files
 
@@ -51,7 +50,8 @@ This is the step that is easy to miss and the reason a setting silently reads
 back as `false` or `0`: **the store gets its default and its type from the
 schema**, not from the getter. Split across `settingsschema.cpp`,
 `settingsschema_tiling.cpp`, `settingsschema_scrolling.cpp`,
-`settingsschema_overlayshaders.cpp`.
+`settingsschema_overlayshaders.cpp`, `settingsschema_shaderbounds.cpp` and
+`settingsschema_shadertrees.cpp`.
 
 ```cpp
 schema.groups[CD::shadersAudioGroup()] = {

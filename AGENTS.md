@@ -59,7 +59,7 @@ Shared placement policy lives in `phosphor/libs/phosphor-engine`. A verdict from
 - Forward declare in headers; group includes: own header → project → KDE → Qt
 - `PLASMAZONES_EXPORT` on public API classes
 - Keep files under 1000 lines, with a 15% grace (hard ceiling 1150). Under 1000 is the target; 1000–1150 is tolerated and not a review finding on its own. Past 1150, split by concern.
-- The ceiling binds NEW files and files being substantially rewritten. Around 39 existing files are already over it (the largest are `plasmazones/kwin-effect/plasmazoneseffect/plasmazoneseffect.h`, `plasmazones/kwin-effect/tilinghandler/tiling.cpp` and `plasmazones/src/config/settings.h`); those are grandfathered. Do not raise an existing overrun as a review finding on its own, and do not split one as a drive-by. Growing one further, or adding a new file over the ceiling, is a finding.
+- The ceiling binds NEW files and files being substantially rewritten. Around 63 existing files are already over it (the largest are `plasmazones/kwin-effect/plasmazoneseffect/plasmazoneseffect.h`, `plasmazones/kwin-effect/tilinghandler/tiling.cpp` and `plasmazones/tests/unit/helpers/StubSettings.h`); those are grandfathered. Do not raise an existing overrun as a review finding on its own, and do not split one as a drive-by. Growing one further, or adding a new file over the ceiling, is a finding.
 - Input validation at system boundaries
 
 ### Qt6 String Literals (CRITICAL)
@@ -149,7 +149,7 @@ An unclamped setter compares, early-returns, writes, then emits. A **clamped** s
 - Register via `ShortcutManager`; dynamic updates via settings signals
 
 ## Skills
-In-repo skills under `.Codex/skills/` (symlinked into `.agents/skills/`). Invoke them rather than reconstructing the procedure:
+In-repo skills under `.claude/skills/` (symlinked into `.agents/skills/`). Invoke them rather than reconstructing the procedure:
 - `pz-build` — configure, build and test. Carries the two `OFF`-by-default flags that make a suite silently run nothing, the warning-vs-error grep, the ctest D-Bus isolation, and the non-unity gate.
 - `pz-add-setting` — the six files a setting touches, in the store-backed shape.
 - `pz-verify-live` — nested-KWin harness for verifying placement and effect changes against a real compositor.
@@ -214,10 +214,10 @@ python3 scripts/check-conventions.py --list-rules
 ```
 
 ### Per-tier builds with moon
-The repo is a [moon](https://moonrepo.dev) workspace. CMake still does every compile; moon adds the tier graph on top: one command per tier, dependency ordering, and affected-only runs in CI. The four tiers are the projects `phosphor`, `phosphor-shell-libs`, `phosphor-shell` and `plasmazones`, plus `repo` for the whole-tree checks. Install moon from the AUR (`moon-bin`) or with `proto install moon`.
+The repo is a [moon](https://moonrepo.dev) workspace. CMake still does every compile; moon adds the tier graph on top: one command per tier, dependency ordering, and affected-only runs locally (CI still drives CMake directly). The four tiers are the projects `phosphor`, `phosphor-shell-libs`, `phosphor-shell` and `plasmazones`, plus `repo` for the whole-tree checks. Install moon from the AUR (`moon-bin`) or with `proto install moon`.
 
 ```bash
-moon run plasmazones:build          # configure once, then build only that tier and its upstream tiers
+moon run plasmazones:build          # build that tier and its upstream tiers (configure runs first each time)
 moon run phosphor:test              # ctest --test-dir build/phosphor
 moon run :test --affected           # every tier touched by the working-tree diff
 moon run repo:check                 # conventions + JSON schema gates

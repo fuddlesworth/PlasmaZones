@@ -6,7 +6,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 # Animation pack contract (`plasmazones/data/animations/<id>/`)
 
 Source of truth: `phosphor/libs/phosphor-animation/src/animationshadereffect.cpp` (`fromJson`),
-`plasmazones/data/animations/shared/animation_uniforms.glsl`, `plasmazones/data/schemas/animation-metadata.schema.json`,
+`plasmazones/data/animations/shared/animation_uniforms.glsl`, `phosphor/data/schemas/animation-metadata.schema.json`,
 `plasmazones/tests/unit/ui/shaders/test_animation_shader_param_wiring.cpp`. Re-read those if anything here
 looks stale; the tests are the bar bundled packs must clear.
 

@@ -25,13 +25,20 @@ grep -E "^(BUILD_TESTING|BUILD_PHOSPHOR_SHELL|BUILD_TOOLS|CMAKE_UNITY_BUILD):" b
 
 | dir | testing | shell tier | unity | use for |
 |---|---|---|---|---|
-| `build` | ON | **OFF** | ON | day-to-day app/daemon/effect work |
-| `build-noshell` | ON | OFF | ON | confirming a shell-tier change still builds shell-OFF |
-| `build-nounity` | ON | **ON** | OFF | shell tier, packager parity, and the clangd compile database |
+| `build` | ON | **ON** | ON | day-to-day work, including the shell tier |
+| `build-release` | ON | ON | ON | the release preset, optimized |
+| `build-off` | ON | **OFF** | ON | confirming a shell-tier change still builds shell-OFF |
+| `build-nounity` | ON | ON | OFF | packager parity and the clangd compile database |
 
-`build` has `BUILD_PHOSPHOR_SHELL=OFF`. Anything under `phosphor-shell-libs/libs/phosphor-shell*`,
-the bar, control center, launcher, power or popout libraries is **not built
-there and its tests do not run**. Use `build-nounity` for shell work.
+`build` is what `cmake --preset debug` produces, and `CMakePresets.json` sets
+`BUILD_TESTING`, `BUILD_PHOSPHOR_SHELL` and `BUILD_TOOLS` all ON there, so the
+shell tier IS built and its tests DO run. Every moon task configures through
+that preset. A dir configured by hand without those flags is the one that runs
+nothing, which is what the grep above is for.
+
+The dir that still needs care is the shell-OFF one: a shell-tier change has to
+be confirmed in both, because `BUILD_PHOSPHOR_SHELL` defaults OFF for anyone
+configuring without a preset.
 
 ## Configure
 
@@ -83,12 +90,14 @@ ctest --test-dir build --output-on-failure
 ```
 
 Test targets carry a `TEST_LAUNCHER` of
-`dbus-run-session --config-file=plasmazones/tests/unit/test-session-bus.conf --`. That conf
+`dbus-run-session --config-file=cmake/test-session-bus.conf --`. That conf
 declares **no** service dirs on purpose: a stock `dbus-run-session` still reads
 the standard service dirs, so the installed `plasmazonesd` gets activated on the
 private bus, reparents when the bus dies, holds the test's stdout pipe open, and
-**ctest hangs after the test passes**. New tests must be added ABOVE that block
-in `plasmazones/tests/unit/CMakeLists.txt`, alongside the shared `ENVIRONMENT` block.
+**ctest hangs after the test passes**. New tests must be added ABOVE the
+directory sweep at the bottom of `plasmazones/tests/unit/CMakeLists.txt`, so the
+`phosphor_apply_test_isolation` loop there picks them up. A test registered
+below that line gets no launcher and no XDG sandbox.
 
 Never `pkill -f plasmazonesd`; that kills the user's real desktop daemon. Kill
 only `build/bin/` test binaries.
@@ -117,7 +126,7 @@ a function with internal linkage (a `static` in an anonymous namespace), which
 only ever links under unity.
 
 Shell-tier changes need **both** a shell-ON and a shell-OFF configure
-(`build-nounity` and `build-noshell`). The Makefile generator rejects ninja's
+(`build-nounity` and `build-off`). The Makefile generator rejects ninja's
 `-k 0`.
 
 ## Conventions gate
