@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Direct coverage for `resolveWithinDirectory`, the shared containment guard
-// four pack parsers in three other libraries depend on.
+// every pack parser in the animation, surface, pointer and shader libraries
+// depends on, along with the pack validator.
 //
 // It had none when it landed, and the case that slipped through was the one a
 // table like this catches on the first run: a symlink out of the directory whose
@@ -214,9 +215,12 @@ private Q_SLOTS:
     /// that is still a symlink, so both agree. Nothing usable is lost: a path
     /// through a cycle can never be opened (ELOOP).
     ///
-    /// Both spellings, because they take different arms. The bare link is
-    /// canonicalised directly. The path THROUGH it fails to canonicalise as a
-    /// whole and reaches the link by the ancestor climb.
+    /// Both spellings, because the link sits at a different depth in each.
+    /// For the bare link it is the LEAF of the canonical result. For the path
+    /// through it, the leaf is a plain missing file and the link is its
+    /// parent, so a leaf-only probe of the canonical result accepted it on
+    /// 6.11 (verified before this test landed). On 6.12 both spellings fail
+    /// to canonicalise and are refused by the ancestor climb instead.
     void refusesASymlinkCycleOnEveryQt()
     {
         const QString link = m_pack->filePath(QStringLiteral("loop"));
