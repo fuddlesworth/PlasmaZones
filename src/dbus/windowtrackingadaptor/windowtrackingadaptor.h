@@ -392,8 +392,10 @@ public Q_SLOTS:
     void clearPreTileGeometry(const QString& windowId);
 
     /**
-     * Get all pre-tile geometries as a typed list (for effect pre-population on restart).
-     * Each entry carries appId, geometry rect, and the screen it was on.
+     * Pre-tile geometry for every LIVE record (appId, rect, screen). Live only:
+     * the consumer keys by appId and applies an entry to an OPEN window of that
+     * app, so a closed instance's rect would be the borrow
+     * getValidatedPreTileGeometry refuses. An effect-(re)start seed.
      */
     PhosphorProtocol::PreTileGeometryList getPreTileGeometries();
 
@@ -524,8 +526,8 @@ public Q_SLOTS:
     /// themselves via their pruneStaleWindows overrides — TilingState / strip
     /// membership, pending orders, min-size and last-rect caches. On top of
     /// that: the registry's metadata + canonical entries, the tab-colour memo,
-    /// the rule evaluator's shared per-window memo, and the adaptor's own
-    /// frame-geometry / broadcast shadow maps.
+    /// the rule evaluator's memo, and the adaptor's own frame-geometry /
+    /// broadcast / pending-open shadow maps.
     /// Called by the KWin effect after daemon ready to clean up stale entries
     /// from windows that no longer exist (closed between save and daemon restart).
     void pruneStaleWindows(const QStringList& aliveWindowIds);
@@ -573,11 +575,10 @@ public Q_SLOTS:
      * @brief Pre-computed zone geometries for pending restore entries.
      * @return JSON object, one ARRAY per app, newest record first:
      *         { appId: [ {x, y, width, height, screenId, windowId}, ... ], ... }
-     *
      * The effect caches these so slotWindowAdded can teleport windows to their
-     * zone position without a D-Bus round trip. It takes an app's first entry
-     * whose instance is not already live, so a second window of a snapped app
-     * is never handed the rect its open sibling still uses.
+     * zone without a round trip. It takes an app's first entry whose instance
+     * is not live, so a second window of a snapped app never gets the rect its
+     * open sibling still uses.
      */
     QString getPendingRestoreGeometries();
 
@@ -1161,7 +1162,7 @@ public:
     /// Engine-neutral RouteToDesktop: if a matched rule pins @p windowId to
     /// a virtual desktop, emit windowDesktopMoveRequested so the compositor moves
     /// it there on open. Independent of snapping/tiling, called from the snap
-    /// open-path facade for first placements only. Pins @p screenId so a
+    /// open-path facade for first placements only, pinning @p screenId so a
     /// ScreenId-scoped rule resolves.
     /// Returns whether a RouteToDesktop rule MATCHED, true even when its target
     /// failed the 1-based guard and no move was emitted (the routing tests assert it).
@@ -1752,14 +1753,13 @@ private:
 
     // Frame-geometry shadow: populated via setFrameGeometry D-Bus pushes from
     // the compositor plugin, removed on windowClosed, read by daemon-local
-    // shortcut handlers (float toggle, etc.) without a round trip. Keyed on
-    // CANONICAL ids, so writes and reads go through shadowWindowId().
+    // shortcut handlers without a round trip. Keyed on CANONICAL ids, so
+    // writes and reads go through shadowWindowId().
     QHash<QString, QRect> m_frameGeometry;
 
     // What the open path just asked the effect to apply (a float-position
     // rect, or a free-size restore's size, #1106), until the next frame
-    // report or the close. The RouteToScreen translation in the same resolve
-    // reads these ahead of the shadow. Canonical ids, like the shadow.
+    // report, the close, or a prune. RouteToScreen reads these first.
     QHash<QString, QRect> m_pendingOpenGeometry;
     QHash<QString, QSize> m_pendingOpenSize;
 

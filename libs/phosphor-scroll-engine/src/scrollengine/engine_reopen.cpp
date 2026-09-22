@@ -166,10 +166,18 @@ bool ScrollEngine::claimCrossScreenReopen(const QString& rawWindowId, const QStr
     return true;
 }
 
-void ScrollEngine::noteCrossScreenClaimsExhausted(const QString& windowId)
+void ScrollEngine::noteCrossScreenClaimsExhausted(const QString& windowId, bool exhausted)
 {
-    if (!windowId.isEmpty()) {
-        m_crossScreenClaimsExhausted.insert(canonicalizeForLookup(windowId));
+    if (windowId.isEmpty()) {
+        return;
+    }
+    // Set AND cleared per announce, so a mark can never outlive the announce
+    // it describes (see the interface contract).
+    const QString canonical = canonicalizeForLookup(windowId);
+    if (exhausted) {
+        m_crossScreenClaimsExhausted.insert(canonical);
+    } else {
+        m_crossScreenClaimsExhausted.remove(canonical);
     }
 }
 

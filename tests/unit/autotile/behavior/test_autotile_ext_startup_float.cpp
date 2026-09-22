@@ -276,13 +276,44 @@ private Q_SLOTS:
         QVERIFY(!engine.isWindowTracked(QStringLiteral("app|new")));
         QVERIFY2(wts.placementStore().contains(QStringLiteral("app|old")), "a declined claim consumes nothing");
 
-        engine.noteCrossScreenClaimsExhausted(QStringLiteral("app|new"));
+        engine.noteCrossScreenClaimsExhausted(QStringLiteral("app|new"), true);
         engine.windowOpened(QStringLiteral("app|new"), arrival, 0, 0);
         QCoreApplication::processEvents();
         PhosphorTiles::TilingState* arrivalState = engine.tilingStateForScreen(arrival);
         QVERIFY(arrivalState);
         QVERIFY2(arrivalState->containsWindow(QStringLiteral("app|new")),
                  "with the claims exhausted the arrival screen must adopt the window");
+
+        // The verdict is per ANNOUNCE, not a sticky per-window mark: an
+        // announce whose claim round was suppressed states false, and that
+        // clears what a previous announce set. Observed through the defer
+        // gate, which needs something to defer TO — a record homed on a
+        // SCROLLING screen, the term that carries no extra liveness toggle.
+        PhosphorZones::AssignmentEntry scrolling;
+        scrolling.mode = PhosphorZones::AssignmentEntry::Scrolling;
+        layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-3"), 0, QString(), scrolling);
+        engine.setScrollingModeResolver([](const QString& screen, int, const QString&) {
+            return screen == QStringLiteral("DP-3");
+        });
+        auto scrolled = PlasmaZones::TestHelpers::makePlacement(
+            QStringLiteral("strip|old"), QStringLiteral("strip"), PhosphorEngine::WindowPlacement::stateTiled(),
+            QString(PhosphorEngine::WindowPlacement::scrollingEngineId()), QStringLiteral("DP-3"));
+        QVERIFY(wts.placementStore().record(scrolled));
+
+        // Cleared verdict: the gate stands down for the scroll engine.
+        engine.noteCrossScreenClaimsExhausted(QStringLiteral("strip|new"), true);
+        engine.noteCrossScreenClaimsExhausted(QStringLiteral("strip|new"), false);
+        engine.windowOpened(QStringLiteral("strip|new"), arrival, 0, 0);
+        QCoreApplication::processEvents();
+        QVERIFY2(!arrivalState->containsWindow(QStringLiteral("strip|new")),
+                 "a cleared verdict must leave the defer gate free to stand down for the record's home engine");
+
+        // Stated verdict: the claims already ran and declined, so it adopts.
+        engine.noteCrossScreenClaimsExhausted(QStringLiteral("strip|new2"), true);
+        engine.windowOpened(QStringLiteral("strip|new2"), arrival, 0, 0);
+        QCoreApplication::processEvents();
+        QVERIFY2(arrivalState->containsWindow(QStringLiteral("strip|new2")),
+                 "an exhausted round must make the same gate adopt");
     }
 
     void testToggleWindowFloat_crossScreenFallback()

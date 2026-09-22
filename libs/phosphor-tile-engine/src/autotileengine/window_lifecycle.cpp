@@ -281,17 +281,13 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
     // nothing — the exact race this guard exists to prevent.
     const PhosphorTiles::TilingState* deferState = m_states.forWindow(windowId);
     const bool trackedInState = deferState && deferState->containsWindow(windowId);
-    // The dispatch already ran every engine's claim for this arrival and all
+    // The dispatch already ran every engine's claim for THIS announce and all
     // declined: the record's engine has answered, so this gate must adopt
     // rather than defer to it a second time (noteCrossScreenClaimsExhausted).
-    //
-    // Consumed inside the gate, not ahead of it: an open that fails one of
-    // the other preconditions never asks the question, and burning the
-    // one-shot there would let a later re-announce of the same window defer
-    // after all.
-    const bool gateApplies = !screenId.isEmpty() && m_windowTracker && m_layoutManager && !trackedInState;
-    const bool claimsExhausted = gateApplies && m_crossScreenClaimsExhausted.remove(windowId) > 0;
-    if (gateApplies && !claimsExhausted) {
+    // Read, not consumed: the dispatch re-states the flag before every
+    // announce, so it always describes the one in progress.
+    const bool claimsExhausted = m_crossScreenClaimsExhausted.contains(windowId);
+    if (!screenId.isEmpty() && m_windowTracker && m_layoutManager && !trackedInState && !claimsExhausted) {
         const QString appId = currentAppIdFor(windowId);
         if (PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
             // Shared predicate with the other engines' reciprocal gates
@@ -529,10 +525,18 @@ void AutotileEngine::dropClosedWindowFromDragPreview(const QString& windowId)
     }
 }
 
-void AutotileEngine::noteCrossScreenClaimsExhausted(const QString& windowId)
+void AutotileEngine::noteCrossScreenClaimsExhausted(const QString& windowId, bool exhausted)
 {
-    if (!windowId.isEmpty()) {
-        m_crossScreenClaimsExhausted.insert(canonicalizeWindowId(windowId));
+    if (windowId.isEmpty()) {
+        return;
+    }
+    // Set AND cleared per announce, so a mark can never outlive the announce
+    // it describes (see the interface contract).
+    const QString canonical = canonicalizeWindowId(windowId);
+    if (exhausted) {
+        m_crossScreenClaimsExhausted.insert(canonical);
+    } else {
+        m_crossScreenClaimsExhausted.remove(canonical);
     }
 }
 

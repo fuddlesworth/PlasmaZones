@@ -1125,7 +1125,7 @@ public:
     /// window (a float is screen-local); returns the REAL adoption outcome.
     bool claimCrossScreenReopen(const QString& windowId, const QString& openingScreenId, int minWidth,
                                 int minHeight) override;
-    void noteCrossScreenClaimsExhausted(const QString& windowId) override;
+    void noteCrossScreenClaimsExhausted(const QString& windowId, bool exhausted) override;
     QString heldScreenForWindow(const QString& windowId) const override;
     std::optional<PhosphorEngine::PlacementStateKey> heldKeyForWindow(const QString& windowId) const override;
 
@@ -1845,7 +1845,7 @@ private:
     // Alias for the type hoisted to AutotileEngineTypes.h.
     using MigrationArrival = ::PhosphorTileEngine::MigrationArrival;
     std::optional<MigrationArrival> m_migrationArrival;
-    /// One-shot from the dispatch (noteCrossScreenClaimsExhausted); consumed by the defer gate.
+    /// Re-stated per announce by the dispatch (noteCrossScreenClaimsExhausted); read by the defer gate.
     QSet<QString> m_crossScreenClaimsExhausted;
 
     /// The float state @p windowId must be inserted with: the live state it

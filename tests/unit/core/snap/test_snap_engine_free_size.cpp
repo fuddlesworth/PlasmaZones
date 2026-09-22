@@ -344,12 +344,17 @@ private Q_SLOTS:
 
         // The parked-open continuation is a first placement too.
         on.engine.applyNoMatchFloatDefault(QStringLiteral("app|arrival"), kScreen,
-                                           PhosphorEngine::RestoreReason::DesktopArrival);
+                                           PhosphorEngine::RestoreReason::DesktopArrival, /*placedBefore=*/false);
         QCOMPARE(sizeSpy.count(), 1);
         sizeSpy.clear();
         // And the same terminal refuses an unminimize.
         on.engine.applyNoMatchFloatDefault(QStringLiteral("app|unmin2"), kScreen,
-                                           PhosphorEngine::RestoreReason::Unminimize);
+                                           PhosphorEngine::RestoreReason::Unminimize, /*placedBefore=*/false);
+        QCOMPARE(sizeSpy.count(), 0);
+        // And the lineage snapshot refuses it on the same terminal, whatever
+        // the reason says.
+        on.engine.applyNoMatchFloatDefault(QStringLiteral("app|placed"), kScreen, PhosphorEngine::RestoreReason::Open,
+                                           /*placedBefore=*/true);
         QCOMPARE(sizeSpy.count(), 0);
 
         // A slot-less stub under the opener's own uuid is not a placement:
@@ -400,7 +405,8 @@ private Q_SLOTS:
         QCOMPARE(order, (QStringList{QStringLiteral("size"), QStringLiteral("float")}));
         order.clear();
         // Reclaim-declined default.
-        on.engine.applyNoMatchFloatDefault(QStringLiteral("app|c"), kScreen, PhosphorEngine::RestoreReason::Open);
+        on.engine.applyNoMatchFloatDefault(QStringLiteral("app|c"), kScreen, PhosphorEngine::RestoreReason::Open,
+                                           /*placedBefore=*/false);
         QCOMPARE(order, (QStringList{QStringLiteral("size"), QStringLiteral("float")}));
     }
 

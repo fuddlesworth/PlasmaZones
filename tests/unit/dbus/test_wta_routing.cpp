@@ -395,6 +395,7 @@ private Q_SLOTS:
         // The claim: consumes and re-binds under the opener's uuid, exactly
         // as takeForReopen does, then declines.
         bool hookRan = false;
+        bool reBindLanded = false;
         m_snapAdaptor->setCrossScreenTileReclaim([&](const QString& windowId, const QString&, int, int) {
             hookRan = true;
             WindowPlacement reBound;
@@ -405,7 +406,12 @@ private Q_SLOTS:
             slot.state = QString(WindowPlacement::stateTiled());
             reBound.engines.insert(QString(WindowPlacement::autotileEngineId()), slot);
             reBound.freeGeometryByScreen.clear();
-            return store.record(reBound) && false;
+            // Captured, not swallowed by a `&& false`: if record() ever
+            // refused this shape the opener would have no slot-bearing
+            // record, placedBefore would read false either way, and the test
+            // would pass while covering nothing.
+            reBindLanded = store.record(reBound);
+            return false;
         });
 
         QSignalSpy sizeSpy(m_snapEngine, &PhosphorEngine::PlacementEngineBase::sizeRestoreRequested);
@@ -420,6 +426,7 @@ private Q_SLOTS:
             static_cast<int>(PhosphorEngine::RestoreReason::Open), 0, 0, x, y, w, h, shouldSnap);
 
         QVERIFY2(hookRan, "the cross-screen tiling reclaim must be offered for a deferred open");
+        QVERIFY2(reBindLanded, "the claim's re-bind must land, or this test covers nothing about the snapshot");
         QVERIFY(!shouldSnap);
         QVERIFY2(m_snapEngine->isFloating(opener), "a declined claim falls back to the snap float default");
         QCOMPARE(floatSpy.count(), 1);
@@ -428,11 +435,17 @@ private Q_SLOTS:
         QCOMPARE(args.at(0).toString(), opener);
         QCOMPARE(args.at(1).toSize(), siblingFree.size());
 
-        // And the deferred record keeps its credit, so the desktop-arrival
-        // continuation can still reclaim it.
-        const auto kept = store.peekExact(QStringLiteral("reclaimapp|old"));
-        QVERIFY(kept);
-        QVERIFY2(kept->reclaimEligible, "a declined claim must not spend the open's reclaim credit");
+        // And no record in the bucket lost its credit, so the desktop-arrival
+        // continuation can still reclaim. BOTH are asserted: burnReclaimCredit
+        // retires the HIGHEST-sequence eligible record, which is the sibling
+        // recorded second, so checking only the deferred one would pass even
+        // with the credit guard deleted.
+        const auto keptDeferred = store.peekExact(QStringLiteral("reclaimapp|old"));
+        QVERIFY(keptDeferred);
+        QVERIFY2(keptDeferred->reclaimEligible, "a declined claim must not spend the open's reclaim credit");
+        const auto keptSibling = store.peekExact(QStringLiteral("reclaimapp|closed"));
+        QVERIFY(keptSibling);
+        QVERIFY2(keptSibling->reclaimEligible, "nor the credit of the newest record in the same bucket");
     }
 
     void testEmitRouteToDesktop_matchedButUnusableTargetStillReportsAMatch()

@@ -148,8 +148,8 @@ private Q_SLOTS:
     // two is refused, three on either axis is accepted.
     void testFreeSize_managedSizeToleranceBoundary()
     {
-        ScrollTestUtils::StubWindowTracking tracker;
         QSet<QString> live{QStringLiteral("sib")};
+        ScrollTestUtils::StubWindowTracking tracker;
         tracker.placementStore().setLiveInstanceProbe(PlasmaZones::TestHelpers::liveInstanceProbe(live));
         ConcreteEngine engine;
         QSignalSpy sizeSpy(&engine, &PlacementEngineBase::sizeRestoreRequested);
@@ -183,8 +183,8 @@ private Q_SLOTS:
     // every other driver can be a first placement.
     void testFreeSize_reasonAndLineageGates()
     {
-        ScrollTestUtils::StubWindowTracking tracker;
         QSet<QString> live{QStringLiteral("sib")};
+        ScrollTestUtils::StubWindowTracking tracker;
         tracker.placementStore().setLiveInstanceProbe(PlasmaZones::TestHelpers::liveInstanceProbe(live));
         QVERIFY(tracker.placementStore().record(floatingRecord(QStringLiteral("app|sib"), QRect(0, 0, 640, 480))));
         ConcreteEngine engine;
@@ -215,8 +215,8 @@ private Q_SLOTS:
     // falls through to the sibling rather than ending the search.
     void testFreeSize_sourceOrderAndStub()
     {
-        ScrollTestUtils::StubWindowTracking tracker;
         QSet<QString> live{QStringLiteral("sib")};
+        ScrollTestUtils::StubWindowTracking tracker;
         tracker.placementStore().setLiveInstanceProbe(PlasmaZones::TestHelpers::liveInstanceProbe(live));
         ConcreteEngine engine;
         QSignalSpy sizeSpy(&engine, &PlacementEngineBase::sizeRestoreRequested);
@@ -262,8 +262,8 @@ private Q_SLOTS:
     // become the bound.
     void testFreeSize_clampNeedsANonEmptyAvailableArea()
     {
-        ScrollTestUtils::StubWindowTracking tracker;
         QSet<QString> live{QStringLiteral("sib")};
+        ScrollTestUtils::StubWindowTracking tracker;
         tracker.placementStore().setLiveInstanceProbe(PlasmaZones::TestHelpers::liveInstanceProbe(live));
         QVERIFY(tracker.placementStore().record(floatingRecord(QStringLiteral("app|sib"), QRect(0, 0, 2500, 1500))));
         ConcreteEngine engine;

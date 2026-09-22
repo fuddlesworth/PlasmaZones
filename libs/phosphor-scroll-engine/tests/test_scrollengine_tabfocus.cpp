@@ -29,6 +29,13 @@ class TestScrollEngineTabFocus : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    /// The in-binary half of the axis vacuity guard pse_add_test installs;
+    /// without it the FAIL_REGULAR_EXPRESSION on both arms is inert.
+    void initTestCase()
+    {
+        AX_GUARD_SUITE();
+    }
+
     void cycleTabWrapsInsteadOfLeavingTheColumn();
     void focusTabAddressesTabsByOrdinal();
     void floatingATabRenumbersTheOrdinals();

@@ -18,6 +18,7 @@
 #include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorIdentity/WindowId.h>
 
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QSet>
 #include <QSignalSpy>
@@ -302,6 +303,14 @@ private Q_SLOTS:
         QVERIFY(after);
         QVERIFY(after->isFloating(QStringLiteral("app|only")));
         QCOMPARE(after->blueprintCursor(), 3);
+
+        // And the TILE was claimed, not merely the cursor carried: the entry
+        // held one tile, so consuming it retires the whole stash and the
+        // window's id disappears from a fresh save. Without this the carry
+        // could be right while the claim block was gone.
+        const QJsonObject afterBlob = second.engine->serializeStripState();
+        const QByteArray afterText = QJsonDocument(afterBlob).toJson(QJsonDocument::Compact);
+        QVERIFY2(!afterText.contains("app|only"), "the claimed stash tile must not survive in the save");
     }
 
     // A window that would float on its recorded home screen is not pulled
@@ -339,7 +348,7 @@ private Q_SLOTS:
         // The dispatch then tells the engine every claim declined, and the
         // arrival screen's open adopts rather than deferring to the record's
         // home a second time.
-        rig.engine->noteCrossScreenClaimsExhausted(QStringLiteral("app|new"));
+        rig.engine->noteCrossScreenClaimsExhausted(QStringLiteral("app|new"), true);
         rig.engine->windowOpened(QStringLiteral("app|new"), kS1, 0, 0);
         QVERIFY2(stateOn(rig.engine, kS1) && stateOn(rig.engine, kS1)->containsWindow(QStringLiteral("app|new")),
                  "with the claims exhausted the arrival screen must adopt the window");

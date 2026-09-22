@@ -12,6 +12,8 @@
 #include <PhosphorZones/LayoutUtils.h>
 #include "snapenginelogging.h"
 
+#include <optional>
+
 namespace PhosphorSnapEngine {
 
 using PhosphorEngine::PendingRestore;
@@ -687,12 +689,21 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 // window on whatever monitor it was really captured on, while
                 // the floating-on-screen tracking says restoreScreen — the
                 // visible/state desync the comment at the read warns about.
-                // Resolved ONCE for the two arms below, which ask the same
-                // question of the same (screen, desktop).
-                const QList<QSize> managedSizes = managedSizesOnScreen(restoreScreen, restoreDesktop);
+                // Resolved at most ONCE for the two arms below, which ask the
+                // same question of the same (screen, desktop). Lazy, so a
+                // re-drive that reaches neither arm — an already-floating
+                // desktop arrival whose move gate short-circuits — pays no
+                // walk at all.
+                std::optional<QList<QSize>> managedSizesMemo;
+                const auto managedSizes = [&]() -> const QList<QSize>& {
+                    if (!managedSizesMemo) {
+                        managedSizesMemo = managedSizesOnScreen(restoreScreen, restoreDesktop);
+                    }
+                    return *managedSizesMemo;
+                };
                 const bool moveRestored = restoreFloatedPosition && freeGeo.isValid()
                     && (!m_windowTracker || m_windowTracker->geometryBelongsToScreen(freeGeo, restoreScreen))
-                    && !isManagedSize(managedSizes, freeGeo.size());
+                    && !isManagedSize(managedSizes(), freeGeo.size());
                 if (moveRestored) {
                     Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
                 } else if (!alreadyFloating) {
@@ -705,7 +716,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                     // above rather than paying restoreFreeSizeForUnplaced's
                     // second walk for the same answer.
                     restoreFreeSizeWhereItStands(m_windowTracker, windowId, restoreScreen, reason, placedBefore,
-                                                 managedSizes);
+                                                 managedSizes());
                 }
                 // The window is floating regardless of whether a position was
                 // recorded — tell the compositor (matching toggleWindowFloat /
@@ -880,12 +891,14 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // genuine snap-mode window with no zone match.
     //
     // This is the one float terminal NOT carrying an explicit !deferredByMode
-    // guard, and it does not need one only because the mode short-circuit
-    // above returns first for every window a tiling engine owns (a
-    // deferredByMode verdict implies a non-null m_layoutManager, so that
-    // branch is always evaluated). Anything that makes that short-circuit
-    // conditional has to add the guard here, or a tiling-screen window
-    // acquires a snap float verdict.
+    // guard. It reaches here only past the mode short-circuit above, which is
+    // always evaluated (a deferredByMode verdict implies a non-null
+    // m_layoutManager). Note the short-circuit asks the SCREEN'S CURRENT
+    // desktop while this terminal pins the float to openDesktop, which a
+    // matched RouteToDesktop makes a different one — so a window routed onto
+    // a tiling-mode desktop of a snapping-mode screen still lands here. That
+    // gap predates the size restore and is the reason to add the guard, or
+    // the openDesktop term to the short-circuit, if this is ever touched.
     stateForWindowOnScreen(windowId, screenId, openDesktop)->setFloatingOnScreen(windowId, screenId, openDesktop);
     // Floating where KWin put it, but at the size the app remembers, which
     // for an app with a snapped window is the zone's. Give it its free size,

@@ -149,7 +149,7 @@ public:
     std::optional<PhosphorEngine::PlacementStateKey> heldKeyForWindow(const QString& windowId) const override;
     void beginArrivalBurst() override;
     void endArrivalBurst() override;
-    void noteCrossScreenClaimsExhausted(const QString& windowId) override;
+    void noteCrossScreenClaimsExhausted(const QString& windowId, bool exhausted) override;
     void windowClosed(const QString& windowId) override;
     void windowFocused(const QString& windowId, const QString& screenId) override;
     void windowMinSizeUpdated(const QString& windowId, int minWidth, int minHeight) override;
@@ -1498,7 +1498,7 @@ private:
     /// focus); the outermost endArrivalBurst applies once per screen.
     int m_arrivalBurstDepth = 0;
     QHash<PhosphorEngine::PlacementStateKey, bool> m_burstPendingApplies;
-    /// One-shot from the dispatch (noteCrossScreenClaimsExhausted); consumed by the defer gate.
+    /// Re-stated per announce by the dispatch (noteCrossScreenClaimsExhausted); read by the defer gate.
     QSet<QString> m_crossScreenClaimsExhausted;
     /// Armed by the context setters (desktop/activity switch), consumed by
     /// setActiveScreens so the identical-set re-emit only claims

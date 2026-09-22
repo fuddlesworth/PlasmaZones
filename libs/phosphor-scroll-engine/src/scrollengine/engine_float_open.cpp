@@ -17,6 +17,8 @@
 
 #include "scrollenginelogging.h"
 
+#include <optional>
+
 namespace PhosphorScrollEngine {
 
 void ScrollEngine::seedFloatRestoreForOpen(const QString& windowId, int minWidth, int minHeight)
@@ -71,18 +73,27 @@ void ScrollEngine::finishFloatedOpen(ScrollState* state, const QString& windowId
     // A migration WITH a record needs neither arm: the caller already
     // consumed it, and a migration moves nothing.
     if (!migration) {
-        // Resolved ONCE for the move gate and the size arm, which ask the
-        // same question of it. Keyed to screenId, which is the record's own
-        // screen in both arms — takeForReopen's accept requires the match.
-        const QList<QSize> managedSizes = managedSizesOnScreen(screenId);
-        const bool moved = record ? emitGatedFloatGeometryRestore(windowId, *record, screenId, managedSizes)
-                                  : restoreFloatRecordForOpen(windowId, screenId, managedSizes);
+        // Resolved at most ONCE for the move gate and the size arm, which ask
+        // the same question of it. Keyed to screenId, which is the record's
+        // own screen in both arms — takeForReopen's accept requires the
+        // match. Lazy, like the autotile twin: an oversized float reaches
+        // neither arm's isManagedSize test and must not pay a walk that
+        // relayouts every strip on the screen.
+        std::optional<QList<QSize>> managedSizesMemo;
+        const auto managedSizes = [&]() -> const QList<QSize>& {
+            if (!managedSizesMemo) {
+                managedSizesMemo = managedSizesOnScreen(screenId);
+            }
+            return *managedSizesMemo;
+        };
+        const bool moved = record ? emitGatedFloatGeometryRestore(windowId, *record, screenId, managedSizes())
+                                  : restoreFloatRecordForOpen(windowId, screenId, managedSizes());
         // A float that moved nowhere still gets its free SIZE back where it
         // stands, unless the window is oversized: the clamp would then ask
         // for less than the client's own minimum on the axis that made it
         // oversized, and the client keeps the frame it has.
         if (!moved && !oversized) {
-            restoreFreeSizeForFloatedOpen(windowId, screenId, placedBefore, managedSizes);
+            restoreFreeSizeForFloatedOpen(windowId, screenId, placedBefore, managedSizes());
         }
     } else if (!record) {
         // Consume the record for the mode marker's sake without applying
@@ -243,19 +254,18 @@ void ScrollEngine::consumeStripStashTileForFloat(ScrollState* state, const Phosp
     // and leave the next fresh open to restart the template from the live
     // column count. Raised, never assigned: a window that opened fresh
     // alongside the restore has already advanced the cursor past the stash.
-    if (state) {
-        state->setBlueprintCursor(qMax(state->blueprintCursor(), stashStrip.blueprintCursor));
-        // Only a VALID stash identity, and only onto a state that has none:
-        // a null identity is what a persistence-staged entry carries, and
-        // stamping it would make the consumption site read a blueprint swap
-        // and reset the cursor just handed over (see restoreFromStripStash).
-        if (stashStrip.blueprintIdentity.isValid() && !state->hasBlueprintIdentity()) {
-            state->setBlueprintIdentity(stashStrip.blueprintIdentity);
-        }
+    state->setBlueprintCursor(qMax(state->blueprintCursor(), stashStrip.blueprintCursor));
+    // Only a VALID stash identity, and only onto a state that has none: a
+    // null identity is what a persistence-staged entry carries, and stamping
+    // it would make the consumption site read a blueprint swap and reset the
+    // cursor just handed over (see restoreFromStripStash).
+    if (stashStrip.blueprintIdentity.isValid() && !state->hasBlueprintIdentity()) {
+        state->setBlueprintIdentity(stashStrip.blueprintIdentity);
     }
-    // A cursor-only entry has no tile to consume; restoreFromStripStash
-    // retires it on the next tiled arrival, which is the payload it exists
-    // for, so a float leaves it alone.
+    // A cursor-only entry has no TILE to consume. Its cursor has just been
+    // carried above, and the entry itself is left for restoreFromStripStash
+    // to retire on the next tiled arrival, which is the payload it exists
+    // for. Re-carrying on a later float is harmless: the raise is idempotent.
     if (stashStrip.isEmpty()) {
         return;
     }

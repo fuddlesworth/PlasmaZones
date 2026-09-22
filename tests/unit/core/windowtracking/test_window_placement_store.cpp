@@ -566,8 +566,8 @@ private Q_SLOTS:
         // probe is what keeps a SECOND instance of the same app from stealing
         // the record just re-bound to the first: multi-instance distribution
         // holds via liveness, not via oldest-first.
-        WindowPlacementStore store;
         QSet<QString> liveInstances;
+        WindowPlacementStore store;
         store.setLiveInstanceProbe(PlasmaZones::TestHelpers::liveInstanceProbe(liveInstances));
         store.record(makePlacement(QStringLiteral("app|a"), QStringLiteral("app"), WindowPlacement::stateFloating(),
                                    WindowPlacement::scrollingEngineId(), QStringLiteral("DP-1"), QRect(0, 0, 10, 10)));
@@ -968,8 +968,8 @@ private Q_SLOTS:
         // bound to a still-open window is evicted — deleting a LIVE window's
         // record leaves that window recordless, the same harm the reopen
         // fallback's live probe guards against.
-        WindowPlacementStore store;
         QSet<QString> liveInstances{QStringLiteral("live")};
+        WindowPlacementStore store;
         store.setLiveInstanceProbe(PlasmaZones::TestHelpers::liveInstanceProbe(liveInstances));
         store.record(makePlacement(QStringLiteral("term|live"), QStringLiteral("term"), WindowPlacement::stateSnapped(),
                                    WindowPlacement::snapEngineId()));
@@ -1397,8 +1397,8 @@ private Q_SLOTS:
         // describes a different window and must never justify a
         // cross-screen pull. The window's OWN record always wins, live or
         // not — that is its history.
-        WindowPlacementStore store;
         QSet<QString> live;
+        WindowPlacementStore store;
         store.setLiveInstanceProbe(PlasmaZones::TestHelpers::liveInstanceProbe(live));
 
         WindowPlacement sibling =
@@ -1497,8 +1497,8 @@ private Q_SLOTS:
         // The snap adaptor's open-path burn (the snap-screen half of the
         // per-open partition). A live sibling's and the opener's own record
         // keep their credit; only a non-live sibling's is retired.
-        WindowPlacementStore store;
         QSet<QString> live;
+        WindowPlacementStore store;
         store.setLiveInstanceProbe(PlasmaZones::TestHelpers::liveInstanceProbe(live));
         store.record(makePlacement(QStringLiteral("kate|self"), QStringLiteral("kate"), WindowPlacement::stateTiled(),
                                    WindowPlacement::autotileEngineId(), QStringLiteral("DP-1")));
@@ -1524,8 +1524,8 @@ private Q_SLOTS:
         // window rides the shutdown grace (the logout save), and the
         // never-live cross-session graveyard is stripped — whatever its
         // in-memory credit says.
-        WindowPlacementStore store;
         QSet<QString> live;
+        WindowPlacementStore store;
         store.setLiveInstanceProbe(PlasmaZones::TestHelpers::liveInstanceProbe(live));
         store.record(makePlacement(QStringLiteral("firefox|alive"), QStringLiteral("firefox"),
                                    WindowPlacement::stateTiled(), WindowPlacement::autotileEngineId(),
@@ -1732,8 +1732,8 @@ private Q_SLOTS:
         // serialize()'s logout grace, and the record would persist as restore
         // evidence — the #1017 teleport surviving into the next session on
         // exactly the windows whose close signal went missing.
-        WindowPlacementStore store;
         QSet<QString> live; // nothing is live: both windows are gone
+        WindowPlacementStore store;
         store.setLiveInstanceProbe(PlasmaZones::TestHelpers::liveInstanceProbe(live));
         store.record(makePlacement(QStringLiteral("firefox|observed"), QStringLiteral("firefox"),
                                    WindowPlacement::stateTiled(), WindowPlacement::autotileEngineId(),

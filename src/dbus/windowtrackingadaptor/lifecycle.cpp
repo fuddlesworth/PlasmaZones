@@ -1209,15 +1209,11 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     }
     // And the two open-path pending maps (#1106), same canonical key space:
     // a leak needs a window that died without a frame report or a close.
-    const auto instanceIsDead = [&aliveInstances](const QString& key) {
-        return !aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(key));
+    const auto dead = [&aliveInstances](const auto& it) {
+        return !aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(it.key()));
     };
-    m_pendingOpenGeometry.removeIf([&](const auto& it) {
-        return instanceIsDead(it.key());
-    });
-    m_pendingOpenSize.removeIf([&](const auto& it) {
-        return instanceIsDead(it.key());
-    });
+    m_pendingOpenGeometry.removeIf(dead);
+    m_pendingOpenSize.removeIf(dead);
     // And the tab-colour rule memo, for the same reason and in the same key
     // space — it is keyed on canonical ids too, so a raw sweep would erase a
     // class-mutating app's live entry every pass.

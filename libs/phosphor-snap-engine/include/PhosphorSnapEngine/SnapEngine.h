@@ -656,9 +656,9 @@ public:
     /// engine. No-op with a definite snap state, snapping off, or empty args.
     /// Pins the residence and restores the free size like the in-line
     /// terminals. @p placedBefore is the caller's pre-reclaim snapshot.
+    /// @p placedBefore has no default: false lets the resize through.
     void applyNoMatchFloatDefault(const QString& windowId, const QString& screenId,
-                                  PhosphorEngine::RestoreReason reason = PhosphorEngine::RestoreReason::Open,
-                                  bool placedBefore = false);
+                                  PhosphorEngine::RestoreReason reason, bool placedBefore);
 
     /// That snapshot. A tiling claim reaching takeForReopen re-binds the record
     /// under this uuid with its own slot and leaves it there on a decline.

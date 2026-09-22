@@ -130,8 +130,7 @@ public:
     /// is an in-session move); decide via WindowPlacementStore::peekForReclaim,
     /// never plain peek() (its live-instance exclusion stops a fresh second
     /// instance being yanked onto its open sibling's monitor); return the REAL
-    /// adoption outcome verified by membership (an optimistic true hands a
-    /// window that was then refused to no other engine).
+    /// adoption outcome verified by membership.
     virtual bool claimCrossScreenReopen(const QString& windowId, const QString& openingScreenId, int minWidth = 0,
                                         int minHeight = 0)
     {
@@ -142,13 +141,15 @@ public:
         return false;
     }
 
-    /// OPTIONAL: every engine's claimCrossScreenReopen declined @p windowId and
-    /// the dispatch is handing it to this engine as the arrival screen's owner.
-    /// A reciprocal defer gate consumes this one-shot and adopts: deferring
-    /// again would leave the window with no engine (snap repairs its own).
-    virtual void noteCrossScreenClaimsExhausted(const QString& windowId)
+    /// OPTIONAL: whether the claim round for THIS announce of @p windowId ran
+    /// and every claimCrossScreenReopen declined. A reciprocal defer gate
+    /// reads it and adopts rather than deferring again, which would leave the
+    /// window with no engine. Set AND cleared once per announce, never sticky:
+    /// a mark left by an earlier announce is spent by a later one.
+    virtual void noteCrossScreenClaimsExhausted(const QString& windowId, bool exhausted)
     {
         Q_UNUSED(windowId)
+        Q_UNUSED(exhausted)
     }
 
     /// OPTIONAL: the screen this engine genuinely HOLDS the window on IN THE
@@ -229,8 +230,8 @@ public:
     /// geometry per arrival may defer those applies until endArrivalBurst so
     /// a restore of an unchanged session resolves one final layout instead of
     /// N visible intermediates. Defaults are no-ops (autotile's retile already
-    /// coalesces). Brackets may nest; only the outermost end flushes. Model
-    /// state is fully updated during the burst; only the apply is deferred.
+    /// coalesces). Brackets may nest, only the outermost end flushes, and
+    /// model state is fully updated during the burst; only the apply defers.
     virtual void beginArrivalBurst()
     {
     }
