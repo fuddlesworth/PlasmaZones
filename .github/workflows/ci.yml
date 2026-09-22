@@ -162,7 +162,7 @@ jobs:
           echo "=== Installed files ==="
           find install -type f | sort
 
-  # ─── Build shell: the phosphor-shell line (libs/phosphor-shell + the
+  # ─── Build shell: the phosphor-shell line (phosphor-shell-libs + phosphor-shell + the
   # gated phosphor-service-* libs + the example shell) is opt-in behind
   # BUILD_PHOSPHOR_SHELL and therefore NOT exercised by the default `build`
   # job. This job turns the gate ON so the Phase 1.5 / Phase 2 service libs
@@ -252,7 +252,7 @@ jobs:
   # stable Plasma, so nothing there exercises the KWin effect against the
   # upcoming release. kde-unstable carries the beta (Plasma 6.8 = KWin
   # 6.7.90), where the paint hooks return bool, RenderDevice exists, and
-  # Scene::renderer() takes a device. kwin-effect/kwincompat.h adapts to
+  # Scene::renderer() takes a device. plasmazones/kwin-effect/kwincompat.h adapts to
   # either, and this job is what keeps that true.
   #
   # ADVISORY (continue-on-error): kde-unstable is a moving target that is
@@ -340,7 +340,7 @@ jobs:
       # resynced between releases), the effect silently compiles its 6.7 arm and
       # this job becomes a duplicate of `build`. Assert the NEW arm was actually
       # selected, so "no newer Plasma to test" is a visible state rather than a
-      # false pass. kwin-effect/CMakeLists.txt emits the line.
+      # false pass. plasmazones/kwin-effect/CMakeLists.txt emits the line.
       #
       # Matched on the API-SELECTION phrase rather than a marketing version
       # number: a grep for "Plasma 6.8" keeps passing once kde-unstable moves on
@@ -469,7 +469,7 @@ jobs:
           fi
 
   # ─── JSON Schema: validate every bundled data file against the committed
-  # schemas under data/schemas/. These are the same schema files runtime
+  # schemas under phosphor/data/schemas/ and plasmazones/data/schemas/. These are the same schema files runtime
   # validation compiles (phosphor-fsloader's SchemaValidator via valijson), so
   # this is the author-time gate that keeps malformed layouts (and future
   # document types) out of the tree. Mirrors the lefthook `json-schema` hook;
@@ -529,7 +529,7 @@ jobs:
   # the runtime we ship — analysis stays deterministic across CI runs and only
   # changes when we deliberately bump the vendored Luau.
   #
-  # The bundled algorithms consume `pluau` as an injected global; data/algorithms/
+  # The bundled algorithms consume `pluau` as an injected global; plasmazones/data/algorithms/
   # .luaurc declares it so the analyzer resolves it (pluau.luau itself *defines*
   # the global and is analyzed under the default config, which luau-analyze
   # picks per-file from the nearest .luaurc).

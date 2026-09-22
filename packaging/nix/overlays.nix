@@ -7,7 +7,7 @@
 # build is wired up in exactly one place instead of five separate call sites.
 #
 # ── THE KWIN IID CONSTRAINT (why an overlay is the right shape) ────────────────
-# PlasmaZones ships a KWin C++ effect plugin (kwin-effect/). KWin embeds its own
+# PlasmaZones ships a KWin C++ effect plugin (plasmazones/kwin-effect/). KWin embeds its own
 # exact version string into every plugin it loads as an IID (Interface
 # Identifier) and refuses, at runtime, to load any plugin whose IID does not
 # match the running KWin — even across patch releases (6.6.4 vs 6.6.5). So the

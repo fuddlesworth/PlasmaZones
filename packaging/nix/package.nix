@@ -26,8 +26,8 @@
 # BUILD FLAGS
 # ───────────
 # We always pass -DUSE_KDE_FRAMEWORKS=ON. This enables:
-#   • The KWin C++ effect plugin (kwin-effect/)
-#   • The KDE System Settings module / KCM (kcm/)
+#   • The KWin C++ effect plugin (plasmazones/kwin-effect/)
+#   • The KDE System Settings module / KCM (plasmazones/kcm/)
 #   • KGlobalAccel shortcut integration
 # There is no reason to build without KDE frameworks on NixOS — the portable
 # Qt-only mode exists for non-KDE compositors (Hyprland, Sway, GNOME). If
@@ -160,7 +160,7 @@ stdenv.mkDerivation (finalAttrs: {
     kdePackages.kcolorscheme      # KColorScheme: the KWin effect resolves the tab pills' theme colours
 
     # ── KWin (for the C++ effect plugin) ─────────────────────────────────────
-    # The kwin-effect/ subdirectory compiles a plugin that is loaded directly
+    # The plasmazones/kwin-effect/ subdirectory compiles a plugin that is loaded directly
     # by KWin. KWin exposes a private Effects API that the plugin links against.
     # THIS IS THE CRITICAL DEPENDENCY: the plugin's IID embeds the exact KWin
     # version. If this kwin package doesn't match the running KWin, the plugin

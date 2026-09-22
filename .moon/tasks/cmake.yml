@@ -54,7 +54,8 @@ tasks:
     command: 'cmake'
     args:
       - '--build'
-      - 'build'
+      - '--preset'
+      - 'debug'
       - '--target'
       - '$project-tier'
       - '--parallel'
@@ -72,6 +73,25 @@ tasks:
       # the same tree race each other on common dependencies. Serialize the
       # upstream builds; ninja's own -j provides the parallelism.
       runDepsInParallel: false
+
+  # Release builds land in build-release/ (see CMakePresets.json), so a
+  # debug tree and a release tree coexist and switching costs nothing.
+  build-release:
+    extends: 'build'
+    args:
+      - '--build'
+      - '--preset'
+      - 'release'
+      - '--target'
+      - '$project-tier'
+      - '--parallel'
+      - '6'
+    deps:
+      - 'repo:configure-release'
+      - '^:build-release'
+    options:
+      mergeArgs: 'replace'
+      mergeDeps: 'replace'
 
   # Every test target already carries its own private-bus TEST_LAUNCHER and
   # XDG sandbox from cmake/PhosphorTestIsolation.cmake, so ctest is invoked
@@ -96,3 +116,17 @@ tasks:
       runFromWorkspaceRoot: true
       cache: false
       runDepsInParallel: false
+
+  test-release:
+    extends: 'test'
+    args:
+      - '--test-dir'
+      - 'build-release/$project'
+      - '--output-on-failure'
+      - '-j'
+      - '6'
+    deps:
+      - '~:build-release'
+    options:
+      mergeArgs: 'replace'
+      mergeDeps: 'replace'

@@ -29,7 +29,7 @@ URL:            https://github.com/fuddlesworth/PlasmaZones
 Source0:        %{url}/archive/refs/tags/v%{version}/%{name}-%{version}.tar.gz
 
 # Luau and valijson are vendored as committed source tarballs
-# (extern/luau-<ver>.tar.gz, extern/valijson-<ver>.tar.gz) and built into the
+# (phosphor/extern/luau-<ver>.tar.gz, phosphor/extern/valijson-<ver>.tar.gz) and built into the
 # shipped objects, so declare the bundled provides per Fedora's bundled-library
 # policy — this lets security tooling track CVEs against the bundled copies.
 # valijson is header-only, which does not exempt it: its code still lands in
@@ -103,7 +103,7 @@ BuildRequires:  kf6-kirigami-devel >= 6.26.0
 %endif
 
 # Plasma 6.7 / KWin 6.7 (effect API). 6.8 (KWin 6.7.90) builds too: the effect
-# adapts to either paint-hook signature at compile time, see kwin-effect/kwincompat.h.
+# adapts to either paint-hook signature at compile time, see plasmazones/kwin-effect/kwincompat.h.
 # The KWin effect plugin's IID embeds KWin's exact upstream version
 # (KWIN_PLUGIN_VERSION_STRING in /usr/include/kwin/config-kwin.h). KWin refuses
 # to load any effect whose IID doesn't match its own version string — even
@@ -279,8 +279,8 @@ echo ""
 %files
 %license LICENSE
 %license COPYING.LESSER
-# MIT licence of the vendored Luau runtime (extern/luau) and BSD-2-Clause
-# licence of the vendored valijson headers (extern/valijson), installed by the
+# MIT licence of the vendored Luau runtime (phosphor/extern/luau) and BSD-2-Clause
+# licence of the vendored valijson headers (phosphor/extern/valijson), installed by the
 # phosphor-scripting / phosphor-fsloader CMake in the default vendored build.
 %license %{_datadir}/licenses/plasmazones/LICENSE.Luau
 %license %{_datadir}/licenses/plasmazones/LICENSE.valijson

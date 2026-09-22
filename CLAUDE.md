@@ -221,10 +221,14 @@ moon run plasmazones:build          # configure once, then build only that tier 
 moon run phosphor:test              # ctest --test-dir build/phosphor
 moon run :test --affected           # every tier touched by the working-tree diff
 moon run repo:check                 # conventions + JSON schema gates
+moon run plasmazones:build-release  # same, from the release preset into build-release/
+moon run phosphor:test-release      # ctest --test-dir build-release/phosphor
 moon query projects --affected      # which tiers a change reaches
 ```
 
-How it maps onto CMake (see `.moon/tasks/cmake.yml`): every tier task runs from the workspace root against the shared `build/` directory. `build` invokes the tier's aggregate target, `<tier>-tier`, declared by `phosphor_tier_target()` at the end of each tier CMakeLists; `test` runs ctest scoped to `build/<tier>`. Because the build directory is shared, moon does not cache build outputs and ccache remains the compile cache. A tier gets its own build directory, and with it a moon-cached output, once it can be configured standalone against an installed upstream tier.
+Configurations come from `CMakePresets.json`: `debug` configures into `build/`, `release` into `build-release/`, `relwithdebinfo` into `build-relwithdebinfo/`, and every preset turns tests, the shell and the tools on. The moon tasks are the debug ones by default and each has a `-release` twin. Plain CMake users get the same trees with `cmake --preset release && cmake --build --preset release`.
+
+How it maps onto CMake (see `.moon/tasks/cmake.yml`): every tier task runs from the workspace root against the build directory its preset names. `build` invokes the tier's aggregate target, `<tier>-tier`, declared by `phosphor_tier_target()` at the end of each tier CMakeLists; `test` runs ctest scoped to `build/<tier>`. Because the build directory is shared, moon does not cache build outputs and ccache remains the compile cache. A tier gets its own build directory, and with it a moon-cached output, once it can be configured standalone against an installed upstream tier.
 
 Known tier inversion: `phosphor-shell` links `plasmazones_rendering` and `plasmazones_shared_qml` from the plasmazones tier, so its `moon.yml` lists `plasmazones` as a dependency and `.moon/workspace.yml` turns layer enforcement off. Both go away together when those two targets move into a phosphor library.
 

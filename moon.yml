@@ -13,22 +13,16 @@ project:
   description: 'Conventions, schema validation and other whole-tree gates.'
 
 tasks:
-  # One configure for the whole tree. Every tier's build task depends on
-  # this one target, so it runs once per moon invocation rather than once
-  # per tier. command + args rather than one string: moon's tokenizer
-  # splits the -D<var>=<value> arguments and cmake then sees a bare "CMAKE".
+  # One configure per configuration for the whole tree. Every tier's build
+  # task depends on the matching one, so it runs once per moon invocation
+  # rather than once per tier. The configurations themselves live in
+  # CMakePresets.json: `debug` configures into build/, `release` into
+  # build-release/, so the two coexist and a plain `cmake --preset release`
+  # gives the same tree without moon.
   configure:
-    command: 'cmake'
-    args:
-      - '-B'
-      - 'build'
-      - '-G'
-      - 'Ninja'
-      - '-DCMAKE_BUILD_TYPE=Debug'
-      - '-DBUILD_TESTING=ON'
-      - '-DBUILD_PHOSPHOR_SHELL=ON'
-      - '-DBUILD_TOOLS=ON'
+    command: 'cmake --preset debug'
     inputs:
+      - 'CMakePresets.json'
       - 'CMakeLists.txt'
       - 'cmake/**/*'
       - '**/CMakeLists.txt'
@@ -36,6 +30,10 @@ tasks:
       - '**/*.cmake.in'
     options:
       cache: false
+
+  configure-release:
+    extends: 'configure'
+    command: 'cmake --preset release'
 
   conventions:
     command: 'python3 scripts/check-conventions.py'
