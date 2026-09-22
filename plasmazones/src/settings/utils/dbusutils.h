@@ -56,10 +56,11 @@ inline bool notifyReload()
 ///
 /// reloadSettings() does NOT cover this: the daemon's rule store is borrowed by
 /// the settings surface it serves, and a borrowed store is never reloaded by the
-/// settings reload path (the owner drives reloads). An import rewrites rules.json
-/// underneath the daemon, so without this call the daemon keeps serving its
-/// pre-import rule set and the settings app's next revert or Apply fetches those
-/// stale rules back over the imported ones.
+/// settings reload path (the owner drives reloads). The daemon's RuleStoreWatcher
+/// does eventually fold an import into the store on its own, but only once a
+/// short debounce fires. This call is what makes the reload land FIRST, so the
+/// settings app's immediate revert or Apply cannot fetch the pre-import set back
+/// over the rules that were just imported.
 ///
 /// Synchronous for the same reason notifyReload is: the caller reloads its own
 /// in-memory state (and re-fetches rules from the daemon) immediately after, so
@@ -67,8 +68,10 @@ inline bool notifyReload()
 ///
 /// Returns false when the call did not reach the daemon (not started, timed
 /// out, no such interface). That is the case the caller has to care about: the
-/// re-fetch it is about to make will then answer with the daemon's PRE-import
-/// rule set and quietly overwrite the rules that were just imported. Failure is
+/// daemon's RuleStoreWatcher will still fold the import in once its debounce
+/// fires, but the re-fetch the caller is about to make can beat it and answer
+/// with the PRE-import rule set, quietly overwriting what was just imported.
+/// Only a successful call guarantees the reload happened first. Failure is
 /// warned about here, so a caller that has no recovery of its own can ignore
 /// the return and still leave a trace in the log.
 ///
@@ -79,7 +82,7 @@ inline bool notifyRulesReload()
         callDaemon(QString(PhosphorProtocol::Service::Interface::Rules), QStringLiteral("reloadRules"));
     if (reply.type() == QDBusMessage::ErrorMessage) {
         qCWarning(lcCore) << "notifyRulesReload: the daemon did not reload rules.json —" << reply.errorMessage()
-                          << "; its rule set is now stale and a re-fetch will serve pre-import rules";
+                          << "; an immediate re-fetch can beat its file watcher and serve pre-import rules";
         return false;
     }
     return true;

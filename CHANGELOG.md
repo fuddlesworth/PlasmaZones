@@ -7,6 +7,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Rules edited outside the settings app took effect only after a restart**: the daemon never watched `rules.json`, so a rule added by hand, restored from a backup or written by a config import stayed invisible until the daemon was restarted or told to reload over D-Bus. Worse, the daemon's next rule save wrote its stale set back over the edit. The daemon now watches the file and reloads it when another process changes it.
+
 ## [3.4.19] - 2026-09-21
 
 ### Added

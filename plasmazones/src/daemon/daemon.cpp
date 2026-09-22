@@ -86,6 +86,7 @@
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/Rule.h>
 #include <PhosphorRules/RuleStore.h>
+#include <PhosphorRules/RuleStoreWatcher.h>
 
 #include "controllers/enginefactory.h"
 #include <PhosphorTileEngine/AutotileEngine.h>
@@ -142,9 +143,12 @@ Daemon::Daemon(QObject* parent)
     // unique_ptr owns lifetime; a Qt parent would double-free.
     , m_configBackend(createDefaultConfigBackend())
     // Unified Rule store — loads rules.json (written by the v3→v4
-    // migration). Daemon is the sole writer; the RuleAdaptor exposes it.
+    // migration). The daemon is the primary writer and the RuleAdaptor exposes
+    // it, but the file is also written out-of-process (settings app, config
+    // import, hand edits), so a watcher below keeps the store current.
     // Declared/constructed before m_layoutManager so the registry can borrow it.
     , m_ruleStore(std::make_unique<PhosphorRules::RuleStore>(ConfigDefaults::rulesFilePath()))
+    , m_ruleStoreWatcher(std::make_unique<PhosphorRules::RuleStoreWatcher>(*m_ruleStore))
     , m_layoutManager(
           std::make_unique<PhosphorZones::LayoutRegistry>(m_ruleStore.get(), QStringLiteral("plasmazones/layouts")))
     , m_layoutComputeService(std::make_unique<PhosphorZones::LayoutComputeService>(nullptr))
@@ -223,6 +227,14 @@ Daemon::Daemon(QObject* parent)
     if (m_ruleStore && !stripStaleManagedAppearanceBaselines(*m_ruleStore)) {
         qCWarning(lcDaemon) << "Failed to persist rules.json after stripping stale baseline appearance rules";
     }
+
+    // Start watching rules.json only now: the strip above may have just
+    // rewritten the file, and start() runs one immediate synchronous reload
+    // that must see the stripped set (an idempotent no-op against what the
+    // strip left in memory). From here on an out-of-process edit reaches the
+    // store through the same rulesChanged path a D-Bus reloadRules takes, so
+    // the rule engines, exclusion slice and reconcile passes all follow it.
+    m_ruleStoreWatcher->start();
 
     // Configure geometry update debounce timer
     // This prevents cascading recalculations when multiple geometry changes occur rapidly.
