@@ -433,6 +433,10 @@ void Daemon::connectOverlaySignals()
                     for (PhosphorEngine::PlacementEngineBase* engine : {m_autotileEngine.get(), m_scrollEngine.get()}) {
                         if (engine && engine->isActiveOnScreen(sourceScreen) && engine->isWindowTracked(windowId)) {
                             engine->windowClosed(windowId);
+                            // A LIVE window released here gets no
+                            // WindowTracking.windowClosed, so the scroll
+                            // engine's closed-mid-hold memory is spent now.
+                            m_windowTrackingAdaptor->forgetClosedFullscreenHold(windowId);
                             // Clear the mode-float marker immediately — windowClosed
                             // removes the window from the engine but doesn't clear
                             // the WTS flag.
@@ -818,7 +822,13 @@ void Daemon::syncScrollFloatStatePassive(const QString& windowId, bool floating,
         }
     } else {
         m_windowTrackingAdaptor->setWindowFloating(windowId, false);
-        m_scrollEngine->clearModeSpecificFloatMarker(windowId);
+        // A release-time hold clear (announceReleasedFullscreenHolds) arrives
+        // for a window the engine no longer tracks. Its mode-specific marker
+        // is an INPUT to handleEngineWindowsReleased, which runs right after,
+        // so only a still-tracked window's marker is cleared here.
+        if (m_scrollEngine->isWindowTracked(windowId)) {
+            m_scrollEngine->clearModeSpecificFloatMarker(windowId);
+        }
     }
     // Deliberately no applyGeometryForFloat and no navigation OSD.
 }

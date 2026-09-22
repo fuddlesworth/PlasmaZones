@@ -165,6 +165,9 @@ pse_add_test(test_scrollengine_focusreport test_scrollengine_focusreport.cpp)
 # flag means, which column the window-scoped verbs act on, and what survives
 # the transitions that discard the pre-maximize slot.
 pse_add_test(test_scrollengine_maximize test_scrollengine_maximize.cpp)
+# The compositor's fullscreen hold: a strip tile held out for its own
+# fullscreen with a passive announcement, and what returns it.
+pse_add_test(test_scrollengine_fullscreenfloat test_scrollengine_fullscreenfloat.cpp)
 # The tile-focus family: cycleTab and focusTab, plus the float refusal and the
 # panned-view hand-back they share with focusWindowTop/Bottom. Its own file
 # rather than more of the smoke suite, which is past the size ceiling.

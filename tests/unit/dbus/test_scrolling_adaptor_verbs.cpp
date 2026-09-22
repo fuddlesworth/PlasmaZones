@@ -34,6 +34,11 @@
  *     id would compile and silently revert to acting on whichever column
  *     happens to be active, which is the behaviour the wire argument exists
  *     to replace.
+ *  5. setWindowFullscreenFloat is a reconciliation call with neither the
+ *     ownership nor the per-context gate, its bool carries the engine's own
+ *     refusals back (a float under another owner, a return of a window it
+ *     did not hold), a repeat hold answers true, and it announces on the
+ *     PASSIVE channel only.
  */
 
 #include <QTest>
@@ -507,6 +512,70 @@ private Q_SLOTS:
         m_adaptor->setWindowHeightProportion(QStringLiteral("DP-1"), 0.5);
         QCOMPARE(activeHeight().kind, WindowHeight::Kind::Preset);
         QCOMPARE(activeHeight().presetFraction, 0.5);
+    }
+
+    // setWindowFullscreenFloat: clearWindowedFullscreen's wire policy (no
+    // ownership gate, no context gate), the engine's refusals carried back
+    // as the bool the effect steers on, and the PASSIVE channel only.
+    void testSetWindowFullscreenFloat_boundaryAndChannel()
+    {
+        QSignalSpy passive(m_engine, &PhosphorEngine::PlacementEngineBase::windowFloatingStateSynced);
+        QSignalSpy active(m_engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+
+        // Boundary: an empty id and an unknown id answer false and emit nothing.
+        QVERIFY(!m_adaptor->setWindowFullscreenFloat(QString(), QStringLiteral("DP-1"), true));
+        QVERIFY(!m_adaptor->setWindowFullscreenFloat(QStringLiteral("app|nosuch"), QStringLiteral("DP-1"), true));
+        QCOMPARE(passive.count(), 0);
+
+        m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
+        m_engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("DP-1"), 0, 0);
+        QCoreApplication::processEvents();
+        auto* state = static_cast<PhosphorScrollEngine::ScrollState*>(m_engine->stateForScreen(QStringLiteral("DP-1")));
+        QVERIFY(state);
+        QCOMPARE(state->strip().columnCount(), 2);
+
+        // UNGATED: a refusing gate and a missing gate both still act, because
+        // this reports what the compositor has already done.
+        m_adaptor->setContextGateProvider([](const QString&) {
+            return true;
+        });
+        QVERIFY(m_adaptor->setWindowFullscreenFloat(QStringLiteral("app|b"), QStringLiteral("DP-1"), true));
+        QVERIFY(m_engine->isFullscreenFloated(QStringLiteral("app|b")));
+        QCOMPARE(state->strip().columnCount(), 1);
+        QCOMPARE(passive.count(), 1);
+        QCOMPARE(passive.last().at(0).toString(), QStringLiteral("app|b"));
+        QCOMPARE(passive.last().at(1).toBool(), true);
+        QCOMPARE(passive.last().at(2).toString(), QStringLiteral("DP-1"));
+        QCOMPARE(active.count(), 0);
+        // A repeat hold of this call's own float answers true and changes nothing.
+        QVERIFY(m_adaptor->setWindowFullscreenFloat(QStringLiteral("app|b"), QStringLiteral("DP-1"), true));
+        QCOMPARE(passive.count(), 1);
+
+        m_adaptor->setContextGateProvider({});
+        QVERIFY(m_adaptor->setWindowFullscreenFloat(QStringLiteral("app|b"), QStringLiteral("DP-1"), false));
+        QCoreApplication::processEvents();
+        QVERIFY(!m_engine->isFullscreenFloated(QStringLiteral("app|b")));
+        QCOMPARE(state->strip().columnCount(), 2);
+        QCOMPARE(passive.count(), 2);
+        QCOMPARE(passive.last().at(1).toBool(), false);
+        QCOMPARE(active.count(), 0);
+        m_adaptor->setContextGateProvider([](const QString&) {
+            return false;
+        });
+
+        // A user float first: the hold is refused and the return does not
+        // unfloat something the compositor never floated.
+        m_engine->setWindowFloat(QStringLiteral("app|a"), true, QStringLiteral("DP-1"));
+        QCoreApplication::processEvents();
+        QVERIFY(state->isFloating(QStringLiteral("app|a")));
+        QVERIFY(!m_adaptor->setWindowFullscreenFloat(QStringLiteral("app|a"), QStringLiteral("DP-1"), true));
+        QVERIFY(!m_adaptor->setWindowFullscreenFloat(QStringLiteral("app|a"), QStringLiteral("DP-1"), false));
+        QVERIFY(state->isFloating(QStringLiteral("app|a")));
+
+        // The screenId is a HINT: a foreign one is forwarded and the engine
+        // announces the window's own screen.
+        QVERIFY(m_adaptor->setWindowFullscreenFloat(QStringLiteral("app|b"), QStringLiteral("HDMI-2"), true));
+        QCOMPARE(passive.last().at(2).toString(), QStringLiteral("DP-1"));
     }
 };
 

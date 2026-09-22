@@ -93,50 +93,44 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
         if (!removed.contains(screenId)) {
             continue;
         }
-        // setNoBorder() and geometry are global KWin properties — skip
-        // sticky and multi-desktop windows UNCONDITIONALLY on a desktop
-        // switch, even when this desktop's autotile set is empty: the
-        // engine preserves the other desktop's TilingState, so such a
-        // window may still be tiled in that desktop's live session and
-        // restoring it here would leak the title bar / geometry into
-        // that session. The only sanctioned restore for these windows
-        // is the genuine-toggle path below (full disable arrives with
-        // isDesktopSwitch=false and an empty set).
-        // Activities carry the same hazard: empty activities() means
-        // all-activities, and a multi-activity window may be tiled in
-        // another activity's live session.
+        // setNoBorder() and geometry are global KWin properties — skip sticky
+        // and multi-desktop windows UNCONDITIONALLY on a desktop switch, even
+        // when this desktop's autotile set is empty: the engine preserves the
+        // other desktop's TilingState, so such a window may still be tiled in
+        // that desktop's live session and restoring it here would leak the
+        // title bar / geometry into it. The only sanctioned restore for these
+        // windows is the genuine-toggle path below. Activities carry the same
+        // hazard: empty activities() means all-activities.
         if (w->isOnAllDesktops() || w->desktops().size() > 1 || w->activities().isEmpty()
             || w->activities().size() > 1) {
             continue;
         }
         const QString windowId = m_effect->getWindowId(w);
-        // A window the user floated in autotile keeps its
-        // pre-autotile geometry entry and notify tracking — but its
-        // CURRENT position is the user's chosen float spot.
-        // Restoring the saved rect would teleport it, and demoting
-        // its tracking would re-announce (and possibly re-tile) it
-        // on desktop return. Floating windows need none of the
-        // cleanup below: they hold no decoration ownership, no
-        // border, no zone tracking.
+        // A tile held out for its OWN fullscreen is parked (the exit branch's shape) before the skips below.
+        if (parkFullscreenHoldForDesktopSwitch(windowId)) {
+            continue;
+        }
+        // A window the user floated in autotile keeps its pre-autotile geometry
+        // entry and notify tracking, but its CURRENT position is the user's
+        // chosen float spot. Restoring the saved rect would teleport it, and
+        // demoting its tracking would re-announce (and possibly re-tile) it on
+        // desktop return. Floating windows need none of the cleanup below.
         if (m_effect->isWindowFloating(windowId)) {
             continue;
         }
-        // Fullscreen windows: KWin owns their geometry and re-asserts
-        // the fullscreen frame against any moveResize, so the
-        // geometry-restore steps below would fight it and park the
-        // window wherever KWin's exit-restore lands. The
-        // enter-fullscreen slot already released the decoration and
-        // border tracking. DO demote — this screen is leaving
-        // autotile, and stale tracking would make the exit-fullscreen
-        // slot re-claim the window on a no-longer-autotile screen.
+        // Fullscreen windows: KWin owns their geometry and re-asserts the
+        // fullscreen frame against any moveResize, so the geometry-restore steps
+        // below would fight it. The enter-fullscreen slot already released the
+        // decoration and border tracking. DO demote: this screen is leaving
+        // autotile, and stale tracking would make the exit-fullscreen slot
+        // re-claim the window on a no-longer-autotile screen.
         //
-        // A windowed-fullscreen window leaving its strip on THIS
-        // (current) context: the flag's owner is gone, so windowed
-        // fullscreen ends. Forget membership NOW — with the entry
-        // gone the tracked path's geometry restore below bails on
-        // the still-requested fullscreen state instead of fighting
-        // it — and queue the state release for after the managed-set
-        // write (the split the release helpers document).
+        // A windowed-fullscreen window leaving its strip on THIS (current)
+        // context: the flag's owner is gone, so windowed fullscreen ends. Forget
+        // membership NOW (with the entry gone the tracked path's geometry
+        // restore below bails on the still-requested fullscreen state instead
+        // of fighting it) and queue the state release for after the
+        // managed-set write (the split the release helpers document).
         const bool wasWindowedFs = m_effect->m_windowedFullscreenWindows.contains(windowId);
         if (wasWindowedFs) {
             forgetWindowedFullscreen(windowId);
@@ -380,8 +374,11 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
         }
     }
     m_notifiedWindows -= windowsOnRemovedScreens;
+    // Not the hotplug path (outputchange.cpp's positional transfer; an un-refitted frame there can
+    // announce a fullscreen tile, self-healing on exit). A toggle to SNAPPING mid-hold spends the pre-tile restore.
     for (const QString& wid : std::as_const(windowsOnRemovedScreens)) {
         m_notifiedWindowScreens.remove(wid);
+        dropFullscreenHoldRecords(wid); // the hold ends with the mode; the exit takes the never-tracked arm
         // A genuine mode toggle ends windowed fullscreen for the
         // windows it untracks: their strip is gone and no batch will
         // ever un-flag them. Same collection-set skips as the border
@@ -1008,16 +1005,17 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                 if (m_savedNotifiedForDesktopReturn.contains(windowId) || m_notifiedWindows.contains(windowId)) {
                     // Previously tracked — re-add without re-notifying the
                     // daemon. Restore the SCREEN record too: the demotion
-                    // dropped both, and a window tracked with an empty
-                    // screen record never detects cross-monitor / cross-VS
-                    // transfers again (handleWindowOutputChanged
-                    // early-returns on an unknown old screen).
+                    // dropped both, and a window tracked with an empty screen
+                    // record never detects cross-monitor / cross-VS transfers
+                    // (handleWindowOutputChanged bails on an unknown old screen).
                     m_notifiedWindows.insert(windowId);
                     m_notifiedWindowScreens[windowId] = screenId;
+                    settleParkedFullscreenHold(w, windowId, screenId);
                 } else {
-                    // Genuinely new window opened while this desktop was
-                    // not active — notify daemon so it's added to PhosphorTiles::TilingState
-                    notifyWindowAdded(w, /*knownFreeFloating=*/true);
+                    // Genuinely new window opened while this desktop was away: free only if
+                    // KWin spawned it meanwhile (spawn marker; lost on an unmanaged screen, the
+                    // daemon's own spawn capture stands in). A formerly-held tile sits at its column rect.
+                    notifyWindowAdded(w, /*knownFreeFloating=*/m_pendingFreshWindows.contains(windowId));
                 }
             }
             // Only remove entries for windows on screens we just processed.
@@ -1071,6 +1069,8 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                         // PARKED, not moved. The park set means exactly "the
                         // daemon STILL holds this window in this desktop's
                         // state" (see the resetNotified comment in
+                        // (A parked held window can outlive a genuine toggle's daemon
+                        // release; the re-track's return is then refused and resolved from the cache.)
                         // tilinghandler.cpp), and a window that genuinely
                         // changed desktops was un-parked by
                         // cleanupAutotileTracking on its way out. So this is a
@@ -1080,13 +1080,13 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                         // other desktop's windows into this strip and destroys
                         // the column order.
                         //
-                        // The `added`-keyed re-track loop above does the same
-                        // thing, but `added` is empty on an identical-set
-                        // switch — every desktop assigned the same mode, which
-                        // is the ordinary multi-desktop scrolling setup — so
-                        // this scan is the only pass those windows reach.
+                        // The `added`-keyed re-track loop above does the same,
+                        // but `added` is empty on an identical-set switch (every
+                        // desktop the same mode, the ordinary setup), so this
+                        // scan is the only pass those windows reach.
                         m_notifiedWindows.insert(windowId);
                         m_notifiedWindowScreens[windowId] = screenId;
+                        settleParkedFullscreenHold(w, windowId, screenId);
                     } else if (!m_notifiedWindows.contains(windowId)) {
                         // Restore preserved pre-autotile geometry so float-restore
                         // returns to the original position, not the tiled frame from

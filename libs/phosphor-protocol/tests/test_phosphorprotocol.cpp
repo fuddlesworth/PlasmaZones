@@ -68,7 +68,7 @@ private Q_SLOTS:
         QCOMPARE(all.size(), DragBypassReasonCount);
         for (auto r : all) {
             const QString token = toWireString(r);
-            QCOMPARE(bypassReasonFromWireString(token), r);
+            QVERIFY2(bypassReasonFromWireString(token) == r, qPrintable(token));
             // The empty token belongs to None ALONE. Without this the round
             // trip passes for a value that fell out of toWireString's switch:
             // it would answer the empty default and parse back to None, which
@@ -377,9 +377,9 @@ private Q_SLOTS:
         // v9 adds Scrolling.leaveNativeFullscreenRequested for the same reason
         // and with the same failure mode. A daemon emitting it to an effect
         // with no such slot, or an effect waiting on a daemon that never emits
-        // it, breaks no signature and errors nowhere: the strip just goes on
-        // scrolling and parking a column whose window the compositor refuses to
-        // move. It takes its own step because v8 shipped in 3.4.4.
+        // it, breaks no signature and errors nowhere: the windowed-fullscreen
+        // toggle just builds its relayout against a window the compositor
+        // refuses to move. It takes its own step because v8 shipped in 3.4.4.
         // v9 ALSO widens Tiling.managedScreensChanged with the per-screen
         // desktop map the announced set was resolved against — one bump for
         // both, since they land in the same unreleased cycle. Same silent
@@ -388,8 +388,13 @@ private Q_SLOTS:
         // on, while an old daemon sends no stamp and leaves the effect unable
         // to tell a late announce for the desktop it just left from a fresh one
         // for the desktop it is on.
-        QCOMPARE(Service::ApiVersion, 9);
-        QCOMPARE(Service::MinPeerApiVersion, 9);
+        // v10 replaces leaveNativeFullscreenRequested with Scrolling.setWindowFullscreenFloat: the
+        // effect holds a tile out of the strip for its own fullscreen through a
+        // passive-channel float instead of a user float, so the toggle has no
+        // fullscreen tile left to release. An old effect calling the missing
+        // method errors on the wire; an old daemon's signal goes unheard.
+        QCOMPARE(Service::ApiVersion, 10);
+        QCOMPARE(Service::MinPeerApiVersion, 10);
     }
 
     // ── Environment switches ─────────────────────────────────────────────
@@ -400,6 +405,8 @@ private Q_SLOTS:
     void testEnvSwitchRules()
     {
         const char* const name = "PLASMAZONES_TEST_ENV_SWITCH";
+        const bool wasSet = qEnvironmentVariableIsSet(name);
+        const QByteArray previous = qgetenv(name);
         qunsetenv(name);
         QCOMPARE(Service::envSwitchEnabled(name), false);
         QCOMPARE(Service::envSwitchEnabledByDefault(name), true);
@@ -418,7 +425,11 @@ private Q_SLOTS:
             QCOMPARE(Service::envSwitchEnabled(name), true);
             QCOMPARE(Service::envSwitchEnabledByDefault(name), true);
         }
-        qunsetenv(name);
+        if (wasSet) {
+            qputenv(name, previous);
+        } else {
+            qunsetenv(name);
+        }
     }
 
     /// The dma-buf thumbnail transport is the DEFAULT: unset enables it, and
@@ -457,8 +468,8 @@ private Q_SLOTS:
             const auto type = static_cast<WindowType>(v);
             const QString token = windowTypeToString(type);
             const auto parsed = windowTypeFromString(token);
-            QVERIFY(parsed.has_value());
-            QVERIFY(*parsed == type);
+            QVERIFY2(parsed.has_value(), qPrintable(token));
+            QVERIFY2(*parsed == type, qPrintable(token));
             tokens.insert(token);
         }
         // Every enum value must map to a DISTINCT wire token — a copy-paste

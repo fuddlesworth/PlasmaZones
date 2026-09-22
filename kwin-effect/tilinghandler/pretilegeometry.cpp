@@ -23,6 +23,7 @@
 #include <PhosphorProtocol/ServiceConstants.h>
 
 #include <core/output.h>
+#include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <window.h>
 
@@ -50,6 +51,14 @@ void TilingHandler::saveAndRecordPreTileGeometry(const QString& windowId, const 
         qCDebug(lcEffect) << "Skipped pre-autotile geometry save: invalid frame" << frame << "for" << windowId;
         return;
     }
+    // The correction above keys on the COMMITTED fullscreen bit, which has
+    // already dropped at the fullscreen-exit edge while the frame still holds
+    // the full-output rect. That caller (signals.cpp, never-tracked arm)
+    // therefore passes knownFreeFloating=false and clears the spawn marker, so
+    // the not-floating guard below drops the capture instead of storing the
+    // output rect as free geometry. A rect equal to the output is NOT rejected
+    // here: a borderless window sized to its output has exactly that free
+    // geometry, and the spawn capture must store it.
     // Use EXACT windowId match only — NOT an appId/stableId fallback.
     // Multiple instances of the same app (e.g., 3 Dolphin windows) share an
     // appId; a fuzzy contains-check would return true after the first
@@ -134,6 +143,18 @@ void TilingHandler::saveAndRecordPreTileGeometry(const QString& windowId, const 
         qCDebug(lcEffect) << "Skipped pre-autotile geometry for snapped window" << windowId << "on" << screenId;
         return;
     }
+    // The fullscreen-exit announce of a never-tracked window (and any re-add
+    // after an effect restart) arrives while KWin still has the window at the
+    // output's fullscreen area: that frame is never free geometry, and the
+    // FloatingCache can read "floating" for a hold the daemon still keeps, so
+    // the guard above alone does not stop it being stored first-capture-wins.
+    if (!knownFreeFloating && KWin::effects) {
+        const QRect fsArea = KWin::effects->clientArea(KWin::FullScreenArea, w).toRect();
+        if (fsArea.isValid() && frame.toRect() == fsArea) {
+            qCDebug(lcEffect) << "Skipped pre-autotile geometry at the fullscreen area" << windowId << "on" << screenId;
+            return;
+        }
+    }
     // Drop-then-insert as one unit: every guard that could bail has now been
     // passed, so the window is never left without an entry. See the deferral
     // note at the scan above.
@@ -154,10 +175,11 @@ void TilingHandler::saveAndRecordPreTileGeometry(const QString& windowId, const 
     m_preTileGeometries[screenId][windowId] = frame;
     qCDebug(lcEffect) << "Saved pre-autotile geometry for" << windowId << "on" << screenId << ":" << frame;
     if (m_effect->m_daemonGate.serviceRegistered) {
-        // overwrite=knownFreeFloating: only the window-opened spawn paths
-        // (the sole callers passing true) may clobber a persisted daemon
-        // entry — the spawn frame IS the authoritative free-floating
-        // geometry, and a stale appId-keyed entry from a prior session
+        // overwrite=knownFreeFloating: only callers vouching for the frame
+        // as free geometry pass true (the window-opened spawn paths and a
+        // mode-entry batch for an untiled window) and may clobber a
+        // persisted daemon entry — that frame IS the authoritative
+        // free-floating geometry, and a stale entry from a prior session
         // would otherwise block the fresh capture and leave float-restore
         // teleporting the window to ancient coordinates.
         // Every other caller (autotile toggle, unminimize-unfloat,

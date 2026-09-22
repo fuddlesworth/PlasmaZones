@@ -69,6 +69,11 @@ void PlacementMapScreen::fetchPinnedSnappingLayout()
     const int desktop = m_pinnedDesktop + 1;
     call<QString>(Iface::LayoutRegistry, QStringLiteral("getLayoutForScreenDesktop"), {m_screenId, desktop},
                   [this](const QString& layoutId) {
+                      // Mode-guarded like the live twin: a late answer must not
+                      // publish zone cells under another mode.
+                      if (m_mode != Snapping || !isPinned()) {
+                          return;
+                      }
                       // "none", the autotile sentinel, or nothing: an empty map.
                       if (layoutId.isEmpty() || layoutId == QLatin1String("none")
                           || layoutId.startsWith(QLatin1String("autotile:"))) {
@@ -80,6 +85,9 @@ void PlacementMapScreen::fetchPinnedSnappingLayout()
                       m_state.layoutId = layoutId;
                       call<QString>(Iface::LayoutRegistry, QStringLiteral("getLayout"), {layoutId},
                                     [this](const QString& json) {
+                                        if (m_mode != Snapping || !isPinned()) {
+                                            return;
+                                        }
                                         m_source = parseSnappingLayout(json, m_workArea.size());
                                         m_sourceLens = QRectF();
                                         rebuildFromSource();
