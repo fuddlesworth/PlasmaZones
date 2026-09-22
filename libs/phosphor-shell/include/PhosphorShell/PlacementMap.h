@@ -222,6 +222,7 @@ private:
     void fetchSnappingLayout();
     void fetchStrip();
     void fetchVisibleStrip();
+    void stripFetchFinished();
     void fetchCurrentTiles();
     void fetchFocus();
     void applyStrip(const PlacementMapParser::StripParse& parse);
@@ -270,6 +271,13 @@ private:
     QList<PlacementMapParser::Occupant> m_pinnedOccupants;
     QStringList m_pinnedWindowIds;
     QTimer m_pinnedRefetch;
+    // Scrolling.stripChanged is a wake-up per placement change, and a drag or
+    // the edge auto-scroll emits one per step. The settle timer folds a burst
+    // into one stripModelJson read (a daemon-side relayout each), and a
+    // wake-up landing while a read is in flight re-arms it once on the reply.
+    QTimer m_stripRefetch;
+    bool m_stripFetchInFlight = false;
+    bool m_stripRefetchWanted = false;
     // Both in the daemon's global coordinates; the published workArea and
     // cellRect() subtract the screen origin.
     QRect m_workArea;

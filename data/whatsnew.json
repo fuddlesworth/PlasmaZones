@@ -11,6 +11,7 @@
                 "Fixed: With \"Keep floating windows above\" on, a fullscreen game no longer stays on top after you Alt+Tab away from it (#1114)",
                 "Fixed: Old-style tray icons, such as those from Wine and Proton apps, no longer leave a glowing bordered square on the panel (#1115)",
                 "Changed: The daemon and the KWin effect must be the same build, since the way a fullscreen window leaves the scrolling strip changed on the wire (#1116)",
+                "Fixed: A window that was fullscreen on a scrolling screen no longer comes back the size of the screen when it floats (#1116)",
                 "Fixed: Going fullscreen on a scrolling screen no longer shows a floated notification or puts the window's saved size back over the fullscreen picture (#1116)",
                 "Fixed: On a scrolling screen, a window that is already fullscreen when it opens is left alone and joins the strip only if it later leaves fullscreen. With same-application tab grouping turned on, a game no longer lands as a tab in its launcher's column (#1116)",
                 "Fixed: On a scrolling screen, moving around the strip by shortcut or by the wheel leaves a fullscreen window in fullscreen. This reverses the 3.4.5 and 3.4.6 behaviour on purpose, because the window now leaves the strip instead (#1116)",

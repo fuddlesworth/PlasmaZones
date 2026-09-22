@@ -26,6 +26,7 @@
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
+#include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include "config/configbackends.h"
 #include "core/interfaces/interfaces.h"
@@ -86,22 +87,21 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
             ? *minimized
             : m_windowRegistry->contains(PhosphorIdentity::WindowId::extractInstanceId(windowId));
     }
-    // The suspension-float classification outlives the live minimize bit: on
-    // the unminimize edge isMinimized flips false immediately while the
-    // unfloat only commits after the animation grace, and a capture landing
-    // inside that window must still take the preserve path.
-    treatAsMinimized = treatAsMinimized || m_service->isSuspensionFloat(windowId);
+    // The suspension-float classification outlives the live minimize bit (the
+    // unfloat commits after the animation grace), so a capture landing there
+    // still preserves. A scroll tile held out for its OWN fullscreen is the same
+    // kind of suspension: its live frame is the output rect, never free geometry.
+    treatAsMinimized = treatAsMinimized || m_service->isSuspensionFloat(windowId)
+        || (m_cachedScrollEngine && m_cachedScrollEngine->isFullscreenFloated(windowId));
     if (treatAsMinimized && !fromStateChange) {
         if (authoritativeScreen.isEmpty()) {
             qCDebug(lcDbusWindow) << "Skipping placement capture for minimized window" << windowId;
             return;
         }
-        // NOTE: AutotileEngine::capturePlacement has its own minimize-preserve
-        // branch (facade.cpp) for engine-internal sweeps that never pass
-        // through this adaptor; the two deliberately coexist. No engine
-        // fallback here: when the store has nothing to preserve, the engines
-        // can only report the generic live capture — a bare suspension float,
-        // the very record this branch exists to keep out of the store.
+        // AutotileEngine::capturePlacement has its own minimize-preserve branch
+        // (facade.cpp) for engine-internal sweeps; the two coexist on purpose.
+        // No engine fallback: with nothing to preserve, the engines could only
+        // report a bare suspension float, the record this branch keeps out.
         std::optional<PhosphorEngine::WindowPlacement> preserved = m_service->placementStore().peekExact(windowId);
         if (!preserved) {
             return;

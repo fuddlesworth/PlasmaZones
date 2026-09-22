@@ -22,6 +22,9 @@ namespace {
 // layout document worth fetching.
 constexpr QLatin1String AutotilePrefix("autotile:");
 constexpr QLatin1String NoneLayout("none");
+// Settle window for Scrolling.stripChanged wake-ups: long enough to fold a
+// drag or auto-scroll step burst into one read, short enough to feel live.
+constexpr int kStripRefetchSettleMs = 40;
 } // namespace
 
 namespace PhosphorShell {
@@ -54,6 +57,9 @@ PlacementMapScreen::PlacementMapScreen(const QString& screenName, int desktopInd
     m_pinnedRefetch.setSingleShot(true);
     m_pinnedRefetch.setInterval(0);
     connect(&m_pinnedRefetch, &QTimer::timeout, this, &PlacementMapScreen::fetchDesktopWindows);
+    m_stripRefetch.setSingleShot(true);
+    m_stripRefetch.setInterval(kStripRefetchSettleMs);
+    connect(&m_stripRefetch, &QTimer::timeout, this, &PlacementMapScreen::fetchStrip);
 
     if (Workspaces* ws = m_map->workspaces()) {
         connect(ws, &Workspaces::activeChanged, this, &PlacementMapScreen::desktopsChanged);
@@ -138,6 +144,11 @@ void PlacementMapScreen::reseed()
     m_sourceOverflowLeft = 0;
     m_sourceOverflowRight = 0;
     m_sourceStripExtentPx = 0;
+    // In-flight strip replies carry the old generation and are dropped, so
+    // the read they would have finished has to be forgotten here.
+    m_stripRefetch.stop();
+    m_stripFetchInFlight = false;
+    m_stripRefetchWanted = false;
     m_focusedWindowId.clear();
     m_focusFromDaemon = false;
     clearPinnedSource();
@@ -154,6 +165,9 @@ void PlacementMapScreen::serviceLost()
     m_lastBatch.clear();
     m_sourceLens = QRectF();
     m_sourceStripExtentPx = 0;
+    m_stripRefetch.stop();
+    m_stripFetchInFlight = false;
+    m_stripRefetchWanted = false;
     // Same reset reseed() performs. Left out here, the strip keeps drawing
     // the overflow arrows of the strip the dead daemon last described.
     m_sourceOverflowLeft = 0;
@@ -304,6 +318,14 @@ void PlacementMapScreen::fetchSnappingLayout()
 
 void PlacementMapScreen::fetchStrip()
 {
+    // One read in flight at a time: each stripModelJson answer costs the
+    // daemon a relayout, so a wake-up that lands mid-read is remembered and
+    // re-armed once the reply is in rather than stacked behind it.
+    if (m_stripFetchInFlight) {
+        m_stripRefetchWanted = true;
+        return;
+    }
+    m_stripFetchInFlight = true;
     // The strip model carries the structure axis, the lens and the overflow
     // counts. A daemon without it answers UnknownMethod and the visible
     // cut stands in (full lens, hue sampled inside the cut).
@@ -326,13 +348,28 @@ void PlacementMapScreen::fetchStrip()
 
 void PlacementMapScreen::fetchVisibleStrip()
 {
-    call<QString>(Iface::Scrolling, QStringLiteral("visibleStripJson"), {m_screenId}, [this](const QString& json) {
-        applyStrip(parseVisibleStrip(json));
-    });
+    call<QString>(
+        Iface::Scrolling, QStringLiteral("visibleStripJson"), {m_screenId},
+        [this](const QString& json) {
+            applyStrip(parseVisibleStrip(json));
+        },
+        [this](const QDBusError&) {
+            stripFetchFinished();
+        });
+}
+
+void PlacementMapScreen::stripFetchFinished()
+{
+    m_stripFetchInFlight = false;
+    if (m_stripRefetchWanted) {
+        m_stripRefetchWanted = false;
+        m_stripRefetch.start();
+    }
 }
 
 void PlacementMapScreen::applyStrip(const StripParse& parse)
 {
+    stripFetchFinished();
     m_source = parse.cells;
     m_sourceLens = parse.lens;
     m_sourceOverflowLeft = parse.overflowLeft;
@@ -446,10 +483,11 @@ void PlacementMapScreen::tilingChanged()
 void PlacementMapScreen::stripChanged()
 {
     if (m_mode == Scrolling) {
+        // A wake-up, not a payload (see the signal's contract): coalesce it.
         if (isPinned()) {
-            fetchDesktopWindows();
+            m_pinnedRefetch.start();
         } else {
-            fetchStrip();
+            m_stripRefetch.start();
         }
     } else {
         // A context epoch change can mean the desktop switched onto a

@@ -95,12 +95,12 @@ ScrollingAdaptor::ScrollingAdaptor(PhosphorScrollEngine::ScrollEngine* engine, Q
     // Undamped, unlike the sibling relay of this same signal onto
     // Tiling.tilingChanged (init_engines.cpp), which skips the edge
     // auto-scroll's ~60 Hz tick. Deliberate rather than an oversight: that
-    // one had no in-tree subscriber to damp it, while the settings reader of
-    // this signal coalesces every wake-up onto a settle timer and re-reads
-    // once. The shell's placement map (libs/phosphor-shell placementmap.cpp)
-    // is a second reader and answers each wake-up with a stripModelJson read
-    // of its own, so for it the cost per tick is that read and not only a
-    // payload-free bus message.
+    // one had no in-tree subscriber to damp it, while both readers of this
+    // signal coalesce. The settings reader folds every wake-up onto a settle
+    // timer and re-reads once, and the shell's placement map
+    // (libs/phosphor-shell placementmap.cpp) does the same and keeps one
+    // stripModelJson read in flight at a time, so the cost per tick here is a
+    // payload-free bus message, not a relayout.
     connect(m_engine, &PhosphorEngine::PlacementEngineBase::placementChanged, this, [this](const QString& screenId) {
         // A placement change for a screen this engine no longer owns
         // describes a strip no reader can fetch: visibleStripJson
