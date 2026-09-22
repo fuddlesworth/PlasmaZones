@@ -78,6 +78,13 @@ bool AutotileEngine::claimCrossScreenReopen(const QString& rawWindowId, const QS
             << "— already held here, so this is an in-session re-announce, not a restore";
         return false;
     }
+    // Any verdict still standing for this window is from an EARLIER announce:
+    // the dispatch states the flag only after the claim round, which is the
+    // round this call is part of. A successful claim below re-enters
+    // windowOpened for the recorded home, and that re-entry reads the flag —
+    // so clear it here or the home open skips a defer gate it owed on the
+    // strength of a mark that describes a different announce.
+    m_crossScreenClaimsExhausted.remove(windowId);
     const QString appId = currentAppIdFor(windowId);
     if (!PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
         // Logged for the same reason the scroll twin logs it: the deferring

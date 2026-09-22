@@ -511,7 +511,8 @@ void TilingAdaptor::dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowO
             // engine's own defer gate adopts instead of standing down for the
             // very record the claims just refused; false when the round was
             // suppressed, which clears any mark an earlier announce of the
-            // same window left behind.
+            // same window left behind. The claim bodies clear it themselves
+            // for the home open they re-enter, which never reaches here.
             engine->noteCrossScreenClaimsExhausted(entry.windowId, allowCrossScreenClaim);
             engine->windowOpened(entry.windowId, entry.screenId, qMax(0, entry.minWidth), qMax(0, entry.minHeight));
             return;

@@ -143,9 +143,9 @@ public:
 
     /// OPTIONAL: whether the claim round for THIS announce of @p windowId ran
     /// and every claimCrossScreenReopen declined. A reciprocal defer gate
-    /// reads it and adopts rather than deferring again, which would leave the
-    /// window with no engine. Set AND cleared once per announce, never sticky:
-    /// a mark left by an earlier announce is spent by a later one.
+    /// reads it and adopts rather than deferring again, leaving the window
+    /// with no engine. Stated either way on every announce reaching an arrival
+    /// engine, never sticky; a claim re-entering windowOpened clears it first.
     virtual void noteCrossScreenClaimsExhausted(const QString& windowId, bool exhausted)
     {
         Q_UNUSED(windowId)

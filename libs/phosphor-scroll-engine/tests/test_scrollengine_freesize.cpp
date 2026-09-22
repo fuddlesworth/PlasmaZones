@@ -10,6 +10,7 @@
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorScrollEngine/ScrollState.h>
 #include <PhosphorScrollEngine/ScrollStrip.h>
+#include <PhosphorScrollEngine/ScrollTypes.h>
 
 #include "scrollstriptestutils.h"
 #include "scrollstubsettings.h"
@@ -290,6 +291,9 @@ private Q_SLOTS:
         QVERIFY(before);
         QVERIFY(before->strip().containsWindow(QStringLiteral("app|only")));
         before->setBlueprintCursor(3);
+        // A distinctive column width, so the stashed tile is identifiable by
+        // what a later same-app arrival would inherit from it.
+        QVERIFY(before->strip().setActiveColumnWidth(ColumnWidth::makePreset(0.42)));
         const QJsonObject blob = rig.engine->serializeStripState();
         rig.engine->windowClosed(QStringLiteral("app|only"));
 
@@ -304,13 +308,25 @@ private Q_SLOTS:
         QVERIFY(after->isFloating(QStringLiteral("app|only")));
         QCOMPARE(after->blueprintCursor(), 3);
 
-        // And the TILE was claimed, not merely the cursor carried: the entry
-        // held one tile, so consuming it retires the whole stash and the
-        // window's id disappears from a fresh save. Without this the carry
-        // could be right while the claim block was gone.
-        const QJsonObject afterBlob = second.engine->serializeStripState();
-        const QByteArray afterText = QJsonDocument(afterBlob).toJson(QJsonDocument::Compact);
-        QVERIFY2(!afterText.contains("app|only"), "the claimed stash tile must not survive in the save");
+        // And the TILE was claimed, not merely the cursor carried. The entry
+        // held one tile, so claiming it retires the whole stash — and a
+        // stash that is gone has no shape left for the next same-app arrival
+        // to inherit. A tiled open now gets a DEFAULT column, where an
+        // unclaimed entry would have handed it the stashed 0.42 preset
+        // through the cross-session fuzzy claim.
+        //
+        // Asserted this way rather than through the save, because a save
+        // drops stash tiles naming LIVE windows at write time: the floated
+        // window is live, so its id is absent from the blob whether or not
+        // the tile was ever claimed.
+        second.engine->windowOpened(QStringLiteral("app|next"), kS1, 0, 0);
+        ScrollState* tiled = stateOn(second.engine, kS1);
+        QVERIFY(tiled);
+        QVERIFY(tiled->strip().containsWindow(QStringLiteral("app|next")));
+        QCOMPARE(tiled->strip().columns().size(), 1);
+        const Column& fresh = tiled->strip().columns().first();
+        QVERIFY2(!(fresh.width.kind == ColumnWidth::Preset && qFuzzyCompare(fresh.width.presetFraction, 0.42)),
+                 "a claimed stash must leave nothing for the next arrival to inherit");
     }
 
     // A window that would float on its recorded home screen is not pulled

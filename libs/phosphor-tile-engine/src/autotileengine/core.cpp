@@ -82,10 +82,9 @@ int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
             ++it;
         }
     }
-    // The cross-screen claims-exhausted one-shot ages out here too: it is
-    // normally consumed by the very next windowOpened or reaped by
-    // windowClosed, but a window that dies without either leaves its id
-    // standing for the session.
+    // The cross-screen claims verdict ages out here too. The dispatch
+    // re-states it before every announce and windowClosed reaps it, so this
+    // covers only a window that dies without either.
     for (auto it = m_crossScreenClaimsExhausted.begin(); it != m_crossScreenClaimsExhausted.end();) {
         if (!aliveWindowIds.contains(*it)) {
             it = m_crossScreenClaimsExhausted.erase(it);

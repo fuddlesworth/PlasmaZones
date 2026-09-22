@@ -73,27 +73,21 @@ void ScrollEngine::finishFloatedOpen(ScrollState* state, const QString& windowId
     // A migration WITH a record needs neither arm: the caller already
     // consumed it, and a migration moves nothing.
     if (!migration) {
-        // Resolved at most ONCE for the move gate and the size arm, which ask
-        // the same question of it. Keyed to screenId, which is the record's
-        // own screen in both arms — takeForReopen's accept requires the
-        // match. Lazy, like the autotile twin: an oversized float reaches
-        // neither arm's isManagedSize test and must not pay a walk that
-        // relayouts every strip on the screen.
-        std::optional<QList<QSize>> managedSizesMemo;
-        const auto managedSizes = [&]() -> const QList<QSize>& {
-            if (!managedSizesMemo) {
-                managedSizesMemo = managedSizesOnScreen(screenId);
-            }
-            return *managedSizesMemo;
-        };
-        const bool moved = record ? emitGatedFloatGeometryRestore(windowId, *record, screenId, managedSizes())
-                                  : restoreFloatRecordForOpen(windowId, screenId, managedSizes());
+        // Resolved ONCE and shared by the move gate and the size arm, which
+        // ask the same question of it. Keyed to screenId, which is the
+        // record's own screen in both arms — takeForReopen's accept requires
+        // the match. Eager, unlike the autotile twin's lazy memo: both arms
+        // below take the list as an argument, so it is evaluated on every
+        // non-migration float anyway and a memo would defer nothing.
+        const QList<QSize> managedSizes = managedSizesOnScreen(screenId);
+        const bool moved = record ? emitGatedFloatGeometryRestore(windowId, *record, screenId, managedSizes)
+                                  : restoreFloatRecordForOpen(windowId, screenId, managedSizes);
         // A float that moved nowhere still gets its free SIZE back where it
         // stands, unless the window is oversized: the clamp would then ask
         // for less than the client's own minimum on the axis that made it
         // oversized, and the client keeps the frame it has.
         if (!moved && !oversized) {
-            restoreFreeSizeForFloatedOpen(windowId, screenId, placedBefore, managedSizes());
+            restoreFreeSizeForFloatedOpen(windowId, screenId, placedBefore, managedSizes);
         }
     } else if (!record) {
         // Consume the record for the mode marker's sake without applying

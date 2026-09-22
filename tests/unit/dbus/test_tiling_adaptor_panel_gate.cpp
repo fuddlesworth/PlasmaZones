@@ -304,6 +304,11 @@ private Q_SLOTS:
         adaptor.windowOpened(QStringLiteral("kate|a"), QStringLiteral("HDMI-2"), 0, 0);
         QCOMPARE(engine.reclaimOffers.size(), 2);
         QCOMPARE(engine.reclaimOffers.last(), QStringLiteral("kate|a"));
+        // And the verdict is re-armed with it: the round ran and declined
+        // again, so this announce states true where the suppressed one
+        // stated false. That is the last direction of the state machine.
+        QCOMPARE(engine.claimsExhaustedNotes.size(), 3);
+        QCOMPARE(engine.claimsExhaustedNotes.last(), QStringLiteral("kate|a=1"));
     }
 
     // -------------------------------------------------------------------------

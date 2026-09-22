@@ -52,6 +52,13 @@ bool ScrollEngine::claimCrossScreenReopen(const QString& rawWindowId, const QStr
                                 << "— already held here, so this is an in-session re-announce, not a restore";
         return false;
     }
+    // Any verdict still standing for this window is from an EARLIER announce:
+    // the dispatch states the flag only after the claim round, which is the
+    // round this call is part of. A successful claim below re-enters
+    // windowOpened for the recorded home, and that re-entry reads the flag —
+    // so clear it here or the home open skips a defer gate it owed on the
+    // strength of a mark that describes a different announce.
+    m_crossScreenClaimsExhausted.remove(windowId);
     // Registry-aware appId, like autotile's twin and like every record
     // producer: parsing the frozen canonical string would look in the wrong
     // bucket after an Electron/CEF class mutation, and finds nothing at all
