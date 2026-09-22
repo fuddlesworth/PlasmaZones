@@ -502,8 +502,8 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
     // by the time this runs the window has already been moved once; cancelling
     // moved it a second time, and only then did the batch's placeIn leg
     // animate from wherever the cancel had left it. Two unanimated jumps and a
-    // transition starting from the wrong origin, where the Meta+Alt+F path —
-    // which never touches KWin's bit — plays one clean leg between two column
+    // transition starting from the wrong origin, where the Meta+Alt+M path —
+    // whose bit only the batch writes — plays one clean leg between two column
     // rects. Nothing can remove the FIRST jump from inside an effect, but the
     // second was ours.
     //
@@ -561,7 +561,7 @@ bool TilingHandler::interceptMaximizeRequest(KWin::EffectWindow* w)
     // No write from a USER-DRIVEN toggle reaches here with an entry live: the
     // engine ADOPTS KWin's bit rather than re-writing it
     // (applyMaximizeSuppressed's requested-mode early return), so the batch
-    // produces no echo at all. An ENGINE-driven write can (Meta+Alt+F, or a
+    // produces no echo at all. An ENGINE-driven write can (Meta+Alt+M, or a
     // neighbour's toggle re-resolving this column): its Wayland echo agrees
     // with membership, and if it lands inside a button press's round trip with
     // no debt outstanding it is recorded as a press and the reply re-dispatches
@@ -957,8 +957,8 @@ TilingHandler::ClaimReleaseResult TilingHandler::releaseAllClaims(const QString&
         // close half of the untrack funnel slotWindowClosed has already removed
         // membership and the release has already erased the snapshot, so the
         // guard answers no while an armed marker is still sitting there — and
-        // window ids are appId-derived and reusable, so it would refuse the
-        // adopt of whatever reuses the id.
+        // ids are unique per window, so the armed marker would only leak, but
+        // it is dropped here to keep the set bounded.
         m_windowedFsClearInFlight.remove(windowId);
         if (hadMembership || m_effect->m_windowedFsLayerSnapshots.contains(windowId)) {
             if (hadMembership) {

@@ -528,8 +528,9 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
                         // them.
                         notifyAlgorithmWindowAdded(ts, screenId, windowId);
                         // Announce on the passive channel via the canonical
-                        // insert-time sync (both directions: restored-floating
-                        // OR seeded-tiled-over-a-stale-WTS-float-bit). The
+                        // insert-time sync (floating only: it announces a
+                        // restored-floating seed and says nothing for a tiled
+                        // one). The
                         // later windowOpened for this already-present window
                         // is a tracked no-op insert whose float sync is
                         // skipped, so without this the seed's float state is

@@ -332,7 +332,7 @@ QString TilingHandler::scrollTrackedScreenFor(const QString& windowId) const
 {
     // Membership FIRST, and it supplies the screen. The two facts used to come
     // from different maps written under different conditions: the apply loop
-    // marks a window tiled unconditionally but only records its screen when
+    // marks a window tiled (bar its own fullscreen) but only records its screen when
     // the window is in m_notifiedWindows, so a window demoted or rolled back
     // between the two ends up a tiled member with no recorded screen. This
     // function needs both, so it answered "unknown" — which is fail-open for
@@ -501,11 +501,11 @@ bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloat
         //
         // knownFreeFloating is passed EXPLICITLY by every caller (no default
         // argument): the genuine window-opened path passes true (the frame is
-        // KWin's spawn geometry — the authoritative pre-autotile position —
-        // and the FloatingCache is not yet populated, so the
-        // isWindowFloating() guard would otherwise drop the one-shot save).
-        // RE-ADD callers pass false so the floating guard runs and rejects a
-        // tiled zone rect instead of persisting it as free geometry.
+        // KWin's spawn geometry and the FloatingCache is not yet populated,
+        // so the isWindowFloating() guard would drop the one-shot save).
+        // RE-ADD callers, and the fullscreen-exit announce of a never-tracked
+        // window (frame still the output rect), pass false so the floating
+        // guard runs and rejects a rect that is not free geometry.
         saveAndRecordPreTileGeometry(windowId, screenId, w, w->frameGeometry(), knownFreeFloating);
 
         const QSize minSize = declaredMinSize(w);
@@ -517,12 +517,12 @@ bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloat
         // may only undo the tracking THIS announce established. Without it an
         // error for announce N-1 erased the tracking announce N had just written,
         // and a NoReply for an already-closed window re-inserted a
-        // spawn-provenance marker for a corpse — ids are appId-derived and
-        // reusable, and the tail prune in completeDeferredWindowRoutes only runs
-        // on a screen-query dispatch, so the stale marker would later flip a
-        // same-app sibling's re-add to knownFreeFloating=true and poison its free
-        // geometry with a zone rect. cleanupAutotileTracking erases the stamp, so
-        // a corpse's error arm reads back 0 and no-ops.
+        // spawn-provenance marker for a corpse. Ids are unique per window (the
+        // KWin internalId is part of them), so such a marker is a leak, not a
+        // misattribution, but the tail prune only runs on a screen-query
+        // dispatch and the stamp/gen guards only stay meaningful while dead
+        // entries are dropped. cleanupAutotileTracking erases the stamp, so a
+        // corpse's error arm reads back 0 and no-ops.
         const quint64 announceGen = ++m_announceSeq;
         m_announceGen[windowId] = announceGen;
 
@@ -723,8 +723,8 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
                     // still THIS one are rolled back. A window re-announced on its
                     // own since dispatch is owned by that announce, and a window
                     // closed since then reads back 0 (cleanupAutotileTracking
-                    // erased the stamp) so its dead, reusable id is not re-armed
-                    // as spawn-provenance.
+                    // erased the stamp) so its dead id is not re-armed as
+                    // spawn-provenance.
                     for (const QString& wid : batchWindowIds) {
                         if (m_announceGen.value(wid) != batchAnnounceGens.value(wid)) {
                             continue;
@@ -766,10 +766,10 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId)
     m_minimizeFloatMarks.remove(windowId);
     m_unfloatInFlight.remove(windowId);
     m_fullscreenFloatedWindows.remove(windowId);
-    // Same reasoning as the retry budget below: ids are appId-derived and
-    // reusable, so a reused id must not inherit an armed toggle. Without this
-    // a window closing inside its own round trip leaves an entry that
-    // suppresses the next occupant's repair arm until it expires.
+    // Same reasoning as the retry budget below: a dead id's entry must not
+    // outlive the window. Ids are unique per window, so the entry is a leak
+    // rather than a misattribution, and a window closing inside its own round
+    // trip would otherwise leave an armed entry behind for good.
     //
     // This funnel also serves the cross-output transfer of a LIVE window,
     // where dropping the marker reopens the race for the remainder of a trip
@@ -779,8 +779,8 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId)
     // strip answers on its own first batch.
     m_maximizeToggleInFlight.remove(windowId);
     m_monocleRestoreOwed.remove(windowId);
-    // Retry budget and route/provenance markers die with the tracking: a
-    // reused windowId must not inherit an exhausted budget, and every direct
+    // Retry budget and route/provenance markers die with the tracking: a dead
+    // id must not keep an exhausted budget around, and every direct
     // caller of this cleanup (not just onWindowClosed) must drop the
     // spawn-provenance entries or they leak past cross-mode moves.
     m_unfloatRetryAttempts.remove(windowId);
@@ -793,15 +793,14 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId)
     // The announce stamp dies with the tracking, and that erasure is what makes
     // a late error reply for a CLOSED window harmless: the arm reads back 0,
     // mismatches its captured stamp, and no-ops instead of re-inserting a
-    // spawn-provenance marker under an id another instance of the same app can
-    // be handed. Safe to erase rather than tombstone because the stamps come
+    // spawn-provenance marker for a dead window, a leak until the tail prune.
+    // Safe to erase rather than tombstone because the stamps come
     // from a session-global monotonic counter (the m_crossScreenRestoreGen
     // contract).
     m_announceGen.remove(windowId);
-    // The clip-loss dedupe entry dies with the window too: ids are
-    // appId-derived and reusable, and a stale entry would swallow a reused
-    // id's first genuine report (the success-path re-arm only runs when the
-    // predicate answers).
+    // The clip-loss dedupe entry dies with the window too: nothing else prunes
+    // it (the success-path re-arm only runs when the predicate answers), so a
+    // dead id's entry would sit in the map for the rest of the session.
     m_scrollClipLossReported.remove(windowId);
     // The commanded-rect entry dies with the tracking too: the cross-output
     // transfer path otherwise leaves the OLD screen's rect behind, and once
@@ -886,13 +885,10 @@ void TilingHandler::onWindowClosed(const QString& windowId, const QString& scree
     // pay — deliberately, so a later arm can pay it. On a dying window there
     // is no later arm, and restoreAllMaximizedToEdges re-inserts on a resolve
     // miss, so a window closing around a daemon-loss drain leaves an entry
-    // with no window and no reaper. Window ids are appId-derived and reusable,
-    // and three live readers consume that entry: interceptMaximizeRequest's
-    // already-agrees test, dispatchMaximizeToEdgesToggle's refusal write-back,
-    // and the batch's resolveMaximizeToEdgesAction inSet term. A reused id
-    // therefore feeds all three a membership the new window never earned, and
-    // the refusal write-back is the one that can act on it outright by
-    // driving KWin to MaximizeFull for a column the engine never maximized.
+    // with no window and no reaper. Ids are unique per window, so the entry
+    // misleads no live reader (interceptMaximizeRequest, the refusal
+    // write-back and the batch's inSet term all key on live ids), but it is
+    // a leak the whole-set restores keep re-inserting, so drop it here.
     //
     // It does NOT belong in cleanupAutotileTracking: that funnel also serves
     // the cross-output transfer of a LIVE window, where the retained entry is
@@ -1275,9 +1271,11 @@ void TilingHandler::clearPerSessionDaemonState()
     // a stale record would mis-route the next unminimize. Pending
     // cross-screen size-restore connections are likewise per-session.
     // clearAllPendingMinimizeFloats() also cancels the deferred unfloat timers
-    // (an escapee bails on the ownership miss below) and the fullscreen-floats.
+    // and clears the fullscreen-float records; the explicit clears below keep
+    // the drain list self-evident (an escapee bails on the ownership miss).
     clearAllPendingMinimizeFloats();
     m_minimizeFloatedWindows.clear();
+    m_fullscreenFloatedWindows.clear();
     m_unfloatInFlight.clear();
     m_unfloatRetryAttempts.clear();
     m_minimizeFloatMarks.clear();
@@ -1308,9 +1306,6 @@ void TilingHandler::clearPerSessionDaemonState()
     // otherwise undo the tracking this bring-up's own re-announce establishes.
     m_announceGen.clear();
 }
-
-// handleAutotileFloatToggle removed: float toggle is now daemon-local via
-// SnapAdaptor::toggleFloatForWindow (which emits applyGeometryRequested).
 
 // connectSignals() / loadSettings() live in tilinghandler/wiring.cpp.
 

@@ -20,7 +20,6 @@
 #include <effect/effectwindow.h>
 
 #include <QRectF>
-#include <QScopeGuard>
 
 #include <optional>
 

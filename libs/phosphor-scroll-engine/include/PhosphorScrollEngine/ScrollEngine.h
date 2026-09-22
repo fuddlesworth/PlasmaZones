@@ -194,16 +194,12 @@ public:
     void pushToEmptyZone(const PhosphorEngine::NavigationContext& ctx) override;
     void restoreFocusedWindow(const PhosphorEngine::NavigationContext& ctx) override;
     void toggleFocusedFloat(const PhosphorEngine::NavigationContext& ctx) override;
-    /// niri switch-focus-between-floating-and-tiling (IPlacementEngine
-    /// override — the daemon reaches it by virtual dispatch, not the
-    /// scroll-specific mode-check-and-cast route below).
+    /// niri switch-focus-between-floating-and-tiling (IPlacementEngine override).
     void switchFocusBetweenFloatingAndTiling(const QString& screenId) override;
 
 private:
-    /// Shared body of toggleFocusedFloat and restoreFocusedWindow: resolve
-    /// the focused window and toggle its float state, reporting the
-    /// no-window failure under @p failureAction so each verb's OSD carries
-    /// its own token ("float" vs "restore").
+    /// Shared body of toggleFocusedFloat and restoreFocusedWindow; the no-window
+    /// failure is reported under @p failureAction so each verb's OSD has its token.
     void toggleFocusedFloatAs(const PhosphorEngine::NavigationContext& ctx, const QString& failureAction);
 
 public:
@@ -226,6 +222,9 @@ public:
     /// Windowed fullscreen (niri toggle-windowed-fullscreen) on the active
     /// window: layout-neutral per-tile flag, see Tile::windowedFullscreen.
     void toggleWindowedFullscreen(const QString& screenId);
+    /// Whether toggleWindowedFullscreen would ACT right now, through the guard
+    /// the verb itself runs. @p resolvedScreen receives the verb's screen.
+    bool canToggleWindowedFullscreen(const QString& screenId, QString* resolvedScreen = nullptr) const;
     /// Compositor-driven reconciliation: the client left fullscreen on its
     /// own, so drop the flag and re-apply that window's screen.
     void clearWindowedFullscreen(const QString& windowId);
@@ -240,28 +239,20 @@ public:
     /// Toggle the maximized state of a column on @p screenId. An empty
     /// @p windowId targets the ACTIVE column (the keyboard shortcut's
     /// meaning); a named window targets the column owning it and refuses when
-    /// the strip does not hold it, which is what the compositor's maximize
-    /// interception needs — that request names one window and the active
-    /// column is frequently a different one.
-    ///
-    /// Answers whether the strip actually CHANGED, which is the contract the
-    /// compositor's maximize interception is built on. That interception
-    /// dispatches toggleMaximizeToEdges below rather than this verb, and both
-    /// twins answer the same way so the wire shape and the effect's reply
-    /// handling do not have to fork: a request the engine quietly does nothing
-    /// with (no state for the context, an empty strip, a window no column
-    /// holds, a column the verb refuses) leaves the window holding the state
-    /// the USER asked for with no batch coming to impose the strip's answer.
-    /// False is the effect's cue to put the bit back where the engine last had
-    /// it.
+    /// the strip does not hold it (the compositor's maximize interception
+    /// names one window, often not the active column's).
+    /// Answers whether the strip actually CHANGED. The interception dispatches
+    /// toggleMaximizeToEdges below, and both twins answer alike so the wire
+    /// shape does not fork. False means the engine did nothing (no state, an
+    /// empty strip, an unheld window, a refused column) and no batch is coming,
+    /// so it is the effect's cue to put the bit back where the engine had it.
     bool toggleMaximizeColumn(const QString& screenId, const QString& windowId = QString());
     /// Toggle a column's maximize-to-edges state (full raw work area on both
     /// axes, gap-free; niri maximize-window-to-edges generalized to the
-    /// column). Same window/screen addressing and the same changed-reporting
-    /// return as toggleMaximizeColumn, and this is the verb the compositor's
-    /// maximize interception dispatches: the KWin maximize bit mirrors THIS
-    /// state alone, toggleMaximizeColumn being a pure width verb with no
-    /// mirror.
+    /// column). Addressing and return as toggleMaximizeColumn. A named ACTIVE
+    /// tab of a tabbed column is first expelled into its own column. This is the
+    /// verb the compositor's maximize interception dispatches, and the KWin
+    /// maximize bit mirrors THIS state alone.
     bool toggleMaximizeToEdges(const QString& screenId, const QString& windowId = QString());
     void expandColumnToAvailableWidth(const QString& screenId);
     /// Equal shares of the viewport for every fully visible column
@@ -1092,27 +1083,36 @@ private:
     ScrollState* stateForKey(const PhosphorEngine::PlacementStateKey& key, bool createIfMissing);
     /// Point the live preview's drop target at the view's leading (@p
     /// direction < 0) or trailing new-column slot, the two shapes the band
-    /// hit-test already produces at the view's extremes. Called on every
-    /// auto-scroll tick INSTEAD of the hit-test, so the target cannot churn
-    /// as columns slide under a stationary cursor (drag_autoscroll.cpp).
-    /// Returns true when the stored target actually changed. @p cursorPos
-    /// feeds the defensive empty-viewport arm's re-aim only.
+    /// hit-test produces at the view's extremes. Called on every auto-scroll
+    /// tick INSTEAD of the hit-test, so the target cannot churn as columns
+    /// slide under a stationary cursor (drag_autoscroll.cpp). Returns true when
+    /// the target changed. @p cursorPos feeds the empty-viewport re-aim only.
     ///
     /// PRECONDITION: m_dragInsertPreview must be live (asserted, with a
     /// release-build refusal, since the signature reads preview-independent).
     bool writeDragAutoScrollTarget(const ScrollState& state, const ScrollLayoutParams& params, int direction,
                                    const QPoint& cursorPos);
-    /// Re-aim the live preview's drop target at @p cursorPos with the
-    /// ordinary hit-test, undoing an edge slot the auto-scroll wrote. Called
-    /// wherever ownership ends with a usable cursor on the preview's own
-    /// screen. Returns true when the stored target actually changed.
-    ///
-    /// PRECONDITION: m_dragInsertPreview must be live.
+    /// Re-aim the live preview's drop target at @p cursorPos with the ordinary
+    /// hit-test, undoing an edge slot the auto-scroll wrote. Called wherever
+    /// ownership ends with a usable cursor on the preview's own screen. Returns
+    /// true when the target changed. PRECONDITION: m_dragInsertPreview is live.
     bool repairDragAutoScrollTarget(const QPoint& cursorPos);
     ScrollState* stateForWindow(const QString& canonicalId, PhosphorEngine::PlacementStateKey* outKey = nullptr) const;
     /// The screen the engine should operate on for a screen-hinted verb:
     /// @p screenId when it is a scrolling screen, else the active screen.
     QString resolveOperationScreen(const QString& screenId) const;
+    /// Why toggleWindowedFullscreen would refuse (NoWindows also covers an
+    /// unresolved screen or a missing state), or Ok.
+    enum class WindowedFullscreenGuard {
+        NoWindows,
+        FloatHasFocus,
+        NoActiveWindow,
+        Ok
+    };
+    /// Read-only guard shared by the verb and canToggleWindowedFullscreen; the
+    /// out-params may be null.
+    WindowedFullscreenGuard windowedFullscreenGuard(const QString& screenId, QString* outScreen,
+                                                    ScrollState** outState) const;
     /// Tear down one context state: appends its windows to
     /// @p releasedWindows, drops the per-window unfloat-slot memory and the
     /// per-screen bookkeeping (pending seed, tab-strip latch), and

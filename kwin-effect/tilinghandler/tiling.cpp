@@ -89,7 +89,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
 
     // Seam diagnostics (docs/strip-identity-seam-plan.md, stage 0). The
     // ARRIVAL of a batch is itself the evidence: the engine emits on change
-    // only (engine_apply.cpp:746), so returning to a desktop whose strip is
+    // only (see engine_apply.cpp), so returning to a desktop whose strip is
     // unchanged emits nothing at all, and candidate A is diagnosed by this
     // line NOT appearing after a desktop switch. Read against the
     // desktopChanged line from the same category.
@@ -392,7 +392,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     // that matched EXACTLY (one candidate, resolved above) must RESERVE its
     // window against the fuzzy entries: exact matches are not in the index
     // below, and without the claimed-set a same-appId fuzzy entry (the
-    // stale-pre-restore-UUID case this file guards in three other places)
+    // stale-pre-restore-UUID case this file guards in several other places)
     // could resolve to the SAME window — every per-window map then written
     // twice for one id, the second apply overwriting the first, and the
     // window the fuzzy entry was meant for silently never tiled.
@@ -1415,7 +1415,13 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             if (m_notifiedWindows.contains(snap.windowId)) {
                 m_notifiedWindowScreens[snap.windowId] = snap.screenId;
             }
-            saveAndRecordPreTileGeometry(snap.windowId, snap.screenId, snap.window, snap.window->frameGeometry());
+            // Requested OR committed, deliberately wider than the bail term
+            // below (committed AND requested). No capture in its own fullscreen:
+            // the restore rect freeGeometryForCapture answers is a column rect.
+            const bool inOwnFullscreen = isInOwnFullscreen(snap.window, snap.windowId, snap.isWindowedFullscreen);
+            if (!inOwnFullscreen) {
+                saveAndRecordPreTileGeometry(snap.windowId, snap.screenId, snap.window, snap.window->frameGeometry());
+            }
             KWin::Window* kwForLog = snap.window->window();
             qCInfo(lcEffect) << "Autotile tile request:" << snap.windowId << "QRect=" << snap.geometry
                              << "monocle=" << snap.isMonocle << "maximizeMode="
@@ -1435,14 +1441,12 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                                   << "predicted=" << m_effect->constrainTileGeometry(snap.window, snap.geometry)
                                   << "x11=" << snap.window->isX11Client();
             }
-            if (!isInOwnFullscreen(snap.window, snap.windowId, snap.isWindowedFullscreen)) {
+            if (!inOwnFullscreen) {
                 markWindowTiled(snap.screenId, snap.windowId);
             }
-            // NOTE: the parked-column visual-delta write for this entry
-            // happens BELOW, after the windowed-fullscreen block, so its
-            // fullscreen-bail term reads the membership this batch just
-            // adopted or cleared rather than last batch's — see the block's
-            // own comment down there.
+            // NOTE: the parked-column visual-delta write happens BELOW, after
+            // the windowed-fullscreen block, so its fullscreen-bail term reads
+            // the membership this batch just adopted or cleared.
             // Re-report the declared minimum size when it changed since the
             // last report. KWin exposes minSize with no change signal, and
             // the one report at announce is too early for clients that set
@@ -1777,9 +1781,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             }
 
             // Column maximize: mirror the engine's state onto KWin's maximize
-            // bit, so the titlebar button agrees with the strip however the
-            // maximize was reached — the interception, the Meta+Alt+F
-            // shortcut, or a width verb that happened to land full width.
+            // bit, so the titlebar button agrees with the strip whether the
+            // maximize came through the interception or the Meta+Alt+M
+            // shortcut. A width verb (Meta+Alt+F) never sets the wire flag.
             //
             // Runs BEFORE the geometry apply below for the monocle arm's
             // reason: the bit has to be set first so the column rect is what
@@ -1922,8 +1926,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     const auto maxSuppressGuard = qScopeGuard([this] {
                         --m_suppressMaximizeChanged;
                     });
-                    // Same two guards the column arm above carries, and for the
-                    // same reasons. maximize() has no fullscreen conditional, so
+                    // The column arm's guards MINUS its committed isFullScreen()
+                    // term, on purpose: nothing re-drives a monocle maximize
+                    // skipped here. maximize() has no fullscreen conditional, so
                     // on a presenting surface it moveResizes down to the restore
                     // rect; and mid-gesture it snaps the window to full size
                     // under the pointer, because the geometry apply below defers
@@ -2067,8 +2072,12 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 //
                 // Skipping is a trade, not free, because this arm is not
                 // ledger-backed and nothing re-drives it at the gesture end.
-                // The condition is recomputed per entry from the live maximize
-                // mode, so the NEXT batch carrying this window pays it; a drag
+                // The condition is recomputed per entry from the COMMITTED
+                // maximize mode (unlike the three twins, which read the
+                // requested one): interceptMaximizeRequest fires on the
+                // committed edge, so a batch landing inside a scrolling-screen
+                // user press's round trip must not cancel the request before
+                // the interception has seen it. The NEXT batch pays it; a drag
                 // that changes no layout schedules no batch, and the window
                 // keeps a stray maximize bit against its tile rect until one
                 // arrives. That is the same bounded staleness the column Apply
@@ -2873,30 +2882,15 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 }
             }
 
-            // The relocation hint is a translation FROM the batch's park rect,
-            // so it only means anything once that park rect is what the window
-            // is committed at. applyWindowGeometry's non-member fullscreen bail
-            // commits nothing at all: a window the client fullscreened itself
-            // (F11) keeps being tiled by the strip — the daemon never untiles on
-            // fullscreen, and the next batch re-marks its tiled membership — so
-            // it still receives park entries, but its committed frame is the
-            // full output. Adding a park-to-strip translation (whose y reaches
-            // below the union of every output) on top of THAT drags the
-            // fullscreen surface off the viewport. Drop the entry instead, so
-            // the window simply paints where it is committed.
-            //
-            // Deliberately NOT extended to the user-move/user-resize defer arm
-            // that commitDeferredOrBailed also covers below: the relocation is
-            // already switched off for the whole drag (scrollManagedOutputFor
-            // rejects a dragged window), and the deferred replay commits the
-            // park rect afterwards, so the entry is still correct when it is
-            // next read. Dropping it there would lose the park with nothing
-            // guaranteed to restore it.
-            // The fullscreen-bail visual-delta removal now happens in the
-            // visual-delta block itself (fullscreenBailSkippedCommit selects
-            // the remove arm there, computed above it), so the entry
-            // converges on stable absence with one damage on the transition
-            // batch instead of an insert/remove repaint pair per batch.
+            // The relocation hint for a self-fullscreened non-member is dropped
+            // in the visual-delta block above (fullscreenBailSkippedCommit
+            // selects its remove arm): the fullscreen bail commits nothing, and
+            // a park-to-strip translation on top of a full-output frame would
+            // drag the surface off the viewport. The float-out normally takes
+            // such a window out of the batch first; this covers the residue (a
+            // closed daemon gate, a batch racing the float). NOT extended to
+            // the user-move defer arm: the relocation is off for the whole
+            // drag and the deferred replay commits the park rect afterwards.
 
             // A strip entry never takes the reactive centring pass, whatever
             // KIND of entry it is. The split below only reaches its removal arm
@@ -3138,8 +3132,8 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     // batch (the per-batch disarm only covers one already in flight).
     //
     // Screen gate through scrollTrackedScreenFor, not the raw notified map:
-    // the apply loop marks tiled unconditionally but records the screen
-    // only for notified windows, so a demoted/rolled-back window is a
+    // the apply loop marks tiled (bar a window in its own fullscreen) but
+    // records the screen only for notified windows, so a demoted window is a
     // tiled member with no recorded screen — the helper resolves that
     // (fail-closed either way; the helper just fails closed for the right
     // set).

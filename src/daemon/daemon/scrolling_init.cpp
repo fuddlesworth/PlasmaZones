@@ -101,9 +101,9 @@ void Daemon::connectScrollingShortcuts()
         // fullscreen game out of fullscreen on a plain focus-left, and a
         // fixed-size game then fought the column rect it was handed. A
         // fullscreen window now stays fullscreen until the user asks otherwise:
-        // the effect keeps it out of strip membership for the hold, so it is
-        // neither translated nor parked with its column, and the fullscreen-exit
-        // branch re-requests its rect from the engine. The one verb that still
+        // the effect FLOATS it out of the strip for the hold, so it owns no
+        // column to translate or park, and the fullscreen-exit branch unfloats
+        // it back into the strip. The one verb that still
         // releases is the windowed-fullscreen toggle below, which is a request
         // about that very state.
         if (outScreenId) {
@@ -177,8 +177,16 @@ void Daemon::connectScrollingShortcuts()
         // when the relayout is built. A signal, so fire-and-forget: the
         // compositor is the only party that knows what is fullscreen, and its
         // receiver no-ops when nothing is.
-        if (m_scrollingAdaptor) {
-            Q_EMIT m_scrollingAdaptor->leaveNativeFullscreenRequested(id);
+        //
+        // Only when the verb is going to ACT. It refuses on an empty strip, a
+        // focused float or no active window, and a press it refuses must not
+        // pull some other tile out of fullscreen on its way to doing nothing.
+        // The engine answers through the verb's own guard and hands back the
+        // screen the verb will resolve, so the release names the strip the
+        // toggle then runs on.
+        QString target;
+        if (m_scrollingAdaptor && s->canToggleWindowedFullscreen(id, &target)) {
+            Q_EMIT m_scrollingAdaptor->leaveNativeFullscreenRequested(target);
         }
         s->toggleWindowedFullscreen(id);
     }));

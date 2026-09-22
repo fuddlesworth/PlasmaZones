@@ -7,8 +7,9 @@
 // Split out of state.cpp, which holds the per-session state the daemon
 // publishes and this side consumes. Nothing here is such state: this is the
 // effect's own input path (the two configurable wheel chords, their per-axis
-// accumulators and the cursor-resolved target screen) plus the release both
-// user-verb dispatch sites run before their verb goes out. The two only ever
+// accumulators and the cursor-resolved target screen, and the tab wheel over
+// an indicator) plus the native-fullscreen release the daemon's
+// windowed-fullscreen toggle asks for before its verb goes out. They only ever
 // shared a file because the wheel settings that arm the chords are published
 // state and the chord reading them is not.
 //
@@ -274,10 +275,17 @@ void TilingHandler::leaveNativeFullscreenTiles(const QString& screenId)
     // focus-left dropped a fullscreen game to a window, and a fixed-size game
     // then fought the column rect it was handed, which the maximize
     // interception turned into a maximized column. The split is handled where
-    // it shows instead: the tile batch leaves a window in its own fullscreen
-    // out of strip membership (isInOwnFullscreen), so it is neither translated
-    // nor parked with its column, and the fullscreen-exit branch re-requests
-    // its rect from the engine.
+    // it starts instead: slotWindowFullScreenChanged's enter branch FLOATS a
+    // strip tile out of the strip for its own fullscreen, so the engine holds
+    // no column to scroll or park, and the exit branch unfloats it back into
+    // its slot. isInOwnFullscreen is the residual guard for a window the
+    // float-out did not take (daemon gate closed, already floating): the tile
+    // batch leaves it out of strip membership.
+    //
+    // The float-out also means this release rarely selects anything. It skips
+    // floating windows (below), and a tile in its own fullscreen is normally
+    // floating by the time the toggle arrives. What is left is that same
+    // residue: a tracked, non-floating window still in its own fullscreen.
     //
     // Called from the VERB DISPATCH — the daemon's windowed-fullscreen toggle
     // over Scrolling.leaveNativeFullscreenRequested — rather than from the
@@ -299,9 +307,9 @@ void TilingHandler::leaveNativeFullscreenTiles(const QString& screenId)
     // park rect on the neighbouring output, so outputChanged genuinely fires.
     // Its handler reaches handleWindowOutputChanged and, on a cross-mode arm,
     // cleanupAutotileTracking, which removes from the very set a range-for
-    // would be walking. The collect/act split is the same one this file
-    // already takes for maximizeClaimsLeavingScrolling, and for the same
-    // stated reason.
+    // would be walking. The collect/act split is the same one state.cpp
+    // takes for maximizeClaimsLeavingScrolling, and for the same stated
+    // reason.
     //
     // Floating tracked windows are excluded outright: a float holds no column,
     // so the engine is not parking one out from under it and there is nothing
@@ -331,7 +339,8 @@ void TilingHandler::leaveNativeFullscreenTiles(const QString& screenId)
         // Re-resolved per entry rather than carried as a pointer: an earlier
         // entry's synchronous exit can have destroyed a later one, and
         // isDeleted() on a dangling EffectWindow* is undefined rather than a
-        // guard (the QPointer note on maximizeClaimsLeavingScrolling above).
+        // guard (the QPointer note on maximizeClaimsLeavingScrolling in
+        // state.cpp).
         KWin::EffectWindow* fsWin = m_effect->findWindowByIdExact(tiledId);
         if (!fsWin || fsWin->isDeleted()) {
             continue;
@@ -340,7 +349,8 @@ void TilingHandler::leaveNativeFullscreenTiles(const QString& screenId)
         if (!kwFs) {
             continue;
         }
-        qCInfo(lcEffect) << "Strip verb on a screen holding a fullscreen tile — leaving fullscreen for" << tiledId;
+        qCInfo(lcEffect) << "Windowed-fullscreen toggle on a screen holding a fullscreen tile, leaving fullscreen for"
+                         << tiledId;
         {
             // Own inGeometryApply bracket, exactly as releaseWindowedFullscreenState
             // takes one around the same call: none of the handlers that answer
@@ -364,10 +374,10 @@ void TilingHandler::leaveNativeFullscreenTiles(const QString& screenId)
         // The suppression above bought re-entrancy safety at the cost of the
         // exit branch's own repair, so deliver that repair here. The ENTER
         // branch shed this window's tiled tracking (clearWindowTiledAllScreens)
-        // and its decoration, and neither comes back on its own: the verb below
-        // only produces a batch when the engine's rects actually move, and a
-        // focusColumn or scrollView at the end of the strip moves nothing. The
-        // window would then sit at whatever rect KWin restored — for a column
+        // and its decoration, and neither comes back on its own: the toggle
+        // that follows only produces a batch for this window when the engine's
+        // rect for it actually moves, and a toggle aimed at another column may
+        // move nothing here. The window would then sit at whatever rect KWin restored — for a column
         // that was parked during the hold, off the union entirely — untiled and
         // undecorated for the rest of the session.
         markWindowTiled(screenId, tiledId);
@@ -381,12 +391,10 @@ void TilingHandler::leaveNativeFullscreenTiles(const QString& screenId)
         // the engine's emit-on-change gate stays silent because its own rects
         // never moved, so nothing else corrects the stray frame.
         //
-        // Both of its gates hold on either caller's path, by different means.
-        // The wheel chord resolved this screen through wheelTargetScreen, which
-        // tests isScrollingScreen and refuses a closed daemon gate. The keyboard
-        // caller cannot reach here at all unless the daemon is up and its own
-        // shortcut gate found the screen in scrolling mode, and a screen this
-        // process holds no tile for selects nothing above.
+        // Both of its gates hold on the one caller's path: the daemon's signal
+        // cannot reach here unless the daemon is up and its own toggle found
+        // the screen in scrolling mode, and a screen this process holds no
+        // tile for selects nothing above.
         PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Scrolling,
                                                        QStringLiteral("reapplyWindowGeometry"), {tiledId},
                                                        QStringLiteral("reapplyWindowGeometry"));
@@ -394,7 +402,7 @@ void TilingHandler::leaveNativeFullscreenTiles(const QString& screenId)
     if (!fullscreenTilesToExit.isEmpty()) {
         // shouldDecorateWindow's fullscreen reject has lifted for these
         // windows, and the enter branch's removeWindowDecoration is what left
-        // them bare. Once per scroll, not once per window.
+        // them bare. Once per request, not once per window.
         m_effect->updateAllDecorations();
     }
 }
@@ -498,6 +506,12 @@ bool TilingHandler::handleTabWheel(const QPointF& pos, qreal delta, qint32 delta
         return true;
     }
     const ScrollTabIndicatorPainter* painter = m_effect->m_scrollTabPainter.get();
+    if (!painter) {
+        // Defensive consistency only: scrollTabPillAt answered non-empty
+        // above, which already required the painter.
+        resetTabWheelAccumulators();
+        return false;
+    }
     // Anchor the walk on the tab the COLUMN is showing, NEVER on the pill
     // under the cursor. Activating a tab recolours the pills but does not
     // reorder them, so the cursor keeps naming the same pill for the whole
@@ -582,9 +596,9 @@ QString TilingHandler::wheelTargetScreen() const
 
 void TilingHandler::slotLeaveNativeFullscreenRequested(const QString& screenId)
 {
-    // The keyboard twin of the wheel chord's own call. The daemon emits this
-    // immediately before dispatching a strip verb, so the exit lands ahead of
-    // the relayout rather than racing it.
+    // The daemon emits this immediately before dispatching its
+    // windowed-fullscreen toggle, so the exit lands ahead of the relayout
+    // rather than racing it. It is the release's only caller.
     //
     // No screen filtering here: leaveNativeFullscreenTiles already selects by
     // m_notifiedWindowScreens, so a screen this process holds no tiles for

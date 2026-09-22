@@ -377,9 +377,9 @@ private Q_SLOTS:
         // v9 adds Scrolling.leaveNativeFullscreenRequested for the same reason
         // and with the same failure mode. A daemon emitting it to an effect
         // with no such slot, or an effect waiting on a daemon that never emits
-        // it, breaks no signature and errors nowhere: the strip just goes on
-        // scrolling and parking a column whose window the compositor refuses to
-        // move. It takes its own step because v8 shipped in 3.4.4.
+        // it, breaks no signature and errors nowhere: the windowed-fullscreen
+        // toggle just builds its relayout against a window the compositor
+        // refuses to move. It takes its own step because v8 shipped in 3.4.4.
         // v9 ALSO widens Tiling.managedScreensChanged with the per-screen
         // desktop map the announced set was resolved against — one bump for
         // both, since they land in the same unreleased cycle. Same silent

@@ -127,14 +127,18 @@ void ScrollEngine::moveColumnToLast(const QString& screenId)
 // A helper struct + lambda was considered and rejected: every verb would
 // still need the three names plus the bail-out, and the macro keeps almost
 // every verb body in this file a one-liner. The names are part of the macro's
-// documented contract. P_SCROLL_VERB is #undef'd at the end of this file; the
-// tail note explains why P_SCROLL_RESOLVE deliberately is not.
+// documented contract. Both verb macros are #undef'd after the last verb that
+// uses them, ahead of the windowed-fullscreen trio; the note there explains
+// why P_SCROLL_RESOLVE deliberately is not.
 // The hand-expanded verbs are the ones the macro cannot express:
-// consumeOrExpelWindow (two ops, one feedback), resetStripToDefaults (the
-// override map resolved once for three defaults), scrollViewByPercent (params
-// needed before the op), the windowed-fullscreen trio (background-context
-// guards) and the float-layer verbs at the tail (feedback branches differ per
-// arm, not just per outcome).
+// consumeWindowIntoColumn (source resolved after the op), consumeOrExpelWindow
+// (two ops, one feedback), the two maximize toggles (a bool answer and a
+// window-addressed arm), resetStripToDefaults (the override map resolved once
+// for three defaults), the two scrollView verbs (params needed before the op),
+// focusColumnAtIndex (the arrow needs the previous index), the
+// windowed-fullscreen trio (its own guard, and background-context guards) and
+// the float-layer verbs (feedback branches differ per arm, not just per
+// outcome).
 void ScrollEngine::consumeWindowIntoColumn(const QString& screenId)
 {
     // Hand-expanded from P_SCROLL_VERB for the SOURCE slot, the way
@@ -280,11 +284,13 @@ bool ScrollEngine::toggleMaximizeColumn(const QString& screenId, const QString& 
     // call arrived. Nothing in tree dispatches this verb from the compositor
     // any more (that is toggleMaximizeToEdges below), but the answer is the
     // same question a scripted caller has to ask, and the twins are kept
-    // identical on purpose, with ONE deliberate exception. The twin logs its
+    // identical on purpose, with TWO deliberate exceptions. The twin logs its
     // refusal and this verb does not, because the twin's refusal answers a
     // button press the user watched do nothing while this one answers a
     // scripted D-Bus call that reads the false it gets back. See the note at
-    // that log.
+    // that log. And the twin expels the asking active tab of a tabbed column
+    // before it toggles, where this width verb always acts on the column
+    // whole.
     if (!canonicalId.isEmpty()) {
         PhosphorEngine::PlacementStateKey key;
         ScrollState* state = stateForWindow(canonicalId, &key);
@@ -338,13 +344,15 @@ bool ScrollEngine::toggleMaximizeToEdges(const QString& screenId, const QString&
     // and the quiet named path (this verb IS the compositor interception's
     // dispatch target, so a background client maximizing itself must not pop
     // an OSD over the user's work). The comments there carry the reasons; the
-    // only difference below is which strip op runs. The two bodies were left
+    // differences below are which strip op runs and the tab expel ahead of
+    // it. The two bodies were left
     // separate rather than folded into one helper because the shared prologue
     // would have to live on ScrollEngine's private interface to reach
     // stateForWindow and applyLayout, and it earns less than it costs at two
-    // call sites. They must stay in step by hand, with the one recorded
-    // exception below: the refusal here is LOGGED and the twin's is not, for
-    // the reason the log itself gives.
+    // call sites. They must stay in step by hand, with the two recorded
+    // exceptions below: the refusal here is LOGGED and the twin's is not, for
+    // the reason the log itself gives, and the asking active tab of a tabbed
+    // column is expelled first.
     //
     // The changed-reporting answer matters MOST here: this verb is what the
     // maximize interception dispatches, and the effect no longer writes KWin's
@@ -385,21 +393,39 @@ bool ScrollEngine::toggleMaximizeToEdges(const QString& screenId, const QString&
         // maximizes a tab group whole.
         //
         // Only on the way IN: an un-maximize must reach the column that holds
-        // the state. Only for the strip's ACTIVE window: the expel acts on the
-        // active tile and moves focus to the new column, which is right for the
-        // window the user is looking at and wrong for a background tab, whose
-        // request keeps the old column-wide behaviour rather than stealing
-        // focus. The "quiet named path" contract above is about exactly that.
-        if (const int ownerIdx = state->strip().columnOfWindow(canonicalId); ownerIdx >= 0) {
+        // the state. Only for the ACTIVE TILE of the ACTIVE column, tested on
+        // the raw activeTileIdx: the strip's expel takes no window id and
+        // removes exactly that tile, while activeWindowId() walks past a
+        // minimized active tile and would let the expel take a different
+        // window than the one asking. A background tab's request keeps the
+        // column-wide behaviour rather than moving the strip's active column.
+        // Only for a TABBED column, because that is where a single visible
+        // window stands in for the group; a stacked column is maximized whole.
+        // Only with a real work area: that is the toggle's one remaining
+        // refusal, so checking it here means an expel is always followed by a
+        // toggle that takes. The result is folded into `changed` regardless,
+        // so a restructure can never go out without its relayout.
+        //
+        // Deliberately NOT gated on floatingHasFocus or on the context being
+        // the current one. Nothing here takes focus (applyLayout below runs
+        // with focusAfter false, and only for the current context), and a
+        // background strip is restructured on its own state like every other
+        // window-keyed mutation in this file.
+        bool expelled = false;
+        if (const int ownerIdx = state->strip().columnOfWindow(canonicalId);
+            ownerIdx >= 0 && ownerIdx == state->strip().activeColumnIndex()) {
             const Column& owner = state->strip().columns().at(ownerIdx);
             if (owner.display == ColumnDisplay::Tabbed && owner.tiles.size() > 1 && !owner.maximizedToEdges
-                && state->strip().activeWindowId() == canonicalId) {
+                && owner.activeTileIdx >= 0 && owner.activeTileIdx < owner.tiles.size()
+                && owner.tiles.at(owner.activeTileIdx).windowId == canonicalId
+                && params.axis.mainSize(params.workArea) > 0) {
                 qCInfo(lcScrollEngine) << "toggleMaximizeToEdges: expelling" << canonicalId
                                        << "from its tabbed column before maximizing it alone";
-                state->strip().expelWindowFromColumn(params);
+                expelled = state->strip().expelWindowFromColumn(params);
             }
         }
-        const bool changed = state->strip().toggleMaximizeToEdgesForWindow(canonicalId, params);
+        const bool toggled = state->strip().toggleMaximizeToEdgesForWindow(canonicalId, params);
+        const bool changed = toggled || expelled;
         // The RESOLVED rect, not just the flag: "did the column end up covering
         // the raw work area" is the question a maximize report actually needs
         // answered, and it is the one the flag alone cannot settle — the effect
@@ -946,15 +972,44 @@ void ScrollEngine::switchFocusBetweenFloatingAndTiling(const QString& screenId)
 // crossed the size ceiling. None uses P_SCROLL_VERB (each hand-expands its
 // resolve for its own feedback/guard shape), so they sit after the #undef.
 
+ScrollEngine::WindowedFullscreenGuard ScrollEngine::windowedFullscreenGuard(const QString& screenId, QString* outScreen,
+                                                                            ScrollState** outState) const
+{
+    const QString screen = resolveOperationScreen(screenId);
+    // m_states directly, the const spelling stateForScreen() const uses:
+    // stateForKey is non-const for its create arm, which this never wants.
+    ScrollState* state = screen.isEmpty() ? nullptr : m_states.stateForKey(currentKeyForScreen(screen));
+    if (outScreen) {
+        *outScreen = screen;
+    }
+    if (outState) {
+        *outState = state;
+    }
+    if (!state || state->strip().isEmpty()) {
+        return WindowedFullscreenGuard::NoWindows;
+    }
+    if (state->floatingHasFocus()) {
+        return WindowedFullscreenGuard::FloatHasFocus;
+    }
+    return state->strip().activeWindowId().isEmpty() ? WindowedFullscreenGuard::NoActiveWindow
+                                                     : WindowedFullscreenGuard::Ok;
+}
+
+bool ScrollEngine::canToggleWindowedFullscreen(const QString& screenId, QString* resolvedScreen) const
+{
+    return windowedFullscreenGuard(screenId, resolvedScreen, nullptr) == WindowedFullscreenGuard::Ok;
+}
+
 void ScrollEngine::toggleWindowedFullscreen(const QString& screenId)
 {
-    // Hand-expanded (not P_SCROLL_VERB) for toggleColumnTabbed's reason —
-    // the op is layout-neutral and never reads layout params — but the two
-    // diverge downstream: this verb's feedback carries the resulting state
-    // as the reason token, and the OSD has dedicated arms for it.
-    const QString screen = resolveOperationScreen(screenId);
-    ScrollState* state = screen.isEmpty() ? nullptr : stateForKey(currentKeyForScreen(screen), false);
-    if (!state || state->strip().isEmpty()) {
+    // Hand-expanded (not P_SCROLL_VERB): the op is layout-neutral and never
+    // reads layout params, the refusals come from a guard shared with
+    // canToggleWindowedFullscreen, and the feedback carries the resulting
+    // state as the reason token, for which the OSD has dedicated arms.
+    QString screen;
+    ScrollState* state = nullptr;
+    const WindowedFullscreenGuard guard = windowedFullscreenGuard(screenId, &screen, &state);
+    if (guard == WindowedFullscreenGuard::NoWindows) {
         // Logged for toggleMaximizeToEdges' reason: this answers a KEYPRESS,
         // and both refusal arms are otherwise silent. The OSD feedback below
         // is not a substitute — it is suppressed on some surfaces and never
@@ -972,7 +1027,7 @@ void ScrollEngine::toggleWindowedFullscreen(const QString& screenId)
     // mirror in moveFocusedToTiling inverts the identical test; the source
     // slot names the floating window that actually holds focus, so the OSD
     // refers to what the user is looking at.
-    if (state->floatingHasFocus()) {
+    if (guard == WindowedFullscreenGuard::FloatHasFocus) {
         // The likeliest reason a user reports that this shortcut "does
         // nothing": focus is on a FLOATING window, which owns no column, so
         // the verb declines rather than acting on the strip's stale active
@@ -984,6 +1039,9 @@ void ScrollEngine::toggleWindowedFullscreen(const QString& screenId)
                                   state->lastFloatingFocus(), QString(), screen);
         return;
     }
+    // NoActiveWindow falls through on purpose: the strip op refuses an empty
+    // active id itself, and the log and no_target feedback below are that
+    // refusal's report.
     const QString sourceWindow = state->strip().activeWindowId();
     const bool changed = state->strip().toggleActiveWindowedFullscreen();
     // Read once and reused by the success reason below, so the log and the

@@ -119,9 +119,10 @@ void TilingHandler::connectSignals()
                 PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("scrollEffectBehaviourChanged"), this,
                 SLOT(slotScrollEffectBehaviourChanged(QVariantMap)));
 
-    // Keyboard strip verbs originate in the daemon and never pass through
-    // handleWheelChord, so the daemon says out loud what the wheel path does
-    // for itself. See leaveNativeFullscreenTiles.
+    // The daemon's windowed-fullscreen toggle asks for the native-fullscreen
+    // release ahead of its verb. It is the only trigger: the wheel chords and
+    // the other strip verbs are navigation and release nothing. See
+    // leaveNativeFullscreenTiles.
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                 PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("leaveNativeFullscreenRequested"), this,
                 SLOT(slotLeaveNativeFullscreenRequested(QString)));

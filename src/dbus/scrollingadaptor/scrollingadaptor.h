@@ -29,7 +29,8 @@ namespace PlasmaZones {
  * The scroll-SPECIFIC wire surface: the scrolling screen set the KWin
  * effect uses as its Mode-stamp discriminator, the strip-preview snapshot
  * (with the preset vocabulary beside it), the wheel-driven focusColumn and
- * scrollView verbs, the four absolute width/height setters for external
+ * scrollView verbs, their placement-map twins focusColumnAt, moveColumnTo and
+ * scrollViewByPx beside the stripModelJson whole-strip read, the four absolute width/height setters for external
  * scripting, the toggleMaximizeColumn width verb, the toggleMaximizeToEdges
  * verb that answers a window's own maximize request (and reports back whether
  * the strip changed, so the effect can put KWin's maximize bit back to the
@@ -39,8 +40,11 @@ namespace PlasmaZones {
  * repair call (inbound too, for a fullscreen exit whose strip rects never
  * moved), the blueprintProgressJson template-seed report, the
  * stripChanged wake-up that tells a preview its strip is worth re-reading,
- * and the stripContextChanged announcement of which strip a screen is
- * currently showing.
+ * the stripContextChanged announcement of which strip a screen is
+ * currently showing, the compositor-owned behaviour map and the
+ * focus-follows-mouse blocked-window list with their change signals, and the
+ * leaveNativeFullscreenRequested release sent ahead of the windowed-fullscreen
+ * toggle.
  * Window lifecycle and tile-request traffic for
  * scrolling screens deliberately stays on org.plasmazones.Tiling — the
  * effect keeps ONE engine-managed screen set and one geometry pipeline
@@ -373,6 +377,14 @@ public Q_SLOTS:
      * state it toggles is the one the effect mirrors onto KWin's maximize bit.
      * The width verb above no longer has any wire mirror.
      *
+     * One addressing difference from the twin: a NAMED window that is the
+     * active tab of the active, not yet maximized TABBED column is first
+     * expelled into a column of its own, and that column is maximized. The
+     * request is about the window, not its tab group. A background tab, a
+     * stacked column and the empty (focused-column) spelling all toggle the
+     * column whole, and the way back out toggles whichever column holds the
+     * window without regrouping it.
+     *
      * WHETHER THE STRIP CHANGED IS REPORTED because this caller is holding
      * compositor state that only the answer can settle: the effect leaves
      * KWin's maximize bit exactly where the user's click put it and dispatches,
@@ -429,7 +441,8 @@ public Q_SLOTS:
      * evicts the window's emit-gate memory and relayouts its screen, so
      * the next batch re-carries the rect the gate would otherwise keep
      * silent. Silent no-op for an unknown window, same wire-boundary
-     * policy as focusColumn.
+     * policy as clearWindowedFullscreen: a repair call, so neither
+     * ownership- nor context-gated.
      *
      * @param windowId Window to re-emit; an empty string is ignored
      */
@@ -611,12 +624,13 @@ Q_SIGNALS:
     /// strip verb, which took a fullscreen game out of fullscreen on a plain
     /// focus-left; navigation now leaves a fullscreen window alone.
     ///
-    /// A tile in its own fullscreen (a client F11, a video going fullscreen —
+    /// A window in its own fullscreen (a client F11, a video going fullscreen —
     /// NOT the windowed-fullscreen feature, whose members are committed at their
     /// column rect on purpose) refuses every geometry commit through the
-    /// effect's fullscreen bail. The engine cannot see that, so it goes on
-    /// scrolling and PARKING that column while the screen still shows the
-    /// fullscreen window, and the two owners stay split for the whole hold.
+    /// effect's fullscreen bail. The effect normally floats such a window out
+    /// of the strip for the hold, so this release is for a tile that is still
+    /// strip-tracked while fullscreen, which the toggle's relayout would
+    /// otherwise be built against.
     ///
     /// Emitted from that verb's handler immediately BEFORE the verb is
     /// dispatched, which is the whole point of a separate signal rather than a
@@ -624,9 +638,11 @@ Q_SIGNALS:
     /// the verb produces is built against a window the compositor will accept.
     /// A flag would arrive with the geometry it was meant to precede.
     ///
-    /// Emitted unconditionally once that verb passed the gate, whether or not a
-    /// tile is actually fullscreen — only the compositor knows that, and the
-    /// receiver no-ops in the common case.
+    /// Emitted only when the verb is going to act
+    /// (ScrollEngine::canToggleWindowedFullscreen: a strip with windows, focus
+    /// not on the float layer, an active window), and for the screen the verb
+    /// resolves. Whether any tile is actually fullscreen is NOT checked — only
+    /// the compositor knows that, and the receiver no-ops in the common case.
     void leaveNativeFullscreenRequested(const QString& screenId);
 
 private:

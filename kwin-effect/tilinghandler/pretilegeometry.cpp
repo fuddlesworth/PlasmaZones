@@ -50,6 +50,14 @@ void TilingHandler::saveAndRecordPreTileGeometry(const QString& windowId, const 
         qCDebug(lcEffect) << "Skipped pre-autotile geometry save: invalid frame" << frame << "for" << windowId;
         return;
     }
+    // The correction above keys on the COMMITTED fullscreen bit, which has
+    // already dropped at the fullscreen-exit edge while the frame still holds
+    // the full-output rect. That caller (signals.cpp, never-tracked arm)
+    // therefore passes knownFreeFloating=false and clears the spawn marker, so
+    // the not-floating guard below drops the capture instead of storing the
+    // output rect as free geometry. A rect equal to the output is NOT rejected
+    // here: a borderless window sized to its output has exactly that free
+    // geometry, and the spawn capture must store it.
     // Use EXACT windowId match only — NOT an appId/stableId fallback.
     // Multiple instances of the same app (e.g., 3 Dolphin windows) share an
     // appId; a fuzzy contains-check would return true after the first
@@ -154,10 +162,11 @@ void TilingHandler::saveAndRecordPreTileGeometry(const QString& windowId, const 
     m_preTileGeometries[screenId][windowId] = frame;
     qCDebug(lcEffect) << "Saved pre-autotile geometry for" << windowId << "on" << screenId << ":" << frame;
     if (m_effect->m_daemonGate.serviceRegistered) {
-        // overwrite=knownFreeFloating: only the window-opened spawn paths
-        // (the sole callers passing true) may clobber a persisted daemon
-        // entry — the spawn frame IS the authoritative free-floating
-        // geometry, and a stale appId-keyed entry from a prior session
+        // overwrite=knownFreeFloating: only callers vouching for the frame
+        // as free geometry pass true (the window-opened spawn paths and a
+        // mode-entry batch for an untiled window) and may clobber a
+        // persisted daemon entry — that frame IS the authoritative
+        // free-floating geometry, and a stale entry from a prior session
         // would otherwise block the fresh capture and leave float-restore
         // teleporting the window to ancient coordinates.
         // Every other caller (autotile toggle, unminimize-unfloat,

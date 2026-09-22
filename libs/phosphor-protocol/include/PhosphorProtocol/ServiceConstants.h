@@ -507,14 +507,15 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       signal-only addition is not treated as harmlessly additive here.
 //
 //   v9: Scrolling gains leaveNativeFullscreenRequested (s), a screen-scoped
-//       signal the daemon emits from the keyboard shortcut gate immediately
-//       BEFORE dispatching a strip verb, telling the compositor to release the
-//       OWN fullscreen of every scroll-tracked tile on that screen. Such a tile
-//       refuses every geometry commit through the effect's fullscreen bail
-//       while the engine goes on scrolling and PARKING its column, so the two
-//       owners drift apart for the whole hold. The wheel chord already did this
-//       for itself inside the effect, but the keyboard half originates in the
-//       daemon and could not.
+//       signal the daemon emits immediately BEFORE dispatching the
+//       windowed-fullscreen toggle, and only when that verb is going to act,
+//       telling the compositor to release the OWN fullscreen of every
+//       scroll-tracked tile on that screen. Such a tile refuses every geometry
+//       commit through the effect's fullscreen bail. As first introduced it
+//       preceded EVERY keyboard strip verb; that took a fullscreen game out of
+//       fullscreen on a plain focus change, so the emitter was narrowed to the
+//       one verb that is a request about fullscreen itself. The wire shape did
+//       not change with the narrowing, so it took no version step.
 //
 //       ANOTHER new REQUIRED signal, so it takes a step of its own for exactly
 //       the reason v8 did: v8 shipped in 3.4.4, and the
@@ -522,9 +523,9 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       Its failure mode is the silent kind as well. A daemon that emits it to
 //       an effect with no such slot, or an effect waiting on a daemon that
 //       never emits it, matches every other signature on the interface and
-//       errors nowhere. The strip simply goes on scrolling and parking a column
-//       whose window the compositor is refusing to move, which is the bug this
-//       signal exists to close.
+//       errors nowhere. The toggle's relayout is simply built against a window
+//       the compositor is refusing to move, which is the bug this signal
+//       exists to close.
 //
 //       A SIGNAL rather than a field on the geometry batch, which is what the
 //       gap note in the wheel path originally anticipated. The exit has to land
