@@ -207,19 +207,14 @@ public:
      * `snappingRestoreFloatedWindowsOnLogin` setting. Like @ref ShouldRestorePredicate
      * the engine stays settings-agnostic (LGPL boundary) — it only asks.
      *
-     * Returns true to restore the recorded position (cross-screen allowed —
-     * stored geometry is in global compositor coordinates, so re-applying it
-     * lands the window back on its original monitor).
+     * Returns true to restore the recorded position.
      *
-     * The gate governs two things for FLOATED records (snapped-to-zone restore is
-     * unaffected):
-     *   - cross-screen CONSUMPTION eligibility — a record whose recorded screen
-     *     differs from the reopening screen is only consumed when the predicate
-     *     opts the window in; otherwise consumption stays gated on the opening
-     *     screen;
-     *   - the geometry MOVE — a floated record ALWAYS re-marks the window floating
-     *     (windowFloatingChanged), but its recorded position is re-applied only
-     *     when the predicate opts in.
+     * The gate governs ONE thing for FLOATED records (snapped-to-zone restore is
+     * unaffected): the geometry MOVE. A floated record ALWAYS re-marks the
+     * window floating (windowFloatingChanged), but its recorded position is
+     * re-applied only when the predicate opts in. Consumption is never governed
+     * by it: a floated record is screen-local whatever this answers. When the
+     * move is declined the window still gets its free SIZE back where it is.
      *
      * When the predicate is UNSET (default), the engine preserves its historical
      * behaviour: a floated record is consumed only on the screen it reopens on and
@@ -481,17 +476,16 @@ public:
     /**
      * @brief Resolve auto-snap for a newly opened window
      *
-     * A matched SnapToZone placement rule has highest priority and overrides any
-     * stored placement (the store still re-binds the record first, so the window's
-     * float-back geometry survives the override). Otherwise the unified
-     * WindowPlacementStore reopens the window from its snapped or floated record
-     * (cross-screen where the predicates allow). With neither, the fallback chain
-     * runs:
-     *   1. Auto-assign to empty zone
-     *   2. Snap to last zone (final fallback)
-     *
-     * Returns a PhosphorEngine::SnapResult so the D-Bus adaptor can unpack geometry for the
-     * KWin effect. Also handles floating windows (skips snap, emits feedback).
+     * A matched SnapToZone placement rule (chain level 1) has highest priority
+     * and overrides any stored placement (the store still re-binds the record
+     * first, so the window's float-back geometry survives the override).
+     * Otherwise the unified WindowPlacementStore reopens the window from its
+     * snapped (may cross screens) or floated (screen-local) record. With
+     * neither, levels 2 (empty zone) and 3 (last-used zone) run. A window
+     * nothing places is FLOATED, by a matched Float rule before the chain or
+     * by the no-match default after it, and every float verdict that does not
+     * move the window gives it its remembered free size back
+     * (restoreFreeSizeForUnplaced). An already-floating window is skipped.
      *
      * @param windowId Window identifier
      * @param screenId Screen where the window appeared
@@ -499,11 +493,13 @@ public:
      * @param kind Structural kind of the opening window. Accepted for D-Bus
      *             wire-compatibility but no longer gates restore — the matched
      *             WindowPlacement record carries its own kind.
+     * @param reason Why this resolve runs; gates the size restore only.
      * @return PhosphorEngine::SnapResult with geometry and zone info, or PhosphorEngine::SnapResult::noSnap()
      */
     PhosphorEngine::SnapResult
     resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky,
-                         PhosphorEngine::WindowKind kind = PhosphorEngine::WindowKind::Unknown);
+                         PhosphorEngine::WindowKind kind = PhosphorEngine::WindowKind::Unknown,
+                         PhosphorEngine::RestoreReason reason = PhosphorEngine::RestoreReason::Open);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotile engine reference (for isActiveOnScreen routing)
@@ -669,9 +665,8 @@ public:
     /// the SnapAdaptor when a deferredToTilingEngine verdict's reclaim was then
     /// DECLINED; without it the window ended the open with no state in any
     /// engine. No-op with a definite snap state, snapping off, or empty args.
-    void applyNoMatchFloatDefault(const QString& windowId, const QString& screenId);
-    /// Give a window left floating its remembered free SIZE (see definition, #1106).
-    void restoreFreeSizeForUnplaced(const QString& windowId, const QString& screenId);
+    void applyNoMatchFloatDefault(const QString& windowId, const QString& screenId,
+                                  PhosphorEngine::RestoreReason reason = PhosphorEngine::RestoreReason::Open);
 
     /// Primary zone of @p windowId across the per-screen stores (empty if none).
     /// Used by the cross-mode handoff to read a snap partner's slot.
@@ -695,6 +690,7 @@ public:
     /// Inject the cross-surface resolver (neighbour output / desktop lookup),
     /// threaded into the navigation target resolver so a no-adjacent-zone
     /// boundary crosses into the neighbouring output instead of failing.
+    /// Not owned; a raw borrow, cleared with nullptr at daemon teardown.
     void setCrossSurfaceResolver(PhosphorEngine::ICrossSurfaceResolver* resolver) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1073,6 +1069,10 @@ Q_SIGNALS:
 private:
     PhosphorEngine::ISnapSettings* snapSettings() const;
 
+    /// The size-only half of a float verdict (#1106); contract at the definition.
+    void restoreFreeSizeForUnplaced(const QString& windowId, const QString& screenId,
+                                    PhosphorEngine::RestoreReason reason);
+
     /// Canonicalize a raw windowId to its stable first-seen composite via the
     /// shared registry (passthrough when no registry is attached). The reverse map
     /// and every per-state lookup key on this, matching SnapState's own internal
@@ -1190,7 +1190,7 @@ private:
     QSet<QString> m_effectReportedWindows;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Float helpers (snapengine/float.cpp)
+    // Float helpers (src/float.cpp)
     //
     // The historical clearFloatingStateForSnap / assignToZones pair was
     // removed — all snap commits now route through commitSnapImpl.
@@ -1314,11 +1314,10 @@ private:
 
     // Auto-snap entry gate. Empty until the daemon wires it; while empty
     // the engine treats every screen as active — preserving the
-    // historical default that unit tests rely on. (The predicate's
-    // signature is `bool(const QString& screenId)` — the desktop and
-    // activity dimensions are resolved by the daemon-side closure at
-    // call time, not passed in here; see ShouldRestorePredicate doc
-    // above and discussion #461 item 7.)
+    // historical default that unit tests rely on. (The predicate takes
+    // the screen and the desktop being restored onto; the activity is
+    // resolved by the daemon-side closure at call time; see the
+    // ShouldRestorePredicate doc above and discussion #461 item 7.)
     ShouldRestorePredicate m_shouldRestorePredicate{};
 
     // Unsnapped-position-restore gate. Empty until the daemon wires it; while

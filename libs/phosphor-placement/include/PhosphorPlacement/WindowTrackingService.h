@@ -858,29 +858,29 @@ public:
     QHash<QString, QRect> updatedWindowGeometries() const;
 
     /**
-     * @brief Pre-computed snap restore target: zone geometry + the saved screen it lives on.
-     *
-     * The effect-side cache carries both so it can tell "saved zone is on
-     * snap-mode screen X" from "current KWin placement is autotile screen Y",
-     * enabling correct cross-VS / cross-monitor restores instead of gating on
-     * wherever KWin happened to drop the window.
+     * @brief Pre-computed snap restore target: zone geometry, the saved screen
+     * it lives on (so the effect can tell "saved zone is on snap-mode screen X"
+     * from "KWin placed it on autotile screen Y"), and the record's window id
+     * (so the effect can drop an entry for a window it can still see, which a
+     * daemon-only restart builds before the registry is repopulated).
      */
     struct PendingRestoreTarget
     {
         QRect geometry;
         QString screenId;
+        QString windowId;
     };
 
     /**
      * @brief Pre-compute zone geometries for all pending restore entries.
-     * @return Map of appId -> {geometry, savedScreenId}
+     * @return Map of appId -> {geometry, savedScreenId, windowId}
      *
      * Used by the KWin effect to cache expected snap positions so that
      * windows can be teleported to their zone immediately on windowAdded,
      * eliminating the visible "flash" from KWin's session-restored position.
-     * Sourced from the unified WindowPlacementStore's snapped records; for a
-     * multi-instance appId the lowest-sequence (least-recently-recorded)
-     * record is chosen. That pick is DETERMINISTIC but is not the FIFO head
+     * Sourced from the WindowPlacementStore's snapped records minus those of
+     * still-open windows (#1106); for a multi-instance appId the lowest-sequence
+     * remaining record is chosen. That pick is DETERMINISTIC but is not the FIFO head
      * snap's take() consumes — record()'s in-place merge keeps bucket
      * position while restamping sequence, so the two orders legitimately
      * diverge; the cache is a best-effort anti-flash hint the async resolver

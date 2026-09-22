@@ -549,7 +549,7 @@ bool PlasmaZonesEffect::isExcludedBySnappingRule(KWin::EffectWindow* w,
     }
     // Per-window verdict cache, mirroring resolveRuleActions: the hot callers
     // (buildWindowMap per batch, hasOtherWindowOfClassWithDifferentPid's
-    // stacking-order sweep per open) would otherwise pay a full ~30-accessor
+    // stacking-order sweep per snap-all) would otherwise pay a full ~30-accessor
     // ruleQuery build per window per consult — O(N^2) query builds across a
     // login burst. Freshness matches the animation verdicts: the cache is
     // revision-keyed for rule edits and cleared by the same placement /
@@ -1032,19 +1032,15 @@ bool PlasmaZonesEffect::hasOtherWindowOfClassWithDifferentPid(KWin::EffectWindow
     // what is the same app — and session restore is exactly when the pid is
     // unknown AND several same-class windows appear together.
     //
-    // "Cannot discriminate" is reported as false. Note the two callers read that
-    // answer with OPPOSITE polarity, so this is a real behaviour choice rather
-    // than a neutral one:
-    //   * window_lifecycle.cpp, canSnapRestore = ... && !hasOther...  — false
-    //     ALLOWS the restore. This is the case the fix targets: a window
-    //     restored at login was being denied its snap position because a
-    //     same-class sibling reported a real pid against its unknown one.
-    //   * kwin-effect/handlers/snaphandler.cpp, snap-all skips when !hasOther... && the appId
-    //     is already snapped — false can now SKIP a pid-unknown window that the
-    //     old sentinel comparison would have snapped. Narrow: it needs an
-    //     unknown pid, a same-class sibling, and the appId already in the
-    //     snapped set. Accepted deliberately, because the login case is the
-    //     common one and a wrongly-denied restore is the more visible failure.
+    // "Cannot discriminate" is reported as false. The one remaining caller,
+    // the snap-all dedup in kwin-effect/handlers/snaphandler.cpp, skips a
+    // window when !hasOther... && the appId is already snapped, so false can
+    // SKIP a pid-unknown window that the old sentinel comparison would have
+    // snapped. Narrow: it needs an unknown pid, a same-class sibling, and the
+    // appId already in the snapped set. Accepted deliberately. (The open-path
+    // canSnapRestore gate, which read the answer with the opposite polarity
+    // and was the reason the sentinel was clamped, is gone since #1106: the
+    // daemon's placement store owns the second-instance question now.)
     if (windowPid <= 0) {
         return false;
     }
@@ -1059,7 +1055,7 @@ bool PlasmaZonesEffect::hasOtherWindowOfClassWithDifferentPid(KWin::EffectWindow
         }
         if (!other || other->isDeleted()) {
             // A close-grabbed dying window of the same class (quit-and-relaunch,
-            // app auto-restart) must not suppress the new instance's snap restore.
+            // app auto-restart) is not another instance for the snap-all dedup.
             continue;
         }
         // Cheap discriminator FIRST: the class/pid compare is two flag

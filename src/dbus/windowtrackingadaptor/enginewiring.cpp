@@ -82,6 +82,9 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     // accumulate duplicate connections.
     if (m_snapEngine) {
         disconnect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this, nullptr);
+        // The size-only twin is snap-only today; dropped on the same rewire so
+        // a same-pointer setEngines cannot deliver two size applies per emit.
+        disconnect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::sizeRestoreRequested, this, nullptr);
     }
     if (m_autotileEngine) {
         disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this, nullptr);
@@ -465,8 +468,22 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // makes the effect keep the window where KWin placed it.
         connect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::sizeRestoreRequested, this,
                 [this](const QString& windowId, const QSize& size, const QString& screenId) {
-                    if (!size.isValid() || size.isEmpty()) {
+                    if (size.isEmpty()) {
                         return;
+                    }
+                    // The frame shadow is the effect's, but it is what the
+                    // open-time RouteToScreen translation reads NEXT, inside
+                    // this same resolve, and the effect's own flush of the
+                    // resized frame arrives only after the configure lands.
+                    // Left alone, a routed window carried the un-restored
+                    // zone size onto its target monitor. The position stays
+                    // the effect's; only the size is what this relay restored.
+                    // A client that refuses the resize leaves the shadow at
+                    // the requested size until its next real move, which is
+                    // the free size the window is meant to have anyway.
+                    if (const auto shadow = m_frameGeometry.find(shadowWindowId(windowId));
+                        shadow != m_frameGeometry.end()) {
+                        shadow->setSize(size);
                     }
                     Q_EMIT applyGeometryRequested(windowId, 0, 0, size.width(), size.height(), QString(), screenId,
                                                   true);

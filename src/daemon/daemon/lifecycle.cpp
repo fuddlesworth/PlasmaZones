@@ -828,9 +828,9 @@ void Daemon::stop()
         // teardown gap; this is the grep-discoverable contract, and it matches
         // the clear the tiling adaptor's identically-named borrow gets above.
         concreteSnap->setWindowRegistry(nullptr);
-        // The navigation-state provider is a raw borrow of a Qt-child adaptor,
-        // in the same class as the zone-detection pointer noted below.
+        // The navigation-state provider and cross-surface resolver: raw borrows too.
         concreteSnap->setNavigationStateProvider(nullptr);
+        concreteSnap->setCrossSurfaceResolver(nullptr);
     }
 
     // Likewise sever WindowTrackingAdaptor's borrow of m_ruleStore (used by

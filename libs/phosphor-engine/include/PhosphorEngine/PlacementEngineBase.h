@@ -11,6 +11,7 @@
 #include <QPointer>
 #include <QRect>
 #include <QSet>
+#include <QSize>
 #include <QString>
 #include <QStringList>
 
@@ -95,7 +96,11 @@ Q_SIGNALS:
     /// Resize @p windowId to @p size where it stands, leaving the position to
     /// the compositor. The size-only sibling of geometryRestoreRequested: a
     /// window nothing places is given back its remembered free size, not its
-    /// remembered spot. Relayed to the effect as a size-only apply.
+    /// remembered spot. Relayed to the effect as a size-only apply. Emitted
+    /// by the snap engine only, and wired for it only: the tiling engines
+    /// place every window they keep, and their float arms restore the full
+    /// float-back rect instead. Declared here so the relay stays
+    /// mode-agnostic the day another engine needs it.
     void sizeRestoreRequested(const QString& windowId, const QSize& size, const QString& screenId);
 
     void navigationFeedback(bool success, const QString& action, const QString& reason, const QString& sourceId,

@@ -243,6 +243,51 @@ private Q_SLOTS:
         QVERIFY(m_service->pendingRestoreQueues().contains(QStringLiteral("firefox")));
     }
 
+    // ────────────────────────────────────────────────────────────────────
+    // pendingRestoreGeometries — the effect's instant-restore cache source
+    // ────────────────────────────────────────────────────────────────────
+
+    // A snapped record whose window is still open (per the registry-backed
+    // live probe) is that window's own placement, not a pending restore:
+    // served through the appId-keyed cache it teleported a fresh second
+    // instance into its open sibling's zone (#1106). Only records of closed
+    // windows feed the cache, and each entry names its record's window so
+    // the effect can drop one the daemon could not tell was live.
+    void pendingRestoreGeometries_skipsRecordsOfLiveWindows()
+    {
+        // Positive control first: with no live window the snapped record IS
+        // a pending restore and resolves to a real zone rect.
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("firefox|closed-uuid");
+        rec.appId = QStringLiteral("firefox");
+        rec.screenId = m_screenId;
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        slot.zoneIds = QStringList{m_zoneIds[0]};
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        QVERIFY(m_service->placementStore().record(rec));
+
+        auto targets = m_service->pendingRestoreGeometries();
+        QVERIFY2(targets.contains(QStringLiteral("firefox")), "a closed window's snapped record feeds the cache");
+        QVERIFY(targets.value(QStringLiteral("firefox")).geometry.isValid());
+        QCOMPARE(targets.value(QStringLiteral("firefox")).windowId, QStringLiteral("firefox|closed-uuid"));
+
+        // The same record's window is live: no entry.
+        m_registry->upsert(QStringLiteral("closed-uuid"), {QStringLiteral("firefox"), QString(), QString()});
+        targets = m_service->pendingRestoreGeometries();
+        QVERIFY2(!targets.contains(QStringLiteral("firefox")), "a live window's record is not a pending restore");
+
+        // Two records, the live one older: the cache falls through to the
+        // closed one instead of the live one the sequence order would pick.
+        PhosphorEngine::WindowPlacement newer = rec;
+        newer.windowId = QStringLiteral("firefox|other-closed");
+        newer.engines[PhosphorEngine::WindowPlacement::snapEngineId()].zoneIds = QStringList{m_zoneIds[1]};
+        QVERIFY(m_service->placementStore().record(newer));
+        targets = m_service->pendingRestoreGeometries();
+        QVERIFY(targets.contains(QStringLiteral("firefox")));
+        QCOMPARE(targets.value(QStringLiteral("firefox")).windowId, QStringLiteral("firefox|other-closed"));
+    }
+
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;

@@ -628,10 +628,10 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
     const PhosphorEngine::WindowKind kind = PhosphorEngine::clampWindowKindFromWire(windowKind);
 
     // Release this instance's open claim on a placement record. Consumption
-    // through take() / takeForReopen() already releases it, so this covers the
-    // window that closed without any engine having restored it — otherwise the
-    // claim would sit in the map holding a record hostage from every sibling
-    // that opens later.
+    // through take() / takeForReopen() already releases it, and so does the
+    // store's markInstanceClosed below; this early release covers the window
+    // that closed without any engine having restored it BEFORE the capture
+    // reads the store, and is otherwise a harmless double release.
     if (m_service) {
         m_service->placementStore().releaseOpenClaim(windowId);
     }
@@ -731,9 +731,9 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
                                               const QString& activity, int windowType, const QVariantMap& extended)
 {
     if (!m_windowRegistry) {
-        // Registry not wired yet — during daemon startup the kwin-effect may
-        // fire before setWindowRegistry runs. Drop silently; the effect re-emits
-        // on every class change so state converges.
+        // Teardown or a registry-less unit test, never a startup race (the
+        // registry is wired before the D-Bus object is registered). Drop
+        // silently; the effect re-emits on every class change.
         return;
     }
     if (instanceId.isEmpty()) {

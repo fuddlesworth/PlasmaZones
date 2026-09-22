@@ -224,7 +224,7 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
     const auto releaseSuppression = [this, safeWindow, releaseSuppressionOnMiss]() {
         if (releaseSuppressionOnMiss) {
             if (safeWindow) {
-                m_effect->endRestoreSuppression(safeWindow);
+                m_effect->releaseRestoreSuppressionOnMiss(safeWindow);
             }
         }
     };

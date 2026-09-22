@@ -201,6 +201,7 @@ QString WindowTrackingAdaptor::getPendingRestoreGeometries()
         geoObj[QLatin1String("width")] = target.geometry.width();
         geoObj[QLatin1String("height")] = target.geometry.height();
         geoObj[QLatin1String("screenId")] = target.screenId;
+        geoObj[QLatin1String("windowId")] = target.windowId;
         result[it.key()] = geoObj;
     }
 

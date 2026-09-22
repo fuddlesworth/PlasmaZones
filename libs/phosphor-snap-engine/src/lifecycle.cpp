@@ -100,8 +100,11 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
 //
 // Mostly decision logic: returns a SnapResult for the caller to apply geometry.
 // Side effects: consumePendingAssignment; marks floated windows floating
-// (setFloatingOnScreen + windowFloatingChanged) on the floated-restore branch and
-// on the no-match default; geometryRestoreRequested for floated position restore.
+// (setFloatingOnScreen + windowFloatingChanged) on the floated-restore branch,
+// the float-by-rule terminal and the no-match default; geometryRestoreRequested
+// for the floated position restore; sizeRestoreRequested (via
+// restoreFreeSizeForUnplaced) on every float verdict that does not move the
+// window, so it gets its remembered free size back where it stands.
 // The caller (windowOpened or WTA D-Bus facade) handles zone assignment and
 // geometry application.
 //
@@ -154,7 +157,7 @@ int SnapEngine::restoreDesktopFor(const QString& windowId, const PhosphorEngine:
 }
 
 SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky,
-                                            PhosphorEngine::WindowKind kind)
+                                            PhosphorEngine::WindowKind kind, PhosphorEngine::RestoreReason reason)
 {
     Q_UNUSED(kind) // window kind no longer gates restore — the store record carries it
     if (windowId.isEmpty() || screenId.isEmpty()) {
@@ -236,8 +239,15 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         bool crossScreenSnapRestorePending = false;
         if (m_windowTracker) {
             const QString appId = m_windowTracker->currentAppIdFor(windowId);
-            crossScreenSnapRestorePending =
-                m_windowTracker->placementStore().peek(windowId, appId, pendingCrossScreenRestore).has_value();
+            // excludeLiveSiblings: this peek asks whether the take() below
+            // will find a cross-screen record, and take() refuses a record
+            // bound to a still-open sibling. Without the same exclusion here
+            // a second instance's open read "restore pending" off its live
+            // sibling's record, took the bypass, and then consumed nothing.
+            crossScreenSnapRestorePending = m_windowTracker->placementStore()
+                                                .peek(windowId, appId, pendingCrossScreenRestore,
+                                                      /*excludeLiveSiblings=*/true)
+                                                .has_value();
         }
         if (!crossScreenSnapRestorePending) {
             qCDebug(PhosphorSnapEngine::lcSnapEngine)
@@ -349,14 +359,13 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // store has no record (windows persisted under the old keys before migration).
     if (m_windowTracker) {
         const QString appId = m_windowTracker->currentAppIdFor(windowId);
-        // Whether a FLOATED record for THIS window may restore its recorded global
+        // Whether a FLOATED record for THIS window may restore its recorded
         // position on open — the daemon resolves the
         // `snappingRestoreFloatedWindowsOnLogin` setting plus the per-window
-        // RestorePosition rule. When true the floated record is eligible
-        // regardless of the opening screen, so a window KWin reopened on the wrong
-        // monitor returns to its recorded one (stored geometry is global, so
-        // re-applying it lands on the original output). When false the historical
-        // opening-screen gate stands. Snapped records are never governed by this.
+        // RestorePosition rule. It governs the geometry MOVE only: the accept
+        // predicate below keeps a floated record screen-local whatever this
+        // says, so a floated window never crosses monitors on reopen. Snapped
+        // records are never governed by this.
         const bool restoreFloatedPosition = m_restorePositionPredicate && m_restorePositionPredicate(windowId);
         // ONE record per window (both engines' slots + the shared free geometry).
         // take() consumes it (multi-instance FIFO); we then re-record it bound to
@@ -594,6 +603,12 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 // zone, so restoring its floating state is correct regardless.
                 // Pinned to restoreDesktop: the float lives in that desktop's
                 // store, not the one the screen happens to show.
+                // Read BEFORE the float write below: this branch runs ahead of
+                // the already-floating guard, so a re-resolve of the same uuid
+                // (the pending sweep, a desktop-arrival re-drive) lands here
+                // again, and the size restore must not fire a second time at a
+                // window the user may have sized since.
+                const bool alreadyFloating = isFloating(windowId);
                 SnapState* restoreState = stateForWindowOnScreen(windowId, restoreScreen, restoreDesktop);
                 restoreState->setFloatingOnScreen(windowId, restoreScreen, restoreDesktop);
                 // A window floated FROM a snapped state carries its pre-float
@@ -631,6 +646,13 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 if (restoreFloatedPosition && freeGeo.isValid()
                     && (!m_windowTracker || m_windowTracker->geometryBelongsToScreen(freeGeo, restoreScreen))) {
                     Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
+                } else if (!alreadyFloating) {
+                    // No move, so the window stays where KWin put it, at the
+                    // size the app remembers. For a KDE app whose sibling is
+                    // snapped that is the zone's size (#1106), exactly as on
+                    // the fresh-window terminals below: give the size back
+                    // from the record just re-bound above, position untouched.
+                    restoreFreeSizeForUnplaced(windowId, restoreScreen, reason);
                 }
                 qCInfo(PhosphorSnapEngine::lcSnapEngine)
                     << "resolveWindowRestore: placement(floated) for" << windowId << "->" << freeGeo
@@ -736,7 +758,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         stateForWindowOnScreen(windowId, screenId)
             ->setFloatingOnScreen(windowId, screenId, currentVirtualDesktopForScreen(screenId));
         Q_EMIT windowFloatingChanged(windowId, true, screenId);
-        restoreFreeSizeForUnplaced(windowId, screenId);
+        restoreFreeSizeForUnplaced(windowId, screenId, reason);
         qCInfo(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore:" << windowId << "floated by rule";
         return SnapResult::noSnap();
     }
@@ -799,83 +821,10 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     Q_EMIT windowFloatingChanged(windowId, true, screenId);
     // Floating where KWin put it, but at the size the app remembers, which
     // for an app with a snapped window is the zone's. Give it its free size.
-    restoreFreeSizeForUnplaced(windowId, screenId);
+    restoreFreeSizeForUnplaced(windowId, screenId, reason);
     qCInfo(PhosphorSnapEngine::lcSnapEngine)
         << "resolveWindowRestore:" << windowId << "no snap match — defaulting to floated on" << screenId;
     return SnapResult::noSnap();
-}
-
-void SnapEngine::restoreFreeSizeForUnplaced(const QString& windowId, const QString& screenId)
-{
-    if (!m_windowTracker || windowId.isEmpty() || screenId.isEmpty()) {
-        return;
-    }
-    const auto& store = m_windowTracker->placementStore();
-    // The window's own record first: a reopen whose snapped record the
-    // managed gate, the #1104 layout gate or a disabled context declined was
-    // re-bound to the live id above, free geometry included.
-    QRect freeGeo;
-    QString source;
-    if (const auto own = store.peekExact(windowId)) {
-        freeGeo = own->freeGeometryFor(screenId);
-        source = QStringLiteral("own record");
-    }
-    if (!freeGeo.isValid()) {
-        const QString appId = m_windowTracker->currentAppIdFor(windowId);
-        if (const auto sibling = store.peekLiveSibling(windowId, appId)) {
-            freeGeo = sibling->freeGeometryFor(screenId);
-            source = QStringLiteral("live sibling ") + sibling->windowId;
-        }
-    }
-    // Screen-local, like the floated restore's move: a rect captured on
-    // another monitor says nothing about this one's usable size.
-    if (!freeGeo.isValid() || freeGeo.isEmpty() || !m_windowTracker->geometryBelongsToScreen(freeGeo, screenId)) {
-        qCDebug(PhosphorSnapEngine::lcSnapEngine)
-            << "restoreFreeSizeForUnplaced:" << windowId << "no free size for" << screenId
-            << "(source=" << (source.isEmpty() ? QStringLiteral("none") : source) << "rect=" << freeGeo << ")";
-        return;
-    }
-    qCInfo(PhosphorSnapEngine::lcSnapEngine)
-        << "restoreFreeSizeForUnplaced:" << windowId << "->" << freeGeo.size() << "from" << source;
-    Q_EMIT sizeRestoreRequested(windowId, freeGeo.size(), screenId);
-}
-
-void SnapEngine::applyNoMatchFloatDefault(const QString& windowId, const QString& screenId)
-{
-    // The default-float terminal, callable by the SnapAdaptor when a
-    // tile-defer verdict (SnapResult::deferredToTilingEngine) was returned
-    // and the offered reclaim then DECLINED — the deferring side and the
-    // claiming side ask slightly different questions (the claims add live
-    // sets, context equality and tileability), so a defer-then-decline is
-    // reachable, and without this fallback the window ended the open with
-    // no state in any engine: not floated, not tiled, invisible to the
-    // float toggle and the save sweep. Guarded so a window that meanwhile
-    // gained a definite state is left alone.
-    //
-    // Deliberately NOT a full mirror of that terminal's preconditions. It
-    // skips the disabled-context predicate, on the floated-restore branch's
-    // reasoning: a floated window is not being SNAPPED into a context, so a
-    // context with snapping disabled has no say in whether it has a float
-    // state. It also does not re-check screen mode, which is sound only
-    // because a deferredToTilingEngine verdict implies a snapping-mode
-    // opening screen (the tile gate requires !deferredByMode) — a second
-    // caller would have to establish that itself.
-    if (windowId.isEmpty() || screenId.isEmpty() || !isEnabled()) {
-        return;
-    }
-    if (isFloating(windowId)) {
-        return;
-    }
-    if (const SnapState* snappedState = stateForWindow(windowId);
-        snappedState && snappedState->isWindowSnapped(windowId)) {
-        return;
-    }
-    stateForWindowOnScreen(windowId, screenId)
-        ->setFloatingOnScreen(windowId, screenId, currentVirtualDesktopForScreen(screenId));
-    Q_EMIT windowFloatingChanged(windowId, true, screenId);
-    restoreFreeSizeForUnplaced(windowId, screenId);
-    qCInfo(PhosphorSnapEngine::lcSnapEngine)
-        << "applyNoMatchFloatDefault:" << windowId << "reclaim declined — defaulting to floated on" << screenId;
 }
 
 int SnapEngine::currentVirtualDesktop() const
@@ -1037,7 +986,10 @@ std::optional<PhosphorEngine::WindowPlacement> SnapEngine::capturePlacementAtDes
     if (isFloating(windowId)) {
         slot.state = WindowPlacement::stateFloating();
         slot.zoneIds = state ? state->preFloatZones(windowId) : QStringList{};
-        p.screenId = screenForTrackedWindow(windowId);
+        // The same borrow the unsnapped-member branch below uses: a floating
+        // multi-desktop window with no residence in its primary store still
+        // has a screen, the one its member stores name.
+        p.screenId = effScreen;
         // The RECORDED desktop wins over the screen's current one — a plain
         // setFloating (globals store) records none, hence the >= 1 guard.
         if (const int recorded = state ? state->desktopForWindow(windowId) : 0; recorded >= 1) {

@@ -750,7 +750,7 @@ bool SnapEngine::isActiveOnScreen(const QString& screenId) const
     return true; // No autotile engine → all screens use snapping
 }
 
-// windowOpened is implemented in snapengine/lifecycle.cpp
+// windowOpened is implemented in src/lifecycle.cpp
 
 void SnapEngine::windowClosed(const QString& windowId)
 {
@@ -805,16 +805,16 @@ void SnapEngine::windowFocused(const QString& windowId, const QString& screenId)
     stateForWindow(windowId)->noteFocused(windowId);
 }
 
-// toggleWindowFloat and setWindowFloat are implemented in snapengine/float.cpp
+// toggleWindowFloat and setWindowFloat are implemented in src/float.cpp
 // Navigation entry points (focusInDirection, moveFocusedInDirection,
 // swapFocusedInDirection, moveFocusedToPosition, pushFocusedToEmptyZone,
 // restoreFocusedWindow, toggleFocusedFloat, cycleFocus,
 // rotateWindowsInLayout, resnapCurrentAssignments, resnapToNewLayout)
-// live in snapengine/navigation_actions.cpp and call back into
+// live in src/navigation_actions.cpp and call back into
 // INavigationStateProvider (m_navState) for fallback target resolution
 // and compositor-layer state. The resnap-by-layout-switch pipeline
 // (calculateResnapEntriesFromAutotileOrder, snapAllWindows etc.) lives
-// in snapengine/navigation.cpp unchanged.
+// in src/navigation.cpp unchanged.
 
 // SnapEngine::assignToZones was removed — its two callers (windowOpened
 // in lifecycle.cpp, unfloatToZone in float.cpp) now go through

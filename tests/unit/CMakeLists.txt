@@ -53,6 +53,9 @@ p_add_test(test_window_placement_store_collapse core/windowtracking/test_window_
 # on desktop removal, the save / load round trip and the restorable-content
 # predicates. Its own suite because the store suite sits at its size baseline.
 p_add_test(test_window_placement_store_desktops core/windowtracking/test_window_placement_store_desktops.cpp)
+# The live-sibling contract of take() / peekLiveSibling and the open-claim
+# release and re-key rules (#1106); its own suite for the same reason as the
+# desktops suite above.
 p_add_test(test_window_placement_store_siblings core/windowtracking/test_window_placement_store_siblings.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -147,8 +150,14 @@ add_test(NAME test_snap_engine_restore COMMAND test_snap_engine_restore)
 add_executable(test_snap_restore_layout_context core/snap/test_snap_restore_layout_context.cpp helpers/SnapEngineTestFixture.h)
 target_link_libraries(test_snap_restore_layout_context PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_snap_restore_layout_context COMMAND test_snap_restore_layout_context)
-add_executable(test_snap_engine_free_size core/snap/test_snap_engine_free_size.cpp helpers/SnapEngineTestFixture.h)
-target_link_libraries(test_snap_engine_free_size PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+# Free-size restore on the float terminals (#1106). Its own target because
+# test_snap_engine_restore sits inside the 1150-line grace band. Needs the
+# FakeScreenProvider: the screen-containment gate and the size clamp only
+# engage with real output geometry behind the ScreenManager.
+add_executable(test_snap_engine_free_size core/snap/test_snap_engine_free_size.cpp helpers/SnapEngineTestFixture.h
+               ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
+target_include_directories(test_snap_engine_free_size PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
+target_link_libraries(test_snap_engine_free_size PRIVATE Qt6::Test Qt6::Core Qt6::DBus Qt6::Gui plasmazones_core)
 add_test(NAME test_snap_engine_free_size COMMAND test_snap_engine_free_size)
 
 # Exclusion half of the SnapEngine suite (exclude wiring, size exclusion,

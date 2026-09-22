@@ -4,10 +4,14 @@
 #pragma once
 
 #include <QRect>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 
+#include <functional>
+
 #include <PhosphorEngine/WindowPlacement.h>
+#include <PhosphorIdentity/WindowId.h>
 
 namespace PlasmaZones::TestHelpers {
 
@@ -44,6 +48,18 @@ inline PhosphorEngine::WindowPlacement makePlacement(const QString& windowId, co
         p.freeGeometryByScreen.insert(screen, rect);
     }
     return p;
+}
+
+// The production live-instance probe's shape (WindowTrackingService's ctor),
+// answered from a test-owned set of live INSTANCE ids: a record is live when
+// the instance component of its windowId is in @p liveInstances. Captured by
+// reference so a test flips liveness mid-slot; the set must outlive the store
+// the probe is installed in.
+inline std::function<bool(const QString&)> liveInstanceProbe(const QSet<QString>& liveInstances)
+{
+    return [&liveInstances](const QString& windowId) {
+        return liveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+    };
 }
 
 } // namespace PlasmaZones::TestHelpers

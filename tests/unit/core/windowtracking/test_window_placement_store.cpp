@@ -570,9 +570,7 @@ private Q_SLOTS:
         // holds via liveness, not via oldest-first.
         WindowPlacementStore store;
         QSet<QString> liveInstances;
-        store.setLiveInstanceProbe([&liveInstances](const QString& windowId) {
-            return liveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(windowId));
-        });
+        store.setLiveInstanceProbe(PlasmaZones::TestHelpers::liveInstanceProbe(liveInstances));
         store.record(makePlacement(QStringLiteral("app|a"), QStringLiteral("app"), WindowPlacement::stateFloating(),
                                    WindowPlacement::scrollingEngineId(), QStringLiteral("DP-1"), QRect(0, 0, 10, 10)));
         store.record(makePlacement(QStringLiteral("app|b"), QStringLiteral("app"), WindowPlacement::stateFloating(),
@@ -974,9 +972,7 @@ private Q_SLOTS:
         // fallback's live probe guards against.
         WindowPlacementStore store;
         QSet<QString> liveInstances{QStringLiteral("live")};
-        store.setLiveInstanceProbe([&liveInstances](const QString& windowId) {
-            return liveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(windowId));
-        });
+        store.setLiveInstanceProbe(PlasmaZones::TestHelpers::liveInstanceProbe(liveInstances));
         store.record(makePlacement(QStringLiteral("term|live"), QStringLiteral("term"), WindowPlacement::stateSnapped(),
                                    WindowPlacement::snapEngineId()));
         for (int i = 1; i < WindowPlacementStore::MaxPerApp; ++i) {
@@ -1405,9 +1401,7 @@ private Q_SLOTS:
         // not — that is its history.
         WindowPlacementStore store;
         QSet<QString> live;
-        store.setLiveInstanceProbe([&live](const QString& windowId) {
-            return live.contains(PhosphorIdentity::WindowId::extractInstanceId(windowId));
-        });
+        store.setLiveInstanceProbe(PlasmaZones::TestHelpers::liveInstanceProbe(live));
 
         WindowPlacement sibling =
             makePlacement(QStringLiteral("term|open"), QStringLiteral("term"), WindowPlacement::stateTiled(),
@@ -1507,9 +1501,7 @@ private Q_SLOTS:
         // keep their credit; only a non-live sibling's is retired.
         WindowPlacementStore store;
         QSet<QString> live;
-        store.setLiveInstanceProbe([&live](const QString& windowId) {
-            return live.contains(PhosphorIdentity::WindowId::extractInstanceId(windowId));
-        });
+        store.setLiveInstanceProbe(PlasmaZones::TestHelpers::liveInstanceProbe(live));
         store.record(makePlacement(QStringLiteral("kate|self"), QStringLiteral("kate"), WindowPlacement::stateTiled(),
                                    WindowPlacement::autotileEngineId(), QStringLiteral("DP-1")));
         store.record(makePlacement(QStringLiteral("kate|open"), QStringLiteral("kate"), WindowPlacement::stateTiled(),
@@ -1536,9 +1528,7 @@ private Q_SLOTS:
         // in-memory credit says.
         WindowPlacementStore store;
         QSet<QString> live;
-        store.setLiveInstanceProbe([&live](const QString& windowId) {
-            return live.contains(PhosphorIdentity::WindowId::extractInstanceId(windowId));
-        });
+        store.setLiveInstanceProbe(PlasmaZones::TestHelpers::liveInstanceProbe(live));
         store.record(makePlacement(QStringLiteral("firefox|alive"), QStringLiteral("firefox"),
                                    WindowPlacement::stateTiled(), WindowPlacement::autotileEngineId(),
                                    QStringLiteral("DP-1")));
@@ -1746,9 +1736,7 @@ private Q_SLOTS:
         // exactly the windows whose close signal went missing.
         WindowPlacementStore store;
         QSet<QString> live; // nothing is live: both windows are gone
-        store.setLiveInstanceProbe([&live](const QString& windowId) {
-            return live.contains(PhosphorIdentity::WindowId::extractInstanceId(windowId));
-        });
+        store.setLiveInstanceProbe(PlasmaZones::TestHelpers::liveInstanceProbe(live));
         store.record(makePlacement(QStringLiteral("firefox|observed"), QStringLiteral("firefox"),
                                    WindowPlacement::stateTiled(), WindowPlacement::autotileEngineId(),
                                    QStringLiteral("DP-1")));

@@ -285,8 +285,7 @@ QSet<QString> TilingHandler::completeDeferredWindowRoutes()
         // same-app sibling to claim.
         // A teleport can move the window to another screen; re-resolve after.
         QString screenId = m_effect->getWindowScreenId(window);
-        if (canSnapRestore && !window->isMinimized()
-            && m_effect->tryInstantSnapRestore(window, windowId, /*canSnapRestore=*/true)) {
+        if (canSnapRestore && !window->isMinimized() && m_effect->tryInstantSnapRestore(window, windowId)) {
             screenId = m_effect->getWindowScreenId(window);
         }
         if (m_managedScreens.contains(screenId)) {

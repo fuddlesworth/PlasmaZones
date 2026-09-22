@@ -218,7 +218,7 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
     m_adaptor->applyOpenDesktopRouting(windowId, screenId);
 
     const PhosphorEngine::WindowKind kind = PhosphorEngine::clampWindowKindFromWire(windowKind);
-    SnapResult result = m_engine->resolveWindowRestore(windowId, screenId, sticky, kind);
+    SnapResult result = m_engine->resolveWindowRestore(windowId, screenId, sticky, kind, reason);
 
     // Per-open reclaim-credit burn, the snap-screen half of the partition
     // (WindowPlacementStore::burnReclaimCredit documents the tiling half —
@@ -269,8 +269,8 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         // adopts the window into its recorded home and its retile moves it
         // there. (Managed-screen arrivals reach the reclaim through
         // TilingAdaptor::dispatchOpenToClaimingEngine instead; windows that
-        // fail the effect's canSnapRestore gate never reach this slot at
-        // all — see setCrossScreenTileReclaim's contract.) The reason gate
+        // fail the effect's candidate gate (minimized at open) never reach
+        // this slot at all — see setCrossScreenTileReclaim's contract.) The reason gate
         // keeps the drivers that re-resolve an ALREADY-VISIBLE window (the
         // unminimize of a daemon-restart orphan, the pending-restores sweep,
         // the bring-up stacking sweep) from teleporting a window the user is
@@ -309,7 +309,7 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
                 // the promise someone would manage the window, so restore
                 // the no-match float default rather than leaving it with no
                 // state in any engine.
-                m_engine->applyNoMatchFloatDefault(windowId, screenId);
+                m_engine->applyNoMatchFloatDefault(windowId, screenId, reason);
             }
         }
         // A matched route is deliberately NOT followed by the float default:

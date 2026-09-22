@@ -3102,11 +3102,11 @@ private:
     void refreshRestoreSuppressionDeadline(KWin::EffectWindow* window);
     /// Consume (single-shot) and, when valid for a snap-mode screen, apply the
     /// instant snap-restore cache entry for this window's app. Returns true
-    /// when the window was teleported (caller should re-evaluate its screen).
-    /// Shared by slotWindowAdded and the deferred-routing dispatch so a
-    /// deferred window cannot leave a stale entry for a same-app sibling.
-    bool tryInstantSnapRestore(KWin::EffectWindow* w, const QString& windowId, bool canSnapRestore);
+    /// when teleported (re-evaluate the screen). Sole caller: the dispatch.
+    bool tryInstantSnapRestore(KWin::EffectWindow* w, const QString& windowId);
     void endRestoreSuppression(KWin::EffectWindow* window);
+    /// endRestoreSuppression for a resolve miss; an in-flight reposition holds.
+    void releaseRestoreSuppressionOnMiss(KWin::EffectWindow* window);
 
     void loadShaderProfileFromDbus();
     void loadMotionProfileTreeFromDbus();

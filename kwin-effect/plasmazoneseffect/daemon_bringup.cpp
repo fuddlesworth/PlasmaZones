@@ -4,6 +4,7 @@
 #include "plasmazoneseffect.h"
 
 #include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorIdentity/WindowId.h>
 
 #include "tilinghandler/tilinghandler.h"
 #include "handlers/navigationhandler.h"
@@ -481,8 +482,29 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
             }
             QJsonObject obj = doc.object();
             m_snapHandler->clearRestoreCache();
+            // An entry built from a record whose window is STILL OPEN is that
+            // window's own placement, not a pending restore, and the daemon
+            // cannot always tell: on a daemon-only restart this reply is
+            // built before the effect re-announces the windows, so every
+            // record reads as dead there. The effect can tell. Keyed by
+            // instance id, since the daemon's record id is the registry's
+            // canonical composite and may differ in prefix from the live one.
+            QSet<QString> liveInstances;
+            const auto liveWindows = KWin::effects->stackingOrder();
+            for (KWin::EffectWindow* lw : liveWindows) {
+                if (lw && !lw->isDeleted()) {
+                    liveInstances.insert(::PhosphorIdentity::WindowId::extractInstanceId(getWindowId(lw)));
+                }
+            }
             for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
                 QJsonObject geo = it.value().toObject();
+                const QString recordWindowId = geo[QLatin1String("windowId")].toString();
+                if (!recordWindowId.isEmpty()
+                    && liveInstances.contains(::PhosphorIdentity::WindowId::extractInstanceId(recordWindowId))) {
+                    qCDebug(lcEffect) << "Skipping instant-restore entry for" << it.key() << ": its window"
+                                      << recordWindowId << "is still open";
+                    continue;
+                }
                 // gw/gh, not w/h — `w` would shadow the lambda's watcher
                 // parameter above.
                 const int gx = geo[QLatin1String("x")].toInt();

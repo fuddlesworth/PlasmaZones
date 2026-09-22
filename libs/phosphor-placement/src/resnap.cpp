@@ -332,6 +332,15 @@ QHash<QString, WindowTrackingService::PendingRestoreTarget> WindowTrackingServic
         if (zoneIds.isEmpty() || p.appId.isEmpty()) {
             continue;
         }
+        // A record whose window is still open is that window's, not a pending
+        // restore: served through the appId-keyed cache it teleported the
+        // next same-app window into the open sibling's zone. Answers false
+        // without a registry (daemon-only restart, before the effect has
+        // re-announced), which is why the target also carries the window id
+        // for the effect to check against what it can see.
+        if (m_placementStore.isLiveInstance(p.windowId)) {
+            continue;
+        }
 
         const QString screenId = resolveEffectiveScreenId(p.screenId);
         // Per-output virtual desktops (#648): validate the record against ITS
@@ -363,7 +372,7 @@ QHash<QString, WindowTrackingService::PendingRestoreTarget> WindowTrackingServic
 
         const QRect geo = resolveZoneGeometry(zoneIds, screenId);
         if (geo.isValid()) {
-            result.insert(p.appId, PendingRestoreTarget{geo, screenId});
+            result.insert(p.appId, PendingRestoreTarget{geo, screenId, p.windowId});
             chosenSequence.insert(p.appId, p.sequence);
         }
     }
