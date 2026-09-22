@@ -901,11 +901,11 @@ private:
     void syncModeFromAssignments();
 
     std::unique_ptr<PhosphorConfig::IBackend> m_configBackend;
-    // Unified Rule store (rules.json). Declared BEFORE
-    // m_layoutManager because the LayoutRegistry borrows it for its
-    // rule-backed assignment cascade — construction order must build the
-    // store first. The RuleAdaptor borrows it too.
+    // Unified Rule store (rules.json), declared BEFORE m_layoutManager and the
+    // RuleAdaptor, which borrow it. The watcher reloads it on an out-of-process
+    // write (daemon saves are idempotent no-ops); stop() resets it first.
     std::unique_ptr<PhosphorRules::RuleStore> m_ruleStore;
+    std::unique_ptr<PhosphorRules::RuleStoreWatcher> m_ruleStoreWatcher;
     // Filtered slice of m_ruleStore — only rules carrying an `Exclude` or
     // `ExcludePlacement` action (a kept rule may carry other actions too),
     // built via `PhosphorRules::ExclusionRules::excludePlacementRulesFrom` and
@@ -1157,7 +1157,7 @@ private:
     ShaderAdaptor* m_shaderAdaptor = nullptr;
     ControlAdaptor* m_controlAdaptor = nullptr;
     // Unified Rule store + its D-Bus adaptor. The store owns
-    // rules.json (daemon sole writer); the adaptor exposes it on
+    // rules.json (m_ruleStoreWatcher folds in outside writes); it is on
     // org.plasmazones.Rules. Adaptor is Qt-parented (raw pointer); it
     // borrows the store, so stop() calls detach() before the store unique_ptr
     // is destroyed.

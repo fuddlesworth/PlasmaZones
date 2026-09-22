@@ -25,8 +25,9 @@ namespace PlasmaZones {
  * live view of the rules. That store is NOT the only writer of
  * @c rules.json — the settings app writes the file in its own process on a
  * reset, on a per-mode engine disable, and on a config import. Every such
- * out-of-process write therefore has to be followed by @ref reloadRules, or
- * the daemon keeps serving (and re-persisting) its pre-write set.
+ * out-of-process write reaches the daemon through its RuleStoreWatcher on
+ * @c rules.json, debounced by ~50 ms; @ref reloadRules remains for a caller
+ * that needs the reload to have happened synchronously before its next call.
  *
  * Rules cross the wire as JSON strings — a single `Rule` serializes to
  * the same @c { id, name, enabled, priority, match, actions } object the
@@ -111,12 +112,12 @@ public Q_SLOTS:
 
     /// Re-read rules.json from disk.
     ///
-    /// The daemon's store is borrowed by whoever owns it, and reloadSettings()
-    /// deliberately does not reload a borrowed store. An out-of-process rewrite of
-    /// rules.json — the settings app's config import is the one that matters —
-    /// therefore leaves this store serving the pre-write set until something asks
-    /// for this. load() is idempotent and emits rulesChanged only when the on-disk
-    /// content actually differs.
+    /// The daemon's RuleStoreWatcher already folds an out-of-process rewrite of
+    /// rules.json into the store, but only after its debounce fires on the next
+    /// event-loop turns. A caller that rewrites the file and then immediately
+    /// reads or mutates rules over D-Bus (the settings app's config import) calls
+    /// this so the reload has happened before that next call. load() is idempotent
+    /// and emits rulesChanged only when the on-disk content actually differs.
     void reloadRules();
 
 Q_SIGNALS:

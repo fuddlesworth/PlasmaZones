@@ -83,6 +83,7 @@
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/Rule.h>
 #include <PhosphorRules/RuleStore.h>
+#include <PhosphorRules/RuleStoreWatcher.h>
 
 #include "config/configbackends.h"
 #include "config/configdefaults.h"
@@ -502,15 +503,14 @@ void Daemon::stop()
     m_animationPublishTimer.stop();
     m_animationPublishPending = false;
 
-    // Reset the loaders explicitly so the QFileSystemWatcher inside
-    // each is torn down NOW, before any other shutdown step has a
-    // chance to spin the event loop. Without this, the unique_ptrs
-    // would only destruct at the end of the ~Daemon body, leaving a
-    // window where stale path-change signals could fire into a
-    // half-destroyed object — visible in tests that re-construct the
-    // daemon, and theoretically observable in production on a
-    // configure-reload cycle.
+    // Reset the curve loader and the rules.json watcher explicitly so the
+    // QFileSystemWatcher inside each is torn down NOW, before any shutdown
+    // step can spin the event loop. Otherwise they destruct at the end of the
+    // ~Daemon body, leaving a window where a stale path-change signal fires
+    // into a half-destroyed object (or reloads m_ruleStore while its
+    // rulesChanged subscribers are being detached). Seen in daemon tests.
     m_curveLoader.reset();
+    m_ruleStoreWatcher.reset();
 
     // Idle wiring, ALSO before the m_running gate, for the same reason as the two
     // blocks above: setupIdleService() runs from init(), which precedes start(), so
