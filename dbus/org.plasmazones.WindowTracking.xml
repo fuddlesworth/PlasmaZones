@@ -48,7 +48,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="pruneStaleWindows">
-            <annotation name="org.gtk.GDBus.DocString" value="Remove zone assignments for windows not in the alive set. Called by KWin effect after daemon ready to clean up stale KConfig entries."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Remove zone assignments for windows not in the alive set. Called by KWin effect after daemon ready to clean up stale persisted entries."/>
             <arg name="aliveWindowIds" type="as" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window IDs currently known to KWin."/>
             </arg>
@@ -204,7 +204,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="getPendingRestoreGeometries">
             <annotation name="org.gtk.GDBus.DocString" value="Pre-computed zone geometries for pending restore entries. The effect caches these for instant window teleport on open (no D-Bus round-trip flash)."/>
             <arg name="geometriesJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON object: { appId: {x, y, width, height, screenId, windowId}, ... }. windowId is the record's; the effect skips an entry whose window it can still see."/>
+                <annotation name="org.gtk.GDBus.DocString" value="JSON object: { appId: [ {x, y, width, height, screenId, windowId}, ... ], ... }, newest record first. windowId is the record's; the effect takes the first entry whose window it cannot still see."/>
             </arg>
         </method>
         <method name="reportNavigationFeedback">
@@ -290,14 +290,30 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </method>
         <signal name="applyGeometryRequested">
             <annotation name="org.gtk.GDBus.DocString" value="Daemon requests compositor to apply geometry. zoneId empty = float restore only; zoneId set = apply and call windowSnapped."/>
-            <arg name="windowId" type="s"/>
-            <arg name="x" type="i"/>
-            <arg name="y" type="i"/>
-            <arg name="width" type="i"/>
-            <arg name="height" type="i"/>
-            <arg name="zoneId" type="s"/>
-            <arg name="screenId" type="s"/>
-            <arg name="sizeOnly" type="b"/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window to apply to. A size-only apply resolves this id exactly; a full apply may fall back to a same-app window."/>
+            </arg>
+            <arg name="x" type="i">
+                <annotation name="org.gtk.GDBus.DocString" value="Frame x in compositor coordinates. Ignored when sizeOnly is true."/>
+            </arg>
+            <arg name="y" type="i">
+                <annotation name="org.gtk.GDBus.DocString" value="Frame y in compositor coordinates. Ignored when sizeOnly is true."/>
+            </arg>
+            <arg name="width" type="i">
+                <annotation name="org.gtk.GDBus.DocString" value="Frame width."/>
+            </arg>
+            <arg name="height" type="i">
+                <annotation name="org.gtk.GDBus.DocString" value="Frame height."/>
+            </arg>
+            <arg name="zoneId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone the window is snapped into, empty for a free placement."/>
+            </arg>
+            <arg name="screenId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen the geometry belongs to."/>
+            </arg>
+            <arg name="sizeOnly" type="b">
+                <annotation name="org.gtk.GDBus.DocString" value="True to resize the window where it stands, keeping the position the compositor chooses (the drag-out unsnap keeps the top-left, a free-size restore at open keeps the centre)."/>
+            </arg>
         </signal>
         <signal name="activateWindowRequested">
             <annotation name="org.gtk.GDBus.DocString" value="Daemon requests KWin to activate (focus) a window. Used by daemon-driven focus/cycle navigation."/>

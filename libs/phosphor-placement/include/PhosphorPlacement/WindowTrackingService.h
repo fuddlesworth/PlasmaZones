@@ -282,6 +282,7 @@ public:
     PhosphorEngine::WindowRegistry* windowRegistry() const;
 
     PhosphorScreens::ScreenManager* screenManager() const override;
+    QRect screenAvailableGeometry(const QString& screenId) const override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PhosphorZones::Zone Assignment Management
@@ -879,17 +880,14 @@ public:
      * windows can be teleported to their zone immediately on windowAdded,
      * eliminating the visible "flash" from KWin's session-restored position.
      * Sourced from the WindowPlacementStore's snapped records minus those of
-     * still-open windows (#1106); for a multi-instance appId the lowest-sequence
-     * remaining record is chosen. That pick is DETERMINISTIC but is not the FIFO head
-     * snap's take() consumes — record()'s in-place merge keeps bucket
-     * position while restamping sequence, so the two orders legitimately
-     * diverge; the cache is a best-effort anti-flash hint the async resolver
-     * corrects. Entries whose saved screen is currently in autotile
-     * mode are skipped: the effect cache is a snap-mode-only fast path, and
-     * autotile on the saved screen will own placement. Validates desktop
-     * context so the cache never contains geometries the async resolver rejects.
+     * still-open windows (#1106), every remaining record of an appId in one
+     * list, NEWEST first: the open claim reserves the newest unclaimed record
+     * for the first opener, so the head is the zone the resolve will confirm.
+     * A best-effort anti-flash hint the async resolver corrects. Skips saved
+     * screens in autotile mode, zones the record's context no longer runs
+     * (the #1104 layout gate) and desktop contexts the resolver would reject.
      */
-    QHash<QString, PendingRestoreTarget> pendingRestoreGeometries() const;
+    QHash<QString, QList<PendingRestoreTarget>> pendingRestoreGeometries() const;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Window Lifecycle
@@ -951,7 +949,7 @@ public:
     void setPendingRestoreQueues(const QHash<QString, QList<PendingRestore>>& queues);
 
     /**
-     * @brief Set user-snapped classes (loaded from KConfig by adaptor)
+     * @brief Set user-snapped classes (loaded from the persisted state by the adaptor)
      *
      * FAILS SAFE, not lossy: called before a SnapState is wired (the adaptor's
      * constructor loads state before the daemon installs the resolver), the
@@ -1297,8 +1295,8 @@ private:
     // loadState() once in-memory state mirrors the disk file.
     DirtyMask m_dirtyMask = DirtyAll;
 
-    // Note: No save timer - persistence handled by WindowTrackingAdaptor via KConfig
-    // Service emits stateChanged() signal when state needs saving
+    // Note: No save timer - persistence is the WindowTrackingAdaptor's debounced
+    // JSON save. Service emits stateChanged() signal when state needs saving
 };
 
 } // namespace PhosphorPlacement

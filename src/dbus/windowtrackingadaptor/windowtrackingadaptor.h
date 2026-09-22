@@ -1157,16 +1157,12 @@ public:
 
     /// Engine-neutral RouteToDesktop: if a matched rule pins @p windowId to
     /// a virtual desktop, emit windowDesktopMoveRequested so the compositor moves
-    /// it there on open. Independent of snapping/tiling — composes with the
-    /// window's placement. Called from the snap open-path facade. Pins @p screenId
-    /// so a ScreenId-scoped rule resolves; reuses the per-window evaluator cache
-    /// placementZonesByRule seeds.
-    ///
+    /// it there on open. Independent of snapping/tiling. Called from the snap
+    /// open-path facade for first placements only. Pins @p screenId so a
+    /// ScreenId-scoped rule resolves; reuses the per-window evaluator cache.
     /// Returns whether a RouteToDesktop rule MATCHED, true even when its target
-    /// failed the 1-based guard and no move was emitted, so a caller can tell a
-    /// rule that owns the window's desktop from one that never matched, whether
-    /// or not its payload was usable. No production caller reads this today; the
-    /// routing tests assert it, which is why it is not void.
+    /// failed the 1-based guard and no move was emitted (the routing tests
+    /// assert it; no production caller reads it).
     bool applyOpenDesktopRouting(const QString& windowId, const QString& screenId);
 
     /// Tiling-family open-path routing. Emits RouteToDesktop (as
@@ -1753,15 +1749,19 @@ private:
     QString m_lastCursorScreenId; // From cursorScreenChanged (cursor's screen)
 
     // Frame-geometry shadow: populated via setFrameGeometry D-Bus pushes from
-    // the compositor plugin. Entries are removed on windowClosed. Used by
-    // daemon-local shortcut handlers (float toggle, etc.) so they can read
-    // fresh geometry without round-tripping through the effect.
-    //
-    // Keyed on CANONICAL window ids. The effect pushes the window's current
-    // composite, but captureWindowPlacement reads this map with canonical ids
-    // on the engine-relay path, so both writes and reads translate through
-    // shadowWindowId() and the stale sweep uses the canonical alive set.
+    // the compositor plugin, removed on windowClosed, read by daemon-local
+    // shortcut handlers (float toggle, etc.) without a round trip. Keyed on
+    // CANONICAL window ids: captureWindowPlacement reads it with canonical ids
+    // on the engine-relay path, so writes and reads go through shadowWindowId().
     QHash<QString, QRect> m_frameGeometry;
+
+    // What the open path just asked the effect to apply (a float-position
+    // rect, or a free-size restore's size, #1106), until the effect's next
+    // frame report or the close. The RouteToScreen translation in the same
+    // resolve reads these ahead of the shadow, which stays the effect's own
+    // account of where the window is. Canonical ids, like the shadow.
+    QHash<QString, QRect> m_pendingOpenGeometry;
+    QHash<QString, QSize> m_pendingOpenSize;
 
     // Last floating value broadcast via windowFloatingChanged, per window. The
     // setWindowFloating broadcast gate compares against THIS, not a re-query of

@@ -123,6 +123,26 @@ bool ScrollEngine::claimCrossScreenReopen(const QString& rawWindowId, const QStr
                                << homeScreen << "current context — declining";
         return false;
     }
+    // A float is screen-local: the home open would mark the window floating
+    // in the HOME state and move nothing, leaving it tracked on a monitor it
+    // is not on and sized against that monitor's columns. The three verdicts
+    // insertOpenedWindow floats on, evaluated for the home screen; the
+    // arrival screen's open then floats it where it stands.
+    const ScrollLayoutParams homeParams = layoutParamsForScreen(homeScreen);
+    const int clampedMinWidth = qMax(0, minWidth);
+    const int clampedMinHeight = qMax(0, minHeight);
+    const bool oversized = homeParams.workArea.isValid()
+        && (clampedMinWidth > homeParams.workArea.width() || clampedMinHeight > homeParams.workArea.height());
+    const bool ruleFloated = m_floatPredicate && m_floatPredicate(windowId, homeScreen);
+    const bool stickyExcluded =
+        effectiveStickyWindowHandling(homeScreen) != PhosphorEngine::StickyWindowHandling::TreatAsNormal
+        && m_windowTracker->isWindowSticky(windowId);
+    if (oversized || ruleFloated || stickyExcluded) {
+        qCInfo(lcScrollEngine) << "claimCrossScreenReopen:" << windowId << "would float on" << homeScreen
+                               << "(oversized" << oversized << "rule" << ruleFloated << "sticky" << stickyExcluded
+                               << ") — declining, a float has nothing to pull home for";
+        return false;
+    }
     windowOpened(windowId, homeScreen, minWidth, minHeight);
     // Return the REAL outcome, verified by membership (ScrollState-level: a
     // legitimately floated adoption is in the floating set, not the strip).
@@ -144,6 +164,13 @@ bool ScrollEngine::claimCrossScreenReopen(const QString& rawWindowId, const QStr
     qCInfo(lcScrollEngine) << "claimCrossScreenReopen:" << windowId << "opened on" << openingScreenId
                            << "— reclaimed to recorded scrolling home" << homeScreen;
     return true;
+}
+
+void ScrollEngine::noteCrossScreenClaimsExhausted(const QString& windowId)
+{
+    if (!windowId.isEmpty()) {
+        m_crossScreenClaimsExhausted.insert(canonicalizeForLookup(windowId));
+    }
 }
 
 } // namespace PhosphorScrollEngine

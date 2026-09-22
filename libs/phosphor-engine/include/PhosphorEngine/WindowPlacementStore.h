@@ -90,8 +90,11 @@ public:
     /// the tie-break: first-recorded order mid-session, the persisted bucket
     /// order for saved records after a restart, and re-announce order for
     /// anything the save missed, so it cannot be trusted on its own.
-    /// Answers nullopt on an empty @p windowId or without a live-instance
-    /// probe, since liveness cannot be established.
+    /// Answers nullopt on an empty @p windowId or @p appId, without a
+    /// live-instance probe, and for the window opened in the daemon-restart
+    /// gap before the effect has re-announced its siblings: the production
+    /// probe reads the registry, so until then no sibling reads as live. The
+    /// last is unknowable from inside the store and is accepted.
     std::optional<WindowPlacement>
     peekLiveSibling(const QString& windowId, const QString& appId,
                     const std::function<bool(const WindowPlacement&)>& accept = {}) const;
@@ -100,8 +103,10 @@ public:
     /// open-time restores use (SnapEngine::resolveWindowRestore keeps its own
     /// take + re-bind: its snapped records restore cross-screen and its accept
     /// depends on a mode-defer bypass, so rule 1 below does not fit it. The
-    /// snap path keeps take()'s oldest-first ORDER and, since #1106, shares
-    /// the live-instance exclusion below, so only the order differs) —
+    /// snap path keeps take()'s oldest-first ORDER plus its `preferred`
+    /// ranking pass, burns no reclaim credit in the store (the snap adaptor
+    /// burns after the resolve) and, since #1106, shares the live-instance
+    /// exclusion below) —
     /// take() wrapped in the accept predicate both tiling engines share and
     /// the two rules that make a close/reopen (fresh uuid, appId-FIFO match)
     /// behave correctly.
@@ -516,10 +521,11 @@ private:
     /// exclusion in the store applies (the eviction and collapse tiers, which
     /// protect ANY live record, and takeForReopen's fallback, where take()'s
     /// same-instance branch and the accept together already keep the asker's
-    /// own record out, read the probe directly): a
-    /// window's own record is its history,
-    /// live or not (daemon restart: same uuid, window open), while an open
-    /// sibling's record describes a different window and is never this one's.
+    /// own record out, read the probe directly): a window's own record is its
+    /// history, live or not (daemon restart: same uuid, window open), while
+    /// an open sibling's record describes a different window and is never
+    /// this one's. With an empty @p askingWindowId every live record is
+    /// "other", which is what peek()'s opt-in exclusion relies on.
     bool boundToLiveOther(const QString& askingWindowId, const WindowPlacement& p) const;
 
 public:
@@ -555,10 +561,12 @@ private:
     ///
     /// Kept in lockstep, and kept TRUE: every path that removes a record drops
     /// the claim naming it, so a claim in these maps always names a record that
-    /// is still in the store. That invariant is what lets the lookups be hash
-    /// hits instead of a full-store scan on a per-open hot path. The lookup
-    /// still fails open if the two ever disagree, because refusing an instance
-    /// every record is worse than the disagreement the claim exists to fix.
+    /// is still in the store. That invariant is what lets pairingAllows answer
+    /// from two hash hits per candidate; claimForOpen itself still walks the
+    /// buckets once per open to find the record by id, which is bounded by
+    /// MaxPerApp times the number of apps. The lookup still fails open if the
+    /// two ever disagree, because refusing an instance every record is worse
+    /// than the disagreement the claim exists to fix.
     QHash<QString, QString> m_openPairing;
     QHash<QString, QString> m_claimedBy;
 

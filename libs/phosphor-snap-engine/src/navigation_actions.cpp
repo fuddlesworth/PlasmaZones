@@ -795,7 +795,7 @@ void SnapEngine::toggleFocusedFloat(const NavigationContext& ctx)
     }
 
     // Dispatch to the IPlacementEngine toggle path (SnapEngine::toggleWindowFloat
-    // lives in snapengine/float.cpp). No need to route through WTA —
+    // lives in src/float.cpp). No need to route through WTA —
     // the router already ensured this screen is snap-mode.
     toggleWindowFloat(windowId, screenId);
 }
@@ -977,7 +977,7 @@ void SnapEngine::rotateWindowsInLayout(bool clockwise, const QString& screenId)
 }
 
 // Note: resnapToNewLayout() and resnapCurrentAssignments(const QString&)
-// live in snapengine/navigation.cpp. They existed before this file and use
+// live in src/navigation.cpp. They existed before this file and use
 // the emitBatchedResnap → resnapToNewLayoutRequested → WTA::handleBatchedResnap
 // pipeline, which remains the canonical batch-resnap path.
 

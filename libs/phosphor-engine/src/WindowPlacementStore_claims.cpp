@@ -95,12 +95,21 @@ std::optional<WindowPlacement> WindowPlacementStore::claimForOpen(const QString&
         m_openPairing.remove(instance);
     }
 
-    // 1. The window's own record, when it carries something worth restoring.
-    //    hasRestorableContent is what keeps the slot-less geometry stub every
-    //    open writes under the live uuid from being mistaken for it.
+    // 1. The window's own record, when an engine has ever captured it. The
+    //    engine-slot test is what keeps the slot-less geometry stub every
+    //    open writes under the live uuid from being mistaken for it:
+    //    hasRestorableContent alone answers true on geometry, and the stub
+    //    carries the spawn frame. Claiming it locked the instance out of
+    //    every sibling record through pairingAllows, so a reopen on a
+    //    tiling screen, where the stub always precedes the announce,
+    //    restored nothing from a closed sibling.
     for (auto b = m_byApp.constBegin(); b != m_byApp.constEnd(); ++b) {
         for (const WindowPlacement& p : b.value()) {
-            if (sameWindowInstance(p.windowId, windowId) && p.hasRestorableContent()) {
+            if (sameWindowInstance(p.windowId, windowId) && !p.engines.isEmpty() && p.hasRestorableContent()) {
+                // Keep the two maps in lockstep: a claim another instance
+                // holds on this record dies here, or its pairing would go on
+                // naming a record m_claimedBy now attributes to this one.
+                dropClaimsNaming(p.windowId);
                 m_openPairing.insert(instance, p.windowId);
                 m_claimedBy.insert(p.windowId, instance);
                 return p;
@@ -119,6 +128,11 @@ std::optional<WindowPlacement> WindowPlacementStore::claimForOpen(const QString&
     const WindowPlacement* best = nullptr;
     for (const WindowPlacement& p : bucket.value()) {
         if (!p.hasRestorableContent()) {
+            continue;
+        }
+        // Step 1 owns the same-instance case; the asker's own slot-less stub
+        // is the newest record in its bucket and would otherwise win here.
+        if (sameWindowInstance(p.windowId, windowId)) {
             continue;
         }
         if (boundToLiveOther(windowId, p)) {

@@ -93,9 +93,9 @@ bool AutotileEngine::claimCrossScreenReopen(const QString& rawWindowId, const QS
     // !shouldTileWindow (sticky under RestoreOnly/IgnoreAll), and a refusal
     // after an optimistic claim left the window phantom-keyed with no
     // geometry and no float state, on the wrong monitor, claimed by nobody.
-    // Unlike scroll — whose open path FLOATS an untileable arrival, a real
-    // adoption — autotile's refuses outright, so the precondition belongs
-    // here. Do not mirror it into the scroll twin.
+    // Scroll's open path FLOATS an untileable arrival instead of refusing,
+    // so its twin declines on the float verdicts (see below) rather than on
+    // this predicate.
     if (!shouldTileWindow(windowId)) {
         qCInfo(PhosphorTileEngine::lcTileEngine)
             << "claimCrossScreenReopen:" << windowId << "— declining, this engine would refuse to tile it anyway";
@@ -153,6 +153,16 @@ bool AutotileEngine::claimCrossScreenReopen(const QString& rawWindowId, const QS
         qCInfo(PhosphorTileEngine::lcTileEngine)
             << "claimCrossScreenReopen:" << windowId << "recorded context desktop" << pending->virtualDesktop
             << "activity" << pending->activity << "differs from" << homeScreen << "current context — declining";
+        return false;
+    }
+    // A float is screen-local: the home open would mark the window floating
+    // in the HOME state and move nothing, leaving it tracked on a monitor it
+    // is not on and sized against that monitor's tiles. The arrival screen's
+    // open floats it where it stands instead. No migration arrival is armed
+    // on a reopen, so insertShouldFloat reduces to the open-time rule.
+    if (insertShouldFloat(windowId, homeScreen)) {
+        qCInfo(PhosphorTileEngine::lcTileEngine) << "claimCrossScreenReopen:" << windowId << "would float on"
+                                                 << homeScreen << "— declining, a float has nothing to pull home for";
         return false;
     }
     windowOpened(windowId, homeScreen, minWidth, minHeight);
@@ -271,7 +281,11 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
     // nothing — the exact race this guard exists to prevent.
     const PhosphorTiles::TilingState* deferState = m_states.forWindow(windowId);
     const bool trackedInState = deferState && deferState->containsWindow(windowId);
-    if (!screenId.isEmpty() && m_windowTracker && m_layoutManager && !trackedInState) {
+    // The dispatch already ran every engine's claim for this arrival and all
+    // declined: the record's engine has answered, so this gate must adopt
+    // rather than defer to it a second time (noteCrossScreenClaimsExhausted).
+    const bool claimsExhausted = m_crossScreenClaimsExhausted.remove(windowId) > 0;
+    if (!screenId.isEmpty() && m_windowTracker && m_layoutManager && !trackedInState && !claimsExhausted) {
         const QString appId = currentAppIdFor(windowId);
         if (PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
             // Shared predicate with the other engines' reciprocal gates
@@ -509,6 +523,13 @@ void AutotileEngine::dropClosedWindowFromDragPreview(const QString& windowId)
     }
 }
 
+void AutotileEngine::noteCrossScreenClaimsExhausted(const QString& windowId)
+{
+    if (!windowId.isEmpty()) {
+        m_crossScreenClaimsExhausted.insert(canonicalizeWindowId(windowId));
+    }
+}
+
 void AutotileEngine::windowClosed(const QString& rawWindowId)
 {
     if (!warnIfEmptyWindowId(rawWindowId, "windowClosed")) {
@@ -522,6 +543,7 @@ void AutotileEngine::windowClosed(const QString& rawWindowId)
     dropClosedWindowFromDragPreview(windowId);
 
     m_autotileFloatedWindows.remove(windowId);
+    m_crossScreenClaimsExhausted.remove(windowId);
     // Min-size cleanup must not depend on tracking: a window released from
     // tracking (autotile toggle-off, orphaned VS) and later closed would hit
     // onWindowRemoved's empty-stored-key early return and keep its entry for

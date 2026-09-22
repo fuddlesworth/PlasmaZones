@@ -9,7 +9,7 @@
 // as AutotileEngine.h / daemon.h / windowtrackingadaptor.h. Grew with the
 // per-desktop membership change: the membership pass and its helpers, the
 // per-desktop seed / restore-desktop resolution, the window-scoped resnap,
-// the pinned-desktop store resolution and the float residence helper.
+// the pinned-desktop store resolution and the float residence helper (#1106).
 
 #pragma once
 
@@ -201,20 +201,15 @@ public:
      *        open. (Snapping is two-state — snapped or floated; "floated" is the
      *        only unsnapped state.)
      *
-     * Keyed by the live windowId so the daemon closure can build a full
-     * WindowQuery (window class / title / role) from its WindowRegistry and
-     * evaluate the per-window RestorePosition rule, falling back to the
-     * `snappingRestoreFloatedWindowsOnLogin` setting. Like @ref ShouldRestorePredicate
-     * the engine stays settings-agnostic (LGPL boundary) — it only asks.
-     *
-     * Returns true to restore the recorded position.
-     *
-     * The gate governs ONE thing for FLOATED records (snapped-to-zone restore is
-     * unaffected): the geometry MOVE. A floated record ALWAYS re-marks the
-     * window floating (windowFloatingChanged), but its recorded position is
-     * re-applied only when the predicate opts in. Consumption is never governed
-     * by it: a floated record is screen-local whatever this answers. When the
-     * move is declined the window still gets its free SIZE back where it is.
+     * Keyed by the live windowId so the daemon closure can evaluate the
+     * per-window RestorePosition rule from its WindowRegistry, falling back to
+     * the `snappingRestoreFloatedWindowsOnLogin` setting; the engine stays
+     * settings-agnostic (LGPL boundary). Returns true to restore the position.
+     * The gate governs ONE thing for FLOATED records: the geometry MOVE. A
+     * floated record ALWAYS re-marks the window floating, but its position is
+     * re-applied only when the predicate opts in and the rect is not a managed
+     * size (a zone-sized "free" rect is a spawn frame). A declined or refused
+     * move still gets a first placement its free SIZE.
      *
      * When the predicate is UNSET (default), the engine preserves its historical
      * behaviour: a floated record is consumed only on the screen it reopens on and
@@ -478,14 +473,13 @@ public:
      *
      * A matched SnapToZone placement rule (chain level 1) has highest priority
      * and overrides any stored placement (the store still re-binds the record
-     * first, so the window's float-back geometry survives the override).
-     * Otherwise the unified WindowPlacementStore reopens the window from its
-     * snapped (may cross screens) or floated (screen-local) record. With
-     * neither, levels 2 (empty zone) and 3 (last-used zone) run. A window
-     * nothing places is FLOATED, by a matched Float rule before the chain or
-     * by the no-match default after it, and every float verdict that does not
-     * move the window gives it its remembered free size back
-     * (restoreFreeSizeForUnplaced). An already-floating window is skipped.
+     * first, so the float-back geometry survives). Otherwise the unified
+     * WindowPlacementStore reopens the window from its snapped (may cross
+     * screens) or floated (screen-local) record. With neither, levels 2 (empty
+     * zone) and 3 (last-used zone) run. A window nothing places is FLOATED, by
+     * a matched Float rule before the chain or by the no-match default after
+     * it; a first-placement float that does not move the window gets its free
+     * size back (restoreFreeSizeForUnplaced). An already-floating window is skipped.
      *
      * @param windowId Window identifier
      * @param screenId Screen where the window appeared
@@ -655,8 +649,7 @@ public:
     void pruneStatesForActivities(const QStringList& validActivities) override;
     void pruneStatesForRemovedScreen(const QString& physicalScreenId) override;
 
-    // Float facade over the per-screen stores (the daemon's engine float
-    // resolver/writer/lister route here instead of a single SnapState).
+    // Float facade over the per-screen stores (the daemon's float resolver/writer/lister route here).
     bool isFloating(const QString& windowId) const;
     void setFloating(const QString& windowId, bool floating);
     QStringList floatingWindows() const;
@@ -665,6 +658,7 @@ public:
     /// the SnapAdaptor when a deferredToTilingEngine verdict's reclaim was then
     /// DECLINED; without it the window ended the open with no state in any
     /// engine. No-op with a definite snap state, snapping off, or empty args.
+    /// Pins the residence and restores the free size like the in-line terminals.
     void applyNoMatchFloatDefault(const QString& windowId, const QString& screenId,
                                   PhosphorEngine::RestoreReason reason = PhosphorEngine::RestoreReason::Open);
 
@@ -871,8 +865,11 @@ public:
     // Auto-snap calculations (moved from WTS)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    PhosphorEngine::SnapResult calculateSnapToPlacementRule(const QString& windowId, const QString& windowScreenName,
+    /// The SnapToZone placement of a matched rule on @p screenId; the four-argument form takes a resolved directive.
+    PhosphorEngine::SnapResult calculateSnapToPlacementRule(const QString& windowId, const QString& screenId,
                                                             bool isSticky) const;
+    PhosphorEngine::SnapResult calculateSnapToPlacementRule(const QString& windowId, const QString& screenId,
+                                                            bool isSticky, const PlacementDirective& directive) const;
     PhosphorEngine::SnapResult calculateSnapToLastZone(const QString& windowId, const QString& windowScreenId,
                                                        bool isSticky) const;
     PhosphorEngine::SnapResult calculateSnapToEmptyZone(const QString& windowId, const QString& windowScreenId,
@@ -1069,10 +1066,13 @@ Q_SIGNALS:
 private:
     PhosphorEngine::ISnapSettings* snapSettings() const;
 
-    /// The snap arm of PlacementEngineBase::restoreFreeSizeWhereItStands (#1106):
-    /// supplies the zone and span sizes and the available area, then delegates.
-    void restoreFreeSizeForUnplaced(const QString& windowId, const QString& screenId,
-                                    PhosphorEngine::RestoreReason reason);
+    /// The snap arm of PlacementEngineBase::restoreFreeSizeWhereItStands (#1106); @p desktop is the restore desktop.
+    void restoreFreeSizeForUnplaced(const QString& windowId, const QString& screenId, int desktop,
+                                    PhosphorEngine::RestoreReason reason, bool placedBefore);
+    /// The sizes a snapped window on @p screenId can have in @p desktop's context (zones and live rects).
+    QList<QSize> managedSizesOnScreen(const QString& screenId, int desktop) const;
+    /// The RouteToDesktop target of the rule matching an opening window (0 = none); the float terminals pin to it.
+    int routedOpenDesktop(const QString& windowId, const QString& screenId) const;
 
     /// Canonicalize a raw windowId to its stable first-seen composite via the
     /// shared registry (passthrough when no registry is attached). The reverse map

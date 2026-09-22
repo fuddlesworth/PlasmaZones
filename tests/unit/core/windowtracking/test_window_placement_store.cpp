@@ -6,8 +6,6 @@
 #include <QJsonArray>
 #include <QSet>
 
-#include <PhosphorIdentity/WindowId.h>
-
 #include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorEngine/WindowPlacementStore.h>
 #include "helpers/WindowPlacementBuilders.h"

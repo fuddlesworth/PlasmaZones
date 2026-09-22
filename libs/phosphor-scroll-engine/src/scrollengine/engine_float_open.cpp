@@ -2,24 +2,20 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 // The float-at-open helpers of the scroll engine, split out of
-// engine_lifecycle.cpp by concern: the float-restore seed, the gated
-// remembered-position restore a floated open performs, and the scroll arm of
-// the shared free-size restore (#1106) for a float that moved nowhere.
+// engine_lifecycle.cpp by concern: the float-restore seed (shared with the
+// handoff receive), the gated remembered-position restore a floated open
+// performs, the scroll arm of the shared free-size restore (#1106) for a
+// float that moved nowhere, and the tail insertOpenedWindow's two float
+// exits share.
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
+#include <PhosphorScrollEngine/ScrollState.h>
+#include <PhosphorScrollEngine/ScrollStrip.h>
 
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorEngine/WindowPlacementStore.h>
-#include <PhosphorScreens/ScreenIdentity.h>
 
-#include "enginelimits.h"
 #include "scrollenginelogging.h"
-
-#include <QTimer>
-#include <QVariant>
-
-#include <algorithm>
-#include <utility>
 
 namespace PhosphorScrollEngine {
 
@@ -47,6 +43,61 @@ void ScrollEngine::seedFloatRestoreForOpen(const QString& windowId, int minWidth
     m_floatRestore.insert(windowId, restore);
 }
 
+void ScrollEngine::finishFloatedOpen(ScrollState* state, const QString& windowId, const QString& screenId, int minWidth,
+                                     int minHeight, bool migration, bool oversized, bool placedBefore,
+                                     const PhosphorEngine::WindowPlacement* record)
+{
+    state->addFloating(windowId);
+    seedFloatRestoreForOpen(windowId, minWidth, minHeight);
+    // Engine-decided or record-decided, the float carries the mode marker
+    // like every other float this engine makes: isModeSpecificFloated has to
+    // answer true or the daemon captures the scroll-mode float into the snap
+    // slot at the next mode transition (presaveSnapFloats skips exactly the
+    // marked windows).
+    m_scrollFloatedWindows.insert(windowId);
+    // A floated arrival consumes its seed entry too, or the screen's list
+    // never empties and the stale entry survives every later mode
+    // transition. Its stash tile likewise: the tile path consumes it on the
+    // claim, and a float that left it standing was fuzzy-claimable by the
+    // next same-app window and persisted as a ghost slot after the close.
+    consumePendingInitialOrder(screenId, windowId);
+    consumeStripStashTileForFloat(currentKeyForScreen(screenId), windowId);
+    // A migration re-entry (the window changed screen or desktop while this
+    // engine tracked it) re-establishes the float mark for a window that is
+    // already placed: the user is looking at it, and neither the remembered
+    // position nor the remembered size may move it. The record consume is
+    // what keeps a user-floated window floating across the move, so it runs
+    // either way; only the geometry follows the gate.
+    if (!migration) {
+        const bool moved = record ? emitGatedFloatGeometryRestore(windowId, *record, screenId)
+                                  : restoreFloatRecordForOpen(windowId, screenId);
+        // A float that moved nowhere still gets its free SIZE back where it
+        // stands, unless the window is oversized: the clamp would then ask
+        // for less than the client's own minimum on the axis that made it
+        // oversized, and the client keeps the frame it has.
+        if (!moved && !oversized) {
+            restoreFreeSizeForFloatedOpen(windowId, screenId, placedBefore);
+        }
+    } else if (record) {
+        // The consume already happened in the caller; nothing to move.
+    } else {
+        // Consume the record for the mode marker's sake without applying
+        // its position: restoreFloatRecordForOpen's move is gated by the
+        // same helper, so a migration takes the consume and declines the
+        // emit through the migration flag it cannot see. Read the record
+        // and drop the geometry here instead.
+        const QString appId = currentAppIdFor(windowId);
+        if (m_windowTracker && PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
+            const PhosphorEngine::PlacementStateKey key = currentKeyForScreen(screenId);
+            (void)m_windowTracker->placementStore().takeForReopen(engineId(), windowId, appId, key.screenId);
+        }
+    }
+    // Announced AFTER the geometry or size emit, so the effect's float
+    // handler sees the reposition already in flight before it decides
+    // whether first-frame suppression has anything left to wait for.
+    Q_EMIT windowFloatingStateSynced(windowId, true, screenId);
+}
+
 bool ScrollEngine::emitGatedFloatGeometryRestore(const QString& windowId, const PhosphorEngine::WindowPlacement& record,
                                                  const QString& screenId)
 {
@@ -70,8 +121,13 @@ bool ScrollEngine::emitGatedFloatGeometryRestore(const QString& windowId, const 
     // geometry to apply. A record filed under one screen whose coordinates
     // describe another would teleport the window to that monitor, which is
     // exactly what the comment above says this restore must never do.
+    // A recorded rect of a live column's size is a spawn frame the window
+    // never chose (it missed its first size restore and closed column-sized):
+    // re-applying it would keep that record alive for every later reopen, so
+    // the move is refused and the size arm finds a real source instead.
     if (freeGeo.isValid() && restorePosition
-        && (!m_windowTracker || m_windowTracker->geometryBelongsToScreen(freeGeo, restoreScreen))) {
+        && (!m_windowTracker || m_windowTracker->geometryBelongsToScreen(freeGeo, restoreScreen))
+        && !isManagedSize(managedSizesOnScreen(restoreScreen), freeGeo.size())) {
         Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
         return true;
     }
@@ -98,24 +154,106 @@ bool ScrollEngine::restoreFloatRecordForOpen(const QString& windowId, const QStr
     return emitGatedFloatGeometryRestore(windowId, *record, screenId);
 }
 
-void ScrollEngine::restoreFreeSizeForFloatedOpen(const QString& windowId, const QString& screenId,
-                                                 const QSize& workAreaSize)
+QList<QSize> ScrollEngine::managedSizesOnScreen(const QString& screenId) const
+{
+    // Keys first, params second: layoutParamsForKey runs the injected
+    // geometry and gap providers, which must not run mid-walk over m_states
+    // (the stashStripStructure precondition), so the walk only collects.
+    QList<PhosphorEngine::PlacementStateKey> keys;
+    for (auto it = m_states.states().cbegin(); it != m_states.states().cend(); ++it) {
+        if (it.key().screenId == screenId && it.value() && !it.value()->strip().isEmpty()) {
+            keys.append(it.key());
+        }
+    }
+    const PhosphorEngine::PlacementStateKey currentKey = currentKeyForScreen(screenId);
+    QList<QSize> sizes;
+    for (const PhosphorEngine::PlacementStateKey& key : std::as_const(keys)) {
+        const ScrollState* state = m_states.stateForKey(key);
+        if (!state) {
+            continue;
+        }
+        // The rects the strip resolves to, tile by tile (a column's own rect
+        // spans the whole cross axis and is not a frame size). Covers a
+        // sibling that arrived in the same burst, whose apply is deferred to
+        // the burst end and whose applied memo is therefore still empty.
+        const ScrollLayoutParams params = layoutParamsForKey(key);
+        if (params.workArea.isValid()) {
+            const ResolvedStrip resolved = state->strip().relayout(params);
+            for (const ResolvedColumn& column : resolved.columns) {
+                for (const ResolvedTile& tile : column.tiles) {
+                    if (tile.rect.isValid()) {
+                        sizes.append(tile.rect.size());
+                    }
+                }
+            }
+        }
+        // The rects the compositor was actually told, where one exists: the
+        // apply path clamps a straddler at the screen edge, and a spawn frame
+        // copies that applied frame, not the resolved tile. The current
+        // context's memo is window-keyed; a background context's is parked
+        // under its key.
+        const QHash<QString, QRect> applied = key == currentKey ? m_lastAppliedRect : m_contextRectMemory.value(key);
+        for (const QString& member : state->strip().windowsInOrder()) {
+            const QRect rect = applied.value(member);
+            if (rect.isValid()) {
+                sizes.append(rect.size());
+            }
+        }
+    }
+    return sizes;
+}
+
+void ScrollEngine::restoreFreeSizeForFloatedOpen(const QString& windowId, const QString& screenId, bool placedBefore)
 {
     // A window this engine leaves floating at open, and did not move to its
     // remembered free spot, stays where the compositor put it at the size the
     // client asked for: for a KDE app whose sibling is a column that is the
-    // column's size (#1106). The live column rects on this screen are the
-    // sizes such a spawn frame can have. Runs ahead of the float-state sync
-    // the callers emit, so the size-only apply precedes the sync on the wire.
-    QList<QSize> columnSizes;
-    for (const QString& member : managedWindowOrder(screenId)) {
-        const QRect rect = lastManagedRect(member);
-        if (rect.isValid()) {
-            columnSizes.append(rect.size());
+    // column's size (#1106). The tiling wire carries no restore reason, so
+    // the base's lineage snapshot (placedBefore) is what tells a restart or
+    // mode-swap re-announce of a visible window from a first placement. The
+    // clamp is the tracker's available area, the same bound the other
+    // engines use, not the gap-inset strip work area.
+    restoreFreeSizeWhereItStands(m_windowTracker, windowId, screenId, PhosphorEngine::RestoreReason::Open, placedBefore,
+                                 managedSizesOnScreen(screenId));
+}
+
+void ScrollEngine::consumeStripStashTileForFloat(const PhosphorEngine::PlacementStateKey& key, const QString& windowId)
+{
+    const auto it = m_stripStash.find(key);
+    if (it == m_stripStash.end()) {
+        return;
+    }
+    if (const auto consumedIt = m_stripStashConsumed.constFind(key);
+        consumedIt != m_stripStashConsumed.cend() && consumedIt->contains(windowId)) {
+        return;
+    }
+    StashedStrip& stashStrip = it.value();
+    // A cursor-only entry has no tile to consume; restoreFromStripStash
+    // retires it on the next tiled arrival, which is the payload it exists
+    // for, so a float leaves it alone.
+    if (stashStrip.isEmpty()) {
+        return;
+    }
+    // EXACT id only: a float never spends the cross-session fuzzy claim,
+    // which renames a stashed tile to a live id and is the tile path's to
+    // make.
+    for (StashedColumn& column : stashStrip.columns) {
+        for (StashedTile& tile : column.tiles) {
+            if (tile.windowId != windowId) {
+                continue;
+            }
+            const int total = stashStrip.tileCount();
+            tile.stagedFromPersistence = false;
+            tile.unclaimedSessions = 0;
+            QSet<QString>& consumed = m_stripStashConsumed[key];
+            consumed.insert(windowId);
+            if (consumed.size() >= total) {
+                m_stripStash.remove(key);
+                m_stripStashConsumed.remove(key);
+            }
+            return;
         }
     }
-    restoreFreeSizeWhereItStands(m_windowTracker, windowId, screenId, PhosphorEngine::RestoreReason::Open, columnSizes,
-                                 workAreaSize.isValid() ? workAreaSize : QSize());
 }
 
 } // namespace PhosphorScrollEngine

@@ -20,6 +20,7 @@ namespace PhosphorEngine {
 
 struct LayerSwitchResult;
 class IWindowTrackingService;
+class WindowPlacementStore;
 
 /// Abstract base class for placement engines.
 ///
@@ -101,33 +102,73 @@ protected:
     /// resize, so an app with a managed window opens its next window at the
     /// zone's, tile's or column's size. Nothing else undoes that: the position
     /// restore is gated and moves only a window with its own screen-local
-    /// record, and a fresh second instance has no record at all. The size
-    /// comes from, in order, the window's OWN record (a reopen whose managed
-    /// record was declined, or whose floated record restored without a move,
-    /// re-bound to the live id before this runs), else the earliest-recorded
-    /// LIVE SIBLING's record with a usable rect.
+    /// record, and a fresh second instance has no record of its own. The size
+    /// comes from, in order:
+    ///  1. the window's OWN record, when it carries an engine slot (a reopen
+    ///     whose managed record was declined, or whose floated record
+    ///     restored without a move, re-bound to the live id before this
+    ///     runs). A slot-less record under the live id is the pre-tile
+    ///     capture of this very open and its rect is the spawn frame, so it
+    ///     is never a source;
+    ///  2. the earliest-recorded LIVE SIBLING's record with a usable rect;
+    ///  3. a CLOSED same-app record with a usable rect, read but never
+    ///     consumed: the tiling engines re-bind only a record they consume,
+    ///     and they consume floating records only, so a window that closed
+    ///     tiled and reopens under a Float rule has neither an own rect nor
+    ///     a live sibling, yet its old record still knows its free size.
     ///
     /// A rect is usable only when it lies on @p screenId (screen-local, like
-    /// the position restore) and its size is not within two pixels of any of
-    /// @p managedSizes, the sizes a managed window on that screen can have
-    /// (zones and live spans for snap, the live tile or column rects for the
-    /// tiling engines): a sibling the engine placed at open carries the
-    /// managed-sized spawn frame as its own "free" rect, which is the very
-    /// size this exists to undo, and record order alone cannot tell such a
-    /// sibling from the first instance. The size is clamped to
-    /// @p availableSize when that is valid.
+    /// the position restore; the containment check fails open without a
+    /// screen manager, which is accepted for embedders and tests) and its size
+    /// is not within two pixels of any of @p managedSizes (isManagedSize), the
+    /// sizes a managed window on that screen can have (zones and live spans
+    /// for snap, the live tile or column rects for the tiling engines): a
+    /// sibling the engine placed at open carries the managed-sized spawn
+    /// frame as its own "free" rect, which is the very size this exists to
+    /// undo, and record order alone cannot tell such a sibling from the first
+    /// instance. The compare is between FRAME sizes, so under the opt-in
+    /// hide-title-bars decoration a managed frame (no title bar) and a fresh
+    /// one (with) differ by the decoration height and the refusal misses;
+    /// the effect then skips an apply that would leave the size unchanged.
+    /// The size is clamped to the screen's available area when @p tracker
+    /// can resolve one.
     ///
-    /// Gated on @p reason: only a first placement may resize (Open, the
-    /// pending sweep that performs an open the readiness gate refused, and
-    /// the desktop-arrival continuation of a parked open). Unminimize and the
-    /// daemon-restart sweep act on a window the user is looking at and leave
-    /// it alone. Emits sizeRestoreRequested; the adaptor relays it as a
-    /// size-only apply the effect performs as a teleport under first-frame
-    /// suppression. Callers guard against repeats with their own
-    /// already-floating checks. No-op without @p tracker.
+    /// Gated on two facts, not on the driver. @p placedBefore says the store
+    /// already held a record WITH AN ENGINE SLOT under this exact uuid before
+    /// the open consumed anything: a previous daemon lineage placed this
+    /// window (a daemon-only restart re-announce, a mode-swap re-announce),
+    /// the user has been looking at it since, and it is left alone. Every
+    /// other driver, the bring-up sweeps included, can be a window's first
+    /// placement (an open the readiness gate refused is placed by the
+    /// daemon-restart sweep) and resizes. @p reason refuses only Unminimize,
+    /// a re-drive of a window whose engine state is warm. Emits
+    /// sizeRestoreRequested; the adaptor relays it as a size-only apply the
+    /// effect performs as a teleport under first-frame suppression. The snap
+    /// and tile callers guard against repeats with their own already-floating
+    /// checks; the scroll caller's same-key early return does the same, and
+    /// its migration re-entry skips the arm. No-op without @p tracker.
     void restoreFreeSizeWhereItStands(IWindowTrackingService* tracker, const QString& windowId, const QString& screenId,
-                                      RestoreReason reason, const QList<QSize>& managedSizes,
-                                      const QSize& availableSize);
+                                      RestoreReason reason, bool placedBefore, const QList<QSize>& managedSizes);
+
+    /// Whether @p size is within two pixels of any entry of @p managedSizes on
+    /// both axes. Within a couple of pixels, not exact: a fractional-scale
+    /// round-trip or a size-increment client (terminal cells) lands the frame
+    /// a pixel or two off the requested rect. Shared by the size restore above
+    /// and by the engines' position-restore move branches, which must not
+    /// re-apply a recorded rect of a managed size either: a window that
+    /// missed its first size restore closes with the managed-sized frame as
+    /// its "free" rect, and re-applying it would keep that record alive for
+    /// every later reopen.
+    static bool isManagedSize(const QList<QSize>& managedSizes, const QSize& size);
+
+    /// The @p placedBefore snapshot for restoreFreeSizeWhereItStands: @p store
+    /// holds a record WITH AN ENGINE SLOT under this exact uuid, so a previous
+    /// daemon lineage placed the window (a daemon-only restart or mode-swap
+    /// re-announce). A slot-less record is an open's own pre-tile capture.
+    /// Every engine takes it BEFORE its take() or takeForReopen, which re-bind
+    /// a FIFO-matched sibling record under the live id and would make a fresh
+    /// window read as already placed.
+    static bool placedByPreviousLineage(const WindowPlacementStore& store, const QString& windowId);
 
 Q_SIGNALS:
     void geometryRestoreRequested(const QString& windowId, const QRect& geometry, const QString& screenId);

@@ -16,6 +16,7 @@
 #include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingState.h>
+#include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
 
 #include <QSet>
@@ -160,6 +161,124 @@ private Q_SLOTS:
         // fixture never produces; the scroll suite pins that arm with real
         // column rects, and the shared helper's refusal is pinned by the snap
         // suite with real zone rects.
+    }
+
+    // The own-record float restore moves OR sizes, never both, and the
+    // lineage gate refuses a re-announce of a window this lineage placed.
+    void testFloatAtOpen_ownRecordMoveOrSize_andLineageGate()
+    {
+        PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
+        std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
+        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), nullptr, nullptr);
+        QSet<QString> liveInstances;
+        wts.placementStore().setLiveInstanceProbe(PlasmaZones::TestHelpers::liveInstanceProbe(liveInstances));
+        AutotileEngine engine(nullptr, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("DP-1");
+        engine.setAutotileScreens({screen});
+
+        const auto floatingRecord = [&](const QString& windowId, const QRect& freeRect) {
+            return PlasmaZones::TestHelpers::makePlacement(windowId, QStringLiteral("app"),
+                                                           PhosphorEngine::WindowPlacement::stateFloating(),
+                                                           engine.engineId(), screen, freeRect);
+        };
+        const QRect ownFree(60, 60, 700, 500);
+        QSignalSpy geoSpy(&engine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested);
+        QSignalSpy sizeSpy(&engine, &PhosphorEngine::PlacementEngineBase::sizeRestoreRequested);
+
+        // Move opted in (predicate unset): the full rect, no size-only.
+        QVERIFY(wts.placementStore().record(floatingRecord(QStringLiteral("app|a"), ownFree)));
+        engine.windowOpened(QStringLiteral("app|a2"), screen, 0, 0);
+        QCoreApplication::processEvents();
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        QVERIFY(state);
+        QVERIFY(state->isFloating(QStringLiteral("app|a2")));
+        QCOMPARE(geoSpy.count(), 1);
+        QCOMPARE(sizeSpy.count(), 0);
+        geoSpy.clear();
+        engine.windowClosed(QStringLiteral("app|a2"));
+
+        // Move declined: the size from the record just re-bound.
+        engine.setRestorePositionPredicate([](const QString&, const QString&) {
+            return false;
+        });
+        QVERIFY(wts.placementStore().record(floatingRecord(QStringLiteral("app|b"), ownFree)));
+        engine.windowOpened(QStringLiteral("app|b2"), screen, 0, 0);
+        QCoreApplication::processEvents();
+        QVERIFY(state->isFloating(QStringLiteral("app|b2")));
+        QCOMPARE(geoSpy.count(), 0);
+        QCOMPARE(sizeSpy.count(), 1);
+        QCOMPARE(sizeSpy.takeFirst().at(1).toSize(), ownFree.size());
+        engine.windowClosed(QStringLiteral("app|b2"));
+
+        // A re-announce of a window this lineage placed: an exact-uuid record
+        // WITH an autotile slot. Floated again without a move, no size.
+        liveInstances.insert(QStringLiteral("placed"));
+        QVERIFY(wts.placementStore().record(floatingRecord(QStringLiteral("app|placed"), ownFree)));
+        engine.windowOpened(QStringLiteral("app|placed"), screen, 0, 0);
+        QCoreApplication::processEvents();
+        QVERIFY(state->isFloating(QStringLiteral("app|placed")));
+        QCOMPARE(geoSpy.count(), 0);
+        QCOMPARE(sizeSpy.count(), 0);
+
+        // A slot-less stub under the opener's own uuid is not a placement,
+        // and not a size source: the live sibling's rect comes back.
+        engine.setFloatPredicate([](const QString& windowId, const QString&) {
+            return windowId == QStringLiteral("app|fresh");
+        });
+        PhosphorEngine::WindowPlacement stub;
+        stub.windowId = QStringLiteral("app|fresh");
+        stub.appId = QStringLiteral("app");
+        stub.screenId = screen;
+        stub.freeGeometryByScreen.insert(screen, QRect(0, 0, 999, 999));
+        QVERIFY(wts.placementStore().record(stub));
+        liveInstances.insert(QStringLiteral("fresh"));
+        engine.windowOpened(QStringLiteral("app|fresh"), screen, 0, 0);
+        QCoreApplication::processEvents();
+        QVERIFY(state->isFloating(QStringLiteral("app|fresh")));
+        QCOMPARE(sizeSpy.count(), 1);
+        QCOMPARE(sizeSpy.takeFirst().at(1).toSize(), ownFree.size());
+    }
+
+    // A window that would float on its recorded home screen is not pulled
+    // home by the cross-screen claim (a float is screen-local), and once the
+    // dispatch reports every claim declined, the arrival screen adopts it
+    // instead of deferring to the record's home a second time.
+    void testClaimCrossScreenReopen_declinesAFloat_thenArrivalAdopts()
+    {
+        PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
+        std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
+        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), nullptr, nullptr);
+        AutotileEngine engine(layoutManager.get(), &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString home = QStringLiteral("DP-1");
+        const QString arrival = QStringLiteral("DP-2");
+        PhosphorZones::AssignmentEntry autotile;
+        autotile.mode = PhosphorZones::AssignmentEntry::Autotile;
+        autotile.tilingAlgorithm = QStringLiteral("dwindle");
+        layoutManager->setAssignmentEntryDirect(home, 0, QString(), autotile);
+        layoutManager->setAssignmentEntryDirect(arrival, 0, QString(), autotile);
+        engine.setAutotileScreens({home, arrival});
+
+        auto rec = PlasmaZones::TestHelpers::makePlacement(QStringLiteral("app|old"), QStringLiteral("app"),
+                                                           PhosphorEngine::WindowPlacement::stateTiled(),
+                                                           engine.engineId(), home);
+        QVERIFY(wts.placementStore().record(rec));
+        engine.setFloatPredicate([home](const QString&, const QString& screen) {
+            return screen == home;
+        });
+        QVERIFY2(!engine.claimCrossScreenReopen(QStringLiteral("app|new"), arrival, 0, 0),
+                 "a float has nothing to pull home for");
+        QVERIFY(!engine.isWindowTracked(QStringLiteral("app|new")));
+        QVERIFY2(wts.placementStore().contains(QStringLiteral("app|old")), "a declined claim consumes nothing");
+
+        engine.noteCrossScreenClaimsExhausted(QStringLiteral("app|new"));
+        engine.windowOpened(QStringLiteral("app|new"), arrival, 0, 0);
+        QCoreApplication::processEvents();
+        PhosphorTiles::TilingState* arrivalState = engine.tilingStateForScreen(arrival);
+        QVERIFY(arrivalState);
+        QVERIFY2(arrivalState->containsWindow(QStringLiteral("app|new")),
+                 "with the claims exhausted the arrival screen must adopt the window");
     }
 
     void testToggleWindowFloat_crossScreenFallback()

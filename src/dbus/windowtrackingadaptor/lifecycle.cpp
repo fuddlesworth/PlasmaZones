@@ -627,14 +627,11 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
 
     const PhosphorEngine::WindowKind kind = PhosphorEngine::clampWindowKindFromWire(windowKind);
 
-    // Release this instance's open claim on a placement record. Consumption
-    // through take() / takeForReopen() already releases it, and so does the
-    // store's markInstanceClosed below; this early release covers the window
-    // that closed without any engine having restored it BEFORE the capture
-    // reads the store, and is otherwise a harmless double release.
-    if (m_service) {
-        m_service->placementStore().releaseOpenClaim(windowId);
-    }
+    // Release this instance's open claim on a placement record BEFORE the
+    // capture reads the store: consumption and markInstanceClosed below
+    // release it too, so this covers only the window that closed without
+    // any engine having restored it (otherwise a harmless double release).
+    m_service->placementStore().releaseOpenClaim(windowId);
 
     // Capture the window's final live placement before teardown drops the
     // frame-geometry shadow + per-engine state below. For a FLOATING window this
@@ -678,11 +675,12 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
     m_service->windowClosed(windowId, kind);
 
     // Drop the shadow maps AFTER the service teardown: windowClosed's cascade
-    // can synchronously re-enter the float relay, and a relay landing between
-    // an earlier removal and the teardown would re-insert a zombie
-    // last-broadcast entry that outlives the window.
+    // can synchronously re-enter the float relay, which would re-insert a
+    // zombie last-broadcast entry that outlives the window.
     const QString shadowId = shadowWindowId(windowId);
     m_frameGeometry.remove(shadowId);
+    m_pendingOpenGeometry.remove(shadowId);
+    m_pendingOpenSize.remove(shadowId);
     m_broadcastFloating.remove(shadowId);
     // shadowId, NOT the raw windowId: shadowWindowId() IS the canonical id,
     // and tabColorRuleParams is called with ids taken from the ScrollEngine
@@ -978,12 +976,14 @@ void WindowTrackingAdaptor::setFrameGeometry(const QString& windowId, int x, int
     if (windowId.isEmpty() || width <= 0 || height <= 0) {
         return;
     }
-    // Key on the CANONICAL id. The effect reports the window's CURRENT
-    // composite, but captureWindowPlacement reaches this map with canonical
-    // ids on the engine-relay path — a raw key would make that capture miss
-    // the frame for a class-mutating app (Electron/CEF) and silently drop its
-    // float-back geometry. Every read canonicalizes to match.
-    m_frameGeometry[shadowWindowId(windowId)] = QRect(x, y, width, height);
+    // Key on the CANONICAL id: captureWindowPlacement reaches this map with
+    // canonical ids on the engine-relay path, and a raw key would drop the
+    // float-back of a class-mutating app (Electron/CEF). Reads match.
+    const QString shadowId = shadowWindowId(windowId);
+    m_frameGeometry[shadowId] = QRect(x, y, width, height);
+    // A fresh report supersedes what the open path asked for, landed or not.
+    m_pendingOpenGeometry.remove(shadowId);
+    m_pendingOpenSize.remove(shadowId);
 }
 
 void WindowTrackingAdaptor::notifyWindowResized(const QString& windowId, int oldX, int oldY, int oldWidth,

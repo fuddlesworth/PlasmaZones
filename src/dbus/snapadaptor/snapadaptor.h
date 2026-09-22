@@ -155,8 +155,11 @@ public Q_SLOTS:
      *                   placement record now carries the kind, so it no longer gates restore.
      * @param restoreReason Why this resolve is running — see
      *                   PhosphorEngine::RestoreReason. Clamped from the wire, so an
-     *                   unrecognised value reads as Open. Gates the cross-screen
-     *                   tile reclaim and the per-open reclaim-credit burn.
+     *                   unrecognised value reads as Open. Gates the open claim, the
+     *                   RouteToDesktop / RouteToScreen routing, the cross-screen
+     *                   tile reclaim and the per-open reclaim-credit burn, and is
+     *                   forwarded to the engine, where it gates the free-size
+     *                   restore of a floated open (#1106).
      */
     void resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int windowKind,
                               int restoreReason, int minWidth, int minHeight, int& snapX, int& snapY, int& snapWidth,

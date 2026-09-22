@@ -349,6 +349,17 @@ bool WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, cons
     // frame rect and is pushed by the setWindowMetadata call that precedes the
     // restore, so fall back to it before declining.
     QRect cur = frameGeometry(windowId);
+    // The open path may have asked the effect for a float-position or a
+    // free-size restore moments ago, inside this very resolve; the shadow
+    // cannot know yet, so read what was asked for (see m_pendingOpenGeometry).
+    const QString pendingKey = shadowWindowId(windowId);
+    if (const auto pendingRect = m_pendingOpenGeometry.constFind(pendingKey);
+        pendingRect != m_pendingOpenGeometry.constEnd() && pendingRect->isValid()) {
+        cur = *pendingRect;
+    } else if (const auto pendingSize = m_pendingOpenSize.constFind(pendingKey);
+               pendingSize != m_pendingOpenSize.constEnd() && cur.isValid()) {
+        cur.setSize(*pendingSize);
+    }
     if (!cur.isValid() && !m_windowRegistry.isNull()) {
         const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
         if (const std::optional<PhosphorEngine::WindowMetadata> meta = m_windowRegistry->metadata(instanceId)) {

@@ -3,12 +3,12 @@
 
 // The float terminals' size-only half, split out of lifecycle.cpp by concern:
 // the snap arm of the shared free-size restore a float verdict gives a window
-// that stays where the compositor put it (#1106), and the reclaim-declined
-// float default that is one of its callers.
+// that stays where the compositor put it (#1106), the managed-size list it
+// and the floated-record move share, the lineage snapshot the restore gates
+// on, and the reclaim-declined float default that is one of its callers.
 
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
-#include <PhosphorScreens/Manager.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Zone.h>
@@ -16,49 +16,66 @@
 
 namespace PhosphorSnapEngine {
 
+QList<QSize> SnapEngine::managedSizesOnScreen(const QString& screenId, int desktop) const
+{
+    QList<QSize> sizes;
+    if (!m_windowTracker || screenId.isEmpty()) {
+        return sizes;
+    }
+    // The layout of the context the window is placed INTO, which a session
+    // restore onto a background desktop or a RouteToDesktop rule makes
+    // differ from the one the screen shows.
+    if (m_layoutManager) {
+        const int layoutDesktop = desktop >= 1 ? desktop : currentVirtualDesktopForScreen(screenId);
+        if (PhosphorZones::Layout* layout =
+                m_layoutManager->layoutForScreen(screenId, layoutDesktop, currentActivity())) {
+            for (PhosphorZones::Zone* zone : layout->zones()) {
+                // zoneGeometry is keyed by the id string, so the braced
+                // QUuid spelling is what the tracker parses back; the
+                // round-trip is per zone per open, not per frame.
+                const QRect geo = m_windowTracker->zoneGeometry(zone->id().toString(), screenId);
+                if (geo.isValid()) {
+                    sizes.append(geo.size());
+                }
+            }
+        }
+    }
+    // Every live snapped window on this screen, whatever context it sits
+    // in: its resolved rect is a size a managed frame has, including one
+    // from another desktop's layout (zoneGeometry finds a zone in any loaded
+    // layout) and a multi-zone span. A window floated FROM a zone keeps its
+    // assignment for the resnap path but no live frame has that size, so it
+    // is skipped. Scoped to this screen's stores, since a store is keyed by
+    // the screen it belongs to.
+    for (auto it = m_states.states().cbegin(); it != m_states.states().cend(); ++it) {
+        const SnapState* state = it.value();
+        if (!state || it.key().screenId != screenId) {
+            continue;
+        }
+        for (const QString& snapped : state->snappedWindows()) {
+            if (state->isFloating(snapped) || state->screenForWindow(snapped) != screenId) {
+                continue;
+            }
+            const QRect rect = m_windowTracker->resolveZoneGeometry(state->zonesForWindow(snapped), screenId);
+            if (rect.isValid()) {
+                sizes.append(rect.size());
+            }
+        }
+    }
+    return sizes;
+}
+
 // The snap arm of PlacementEngineBase::restoreFreeSizeWhereItStands, which
 // carries the contract. This supplies what only this engine knows: the sizes
-// a snapped window on @p screenId can have (every zone of the layout the
-// screen runs, plus every multi-zone span a live window is snapped across),
-// and the screen's available area for the clamp. A span under a layout
-// switched since is not caught; the restore is best effort.
-void SnapEngine::restoreFreeSizeForUnplaced(const QString& windowId, const QString& screenId,
-                                            PhosphorEngine::RestoreReason reason)
+// a snapped window on @p screenId can have in the context of @p desktop.
+void SnapEngine::restoreFreeSizeForUnplaced(const QString& windowId, const QString& screenId, int desktop,
+                                            PhosphorEngine::RestoreReason reason, bool placedBefore)
 {
     if (!m_windowTracker || windowId.isEmpty() || screenId.isEmpty()) {
         return;
     }
-    QList<QSize> snappedSizes;
-    if (m_layoutManager) {
-        if (PhosphorZones::Layout* layout = m_layoutManager->layoutForScreen(
-                screenId, currentVirtualDesktopForScreen(screenId), currentActivity())) {
-            for (PhosphorZones::Zone* zone : layout->zones()) {
-                const QRect geo = m_windowTracker->zoneGeometry(zone->id().toString(), screenId);
-                if (geo.isValid()) {
-                    snappedSizes.append(geo.size());
-                }
-            }
-        }
-    }
-    for (SnapState* state : m_states.states()) {
-        for (const QString& snapped : state->snappedWindows()) {
-            const QStringList zones = state->zonesForWindow(snapped);
-            if (zones.size() > 1 && state->screenForWindow(snapped) == screenId) {
-                const QRect span = m_windowTracker->resolveZoneGeometry(zones, screenId);
-                if (span.isValid()) {
-                    snappedSizes.append(span.size());
-                }
-            }
-        }
-    }
-    QSize available;
-    if (auto* mgr = m_windowTracker->screenManager()) {
-        const QRect avail = mgr->screenAvailableGeometry(screenId);
-        if (avail.isValid()) {
-            available = avail.size();
-        }
-    }
-    restoreFreeSizeWhereItStands(m_windowTracker, windowId, screenId, reason, snappedSizes, available);
+    restoreFreeSizeWhereItStands(m_windowTracker, windowId, screenId, reason, placedBefore,
+                                 managedSizesOnScreen(screenId, desktop));
 }
 
 void SnapEngine::applyNoMatchFloatDefault(const QString& windowId, const QString& screenId,
@@ -92,10 +109,18 @@ void SnapEngine::applyNoMatchFloatDefault(const QString& windowId, const QString
         snappedState && snappedState->isWindowSnapped(windowId)) {
         return;
     }
-    stateForWindowOnScreen(windowId, screenId)
-        ->setFloatingOnScreen(windowId, screenId, currentVirtualDesktopForScreen(screenId));
+    // A deferredToTilingEngine verdict implies the placement rule was
+    // admissible for this window (the defer gate requires !deferredByMode),
+    // so the routed open desktop resolves here exactly as it did in the
+    // resolve that deferred. Nothing was consumed on that pass (a declined
+    // reclaim consumes nothing either), so the lineage snapshot is still
+    // exact here.
+    const int routed = routedOpenDesktop(windowId, screenId);
+    const int openDesktop = routed >= 1 ? routed : currentVirtualDesktopForScreen(screenId);
+    stateForWindowOnScreen(windowId, screenId, openDesktop)->setFloatingOnScreen(windowId, screenId, openDesktop);
+    restoreFreeSizeForUnplaced(windowId, screenId, openDesktop, reason,
+                               m_windowTracker && placedByPreviousLineage(m_windowTracker->placementStore(), windowId));
     Q_EMIT windowFloatingChanged(windowId, true, screenId);
-    restoreFreeSizeForUnplaced(windowId, screenId, reason);
     qCInfo(PhosphorSnapEngine::lcSnapEngine)
         << "applyNoMatchFloatDefault:" << windowId << "reclaim declined — defaulting to floated on" << screenId;
 }

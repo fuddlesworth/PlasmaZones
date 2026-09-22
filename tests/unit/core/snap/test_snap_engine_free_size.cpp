@@ -286,9 +286,94 @@ private Q_SLOTS:
                  "the closed record was the one consumed");
     }
 
-    // Only a first placement may resize. The daemon-restart sweep and the
-    // unminimize re-drive act on a window the user is looking at.
+    // Only a first placement may resize. The restart sweep re-drives a window
+    // this daemon lineage placed (an exact-uuid record WITH a snap slot), and
+    // the unminimize re-drive acts on a window the user is looking at; both
+    // are refused. A pending sweep and a desktop arrival are first placements
+    // of windows that opened before the daemon was ready, and a slot-less
+    // stub under the opening uuid (the effect's pre-tile geometry write) is
+    // not a placement.
     void testReResolveOfVisibleWindow_neverResizes()
+    {
+        EngineOn on(m_wts, m_layoutManager, m_settings);
+        m_liveInstances.insert(QStringLiteral("first"));
+        setLiveProbe(m_wts);
+        auto* layout = activateLayout();
+        const QRect siblingFree(0, 0, 800, 600);
+        QVERIFY(m_wts->placementStore().record(
+            snappedRecord(QStringLiteral("app|first"), firstZoneId(layout), kScreen, siblingFree)));
+
+        QSignalSpy floatSpy(&on.engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+        QSignalSpy sizeSpy(&on.engine, &PhosphorEngine::PlacementEngineBase::sizeRestoreRequested);
+
+        // Restart sweep of a window this lineage placed: its own record
+        // carries a snap slot (floating, so the record branch floats it
+        // again without a move) and the size is left alone.
+        QVERIFY(m_wts->placementStore().record(PlasmaZones::TestHelpers::makePlacement(
+            QStringLiteral("app|restart"), QStringLiteral("app"), PhosphorEngine::WindowPlacement::stateFloating(),
+            PhosphorEngine::WindowPlacement::snapEngineId(), kScreen, QRect())));
+        m_liveInstances.insert(QStringLiteral("restart"));
+        on.engine.setRestorePositionPredicate([](const QString&) {
+            return false;
+        });
+        (void)on.engine.resolveWindowRestore(QStringLiteral("app|restart"), kScreen, /*sticky*/ false,
+                                             PhosphorEngine::WindowKind::Unknown,
+                                             PhosphorEngine::RestoreReason::DaemonRestartSweep);
+        QCOMPARE(floatSpy.count(), 1);
+        QCOMPARE(sizeSpy.count(), 0);
+
+        // Unminimize on the rule-float terminal: a visible window.
+        on.engine.setFloatPredicate([](const QString& id, const QString&) {
+            return id == QStringLiteral("app|unmin");
+        });
+        (void)on.engine.resolveWindowRestore(QStringLiteral("app|unmin"), kScreen, /*sticky*/ false,
+                                             PhosphorEngine::WindowKind::Unknown,
+                                             PhosphorEngine::RestoreReason::Unminimize);
+        QCOMPARE(floatSpy.count(), 2);
+        QCOMPARE(sizeSpy.count(), 0);
+        on.engine.setFloatPredicate({});
+
+        // The pending sweep is a first placement: this window never got past
+        // the readiness gate.
+        (void)on.engine.resolveWindowRestore(QStringLiteral("app|swept"), kScreen, /*sticky*/ false,
+                                             PhosphorEngine::WindowKind::Unknown,
+                                             PhosphorEngine::RestoreReason::PendingSweep);
+        QCOMPARE(floatSpy.count(), 3);
+        QCOMPARE(sizeSpy.count(), 1);
+        QCOMPARE(sizeSpy.takeFirst().at(1).toSize(), siblingFree.size());
+
+        // The parked-open continuation is a first placement too.
+        on.engine.applyNoMatchFloatDefault(QStringLiteral("app|arrival"), kScreen,
+                                           PhosphorEngine::RestoreReason::DesktopArrival);
+        QCOMPARE(sizeSpy.count(), 1);
+        sizeSpy.clear();
+        // And the same terminal refuses an unminimize.
+        on.engine.applyNoMatchFloatDefault(QStringLiteral("app|unmin2"), kScreen,
+                                           PhosphorEngine::RestoreReason::Unminimize);
+        QCOMPARE(sizeSpy.count(), 0);
+
+        // A slot-less stub under the opener's own uuid is not a placement:
+        // the open is a first one, the stub is not a size source (no slot),
+        // and the sibling's rect comes back.
+        PhosphorEngine::WindowPlacement stub;
+        stub.windowId = QStringLiteral("app|stubbed");
+        stub.appId = QStringLiteral("app");
+        stub.screenId = kScreen;
+        stub.freeGeometryByScreen.insert(kScreen, QRect(0, 0, 999, 999));
+        QVERIFY(m_wts->placementStore().record(stub));
+        (void)on.engine.resolveWindowRestore(QStringLiteral("app|stubbed"), kScreen, /*sticky*/ false);
+        QCOMPARE(sizeSpy.count(), 1);
+        QCOMPARE(sizeSpy.takeFirst().at(1).toSize(), siblingFree.size());
+        // A sticky window on the no-match terminal is a first placement like
+        // any other.
+        (void)on.engine.resolveWindowRestore(QStringLiteral("app|sticky"), kScreen, /*sticky*/ true);
+        QCOMPARE(sizeSpy.count(), 1);
+    }
+
+    // The size emit precedes the float emit on every terminal: the effect's
+    // float handler decides whether first-frame suppression has anything
+    // left to wait for from what is already in flight.
+    void testEmitOrder_sizeBeforeFloat()
     {
         EngineOn on(m_wts, m_layoutManager, m_settings);
         m_liveInstances.insert(QStringLiteral("first"));
@@ -296,22 +381,50 @@ private Q_SLOTS:
         auto* layout = activateLayout();
         QVERIFY(m_wts->placementStore().record(
             snappedRecord(QStringLiteral("app|first"), firstZoneId(layout), kScreen, QRect(0, 0, 800, 600))));
+        QStringList order;
+        connect(&on.engine, &PhosphorEngine::PlacementEngineBase::sizeRestoreRequested, this, [&order] {
+            order.append(QStringLiteral("size"));
+        });
+        connect(&on.engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged, this, [&order] {
+            order.append(QStringLiteral("float"));
+        });
+        // No-match terminal.
+        (void)on.engine.resolveWindowRestore(QStringLiteral("app|a"), kScreen, /*sticky*/ false);
+        QCOMPARE(order, (QStringList{QStringLiteral("size"), QStringLiteral("float")}));
+        order.clear();
+        // Rule-float terminal.
+        on.engine.setFloatPredicate([](const QString&, const QString&) {
+            return true;
+        });
+        (void)on.engine.resolveWindowRestore(QStringLiteral("app|b"), kScreen, /*sticky*/ false);
+        QCOMPARE(order, (QStringList{QStringLiteral("size"), QStringLiteral("float")}));
+        order.clear();
+        // Reclaim-declined default.
+        on.engine.applyNoMatchFloatDefault(QStringLiteral("app|c"), kScreen, PhosphorEngine::RestoreReason::Open);
+        QCOMPARE(order, (QStringList{QStringLiteral("size"), QStringLiteral("float")}));
+    }
 
+    // A window opening on a screen a tiling engine owns is that engine's:
+    // even with a floating record of its own on that screen, the snap engine
+    // writes no float residence and sends no size.
+    void testTilingScreen_noFloatNoSize()
+    {
+        EngineOn on(m_wts, m_layoutManager, m_settings);
+        PhosphorZones::AssignmentEntry autotile;
+        autotile.mode = PhosphorZones::AssignmentEntry::Autotile;
+        autotile.tilingAlgorithm = QStringLiteral("dwindle");
+        m_layoutManager->setAssignmentEntryDirect(kScreen, 0, QString(), autotile);
+        QVERIFY(m_wts->placementStore().record(PlasmaZones::TestHelpers::makePlacement(
+            QStringLiteral("app|orig"), QStringLiteral("app"), PhosphorEngine::WindowPlacement::stateFloating(),
+            PhosphorEngine::WindowPlacement::snapEngineId(), kScreen, QRect(10, 10, 600, 400))));
         QSignalSpy floatSpy(&on.engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
         QSignalSpy sizeSpy(&on.engine, &PhosphorEngine::PlacementEngineBase::sizeRestoreRequested);
-        (void)on.engine.resolveWindowRestore(QStringLiteral("app|restart"), kScreen, /*sticky*/ false,
-                                             PhosphorEngine::WindowKind::Unknown,
-                                             PhosphorEngine::RestoreReason::DaemonRestartSweep);
-        QCOMPARE(floatSpy.count(), 1);
+        const PhosphorEngine::SnapResult result =
+            on.engine.resolveWindowRestore(QStringLiteral("app|new"), kScreen, /*sticky*/ false);
+        QVERIFY(!result.shouldSnap);
+        QCOMPARE(floatSpy.count(), 0);
         QCOMPARE(sizeSpy.count(), 0);
-        on.engine.applyNoMatchFloatDefault(QStringLiteral("app|unmin"), kScreen,
-                                           PhosphorEngine::RestoreReason::Unminimize);
-        QCOMPARE(floatSpy.count(), 2);
-        QCOMPARE(sizeSpy.count(), 0);
-        // The parked-open continuation is a first placement.
-        on.engine.applyNoMatchFloatDefault(QStringLiteral("app|arrival"), kScreen,
-                                           PhosphorEngine::RestoreReason::DesktopArrival);
-        QCOMPARE(sizeSpy.count(), 1);
+        QVERIFY(!on.engine.isFloating(QStringLiteral("app|new")));
     }
 
     // The screen-containment gate and the clamp need real output geometry
@@ -366,6 +479,35 @@ private Q_SLOTS:
         (void)on.engine.resolveWindowRestore(QStringLiteral("app|fourth"), kScreen, /*sticky*/ false);
         QCOMPARE(sizeSpy.count(), 1);
         QCOMPARE(sizeSpy.takeFirst().at(1).toSize(), laterFree.size());
+
+        // A floated record whose own free rect is a zone's size: the move is
+        // refused (position restore opted in), and the size arm skips that
+        // rect too and falls through to the live sibling's real one.
+        on.engine.setRestorePositionPredicate([](const QString&) {
+            return true;
+        });
+        QSignalSpy geoSpy(&on.engine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested);
+        QVERIFY(svc->placementStore().record(PlasmaZones::TestHelpers::makePlacement(
+            QStringLiteral("app|zoned"), QStringLiteral("app"), PhosphorEngine::WindowPlacement::stateFloating(),
+            PhosphorEngine::WindowPlacement::snapEngineId(), kScreen, QRect(QPoint(80, 80), zoneRect.size()))));
+        (void)on.engine.resolveWindowRestore(QStringLiteral("app|fifth"), kScreen, /*sticky*/ false);
+        QCOMPARE(geoSpy.count(), 0);
+        QCOMPARE(sizeSpy.count(), 1);
+        QCOMPARE(sizeSpy.takeFirst().at(1).toSize(), laterFree.size());
+        QVERIFY2(!svc->placementStore().contains(QStringLiteral("app|zoned")), "the poisoned record was consumed");
+
+        // A live window spanning two zones has a managed size no single zone
+        // has: a sibling rect of exactly that span is refused as well.
+        const QStringList spanIds{layout->zones().at(0)->id().toString(), layout->zones().at(1)->id().toString()};
+        const QRect spanRect = svc->resolveZoneGeometry(spanIds, kScreen);
+        QVERIFY(spanRect.isValid());
+        QVERIFY(spanRect.size() != zoneRect.size());
+        on.engine.snapState()->assignWindowToZones(QStringLiteral("app|span"), spanIds, kScreen, 1);
+        QVERIFY(svc->placementStore().record(snappedRecord(QStringLiteral("app|later"), firstZoneId(layout), kScreen,
+                                                           QRect(QPoint(5, 5), spanRect.size()))));
+        m_liveInstances.remove(QStringLiteral("first"));
+        (void)on.engine.resolveWindowRestore(QStringLiteral("app|sixth"), kScreen, /*sticky*/ false);
+        QCOMPARE(sizeSpy.count(), 0);
         // The fixture-owned set outlives this local service, so no probe reset
         // is needed before `svc` dies.
     }

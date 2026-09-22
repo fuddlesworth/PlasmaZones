@@ -72,7 +72,12 @@ void PlasmaZonesEffect::slotActivateWindowRequested(const QString& windowId)
 
 void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, int desktop)
 {
-    KWin::EffectWindow* w = findWindowById(windowId);
+    // Instance-exact: every producer names a live window it just resolved
+    // or navigated (the open-path RouteToDesktop, the directional and
+    // cross-mode moves). The app-id fallback would move a same-app SIBLING
+    // when the named window closed inside the round trip, and then park
+    // that sibling for a desktop-arrival restore nobody asked for.
+    KWin::EffectWindow* w = findWindowByInstanceId(windowId);
     if (!w) {
         qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: window not found" << windowId;
         return;
@@ -91,13 +96,16 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
         return;
     }
     // Refusing the move is not the end of it. On the open path a RouteToDesktop
-    // rule emits this and places nothing, expecting the window to be
-    // re-announced when it lands. If the move never happens, nothing
-    // re-announces it and the window stays unplaced for the rest of the session.
-    // So each refusal below hands the window straight to the arrival restore
-    // instead, which places it on the desktop it is already on. The out-of-range
-    // case is the concrete one: a user who removed a virtual desktop has rules
-    // naming a desktop that no longer exists.
+    // rule emits this ahead of the same round trip's resolve, and the snap
+    // engine then pins the window's float residence to the ROUTED desktop
+    // (the placement it made for the window assumes the move happened). If
+    // the move never happens, the window sits on its spawn desktop with its
+    // state filed under another, so each refusal below hands it to the
+    // arrival restore instead, which re-drives the resolve for the desktop
+    // it is actually on (the re-drive returns at the engine's already-placed
+    // guards for a window whose residence is already right). The
+    // out-of-range case is the concrete one: a user who removed a virtual
+    // desktop has rules naming a desktop that no longer exists.
     const auto placeWhereItIs = [this, w]() {
         m_snapHandler->armDesktopArrivalRestore(getWindowId(w));
         m_snapHandler->slotDesktopChangedRestoreArrivals();
@@ -110,9 +118,7 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
     // value either — it is WindowPlacement::virtualDesktop's own sentinel for
     // "on all desktops / unknown". The in-tree emitters mostly gate on `> 0`
     // themselves, but this slot is the authoritative bound. Routed to the
-    // same recovery as the out-of-range arm: the daemon placed nothing and
-    // expects a re-announce, so a bare return strands the window unplaced
-    // for the session.
+    // same recovery as the out-of-range arm, for the reason given above.
     if (desktop < 1 || desktop > all.size()) {
         qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: desktop" << desktop << "out of range (have" << all.size()
                           << "desktops) — placing" << windowId << "where it is instead";
@@ -167,8 +173,92 @@ void PlasmaZonesEffect::slotWindowOutputMoveExpected(const QString& windowId, co
     }
     // Hand the one-shot to the autotile handler: it owns the cross-output
     // outputChanged transfer path that would otherwise re-issue close/open.
-    if (TilingHandler* handler = m_tilingHandler.get()) {
-        handler->markExpectedOutputMove(windowId, targetScreenId, sourceScreenId);
+    // The handler is constructed with the effect, like every other slot in
+    // this file assumes.
+    m_tilingHandler->markExpectedOutputMove(windowId, targetScreenId, sourceScreenId);
+}
+
+void PlasmaZonesEffect::applySizeOnlyRestore(KWin::EffectWindow* w, const QString& liveWindowId,
+                                             const QString& screenId, const QSize& size, bool freshOpen)
+{
+    // Integer-aligned like every other frame compare in this file: on a
+    // fractional output the qreal frame carries sub-pixel residue.
+    const QRect frameInt = w->frameGeometry().toRect();
+    // Which producer this is decides where the restored size lands, and it
+    // is read from the effect's own bookkeeping, not inferred from the
+    // suppression entry: paintWindow erases a past-deadline entry on the
+    // first paint that reaches the window, so a desktop-arrival re-drive
+    // raced its own first paint for the answer. The open-path producer
+    // (a first-placement resolve or a tiling announce in flight) keeps the
+    // CENTRE: KWin placed the larger, app-inherited size, and a fresh window
+    // whose top-left is kept ends up parked in the upper-left corner of the
+    // spot KWin chose for it. The drag-out unsnap keeps the top-left: the
+    // user just dropped the window there and the shrink must not walk it
+    // away from the pointer.
+    const bool openPath =
+        m_snapHandler->hasOpenResolveInFlight(liveWindowId) || m_tilingHandler->announceInFlight(liveWindowId);
+    QRect geo(frameInt.topLeft(), size);
+    if (openPath) {
+        geo.moveCenter(frameInt.center());
+        // Clamped into the work area of the output the daemon named (its
+        // authoritative answer), else the output under the window's centre;
+        // never KWin's own w->screen(), which can name the wrong one of two
+        // identical outputs (Discussion #724). A window placed against an
+        // edge does not recentre off-screen.
+        KWin::LogicalOutput* out = outputForScreenId(screenId);
+        if (!out) {
+            out = windowOutput(w);
+        }
+        QRect work;
+        if (out) {
+            work = KWin::effects->clientArea(KWin::MaximizeArea, out).toRect();
+        }
+        if (work.isValid()) {
+            geo.moveLeft(qMax(work.left(), qMin(geo.left(), work.right() - size.width() + 1)));
+            geo.moveTop(qMax(work.top(), qMin(geo.top(), work.bottom() - size.height() + 1)));
+        }
+    }
+    qCInfo(lcEffect) << "slotApplyGeometryRequested: size-only restore for" << liveWindowId << "requested" << size
+                     << "at" << geo.topLeft() << (openPath ? "(open path)" : "(drag-out)");
+    if (freshOpen && frameInt.size() == geo.size()) {
+        // Explicit, rather than applyWindowGeometry's own at-target bail:
+        // that bail releases the suppression, which the float signal that
+        // follows this apply, or the resolve reply, releases in order. (The
+        // hold matters on Wayland, where the configure is asynchronous; an
+        // XWayland moveResize settles synchronously inside the apply.)
+        qCDebug(lcEffect) << "slotApplyGeometryRequested: size-only restore already at size for" << liveWindowId;
+        return;
+    }
+    if (w->isMinimized()) {
+        // Same reason as the float-restore path: a moveResize while
+        // minimized poisons what KWin restores to on unminimize.
+        qCDebug(lcEffect) << "slotApplyGeometryRequested: size-only restore skipped, window minimized:" << liveWindowId;
+        return;
+    }
+    // A window that mapped maximized (or is going fullscreen) keeps its
+    // frame whatever size is asked; nothing on this path unmaximizes, unlike
+    // a zone commit's demote. The free size lands when the user restores it.
+    if (KWin::Window* kw = w->window();
+        kw && (kw->requestedMaximizeMode() != KWin::MaximizeRestore || kw->isRequestedFullScreen())) {
+        qCDebug(lcEffect) << "slotApplyGeometryRequested: size-only restore skipped, window maximized:" << liveWindowId;
+        return;
+    }
+    // Pre-seed the tracked screen from the daemon's authoritative answer, as
+    // the full-rect arm does: the configure's frame change is asynchronous
+    // and the bracket below covers only the synchronous one.
+    if (!screenId.isEmpty()) {
+        m_trackedScreenPerWindow[w] = screenId;
+        m_tilingHandler->updateNotifiedScreen(liveWindowId, screenId);
+    }
+    const auto applyGuard = geometryApplyScope();
+    applyWindowGeometry(w, geo, /*allowDuringDrag=*/false, /*skipAnimation=*/freshOpen,
+                        PhosphorAnimation::ProfilePaths::WindowPlaceOut);
+    // The entry may be past its deadline (a window parked off-desktop keeps
+    // its entry on purpose), and paintWindow erases such an entry on the next
+    // paint: re-arm so the teleport just stamped is held to its settle, not
+    // painted at the spawn frame until the client acks.
+    if (freshOpen) {
+        refreshRestoreSuppressionDeadline(w);
     }
 }
 
@@ -199,7 +289,14 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
         return;
     }
 
-    KWin::EffectWindow* w = findWindowById(windowId);
+    // A size-only apply names ONE window the daemon resolved moments ago, so
+    // it resolves by instance (exact id, else the same instance under a
+    // drifted prefix; the tiling engines address windows by the daemon's
+    // canonical composite) and never by the app-id fallback: a miss means
+    // the window closed inside the round trip, and the fallback would land
+    // the resize, and the clearWindowSnapped below, on the sole surviving
+    // same-app sibling, which may be the snapped first instance.
+    KWin::EffectWindow* w = sizeOnly ? findWindowByInstanceId(windowId) : findWindowById(windowId);
     if (!w) {
         qCDebug(lcEffect) << "slotApplyGeometryRequested: window not found" << windowId;
         return;
@@ -212,6 +309,13 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // entry and a permanently hidden title bar. Every other commit path
     // (batch, drag, snap assist) already keys by the live id.
     const QString liveWindowId = getWindowId(w);
+    // An open-path apply arrives under first-frame suppression, before the
+    // window has painted, so it is a teleport: an animated move would play
+    // over the open shader from a spot the user never saw. An apply that
+    // lands after the suppression was released (deadline expired, or a late
+    // reclaim-declined float default) animates instead, which is right for
+    // a window already visible.
+    const bool freshOpen = m_restoreSuppress.contains(w);
 
     // Size-only restore: the daemon sets sizeOnly=true to restore a window's
     // free width/height while keeping it where it stands. Two producers: the
@@ -220,77 +324,8 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // the open-path free-size restore (a window left floating that inherited
     // a snapped sibling's zone size from its app config, #1106).
     if (sizeOnly) {
-        // Exact id only, no appId fuzzy fallback: both producers name a window
-        // the daemon resolved moments ago under its live id, so a miss means
-        // it closed inside the round-trip. The fuzzy fallback would then land
-        // the resize, and the clearWindowSnapped below, on the sole surviving
-        // same-app sibling, which may be the snapped first instance. `w` is
-        // the fuzzy result, which tries exact first, so it IS the exact target
-        // whenever one exists.
-        if (w != findWindowByIdExact(windowId)) {
-            qCDebug(lcEffect) << "slotApplyGeometryRequested: size-only target gone" << windowId;
-            return;
-        }
         if (width > 0 && height > 0) {
-            // Integer-aligned like every other frame compare in this file: on
-            // a fractional output the qreal frame carries sub-pixel residue.
-            const QRect frameInt = w->frameGeometry().toRect();
-            // The open-path producer arrives under first-frame suppression,
-            // before the window has painted, so it is applied as a teleport:
-            // an animated shrink would play over the open shader from a size
-            // the user never saw. A stale suppression entry counts too: an
-            // entry for a window parked off-desktop outlives its deadline on
-            // purpose, and a size restore reaching such a window (the
-            // desktop-arrival re-drive) still precedes its first paint. A
-            // size restore that lands after the suppression was released
-            // (deadline expired, or a late reclaim-declined float default)
-            // animates instead, which is right for a window already visible.
-            const bool freshOpen = m_restoreSuppress.contains(w);
-            // Where the restored size lands depends on the producer. The
-            // drag-out unsnap keeps the top-left: the user just dropped the
-            // window there and the shrink must not walk it away from the
-            // pointer. The open-path producer keeps the CENTRE instead: KWin
-            // placed the larger, app-inherited size, and a fresh window whose
-            // top-left is kept ends up parked in the upper-left corner of the
-            // spot KWin chose for it. Clamped into the output's work area so a
-            // window placed against an edge does not recentre off-screen.
-            QRect sizeOnlyGeo(frameInt.topLeft(), QSize(width, height));
-            if (freshOpen) {
-                sizeOnlyGeo.moveCenter(frameInt.center());
-                const QRect work = KWin::effects->clientArea(KWin::MaximizeArea, w).toRect();
-                if (work.isValid()) {
-                    sizeOnlyGeo.moveLeft(qMax(work.left(), qMin(sizeOnlyGeo.left(), work.right() - width + 1)));
-                    sizeOnlyGeo.moveTop(qMax(work.top(), qMin(sizeOnlyGeo.top(), work.bottom() - height + 1)));
-                }
-            }
-            qCInfo(lcEffect) << "slotApplyGeometryRequested: size-only restore for" << liveWindowId << width << "x"
-                             << height << "at" << sizeOnlyGeo.topLeft();
-            if (freshOpen && frameInt.size() == sizeOnlyGeo.size()) {
-                // Explicit, rather than applyWindowGeometry's own at-target
-                // bail: that bail releases the suppression, and a fresh window
-                // already at size must stay suppressed until its resolve
-                // reply settles it, or it paints before the reply's own
-                // placement decision lands.
-                qCDebug(lcEffect) << "slotApplyGeometryRequested: size-only restore already at size for"
-                                  << liveWindowId;
-            } else if (w->isMinimized()) {
-                // Same reason as the float-restore path below: a moveResize
-                // while minimized poisons what KWin restores to on unminimize.
-                qCDebug(lcEffect) << "slotApplyGeometryRequested: size-only restore skipped, window minimized:"
-                                  << liveWindowId;
-            } else {
-                // Save/restore, not set/clear (nesting-safe): the same bracket
-                // the other applies in this slot carry, so the synchronous
-                // outputChanged / VS-crossing handlers an XWayland moveResize
-                // fires read this as a daemon-driven apply.
-                const bool prevInApply = m_daemonGate.inGeometryApply;
-                m_daemonGate.inGeometryApply = true;
-                const auto applyGuard = qScopeGuard([this, prevInApply] {
-                    m_daemonGate.inGeometryApply = prevInApply;
-                });
-                applyWindowGeometry(w, sizeOnlyGeo, /*allowDuringDrag=*/false, /*skipAnimation=*/freshOpen,
-                                    PhosphorAnimation::ProfilePaths::WindowPlaceOut);
-            }
+            applySizeOnlyRestore(w, liveWindowId, screenId, QSize(width, height), freshOpen);
             // Either way the window is not zone-sized: the drag-out producer
             // left zone-managed sizing, the open-path one never had it (a
             // no-op there beyond one decoration re-resolve).
@@ -393,13 +428,13 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
         if (demoteForSnap) {
             m_tilingHandler->demoteMaximizeForSnapPlacement(w, geometry);
         }
-        // Save/restore, not set/clear (nesting-safe).
-        const bool prevInApply = m_daemonGate.inGeometryApply;
-        m_daemonGate.inGeometryApply = true;
-        const auto applyGuard = qScopeGuard([this, prevInApply] {
-            m_daemonGate.inGeometryApply = prevInApply;
-        });
-        applyWindowGeometry(w, geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
+        const auto applyGuard = geometryApplyScope();
+        // A float-position restore on a fresh open teleports like the
+        // size-only twin and the zone commits do: a glide from the spawn
+        // rect is the "KDE opened it, then we moved it" read the suppression
+        // exists to hide. A zone commit keeps its morph (not an open-path
+        // producer on this slot).
+        applyWindowGeometry(w, geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/zoneId.isEmpty() && freshOpen,
                             zoneId.isEmpty() ? PhosphorAnimation::ProfilePaths::WindowPlaceOut
                                              : PhosphorAnimation::ProfilePaths::WindowPlaceIn,
                             QRectF(), QRectF(), /*demoteMaximizeOnDeferredReplay=*/demoteForSnap);
@@ -598,12 +633,7 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
                 m_trackedScreenPerWindow[p.window] = p.screenId;
                 m_tilingHandler->updateNotifiedScreen(getWindowId(p.window), p.screenId);
             }
-            // Save/restore, not set/clear (nesting-safe).
-            const bool prevInApply = m_daemonGate.inGeometryApply;
-            m_daemonGate.inGeometryApply = true;
-            const auto guard = qScopeGuard([this, prevInApply] {
-                m_daemonGate.inGeometryApply = prevInApply;
-            });
+            const auto guard = geometryApplyScope();
             // Minimized guard for float/restore entries (empty screenId), the
             // batch twin of slotApplyGeometryRequested's check: applying the
             // pre-tile geometry while minimized would poison what KWin
@@ -783,6 +813,18 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // with an empty zone. Idempotent when the window wasn't snap-tracked.
         m_snapHandler->clearWindowSnapped(liveWindowId);
         m_tilingHandler->applyPassiveFloatShed(liveWindowId);
+        // A float verdict at open is the placement: nothing else will move
+        // the window. Every engine emits its geometry or size restore BEFORE
+        // this signal, so an entry with no stamped target has no reposition
+        // coming and is released now rather than at the 250 ms deadline (a
+        // tiling-screen open has no resolve miss to release it). A stamped
+        // target is left to the settle hook.
+        if (liveForOwner && !liveForOwner->isDeleted()) {
+            if (const auto sup = m_restoreSuppress.constFind(liveForOwner);
+                sup != m_restoreSuppress.constEnd() && !sup->targetGeometry.isValid()) {
+                endRestoreSuppression(liveForOwner);
+            }
+        }
     }
     // When a window is unfloated (tiled/snapped), clear the drag-float skip flag.
     // Without this, a subsequent float toggle's geometry restore would be skipped

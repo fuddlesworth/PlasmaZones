@@ -629,6 +629,11 @@ struct RestoreSuppression
     /// unreachable) suppression is released unconditionally here so a
     /// window can never be lost behind a stuck suppression.
     qint64 deadlineMs = 0;
+    /// A resolve miss already re-armed the deadline once for a stamped
+    /// reposition still in flight (releaseRestoreSuppressionOnMiss). The
+    /// next miss releases: a client that never acks the configure (a
+    /// fixed-size toplevel) is held one extra deadline, not one per retry.
+    bool missRearmed = false;
 };
 
 } // namespace PlasmaZones

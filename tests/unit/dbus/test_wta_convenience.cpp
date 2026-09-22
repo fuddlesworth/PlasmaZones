@@ -146,6 +146,25 @@ private Q_SLOTS:
     // float-restore — close-while-floating → reopen-floating (unified store)
     // =====================================================================
 
+    // An engine's size-only restore (#1106) reaches the wire as a size-only
+    // applyGeometryRequested: zero origin, the size, no zone, the screen,
+    // and the sizeOnly flag the effect keys its teleport on.
+    void testSizeRestore_relayedAsSizeOnlyApply()
+    {
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        Q_EMIT m_snapEngine->sizeRestoreRequested(QStringLiteral("app|w"), QSize(640, 480), m_screenId);
+        QCOMPARE(spy.count(), 1);
+        const QList<QVariant> args = spy.takeFirst();
+        QCOMPARE(args.at(0).toString(), QStringLiteral("app|w"));
+        QCOMPARE(args.at(1).toInt(), 0);
+        QCOMPARE(args.at(2).toInt(), 0);
+        QCOMPARE(args.at(3).toInt(), 640);
+        QCOMPARE(args.at(4).toInt(), 480);
+        QVERIFY(args.at(5).toString().isEmpty());
+        QCOMPARE(args.at(6).toString(), m_screenId);
+        QVERIFY(args.at(7).toBool());
+    }
+
     void testFloatRestore_closeWhileFloating_reopensFloatingAtGeometry()
     {
         // End-to-end: a snapped window is floated (and moved), then closed while

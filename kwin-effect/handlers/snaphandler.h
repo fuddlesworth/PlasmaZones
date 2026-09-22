@@ -37,9 +37,9 @@ namespace TilingStateHelpers = PhosphorCompositor::TilingStateHelpers;
 class PlasmaZonesEffect;
 
 /// Pre-computed snap restore target for a pending app (appId → geometry + saved
-/// screen). Fetched once from the daemon on ready; consumed single-shot in
-/// PlasmaZonesEffect::slotWindowAdded for instant teleport (no D-Bus round-trip
-/// visible flash). The screenId lets the effect tell "cached saved zone is on
+/// screen). Fetched once from the daemon on ready; consumed single-shot by the
+/// deferred-route dispatch (PlasmaZonesEffect::tryInstantSnapRestore) for instant
+/// teleport (no D-Bus round-trip visible flash). The screenId lets the effect tell "cached saved zone is on
 /// snap-mode screen X" from "current KWin placement is autotile screen Y" — we
 /// trust the saved screen, not the placement, so cross-VS / cross-monitor
 /// restores work.
@@ -102,7 +102,10 @@ public:
 
     // ── Snap restore cache (instant snap-restore-on-open latency cache) ──
     // Populated from the daemon's pending restores on daemon-ready; consumed
-    // single-shot in PlasmaZonesEffect::slotWindowAdded for flash-free teleport.
+    // single-shot by tryInstantSnapRestore for flash-free teleport, and
+    // dropped for an app whenever a zone restore applies (markWindowSnapped):
+    // the record it was built from is then bound to a live window, and a
+    // later same-app open would otherwise teleport into that window's zone.
     void clearRestoreCache()
     {
         m_restoreCache.clear();
@@ -256,6 +259,14 @@ public:
     {
         return m_unfloatInFlight.contains(windowId);
     }
+    /// A first-placement resolve (open, pending sweep or desktop arrival) is
+    /// in flight for the window. The size-only apply reads this to tell the
+    /// open-path free-size restore, which recentres, from the drag-out
+    /// unsnap, which keeps the top-left; the two ride one signal.
+    bool hasOpenResolveInFlight(const QString& windowId) const
+    {
+        return m_openResolveInFlight.contains(windowId);
+    }
 
     /// Cancel a pending deferred unminimize→unfloat commit. No-op if no timer
     /// is pending for the window. Called from the minimize edge (a re-minimize
@@ -392,6 +403,10 @@ private:
     // restore continually and drag each floated window back to its recorded
     // position, undoing any move the user had made since.
     QSet<QString> m_awaitingDesktopArrivalRestore;
+    // Windows whose first-placement resolve has been dispatched and not yet
+    // answered (see hasOpenResolveInFlight). Erased by every reply arm, on
+    // close, and on daemon loss.
+    QSet<QString> m_openResolveInFlight;
     // Pending debounced minimize→float commits. Shares the compositor's
     // spurious minimize-pair window with the shader and autotile paths.
     DeferredWindowCommits m_pendingMinimizeFloat{this};

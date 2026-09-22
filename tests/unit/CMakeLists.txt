@@ -57,6 +57,7 @@ p_add_test(test_window_placement_store_desktops core/windowtracking/test_window_
 # release and re-key rules (#1106); its own suite for the same reason as the
 # desktops suite above.
 p_add_test(test_window_placement_store_siblings core/windowtracking/test_window_placement_store_siblings.cpp)
+target_link_libraries(test_window_placement_store_siblings PRIVATE PhosphorEngine PhosphorIdentity::PhosphorIdentity)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Session Persistence Tests
@@ -115,7 +116,9 @@ target_link_libraries(test_wts_crossmode_float PRIVATE Qt6::Test Qt6::Core Qt6::
 add_test(NAME test_wts_crossmode_float COMMAND test_wts_crossmode_float)
 
 add_executable(test_wts_registry_integration core/windowtracking/test_wts_registry_integration.cpp)
-target_link_libraries(test_wts_registry_integration PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+# Qt6::Gui explicitly: the instant-restore cache case asserts a resolved zone
+# rect, which needs QTEST_MAIN to expand to QGuiApplication (primaryScreen).
+target_link_libraries(test_wts_registry_integration PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::DBus plasmazones_core)
 add_test(NAME test_wts_registry_integration COMMAND test_wts_registry_integration)
 
 # DirtyMask invariants for delta-persistence (Phase 3 of refactor/dbus-performance).
@@ -157,7 +160,9 @@ add_test(NAME test_snap_restore_layout_context COMMAND test_snap_restore_layout_
 add_executable(test_snap_engine_free_size core/snap/test_snap_engine_free_size.cpp helpers/SnapEngineTestFixture.h
                ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
 target_include_directories(test_snap_engine_free_size PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
-target_link_libraries(test_snap_engine_free_size PRIVATE Qt6::Test Qt6::Core Qt6::DBus Qt6::Gui plasmazones_core)
+target_link_libraries(test_snap_engine_free_size PRIVATE Qt6::Test Qt6::Core Qt6::DBus Qt6::Gui plasmazones_core
+                                                         PhosphorSnapEngine::PhosphorSnapEngine
+                                                         PhosphorPlacement::PhosphorPlacement)
 add_test(NAME test_snap_engine_free_size COMMAND test_snap_engine_free_size)
 
 # Exclusion half of the SnapEngine suite (exclude wiring, size exclusion,
@@ -195,7 +200,12 @@ add_test(NAME test_snap_unfloat_fallback COMMAND test_snap_unfloat_fallback)
 # core/ - PlacementEngineBase Tests (LGPL shared engine base: settings injection + base prune)
 # ═══════════════════════════════════════════════════════════════════════════════
 add_executable(test_placement_engine_base core/test_placement_engine_base.cpp)
-target_link_libraries(test_placement_engine_base PRIVATE Qt6::Test Qt6::Core PhosphorEngine)
+# The scroll engine's tracker stub (header-only over PhosphorEngine) drives the
+# shared free-size restore without any engine fixture; PhosphorIdentity for the
+# builders' probe helper.
+target_include_directories(test_placement_engine_base PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-scroll-engine/tests)
+target_link_libraries(test_placement_engine_base PRIVATE Qt6::Test Qt6::Core PhosphorEngine
+                                                         PhosphorIdentity::PhosphorIdentity)
 add_test(NAME test_placement_engine_base COMMAND test_placement_engine_base)
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -344,6 +354,10 @@ target_compile_definitions(test_autotile_virtual PRIVATE "P_SOURCE_DIR=\"${PROJE
 #             script-state stash, overflow)
 # ═══════════════════════════════════════════════════════════════════════════════
 p_add_test(test_autotile_ext_startup_float autotile/behavior/test_autotile_ext_startup_float.cpp)
+# Names the libraries whose types it constructs (engine, service, registry).
+target_link_libraries(test_autotile_ext_startup_float PRIVATE PhosphorTileEngine::PhosphorTileEngine
+                                                              PhosphorPlacement::PhosphorPlacement
+                                                              PhosphorZones::PhosphorZones)
 p_add_test(test_autotile_ext_algoswitch autotile/behavior/test_autotile_ext_algoswitch.cpp)
 target_compile_definitions(test_autotile_ext_algoswitch PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 p_add_test(test_autotile_script_state_stash autotile/state/test_autotile_script_state_stash.cpp)
@@ -1908,8 +1922,9 @@ add_test(NAME test_animations_stale_params COMMAND test_animations_stale_params)
 # plasmazones_core); the split _paths / _browser / _sets TUs carry
 # parentChain(), the shader-browser bridge and the set-store wiring.
 #
-# One source list, shared by the page-controller test and the decoration-set
-# test below, so a new controller TU can't silently miss one of the two.
+# One source list, shared by the three decoration consumers below (page
+# controller, sets, sets validation), so a new controller TU can't silently
+# miss one of them.
 set(_decoration_ctrl_SRCS
     ${CMAKE_SOURCE_DIR}/src/settings/pages/decorationpagecontroller.cpp
     # The page controller constructs one of these in its ctor, so every TU that
@@ -1960,8 +1975,9 @@ target_link_libraries(test_decorationpagecontroller
 target_compile_definitions(test_decorationpagecontroller PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_decorationpagecontroller COMMAND test_decorationpagecontroller)
 
-# One source list, shared by the overlay controller test and the QML-contract
-# test below, so a new controller TU can't silently miss one of the two.
+# One source list, shared by the three overlay consumers below (page
+# controller, QML contracts, sets), so a new controller TU can't silently
+# miss one of them.
 set(_overlays_ctrl_SRCS
     ${CMAKE_SOURCE_DIR}/src/settings/pages/overlayspagecontroller.cpp
     # The ctor builds the set store, so every TU linking the controller needs

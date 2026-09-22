@@ -505,6 +505,14 @@ void TilingAdaptor::dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowO
     for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
         if (engine->isActiveOnScreen(entry.screenId)) {
             removeUnclaimedOpen(entry.windowId);
+            if (allowCrossScreenClaim) {
+                // Every claim above declined (a float rule, a context
+                // mismatch, an absent home screen). The arrival engine's own
+                // defer gate would otherwise stand down for the very record
+                // the claims just refused, and the window would end the open
+                // held by no engine.
+                engine->noteCrossScreenClaimsExhausted(entry.windowId);
+            }
             engine->windowOpened(entry.windowId, entry.screenId, qMax(0, entry.minWidth), qMax(0, entry.minHeight));
             return;
         }

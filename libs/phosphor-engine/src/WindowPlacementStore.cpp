@@ -206,6 +206,13 @@ void WindowPlacementStore::evictForCapacity(QList<WindowPlacement>& bucket)
             }
         }
         const int idx = victim >= 0 ? victim : 0;
+        if (victim < 0) {
+            // Every record in the bucket is restorable and live: the head
+            // goes, and its window keeps no float-back. Loud, because the
+            // window is still open and nothing else will explain the loss.
+            qCWarning(lcPlacementStore) << "evictForCapacity: bucket full of live records, evicting"
+                                        << bucket.at(idx).windowId << "which is still open";
+        }
         // Drop any open claim naming the record about to go, or the instance
         // that claimed it becomes unpairable and restores nothing.
         dropClaimsNaming(bucket.at(idx).windowId);
@@ -472,9 +479,11 @@ WindowPlacementStore::peekLiveSibling(const QString& windowId, const QString& ap
     if (bucket == m_byApp.constEnd()) {
         return std::nullopt;
     }
-    // Bucket order is first-recorded order (record() updates in place and
-    // appends only the new), so the first hit is the earliest-recorded live
-    // sibling — see the header for why that beats the newest.
+    // Bucket order is the tie-break the header describes: first-recorded
+    // mid-session (record() updates in place), the persisted order after a
+    // restart, and the tail for anything re-bound or re-bucketed since. The
+    // first hit is the positionally earliest live sibling; the accept
+    // predicate carries the real discrimination.
     for (const WindowPlacement& p : bucket.value()) {
         if (!boundToLiveOther(windowId, p)) {
             continue;

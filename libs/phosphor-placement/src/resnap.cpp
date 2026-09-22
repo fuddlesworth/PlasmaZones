@@ -155,8 +155,10 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
         // gate: a daemon restart keeps the compositor-issued window ids, so
         // the re-announced live windows match their records exactly. No
         // registry wired (test envs) keeps the historical permissive path.
-        if (m_windowRegistry
-            && !m_windowRegistry->metadata(PhosphorIdentity::WindowId::extractInstanceId(rec.windowId)).has_value())
+        // One spelling of liveness for the whole file: the store's probe is
+        // the registry lookup plus the bare-id refusal, and a bare id would
+        // otherwise read the whole string as an instance.
+        if (m_windowRegistry && !m_placementStore.isLiveInstance(rec.windowId))
             continue;
         const PhosphorEngine::EngineSlot snapSlot = rec.slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
         if (snapSlot.state != PhosphorEngine::WindowPlacement::stateSnapped())
@@ -309,20 +311,24 @@ QHash<QString, QRect> WindowTrackingService::updatedWindowGeometries() const
     return result;
 }
 
-QHash<QString, WindowTrackingService::PendingRestoreTarget> WindowTrackingService::pendingRestoreGeometries() const
+QHash<QString, QList<WindowTrackingService::PendingRestoreTarget>>
+WindowTrackingService::pendingRestoreGeometries() const
 {
-    QHash<QString, PendingRestoreTarget> result;
+    QHash<QString, QList<PendingRestoreTarget>> result;
 
     // Source the effect's instant-restore cache from the unified placement store:
-    // one snapped WindowPlacement per appId-keyed window, resolved to its zone
-    // geometry. The async resolveWindowRestore re-validates and corrects, so this
-    // is a best-effort anti-flash fast path (an invalid/stale zone resolves to an
-    // empty rect and is skipped). When an appId has several snapped records (multi
-    // instance), pick the lowest-sequence record (least-recently-recorded; sequence
-    // is re-stamped on every record()) deterministically so a repeated lookup is
-    // stable and matches the FIFO consumption order, rather than depending on
-    // unordered hash iteration.
-    QHash<QString, quint64> chosenSequence;
+    // every snapped WindowPlacement of a closed window, resolved to its zone
+    // geometry, grouped by appId. The async resolveWindowRestore re-validates and
+    // corrects, so this is a best-effort anti-flash fast path (an invalid/stale
+    // zone resolves to an empty rect and is skipped). Each app's list is ordered
+    // NEWEST record first, because that is the record the daemon hands the
+    // first opener: claimForOpen reserves the newest unclaimed record and the
+    // engine's take() then consumes exactly the claimed one, so a cache that
+    // teleported the first opener into the OLDEST record's zone was corrected
+    // a moment later by the resolve, the flash-then-move this cache exists to
+    // prevent. The effect keeps the whole list so a record it can see is
+    // still open (daemon-only restart, before re-announce) costs nothing.
+    QHash<QString, QList<quint64>> sequences;
     for (const PhosphorEngine::WindowPlacement& p : m_placementStore.records()) {
         const PhosphorEngine::EngineSlot snapSlot = p.slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
         if (snapSlot.state != PhosphorEngine::WindowPlacement::stateSnapped()) {
@@ -364,17 +370,29 @@ QHash<QString, WindowTrackingService::PendingRestoreTarget> WindowTrackingServic
             continue;
         }
 
-        // Keep only the lowest-sequence (least-recently-recorded) record per appId.
-        const auto seqIt = chosenSequence.constFind(p.appId);
-        if (seqIt != chosenSequence.constEnd() && seqIt.value() <= p.sequence) {
+        // The zone must belong to the layout the record's context currently
+        // runs, the same gate the async resolver applies (#1104): zoneGeometry
+        // finds a zone in ANY loaded layout, and a record naming a zone of a
+        // layout no longer assigned there teleported the window onto that
+        // ghost zone before the resolver moved it again.
+        if (!PhosphorZones::LayoutUtils::contextLayoutHoldsZones(m_layoutManager, screenId, p.virtualDesktop,
+                                                                 p.activity, zoneIds)) {
             continue;
         }
 
         const QRect geo = resolveZoneGeometry(zoneIds, screenId);
-        if (geo.isValid()) {
-            result.insert(p.appId, PendingRestoreTarget{geo, screenId, p.windowId});
-            chosenSequence.insert(p.appId, p.sequence);
+        if (!geo.isValid()) {
+            continue;
         }
+        // Insert in descending sequence order (newest first).
+        QList<PendingRestoreTarget>& targets = result[p.appId];
+        QList<quint64>& order = sequences[p.appId];
+        int at = 0;
+        while (at < order.size() && order.at(at) > p.sequence) {
+            ++at;
+        }
+        order.insert(at, p.sequence);
+        targets.insert(at, PendingRestoreTarget{geo, screenId, p.windowId});
     }
 
     return result;

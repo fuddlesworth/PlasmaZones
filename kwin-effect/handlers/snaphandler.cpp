@@ -67,6 +67,11 @@ void SnapHandler::markWindowSnapped(const QString& windowId, const QString& scre
         TilingStateHelpers::removeFromAllScreens(m_border, windowId);
         return;
     }
+    // The app's instant-restore entry was built from a record a zone restore
+    // has now bound to a live window (or a sibling's, which the async resolve
+    // still serves); left standing, the next same-app open teleported into
+    // this window's zone before the daemon refused the record.
+    m_restoreCache.remove(::PhosphorIdentity::WindowId::extractAppId(windowId));
     // A window can only be snap-managed by one screen at a time. Strip stale
     // tiled tracking from any OTHER screen before recording the new owner
     // (mirrors the autotile cross-screen-transfer cleanup in tiling.cpp).
@@ -166,6 +171,7 @@ void SnapHandler::clearSnapTracking()
     // stacking sweep re-announces every window anyway, which is the correct
     // retry for a window still waiting.
     m_awaitingDesktopArrivalRestore.clear();
+    m_openResolveInFlight.clear();
     m_border.tiledWindowsByScreen.clear();
 }
 
@@ -179,6 +185,7 @@ void SnapHandler::onWindowClosed(const QString& windowId)
     // A dead window's park would otherwise sit in the set until some later
     // desktop switch happened to notice its id has no live window.
     cancelDesktopArrivalRestore(windowId);
+    m_openResolveInFlight.remove(windowId);
 }
 
 void SnapHandler::setFocusFollowsMouse(bool enabled)
@@ -218,9 +225,10 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
     bool sticky = m_effect->isWindowSticky(window);
 
     // On a resolve miss (daemon found no zone) release first-frame
-    // suppression — unless the caller says another path will still
-    // reposition the window (autotile-screen path), in which case the
-    // suppression must hold until that reposition's geometry settles.
+    // suppression through the miss helper, which holds a window whose
+    // size-only reposition is still in flight — unless the caller says
+    // another path will still reposition the window (autotile-screen path),
+    // in which case the suppression must hold until that geometry settles.
     const auto releaseSuppression = [this, safeWindow, releaseSuppressionOnMiss]() {
         if (releaseSuppressionOnMiss) {
             if (safeWindow) {
@@ -235,33 +243,20 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
 
     // Single D-Bus call — daemon runs the full appRule → persisted → emptyZone → lastZone chain.
     //
-    // skipAnimation=true: teleport the window straight into the resolved
-    // zone. The animated morph path tweens the window from its spawn
-    // position, which both reads as "KDE opened the window, then we moved
-    // it" and collides with any in-flight surface-extent window.open
-    // shader (bounce / fly-in) — the morph translates the output-spanning
-    // shader quad. Placing the window directly lets the open shader play
-    // cleanly into the zone.
+    // skipAnimation=true: teleport straight into the resolved zone. The morph
+    // tweens from the spawn position, which reads as "KDE opened the window,
+    // then we moved it" and translates any in-flight window.open shader quad.
     //
-    // storePreSnap=false: the window is already at its snap/zone position (from before
-    // daemon restart or from KWin session restore), so its current frameGeometry is the
-    // zone geometry — NOT the free-floating geometry. Storing it as pre-tile would cause
-    // float toggle to restore to the zone geometry instead of the original free-floating position.
-    // Seed the daemon's frame-geometry shadow before the resolve below, but
-    // only on the open path. The daemon translates a bare RouteToScreen onto
-    // the target monitor from that shadow, and the shadow has exactly two
-    // writers (the debounced motion flush and the bring-up bulk seed), so a
-    // window that has never MOVED has no entry at all — which is precisely a
-    // freshly opened one. Without this the daemon reads an invalid rect and
-    // takes its "the rule owns this window, but there is nothing to
-    // translate" branch, leaving the window on its spawn monitor and
-    // suppressing the remembered-placement fallback too. Confirmed live in a
-    // nested session: the same rule routed an already-open window (shadow
-    // seeded by a daemon restart) and silently did nothing for a fresh one.
+    // storePreSnap=false: the window is already at its zone position (daemon
+    // restart or KWin session restore), so its frame is the zone geometry, not
+    // a free one; stored as pre-tile it would become the float-back.
     //
-    // Ordering is why this can be fire-and-forget: both calls ride the same
-    // D-Bus connection, and per-connection message order is preserved, so the
-    // daemon has applied this push before it handles the resolve.
+    // Seed the daemon's frame-geometry shadow before the resolve, open path
+    // only: the daemon translates a bare RouteToScreen from that shadow, whose
+    // only writers are the debounced motion flush and the bring-up bulk seed,
+    // so a freshly opened window has no entry and the rule silently did
+    // nothing for it (confirmed live). Fire-and-forget is safe because both
+    // calls ride one D-Bus connection, whose message order is preserved.
     if (isOpenPath) {
         const QRect openGeo = window->frameGeometry().toRect();
         if (openGeo.isValid()) {
@@ -275,17 +270,29 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
     // Thread the applied outcome to onComplete: onSnapSuccess fires only on
     // the zone-applied branch of tryAsyncSnapCall, and every branch calls
     // onComplete afterwards, so the flag is always settled when it runs.
+    // The completion is ALWAYS constructed, caller callback or not: it is
+    // also what retires the in-flight mark below, and every reply arm
+    // (applied, miss, error, window died) calls it.
+    const bool firstPlacement = isOpenPath || reason == PhosphorEngine::RestoreReason::PendingSweep
+        || reason == PhosphorEngine::RestoreReason::DesktopArrival;
+    if (firstPlacement) {
+        m_openResolveInFlight.insert(windowId);
+    }
     auto snapApplied = std::make_shared<bool>(false);
     std::function<void(const QString&, const QString&)> markApplied;
-    std::function<void()> completeWithOutcome;
     if (onComplete) {
         markApplied = [snapApplied](const QString&, const QString&) {
             *snapApplied = true;
         };
-        completeWithOutcome = [onComplete, snapApplied]() {
-            onComplete(*snapApplied);
-        };
     }
+    const std::function<void()> completeWithOutcome = [this, windowId, onComplete, snapApplied, firstPlacement]() {
+        if (firstPlacement) {
+            m_openResolveInFlight.remove(windowId);
+        }
+        if (onComplete) {
+            onComplete(*snapApplied);
+        }
+    };
     // Client-declared minimum, the same value the tiling channel sends: on a
     // cross-screen reclaim the adopting engine evaluates its oversized/float
     // verdict once from this, and 0,0 left an oversized window tiled.
@@ -1049,12 +1056,7 @@ void SnapHandler::slotMoveSpecificWindowToZoneRequested(const QString& windowId,
     // fighting the rect on managed screens — the defect it exists to fix.
     m_effect->m_tilingHandler->demoteMaximizeForSnapPlacement(targetWindow, geometry);
     {
-        // Save/restore, not set/clear (nesting-safe).
-        const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
-        m_effect->m_daemonGate.inGeometryApply = true;
-        const auto applyGuard = qScopeGuard([this, prevInApply] {
-            m_effect->m_daemonGate.inGeometryApply = prevInApply;
-        });
+        const auto applyGuard = m_effect->geometryApplyScope();
         m_effect->applyWindowGeometry(targetWindow, geometry, false, false,
                                       PhosphorAnimation::ProfilePaths::WindowPlaceIn, QRectF(), QRectF(),
                                       /*demoteMaximizeOnDeferredReplay=*/true);
@@ -1111,11 +1113,9 @@ void SnapHandler::slotSnapAllWindowsRequested(const QString& screenId)
 
         QDBusPendingReply<QStringList> snapReply = *sw;
         QSet<QString> snappedFullIds;
-        QSet<QString> snappedAppIds;
         if (snapReply.isValid()) {
             for (const QString& id : snapReply.value()) {
                 snappedFullIds.insert(id);
-                snappedAppIds.insert(::PhosphorIdentity::WindowId::extractAppId(id));
             }
         }
 
@@ -1149,14 +1149,14 @@ void SnapHandler::slotSnapAllWindowsRequested(const QString& screenId)
                 continue;
             }
 
-            // Full ID match first (distinguishes multi-instance apps),
-            // appId fallback for single-instance apps
+            // Full id match only. The daemon tracks a live window by the id
+            // the effect announced it with, so a snapped window's id is
+            // always in the set; an app-id match would only ever name a
+            // DIFFERENT window (a same-app sibling, or a stale persisted
+            // assignment), and skipping this one for that left the second
+            // window of a snapped app out of every snap-all.
             if (snappedFullIds.contains(windowId)) {
                 qCDebug(lcEffect) << "snap-all: skipping already-snapped window" << appId;
-                continue;
-            }
-            if (!m_effect->hasOtherWindowOfClassWithDifferentPid(w) && snappedAppIds.contains(appId)) {
-                qCDebug(lcEffect) << "snap-all: skipping already-snapped window (appId match)" << appId;
                 continue;
             }
 

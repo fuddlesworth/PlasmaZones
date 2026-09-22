@@ -211,37 +211,53 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         svc->placementStore().claimForOpen(windowId, svc->currentAppIdFor(windowId));
     }
 
-    // Engine-neutral RouteToDesktop runs first and unconditionally — a window can
-    // be routed to a desktop whether or not it snaps (and even when it doesn't
-    // match a SnapToZone rule at all), so it must not sit behind the shouldSnap
-    // early-return below.
-    m_adaptor->applyOpenDesktopRouting(windowId, screenId);
+    // Engine-neutral RouteToDesktop runs first — a window can be routed to a
+    // desktop whether or not it snaps (and even when it doesn't match a
+    // SnapToZone rule at all), so it must not sit behind the shouldSnap
+    // early-return below. First placements only, the same set that claims:
+    // the sweeps and the unminimize re-drive act on a window the user may
+    // have moved to another desktop since, and routing it again yanks it
+    // back at every daemon restart; the desktop-arrival re-drive IS the
+    // landing of a move already made. (The tiling dispatch routes once per
+    // open for the same reason.)
+    const bool firstPlacement = isOpen || reason == PhosphorEngine::RestoreReason::PendingSweep;
+    if (firstPlacement) {
+        m_adaptor->applyOpenDesktopRouting(windowId, screenId);
+    }
 
     const PhosphorEngine::WindowKind kind = PhosphorEngine::clampWindowKindFromWire(windowKind);
     SnapResult result = m_engine->resolveWindowRestore(windowId, screenId, sticky, kind, reason);
 
     // Per-open reclaim-credit burn, the snap-screen half of the partition
     // (WindowPlacementStore::burnReclaimCredit documents the tiling half —
-    // takeForReopen, which snap never calls). Runs for genuine OPENS on
+    // takeForReopen, which snap never calls). Runs for first placements on
     // SNAP-mode screens only: tiling-screen arrivals burn through their
     // engine's own open path, and the re-resolve drivers of this slot
-    // (unminimize, the sweeps, the desktop-arrival re-drive) must retire
-    // nothing. Skipped when a tiling claim adopts the window below — the
-    // adopted windowOpened's takeForReopen is that open's burn.
+    // (unminimize, the restart sweep, the desktop-arrival re-drive) must
+    // retire nothing. The pending sweep counts as a first placement here for
+    // the reason the claim above gives: an open the readiness gate refused
+    // is performed by the sweep, and a missed burn there left the newest
+    // sibling's credit standing to teleport a later same-app open. Skipped
+    // when a tiling claim adopts the window below — the adopted
+    // windowOpened's takeForReopen is that open's burn — and when the open
+    // pass deferred to a tiling engine whose claim DECLINED: the burn and
+    // the reclaim pick the same newest eligible record, so burning on the
+    // open pass retired the very record the desktop-arrival reclaim needs.
+    // A missed burn fails safe (the close-time revoke takes the credit).
     //
     // WHY DesktopArrival DOES NOT BURN. burnReclaimCredit is not idempotent:
     // each call retires the newest eligible SIBLING's credit, so two calls
     // for one logical open spend two siblings' credits and strand a window
-    // that has not reopened yet. This slot now always reaches the burn on
-    // the open pass — a window a RouteToDesktop rule sends to another
-    // desktop is parked by the effect and re-enters here with
+    // that has not reopened yet. A window a RouteToDesktop rule sends to
+    // another desktop is parked by the effect and re-enters here with
     // DesktopArrival, which would be that second call. The arrival is the
     // continuation of an open that already burned, never an open of its own.
     // The other producer, the move-to-desktop shortcut, acts on an
     // already-open window and must retire nothing either.
     bool reclaimedByTiling = false;
+    bool creditLeftForArrival = false;
     const auto burnOpenCredit = [&]() {
-        if (!isOpen || reclaimedByTiling || !m_engine->isSnapModeScreen(screenId)) {
+        if (!firstPlacement || reclaimedByTiling || creditLeftForArrival || !m_engine->isSnapModeScreen(screenId)) {
             return;
         }
         const QString appId = svc->currentAppIdFor(windowId);
@@ -259,7 +275,12 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         // the cross-screen reclaim below (it applies the final geometry). A
         // route WITH SnapToZone moved+snapped on the target via the placement
         // directive and never reaches here.
-        const bool routed = m_adaptor->applyOpenScreenRouting(windowId, screenId);
+        // Gated like the desktop route above, plus the desktop-arrival
+        // continuation: a re-drive of a visible window (the sweeps, an
+        // unminimize) must not pull a window the user dragged to another
+        // monitor back to its rule's.
+        const bool routed = (firstPlacement || reason == PhosphorEngine::RestoreReason::DesktopArrival)
+            && m_adaptor->applyOpenScreenRouting(windowId, screenId);
         // Cross-screen tiling-engine reclaim — gated on the ENGINE's explicit
         // defer verdict, never on a bare no-snap: an exclusion refusal, a
         // disabled context, or an ordinary no-match must not hand the window
@@ -308,7 +329,10 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
                 // defer): the engine's defer skipped its float terminal on
                 // the promise someone would manage the window, so restore
                 // the no-match float default rather than leaving it with no
-                // state in any engine.
+                // state in any engine. The record that earned the defer is
+                // left with its credit, so a desktop-arrival continuation
+                // can still reclaim it (see burnOpenCredit).
+                creditLeftForArrival = true;
                 m_engine->applyNoMatchFloatDefault(windowId, screenId, reason);
             }
         }

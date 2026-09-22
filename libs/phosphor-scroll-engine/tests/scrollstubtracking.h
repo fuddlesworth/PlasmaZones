@@ -30,6 +30,7 @@
 #include <QUuid>
 #include <QVector>
 
+#include <functional>
 #include <optional>
 
 namespace ScrollTestUtils {
@@ -60,6 +61,13 @@ public:
     PhosphorScreens::ScreenManager* screenManager() const override
     {
         return nullptr;
+    }
+    /// Test knob for the free-size clamp: invalid (the default) means no
+    /// clamp, the way a null ScreenManager answers in production.
+    QRect availableGeometry;
+    QRect screenAvailableGeometry(const QString&) const override
+    {
+        return availableGeometry;
     }
 
     void assignWindowToZone(const QString&, const QString&, const QString&, int) override
@@ -159,11 +167,12 @@ public:
         return sep > 0 ? anyWindowId.left(sep) : QString();
     }
     /// Stub: the fake has no screen manager, so it fails OPEN exactly as the
-    /// real service does in that case. Tests that need the refusal drive it
-    /// through a FakeScreenProvider-backed service instead.
-    bool geometryBelongsToScreen(const QRect&, const QString&) const override
+    /// real service does in that case, unless a test installs a predicate to
+    /// drive the refusal (the free-size restore's screen-local rule).
+    std::function<bool(const QRect&, const QString&)> belongsToScreen;
+    bool geometryBelongsToScreen(const QRect& rect, const QString& screenId) const override
     {
-        return true;
+        return !belongsToScreen || belongsToScreen(rect, screenId);
     }
     std::optional<QRect> validatedUnmanagedGeometry(const QString&, const QString&) const override
     {

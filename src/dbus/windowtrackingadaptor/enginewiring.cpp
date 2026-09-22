@@ -45,13 +45,13 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                                        PhosphorEngine::PlacementEngineBase* autotileEngine,
                                        PhosphorEngine::PlacementEngineBase* scrollEngine)
 {
-    // Disconnect previous autotile engine nav feedback (its other six
+    // Disconnect previous autotile engine nav feedback (its other seven
     // signals get their own targeted disconnect blocks below)
     if (m_autotileEngine) {
         disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::navigationFeedback, this, nullptr);
     }
     // The scroll engine gets the same generic base-signal wiring as the
-    // other two below; drop the SAME seven signals, targeted — a blanket
+    // other two below; drop the SAME eight signals, targeted — a blanket
     // disconnect(engine, nullptr, this, nullptr) would also sever
     // connections OTHER classes made with this adaptor as receiver context
     // (concretely the composition root's placementChanged→markDirty
@@ -456,6 +456,14 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         if (!geometry.isValid()) {
             return;
         }
+        // The RouteToScreen translation that can follow inside this same
+        // resolve reads the window's frame NEXT, and the effect's own flush
+        // of the applied frame arrives only after the configure lands.
+        // Remembered beside the shadow rather than written into it: the
+        // shadow is the effect's account of where the window IS, and a
+        // client that refuses the apply would otherwise leave a fabricated
+        // rect there for the next placement capture to persist.
+        m_pendingOpenGeometry.insert(shadowWindowId(windowId), geometry);
         Q_EMIT applyGeometryRequested(windowId, geometry.x(), geometry.y(), geometry.width(), geometry.height(),
                                       QString(), screenId, false);
     };
@@ -471,20 +479,14 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         if (size.isEmpty()) {
             return;
         }
-        // The frame shadow is the effect's, but it is what the open-time
-        // RouteToScreen translation reads NEXT, inside this same resolve, and
-        // the effect's own flush of the resized frame arrives only after the
-        // configure lands. Left alone, a routed window carried the un-restored
-        // managed size onto its target monitor. Only the size is what this
-        // relay restored; the position is the effect's to decide (it keeps the
-        // top-left for a drag-out and recentres a fresh open), and its own
-        // flush of the applied frame refreshes the shadow's origin. A client that
-        // refuses the resize leaves the shadow at the requested size until
-        // its next real move, which is the free size the window is meant to
-        // have anyway.
-        if (const auto shadow = m_frameGeometry.find(shadowWindowId(windowId)); shadow != m_frameGeometry.end()) {
-            shadow->setSize(size);
-        }
+        // Same reasoning as the float relay above: the open-time RouteToScreen
+        // translation reads the frame NEXT, and without this a routed window
+        // carried the un-restored managed size onto its target monitor. Only
+        // the size is what this relay restored; the position is the effect's
+        // to decide (it keeps the top-left for a drag-out and recentres a
+        // fresh open), so only the size is remembered, and the shadow itself
+        // stays what the effect last reported.
+        m_pendingOpenSize.insert(shadowWindowId(windowId), size);
         Q_EMIT applyGeometryRequested(windowId, 0, 0, size.width(), size.height(), QString(), screenId, true);
     };
     if (m_snapEngine) {
@@ -584,7 +586,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         } else {
             // A non-ScrollEngine in the scroll slot leaves m_cachedScrollEngine
             // null, so the float predicate and the open-params resolver are
-            // silently skipped while all seven generic signals stay wired —
+            // silently skipped while all eight generic signals stay wired —
             // every scrolling Float rule and every open-behaviour rule becomes
             // inert with nothing in the log to say why. The snap slot qFatals
             // on the same mistake; this is at least loud.

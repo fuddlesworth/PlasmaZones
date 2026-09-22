@@ -289,6 +289,56 @@ private Q_SLOTS:
         QCOMPARE(quietSpy.count(), 0);
     }
 
+    // The snap open path runs RouteToDesktop for a FIRST placement only. An
+    // Open and a PendingSweep (a window that opened before the daemon was
+    // ready) route; the unminimize re-drive, the daemon-restart sweep and the
+    // desktop-arrival continuation act on a window that is already where it
+    // belongs, and re-routing it would yank it back on every re-announce.
+    void testResolveWindowRestore_routesToDesktopOnFirstPlacementOnly()
+    {
+        auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
+        m_wta->setWindowRegistry(registry);
+        m_wta->setWindowMetadata(QStringLiteral("inst5"), QStringLiteral("deskapp"), QString(), QString(), QString(), 0,
+                                 0, QString(), 0, QVariantMap());
+
+        using namespace PhosphorRules;
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.enabled = true;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("deskapp"));
+        RuleAction desk;
+        desk.type = QString(ActionType::RouteToDesktop);
+        desk.params.insert(QString(ActionParam::TargetDesktop), 3);
+        rule.actions = {desk};
+
+        RuleStore store(ConfigDefaults::rulesFilePath(), nullptr);
+        QVERIFY(store.addRule(rule));
+        m_wta->setRuleStore(&store);
+        const auto teardown = qScopeGuard([this] {
+            m_wta->setRuleStore(nullptr);
+            m_wta->setWindowRegistry(nullptr);
+        });
+
+        using PhosphorEngine::RestoreReason;
+        const auto drive = [this](RestoreReason reason) {
+            QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+            int x = 0;
+            int y = 0;
+            int w = 0;
+            int h = 0;
+            bool shouldSnap = false;
+            m_snapAdaptor->resolveWindowRestore(QStringLiteral("deskapp|inst5"), QStringLiteral("DP-1"), false,
+                                                static_cast<int>(PhosphorEngine::WindowKind::Unknown),
+                                                static_cast<int>(reason), 0, 0, x, y, w, h, shouldSnap);
+            return desktopSpy.count();
+        };
+        QCOMPARE(drive(RestoreReason::Open), 1);
+        QCOMPARE(drive(RestoreReason::PendingSweep), 1);
+        QCOMPARE(drive(RestoreReason::Unminimize), 0);
+        QCOMPARE(drive(RestoreReason::DaemonRestartSweep), 0);
+        QCOMPARE(drive(RestoreReason::DesktopArrival), 0);
+    }
+
     void testEmitRouteToDesktop_matchedButUnusableTargetStillReportsAMatch()
     {
         // A matched RouteToDesktop owns this window's desktop whether or not its
