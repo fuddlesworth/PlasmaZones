@@ -113,8 +113,8 @@ public Q_SLOTS:
     /// Re-read rules.json from disk.
     ///
     /// The daemon's RuleStoreWatcher already folds an out-of-process rewrite of
-    /// rules.json into the store, but only after its debounce fires on the next
-    /// event-loop turns. A caller that rewrites the file and then immediately
+    /// rules.json into the store, but only once its debounce fires on a later
+    /// event-loop turn. A caller that rewrites the file and then immediately
     /// reads or mutates rules over D-Bus (the settings app's config import) calls
     /// this so the reload has happened before that next call. load() is idempotent
     /// and emits rulesChanged only when the on-disk content actually differs.

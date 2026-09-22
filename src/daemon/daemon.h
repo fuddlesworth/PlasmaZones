@@ -1156,9 +1156,9 @@ private:
     // window (and any queued D-Bus call landing in that window would UAF).
     ShaderAdaptor* m_shaderAdaptor = nullptr;
     ControlAdaptor* m_controlAdaptor = nullptr;
-    // Unified Rule store + its D-Bus adaptor. The store owns
-    // rules.json (m_ruleStoreWatcher folds in outside writes); it is on
-    // org.plasmazones.Rules. Adaptor is Qt-parented (raw pointer); it
+    // Unified Rule store + its D-Bus adaptor. The store owns rules.json
+    // (m_ruleStoreWatcher folds in outside writes) and the adaptor exposes it
+    // on org.plasmazones.Rules. Adaptor is Qt-parented (raw pointer); it
     // borrows the store, so stop() calls detach() before the store unique_ptr
     // is destroyed.
     RuleAdaptor* m_ruleAdaptor = nullptr;

@@ -483,32 +483,30 @@ void Daemon::stop()
     PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(nullptr);
     PhosphorAnimation::QtQuickClockManager::setDefaultManager(nullptr);
 
-    // Animation-loader teardown, ALSO above the m_running gate for the same
-    // ctor-origin reason as the statics it pairs with: setupAnimationProfiles
-    // runs from the ctor, so an init-without-start teardown reaches the
-    // member destructors with the curve loader (and its QFileSystemWatcher)
-    // still live — exactly the construct-without-start fixture the reset
-    // comment below names. NOTE the deliberate asymmetry this creates for a
-    // stop() → start() cycle: nothing rebuilds the loader (it is ctor-only),
-    // so live reload of `plasmazones/curves` does not
-    // survive the cycle — the seeds and the low-precedence tag DO survive,
-    // so inheritance keeps resolving, and a restarted daemon has no bus
-    // presence anyway (see the partition-shedding rationale above).
+    // Animation-loader teardown, ALSO above the m_running gate for the same ctor-origin reason as
+    // the statics it pairs with: setupAnimationProfiles runs from the ctor, so an
+    // init-without-start teardown reaches the member destructors with the curve loader (and its
+    // QFileSystemWatcher) still live — exactly the construct-without-start fixture the reset
+    // comment below names. NOTE the deliberate asymmetry this creates for a stop() → start()
+    // cycle: nothing rebuilds the loader, nor the m_ruleStoreWatcher reset beside it below (both
+    // are ctor-only), so live reload of `plasmazones/curves` and of rules.json does not survive
+    // the cycle — the curve seeds and the low-precedence tag DO survive so inheritance keeps
+    // resolving, rules.json is still re-read by an explicit load() (D-Bus reloadRules), and a
+    // restarted daemon has no bus presence anyway (see the partition-shedding rationale above).
     m_rawJsonProfiles.clear();
 
-    // Stop the publish coalescing trampoline before resetting the
-    // loaders — the timer is a member QTimer, so its `timeout` slot
-    // would otherwise still fire on the next event-loop tick after
+    // Stop the publish coalescing trampoline before resetting the loaders — the timer is a member
+    // QTimer, so its `timeout` slot would otherwise still fire on the next event-loop tick after
     // m_settings (its data source) has been destroyed.
     m_animationPublishTimer.stop();
     m_animationPublishPending = false;
 
     // Reset the curve loader and the rules.json watcher explicitly so the
-    // QFileSystemWatcher inside each is torn down NOW, before any shutdown
-    // step can spin the event loop. Otherwise they destruct at the end of the
-    // ~Daemon body, leaving a window where a stale path-change signal fires
-    // into a half-destroyed object (or reloads m_ruleStore while its
-    // rulesChanged subscribers are being detached). Seen in daemon tests.
+    // QFileSystemWatcher inside each is torn down NOW, before any shutdown step
+    // can spin the event loop. Otherwise they destruct at the end of the ~Daemon
+    // body, leaving a window where a stale path-change signal fires into a
+    // half-destroyed object (or reloads m_ruleStore while its rulesChanged
+    // subscribers are being detached). Seen in daemon tests.
     m_curveLoader.reset();
     m_ruleStoreWatcher.reset();
 
