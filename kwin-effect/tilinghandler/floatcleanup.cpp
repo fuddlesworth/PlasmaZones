@@ -42,9 +42,11 @@ namespace {
 /// The two cases the scrolling fullscreen exemption exists for are told apart
 /// without daemon state, so they hold at effect bring-up where the membership
 /// hash is still empty:
-///  - a WINDOWED-FULLSCREEN column is fullscreen at its COLUMN rect, never at
-///    the output's fullscreen area, and its requested bit is only ever written
-///    for a window already in the membership hash;
+///  - a WINDOWED-FULLSCREEN column is fullscreen at its COLUMN rect, which
+///    equals the output's fullscreen area only for a single column with zero
+///    outer gaps and no panel (then a first-contact windowed member reads
+///    genuine and is left alone until its next announce), and its requested
+///    bit is only ever written for a window already in the membership hash;
 ///  - a strip tile that went fullscreen later (F11, a video) was announced
 ///    before it did, so it is already in the notified set.
 ///
@@ -192,7 +194,7 @@ bool TilingHandler::isEligibleForTilingNotify(KWin::EffectWindow* w, bool* rejec
     // getWindowScreenId (a scroll-tracking lookup) twice for every fullscreen
     // window.
     if (fullScreen && !(windowedFullscreenMember || fullscreenOnScrollingScreen)) {
-        qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (fullscreen)" << m_effect->getWindowId(w);
+        qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (fullscreen)" << fullscreenWindowId;
         return false;
     }
     if (!w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
@@ -281,10 +283,11 @@ void TilingHandler::reevaluateWindowEligibility(KWin::EffectWindow* w)
     //
     // Same scrolling-fullscreen exemption as isEligibleForTilingNotify: the
     // strip keeps TRACKING a window through real fullscreen (floated out for
-    // the hold, its slot remembered), so a benign flag
-    // edge (keep-above cleared, say) on a fullscreen scrolling tile must not
-    // read shouldHandleWindow's structural fullscreen reject as an eviction
-    // verdict.
+    // the hold, its slot remembered), so a benign flag edge (keep-above
+    // cleared, say) on a fullscreen scrolling tile must not read
+    // shouldHandleWindow's structural fullscreen reject as an eviction verdict.
+    // The first-contact carve-out is unreachable behind the notified gate
+    // above; it matters at bring-up only.
     KWin::Window* kwFs = w->window();
     const bool fullScreen = w->isFullScreen() || (kwFs && kwFs->isRequestedFullScreen());
     const bool fullscreenOnScrollingScreen = fullScreen && isScrollingScreen(m_effect->getWindowScreenId(w));

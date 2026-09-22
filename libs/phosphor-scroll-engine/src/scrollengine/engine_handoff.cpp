@@ -89,6 +89,7 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
     if (windowId.isEmpty() || !m_scrollingScreens.contains(ctx.toScreenId)) {
         return;
     }
+    m_closedFullscreenHolds.remove(windowId); // any re-entry ends the closed-hold answer
     // Same preview hygiene as handoffRelease: an arriving window that a
     // live preview still names would be double-placed at commit.
     dropClosedWindowFromDragPreview(windowId);
@@ -318,6 +319,12 @@ std::optional<PhosphorEngine::WindowPlacement> ScrollEngine::capturePlacement(co
     PhosphorEngine::PlacementStateKey key;
     const ScrollState* state = stateForWindow(windowId, &key);
     if (!state) {
+        return std::nullopt;
+    }
+    // A window held out for its OWN fullscreen has no placement to capture:
+    // the hold is not intent, and a floating slot recorded here would re-float
+    // the window on reopen with no hold and no compositor to end it.
+    if (m_floatRestore.value(windowId).fullscreenHold) {
         return std::nullopt;
     }
     PhosphorEngine::WindowPlacement placement;

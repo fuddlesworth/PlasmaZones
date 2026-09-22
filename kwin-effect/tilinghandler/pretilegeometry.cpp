@@ -23,6 +23,7 @@
 #include <PhosphorProtocol/ServiceConstants.h>
 
 #include <core/output.h>
+#include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <window.h>
 
@@ -141,6 +142,18 @@ void TilingHandler::saveAndRecordPreTileGeometry(const QString& windowId, const 
     if (!knownFreeFloating && !m_effect->isWindowFloating(windowId)) {
         qCDebug(lcEffect) << "Skipped pre-autotile geometry for snapped window" << windowId << "on" << screenId;
         return;
+    }
+    // The fullscreen-exit announce of a never-tracked window (and any re-add
+    // after an effect restart) arrives while KWin still has the window at the
+    // output's fullscreen area: that frame is never free geometry, and the
+    // FloatingCache can read "floating" for a hold the daemon still keeps, so
+    // the guard above alone does not stop it being stored first-capture-wins.
+    if (!knownFreeFloating && KWin::effects) {
+        const QRect fsArea = KWin::effects->clientArea(KWin::FullScreenArea, w).toRect();
+        if (fsArea.isValid() && frame.toRect() == fsArea) {
+            qCDebug(lcEffect) << "Skipped pre-autotile geometry at the fullscreen area" << windowId << "on" << screenId;
+            return;
+        }
     }
     // Drop-then-insert as one unit: every guard that could bail has now been
     // passed, so the window is never left without an entry. See the deferral

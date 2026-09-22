@@ -61,8 +61,9 @@ void TilingHandler::cancelPendingUnminimizeUnfloat(const QString& windowId)
 
 // Clears three things despite the name, which dates from when it held only the
 // first: the debounced minimize-float commits, the deferred unminimize-unfloat
-// timers (grace and retry alike), and the fullscreen-float records. The
-// minimize-float MARKERS and the in-flight unfloat map are not touched here.
+// timers (grace and retry alike), and the fullscreen-hold records (record,
+// unanswered return and generation stamp). The minimize-float MARKERS and the
+// in-flight unfloat map are not touched here.
 void TilingHandler::clearAllPendingMinimizeFloats()
 {
     m_pendingMinimizeFloat.cancelAll();
@@ -77,6 +78,7 @@ void TilingHandler::clearAllPendingMinimizeFloats()
     // daemon does not have.
     m_fullscreenFloatedWindows.clear();
     m_fullscreenUnfloatInFlight.clear();
+    m_fullscreenHoldGeneration.clear();
 }
 
 bool TilingHandler::beginUnminimizeUnfloat(const QString& windowId)
@@ -165,7 +167,7 @@ void TilingHandler::scheduleUnminimizeUnfloatRetry(const QString& windowId)
         || m_unfloatRetryAttempts.value(windowId) >= kAutotileMaxUnfloatRetries) {
         return;
     }
-    KWin::EffectWindow* window = m_effect->findWindowById(windowId);
+    KWin::EffectWindow* window = m_effect->findWindowByIdExact(windowId);
     if (!window || window->isDeleted() || window->isMinimized()) {
         return;
     }
@@ -173,6 +175,12 @@ void TilingHandler::scheduleUnminimizeUnfloatRetry(const QString& windowId)
     ++m_unfloatRetryAttempts[windowId];
     m_pendingUnminimizeUnfloat.schedule(windowId, kAutotileUnfloatRetryDelayMs, [this, windowId, safeWindow]() {
         if (!safeWindow || safeWindow->isDeleted() || safeWindow->isMinimized()) {
+            return;
+        }
+        // Same bail as the grace lambda: a window that re-fullscreened in the
+        // gap must not be unfloated into the strip as a fullscreen column.
+        if (!m_effect->shouldHandleWindow(safeWindow.data()) || !m_effect->isTileableWindow(safeWindow.data())) {
+            qCDebug(lcEffect) << "Autotile: unfloat retry no longer handleable, skipping:" << windowId;
             return;
         }
         const QString screenId = m_effect->getWindowScreenId(safeWindow.data());

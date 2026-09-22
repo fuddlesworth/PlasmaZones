@@ -167,8 +167,8 @@ void PlasmaZonesEffect::clearWindowZone(const QString& windowId)
 PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w) const
 {
     const QString windowId = getWindowId(w);
-    // Id-taking overload: the scroll override resolves off the window id, and
-    // this funnel already holds it.
+    // Id-taking overload: the scroll override resolves off the window id this funnel holds.
+    // IsFloating reads a tile held out for its own fullscreen as floating (the daemon's bit).
     const QString screenId = getWindowScreenId(w, windowId);
     PhosphorRules::WindowQuery query = ruleQueryFor(w, screenId, isWindowFloating(windowId), isWindowSnapped(windowId),
                                                     m_tilingHandler->isTiledWindow(windowId), zoneForWindow(windowId));

@@ -278,6 +278,11 @@ private:
     QTimer m_stripRefetch;
     bool m_stripFetchInFlight = false;
     bool m_stripRefetchWanted = false;
+    // The same wake-up reaches a screen in another mode as a mode re-read
+    // (a context epoch change can mean the desktop switched onto a scrolling
+    // context), coalesced on the same settle so a drag step on one screen
+    // does not cost every other screen a round trip per step.
+    QTimer m_modeRefetch;
     // Both in the daemon's global coordinates; the published workArea and
     // cellRect() subtract the screen origin.
     QRect m_workArea;

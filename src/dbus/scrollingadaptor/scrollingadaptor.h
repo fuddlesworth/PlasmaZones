@@ -30,8 +30,9 @@ namespace PlasmaZones {
  * effect uses as its Mode-stamp discriminator, the strip-preview snapshot
  * (with the preset vocabulary beside it), the wheel-driven focusColumn and
  * scrollView verbs, their placement-map twins focusColumnAt, moveColumnTo and
- * scrollViewByPx beside the stripModelJson whole-strip read, the four absolute width/height setters for external
- * scripting, the toggleMaximizeColumn width verb, the toggleMaximizeToEdges
+ * scrollViewByPx beside the stripModelJson whole-strip read, the four absolute
+ * width/height setters for external scripting, the toggleMaximizeColumn width
+ * verb, the toggleMaximizeToEdges
  * verb that answers a window's own maximize request (and reports back whether
  * the strip changed, so the effect can put KWin's maximize bit back to the
  * engine's state when it did not), the
@@ -457,19 +458,24 @@ public Q_SLOTS:
      * leaves fullscreen. The engine floats the window with the same slot
      * memory a user float keeps, so the return lands in the same column and
      * width, but announces on its PASSIVE channel: no float OSD, no free
-     * geometry restore. A float of an already-floating window and a return
-     * of a window this call did not float both answer false, so a user float
-     * is never taken over or undone.
+     * geometry restore. A hold of a window that already floats under another
+     * owner, and a return of a window this call did not hold, both answer
+     * false, so a user float is never taken over or undone. A repeat hold of
+     * this call's own float answers true.
      *
      * Same wire-boundary policy as clearWindowedFullscreen: a reconciliation
      * call, so neither ownership- nor context-gated. The engine's own lookup
      * rejects an untracked window.
      *
      * @param windowId Window to hold out or return; an empty string answers false
-     * @param screenId Screen hint for the announcement; the engine uses the
+     * @param screenId Screen hint; the engine acts on, and announces, the
      *        window's own tracked screen
      * @param floating true to hold the window out of the strip, false to return it
-     * @return true when the strip changed
+     * @return true when the engine holds, or has returned, this call's own
+     *         float: a first hold of a strip tile, a repeat hold of a tile this
+     *         call already holds, or a return of a tile this call held. False
+     *         for an empty or untracked window, a window that floats under
+     *         another owner, and a return of a window this call did not hold
      */
     bool setWindowFullscreenFloat(const QString& windowId, const QString& screenId, bool floating);
 

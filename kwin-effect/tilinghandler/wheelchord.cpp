@@ -8,8 +8,11 @@
 // Split out of state.cpp, which holds the per-session state the daemon
 // publishes and this side consumes. Nothing here is such state: this is the
 // effect's own input path. The chords are navigation and never take a window
-// out of its own fullscreen; a strip tile that enters its own fullscreen is
-// held out of the strip by slotWindowFullScreenChanged instead.
+// out of its own fullscreen (a strip tile in its own fullscreen is held out of
+// the strip by slotWindowFullScreenChanged). Every focus verb with focusAfter,
+// keyboard or wheel, still activates the strip under a held game, which
+// scrolling_init.cpp records as intended, and a focus-guarded verb refuses
+// with a no_target OSD naming the game while it holds focus.
 
 #include "tilinghandler.h"
 #include "handlers/dragtracker.h"
@@ -22,18 +25,12 @@
 #include <PhosphorProtocol/ServiceConstants.h>
 
 #include <effect/effectwindow.h>
-// KWin::Window is only forward-declared through the effect header; the release
-// below needs isRequestedFullScreen and setFullScreen on the complete type.
-#include <window.h>
 
 #include <QLoggingCategory>
 #include <QPointF>
-#include <QScopeGuard>
-#include <QStringList>
 
 #include <cmath>
 #include <optional>
-#include <utility> // std::as_const over the collected exit list
 
 namespace PlasmaZones {
 

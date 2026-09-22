@@ -60,24 +60,19 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
     if (windowId.isEmpty() || !m_service) {
         return;
     }
-    // Minimize uses floating as a live suspension mechanism so the hidden
-    // window stops occupying a snap zone or autotile slot. It is not placement
-    // intent. Preserve the record exactly as it was before minimization rather
-    // than persisting that temporary float through passive, presave, periodic,
-    // close, or mode-transition captures. A genuinely user-floated window was
-    // already captured when it floated, so preserving its prior record is also
-    // correct while it is minimized.
+    // Minimize uses floating as a live suspension so the hidden window stops
+    // occupying a snap zone or autotile slot. It is not placement intent, so the
+    // record is preserved as it was before minimization rather than persisting
+    // that float through passive, presave, periodic, close or mode-transition
+    // captures. A user-floated window was captured when it floated, so preserving
+    // its prior record is also correct while it is minimized.
     //
-    // Tri-state, not the collapsed bool: a REGISTERED window whose minimize
-    // state was never delivered cannot be proven visible, so it takes the
-    // guard too (capturing it would risk persisting the suspension float).
-    // An UNREGISTERED window (no record at all — already pruned, or a
-    // registry-less test service) keeps the plain capture path.
-    //
-    // An authoritative ENGINE STATE CHANGE bypasses the guard entirely: the
-    // engine then reports the freshly committed state (a resnap sweep can
-    // legitimately re-zone a minimized window), which is exactly what the
-    // record should hold. See the fromStateChange doc on the declaration.
+    // Tri-state, not the collapsed bool: a REGISTERED window whose minimize state
+    // was never delivered cannot be proven visible, so it takes the guard too. An
+    // UNREGISTERED window (already pruned, or a registry-less test service) keeps
+    // the plain capture path. An authoritative ENGINE STATE CHANGE bypasses the
+    // guard entirely: the engine reports the freshly committed state (a resnap
+    // can re-zone a minimized window). See the fromStateChange doc.
     bool treatAsMinimized = false;
     if (m_windowRegistry) {
         // Per-capture hot path: only pay the contains() lookup when the
@@ -90,7 +85,8 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
     // The suspension-float classification outlives the live minimize bit (the
     // unfloat commits after the animation grace), so a capture landing there
     // still preserves. A scroll tile held out for its OWN fullscreen is the same
-    // kind of suspension: its live frame is the output rect, never free geometry.
+    // kind of suspension: its live frame is the output rect, never free geometry
+    // (m_cachedScrollEngine: isFullscreenFloated is ScrollEngine-only API).
     treatAsMinimized = treatAsMinimized || m_service->isSuspensionFloat(windowId)
         || (m_cachedScrollEngine && m_cachedScrollEngine->isFullscreenFloated(windowId));
     if (treatAsMinimized && !fromStateChange) {
@@ -637,23 +633,17 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
     }
 
     // Capture the window's final live placement before teardown drops the
-    // frame-geometry shadow + per-engine state below. For a FLOATING window this
-    // records a floated WindowPlacement at its live geometry (the single source
-    // of truth a future reopen restores from); for a snapped window it records the
-    // corresponding state. Runs while the window is still floating
-    // (m_service->windowClosed below tears that down) and before m_frameGeometry
-    // is dropped, so the live floated geometry is captured.
+    // frame-geometry shadow + per-engine state below: a floated WindowPlacement at
+    // its live geometry (the single source of truth a reopen restores from), or the
+    // snapped state. Runs while the window is still floating (m_service->windowClosed
+    // below tears that down) and before m_frameGeometry is dropped.
     //
-    // Pass the effect's authoritative close screen: when a cross-screen move has
-    // orphaned the window from both engines' tracking by close time, both engine
-    // capturePlacement calls miss/decline and the real screen would be lost —
-    // captureWindowPlacement falls back to this screen to record the float-back.
-    // Validate the effect-supplied close screen before it becomes the
-    // persisted record's managed context: a stale id (output unplugged
-    // mid-close) would poison the reopen screen. Fall back to resolving from
-    // the live frame's centre; an empty result makes the capture keep the
-    // record's prior screen, which is strictly better than adopting a dead
-    // one.
+    // Pass the effect's authoritative close screen: a cross-screen move can orphan
+    // the window from both engines by close time, so both capturePlacement calls
+    // miss and the real screen would be lost; the capture falls back to this screen
+    // for the float-back. Validate it first (a stale id from an output unplugged
+    // mid-close would poison the reopen screen), falling back to the live frame's
+    // centre; an empty result keeps the record's prior screen, which beats a dead one.
     QString closeScreen = screenId;
     if (!closeScreen.isEmpty() && m_service->screenManager()
         && !m_service->screenManager()->physicalScreenFor(closeScreen).isValid()) {
@@ -664,6 +654,9 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
                               << "— resolved to" << closeScreen;
     }
     captureWindowPlacement(windowId, closeScreen);
+    // The engine kept answering the hold for this closed window so the capture
+    // above classified its frame as a suspension; that answer is spent now.
+    forgetClosedFullscreenHold(windowId);
     // AFTER the capture (record() preserves the stored credit on merge):
     // a mid-session close revokes the record's cross-screen reclaim credit,
     // so it can never again home a future same-app window on this monitor —
@@ -1089,6 +1082,13 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
         && !m_service->isAutoSnapped(windowId)) {
         QString windowClass = m_service->currentAppIdFor(windowId);
         m_service->updateLastUsedZone(zoneId, resolvedScreen, windowClass, currentDesktopForScreen(resolvedScreen));
+    }
+}
+
+void WindowTrackingAdaptor::forgetClosedFullscreenHold(const QString& windowId)
+{
+    if (m_cachedScrollEngine) {
+        m_cachedScrollEngine->forgetClosedFullscreenHold(windowId);
     }
 }
 

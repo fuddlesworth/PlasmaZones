@@ -422,6 +422,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             QPoint targetCenter = e.geometry.center();
             KWin::EffectWindow* best = nullptr;
             qreal bestDist = 1e9;
+            // No fullscreen exclusion: a held game may be picked for its launcher's stale entry (unconfirmed).
             for (KWin::EffectWindow* c : std::as_const(e.candidates)) {
                 if (claimedByExact.contains(c)) {
                     continue;
@@ -1415,9 +1416,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             if (m_notifiedWindows.contains(snap.windowId)) {
                 m_notifiedWindowScreens[snap.windowId] = snap.screenId;
             }
-            // Requested OR committed, deliberately wider than the bail term
-            // below (committed AND requested). No capture in its own fullscreen:
-            // the restore rect freeGeometryForCapture answers is a column rect.
+            // Requested OR committed, wider than the bail term below (committed AND requested):
+            // the visual-delta, offered-column, commanded-rect and apply writes still run in that
+            // gap and are dropped by the enter branch. No capture in own fullscreen (column rect).
             const bool inOwnFullscreen = isInOwnFullscreen(snap.window, snap.windowId, snap.isWindowedFullscreen);
             if (!inOwnFullscreen) {
                 saveAndRecordPreTileGeometry(snap.windowId, snap.screenId, snap.window, snap.window->frameGeometry());
@@ -3026,7 +3027,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // otherwise keep the entry its autotile placement armed.
                     // The removal itself now happens before this split, so it
                     // also covers the monocle and windowed-fullscreen kinds
-                    // that never reach here.
+                    // that never reach here. (A self-fullscreened entry is re-written each batch of its hold.)
                 } else if (!snap.isWindowedFullscreen) {
                     m_tileTargetZones[snap.windowId] = snap.geometry;
                 }

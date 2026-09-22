@@ -83,7 +83,8 @@ namespace PhosphorScrollEngine {
  * leaves the strip (its column closes up) and the engine remembers the
  * column index so unfloat / unminimize restores the slot. The effect's
  * minimize machinery reports minimize as a float toggle, so slot memory
- * covers minimize for free.
+ * covers minimize for free. The compositor's own-fullscreen hold
+ * (setWindowFullscreenFloat) is a third producer, announced passively.
  *
  * @see PhosphorEngine::IPlacementEngine, ScrollStrip, ScrollState
  */
@@ -224,9 +225,17 @@ public:
     void toggleWindowedFullscreen(const QString& screenId);
     /// Compositor-driven: hold a strip tile out for its OWN fullscreen or return it, with a
     /// user float's slot memory but a PASSIVE announcement (no OSD, no free-geometry
-    /// restore). False when the window already floats or the float is not this verb's to undo.
+    /// restore). True when the engine holds, or has returned, this call's own float: a first
+    /// hold of a strip tile, a repeat hold of a tile this call already holds, or a return of a
+    /// tile this call held. False for an empty or untracked window, a window that floats under
+    /// another owner, and a return of a window this call did not hold.
     bool setWindowFullscreenFloat(const QString& windowId, bool floating, const QString& screenId);
+    /// True while the slot carries the compositor's hold, and for a window that CLOSED mid-hold
+    /// until WindowTracking.windowClosed has taken its capture (forgetClosedFullscreenHold).
     bool isFullscreenFloated(const QString& windowId) const;
+    /// Drop the closed-mid-hold memory once the daemon's close capture has read it, or a live
+    /// release left no capture to read it.
+    void forgetClosedFullscreenHold(const QString& windowId);
     /// Compositor-driven reconciliation: the client left fullscreen on its own.
     void clearWindowedFullscreen(const QString& windowId);
     /// Compositor-driven repair: the compositor moved this window behind
@@ -1096,17 +1105,6 @@ private:
     /// The screen the engine should operate on for a screen-hinted verb:
     /// @p screenId when it is a scrolling screen, else the active screen.
     QString resolveOperationScreen(const QString& screenId) const;
-    /// Why toggleWindowedFullscreen would refuse (NoWindows also covers an
-    /// unresolved screen or a missing state), or Ok.
-    enum class WindowedFullscreenGuard {
-        NoWindows,
-        FloatHasFocus,
-        NoActiveWindow,
-        Ok
-    };
-    /// Read-only guard toggleWindowedFullscreen runs; the out-params may be null.
-    WindowedFullscreenGuard windowedFullscreenGuard(const QString& screenId, QString* outScreen,
-                                                    ScrollState** outState) const;
     /// Tear down one context state: appends its windows to
     /// @p releasedWindows, drops the per-window unfloat-slot memory and the
     /// per-screen bookkeeping (pending seed, tab-strip latch), and
@@ -1116,30 +1114,23 @@ private:
     /// state would invalidate the live iterator. A caller must not assume the
     /// clear has landed by the time this returns.
     ///
-    /// It deliberately does NOT drop the mode-specific float markers or the
-    /// last-applied rects. Both are INPUTS to the daemon's windowsReleased
-    /// handler, which runs after this returns: it reads
-    /// isModeSpecificFloated() to decide whether a window still needs its
-    /// snap float cleared and its snap slot restored (and clears the marker
-    /// itself, per window), and the adaptor reads lastManagedRect() as the
-    /// float-back tile-rect poison guard. Clearing either here reports every
-    /// scroll-floated window as not-floated and the window stays floated at
-    /// its scroll-float geometry. The rects are reclaimed by
-    /// pruneStaleWindows instead. AutotileEngine documents the same contract
-    /// on releaseScreenStateForTeardown.
+    /// It deliberately does NOT drop the mode-specific float markers or the last-applied rects:
+    /// both are INPUTS to the daemon's windowsReleased handler, which reads isModeSpecificFloated()
+    /// (clearing it per window) and lastManagedRect() (the float-back poison guard). A fullscreen
+    /// HOLD is queued for announceReleasedFullscreenHolds, which fires before windowsReleased; the
+    /// daemon's passive-false arm clears the WTS bit but leaves an UNTRACKED window's marker alone,
+    /// so the handler still sees it. pruneStaleWindows reclaims the rects. AutotileEngine has the same.
     void releaseScreenState(ScrollState* state, QStringList& releasedWindows);
     /// Latch-guarded tab-strip clear: emits the "[]" payload once for a
     /// screen that had a strip showing, no-op otherwise.
     void clearTabStripsForScreen(const QString& screenId);
     // engine_context.cpp
-    /// Shared per-window side-map sweep for the SILENT prune paths (desktop
-    /// and activity teardown), which emit no windowsReleased and so have no
-    /// downstream consumer of the float marker or the last-applied rect.
-    ///
-    /// The removed-output prune is NOT one of them: it releases live windows
-    /// and emits, so it goes through releaseScreenState and sweeps the side
-    /// maps only AFTER the emit. The mode-transition release path likewise
-    /// uses releaseScreenState; see the contract there.
+    /// Shared per-window side-map sweep for the SILENT prune paths (desktop and activity teardown),
+    /// which emit no windowsReleased. A fullscreen hold found here is queued for
+    /// announceReleasedFullscreenHolds, which the prune runs after its reverse-map sweep; nothing else
+    /// reads the float marker or the last-applied rect. The closed-hold memory is not seeded here, so
+    /// a close while still fullscreen after a silent prune records the output rect. The removed-output
+    /// prune releases live windows and emits, so it goes through releaseScreenState instead.
     void dropWindowBookkeeping(const PhosphorEngine::PlacementStateKey& key, const ScrollState* state);
     /// Consume @p windowId from a screen's mode-transition seed (marking it
     /// in m_consumedInitialOrder; the list itself keeps its positions) and
@@ -1356,11 +1347,15 @@ private:
         Passive
     };
     void announceFloat(FloatAnnounce announce, const QString& windowId, bool floating, const QString& screenId);
-    /// Holds found by releaseScreenState, announced clear right before windowsReleased.
-    QStringList m_releasedFullscreenHolds;
+    /// Queue @p windowId for announceReleasedFullscreenHolds when its slot carries the hold.
+    void rememberReleasedFullscreenHold(const QString& windowId);
     void announceReleasedFullscreenHolds();
+    /// A same-key re-announce of a held window is the compositor's return (its record is gone).
+    /// @p fullscreenHold on floatWindowInternal stamps the hold on the slot BEFORE the announce.
+    void settleReannouncedFullscreenHold(const QString& windowId);
     bool floatWindowInternal(ScrollState* state, const PhosphorEngine::PlacementStateKey& key, const QString& windowId,
-                             const QString& screenId, FloatAnnounce announce = FloatAnnounce::Active);
+                             const QString& screenId, FloatAnnounce announce = FloatAnnounce::Active,
+                             bool fullscreenHold = false);
     bool unfloatWindowInternal(ScrollState* state, const QString& windowId, const QString& screenId,
                                bool applyAfter = true, FloatAnnounce announce = FloatAnnounce::Active);
     // engine_navigation.cpp
@@ -1704,6 +1699,11 @@ private:
     /// column must not come back as the default width). Value type hoisted
     /// to ScrollStashTypes.h (the stash types' file-size-ceiling precedent).
     QHash<QString, FloatRestore> m_floatRestore;
+    /// Holds found by releaseScreenState and the silent prunes, announced clear before the emit.
+    QStringList m_releasedFullscreenHolds;
+    /// Ids that CLOSED while held: isFullscreenFloated keeps answering true so the daemon's close
+    /// capture (after Tiling.windowClosed dropped the slot) reads a suspension. Consumed by the WTA.
+    QSet<QString> m_closedFullscreenHolds;
     /// Live drag-insert preview state (drag_preview.cpp). The structural
     /// edits a preview makes while it is LIVE are signal-silent, mirroring
     /// autotile's contract, so the daemon's float bookkeeping never sees the

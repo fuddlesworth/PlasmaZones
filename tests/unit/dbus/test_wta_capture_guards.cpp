@@ -29,6 +29,7 @@
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScreens/Manager.h>
+#include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -730,6 +731,77 @@ private Q_SLOTS:
         const auto rec = wta->service()->placementStore().peek(windowId, appId);
         QVERIFY(rec);
         QCOMPARE(rec->freeGeometryFor(screenId), freeFrame);
+
+        wta->setEngines(snap.get(), nullptr, nullptr);
+        wta->service()->setSnapState(nullptr);
+        wta->service()->setSnapEngine(nullptr);
+        snap.reset();
+    }
+
+    // Close DURING a fullscreen hold: the window's frame is the output rect.
+    // Tiling.windowClosed drops the engine slot before WindowTracking's
+    // capture runs, so without the engine's closed-hold memory the orphan
+    // fallback saw an untracked window on a frame matching no remembered tile
+    // rect and recorded the OUTPUT as its float-back.
+    void testCloseDuringFullscreenHoldKeepsFreeGeometry()
+    {
+        PhosphorScreens::FakeScreenProvider fake;
+        const QRect output(0, 0, 3072, 1728);
+        fake.addScreen(QStringLiteral("DP-1"), output, QStringLiteral("DP-1"));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        QObject owner;
+        auto* scroll = new PhosphorScrollEngine::ScrollEngine(nullptr, nullptr, &owner);
+        scroll->setScreenGeometryProviders(
+            [output](const QString&) {
+                return output;
+            },
+            [output](const QString&) {
+                return output;
+            });
+        scroll->setActiveScreens({QStringLiteral("DP-1")});
+        std::unique_ptr<SnapEngine> snap;
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        snap = std::make_unique<SnapEngine>(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        wta->service()->setSnapState(snap->snapState());
+        wta->service()->setSnapEngine(snap.get());
+        wta->setEngines(snap.get(), nullptr, scroll);
+
+        const QString a = QStringLiteral("app|a");
+        const QString b = QStringLiteral("app|b");
+        const QString screenId = QStringLiteral("DP-1");
+        const QString appId = wta->service()->currentAppIdFor(b);
+        scroll->windowOpened(a, screenId, 0, 0);
+        scroll->windowOpened(b, screenId, 0, 0);
+        scroll->windowFocused(b, screenId);
+        QCoreApplication::processEvents();
+
+        // The genuine free size, which the close must PRESERVE.
+        const QRect realFreeBack(120, 90, 800, 600);
+        wta->service()->recordFreeGeometry(b, screenId, realFreeBack, true);
+
+        QVERIFY(scroll->setWindowFullscreenFloat(b, true, screenId));
+        QVERIFY(scroll->isFullscreenFloated(b));
+        // KWin's fullscreen frame.
+        wta->setFrameGeometry(b, output.x(), output.y(), output.width(), output.height());
+
+        // Effect relay order: Tiling.windowClosed first (the engine untracks),
+        // WindowTracking.windowClosed second (the capture with a screen).
+        scroll->windowClosed(b);
+        QVERIFY2(!scroll->isWindowTracked(b), "the engine must have dropped the slot");
+        wta->windowClosed(b, 0, screenId);
+
+        const auto rec = wta->service()->placementStore().peek(b, appId);
+        QVERIFY(rec);
+        QVERIFY2(rec->freeGeometryFor(screenId) != output,
+                 "a close during the hold must not record the output rect as the float-back");
+        QCOMPARE(rec->freeGeometryFor(screenId), realFreeBack);
+        // The memory is consumed by the capture, not left behind for good.
+        QVERIFY2(!scroll->isFullscreenFloated(b), "WindowTracking.windowClosed must consume the closed-hold memory");
 
         wta->setEngines(snap.get(), nullptr, nullptr);
         wta->service()->setSnapState(nullptr);

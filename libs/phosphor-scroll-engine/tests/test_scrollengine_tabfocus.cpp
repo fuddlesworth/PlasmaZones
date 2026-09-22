@@ -29,6 +29,13 @@ class TestScrollEngineTabFocus : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    /// Proves the vertical arm really is transposed, so a lost ENVIRONMENT
+    /// property cannot leave it silently re-running the horizontal suite.
+    void initTestCase()
+    {
+        AX_GUARD_SUITE();
+    }
+
     void cycleTabWrapsInsteadOfLeavingTheColumn();
     void focusTabAddressesTabsByOrdinal();
     void floatingATabRenumbersTheOrdinals();

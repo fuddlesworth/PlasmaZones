@@ -782,8 +782,7 @@ void AutotileEngine::backfillWindows()
             const bool inserted = insertWindow(windowId, screenId);
             // Same passive float-state sync onWindowAdded does: a window that
             // insertWindow floats here (matched Float rule / restored saved float)
-            // — or whose stale WTS float must be cleared because it was placed
-            // tiled — would otherwise desync from the daemon until its next add.
+            // would otherwise desync from the daemon until its next add.
             // emitInsertFloatStateSync uses windowFloatingStateSynced (NOT
             // windowFloatingChanged), so it applies no geometry and cannot drive
             // the mid-transition feedback loop the overflow-recovery note warns of.

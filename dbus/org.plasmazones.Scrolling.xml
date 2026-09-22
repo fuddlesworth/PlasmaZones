@@ -154,18 +154,18 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </method>
 
         <method name="setWindowFullscreenFloat">
-            <annotation name="org.gtk.GDBus.DocString" value="Holds a strip tile out of the strip for its OWN fullscreen, or returns it. Called by the KWin effect with floating=true when a tiled window goes fullscreen by itself (a client F11, a video going fullscreen, NOT the windowed-fullscreen feature) and with floating=false when it leaves fullscreen. The engine floats the window with the same slot memory a user float keeps, so the return lands in the same column at the same width, but announces the change on its passive channel: no float notification is shown and no free geometry is restored. A float of an already-floating window and a return of a window this call did not float both answer false, so a user float is never taken over or undone. Same wire-boundary policy as clearWindowedFullscreen: a reconciliation call, neither ownership- nor context-gated."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Holds a strip tile out of the strip for its OWN fullscreen, or returns it. Called by the KWin effect with floating=true when a tiled window goes fullscreen by itself (a client F11, a video going fullscreen, NOT the windowed-fullscreen feature) and with floating=false when it leaves fullscreen. The engine floats the window with the same slot memory a user float keeps, so the return lands in the same column at the same width, but announces the change on its passive channel: no float notification is shown and no free geometry is restored. A hold of a window that already floats under another owner, and a return of a window this call did not hold, both answer false, so a user float is never taken over or undone. A repeat hold of this call's own float answers true. Same wire-boundary policy as clearWindowedFullscreen: a reconciliation call, neither ownership- nor context-gated."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window to hold out or return. An empty string answers false."/>
             </arg>
             <arg name="screenId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen hint for the announcement; the engine acts on the window's own tracked screen."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Screen hint. The engine acts on, and announces, the window's own tracked screen."/>
             </arg>
             <arg name="floating" type="b" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="true to hold the window out of the strip, false to return it."/>
             </arg>
             <arg name="changed" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="True when the strip changed."/>
+                <annotation name="org.gtk.GDBus.DocString" value="True when the engine holds, or has returned, this call's own float: a first hold of a strip tile, a repeat hold of a tile this call already holds, or a return of a tile this call held. False for an empty or untracked window, a window that floats under another owner, and a return of a window this call did not hold."/>
             </arg>
         </method>
 
@@ -242,7 +242,6 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Same shape as the scrollFocusScrollBlockedWindows property."/>
             </arg>
         </signal>
-
 
         <signal name="stripChanged">
             <annotation name="org.gtk.GDBus.DocString" value="A screen's strip changed shape. This is a wake-up for anyone rendering the strip, not a payload: re-read visibleStripJson to find out what it looks like now. It relays the engine's own placement-change signal, so it fires on a placement or focus change rather than on every relayout, but it is NOT gated against the strip payload — payload-gating would cost a full relayout on every placement change, paid whether or not anything is listening, to suppress wake-ups whose only cost to a receiver is one read it discards as identical. Treat it as 're-read soon', never as 'the strip differs': a placement change that moves a floating window, or one on a context the screen is not currently showing, fires it without changing a single visible tile. The gate also runs one way only: a settings, rule or template push re-resolves the strip through applyLayout and emits this only if the view anchor moved, so a relayout that changes column widths while the anchor stays put changes the strip without waking anyone. Keep a periodic re-read as the backstop; this signal only makes the common cases prompt. Coalesce it, since a drag or a burst of window opens emits per step. Never emitted for a screen the scrolling engine does not currently own, since visibleStripJson answers empty for those anyway."/>
