@@ -262,8 +262,11 @@ docs/latex/
 *.deb
 *.rpm
 *.dmg
-# ...but the vendored Luau source tarball is committed (extracted at build time).
-!extern/*.tar.gz
+# ...but the vendored Luau and valijson source tarballs are committed
+# (extracted at build time). The path is phosphor/extern/ since the tier
+# split; a stale `!extern/*.tar.gz` here silently drops them from a commit
+# rather than erroring, which is how they went missing once already.
+!phosphor/extern/*.tar.gz
 *.pkg
 dist/
 *.egg-info/
