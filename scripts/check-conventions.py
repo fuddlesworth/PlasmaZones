@@ -164,7 +164,7 @@ def line_of(text: str, index: int) -> int:
 
 # Data assets in formats with no comment syntax are exempt. CLAUDE.md names
 # these exactly; adding a header to them makes the file invalid.
-SPDX_EXEMPT = re.compile(r"^data/.*\.json$|^libs/phosphor-registry/tests/.*manifest\.json(\.in)?$")
+SPDX_EXEMPT = re.compile(r"(^|/)data/.*\.json$|(^|/)libs/phosphor-registry/tests/.*manifest\.json(\.in)?$")
 
 
 def rule_spdx(files: list[str]) -> list[Violation]:
@@ -199,17 +199,20 @@ GPL3 = "GPL-3.0-or-later"
 # content, so it cannot be derived from the path. data/overlays and data/surface
 # are likewise un-normalised. These trees are checked for header *presence*
 # by the spdx rule and are exempt from the per-tree license rule.
-LICENSE_UNGOVERNED = ("data/",)
+LICENSE_UNGOVERNED = re.compile(r"(^|/)data/")
 
 
 def expected_license(path: str) -> str | None:
-    if path.startswith(LICENSE_UNGOVERNED):
+    if LICENSE_UNGOVERNED.search(path):
         return None
-    if path.startswith("libs/phosphor-"):
+    if re.search(r"(^|/)libs/phosphor-", path):
         # A library's own tests follow the library. Test code that links and
         # ships inside an LGPL lib must not taint that lib's tree with GPL.
         return LGPL
-    if path.startswith(("src/", "kcm/", "kwin-effect/", "examples/", "tests/", "tools/", "scripts/", "cli/")):
+    # The app tiers: plasmazones (daemon, editor, settings, KCM, KWin effect,
+    # tools, tests) and phosphor-shell (binary, CLI, shell QML, tests), plus
+    # the shell-libs example harnesses and the repo-level scripts.
+    if path.startswith(("plasmazones/", "phosphor-shell/", "phosphor-shell-libs/examples/", "scripts/")):
         return GPL3
     return None
 
@@ -320,11 +323,11 @@ def update_baseline() -> int:
 # The i18n bridge itself necessarily names and wraps KLocalizedString; the rule
 # targets ordinary call sites, not the implementation of the abstraction.
 I18N_BRIDGE_ALLOW = {
-    "src/phosphor_i18n.h",
-    "src/phosphor_qml_i18n.h",
-    "src/phosphor_qml_i18n.cpp",
-    "libs/phosphor-control/include/PhosphorControl/LocalizedContext.h",
-    "libs/phosphor-control/src/localizedcontext.cpp",
+    "plasmazones/src/phosphor_i18n.h",
+    "plasmazones/src/phosphor_qml_i18n.h",
+    "plasmazones/src/phosphor_qml_i18n.cpp",
+    "phosphor/libs/phosphor-control/include/PhosphorControl/LocalizedContext.h",
+    "phosphor/libs/phosphor-control/src/localizedcontext.cpp",
 }
 
 I18N_CALL = re.compile(r"(?<![\w:.])(i18n|i18nc|i18np|i18ncp)\s*\(")
@@ -370,7 +373,11 @@ def rule_i18n_cpp(files: list[str]) -> list[Violation]:
 CONFIG_DOTPATH = re.compile(
     r'QStringLiteral\(\s*"((?:Snapping|Tiling|Scrolling|General|Appearance|Editor|Shell|Rules|Profiles)\.[A-Za-z0-9.]+)"\s*\)'
 )
-CONFIG_KEY_DEFS = ("src/config/configkeys.h", "src/config/configdefaults.h", "src/config/configmigration.cpp")
+CONFIG_KEY_DEFS = (
+    "plasmazones/src/config/configkeys.h",
+    "plasmazones/src/config/configdefaults.h",
+    "plasmazones/src/config/configmigration.cpp",
+)
 
 
 def rule_config_keys(files: list[str]) -> list[Violation]:
@@ -505,7 +512,7 @@ def rule_prose(files: list[str]) -> list[Violation]:
     for f in files:
         suffix = Path(f).suffix
 
-        if f.startswith("data/") and suffix == ".json":
+        if re.search(r"(^|/)data/", f) and suffix == ".json":
             for trail, s in iter_json_prose(f):
                 for p in prose_problems(s):
                     out.append(Violation("prose", f, 0, f"{trail}: {p} -> {s[:80]!r}"))
@@ -546,7 +553,7 @@ def rule_prose(files: list[str]) -> list[Violation]:
                     out.append(Violation("prose", f, 0, f"{p} -> {m.group(1)[:80]!r}"))
             continue
 
-        if f.startswith("data/algorithms/") and suffix == ".luau":
+        if f.startswith("plasmazones/data/algorithms/") and suffix == ".luau":
             code = strip_c_comments(read(f))
             for m in re.finditer(r'description\s*=\s*"((?:[^"\\]|\\.)*)"', code):
                 for p in prose_problems(m.group(1)):

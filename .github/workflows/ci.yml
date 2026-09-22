@@ -437,7 +437,7 @@ jobs:
           # round-tripping clang-format against them).
           git diff --name-only --diff-filter=ACMR "$RANGE" -- \
               '*.cpp' '*.h' '*.qml' \
-            | grep -v '^libs/.*/include/.*_export\.h$' \
+            | grep -v '^[a-z-]*/libs/.*/include/.*_export\.h$' \
             > changed.txt || true
           echo "Changed files:"
           cat changed.txt
@@ -525,7 +525,7 @@ jobs:
   # and the pluau standard library with luau-analyze. Catches parse and type
   # errors (a broken bundled .luau would otherwise only surface at runtime as
   # a silently-skipped algorithm). The analyzer is built from the committed
-  # vendored Luau (extern/luau-*.tar.gz) so the lint/type ruleset is pinned exactly to
+  # vendored Luau (phosphor/extern/luau-*.tar.gz) so the lint/type ruleset is pinned exactly to
   # the runtime we ship — analysis stays deterministic across CI runs and only
   # changes when we deliberately bump the vendored Luau.
   #
@@ -558,7 +558,7 @@ jobs:
           # Luau is vendored as a committed tarball; extract it before building
           # the analyzer CLI from it (same source the runtime links).
           mkdir -p luau-src
-          tar xzf extern/luau-*.tar.gz -C luau-src --strip-components=1
+          tar xzf phosphor/extern/luau-*.tar.gz -C luau-src --strip-components=1
           cmake -S luau-src -B luau-cli -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DLUAU_BUILD_CLI=ON \
@@ -572,8 +572,8 @@ jobs:
           # Non-zero exit on any parse/type error fails the job. Lint findings
           # are advisory (lintErrors:false in .luaurc) but still printed.
           ./luau-cli/luau-analyze \
-            data/algorithms/*.luau \
-            libs/phosphor-tiles/src/pluau/pluau.luau
+            plasmazones/data/algorithms/*.luau \
+            phosphor/libs/phosphor-tiles/src/pluau/pluau.luau
 
       - name: Analyze the pluau type stubs
         run: |
@@ -595,7 +595,7 @@ jobs:
           # The stripped copy sits next to the file it is a copy of, so any
           # .luaurc that would govern the real stub in this tree governs the
           # copy too. No such config exists today (the repo's only .luaurc is
-          # data/algorithms/.luaurc, which is out of this path's lookup), so
+          # plasmazones/data/algorithms/.luaurc, which is out of this path's lookup), so
           # right now this resolves the same default config /tmp would. The
           # trap clears the copy on the failing path too, where `set -e` would
           # otherwise leave it behind.
@@ -603,9 +603,9 @@ jobs:
           # An all-declare file would strip to nothing; grep exits 1 on no
           # match, so `set -e` fails the step rather than analyzing an empty
           # file and passing.
-          stub_copy=libs/phosphor-tiles/src/pluau/pluau-stub-check.luau
+          stub_copy=phosphor/libs/phosphor-tiles/src/pluau/pluau-stub-check.luau
           trap 'rm -f "$stub_copy"' EXIT
-          grep -v '^declare ' libs/phosphor-tiles/src/pluau/pluau.d.luau > "$stub_copy"
+          grep -v '^declare ' phosphor/libs/phosphor-tiles/src/pluau/pluau.d.luau > "$stub_copy"
           ./luau-cli/luau-analyze "$stub_copy"
 
   # ═══════════════════════════════════════════════════════════════════════════

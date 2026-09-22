@@ -78,7 +78,7 @@
           lib.fileset.unions [
             ./.github
             ./docs
-            ./examples
+            ./phosphor-shell-libs/examples
             ./README.md
             ./CHANGELOG.md
             ./CONTRIBUTING.md

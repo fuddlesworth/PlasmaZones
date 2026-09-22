@@ -49,7 +49,7 @@ The loop terminates in exactly one way: you reach step 11, its predicate says st
 - `/code-audit branch` — audit current branch vs main
 - `/code-audit staged` — audit staged changes only
 - `/code-audit PR` or `/code-audit PR #123` — audit a pull request
-- `/code-audit src/config/settings.cpp src/core/zone.h` — audit specific files
+- `/code-audit plasmazones/src/config/settings.cpp plasmazones/src/core/zone.h` — audit specific files
 
 If `<scope>` is provided, use it directly — do not ask the user to clarify. If omitted, default to uncommitted changes.
 
@@ -102,7 +102,7 @@ Write `.claude/audit-state.json` (relative to the repo root / cwd — this exact
   "inventory_files": 57,
   "complete": false,
   "findings": [
-    {"id": "F1", "sev": "HIGH", "file": "src/foo.cpp:42", "status": "open", "raised_pass": 1}
+    {"id": "F1", "sev": "HIGH", "file": "plasmazones/src/foo.cpp:42", "status": "open", "raised_pass": 1}
   ]
 }
 ```
@@ -163,7 +163,7 @@ Compute scope size from the inventory:
 
 For partitioned scopes:
 
-1. Group files by coherent domain (e.g. `controller/`, `rendering/`, `qml/`, `tests/`, `config/`). 4-6 partitions is typical; aim for ≤15 files per partition.
+1. Group files by coherent domain (e.g. `controller/`, `rendering/`, `qml/`, `plasmazones/tests/`, `config/`). 4-6 partitions is typical; aim for ≤15 files per partition.
 2. **Reviewer selection.** Check the available agent types for project-defined domain reviewers (by convention in `.claude/agents/review/`, e.g. `pz-*-reviewer` in PlasmaZones; each one's description names the directories/domains it covers). If any exist, partition boundaries SHOULD follow the specialists' domains, and each partition MUST be dispatched to the specialist whose description matches it — a specialist encodes stack expertise and past-bug patterns a generic reviewer lacks. Only for a partition no specialist covers (or when a project defines none) fall back to `subagent_type=code-analyzer`. Dispatch ONE `Agent` call per partition; all Agent calls go in a SINGLE message so they run in parallel.
 3. Each agent prompt MUST include:
    - The exact file paths in its partition (explicit paths, not a directory glob).

@@ -1,0 +1,98 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Tasks inherited by every project tagged `cmake` (the four tiers).
+#
+# One configure serves the whole tree: the root CMakeLists enters each tier
+# in dependency order and the tiers share ./build. Per-tier build and test
+# selection comes from two CMake-side hooks:
+#   - each tier CMakeLists ends with phosphor_tier_target(<tier>-tier), an
+#     aggregate target that depends on everything declared under it;
+#   - ctest --test-dir build/<tier> runs only the tests declared under it.
+#
+# The build directory is shared, so a tier's build outputs are not declared
+# as moon outputs and the build/test tasks are not cached by moon: ccache
+# already caches the compile step, and a moon cache of a shared tree would
+# restore files another tier's build had since overwritten. What moon adds
+# is ordering (^:build), affected-only runs (moon run :test --affected) and
+# one command per tier.
+$schema: 'https://moonrepo.dev/schemas/tasks.json'
+
+inheritedBy:
+  tags: ['cmake']
+
+fileGroups:
+  cmake:
+    - '/CMakeLists.txt'
+    - '/cmake/**/*'
+    - 'CMakeLists.txt'
+    - '**/CMakeLists.txt'
+    - '**/*.cmake'
+    - '**/*.cmake.in'
+  sources:
+    - 'src/**/*'
+    - 'libs/**/*'
+    - 'cli/**/*'
+    - 'shell/**/*'
+    - 'kcm/**/*'
+    - 'kwin-effect/**/*'
+    - 'tools/**/*'
+    - 'data/**/*'
+    - 'dbus/**/*'
+    - 'extern/**/*'
+    - 'examples/**/*'
+  tests:
+    - 'tests/**/*'
+    - 'libs/*/tests/**/*'
+
+tasks:
+  # The configure step lives on the `repo` project (moon.yml at the root),
+  # not here: a per-tier configure would run once per tier in parallel
+  # against the same build directory, and concurrent cmake configures of
+  # one tree corrupt each other's generate step.
+  build:
+    command: 'cmake'
+    args:
+      - '--build'
+      - 'build'
+      - '--target'
+      - '$project-tier'
+      - '--parallel'
+      - '6'
+    deps:
+      - 'repo:configure'
+      - '^:build'
+    inputs:
+      - '@group(cmake)'
+      - '@group(sources)'
+    options:
+      runFromWorkspaceRoot: true
+      cache: false
+      # Sibling tiers share one build directory, and two ninja processes in
+      # the same tree race each other on common dependencies. Serialize the
+      # upstream builds; ninja's own -j provides the parallelism.
+      runDepsInParallel: false
+
+  # Every test target already carries its own private-bus TEST_LAUNCHER and
+  # XDG sandbox from cmake/PhosphorTestIsolation.cmake, so ctest is invoked
+  # bare here. Wrapping it in another dbus-run-session would put the private
+  # buses inside a second bus for no gain.
+  test:
+    command: 'ctest'
+    args:
+      - '--test-dir'
+      - 'build/$project'
+      - '--output-on-failure'
+      - '-j'
+      - '6'
+    deps:
+      - '~:build'
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
+    env:
+      QT_QPA_PLATFORM: 'offscreen'
+    options:
+      runFromWorkspaceRoot: true
+      cache: false
+      runDepsInParallel: false

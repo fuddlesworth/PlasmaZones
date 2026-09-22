@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# moon workspace: one project per product tier, plus the repo root for the
+# checks that span tiers. CMake stays the build system inside each tier;
+# moon orders the tiers, runs only the affected ones, and caches the
+# results. See .moon/tasks/cmake.yml for the shared task shapes.
+$schema: 'https://moonrepo.dev/schemas/workspace.json'
+
+projects:
+  repo: '.'
+  phosphor: 'phosphor'
+  phosphor-shell-libs: 'phosphor-shell-libs'
+  phosphor-shell: 'phosphor-shell'
+  plasmazones: 'plasmazones'
+
+vcs:
+  client: 'git'
+  defaultBranch: 'main'
+  provider: 'github'
+
+constraints:
+  # moon refuses an application depending on an application, which is the
+  # product order this workspace is meant to enforce. phosphor-shell still
+  # links plasmazones_rendering and plasmazones_shared_qml (see
+  # phosphor-shell/moon.yml), so enforcement is off until those two move
+  # into a phosphor library. Re-enable it in the same change that drops the
+  # plasmazones entry from phosphor-shell's dependsOn.
+  enforceLayerRelationships: false
+
+hasher:
+  # Hash from the git index so gitignored build trees never enter an input
+  # set. The build/ directory is shared by every tier and must not be hashed.
+  walkStrategy: 'vcs'
+  ignorePatterns:
+    - 'build*/**'
+    - '.claude/**'
+    - '.codex/**'

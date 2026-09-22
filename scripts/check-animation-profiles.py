@@ -115,8 +115,8 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv[1:])
 
     root = args.source_root.resolve()
-    profiles_dir = root / "data" / "profiles"
-    curves_dir = root / "data" / "curves"
+    profiles_dir = root / "plasmazones" / "data" / "profiles"
+    curves_dir = root / "plasmazones" / "data" / "curves"
 
     # An absent profiles dir is fine — the shipped tree may legitimately
     # ship zero per-leaf JSONs and rely entirely on Settings-driven

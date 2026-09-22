@@ -34,8 +34,8 @@ Source0:        %{url}/archive/refs/tags/v%{version}/%{name}-%{version}.tar.gz
 # policy — this lets security tooling track CVEs against the bundled copies.
 # valijson is header-only, which does not exempt it: its code still lands in
 # libPhosphorFsLoader. Keep both versions in sync with
-# PHOSPHORSCRIPTING_LUAU_VERSION in libs/phosphor-scripting/CMakeLists.txt and
-# PHOSPHORFSLOADER_VALIJSON_VERSION in libs/phosphor-fsloader/CMakeLists.txt.
+# PHOSPHORSCRIPTING_LUAU_VERSION in phosphor/libs/phosphor-scripting/CMakeLists.txt and
+# PHOSPHORFSLOADER_VALIJSON_VERSION in phosphor/libs/phosphor-fsloader/CMakeLists.txt.
 Provides:       bundled(luau) = 0.737
 Provides:       bundled(valijson) = 1.1.3
 
@@ -44,7 +44,7 @@ ExclusiveArch:  x86_64 aarch64
 
 # Build tools
 # wayland-scanner: protocol-glue code generator, located by CMake via
-# find_program (CMakeLists.txt:186, libs/phosphor-wayland/CMakeLists.txt:46).
+# find_program (CMakeLists.txt:186, phosphor/libs/phosphor-wayland/CMakeLists.txt:46).
 # Depend on the pkgconfig(wayland-scanner) capability, not the bare
 # /usr/bin/wayland-scanner file path: the file-path form is reported
 # unresolvable by OBS on openSUSE Tumbleweed. wayland-devel ships both the
@@ -112,7 +112,7 @@ BuildRequires:  kf6-kirigami-devel >= 6.26.0
 # block for why an exact pin breaks whole-desktop upgrades.
 %if 0%{?suse_version}
 BuildRequires:  kwin6-devel
-# find_package(KWin) in kwin-effect/CMakeLists.txt pulls in KWinConfig.cmake,
+# find_package(KWin) in plasmazones/kwin-effect/CMakeLists.txt pulls in KWinConfig.cmake,
 # which find_dependency()s the targets below (see KWinConfig.cmake.in, Plasma
 # 6.7). openSUSE's kwin6-devel does not drag these into the build root itself,
 # so the KWin effect's CMake configure step fails without them. KF6Config /

@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'cpp'
+layer: 'library'
+stack: 'systems'
+tags: ['cmake']
+
+dependsOn:
+  - 'phosphor'
+
+project:
+  name: 'Phosphor shell libraries'
+  description: 'Theme, popout and IPC foundation, the Phosphor.* QML surfaces and the per-domain system service libraries behind the shell.'

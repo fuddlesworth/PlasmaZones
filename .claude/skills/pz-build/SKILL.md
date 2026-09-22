@@ -29,7 +29,7 @@ grep -E "^(BUILD_TESTING|BUILD_PHOSPHOR_SHELL|BUILD_TOOLS|CMAKE_UNITY_BUILD):" b
 | `build-noshell` | ON | OFF | ON | confirming a shell-tier change still builds shell-OFF |
 | `build-nounity` | ON | **ON** | OFF | shell tier, packager parity, and the clangd compile database |
 
-`build` has `BUILD_PHOSPHOR_SHELL=OFF`. Anything under `libs/phosphor-shell*`,
+`build` has `BUILD_PHOSPHOR_SHELL=OFF`. Anything under `phosphor-shell-libs/libs/phosphor-shell*`,
 the bar, control center, launcher, power or popout libraries is **not built
 there and its tests do not run**. Use `build-nounity` for shell work.
 
@@ -83,12 +83,12 @@ ctest --test-dir build --output-on-failure
 ```
 
 Test targets carry a `TEST_LAUNCHER` of
-`dbus-run-session --config-file=tests/unit/test-session-bus.conf --`. That conf
+`dbus-run-session --config-file=plasmazones/tests/unit/test-session-bus.conf --`. That conf
 declares **no** service dirs on purpose: a stock `dbus-run-session` still reads
 the standard service dirs, so the installed `plasmazonesd` gets activated on the
 private bus, reparents when the bus dies, holds the test's stdout pipe open, and
 **ctest hangs after the test passes**. New tests must be added ABOVE that block
-in `tests/unit/CMakeLists.txt`, alongside the shared `ENVIRONMENT` block.
+in `plasmazones/tests/unit/CMakeLists.txt`, alongside the shared `ENVIRONMENT` block.
 
 Never `pkill -f plasmazonesd`; that kills the user's real desktop daemon. Kill
 only `build/bin/` test binaries.

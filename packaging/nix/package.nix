@@ -54,7 +54,7 @@
 
   # -- Vulkan headers (build-time, required by the daemon) --
   # The dma-buf thumbnail daemon path hard-requires the Vulkan SDK via
-  # find_package(Vulkan REQUIRED) in src/CMakeLists.txt (dmabuftextureprovider.cpp
+  # find_package(Vulkan REQUIRED) in plasmazones/src/CMakeLists.txt (dmabuftextureprovider.cpp
   # includes <vulkan/vulkan.h> unconditionally), so a daemon build without these
   # headers fails at configure time. (Qt's separate QVulkanInstance render backend
   # is still QT_CONFIG(vulkan)-guarded/optional — a distinct concern from this SDK.)
@@ -133,15 +133,15 @@ stdenv.mkDerivation (finalAttrs: {
 
     # ── Vulkan headers (build-time, required by the daemon) ───────────────────
     # Hard build requirement: the dma-buf thumbnail daemon path uses
-    # find_package(Vulkan REQUIRED) (src/CMakeLists.txt) and includes
+    # find_package(Vulkan REQUIRED) (plasmazones/src/CMakeLists.txt) and includes
     # <vulkan/vulkan.h> unconditionally, so the daemon won't configure without
     # these. Only headers are needed — no runtime lib.
     vulkan-headers
 
     # ── Kirigami (build-time AND runtime, both builds) ────────────────────────
-    # Unconditional on purpose. src/settings/CMakeLists.txt opens with
+    # Unconditional on purpose. plasmazones/src/settings/CMakeLists.txt opens with
     # find_package(KF6Kirigami REQUIRED) and links KF6::Kirigami, and
-    # src/CMakeLists.txt adds the settings subdirectory unconditionally — it is
+    # plasmazones/src/CMakeLists.txt adds the settings subdirectory unconditionally — it is
     # not behind USE_KDE_FRAMEWORKS. So this is a hard configure-time dependency
     # of EVERY build, portable one included; gating it on withKdeFrameworks made
     # `.override { withKdeFrameworks = false; }` fail at CMake configure.

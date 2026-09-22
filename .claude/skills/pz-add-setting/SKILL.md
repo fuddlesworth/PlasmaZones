@@ -22,7 +22,7 @@ clamping come from the schema. Follow this file, not that summary.
 
 ## The six files
 
-### 1. `src/config/configdefaults_<area>.h` — the default value
+### 1. `plasmazones/src/config/configdefaults_<area>.h` — the default value
 
 `configdefaults.h` is split by area: `_appearance`, `_gaps`, `_limits`,
 `_screens`, `_scrolling`, `_scrolling_behavior`, `_scrolling_shortcuts`,
@@ -36,7 +36,7 @@ static constexpr int audioSpectrumBarCountMin() { return 16; }
 static constexpr int audioSpectrumBarCountMax() { return 256; }
 ```
 
-### 2. `src/config/configdefaults.h` — the group and key accessors
+### 2. `plasmazones/src/config/configdefaults.h` — the group and key accessors
 
 Only if the group or key is new. Group names are v2 dot-paths mirroring the UI
 hierarchy (`"Snapping.Behavior.ZoneSpan"`). Key accessors are generic
@@ -45,7 +45,7 @@ hierarchy (`"Snapping.Behavior.ZoneSpan"`). Key accessors are generic
 Never inline a config path as a `QStringLiteral`. `scripts/check-conventions.py`
 fails the build on that.
 
-### 3. `src/config/settingsschema*.cpp` — register the key
+### 3. `plasmazones/src/config/settingsschema*.cpp` — register the key
 
 This is the step that is easy to miss and the reason a setting silently reads
 back as `false` or `0`: **the store gets its default and its type from the
@@ -70,11 +70,11 @@ clause-splicing semicolon, no spaced hyphen. The conventions checker enforces
 that. The 5th field is the coercion applied on **every read and every write**,
 which is what makes the clamped-setter idiom below necessary.
 
-### 4. `src/core/interfaces/isettings.h` — the signal
+### 4. `plasmazones/src/core/interfaces/isettings.h` — the signal
 
 Add it under `Q_SIGNALS:`, past tense, named `<property>Changed`.
 
-### 5. `src/config/settings.h` — the property
+### 5. `plasmazones/src/config/settings.h` — the property
 
 ```cpp
 Q_PROPERTY(bool enableAudioVisualizer READ enableAudioVisualizer
@@ -89,15 +89,15 @@ file-size baseline, so the conventions checker fails if it grows. Adding a
 property to it means shrinking something else, or the addition belongs in a
 different header.
 
-### 6. `src/config/settings/<concern>.cpp` — getter and setter
+### 6. `plasmazones/src/config/settings/<concern>.cpp` — getter and setter
 
-Never `src/config/settings.cpp`. Pick the file matching the concern:
+Never `plasmazones/src/config/settings.cpp`. Pick the file matching the concern:
 `setters.cpp`, `storescalars.cpp`, `shortcuts.cpp`, `scrolling.cpp`,
 `triggers.cpp`, `perscreen.cpp`, `disable.cpp`, `uienums.cpp`,
 `profiletrees.cpp`, `animationprofile.cpp`, `systemcolors.cpp`.
 
-Note there are three files named `settings.cpp` in the tree (`src/config/`,
-`src/daemon/overlayservice/`, `src/editor/controller/`). Always use full paths.
+Note there are three files named `settings.cpp` in the tree (`plasmazones/src/config/`,
+`plasmazones/src/daemon/overlayservice/`, `plasmazones/src/editor/controller/`). Always use full paths.
 
 **Unclamped setting** — compare, early-return, write, emit:
 

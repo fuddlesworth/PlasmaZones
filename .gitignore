@@ -365,3 +365,7 @@ scratchpad/
 # and its version from the tag being released, so a committed copy could only
 # ever go stale.
 packaging/obs/plasmazones.dsc
+
+# moon workspace runtime state (hashes, run reports). The config under
+# .moon/*.yml and .moon/tasks/ is tracked; only the cache is not.
+.moon/cache/

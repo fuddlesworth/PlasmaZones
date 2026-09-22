@@ -1,0 +1,62 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+# The repository root: the checks that span every tier. The tiers
+# themselves are the four projects listed in .moon/workspace.yml.
+language: 'python'
+layer: 'configuration'
+tags: ['repo']
+
+project:
+  name: 'Repository checks'
+  description: 'Conventions, schema validation and other whole-tree gates.'
+
+tasks:
+  # One configure for the whole tree. Every tier's build task depends on
+  # this one target, so it runs once per moon invocation rather than once
+  # per tier. command + args rather than one string: moon's tokenizer
+  # splits the -D<var>=<value> arguments and cmake then sees a bare "CMAKE".
+  configure:
+    command: 'cmake'
+    args:
+      - '-B'
+      - 'build'
+      - '-G'
+      - 'Ninja'
+      - '-DCMAKE_BUILD_TYPE=Debug'
+      - '-DBUILD_TESTING=ON'
+      - '-DBUILD_PHOSPHOR_SHELL=ON'
+      - '-DBUILD_TOOLS=ON'
+    inputs:
+      - 'CMakeLists.txt'
+      - 'cmake/**/*'
+      - '**/CMakeLists.txt'
+      - '**/*.cmake'
+      - '**/*.cmake.in'
+    options:
+      cache: false
+
+  conventions:
+    command: 'python3 scripts/check-conventions.py'
+    inputs:
+      - 'scripts/check-conventions.py'
+      - 'scripts/oversize-baseline.json'
+      - 'CLAUDE.md'
+      - 'phosphor/**/*'
+      - 'phosphor-shell-libs/**/*'
+      - 'phosphor-shell/**/*'
+      - 'plasmazones/**/*'
+      - 'packaging/**/*'
+
+  schemas:
+    command: 'python3 scripts/validate-json-schemas.py'
+    inputs:
+      - 'scripts/validate-json-schemas.py'
+      - 'phosphor/data/schemas/**/*'
+      - 'plasmazones/data/**/*.json'
+
+  check:
+    deps:
+      - '~:conventions'
+      - '~:schemas'

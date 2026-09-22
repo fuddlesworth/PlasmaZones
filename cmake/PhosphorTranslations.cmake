@@ -39,25 +39,25 @@ find_package(Qt6LinguistTools QUIET)
 # CONFIGURE_DEPENDS makes the build re-run the glob, so a newly-added file is
 # extractable without a manual `cmake` invocation.
 file(GLOB_RECURSE PLASMAZONES_I18N_SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_SOURCE_DIR}/src/*.cpp"
-    "${CMAKE_SOURCE_DIR}/src/*.h"
-    "${CMAKE_SOURCE_DIR}/kcm/*.cpp"
-    "${CMAKE_SOURCE_DIR}/kcm/*.h"
+    "${CMAKE_SOURCE_DIR}/plasmazones/src/*.cpp"
+    "${CMAKE_SOURCE_DIR}/plasmazones/src/*.h"
+    "${CMAKE_SOURCE_DIR}/plasmazones/kcm/*.cpp"
+    "${CMAKE_SOURCE_DIR}/plasmazones/kcm/*.h"
     # The KWin effect carries user-facing text of its own since the scrolling
     # tab indicators moved into it (the untitled-tab placeholder); it loads
     # the same "plasmazones" catalog at construction.
-    "${CMAKE_SOURCE_DIR}/kwin-effect/*.cpp"
-    "${CMAKE_SOURCE_DIR}/kwin-effect/*.h"
+    "${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect/*.cpp"
+    "${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect/*.h"
 )
 file(GLOB_RECURSE PLASMAZONES_I18N_QML CONFIGURE_DEPENDS
-    "${CMAKE_SOURCE_DIR}/src/*.qml"
+    "${CMAKE_SOURCE_DIR}/plasmazones/src/*.qml"
     # phosphor-control extracts nothing HERE today — its chrome calls qsTr(),
     # which lupdate reads natively via the qsTr glob below, and the one `i18n`
     # string in that tree is inside a code comment (Sidebar.qml). Listed anyway
     # so that the day someone adds a real i18n() call to the settings chrome it
     # is picked up instead of silently going missing, which is the failure this
     # whole file exists to prevent.
-    "${CMAKE_SOURCE_DIR}/libs/phosphor-control/qml/*.qml"
+    "${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-control/qml/*.qml"
 )
 
 # phosphor-control's QML is ALSO handed to lupdate raw, below. Its chrome
@@ -80,8 +80,8 @@ file(GLOB_RECURSE PLASMAZONES_I18N_QML CONFIGURE_DEPENDS
 # installs a plain QTranslator itself (kcm/about/kcmabout.cpp), which needs no
 # link against plasmazones_core.
 file(GLOB_RECURSE PLASMAZONES_I18N_QML_QSTR CONFIGURE_DEPENDS
-    "${CMAKE_SOURCE_DIR}/libs/phosphor-control/qml/*.qml"
-    "${CMAKE_SOURCE_DIR}/kcm/*.qml"
+    "${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-control/qml/*.qml"
+    "${CMAKE_SOURCE_DIR}/plasmazones/kcm/*.qml"
 )
 
 # QML is NOT handed to lupdate directly. lupdate's QML parser only recognizes
@@ -98,11 +98,11 @@ file(GLOB_RECURSE PLASMAZONES_I18N_QML_QSTR CONFIGURE_DEPENDS
 # The stub filenames mirror the real .qml paths (translations/.qml-stubs/
 # src/.../Foo.qml.cpp, same line numbers), so the mapping back to the real
 # source is mechanical.
-set(_qml_stub_dir "${CMAKE_SOURCE_DIR}/translations/.qml-stubs")
+set(_qml_stub_dir "${CMAKE_SOURCE_DIR}/plasmazones/translations/.qml-stubs")
 
 # Collect all .ts files once (en template + per-language); the compile list
 # below filters the template back out.
-file(GLOB _all_ts_files CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/translations/plasmazones_*.ts")
+file(GLOB _all_ts_files CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/plasmazones/translations/plasmazones_*.ts")
 
 # Per-language .ts files (plasmazones_de.ts, plasmazones_fr.ts, etc.)
 # Flat layout: translations/plasmazones_<lang>.ts → plasmazones_<lang>.qm
@@ -143,7 +143,7 @@ if(Qt6LinguistTools_FOUND AND Python3_Interpreter_FOUND)
         # run; a wave of deletions you did not expect IS the scrape-gap alarm.
         COMMAND Qt6::lupdate
             -no-obsolete
-            -I ${CMAKE_SOURCE_DIR}/src
+            -I ${CMAKE_SOURCE_DIR}/plasmazones/src
             ${PLASMAZONES_I18N_SOURCES}
             ${PLASMAZONES_I18N_QML_QSTR}
             "@${_qml_stub_dir}/stubs.txt"

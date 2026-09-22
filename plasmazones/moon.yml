@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'cpp'
+layer: 'application'
+stack: 'systems'
+tags: ['cmake']
+
+dependsOn:
+  - 'phosphor'
+
+project:
+  name: 'PlasmaZones'
+  description: 'Window snapping, tiling and scrolling for KDE Plasma: daemon, editor, settings, KCM, KWin effect, bundled data and tests.'

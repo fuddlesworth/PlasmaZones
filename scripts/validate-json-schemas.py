@@ -43,14 +43,14 @@ _BOOTSTRAP_ENV = "PZ_JSONSCHEMA_BOOTSTRAPPED"
 # validated only here, where the runtime checks those document types in C++
 # directly.
 SCHEMA_MAP: dict[str, list[str]] = {
-    "data/schemas/layout.schema.json": ["data/layouts/*.json"],
-    "data/schemas/scrolling-template.schema.json": ["data/scrolling-templates/*.json"],
-    "data/schemas/curve.schema.json": ["data/curves/*.json"],
-    "data/schemas/animation-metadata.schema.json": ["data/animations/*/metadata.json"],
-    "data/schemas/shader-metadata.schema.json": ["data/overlays/*/metadata.json"],
-    "data/schemas/surface-metadata.schema.json": ["data/surface/*/metadata.json"],
-    "data/schemas/pointer-metadata.schema.json": ["data/pointer/*/metadata.json"],
-    "data/schemas/whatsnew.schema.json": ["data/whatsnew.json"],
+    "phosphor/data/schemas/layout.schema.json": ["plasmazones/data/layouts/*.json"],
+    "plasmazones/data/schemas/scrolling-template.schema.json": ["plasmazones/data/scrolling-templates/*.json"],
+    "phosphor/data/schemas/curve.schema.json": ["plasmazones/data/curves/*.json"],
+    "phosphor/data/schemas/animation-metadata.schema.json": ["plasmazones/data/animations/*/metadata.json"],
+    "phosphor/data/schemas/shader-metadata.schema.json": ["plasmazones/data/overlays/*/metadata.json"],
+    "phosphor/data/schemas/surface-metadata.schema.json": ["plasmazones/data/surface/*/metadata.json"],
+    "phosphor/data/schemas/pointer-metadata.schema.json": ["plasmazones/data/pointer/*/metadata.json"],
+    "plasmazones/data/schemas/whatsnew.schema.json": ["plasmazones/data/whatsnew.json"],
 }
 
 # The one dialect this gate speaks. Draft7Validator is used unconditionally

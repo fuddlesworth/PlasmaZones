@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'cpp'
+layer: 'library'
+stack: 'systems'
+tags: ['cmake']
+
+project:
+  name: 'Phosphor core libraries'
+  description: 'LGPL placement engines, rendering, layer-shell, animation, config and service libraries usable without the shell.'

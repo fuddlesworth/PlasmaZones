@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'cpp'
+layer: 'application'
+stack: 'systems'
+tags: ['cmake']
+
+# The shell binary links plasmazones_rendering and plasmazones_shared_qml
+# from the plasmazones tier (ShellChrome hosts the surface decoration
+# through them), so the graph records that edge until those two move into
+# a phosphor library. Drop the plasmazones entry when that lands.
+dependsOn:
+  - 'phosphor'
+  - 'phosphor-shell-libs'
+  - 'plasmazones'
+
+project:
+  name: 'Phosphor shell'
+  description: 'The phosphor-shell binary, the phosphorctl IPC CLI, the bundled shell QML tree and the shell unit tests.'
