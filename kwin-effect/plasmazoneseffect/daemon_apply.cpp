@@ -235,9 +235,6 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
             // Integer-aligned like every other frame compare in this file: on
             // a fractional output the qreal frame carries sub-pixel residue.
             const QRect frameInt = w->frameGeometry().toRect();
-            const QRect sizeOnlyGeo(frameInt.topLeft(), QSize(width, height));
-            qCInfo(lcEffect) << "slotApplyGeometryRequested: size-only restore for" << liveWindowId << width << "x"
-                             << height;
             // The open-path producer arrives under first-frame suppression,
             // before the window has painted, so it is applied as a teleport:
             // an animated shrink would play over the open shader from a size
@@ -249,6 +246,25 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
             // (deadline expired, or a late reclaim-declined float default)
             // animates instead, which is right for a window already visible.
             const bool freshOpen = m_restoreSuppress.contains(w);
+            // Where the restored size lands depends on the producer. The
+            // drag-out unsnap keeps the top-left: the user just dropped the
+            // window there and the shrink must not walk it away from the
+            // pointer. The open-path producer keeps the CENTRE instead: KWin
+            // placed the larger, app-inherited size, and a fresh window whose
+            // top-left is kept ends up parked in the upper-left corner of the
+            // spot KWin chose for it. Clamped into the output's work area so a
+            // window placed against an edge does not recentre off-screen.
+            QRect sizeOnlyGeo(frameInt.topLeft(), QSize(width, height));
+            if (freshOpen) {
+                sizeOnlyGeo.moveCenter(frameInt.center());
+                const QRect work = KWin::effects->clientArea(KWin::MaximizeArea, w).toRect();
+                if (work.isValid()) {
+                    sizeOnlyGeo.moveLeft(qMax(work.left(), qMin(sizeOnlyGeo.left(), work.right() - width + 1)));
+                    sizeOnlyGeo.moveTop(qMax(work.top(), qMin(sizeOnlyGeo.top(), work.bottom() - height + 1)));
+                }
+            }
+            qCInfo(lcEffect) << "slotApplyGeometryRequested: size-only restore for" << liveWindowId << width << "x"
+                             << height << "at" << sizeOnlyGeo.topLeft();
             if (freshOpen && frameInt.size() == sizeOnlyGeo.size()) {
                 // Explicit, rather than applyWindowGeometry's own at-target
                 // bail: that bail releases the suppression, and a fresh window

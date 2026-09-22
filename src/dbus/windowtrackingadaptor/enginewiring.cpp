@@ -475,8 +475,10 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // RouteToScreen translation reads NEXT, inside this same resolve, and
         // the effect's own flush of the resized frame arrives only after the
         // configure lands. Left alone, a routed window carried the un-restored
-        // managed size onto its target monitor. The position stays the
-        // effect's; only the size is what this relay restored. A client that
+        // managed size onto its target monitor. Only the size is what this
+        // relay restored; the position is the effect's to decide (it keeps the
+        // top-left for a drag-out and recentres a fresh open), and its own
+        // flush of the applied frame refreshes the shadow's origin. A client that
         // refuses the resize leaves the shadow at the requested size until
         // its next real move, which is the free size the window is meant to
         // have anyway.
