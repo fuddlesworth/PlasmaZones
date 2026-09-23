@@ -16,7 +16,7 @@
 //      the name / manufacturer / model / resolution fields.
 // QML consumers relying on `Object.keys(map).includes('isVirtualScreen')`
 // semantics for physical-vs-virtual disambiguation must be audited; see
-// libs/phosphor-screens/CHANGES.md for full rationale.
+// phosphor/libs/phosphor-screens/CHANGES.md for full rationale.
 
 #include "PhosphorScreens/ScreenInfo.h"
 #include "screenslogging.h"

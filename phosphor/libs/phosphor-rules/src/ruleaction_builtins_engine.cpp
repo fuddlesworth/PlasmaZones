@@ -124,7 +124,7 @@ void ActionRegistry::registerBuiltinsEngine()
     // depend on PhosphorZones, and depending on it just for the string
     // vocabulary would couple the two libs over a stable wire format. New
     // tokens added here MUST mirror the Mode enum extension in
-    // libs/phosphor-zones/include/PhosphorZones/AssignmentEntry.h; the
+    // phosphor/libs/phosphor-zones/include/PhosphorZones/AssignmentEntry.h; the
     // round-trip tests pin the contract.
     registerAction(ActionDescriptor{
         .type = QString(ActionType::DisableEngine),

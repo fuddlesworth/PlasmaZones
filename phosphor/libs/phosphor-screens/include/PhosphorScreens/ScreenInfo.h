@@ -8,7 +8,7 @@
 //   QML consumers binding individual keys via QVariantMap should be aware
 //   that the variant map produced by screenInfoListToVariantList() emits
 //   `width`, `height`, `resolution`, `x`, `y`, and `isVirtualScreen` with
-//   the semantics documented in libs/phosphor-screens/CHANGES.md. In
+//   the semantics documented in phosphor/libs/phosphor-screens/CHANGES.md. In
 //   particular, `isVirtualScreen` is ALWAYS present (was: only when
 //   true); QML that uses `Object.keys(map).includes('isVirtualScreen')`
 //   to disambiguate physical-vs-virtual must be audited. See the

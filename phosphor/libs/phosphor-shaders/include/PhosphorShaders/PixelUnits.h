@@ -15,7 +15,7 @@ namespace PhosphorShaders {
 /// The `unit` a parameter declares when its value is logical pixels of the
 /// real surface the shader draws on, which is the screen for a zone/overlay
 /// pack. Only zone/overlay pack metadata declares this: the surface schema has
-/// no `unit` field and nothing under `libs/phosphor-surface` reads one.
+/// no `unit` field and nothing under `phosphor/libs/phosphor-surface` reads one.
 ///
 /// Every other parameter is unitless as far as the runtime is concerned: a
 /// strength, an angle, a count, a colour. Only px values have to be re-read

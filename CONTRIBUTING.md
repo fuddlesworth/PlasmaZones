@@ -55,7 +55,7 @@ Write decent commit messages. First line should be a short summary, then a blank
 
 ## Testing
 
-The test suites live in `plasmazones/tests/`, `phosphor-shell/tests/` and each library's own `tests/`. Run it with:
+The test suites live in `plasmazones/tests/`, `phosphor-shell/tests/` and each library's own `tests/`. Run them all with:
 
 ```bash
 cd build
