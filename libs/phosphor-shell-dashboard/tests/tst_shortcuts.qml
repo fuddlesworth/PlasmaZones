@@ -205,6 +205,45 @@ Item {
             verify(!actionIds(sheet).includes("scroll_center_column"));
         }
 
+        function test_keyboardActivatesSidebarViews_data() {
+            const cases = [];
+            for (const horizontal of [false, true]) {
+                for (const key of [Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space]) {
+                    cases.push({
+                        tag: (horizontal ? "horizontal" : "vertical") + "-" + key,
+                        horizontal: horizontal,
+                        key: key
+                    });
+                }
+            }
+            return cases;
+        }
+
+        function test_keyboardActivatesSidebarViews(data) {
+            const sheet = scene({
+                width: data.horizontal ? 640 : 1440,
+                height: data.horizontal ? 480 : 900
+            });
+            const first = child(sheet, "shortcutScope:tiling");
+            first.focus = true;
+            first.forceActiveFocus(Qt.TabFocusReason);
+            tryCompare(first, "activeFocus", true);
+            for (const scope of ["scrolling", "snapping", "general", "shell", "all", "tiling"]) {
+                const previousScope = sheet.scope;
+                keyClick(data.horizontal ? Qt.Key_Right : Qt.Key_Down);
+                const button = child(sheet, "shortcutScope:" + scope);
+                tryCompare(button, "activeFocus", true);
+                compare(sheet.scope, previousScope);
+                keyClick(data.key);
+                tryCompare(sheet, "scope", scope);
+                tryCompare(button, "checked", true);
+                compare(sheet.map.mode, 1);
+                compare(sheet.map.currentDesktop, 0);
+            }
+            verify(actionIds(sheet).includes("focus_master"));
+            verify(!actionIds(sheet).includes("scroll_center_column"));
+        }
+
         function test_assignedFilterAndRecovery() {
             const rows = [row("focus_master", qsTr("Focus master"), "autotile", ["Meta+M"]), row("swap_master", qsTr("Swap master"), "autotile", [])];
             const sheet = scene({

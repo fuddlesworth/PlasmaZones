@@ -130,6 +130,12 @@ Item {
                     Accessible.description: modelData.id === root.currentMode ? qsTr("Current workspace mode") : ""
                     onClicked: root.chosen(modelData.id)
                     Keys.onPressed: event => {
+                        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                            event.accepted = true;
+                            if (!event.isAutoRepeat)
+                                button.click();
+                            return;
+                        }
                         let target = index;
                         if (event.key === Qt.Key_Down || event.key === Qt.Key_Right)
                             target = (index + 1) % items.count;
