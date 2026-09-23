@@ -648,6 +648,14 @@ target_link_libraries(test_cheatsheet_compression
     PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core PhosphorShortcuts::PhosphorShortcuts)
 add_test(NAME test_cheatsheet_compression COMMAND test_cheatsheet_compression)
 
+qt_add_executable(test_shell_cheatsheet_bridge
+    daemon/test_shell_cheatsheet_bridge.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/shellcheatsheetbridge.cpp
+)
+target_include_directories(test_shell_cheatsheet_bridge PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(test_shell_cheatsheet_bridge PRIVATE Qt6::Test Qt6::Core Qt6::Network)
+add_test(NAME test_shell_cheatsheet_bridge COMMAND test_shell_cheatsheet_bridge)
+
 # Shortcuts.Scrolling four-list parity (schema / registration / catalog /
 # D-Bus registry). Same daemon-source compilation as the two neighbours,
 # and it drives a real ShortcutManager, so it needs a Settings instance and
@@ -2043,7 +2051,7 @@ add_executable(test_layout_adaptor_signals dbus/test_layout_adaptor_signals.cpp)
 # plasmazones_core.
 target_link_libraries(test_layout_adaptor_signals PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
                       PhosphorTiles::PhosphorTiles PhosphorZones::PhosphorZones
-                      PhosphorLayoutApi::PhosphorLayoutApi)
+                      PhosphorLayoutApi::PhosphorLayoutApi PhosphorScreens::Runtime)
 add_test(NAME test_layout_adaptor_signals COMMAND test_layout_adaptor_signals)
 
 # LayoutAdaptor scrolling-template surface: the set/get pair's validation and

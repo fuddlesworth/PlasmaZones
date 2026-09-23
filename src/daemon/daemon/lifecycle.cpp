@@ -387,9 +387,9 @@ void Daemon::emitBridgeMissingWarning(const QString& diagnosis)
 void Daemon::stop()
 {
     m_shuttingDown = true;
+    cancelCheatsheetRequest();
 
-    // Cancel any pending debounced gap-resnap so it can't fire mid-teardown
-    // (the engine is cleared below; a late fire would be a wasted no-op).
+    // Cancel pending gap resnaps before clearing the engine below.
     m_gapResnapTimer.stop();
 
     // The bridge watchdog is double-guarded (m_shuttingDown + registered

@@ -119,6 +119,8 @@ public:
     /// `screen` is not in its declarative type info), so a typo there would
     /// surface only at runtime, as an undefined that quietly opens nothing.
     [[nodiscard]] Q_INVOKABLE QScreen* screenOf(QQuickItem* item) const;
+    /// Resolve an exact output name for an IPC action; unknown names are refused.
+    [[nodiscard]] Q_INVOKABLE QScreen* screenNamed(const QString& name) const;
 
     /// `item`'s horizontal centre in the pixels of the screen it is on, for
     /// PopoutRequest.customAnchor under Anchor::BarItem. -1 when it cannot

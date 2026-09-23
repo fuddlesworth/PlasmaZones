@@ -194,16 +194,11 @@ public:
     static constexpr int kScrollingOsdAdoptSettleMs = 300;
 
     // Shortcut cheatsheet overlay (impls in daemon/cheatsheet.cpp).
-    /// Toggle the cheatsheet on the cursor's screen. Show path resolves an
-    /// ENABLED tiling mode for the screen (@ref modeEnabled, not the routed
-    /// mode raw), the two feature gates, the engine layouts capability and
-    /// the shortcut catalog, and pushes them all into the
-    /// overlay (daemon-mediated push), dismisses any other Escape-consuming
-    /// modal first (picker / snap assist — at most one Escape grab consumer
-    /// at a time), then binds the sheet's dedicated Escape ad-hoc grab. With
-    /// every master switch off it posts @ref showModelessOsd instead of
-    /// showing a sheet.
+    /// Prefer the optional shell's shortcut reference on the cursor output.
+    /// When its IPC target is absent, toggle the daemon overlay with its
+    /// existing mode/capability filtering and dedicated Escape grab.
     void toggleCheatsheet();
+    void cancelCheatsheetRequest();
     /// Re-push catalog + mode + gates + layouts capability into a visible
     /// cheatsheet — live refilter on mode switches, rebinds, feature-gate
     /// flips and context switches. No-op when hidden, and a DISMISSAL when
@@ -218,10 +213,9 @@ public:
     void onCheatsheetDismissed();
 
 private:
-    /// Show path for the toggle shortcut: resolve cursor screen, catalog,
-    /// per-screen mode; dismiss sibling Escape-consuming modals; show and
-    /// bind the Escape grab. Only called from toggleCheatsheet().
-    void showCheatsheetOnCursorScreen();
+    /// Fallback show on the output captured at keypress. Resolves catalog
+    /// and mode, dismisses sibling modals, then binds the Escape grab.
+    void showCheatsheetOnScreen(const QString& screenId);
     /// Everything both cheatsheet push sites hand the overlay, resolved in
     /// one place so show and refresh cannot drift apart.
     struct CheatsheetPushState
@@ -1132,6 +1126,7 @@ private:
     std::unique_ptr<PhosphorWorkspaces::VirtualDesktopManager> m_virtualDesktopManager;
     std::unique_ptr<PhosphorWorkspaces::ActivityManager> m_activityManager;
     std::unique_ptr<ShortcutManager> m_shortcutManager;
+    ShellCheatsheetBridge* m_shellCheatsheetBridge = nullptr;
 
     // Domain-specific D-Bus adaptors
     // D-Bus adaptors need a parent (the adapted object); Qt requires it.

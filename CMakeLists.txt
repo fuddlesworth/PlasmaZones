@@ -99,6 +99,7 @@ find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS
     QuickControls2
     Gui
     DBus
+    Network
     Widgets
     ShaderTools
     Svg

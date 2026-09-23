@@ -389,6 +389,19 @@ private Q_SLOTS:
         QCOMPARE(screenStateFor(QStringLiteral("junk"), QStringLiteral("A")).mode, -1);
     }
 
+    void screenStateUsesTheReportedLayoutCapability()
+    {
+        const QString json = QStringLiteral(R"([{"screenId":"A","mode":1,"layoutsAvailable":true},)"
+                                            R"({"screenId":"B","mode":0,"layoutsAvailable":false},)"
+                                            R"({"screenId":"C","mode":2},)"
+                                            R"({"screenId":"D","mode":0,"layoutsAvailable":"true"}])");
+        QVERIFY(screenStateFor(json, QStringLiteral("A")).layoutsAvailable);
+        QVERIFY(!screenStateFor(json, QStringLiteral("B")).layoutsAvailable);
+        QVERIFY(!screenStateFor(json, QStringLiteral("C")).layoutsAvailable);
+        QVERIFY(!screenStateFor(json, QStringLiteral("D")).layoutsAvailable);
+        QVERIFY(!screenStateFor(json, QStringLiteral("missing")).layoutsAvailable);
+    }
+
     // The WindowDrag.registerDropProxy payload: the miniature's rect and
     // one entry per cell, both in screen pixels; empty and unnamed cells
     // are dropped.

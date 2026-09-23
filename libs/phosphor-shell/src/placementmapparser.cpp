@@ -538,6 +538,7 @@ ScreenState screenStateFor(const QString& statesJson, const QString& screenId)
         out.layoutId = state[ScreenStatesLayoutId].toString();
         out.algorithmId = state[ScreenStatesAlgorithmId].toString();
         out.scrollingTemplateId = state[ScreenStatesTemplateId].toString();
+        out.layoutsAvailable = state[QLatin1String("layoutsAvailable")].toBool(false);
         return out;
     }
     return out;

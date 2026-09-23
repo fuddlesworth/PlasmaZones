@@ -91,6 +91,7 @@ class PHOSPHORSHELL_EXPORT PlacementMapScreen : public QObject
     Q_PROPERTY(int currentDesktop READ currentDesktop NOTIFY currentDesktopChanged)
     Q_PROPERTY(bool urgent READ isUrgent NOTIFY urgentChanged)
     Q_PROPERTY(QVariantList menuModel READ menuModel NOTIFY menuModelChanged)
+    Q_PROPERTY(bool layoutsAvailable READ layoutsAvailable NOTIFY layoutsAvailableChanged)
     Q_PROPERTY(int pinnedDesktop READ pinnedDesktop CONSTANT)
 
 public:
@@ -113,6 +114,7 @@ public:
     [[nodiscard]] QString screenName() const;
     [[nodiscard]] QString screenId() const;
     [[nodiscard]] int mode() const;
+    [[nodiscard]] bool layoutsAvailable() const;
     [[nodiscard]] qreal aspect() const;
     [[nodiscard]] QRect workArea() const;
     [[nodiscard]] QVariantList cells() const;
@@ -211,6 +213,7 @@ public:
 Q_SIGNALS:
     void screenIdChanged();
     void modeChanged();
+    void layoutsAvailableChanged();
     void aspectChanged();
     void workAreaChanged();
     void cellsChanged();

@@ -50,6 +50,7 @@ private Q_SLOTS:
     void aDynamicPropertyWriteReportsFailureButStoresTheValue();
     void screenOfANullItemFallsBackToPrimary();
     void screenOfAWindowlessItemFallsBackToPrimary();
+    void namedScreenRequiresAnExactLiveOutput();
     void anchorCenterForAnUnresolvableItemIsNegative();
     void anchorCenterForAWindowedItemIsItsScreenLocalCentre();
 };
@@ -317,6 +318,16 @@ void TestBarController::aDynamicPropertyWriteReportsFailureButStoresTheValue()
 // a null targetScreen leaves the popout transport with no bar to hang from;
 // anchorCenterFor is the opposite and returns a SENTINEL, because 0 is a
 // valid left-edge anchor and cannot carry "unknown".
+
+void TestBarController::namedScreenRequiresAnExactLiveOutput()
+{
+    BarController controller;
+    auto* screen = QGuiApplication::primaryScreen();
+    QVERIFY(screen);
+    QCOMPARE(controller.screenNamed(screen->name()), screen);
+    QCOMPARE(QQmlEngine::objectOwnership(screen), QQmlEngine::CppOwnership);
+    QCOMPARE(controller.screenNamed(QStringLiteral("missing-output")), nullptr);
+}
 
 void TestBarController::screenOfANullItemFallsBackToPrimary()
 {

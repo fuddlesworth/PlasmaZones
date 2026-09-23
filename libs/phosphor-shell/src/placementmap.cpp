@@ -85,6 +85,10 @@ int PlacementMapScreen::mode() const
 {
     return m_mode;
 }
+bool PlacementMapScreen::layoutsAvailable() const
+{
+    return m_state.layoutsAvailable;
+}
 qreal PlacementMapScreen::aspect() const
 {
     return m_aspect;
@@ -238,9 +242,12 @@ void PlacementMapScreen::refreshMode()
 
 void PlacementMapScreen::setState(const ScreenState& state)
 {
+    const bool layoutsChanged = state.layoutsAvailable != m_state.layoutsAvailable;
     const bool idsChanged = state.layoutId != m_state.layoutId || state.algorithmId != m_state.algorithmId
         || state.scrollingTemplateId != m_state.scrollingTemplateId;
     m_state = state;
+    if (layoutsChanged)
+        Q_EMIT layoutsAvailableChanged();
     setMode(state.mode);
     // A menu that is being shown re-reads so its `current` mark follows
     // the assignment; an empty menu is nobody's and stays empty.

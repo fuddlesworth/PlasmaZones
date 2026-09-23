@@ -260,6 +260,17 @@ QScreen* BarController::screenOf(QQuickItem* item) const
     return screen;
 }
 
+QScreen* BarController::screenNamed(const QString& name) const
+{
+    for (QScreen* screen : QGuiApplication::screens()) {
+        if (screen->name() == name) {
+            QQmlEngine::setObjectOwnership(screen, QQmlEngine::CppOwnership);
+            return screen;
+        }
+    }
+    return nullptr;
+}
+
 qreal BarController::anchorCenterFor(QQuickItem* item) const
 {
     if (!item) {

@@ -1046,56 +1046,7 @@ Item {
         }
     }
 
-    // The keybind cheatsheet (A3 §10): the daemon's chords drawn on this
-    // output's placement map. A Cooperative popout with OnDemand keyboard
-    // focus, so Escape and the type-to-filter keys land on the sheet while
-    // every real chord still reaches the compositor's global-shortcut
-    // filter first: press one and the map moves under the labels. Not
-    // Modal: the desktop stays live behind it and nothing is dimmed by
-    // the compositor.
-    //
-    // The sheet's own ShortcutCatalog is declared inside the Component,
-    // where its id resolves; it reads Control.getShortcutsJson and follows
-    // shortcutsChanged.
-    Component {
-        id: cheatsheetComponent
-
-        Cheatsheet {
-            implicitWidth: Screen.width
-            implicitHeight: Screen.height
-            screenName: Screen.name
-            map: Screen.name ? PlacementMap.forScreen(Screen.name) : null
-            catalog: chords.rows
-            open: true
-            onCloseRequested: open = false
-            onReleased: Popouts.close(Popouts.handleFor("cheatsheet"))
-
-            ShortcutCatalog {
-                id: chords
-            }
-        }
-    }
-
-    function toggleCheatsheet(): void {
-        Popouts.toggle({
-            "popoutId": "cheatsheet",
-            "content": cheatsheetComponent,
-            "anchor": PhosphorPopout.Anchor.ScreenCenter,
-            "exclusive": PhosphorPopout.ExclusiveMode.Cooperative,
-            "keyboardFocus": true,
-            "exclusiveKeyboard": true,
-            "dismissOnFocusLoss": false
-        });
-    }
-
-    // `phosphorctl call cheatsheet.toggle`, for the compositor keybind
-    // (the daemon's own toggle_cheatsheet chord drives its KWin-overlay
-    // sheet, not this one).
-    IpcTarget {
-        target: "cheatsheet"
-
-        function toggle(): void {
-            root.toggleCheatsheet();
-        }
+    CheatsheetSurface {
+        locked: sessionCoordinator.lock.state !== 0
     }
 }

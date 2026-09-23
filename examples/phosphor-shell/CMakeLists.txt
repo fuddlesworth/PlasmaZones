@@ -58,6 +58,7 @@ qt_add_qml_module(phosphor_shell_example
         shell.qml
         QuickSettingsSurface.qml
         AppearanceSurfaces.qml
+        CheatsheetSurface.qml
         NotificationSurfaces.qml
         DefaultWallpaper.qml
         TopPanel.qml

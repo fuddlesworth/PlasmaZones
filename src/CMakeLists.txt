@@ -579,6 +579,8 @@ set(plasmazones_daemon_SRCS
     daemon/rendering/dmabufglimport.h
     daemon/controllers/shortcutmanager.cpp
     daemon/controllers/shortcutmanager.h
+    daemon/controllers/shellcheatsheetbridge.cpp
+    daemon/controllers/shellcheatsheetbridge.h
     daemon/controllers/zoneselectorcontroller.cpp
     daemon/controllers/zoneselectorcontroller.h
     # Mode tracking and smart toggle (Unified Layout Model)
@@ -619,6 +621,7 @@ target_link_libraries(plasmazonesd
         Qt6::Quick
         Qt6::QuickControls2
         Qt6::Concurrent  # Pre-load shader bake cache on registry refresh
+        Qt6::Network  # Optional shell shortcut IPC, also available in shell-OFF builds
         Qt6::ShaderTools  # QShaderBaker for ZoneShaderNodeRhi (runtime GLSL bake)
 )
 

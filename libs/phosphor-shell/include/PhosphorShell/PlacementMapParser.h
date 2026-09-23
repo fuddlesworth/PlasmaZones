@@ -95,6 +95,7 @@ struct PHOSPHORSHELL_EXPORT ScreenState
     QString layoutId;
     QString algorithmId;
     QString scrollingTemplateId;
+    bool layoutsAvailable = false;
 };
 
 /// A tile from a `Tiling.windowsTileRequested` batch, reduced to what the

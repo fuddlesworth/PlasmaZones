@@ -1,394 +1,551 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// Phosphor.Dashboard.Cheatsheet, the keybind sheet drawn on the
-// placement map (A3 §10).
-//
-// A full-screen overlay on the void ground at 60 % over the live
-// desktop: the screen's cells at 1:1 (FullMap) with a chord label on
-// each rect or gap the chord acts on (ChordLayout.place), and the
-// non-spatial chords in a 300 px column on the right edge. Top-left
-// reads `Mode · desktop N`; typing filters both the labels and the
-// column, Escape closes.
-//
-// Live mode comes from the map: the host surface takes keyboard focus
-// on demand, never exclusively, so a chord pressed while the sheet is
-// up still reaches the compositor and the daemon, the map moves, and
-// the labels ride the rects (FullMap retargets, the labels follow their
-// anchors). The pill of the chord just performed cannot be pulsed
-// here: the compositor consumes the chord and nothing reports which one
-// fired, so `hot` stays a hover signal.
-//
-// Inputs are properties: `map` (a PlacementMapScreen, or a fake with
-// `workArea`, `cells`, `mode`, `focusedCellId()` and `changed()`),
-// `catalog` (ShortcutCatalog.rows, or a fake list), `open`.
-
+pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Controls.Basic as Basic
+import QtQuick.Layouts
 import Phosphor.Theme
 import Phosphor.Widgets
-import "ChordLayout.js" as Layout
 
 FocusScope {
     id: root
-
+    objectName: "shortcutReference"
     property string screenName: ""
     property var map: null
     property var catalog: []
+    property bool catalogAvailable: true
+    property bool catalogLoading: false
+    property string catalogError: ""
+    property bool layoutsAvailable: true
+    property string workspaceName: ""
+    property Component decoration: null
+    property var surfaceEffects: null
+    readonly property rect materialRect: Qt.rect(sheet.x, sheet.y, sheet.width, sheet.height)
+    readonly property real materialRadius: sheet.radius
+    readonly property bool materialBlurred: visible && Window.window && Window.window.visible && Appearance.settings.material !== "solid"
+    function applyMaterial(): void {
+        if (!surfaceEffects || !root.Window.window)
+            return;
+        const region = materialBlurred ? root.mapToItem(null, materialRect.x, materialRect.y, materialRect.width, materialRect.height) : Qt.rect(0, 0, 0, 0);
+        surfaceEffects.setBlurBehind(root, region, Qt.rect(0, 0, 0, 0), materialRadius);
+    }
+    onMaterialRectChanged: Qt.callLater(applyMaterial)
+    onMaterialRadiusChanged: Qt.callLater(applyMaterial)
+    onMaterialBlurredChanged: Qt.callLater(applyMaterial)
+    onSurfaceEffectsChanged: Qt.callLater(applyMaterial)
+    onParentChanged: Qt.callLater(applyMaterial)
+    onXChanged: Qt.callLater(applyMaterial)
+    onYChanged: Qt.callLater(applyMaterial)
+    Window.onWindowChanged: Qt.callLater(applyMaterial)
     property bool open: false
     property string filter: ""
-    property int columnWidth: 300
-    property int rowHeight: 32
-
-    signal closeRequested
-
+    property string scope: "tiling"
+    property bool assignedOnly: false
+    property bool showGuide: true
+    property bool scopeChosen: false
+    property var expandedRows: ({})
     readonly property int mode: map ? map.mode : -1
     readonly property int currentDesktop: map ? map.currentDesktop : -1
-    readonly property string modeName: {
-        switch (mode) {
-        case 0:
-            return qsTr("Snapping");
-        case 1:
-            return qsTr("Tiling");
-        case 2:
-            return qsTr("Scrolling");
-        default:
-            return qsTr("No placement");
-        }
+    readonly property string currentScope: mode === 0 ? "snapping" : mode === 1 ? "tiling" : mode === 2 ? "scrolling" : "general"
+    readonly property bool placementScope: ["tiling", "snapping", "scrolling"].includes(scope)
+    readonly property color accent: Appearance.stops[scope === "snapping" ? 0 : scope === "scrolling" ? 2 : scope === "shell" ? 3 : 1]
+    readonly property bool unavailable: !catalogAvailable || catalogError.length > 0
+    readonly property bool fullScreen: true
+    readonly property int actionCount: reference.count
+    readonly property var groups: reference.groups
+    readonly property string guideId: scope === "tiling" ? "focus_master" : scope === "scrolling" ? "scroll_center_column" : "snap_to_zone_1"
+    readonly property var guideBindings: {
+        const row = catalog.find(row => row.id === guideId);
+        return row ? (row.triggers || []).map(trigger => reference.keyPartsForTrigger(trigger)) : [];
     }
-
-    // The placement, recomputed when the rects, the focus, the catalog or
-    // the filter move. `spatial` labels carry x/y as their centres.
-    property var spatial: []
-    property var column: []
-    // The shell surfaces that have no daemon chord. They are bound as
-    // compositor keybinds to `phosphorctl call`, which no daemon surface
-    // reports, so the cheatsheet lists them without a chord rather than
-    // guessing at one.
-    readonly property var shellVerbs: [
-        {
-            "id": "shell:launcher",
-            "label": qsTr("Launcher")
-        },
-        {
-            "id": "shell:control-center",
-            "label": qsTr("Control center")
-        },
-        {
-            "id": "shell:notifications",
-            "label": qsTr("Notifications")
-        },
-        {
-            "id": "shell:lock",
-            "label": qsTr("Lock")
-        },
-        {
-            "id": "shell:screenshot",
-            "label": qsTr("Screenshot")
-        },
-        {
-            "id": "shell:power",
-            "label": qsTr("Power")
-        },
-        {
-            "id": "shell:dashboard",
-            "label": qsTr("Dashboard")
-        }
-    ]
-
-    function relayout(): void {
-        const cells = fullMap.cellRects;
-        const focused = map && typeof map.focusedCellId === "function" ? map.focusedCellId() : fullMap.focusedId;
-        const rows = (catalog || []).concat(shellVerbs.map(v => ({
-                    "id": v.id,
-                    "label": v.label,
-                    "triggers": [],
-                    "assigned": false,
-                    "mode": "all"
-                })));
-        const placed = Layout.place(cells, focused, rows, mode);
-        spatial = placed.spatial.filter(l => Layout.matches(l, filter));
-        column = placed.column.filter(l => Layout.matches(l, filter));
-        _syncSpatial(spatial);
-    }
-
-    // Reconcile the pill rows in place, keyed by the row's id. Handing the
-    // Repeater a fresh array destroys and rebuilds every delegate, which both
-    // discards the x/y Behaviors below (the labels jump instead of riding the
-    // rects, contradicting this file's own header) and re-runs the staggered
-    // enter from `Component.onCompleted` — in live mode that is every window
-    // move. Same shape FullMap and PlacementMiniature use.
-    //
-    // Role names are suffixed because ChordPill already declares `chord`,
-    // `label`, `description` and `assigned`; a role of the same name would
-    // collide with the property it is meant to feed.
-    function _syncSpatial(rows): void {
-        for (let i = 0; i < rows.length; ++i) {
-            const r = rows[i];
-            let at = -1;
-            for (let j = i; j < spatialModel.count; ++j) {
-                if (spatialModel.get(j).rowId === r.id) {
-                    at = j;
-                    break;
-                }
-            }
-            if (at === -1) {
-                spatialModel.insert(i, _spatialRow(r));
-                continue;
-            }
-            if (at !== i)
-                spatialModel.move(at, i, 1);
-            const row = _spatialRow(r);
-            for (const key in row)
-                spatialModel.setProperty(i, key, row[key]);
-        }
-        while (spatialModel.count > rows.length)
-            spatialModel.remove(spatialModel.count - 1);
-    }
-
-    function _spatialRow(r) {
-        return {
-            "rowId": String(r.id),
-            "chordText": String(r.chord),
-            "labelText": String(r.label),
-            "descriptionText": String(r.description),
-            "assignedFlag": !!r.assigned,
-            "px": Number(r.x) || 0,
-            "py": Number(r.y) || 0
-        };
-    }
-
-    ListModel {
-        id: spatialModel
-    }
-
-    onCatalogChanged: relayout()
-    onFilterChanged: relayout()
-    onModeChanged: relayout()
-    Connections {
-        target: fullMap
-        function onCellRectsChanged() {
-            root.relayout();
-        }
-    }
-    Component.onCompleted: {
-        relayout();
-        // Built with open already true (a popout builds its content fresh
-        // per open): run the enter from zero.
-        if (open) {
-            _opened = true;
-            progress = 0;
-            progress = 1;
-            root.forceActiveFocus();
-        }
-    }
-
-    // Enter / release.
     property real progress: 0
-    Behavior on progress {
-        NumberAnimation {
-            duration: root.open ? Motion.duration_enter_content : Motion.duration_release
-            easing: root.open ? Motion.reveal : Motion.release
-        }
-    }
-    // Released fires once the close animation has run, for a host that
-    // tears the surface down afterwards.
+    property bool wasOpened: false
+    signal closeRequested
     signal released
-    property bool _opened: false
-    onOpenChanged: {
-        progress = open ? 1 : 0;
-        if (open) {
-            _opened = true;
-            filter = "";
-            root.forceActiveFocus();
-        }
-    }
-    onProgressChanged: {
-        if (!open && _opened && progress === 0) {
-            _opened = false;
-            root.released();
-        }
-    }
-    visible: progress > 0 || open
+    signal retryRequested
+    implicitWidth: 1440
+    implicitHeight: 900
+    visible: open || progress > 0
     enabled: open
     opacity: progress
-
-    Accessible.role: Accessible.Pane
+    focus: true
+    Accessible.role: Accessible.Dialog
     Accessible.name: qsTr("Keyboard shortcuts")
 
-    // Escape closes; printable keys filter; Backspace edits the filter.
-    // Modifier chords are left unaccepted so the compositor's grab (which
-    // runs first anyway) is the only consumer.
-    focus: true
-    Keys.onPressed: event => {
-        if (event.key === Qt.Key_Escape) {
-            event.accepted = true;
-            if (root.filter !== "")
-                root.filter = "";
-            else
-                root.closeRequested();
-            return;
-        }
-        if ((event.modifiers & ~Qt.ShiftModifier) !== Qt.NoModifier)
-            return;
-        if (event.key === Qt.Key_Backspace) {
-            event.accepted = true;
-            root.filter = root.filter.slice(0, -1);
-            return;
-        }
-        if (event.text !== "" && event.text.charCodeAt(0) >= 32) {
-            event.accepted = true;
-            root.filter += event.text;
+    ShortcutReferenceModel {
+        id: reference
+        rows: root.catalog
+        scope: root.scope
+        query: root.filter
+        assignedOnly: root.assignedOnly
+        layoutsAvailable: root.layoutsAvailable
+    }
+    function focusSearch(): void {
+        search.forceActiveFocus(Qt.OtherFocusReason);
+    }
+    function activate(): void {
+        wasOpened = true;
+        scopeChosen = false;
+        filter = "";
+        scope = currentScope;
+        progress = 1;
+        Qt.callLater(focusSearch);
+    }
+    function handleEscape(): void {
+        if (filter.length) {
+            filter = "";
+            focusSearch();
+        } else
+            closeRequested();
+    }
+    function selectScope(value): void {
+        scopeChosen = true;
+        scope = value;
+        viewport.contentY = 0;
+    }
+    function toggleRow(id): void {
+        const next = Object.assign({}, expandedRows);
+        next[id] = !next[id];
+        expandedRows = next;
+    }
+    function cycleFocus(backward): void {
+        let next = root.Window.window?.activeFocusItem || root;
+        for (let i = 0; i < 1000; ++i) {
+            next = next.nextItemInFocusChain(!backward);
+            let parent = next;
+            while (parent && parent !== root)
+                parent = parent.parent;
+            if (parent === root && next !== root && next.visible && next.enabled && next.activeFocusOnTab) {
+                next.forceActiveFocus(backward ? Qt.BacktabFocusReason : Qt.TabFocusReason);
+                return;
+            }
         }
     }
-
-    // Ground: void at 60 %.
+    onOpenChanged: {
+        if (open)
+            activate();
+        else
+            progress = 0;
+    }
+    onCurrentScopeChanged: if (open && !scopeChosen)
+        scope = currentScope
+    Component.onCompleted: if (open)
+        activate()
+    onProgressChanged: if (!open && wasOpened && progress === 0) {
+        wasOpened = false;
+        released();
+    }
+    Behavior on progress {
+        NumberAnimation {
+            duration: Appearance.motion ? (root.open ? 180 : 140) : 0
+            easing.type: Easing.OutCubic
+        }
+    }
+    Keys.onEscapePressed: handleEscape()
+    Keys.onTabPressed: event => cycleFocus(!!(event.modifiers & Qt.ShiftModifier))
+    Keys.onBacktabPressed: cycleFocus(true)
+    Shortcut {
+        sequence: "Tab"
+        enabled: root.open
+        onActivated: root.cycleFocus(false)
+    }
+    Shortcut {
+        sequence: "Shift+Tab"
+        enabled: root.open
+        onActivated: root.cycleFocus(true)
+    }
+    Shortcut {
+        sequences: [StandardKey.Find]
+        enabled: root.open
+        onActivated: {
+            root.focusSearch();
+            search.selectAll();
+        }
+    }
+    Connections {
+        target: root.Window.window
+        function onActiveFocusItemChanged() {
+            const item = root.Window.window.activeFocusItem;
+            let parent = item;
+            while (parent && parent !== viewport.contentItem)
+                parent = parent.parent;
+            if (!parent || !item)
+                return;
+            const point = item.mapToItem(viewport.contentItem, 0, 0);
+            if (point.y < viewport.contentY)
+                viewport.contentY = Math.max(0, point.y - 8);
+            else if (point.y + item.height > viewport.contentY + viewport.height)
+                viewport.contentY = Math.max(0, Math.min(viewport.contentHeight - viewport.height, point.y + item.height - viewport.height + 8));
+        }
+    }
     Rectangle {
         anchors.fill: parent
-        color: Appearance.recess
-        opacity: 0.6
-    }
-
-    FullMap {
-        id: fullMap
-
-        anchors.fill: parent
-        model: root.map
-    }
-
-    // Top-left: `Mode · desktop N`, and the filter while one is typed.
-    Column {
-        anchors.left: parent.left
-        anchors.top: parent.top
-        anchors.margins: Tokens.spacing_xl
-        spacing: Tokens.spacing_xs
-
-        Text {
-            text: root.currentDesktop >= 0 ? qsTr("%1 · desktop %2").arg(root.modeName).arg(root.currentDesktop + 1) : root.modeName
-            color: Appearance.text
-            font.family: Tokens.font_family_ui
-            font.pixelSize: Tokens.font_size_body_m
-        }
-        Row {
-            spacing: Tokens.spacing_xs
-            Text {
-                text: root.filter !== "" ? qsTr("Search") : qsTr("Type to search")
-                color: Appearance.muted
-                font.family: Tokens.font_family_ui
-                font.pixelSize: Tokens.font_size_label_m
-            }
-            TabularText {
-                text: root.filter
-                font.pixelSize: Tokens.font_size_label_m
-                color: Appearance.text
-            }
+        color: Qt.alpha(Appearance.recess, .48)
+        MouseArea {
+            anchors.fill: parent
+            onClicked: root.closeRequested()
         }
     }
-
-    // The spatial labels, centred on their anchors. Enter outward from the
-    // focused window with a 6 ms stagger (A3 §10 c).
-    Repeater {
-        id: spatialLabels
-
-        model: spatialModel
-        delegate: ChordPill {
-            id: pill
-
-            required property int index
-            required property string chordText
-            required property string labelText
-            required property string descriptionText
-            required property bool assignedFlag
-            required property real px
-            required property real py
-
-            chord: pill.chordText
-            label: pill.labelText
-            description: pill.descriptionText
-            assigned: pill.assignedFlag
-            x: Math.round(pill.px - width / 2)
-            y: Math.round(pill.py - height / 2)
-
-            opacity: 0
-            Component.onCompleted: opacity = 1
-            Behavior on opacity {
-                SequentialAnimation {
-                    PauseAnimation {
-                        // `index` is -1 while the delegate is still being
-                        // incubated, and a negative duration is a QML error
-                        // that discards the whole animation. Clamp at zero.
-                        duration: Motion.reducedMotion ? 0 : Math.max(0, Math.min(150, pill.index * 6))
+    Item {
+        id: sheet
+        objectName: "shortcutSheet"
+        readonly property real radius: Appearance.radius
+        readonly property bool narrow: width < 650
+        readonly property bool shortScreen: height < 600
+        readonly property int sidebarWidth: width < 1050 ? 180 : 218
+        readonly property real inset: width < 1050 ? 20 : 28
+        width: Math.max(1, Math.min(1180, root.width - Math.min(68, root.width * .08)))
+        height: Math.max(1, Math.min(724, root.height - (root.height < 650 ? 76 : 128)))
+        x: (root.width - width) / 2
+        y: Math.min(root.height - height - 16, (root.height - height) / 2 + (root.height < 650 ? 0 : 22))
+        ShellSurface {
+            id: ground
+            property bool shaderAnchor: true
+            anchors.fill: parent
+            accented: true
+        }
+        DecorationSlot {
+            anchors.fill: parent
+            component: root.decoration
+            contentItem: ground
+            surfacePath: "shell.phosphor.cheatsheet"
+            focused: root.activeFocus
+        }
+        MouseArea {
+            anchors.fill: parent
+        }
+        Rectangle {
+            x: 1
+            y: 1
+            width: sheet.narrow ? sheet.width - 2 : sheet.sidebarWidth
+            height: sheet.narrow ? 61 : sheet.height - 2
+            color: Qt.alpha(Appearance.recess, .3)
+            radius: Appearance.radius
+            Rectangle {
+                visible: !sheet.narrow
+                anchors.right: parent.right
+                width: parent.radius
+                height: parent.height
+                color: parent.color
+            }
+        }
+        Rectangle {
+            x: sheet.narrow ? 0 : sheet.sidebarWidth
+            y: sheet.narrow ? 62 : 0
+            width: sheet.narrow ? sheet.width : 1
+            height: sheet.narrow ? 1 : sheet.height
+            color: Appearance.outline
+        }
+        ShortcutSidebar {
+            id: sidebar
+            width: sheet.narrow ? sheet.width : sheet.sidebarWidth
+            height: sheet.narrow ? 62 : sheet.height
+            scope: root.scope
+            currentMode: root.currentScope
+            workspaceName: root.workspaceName.length ? root.workspaceName : root.currentDesktop >= 0 ? qsTr("Workspace %1").arg(root.currentDesktop + 1) : ""
+            horizontal: sheet.narrow
+            onChosen: scope => root.selectScope(scope)
+        }
+        ColumnLayout {
+            id: main
+            x: sheet.narrow ? 0 : sheet.sidebarWidth + 1
+            y: sheet.narrow ? 63 : 0
+            width: sheet.width - x
+            height: sheet.height - y
+            spacing: 0
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: sheet.inset
+                Layout.rightMargin: sheet.inset
+                Layout.topMargin: sheet.shortScreen ? 14 : Appearance.compact ? 20 : 25
+                Layout.bottomMargin: sheet.shortScreen ? 10 : 17
+                spacing: 20
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 5
+                    ShortcutText {
+                        Layout.fillWidth: true
+                        text: qsTr("Keyboard shortcuts")
+                        size: sheet.shortScreen ? 21 : 24.5
+                        font.weight: Font.Medium
+                        font.letterSpacing: -.65
                     }
-                    NumberAnimation {
-                        duration: Motion.duration_enter_content
-                        easing: Motion.reveal
+                    ShortcutText {
+                        visible: !sheet.shortScreen
+                        Layout.fillWidth: true
+                        text: qsTr("Find your next move.")
+                        muted: true
+                    }
+                }
+                ShellButton {
+                    objectName: "shortcutClose"
+                    iconName: "window-close"
+                    label: qsTr("Close shortcut reference")
+                    outlined: true
+                    flat: true
+                    implicitWidth: 32
+                    implicitHeight: 32
+                    onClicked: root.closeRequested()
+                }
+            }
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.leftMargin: sheet.inset
+                Layout.rightMargin: sheet.inset
+                implicitHeight: Math.max(43, search.implicitHeight + 8)
+                color: Qt.alpha(Appearance.recess, .78)
+                border.color: search.activeFocus ? root.accent : Appearance.outline
+                radius: Appearance.radius * .5
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 12
+                    anchors.rightMargin: 10
+                    spacing: 10
+                    ShellIcon {
+                        Layout.preferredWidth: 17
+                        Layout.preferredHeight: 17
+                        source: "edit-find"
+                        color: Appearance.muted
+                    }
+                    Basic.TextField {
+                        id: search
+                        objectName: "shortcutSearch"
+                        Layout.fillWidth: true
+                        text: root.filter
+                        onTextEdited: {
+                            root.filter = text;
+                            viewport.contentY = 0;
+                        }
+                        placeholderText: qsTr("Find an action or key…")
+                        placeholderTextColor: Appearance.muted
+                        color: Appearance.text
+                        font.family: Tokens.font_family_ui
+                        font.pixelSize: 12 * Appearance.textScale
+                        background: null
+                        selectByMouse: true
+                        Accessible.name: qsTr("Search shortcuts")
+                        Keys.onEscapePressed: root.handleEscape()
+                    }
+                    ShortcutKeys {
+                        visible: !root.filter.length
+                        bindings: [["Ctrl", "F"]]
+                        Layout.preferredWidth: visible ? implicitWidth : 0
+                    }
+                    ShellButton {
+                        visible: root.filter.length > 0
+                        objectName: "shortcutClearSearch"
+                        iconName: "edit-clear"
+                        label: qsTr("Clear shortcut search")
+                        implicitWidth: 26
+                        implicitHeight: 26
+                        flat: true
+                        onClicked: {
+                            root.filter = "";
+                            root.focusSearch();
+                        }
                     }
                 }
             }
-            Behavior on x {
-                NumberAnimation {
-                    duration: Motion.duration_release
-                    easing: Motion.release
+            Flow {
+                Layout.fillWidth: true
+                Layout.leftMargin: sheet.inset
+                Layout.rightMargin: sheet.inset
+                Layout.topMargin: 8
+                Layout.bottomMargin: 10
+                spacing: 10
+                ShortcutText {
+                    width: Math.max(100, parent.width - assigned.implicitWidth - guideToggle.implicitWidth - 20)
+                    height: Math.max(30, implicitHeight)
+                    verticalAlignment: Text.AlignVCenter
+                    text: root.catalogLoading ? qsTr("Loading shortcuts…") : root.unavailable ? qsTr("Catalog unavailable") : root.placementScope ? qsTr("%1 actions · includes shared shortcuts").arg(reference.count) : qsTr("%1 actions").arg(reference.count)
+                    muted: true
+                    size: 10
                 }
-            }
-            Behavior on y {
-                NumberAnimation {
-                    duration: Motion.duration_release
-                    easing: Motion.release
-                }
-            }
-        }
-    }
-
-    // The right-edge column: non-spatial chords as 32 px rows, the key in
-    // a pill on the left and the description on the right.
-    Column {
-        id: columnList
-
-        anchors.right: parent.right
-        anchors.top: parent.top
-        anchors.margins: Tokens.spacing_xl
-        width: root.columnWidth
-        spacing: 0
-
-        Text {
-            text: qsTr("Not on the map")
-            color: Appearance.muted
-            font.family: Tokens.font_family_ui
-            font.pixelSize: Tokens.font_size_label_m
-            font.letterSpacing: 1
-            font.capitalization: Font.AllUppercase
-            height: root.rowHeight
-            verticalAlignment: Text.AlignVCenter
-        }
-
-        Repeater {
-            model: root.column
-            delegate: Item {
-                id: row
-
-                required property var modelData
-
-                width: columnList.width
-                height: root.rowHeight
-
-                ChordPill {
-                    id: rowPill
-
-                    anchors.left: parent.left
-                    anchors.verticalCenter: parent.verticalCenter
-                    chord: row.modelData.chord
-                    label: row.modelData.label
-                    assigned: row.modelData.assigned
-                }
-                Text {
-                    anchors.left: rowPill.right
-                    anchors.leftMargin: Tokens.spacing_m
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: row.modelData.label
-                    color: row.modelData.assigned ? Appearance.text : Appearance.muted
+                Basic.CheckBox {
+                    id: assigned
+                    objectName: "shortcutAssignedOnly"
+                    text: qsTr("Assigned only")
+                    checked: root.assignedOnly
+                    onToggled: root.assignedOnly = checked
                     font.family: Tokens.font_family_ui
-                    font.pixelSize: Tokens.font_size_body_m
-                    elide: Text.ElideRight
+                    font.pixelSize: 10 * Appearance.textScale
+                    palette.windowText: Appearance.muted
+                    palette.highlight: root.accent
+                    implicitHeight: Math.max(30, contentItem.implicitHeight + 8)
+                    indicator: Rectangle {
+                        x: assigned.leftPadding
+                        y: (assigned.height - height) / 2
+                        implicitWidth: 13 * Appearance.textScale
+                        implicitHeight: implicitWidth
+                        radius: 2
+                        color: assigned.checked ? root.accent : Appearance.recess
+                        border.color: assigned.visualFocus ? root.accent : Appearance.outline
+                        ShellIcon {
+                            anchors.fill: parent
+                            anchors.margins: 1
+                            source: "checkmark"
+                            color: Appearance.recess
+                            visible: assigned.checked
+                        }
+                    }
+                    contentItem: ShortcutText {
+                        leftPadding: assigned.indicator.width + assigned.spacing
+                        text: assigned.text
+                        size: 10
+                        muted: true
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+                ShellButton {
+                    id: guideToggle
+                    objectName: "shortcutGuideToggle"
+                    visible: root.placementScope
+                    implicitWidth: visible ? contentItem.implicitWidth + 12 : 0
+                    text: root.showGuide ? qsTr("Hide field guide") : qsTr("Show field guide")
+                    iconName: "view-grid"
+                    labelSize: 10
+                    foreground: Appearance.muted
+                    flat: true
+                    checkable: true
+                    checked: root.showGuide
+                    onClicked: root.showGuide = !root.showGuide
+                }
+            }
+            Flickable {
+                id: viewport
+                objectName: "shortcutViewport"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.leftMargin: sheet.inset
+                Layout.rightMargin: sheet.inset
+                contentWidth: width
+                contentHeight: content.implicitHeight + 24
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                Basic.ScrollBar.vertical: Basic.ScrollBar {
+                    width: 5
+                }
+                Column {
+                    id: content
+                    width: viewport.width
+                    spacing: 23
+                    ShortcutGuide {
+                        width: parent.width
+                        visible: root.showGuide && root.placementScope && !root.filter.length && !root.unavailable && !root.catalogLoading
+                        scope: root.scope
+                        accent: root.accent
+                        bindings: root.guideBindings
+                    }
+                    ShortcutText {
+                        visible: root.scope === "shell" && !root.unavailable && !root.catalogLoading
+                        width: parent.width
+                        text: qsTr("Shell actions use compositor shortcuts. A missing binding means it hasn’t been provided here.")
+                        muted: true
+                    }
+                    GridLayout {
+                        id: grid
+                        width: parent.width
+                        visible: !root.unavailable && !root.catalogLoading && reference.count > 0
+                        columns: sheet.width < 1050 ? 1 : 2
+                        columnSpacing: 26
+                        rowSpacing: 22
+                        Repeater {
+                            model: grid.visible ? reference.groups : []
+                            delegate: ShortcutGroup {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: (grid.width - (grid.columns - 1) * grid.columnSpacing) / grid.columns
+                                Layout.alignment: Qt.AlignTop
+                                group: modelData
+                                accent: root.accent
+                                expandedRows: root.expandedRows
+                                onExpansionToggled: id => root.toggleRow(id)
+                            }
+                        }
+                    }
+                    Column {
+                        visible: root.unavailable || root.catalogLoading || reference.count === 0
+                        width: parent.width
+                        spacing: 16
+                        topPadding: 28
+                        ShellIcon {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: 30
+                            height: 30
+                            source: root.unavailable || root.catalogLoading ? "input-keyboard" : "edit-find"
+                            color: root.accent
+                        }
+                        ShortcutText {
+                            width: parent.width
+                            horizontalAlignment: Text.AlignHCenter
+                            size: 16
+                            objectName: "shortcutEmptyTitle"
+                            text: root.catalogLoading ? qsTr("Loading your shortcuts…") : root.unavailable ? qsTr("Shortcuts aren’t available yet.") : root.filter.length ? qsTr("No matching shortcuts.") : root.assignedOnly ? qsTr("No assigned shortcuts here.") : qsTr("No shortcuts in this section.")
+                        }
+                        ShortcutText {
+                            width: Math.min(parent.width, 360)
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            horizontalAlignment: Text.AlignHCenter
+                            muted: true
+                            text: root.catalogLoading ? qsTr("Reading your configured bindings.") : root.unavailable ? qsTr("The shortcut service couldn’t be reached. Try reconnecting to load your bindings.") : root.filter.length ? qsTr("Try an action, a key, or another section.") : root.assignedOnly ? qsTr("Turn off Assigned only to see actions you can bind.") : qsTr("Choose another section to browse the available actions.")
+                        }
+                        ShellButton {
+                            objectName: "shortcutRecover"
+                            visible: !root.catalogLoading && (root.unavailable || root.filter.length || root.assignedOnly)
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: root.unavailable ? qsTr("Try again") : root.filter.length ? qsTr("Clear search") : qsTr("Show unassigned actions")
+                            outlined: true
+                            implicitHeight: 36
+                            onClicked: {
+                                if (root.unavailable)
+                                    root.retryRequested();
+                                else if (root.filter.length)
+                                    root.filter = "";
+                                else
+                                    root.assignedOnly = false;
+                                root.focusSearch();
+                            }
+                        }
+                        ShellButton {
+                            visible: !root.unavailable && !root.catalogLoading && root.filter.length && root.scope !== "all"
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: qsTr("Search all shortcuts")
+                            flat: true
+                            onClicked: root.selectScope("all")
+                        }
+                    }
+                }
+            }
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: 1
+                color: Appearance.outline
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.margins: sheet.shortScreen ? 10 : 14
+                Layout.leftMargin: sheet.inset
+                Layout.rightMargin: sheet.inset
+                spacing: 7
+                ShellIcon {
+                    Layout.preferredWidth: 14
+                    Layout.preferredHeight: 14
+                    source: "input-keyboard"
+                    color: Appearance.muted
+                }
+                ShortcutText {
+                    Layout.fillWidth: true
+                    text: qsTr("Meta is the Super / Windows key")
+                    size: 10
+                    muted: true
+                }
+                ShortcutKeys {
+                    bindings: [[qsTr("Esc")]]
+                }
+                ShortcutText {
+                    text: root.filter.length ? qsTr("Clear search") : qsTr("Close reference")
+                    size: 10
+                    muted: true
                 }
             }
         }

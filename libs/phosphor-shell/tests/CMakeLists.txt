@@ -131,6 +131,11 @@ target_link_libraries(test_phosphorshell_placementmapparser
 )
 add_test(NAME test_phosphorshell_placementmapparser COMMAND test_phosphorshell_placementmapparser)
 phosphorshell_isolate_test(test_phosphorshell_placementmapparser "QT_QPA_PLATFORM=offscreen")
+add_executable(test_phosphorshell_placementmap_live test_placementmap_live.cpp)
+target_link_libraries(test_phosphorshell_placementmap_live PRIVATE
+    Qt6::Test Qt6::DBus PhosphorShell::PhosphorShell)
+add_test(NAME test_phosphorshell_placementmap_live COMMAND test_phosphorshell_placementmap_live)
+phosphorshell_isolate_test(test_phosphorshell_placementmap_live "QT_QPA_PLATFORM=offscreen")
 phosphorshell_isolate_test(test_phosphorshell_workspaces "QT_QPA_PLATFORM=offscreen")
 # TIMEOUT set AFTER the isolation call, which only supplies its 120s default
 # when no TIMEOUT is set yet — last write wins.
