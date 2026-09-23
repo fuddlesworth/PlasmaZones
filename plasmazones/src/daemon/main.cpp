@@ -48,6 +48,13 @@ using namespace PlasmaZones;
 
 namespace {
 
+// The KGlobalAccel component key, and the name printed for --version. Named
+// once because two sites need it and they must not drift: the early --version
+// path at the top of main() runs before QGuiApplication exists, while
+// app.setApplicationName() feeds QCommandLineParser's own showVersion() for
+// every other invocation. Must match plasmazonesd.desktop.
+constexpr const char* kApplicationName = "plasmazonesd";
+
 // Self-pipe for signal delivery. The handler may only touch async-signal-safe
 // calls, so it writes one byte here and returns; the real shutdown runs on the
 // main thread from a QSocketNotifier slot.
@@ -74,6 +81,27 @@ extern "C" void signalHandler(int signum)
 
 int main(int argc, char* argv[])
 {
+    // --version is answered HERE, before everything, because everything below
+    // assumes a live session. The Wayland guard exits cleanly on a machine with
+    // no compositor, and QCommandLineParser only reaches --version at the
+    // bottom of this function, after a QGuiApplication whose constructor is the
+    // very thing that guard exists to avoid calling headless. So without this,
+    // asking the binary what it is from a package build, a container or a bug
+    // report printed nothing on stdout and exited 0.
+    //
+    // Answered by hand rather than through the parser, and deliberately kept to
+    // the version alone: reproducing the --help option table here would
+    // duplicate the real one twenty lines down and drift from it. --help still
+    // needs a session. The format matches QCommandLineParser::showVersion()
+    // ("<name> <version>") so a headless --version and a session --version
+    // cannot disagree. `-v` is included because addVersionOption() binds it.
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--version") == 0 || std::strcmp(argv[i], "-v") == 0) {
+            std::printf("%s %s\n", kApplicationName, PlasmaZones::VERSION_STRING.toLocal8Bit().constData());
+            return 0;
+        }
+    }
+
     // Exit cleanly (code 0) if there is no usable Wayland display — avoids a
     // SIGABRT → Restart=on-failure loop. When systemd respawns us during the
     // logout → SDDM handoff (or autostarts us in a session that has no live
@@ -238,7 +266,7 @@ int main(int argc, char* argv[])
 
     // Set up application metadata
     // applicationName is the KGlobalAccel component key — must match plasmazonesd.desktop
-    app.setApplicationName(QStringLiteral("plasmazonesd"));
+    app.setApplicationName(QString::fromLatin1(kApplicationName));
     app.setApplicationDisplayName(QStringLiteral("PlasmaZones"));
     app.setApplicationVersion(PlasmaZones::VERSION_STRING);
     app.setOrganizationName(QStringLiteral("plasmazones"));
