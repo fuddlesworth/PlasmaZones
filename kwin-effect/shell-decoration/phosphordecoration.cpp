@@ -233,7 +233,6 @@ void Decoration::paint(QPainter* painter, const QRectF& repaintArea)
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing);
     painter->setClipRect(repaintArea);
-    const qreal radius = window()->isMaximized() ? 0 : m_style->radius;
     painter->fillRect(rect(), alpha(palette().surface, palette().opacity));
     QLinearGradient tint(rect().topLeft(), QPointF(rect().width() * 0.6, 43));
     tint.setColorAt(0, alpha(accent(), 0.06));
@@ -241,12 +240,7 @@ void Decoration::paint(QPainter* painter, const QRectF& repaintArea)
     painter->fillRect(QRectF(0, 0, rect().width(), 43), tint);
     painter->setPen(palette().outline);
     painter->drawLine(QPointF(0, 42.5), QPointF(rect().width(), 42.5));
-    QLinearGradient rail(QPointF(radius, 0), QPointF(rect().width() - radius, 0));
     const bool focused = this->focused();
-    rail.setColorAt(0, alpha(accent(), focused ? 0.9 : 0.45));
-    rail.setColorAt(0.5, alpha(focused ? palette().text : accent(), focused ? 0.9 : 0.45));
-    rail.setColorAt(1, alpha(accent(), focused ? 0.9 : 0.45));
-    painter->fillRect(QRectF(radius, 0, std::max(0.0, rect().width() - 2 * radius), focused ? 2 : 1), rail);
     painter->setFont(m_style->font);
     const QFontMetricsF metrics(m_style->font);
     const QColor textColor = focused ? palette().text : palette().muted;

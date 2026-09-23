@@ -26,7 +26,7 @@ PhosphorSurfaceShaders::DecorationProfileTree shellDecorationSeedTree(const QVar
     const int radius = appearance.value(QStringLiteral("radius")).toInt();
     if (desktopStyleActive) {
         DecorationProfile window;
-        window.chain = QStringList{QStringLiteral("border"), QStringLiteral("shadow")};
+        window.chain = QStringList{QStringLiteral("border"), QStringLiteral("top-rail"), QStringLiteral("shadow")};
         const QColor accent = palette.windowColor(0);
         QVariantMap params{{QStringLiteral("border"),
                             QVariantMap{{QStringLiteral("borderWidth"), 1},
@@ -38,6 +38,16 @@ PhosphorSurfaceShaders::DecorationProfileTree shellDecorationSeedTree(const QVar
                                         {QStringLiteral("useWindowAccent"), true},
                                         {QStringLiteral("activeColor"), withAlpha(accent, .70)},
                                         {QStringLiteral("inactiveColor"), withAlpha(accent, .40)}}},
+                           {QStringLiteral("top-rail"),
+                            QVariantMap{{QStringLiteral("activeHeight"), 2},
+                                        {QStringLiteral("inactiveHeight"), 1},
+                                        {QStringLiteral("cornerRadius"), radius},
+                                        {QStringLiteral("squareWhenMaximized"), true},
+                                        {QStringLiteral("railInset"), 0},
+                                        {QStringLiteral("edgeSoftness"), .7},
+                                        {QStringLiteral("activeColor"), withAlpha(accent, .90)},
+                                        {QStringLiteral("activeCenterColor"), withAlpha(palette.text, .90)},
+                                        {QStringLiteral("inactiveColor"), withAlpha(accent, .45)}}},
                            {QStringLiteral("shadow"),
                             QVariantMap{{QStringLiteral("shadowSize"), 36},
                                         {QStringLiteral("hideWhenMaximized"), true},

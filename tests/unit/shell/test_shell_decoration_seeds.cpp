@@ -28,11 +28,19 @@ private Q_SLOTS:
         for (const auto& path :
              {QStringLiteral("window.floating"), QStringLiteral("window.snapped"), QStringLiteral("window.tiled")}) {
             QCOMPARE(active.resolve(path).enabledChain(),
-                     (QStringList{QStringLiteral("border"), QStringLiteral("shadow"), QStringLiteral("glow")}));
+                     (QStringList{QStringLiteral("border"), QStringLiteral("top-rail"), QStringLiteral("shadow"),
+                                  QStringLiteral("glow")}));
         }
+        const auto rail = active.resolve(QStringLiteral("window.floating"))
+                              .effectiveParameters()
+                              .value(QStringLiteral("top-rail"))
+                              .toMap();
+        QCOMPARE(rail.value(QStringLiteral("cornerRadius")).toInt(), values.value(QStringLiteral("radius")).toInt());
+        QCOMPARE(rail.value(QStringLiteral("activeHeight")).toInt(), 2);
+        QCOMPARE(rail.value(QStringLiteral("inactiveHeight")).toInt(), 1);
         values[QStringLiteral("glow")] = false;
         QCOMPARE(shellDecorationSeedTree(values, true).resolve(QStringLiteral("window.floating")).enabledChain(),
-                 (QStringList{QStringLiteral("border"), QStringLiteral("shadow")}));
+                 (QStringList{QStringLiteral("border"), QStringLiteral("top-rail"), QStringLiteral("shadow")}));
     }
 
     void livePreviewUpdatesBothViewsWithoutWritingDecorationConfig()
