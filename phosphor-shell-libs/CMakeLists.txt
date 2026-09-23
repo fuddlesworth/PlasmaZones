@@ -3,10 +3,15 @@
 #
 # Phosphor shell libraries: the theme, popout and IPC foundation, the
 # Phosphor.* QML surfaces, and the per-domain system service libraries.
-# Entered from the root CMakeLists only when BUILD_PHOSPHOR_SHELL is ON,
-# so nothing here needs its own gate. Order matters: phosphor-shell
-# links theme/popout/ipc, so they precede it. icontheme is consumed by
-# sni and notifications, so it configures first among the services.
+# Entered from the root CMakeLists only when BUILD_PHOSPHOR_SHELL is ON, so
+# the per-subdirectory `if(BUILD_PHOSPHOR_SHELL)` blocks below are redundant
+# rather than load-bearing. They are kept as belt-and-braces so each entry
+# reads as declaring its own precondition; do not take their presence as
+# evidence that this file is reachable with the flag off.
+#
+# Order matters: phosphor-shell links theme/popout/ipc, so they precede it.
+# icontheme is consumed by sni and notifications, so it configures first
+# among the services.
 
 add_subdirectory(libs/phosphor-theme)   # M3 color-token store + Phosphor.Theme QML singletons
 add_subdirectory(libs/phosphor-popout)  # central popout coordinator (lifetime, focus, scope arbitration)

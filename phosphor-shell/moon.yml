@@ -7,10 +7,12 @@ layer: 'application'
 stack: 'systems'
 tags: ['cmake']
 
-# The shell binary links plasmazones_rendering and plasmazones_shared_qml
-# from the plasmazones tier (ShellChrome hosts the surface decoration
-# through them), so the graph records that edge until those two move into
-# a phosphor library. Drop the plasmazones entry when that lands.
+# The shell binary links plasmazones_rendering, plasmazones_shared_qml and
+# plasmazones_shared_qmlplugin from the plasmazones tier (ShellChrome hosts
+# the surface decoration through them), so the graph records that edge until
+# all three move into a phosphor library. Drop the plasmazones entry when
+# that lands. phosphor-shell/tests also reads plasmazones/data/surface and
+# rides this same exception.
 dependsOn:
   - 'phosphor'
   - 'phosphor-shell-libs'

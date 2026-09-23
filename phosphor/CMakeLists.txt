@@ -72,25 +72,20 @@ add_subdirectory(libs/phosphor-audio)       # audio spectrum provider (CAVA back
 add_subdirectory(libs/phosphor-surfaces)    # managed surface lifecycle (engine, keep-alive, scope gen)
 add_subdirectory(libs/phosphor-overlay)     # per-screen shell-host + slot mechanism (rides on layer/shell-patterns/surfaces/animation/screens)
 # ───────────────────────────────────────────────────────────────────────
-# Phosphor SDK groundwork — gated behind BUILD_PHOSPHOR_SHELL (default off)
+# Declared last, because the shell tier looks these up
 # ───────────────────────────────────────────────────────────────────────
-# The Phase-1 foundation libraries (theme / popout / ipc), the phosphorctl
-# CLI, and the phosphor-shell binary are consumed only by the bundled shell,
-# the example demos, and third-party shells. NOTHING in the shipping
-# PlasmaZones tiler (daemon / editor / settings / kwin-effect) links them,
-# so building them in a default package is pure overhead and installs unused
-# runtime artifacts (the Phosphor.Theme QML plugin, /usr/bin/phosphorctl)
-# that a strict RPM build rejects as unpackaged files. Gate the whole tier;
-# the matching example demos under examples/ are gated the same way. Order
-# matters: phosphor-shell links theme/popout/ipc, so they precede it.
-# phosphor-engine and phosphor-workspaces precede the shell tier because
-# phosphor-shell links PhosphorWorkspaces (backing the Workspaces QML
-# singleton), and phosphor-workspaces links PhosphorEngine. Declared after
-# the shell block, the in-tree targets would not exist yet at the point
-# phosphor-shell looks for them, and its find_package fallback would
-# silently resolve against a system-installed copy instead.
-# Their own dependencies — identity, protocol, layout-api, geometry — are
-# all declared further up.
+# Everything in this file is unconditional: the shell-tier libraries (theme,
+# popout, ipc), the phosphorctl CLI and the phosphor-shell binary live in
+# phosphor-shell-libs/ and phosphor-shell/, which the ROOT CMakeLists enters
+# under BUILD_PHOSPHOR_SHELL. Nothing here is gated by that flag.
+#
+# Order still matters. phosphor-shell links PhosphorWorkspaces (backing the
+# Workspaces QML singleton) and phosphor-workspaces links PhosphorEngine, so
+# both must be declared before the root enters the shell tier. Declared after
+# it, the in-tree targets would not exist when phosphor-shell looks for them,
+# and its find_package fallback would silently resolve against a
+# system-installed copy instead. Their own dependencies — identity, protocol,
+# layout-api, geometry — are all declared further up.
 add_subdirectory(libs/phosphor-engine)  # unified placement engine contracts + window registry (SHARED lib)
 add_subdirectory(libs/phosphor-workspaces)  # virtual desktop / workspace management
 add_subdirectory(libs/phosphor-tile-engine) # autotile placement engine (IAutotileSettings + engine code)

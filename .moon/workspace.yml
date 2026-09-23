@@ -3,8 +3,11 @@
 #
 # moon workspace: one project per product tier, plus the repo root for the
 # checks that span tiers. CMake stays the build system inside each tier;
-# moon orders the tiers, runs only the affected ones, and caches the
-# results. See .moon/tasks/cmake.yml for the shared task shapes.
+# moon orders the tiers and runs only the affected ones. It does NOT cache
+# the build and test results: those tasks set `cache: false` because the
+# four tiers share one build directory (see .moon/tasks/cmake.yml), and
+# ccache remains the compile cache. See .moon/tasks/cmake.yml for the
+# shared task shapes.
 $schema: 'https://moonrepo.dev/schemas/workspace.json'
 
 projects:
@@ -22,10 +25,16 @@ vcs:
 constraints:
   # moon refuses an application depending on an application, which is the
   # product order this workspace is meant to enforce. phosphor-shell still
-  # links plasmazones_rendering and plasmazones_shared_qml (see
-  # phosphor-shell/moon.yml), so enforcement is off until those two move
-  # into a phosphor library. Re-enable it in the same change that drops the
-  # plasmazones entry from phosphor-shell's dependsOn.
+  # links plasmazones_rendering, plasmazones_shared_qml and
+  # plasmazones_shared_qmlplugin (see phosphor-shell/moon.yml), so
+  # enforcement is off until all three move into a phosphor library.
+  #
+  # There is a SECOND inversion that no dependsOn records, so turning this
+  # back on would not catch it: three tier-1 tests read tier-4 data at
+  # runtime (phosphor-animation and phosphor-pointer read
+  # plasmazones/data/{animations,pointer}). phosphor/moon.yml carries
+  # workspace-relative inputs for them instead, because a dependsOn in that
+  # direction would cycle. Both have to go before enforcement means anything.
   enforceLayerRelationships: false
 
 hasher:

@@ -24,9 +24,11 @@ if(USE_KDE_FRAMEWORKS)
     add_subdirectory(kcm)          # KDE System Settings modules (KDE-only)
 endif()
 
-# Tests - enable with -DBUILD_TESTING=ON. Option is declared at the top
-# of the file (before KDECMakeSettings) so the OFF default actually wins;
-# this block just gates the test subdirectory.
+# Tests - enable with -DBUILD_TESTING=ON. The option is declared in the ROOT
+# CMakeLists before KDECMakeSettings, which is what makes the OFF default
+# win; declaring it here would be a no-op, because include(CTest) has
+# already locked BUILD_TESTING into the cache by the time this file runs.
+# This block just gates the test subdirectory.
 if(BUILD_TESTING)
     enable_testing()
     add_subdirectory(tests)
@@ -201,8 +203,9 @@ install(PROGRAMS scripts/plasmazones-report.sh
 )
 
 # Install icons (hicolor for dark themes, hicolor-light for light themes).
-# The phosphor-shell.svg icons are conditional on BUILD_PHOSPHOR_SHELL:
-# no point shipping the icon if the binary isn't built.
+# The phosphor-shell.svg icons moved to phosphor-shell/CMakeLists.txt with
+# the rest of that tier, where the whole file is already gated on
+# BUILD_PHOSPHOR_SHELL, so nothing here is conditional.
 set(_plasmazones_dark_icons
     icons/hicolor/scalable/apps/plasmazones.svg
     icons/hicolor/scalable/apps/plasmazones-editor.svg

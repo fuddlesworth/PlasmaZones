@@ -19,10 +19,21 @@
 function(phosphor_tier_target name)
     set(_tier_targets "")
     _phosphor_tier_collect("${CMAKE_CURRENT_SOURCE_DIR}" _tier_targets)
-    add_custom_target(${name})
-    if(_tier_targets)
-        add_dependencies(${name} ${_tier_targets})
+    # Collecting nothing is always a mistake, and a silent one: the aggregate
+    # would still be created, `cmake --build --target <tier>-tier` would succeed
+    # instantly having compiled nothing, and `moon run <tier>:build` would
+    # report green. The realistic trigger is the ordering rule above — call this
+    # before an add_subdirectory and the subdirectory's targets do not exist
+    # yet. Fail loudly instead, matching the engine QML firewall in the root
+    # CMakeLists, which FATAL_ERRORs rather than letting a stale name through.
+    if(NOT _tier_targets)
+        message(FATAL_ERROR
+            "phosphor_tier_target(${name}): collected no buildable targets under "
+            "${CMAKE_CURRENT_SOURCE_DIR}. Call it AFTER every add_subdirectory for "
+            "the tier, or the aggregate builds nothing and still reports success.")
     endif()
+    add_custom_target(${name})
+    add_dependencies(${name} ${_tier_targets})
 endfunction()
 
 function(_phosphor_tier_collect dir out_var)
