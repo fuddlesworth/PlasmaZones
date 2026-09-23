@@ -24,12 +24,16 @@ class FakeBridge : public QObject
 {
     Q_OBJECT
 public:
-    void emitGesture(const QString& kind, const QString& direction, uint fingers)
+    bool emitGesture(const QString& kind, const QString& direction, uint fingers)
     {
         QDBusMessage signal =
             QDBusMessage::createSignal(kFakePath, ShellGestures::interfaceName(), ShellGestures::signalName());
         signal << kind << direction << fingers;
-        QVERIFY(QDBusConnection::sessionBus().send(signal));
+        // Returns bool rather than QVERIFY-ing in a void helper: QVERIFY
+        // expands to a return, so in a void helper it aborts only the send
+        // and the real failure surfaces later as a confusing QTRY timeout.
+        // test_control_center_controller.cpp does the same for importQtQuick.
+        return QDBusConnection::sessionBus().send(signal);
     }
 };
 
@@ -55,9 +59,9 @@ private Q_SLOTS:
         QSignalSpy swiped(&gestures, &ShellGestures::swiped);
         QSignalSpy pinched(&gestures, &ShellGestures::pinched);
 
-        m_bridge.emitGesture(QStringLiteral("swipe"), QStringLiteral("up"), 3);
-        m_bridge.emitGesture(QStringLiteral("pinch"), QStringLiteral("expanding"), 4);
-        m_bridge.emitGesture(QStringLiteral("tap"), QStringLiteral("up"), 1);
+        QVERIFY(m_bridge.emitGesture(QStringLiteral("swipe"), QStringLiteral("up"), 3));
+        QVERIFY(m_bridge.emitGesture(QStringLiteral("pinch"), QStringLiteral("expanding"), 4));
+        QVERIFY(m_bridge.emitGesture(QStringLiteral("tap"), QStringLiteral("up"), 1));
 
         QTRY_COMPARE(swiped.count(), 1);
         QTRY_COMPARE(pinched.count(), 1);
@@ -75,7 +79,7 @@ private Q_SLOTS:
     {
         ShellGestures gestures(QStringLiteral("org.plasmazones.test.other"), kFakePath, nullptr);
         QSignalSpy swiped(&gestures, &ShellGestures::swiped);
-        m_bridge.emitGesture(QStringLiteral("swipe"), QStringLiteral("up"), 3);
+        QVERIFY(m_bridge.emitGesture(QStringLiteral("swipe"), QStringLiteral("up"), 3));
         QTest::qWait(100);
         QCOMPARE(swiped.count(), 0);
     }

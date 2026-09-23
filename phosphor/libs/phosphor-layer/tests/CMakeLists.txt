@@ -55,3 +55,16 @@ pl_add_test(pl_test_content_url test_content_url.cpp)
 pl_add_test(pl_test_default_screen_provider test_default_screen_provider.cpp)
 pl_add_test(pl_test_extensions test_extensions.cpp)
 pl_add_test(pl_test_surface_animator_dispatch test_surface_animator_dispatch.cpp)
+
+# Two named outputs for the tests that cannot observe anything with one.
+#
+# The offscreen plugin's default screen is unnamed, so identifierFor() gives
+# the empty string and every test needing a physical id skipped itself. Append
+# AFTER the per-test environment above: the list is read last-wins, so this
+# overrides the plain offscreen entry rather than fighting it.
+foreach(_two_screen_test pl_test_registry)
+    if(TEST ${_two_screen_test})
+        phosphor_append_test_environment(${_two_screen_test}
+            "QT_QPA_PLATFORM=offscreen:configfile=${CMAKE_CURRENT_SOURCE_DIR}/two-screens.json")
+    endif()
+endforeach()

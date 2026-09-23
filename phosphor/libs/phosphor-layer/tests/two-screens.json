@@ -1,19 +1,18 @@
 {
     "_comment": [
         "SPDX-FileCopyrightText: 2026 fuddlesworth",
-        "SPDX-License-Identifier: GPL-3.0-or-later",
+        "SPDX-License-Identifier: LGPL-2.1-or-later",
         "",
-        "Offscreen-QPA screen configuration for test_windowdrag_drop_proxy.",
+        "Offscreen-QPA screen configuration for pl_test_registry.",
         "",
-        "The offscreen platform plugin gives an unnamed screen by default, and",
-        "PhosphorScreens::ScreenIdentity::identifierFor() then resolves it to the",
-        "empty string, which the drop-proxy registration refuses. Naming the",
-        "outputs here gives the fixture a real screen id to register against.",
+        "syncToScreens() drops the surfaces belonging to a screen that went away.",
+        "Observing that needs two outputs: with the single screen the offscreen",
+        "plugin provides by default, removing it leaves nothing to compare the",
+        "survivors against, and the test skipped itself with 'Need at least two",
+        "screens'.",
         "",
         "The offscreen platform plugin accepts this file via",
-        "QT_QPA_PLATFORM=offscreen:configfile=<path>. Two sibling copies exist",
-        "for the shell tiers and describe their own reasons; this one is the",
-        "plasmazones copy."
+        "QT_QPA_PLATFORM=offscreen:configfile=<path>."
     ],
     "screens": [
         {

@@ -371,9 +371,25 @@ void TestLayerPopoutTransport::closeIsIdempotentForUnknownHandles()
 {
     LayerPopoutTransport transport(m_factory.get(), m_screens.get());
     transport.setEngine(m_engine.get());
+    transport.setSurfaceDismissedCallback([this](const QString& h) {
+        m_dismissed.append(h);
+    });
+
+    // Open a real surface first. Without one the slot asserted nothing at all
+    // and would have passed with closeSurface() deleted outright; the point is
+    // that the miss branch leaves a LIVE surface alone.
+    const QString live = transport.openSurface(makeRequest());
+    QVERIFY(!live.isEmpty());
+    QTRY_VERIFY(m_wire->m_attachCount >= 1);
+    QPointer<QQuickWindow> liveWindow(m_wire->m_attachRecords.at(0).window);
+    QVERIFY(liveWindow);
+
     // Unknown and empty handles are documented no-ops.
     transport.closeSurface(QStringLiteral("never-issued"));
     transport.closeSurface(QString());
+
+    QVERIFY2(liveWindow, "closing an unknown handle tore down the live surface");
+    QVERIFY2(m_dismissed.isEmpty(), "an unknown handle was reported as a dismissal");
 }
 
 void TestLayerPopoutTransport::drainEmptiesWithoutInvokingTheCallback()

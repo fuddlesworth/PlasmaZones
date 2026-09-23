@@ -76,27 +76,6 @@ private Q_SLOTS:
         QCOMPARE(state->windowCount(), 3);
     }
 
-    void testStartup_pendingOrderSkipsRetileUntilWindowsArrive()
-    {
-        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
-        const QString screen = QStringLiteral("eDP-1");
-
-        QStringList order = {QStringLiteral("win1"), QStringLiteral("win2")};
-        engine.tilingStateForScreen(screen);
-        engine.setInitialWindowOrder(screen, order);
-
-        QSignalSpy tilingSpy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
-
-        engine.setAutotileScreens({screen});
-        QCoreApplication::processEvents();
-
-        // The pending order mechanism prevents unnecessary empty retiles.
-        // Verify mechanism does not crash by arriving windows normally.
-        QSKIP(
-            "Pending order skip behavior is timing-dependent; "
-            "verified by testStartup_pendingOrderTimeoutCleansUp");
-    }
-
     // =========================================================================
     // Float/unfloat
     // =========================================================================

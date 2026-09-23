@@ -2648,30 +2648,15 @@ add_test(NAME test_scroll_tab_layout COMMAND test_scroll_tab_layout)
 # ═══════════════════════════════════════════════════════════════════════════════
 include(${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake)
 
-get_property(_all_tests DIRECTORY . PROPERTY TESTS)
-foreach(_pz_test IN LISTS _all_tests)
-    # Every add_test in this directory uses NAME == target; the guard keeps a
-    # future non-target test entry from breaking the configure.
-    if(TARGET ${_pz_test})
-        # The shared helper, not a hand-rolled copy. This block used to be its
-        # own implementation and the two drifted: the library trees got
-        # per-target XDG homes while this one shared a single home across ~340
-        # tests, so a parallel ctest run interleaved writes into one config dir.
-        #
-        # It supplies the private-bus TEST_LAUNCHER and a per-target XDG sandbox.
-        # The bus config declares no service directories, which is the essential
-        # part: a stock dbus-run-session bus still reads
-        # /usr/share/dbus-1/services, so the installed daemon would be activated
-        # on the private bus too — as a child of the private dbus-daemon, which
-        # then holds the test's stdout pipe open and hangs ctest AFTER the test
-        # itself passed. Several tests here compile client sources whose async
-        # calls target org.plasmazones with QDBus's default auto-start flag.
-        phosphor_apply_test_isolation(${_pz_test})
-        # APPEND, never PROPERTIES ENVIRONMENT: a plain set would replace the
-        # sandbox the helper just installed.
-        phosphor_append_test_environment(${_pz_test} "QT_QPA_PLATFORM=offscreen")
-    endif()
-endforeach()
+# The shared sweep, not a hand-rolled copy. It supplies the private-bus
+# TEST_LAUNCHER and a per-target XDG sandbox. The bus config declares no service
+# directories, which is the essential part: a stock dbus-run-session bus still
+# reads /usr/share/dbus-1/services, so the installed daemon would be activated
+# on the private bus too — as a child of the private dbus-daemon, which then
+# holds the test's stdout pipe open and hangs ctest AFTER the test itself
+# passed. Several tests here compile client sources whose async calls target
+# org.plasmazones with QDBus's default auto-start flag.
+phosphor_apply_directory_test_isolation()
 
 # ─── ABOVE THIS LINE: ADD NEW TESTS — BELOW THIS LINE: env wiring only ───
 

@@ -72,9 +72,19 @@ private Q_SLOTS:
 
         QSet<QString> screens{screenName};
         engine.setAutotileScreens(screens);
+        // Drain the retile setAutotileScreens itself schedules, so the spy
+        // below only sees what windowMinSizeUpdated caused.
+        QCoreApplication::processEvents();
 
+        // storeWindowMinSize records the value even for a window the engine has
+        // never seen, but keyForWindow yields no screen, so scheduleRetileForScreen
+        // is skipped. Without the spy this passed with windowMinSizeUpdated()
+        // deleted outright.
+        QSignalSpy tilingSpy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
         engine.windowMinSizeUpdated(QStringLiteral("nonexistent-win"), 100, 50);
         QCoreApplication::processEvents();
+
+        QCOMPARE(tilingSpy.count(), 0);
     }
 
     void testWindowMinSizeUpdated_negativeValues()
@@ -88,8 +98,15 @@ private Q_SLOTS:
         engine.windowOpened(windowId, screenName, 100, 50);
         QCoreApplication::processEvents();
 
+        // Negative dimensions clamp to zero (qMax(0, ...)), and a zero minimum
+        // REMOVES the stored entry rather than recording it. The window opened
+        // with 100x50, so that is a real change and the screen is retiled --
+        // asserting zero here would be asserting the opposite of the contract.
+        QSignalSpy tilingSpy(&engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
         engine.windowMinSizeUpdated(windowId, -10, -20);
         QCoreApplication::processEvents();
+
+        QCOMPARE(tilingSpy.count(), 1);
     }
 
     void testWindowMinSizeUpdated_zeroRemovesEntry()

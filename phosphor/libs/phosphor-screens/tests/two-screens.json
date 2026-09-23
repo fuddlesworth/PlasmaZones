@@ -1,0 +1,42 @@
+{
+    "_comment": [
+        "SPDX-FileCopyrightText: 2026 fuddlesworth",
+        "SPDX-License-Identifier: LGPL-2.1-or-later",
+        "",
+        "Offscreen-QPA screen configuration for ps_test_dbusscreenadaptor and",
+        "ps_test_manager_lifecycle.",
+        "",
+        "The offscreen platform plugin's default screen is unnamed, so",
+        "ScreenIdentity::identifierFor() resolves it to the empty string and every",
+        "test that needs a physical id bails out with 'no primary screen available",
+        "under offscreen QPA'. Naming the outputs gives those tests a real id, and",
+        "the second output makes identifier drift and per-screen removal",
+        "observable at all — with one screen the before and after are the same",
+        "pointer.",
+        "",
+        "The offscreen platform plugin accepts this file via",
+        "QT_QPA_PLATFORM=offscreen:configfile=<path>."
+    ],
+    "screens": [
+        {
+            "name": "TEST-0",
+            "x": 0,
+            "y": 0,
+            "width": 1920,
+            "height": 1080,
+            "logicalDpi": 96,
+            "logicalBaseDpi": 96,
+            "dpr": 1
+        },
+        {
+            "name": "TEST-1",
+            "x": 1920,
+            "y": 0,
+            "width": 1280,
+            "height": 1024,
+            "logicalDpi": 96,
+            "logicalBaseDpi": 96,
+            "dpr": 1
+        }
+    ]
+}

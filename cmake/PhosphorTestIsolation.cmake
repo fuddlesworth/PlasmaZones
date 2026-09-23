@@ -130,3 +130,27 @@ endfunction()
 function(phosphor_append_test_environment _test_name)
     set_property(TEST ${_test_name} APPEND PROPERTY ENVIRONMENT ${ARGN})
 endfunction()
+
+# Apply the isolation and the offscreen platform to EVERY test registered in the
+# calling directory so far.
+#
+# This sweep existed as a verbatim copy in plasmazones/tests/unit and again in
+# phosphor-shell/tests. Two copies of the part that must not drift is exactly
+# what the plasmazones comment warned about, and they had already begun to
+# diverge, so it lives here once instead.
+#
+# Call it LAST in a tests CMakeLists: it reads the directory's TESTS property,
+# so a test registered after the call is not covered.
+function(phosphor_apply_directory_test_isolation)
+    get_property(_pdti_tests DIRECTORY . PROPERTY TESTS)
+    foreach(_pdti_test IN LISTS _pdti_tests)
+        # These directories register with NAME == target; the guard keeps a
+        # future non-target entry from breaking the configure.
+        if(TARGET ${_pdti_test})
+            phosphor_apply_test_isolation(${_pdti_test})
+            # APPEND, never PROPERTIES ENVIRONMENT: a plain set would replace
+            # the sandbox the helper just installed.
+            phosphor_append_test_environment(${_pdti_test} "QT_QPA_PLATFORM=offscreen")
+        endif()
+    endforeach()
+endfunction()
