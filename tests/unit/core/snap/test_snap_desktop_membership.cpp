@@ -25,6 +25,7 @@
 #include "helpers/LayoutRegistryTestHelpers.h"
 #include "helpers/StubSettings.h"
 #include "helpers/StubZoneDetector.h"
+#include <PhosphorEngine/GeometryUtils.h>
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorEngine/WindowRegistry.h>
@@ -34,6 +35,7 @@
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorZones/Zone.h>
 
 using namespace PlasmaZones;
@@ -256,6 +258,209 @@ private Q_SLOTS:
         m_engine->setCurrentDesktopForScreen(kScreen, 1);
         QVERIFY2(!m_service->windowsInZone(m_zoneIds[0]).contains(kWindow), "no phantom zone occupant");
         QCOMPARE(zonesOn(1, kOther), QStringList{m_zoneIds[2]});
+    }
+
+    // Discussion #1104, the second half: a window that is SNAPPED on the
+    // desktop it is moved off keeps its slot on the desktop it moves to,
+    // translated into the layout that desktop runs. Left alone it sat at the
+    // rect of a layout the destination has not got — the "ghost layout".
+    void movingToAnotherDesktopCarriesTheSnapIntoThatDesktopsLayout()
+    {
+        PhosphorZones::Layout* destination = addLayout(3);
+        m_layoutManager->assignLayout(kScreen, 2, QString(), destination);
+        QVector<PhosphorEngine::ZoneAssignmentEntry> batch;
+        wireResnapCommit(&batch);
+
+        snapOn(1, kWindow, m_zoneIds[1]); // the second zone, so position 2 carries
+        QSignalSpy parkSpy(m_engine, &SnapEngine::windowDesktopMoveRequested);
+        const auto result = m_engine->reconcileWindowMemberships(kWindow, spanOf(on({2})));
+
+        QVERIFY2(result.released.isEmpty(), "a window that is re-snapped on its new desktop is not a release");
+        QCOMPARE(batch.size(), 1);
+        QCOMPARE(batch.first().virtualDesktop, 2);
+        QCOMPARE(batch.first().targetZoneId, sortedZoneIds(destination).at(1));
+        QCOMPARE(zonesOn(2, kWindow), QStringList{sortedZoneIds(destination).at(1)});
+        QVERIFY2(zonesOn(1, kWindow).isEmpty(), "the desktop it left keeps nothing");
+        // Desktop 2 is not the one in view, and its client is suspended there,
+        // so the geometry apply above may never be acked. The window is parked
+        // for the effect's desktop-arrival restore instead, and parked AFTER
+        // the batch, because a geometry apply cancels a park it finds.
+        QCOMPARE(parkSpy.count(), 1);
+        QCOMPARE(parkSpy.first().at(0).toString(), kWindow);
+        QCOMPARE(parkSpy.first().at(1).toInt(), 2);
+    }
+
+    // The park is asked for over windowDesktopMoveRequested, which the effect
+    // answers by REPLACING the window's desktop set. For a window on several
+    // desktops that would drop the ones it is not being carried to, so the
+    // carry takes the geometry apply alone and the desktops stay as they are.
+    void aMultiDesktopWindowIsCarriedButNeverParked()
+    {
+        PhosphorZones::Layout* destination = addLayout(3);
+        m_layoutManager->assignLayout(kScreen, 2, QString(), destination);
+        QVector<PhosphorEngine::ZoneAssignmentEntry> batch;
+        wireResnapCommit(&batch);
+
+        snapOn(1, kWindow, m_zoneIds[1]);
+        QSignalSpy parkSpy(m_engine, &SnapEngine::windowDesktopMoveRequested);
+        m_engine->reconcileWindowMemberships(kWindow, spanOf(on({2, 3})));
+
+        QCOMPARE(batch.size(), 1);
+        QCOMPARE(batch.first().virtualDesktop, 2);
+        QCOMPARE(zonesOn(2, kWindow), QStringList{sortedZoneIds(destination).at(1)});
+        QVERIFY2(parkSpy.isEmpty(), "a park would pin this window to one of its desktops");
+    }
+
+    // The destination IS the desktop in view (KWin's move-to-desktop shortcut
+    // follows the window). Its client is awake, so the geometry apply lands on
+    // its own and there is nothing to park.
+    void aCarryOntoTheDesktopInViewIsNotParked()
+    {
+        PhosphorZones::Layout* destination = addLayout(3);
+        m_layoutManager->assignLayout(kScreen, 2, QString(), destination);
+        QVector<PhosphorEngine::ZoneAssignmentEntry> batch;
+        wireResnapCommit(&batch);
+
+        snapOn(1, kWindow, m_zoneIds[1]);
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        QSignalSpy parkSpy(m_engine, &SnapEngine::windowDesktopMoveRequested);
+        m_engine->reconcileWindowMemberships(kWindow, spanOf(on({2})));
+
+        QCOMPARE(batch.size(), 1);
+        QCOMPARE(zonesOn(2, kWindow), QStringList{sortedZoneIds(destination).at(1)});
+        QVERIFY2(parkSpy.isEmpty(), "the window is on the desktop in view — nothing to wait for");
+    }
+
+    // Both desktops run the same layout: the same zone id, so the window does
+    // not move — but the destination desktop now records it as the occupant,
+    // which is what makes zone navigation and empty-zone detection right there.
+    void aSharedLayoutCarriesTheWindowIntoTheSameZone()
+    {
+        QVector<PhosphorEngine::ZoneAssignmentEntry> batch;
+        wireResnapCommit(&batch);
+
+        snapOn(1, kWindow, m_zoneIds[2]);
+        m_engine->reconcileWindowMemberships(kWindow, spanOf(on({2})));
+
+        QCOMPARE(batch.size(), 1);
+        QCOMPARE(batch.first().targetZoneId, m_zoneIds[2]);
+        QCOMPARE(zonesOn(2, kWindow), QStringList{m_zoneIds[2]});
+        QVERIFY2(zonesOn(1, kWindow).isEmpty(), "the same zone id, but only on the desktop the window is on now");
+    }
+
+    // The destination layout has no slot in the window's position (zone 3 of
+    // three, moved onto a two-zone layout). The window goes back to its
+    // pre-snap rect, the way a layout switch answers the same question, and
+    // the release IS reported because it genuinely stopped being snapped.
+    void aPositionTheDestinationLayoutHasNotFallsBackToThePreSnapRect()
+    {
+        PhosphorZones::Layout* destination = addLayout(2);
+        m_layoutManager->assignLayout(kScreen, 2, QString(), destination);
+        recordFreeGeometry(QRect(120, 80, 640, 480));
+        QVector<PhosphorEngine::ZoneAssignmentEntry> batch;
+        wireResnapCommit(&batch);
+
+        snapOn(1, kWindow, m_zoneIds[2]); // position 3, which the destination has not got
+        const auto result = m_engine->reconcileWindowMemberships(kWindow, spanOf(on({2})));
+
+        QCOMPARE(result.released.size(), 1);
+        QCOMPARE(batch.size(), 1);
+        QCOMPARE(batch.first().targetZoneId, QString(PhosphorEngine::RestoreSentinel));
+        QCOMPARE(batch.first().targetGeometry, QRect(120, 80, 640, 480));
+        QVERIFY(zonesOn(2, kWindow).isEmpty());
+    }
+
+    // A destination desktop in a tiling mode is that engine's to place: the
+    // snap pass gives the window up the way it always did.
+    void aTilingDestinationIsLeftToItsOwnEngine()
+    {
+        PhosphorZones::AssignmentEntry tiling;
+        tiling.mode = PhosphorZones::AssignmentEntry::Mode::Autotile;
+        tiling.tilingAlgorithm = QStringLiteral("bsp");
+        m_layoutManager->setAssignmentEntryDirect(kScreen, 2, QString(), tiling);
+        QVector<PhosphorEngine::ZoneAssignmentEntry> batch;
+        wireResnapCommit(&batch);
+
+        snapOn(1, kWindow, m_zoneIds[0]);
+        const auto result = m_engine->reconcileWindowMemberships(kWindow, spanOf(on({2})));
+
+        QCOMPARE(result.released.size(), 1);
+        QVERIFY2(batch.isEmpty(), "snapping must not place a window on a desktop it does not run");
+        QVERIFY(zonesOn(2, kWindow).isEmpty());
+    }
+
+    // The desktop the window LEFT runs a tiling mode now, so the zone it
+    // holds there is frozen memory for a return to snapping and the window
+    // was tiled, not snapped, when it moved. Nothing to carry.
+    void aSnapFrozenOnATilingDesktopIsNotCarried()
+    {
+        PhosphorZones::Layout* destination = addLayout(3);
+        m_layoutManager->assignLayout(kScreen, 2, QString(), destination);
+        QVector<PhosphorEngine::ZoneAssignmentEntry> batch;
+        wireResnapCommit(&batch);
+
+        snapOn(1, kWindow, m_zoneIds[0]);
+        PhosphorZones::AssignmentEntry tiling;
+        tiling.mode = PhosphorZones::AssignmentEntry::Mode::Autotile;
+        tiling.tilingAlgorithm = QStringLiteral("bsp");
+        m_layoutManager->setAssignmentEntryDirect(kScreen, 1, QString(), tiling);
+
+        const auto result = m_engine->reconcileWindowMemberships(kWindow, spanOf(on({2})));
+
+        QCOMPARE(result.released.size(), 1);
+        QVERIFY2(batch.isEmpty(), "a frozen snap must not be carried onto another desktop");
+        QVERIFY(zonesOn(2, kWindow).isEmpty());
+    }
+
+    // The read SnapAdaptor's desktop-arrival re-apply depends on. Its answer
+    // becomes GEOMETRY, and zoneForWindow is the wrong question to ask for
+    // that: it reports the window's PRIMARY membership, which falls back to
+    // another desktop's store while the one in view holds nothing, and
+    // zoneGeometry resolves a zone id against whichever layout owns it. The
+    // pair hands back a valid rect of a layout this desktop does not run,
+    // which is the ghost of discussion #1104. The store in view answers only
+    // for its own desktop.
+    void theStoreInViewAnswersForItsOwnDesktopWherePrimaryDoesNot()
+    {
+        snapOn(1, kWindow, m_zoneIds[0]);
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+
+        // The trap: the primary membership is still desktop 1's, so this names
+        // a zone of a layout desktop 2 need not have.
+        QCOMPARE(m_engine->zoneForWindow(kWindow), m_zoneIds[0]);
+        QVERIFY2(zonesOn(2, kWindow).isEmpty(), "the store in view holds no zone for this window");
+
+        // Snapped there too, and each store keeps answering for its own desktop.
+        snapOn(2, kWindow, m_zoneIds[1]);
+        QCOMPARE(zonesOn(2, kWindow), QStringList{m_zoneIds[1]});
+        QCOMPARE(zonesOn(1, kWindow), QStringList{m_zoneIds[0]});
+        // And a float there is per store too, so the arrival read can tell a
+        // window that occupies its zone from one that only remembers it.
+        m_engine->setCurrentDesktopForScreen(kScreen, 2);
+        m_engine->setWindowFloat(kWindow, true, kScreen);
+        QVERIFY(static_cast<SnapState*>(m_engine->stateForScreen(kScreen))->isFloating(kWindow));
+        m_engine->setCurrentDesktopForScreen(kScreen, 1);
+        QVERIFY2(!static_cast<SnapState*>(m_engine->stateForScreen(kScreen))->isFloating(kWindow),
+                 "desktop 1 is still a live snap");
+    }
+
+    // A FLOATED window carries nothing: it sits at its own free geometry, so
+    // there is no foreign zone rect to correct, and its zone assignment is
+    // only the memory a float toggle resnaps into.
+    void aFloatedWindowCarriesNothing()
+    {
+        PhosphorZones::Layout* destination = addLayout(3);
+        m_layoutManager->assignLayout(kScreen, 2, QString(), destination);
+        QVector<PhosphorEngine::ZoneAssignmentEntry> batch;
+        wireResnapCommit(&batch);
+
+        snapOn(1, kWindow, m_zoneIds[0]);
+        m_engine->setWindowFloat(kWindow, true, kScreen);
+        const auto result = m_engine->reconcileWindowMemberships(kWindow, spanOf(on({2})));
+
+        QCOMPARE(result.released.size(), 1);
+        QVERIFY(batch.isEmpty());
+        QVERIFY(zonesOn(2, kWindow).isEmpty());
     }
 
     // The aggregate queries see a window in every member store: it occupies
@@ -646,6 +851,54 @@ private:
             return e->holdsWindowInState(id, state);
         };
         m_service->setSnapStateResolver(resolver);
+    }
+
+    /// A second layout in the registry, so a desktop can be given one of its
+    /// own.
+    PhosphorZones::Layout* addLayout(int zoneCount)
+    {
+        PhosphorZones::Layout* layout = createTestLayout(zoneCount, m_layoutManager);
+        m_layoutManager->addLayout(layout);
+        return layout;
+    }
+
+    /// @p layout's zone ids in the order the position mapping counts them.
+    static QStringList sortedZoneIds(PhosphorZones::Layout* layout)
+    {
+        QVector<PhosphorZones::Zone*> zones = layout->zones();
+        PhosphorZones::LayoutUtils::sortZonesByNumber(zones);
+        QStringList ids;
+        for (PhosphorZones::Zone* zone : std::as_const(zones)) {
+            ids.append(zone->id().toString());
+        }
+        return ids;
+    }
+
+    /// Wire the engine's resnap batch the way SnapAdaptor does, so what the
+    /// pass asks for is actually committed, and keep a copy of the entries.
+    void wireResnapCommit(QVector<PhosphorEngine::ZoneAssignmentEntry>* seen)
+    {
+        QObject::connect(m_engine, &SnapEngine::resnapToNewLayoutRequested, m_engine,
+                         [this, seen](const QString& payload) {
+                             QString error;
+                             const QVector<PhosphorEngine::ZoneAssignmentEntry> entries =
+                                 PhosphorEngine::GeometryUtils::deserializeZoneAssignments(payload, &error);
+                             QVERIFY2(error.isEmpty(), qPrintable(error));
+                             *seen += entries;
+                             m_engine->applyBatchAssignments(entries);
+                         });
+    }
+
+    /// The pre-snap rect the float-back reads, recorded the way a capture does.
+    void recordFreeGeometry(const QRect& rect)
+    {
+        WindowPlacement rec;
+        rec.windowId = kWindow;
+        rec.appId = QStringLiteral("app");
+        rec.screenId = kScreen;
+        rec.virtualDesktop = 1;
+        rec.freeGeometryByScreen.insert(kScreen, rect);
+        m_service->placementStore().record(rec);
     }
 
     /// Snap @p windowId into @p zoneId on @p desktop of kScreen through the
