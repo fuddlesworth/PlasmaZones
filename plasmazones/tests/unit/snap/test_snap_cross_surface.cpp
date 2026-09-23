@@ -68,6 +68,10 @@ public:
     {
         return nullptr;
     }
+    QRect screenAvailableGeometry(const QString&) const override
+    {
+        return {};
+    }
     const QHash<QString, QList<PhosphorEngine::PendingRestore>>& pendingRestoreQueues() const override
     {
         return m_pending;

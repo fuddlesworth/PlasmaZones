@@ -12,9 +12,10 @@
 // short-circuits on the null tracker before the resolved value is ever used.
 //
 // Everything else answers the empty/false/no-op value. The placement store is
-// a real (empty) WindowPlacementStore: the open path consults it for a
-// float-reopen record, and an empty store is exactly the "no record" case
-// these suites want.
+// a real WindowPlacementStore, which most suites leave empty (the open path
+// consults it for a float-reopen record, and empty is exactly the "no record"
+// case they want) and the free-size suites populate directly to drive the
+// record and live-sibling tiers.
 
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorEngine/IWindowTrackingService.h>
@@ -30,6 +31,7 @@
 #include <QUuid>
 #include <QVector>
 
+#include <functional>
 #include <optional>
 
 namespace ScrollTestUtils {
@@ -60,6 +62,13 @@ public:
     PhosphorScreens::ScreenManager* screenManager() const override
     {
         return nullptr;
+    }
+    /// Test knob for the free-size clamp: invalid (the default) means no
+    /// clamp, the way a null ScreenManager answers in production.
+    QRect availableGeometry;
+    QRect screenAvailableGeometry(const QString&) const override
+    {
+        return availableGeometry;
     }
 
     void assignWindowToZone(const QString&, const QString&, const QString&, int) override
@@ -159,11 +168,12 @@ public:
         return sep > 0 ? anyWindowId.left(sep) : QString();
     }
     /// Stub: the fake has no screen manager, so it fails OPEN exactly as the
-    /// real service does in that case. Tests that need the refusal drive it
-    /// through a FakeScreenProvider-backed service instead.
-    bool geometryBelongsToScreen(const QRect&, const QString&) const override
+    /// real service does in that case, unless a test installs a predicate to
+    /// drive the refusal (the free-size restore's screen-local rule).
+    std::function<bool(const QRect&, const QString&)> belongsToScreen;
+    bool geometryBelongsToScreen(const QRect& rect, const QString& screenId) const override
     {
-        return true;
+        return !belongsToScreen || belongsToScreen(rect, screenId);
     }
     std::optional<QRect> validatedUnmanagedGeometry(const QString&, const QString&) const override
     {

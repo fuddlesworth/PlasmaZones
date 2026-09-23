@@ -14,7 +14,15 @@ ScreenModel::ScreenModel(PhosphorLayer::IScreenProvider* provider, QObject* pare
     : QAbstractListModel(parent)
     , m_provider(provider)
 {
-    Q_ASSERT_X(m_provider, "ScreenModel", "IScreenProvider must not be null");
+    // qFatal, not Q_ASSERT_X: the two lines below dereference m_provider
+    // unconditionally, and data() / onScreensChanged() do the same for the
+    // model's whole lifetime — m_provider is never reset. Q_ASSERT_X compiles
+    // out under NDEBUG, so a null provider was a debug abort and a release
+    // segfault. Matches LayoutRegistry's ctor, which qFatals for the same
+    // reason (initCommon() dereferences its store unconditionally).
+    if (m_provider == nullptr) {
+        qFatal("ScreenModel: IScreenProvider is required — the model dereferences it on every screen query");
+    }
     m_screens = m_provider->screens();
 
     connect(m_provider->notifier(), &PhosphorLayer::ScreenProviderNotifier::screensChanged, this,

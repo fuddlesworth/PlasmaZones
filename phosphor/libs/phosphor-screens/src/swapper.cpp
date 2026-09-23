@@ -124,6 +124,16 @@ VirtualScreenSwapper::Result VirtualScreenSwapper::swapInDirection(const QString
         return Result::InvalidDirection;
     }
 
+    // Release-build pair of the ctor's Q_ASSERT(store). The class is exported
+    // with a public constructor, so an out-of-tree consumer can reach it with a
+    // null store; in-tree DBusScreenAdaptor already checks m_configStore before
+    // constructing us. NoConfigStore is the enum's own documented answer for
+    // "no store to talk to" — the adaptor surfaces it today, and this makes the
+    // swapper itself answer the same way instead of dereferencing.
+    if (!m_store) {
+        return Result::NoConfigStore;
+    }
+
     const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(currentVirtualScreenId);
     VirtualScreenConfig cfg = m_store->get(physId);
     if (cfg.screens.size() < 2) {
@@ -173,6 +183,11 @@ VirtualScreenSwapper::Result VirtualScreenSwapper::rotate(const QString& physica
     if (physicalScreenId.isEmpty() || PhosphorIdentity::VirtualScreenId::isVirtual(physicalScreenId)) {
         qCDebug(lcPhosphorScreens) << "VirtualScreenSwapper::rotate: invalid physicalScreenId:" << physicalScreenId;
         return Result::NotVirtual;
+    }
+
+    // Release-build pair of the ctor's Q_ASSERT(store) — see swapInDirection.
+    if (!m_store) {
+        return Result::NoConfigStore;
     }
 
     VirtualScreenConfig cfg = m_store->get(physicalScreenId);

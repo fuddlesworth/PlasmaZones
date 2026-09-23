@@ -5,91 +5,16 @@
 
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorEngine/WindowPlacementStore.h>
-#include <PhosphorScreens/ScreenIdentity.h>
 
 #include "enginelimits.h"
 #include "scrollenginelogging.h"
 
-#include <QTimer>
 #include <QVariant>
 
 #include <algorithm>
 #include <utility>
 
 namespace PhosphorScrollEngine {
-
-void ScrollEngine::seedFloatRestoreForOpen(const QString& windowId, int minWidth, int minHeight)
-{
-    // windowMinimumSize reads the clamp out of this entry for every window
-    // that is floated rather than tiled, and the cross-engine handoff queries
-    // it whatever state the window is in: with no entry the answer is the
-    // "unknown" one, and the receiving engine gets an unclamped window. That
-    // bites hardest on exactly the windows these paths float — the oversized
-    // ones, whose clamp is why they could not take a column in the first
-    // place.
-    const auto existing = m_floatRestore.find(windowId);
-    if (existing != m_floatRestore.end()) {
-        // A real remembered slot is worth more than a slotless seed; only
-        // the clamp is refreshed.
-        existing->minWidth = qMax(0, minWidth);
-        existing->minHeight = qMax(0, minHeight);
-        return;
-    }
-    FloatRestore restore;
-    restore.column = -1; // no slot to go back to; unfloat opens a fresh column
-    restore.minWidth = qMax(0, minWidth);
-    restore.minHeight = qMax(0, minHeight);
-    m_floatRestore.insert(windowId, restore);
-}
-
-void ScrollEngine::emitGatedFloatGeometryRestore(const QString& windowId, const PhosphorEngine::WindowPlacement& record,
-                                                 const QString& screenId)
-{
-    // SCREEN-LOCAL recorded position only, for autotile's documented reason: a
-    // rect captured on a different screen would teleport the window while the
-    // float tracking points elsewhere. The move itself is gated (daemon-wired
-    // scrollingRestoreFloatedWindowsOnLogin setting + per-window
-    // RestorePosition rule) while the floating MARK is not — the callers mark
-    // unconditionally and only the geometry comes through here.
-    //
-    // Shared by the two restore paths (insertOpenedWindow's record-float branch
-    // and restoreFloatRecordForOpen) because they are one rule with two entry
-    // points, and a change to the gate that reached only one of them would
-    // restore the position on one open path and not the other.
-    const QString restoreScreen = record.screenId.isEmpty() ? screenId : record.screenId;
-    const QRect freeGeo = record.freeGeometryFor(restoreScreen);
-    const bool restorePosition = !m_restorePositionPredicate || m_restorePositionPredicate(windowId);
-    // Do not trust the KEY. This reads the shared free-geometry map directly
-    // rather than through validatedUnmanagedGeometry, so it gets none of that
-    // resolver's validation — and the rect goes straight out as an absolute
-    // geometry to apply. A record filed under one screen whose coordinates
-    // describe another would teleport the window to that monitor, which is
-    // exactly what the comment above says this restore must never do.
-    if (freeGeo.isValid() && restorePosition
-        && (!m_windowTracker || m_windowTracker->geometryBelongsToScreen(freeGeo, restoreScreen))) {
-        Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
-    }
-}
-
-void ScrollEngine::restoreFloatRecordForOpen(const QString& windowId, const QString& screenId)
-{
-    // Registry answer, not a parse: a canonical id frozen before KWin resolved
-    // the class has no appId to parse, and this gate would then silently skip
-    // the float restore for the window's whole life.
-    const QString appId = currentAppIdFor(windowId);
-    if (!m_windowTracker || !PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
-        return;
-    }
-    // The window floats regardless (the caller already decided that), so only
-    // a FLOATING record is consumed — takeForReopen's contract. The accept
-    // itself is the store's shared predicate.
-    const PhosphorEngine::PlacementStateKey key = currentKeyForScreen(screenId);
-    const auto record = m_windowTracker->placementStore().takeForReopen(engineId(), windowId, appId, key.screenId);
-    if (!record) {
-        return;
-    }
-    emitGatedFloatGeometryRestore(windowId, *record, screenId);
-}
 
 bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowId, const QString& screenId,
                                       int minWidthIn, int minHeightIn, ScrollOpenParams* outOpenParams, bool migration,
@@ -127,29 +52,20 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     const bool stickyExcluded =
         effectiveStickyWindowHandling(screenOverrides) != PhosphorEngine::StickyWindowHandling::TreatAsNormal
         && m_windowTracker && m_windowTracker->isWindowSticky(windowId);
+    // The lineage snapshot the free-size restore gates on, taken BEFORE any
+    // takeForReopen below can re-bind a FIFO-matched sibling record under
+    // this uuid (see PlacementEngineBase::placedByPreviousLineage).
+    const bool placedBefore = m_windowTracker && placedByPreviousLineage(m_windowTracker->placementStore(), windowId);
     // Never on an ADOPTION: the same three verdicts already ran for this
     // window on the desktop it came from and answered "tile" (a floating
     // source is adopted as floating by the caller and never reaches here).
+    // An engine-decided float still consumes its FLOATING placement record
+    // and restores the remembered float-back — autotile reaches the same
+    // outcome through its record branch (record first, rule float layered on
+    // top); this engine floats before ever consulting the store, so the
+    // consumption happens in finishFloatedOpen or never.
     if (!adoption && (oversized || ruleFloated || stickyExcluded)) {
-        state->addFloating(windowId);
-        seedFloatRestoreForOpen(windowId, minWidth, minHeight);
-        // Engine-decided float, so it carries the mode marker like every
-        // other float this engine makes: isModeSpecificFloated has to answer
-        // true or the daemon captures the scroll-mode float into the snap
-        // slot at the next mode transition (presaveSnapFloats skips exactly
-        // the marked windows).
-        m_scrollFloatedWindows.insert(windowId);
-        // A floated arrival consumes its seed entry too, or the screen's
-        // list never empties and the stale entry survives every later mode
-        // transition.
-        consumePendingInitialOrder(screenId, windowId);
-        // An engine-decided float still consumes its FLOATING placement
-        // record and restores the remembered float-back — autotile reaches
-        // the same outcome through its record branch (record first, rule
-        // float layered on top); this engine floats before ever consulting
-        // the store, so the consumption happens here or never.
-        restoreFloatRecordForOpen(windowId, screenId);
-        Q_EMIT windowFloatingStateSynced(windowId, true, screenId);
+        finishFloatedOpen(state, windowId, screenId, minWidth, minHeight, migration, oversized, placedBefore, nullptr);
         return true;
     }
 
@@ -183,17 +99,14 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
             if (slot.state == PhosphorEngine::WindowPlacement::stateFloating()) {
                 // A record captured mid-hold before holds were excluded from capture
                 // re-floats once at the output rect; the next close overwrites it.
-                state->addFloating(windowId);
-                seedFloatRestoreForOpen(windowId, minWidth, minHeight);
+                // The float mark and the clamp seed are finishFloatedOpen's now.
                 // The record's SCROLL slot says floating, so this float is
-                // this engine's own — marked like the rule-float exit above.
-                m_scrollFloatedWindows.insert(windowId);
-                consumePendingInitialOrder(screenId, windowId); // same rationale as the rule-float exit
-                // The window is marked floating unconditionally above; only
-                // the geometry MOVE onto the recorded free spot is gated. That
-                // gate and its screen-local rule live in the shared helper.
-                emitGatedFloatGeometryRestore(windowId, *record, screenId);
-                Q_EMIT windowFloatingStateSynced(windowId, true, screenId);
+                // this engine's own. The window is marked floating
+                // unconditionally; only the geometry MOVE onto the recorded
+                // free spot is gated, and a declined move still gets the
+                // free SIZE back from the record just re-bound.
+                finishFloatedOpen(state, windowId, screenId, minWidth, minHeight, migration, /*oversized=*/false,
+                                  placedBefore, &*record);
                 return true;
             }
         }
@@ -656,7 +569,13 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     // term): a refused earlier open can leave a phantom key, and gating on
     // it would skip the defer while this engine manages nothing.
     const bool trackedHere = oldState && oldState->containsWindow(windowId);
-    if (!trackedHere && m_windowTracker && (m_snappingModeResolver || m_autotileModeResolver)) {
+    // The dispatch already ran every engine's claim for this arrival and all
+    // declined: the record's engine has answered, so this gate must adopt
+    // rather than defer to it a second time (noteCrossScreenClaimsExhausted).
+    // Read, not consumed: the dispatch re-states the flag before every
+    // announce, so it always describes the one in progress.
+    const bool claimsExhausted = m_crossScreenClaimsExhausted.contains(windowId);
+    if (!trackedHere && !claimsExhausted && m_windowTracker && (m_snappingModeResolver || m_autotileModeResolver)) {
         // Registry-aware appId and the reclaim-grade lookup, matching what
         // the CLAIMING side asks. Both halves are load-bearing for the N-way
         // agreement: parsing the frozen canonical string would read a
@@ -1057,6 +976,7 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
     // reused id would be eaten as that echo.
     m_pendingSelfActivations.removeAll(windowId);
     m_pendingSelfActivationQueuedAt.remove(windowId);
+    m_crossScreenClaimsExhausted.remove(windowId);
     // Same reasoning for the declined-open mark: the arrival that was denied
     // focus can close before its one report arrives, and a stale mark would
     // then eat the first genuine focus of a reused id.
@@ -1131,6 +1051,11 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
     }
     Q_EMIT placementChanged(key.screenId);
 }
+
+// The float-at-open helpers (the float-restore seed, the gated position
+// restore, the free-size arm and the shared float-exit tail) live in
+// engine_float_open.cpp — split out when this file crossed the size ceiling
+// a SIXTH time.
 
 // The compositor focus-report handler (windowFocused) lives in
 // engine_focus.cpp — split out when this file crossed the size ceiling a

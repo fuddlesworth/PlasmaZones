@@ -10,6 +10,9 @@
 #include "core/interfaces/isettings.h"
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorSnapEngine/SnapState.h>
+
+#include <utility>
 
 namespace PlasmaZones {
 
@@ -211,37 +214,53 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         svc->placementStore().claimForOpen(windowId, svc->currentAppIdFor(windowId));
     }
 
-    // Engine-neutral RouteToDesktop runs first and unconditionally — a window can
-    // be routed to a desktop whether or not it snaps (and even when it doesn't
-    // match a SnapToZone rule at all), so it must not sit behind the shouldSnap
-    // early-return below.
-    m_adaptor->applyOpenDesktopRouting(windowId, screenId);
+    // Engine-neutral RouteToDesktop runs first — a window can be routed to a
+    // desktop whether or not it snaps (and even when it doesn't match a
+    // SnapToZone rule at all), so it must not sit behind the shouldSnap
+    // early-return below. First placements only, the same set that claims:
+    // the sweeps and the unminimize re-drive act on a window the user may
+    // have moved to another desktop since, and routing it again yanks it
+    // back at every daemon restart; the desktop-arrival re-drive IS the
+    // landing of a move already made. (The tiling dispatch routes once per
+    // open for the same reason.)
+    const bool firstPlacement = isOpen || reason == PhosphorEngine::RestoreReason::PendingSweep;
+    if (firstPlacement) {
+        m_adaptor->applyOpenDesktopRouting(windowId, screenId);
+    }
 
     const PhosphorEngine::WindowKind kind = PhosphorEngine::clampWindowKindFromWire(windowKind);
-    SnapResult result = m_engine->resolveWindowRestore(windowId, screenId, sticky, kind);
+    SnapResult result = m_engine->resolveWindowRestore(windowId, screenId, sticky, kind, reason);
 
     // Per-open reclaim-credit burn, the snap-screen half of the partition
     // (WindowPlacementStore::burnReclaimCredit documents the tiling half —
-    // takeForReopen, which snap never calls). Runs for genuine OPENS on
+    // takeForReopen, which snap never calls). Runs for first placements on
     // SNAP-mode screens only: tiling-screen arrivals burn through their
     // engine's own open path, and the re-resolve drivers of this slot
-    // (unminimize, the sweeps, the desktop-arrival re-drive) must retire
-    // nothing. Skipped when a tiling claim adopts the window below — the
-    // adopted windowOpened's takeForReopen is that open's burn.
+    // (unminimize, the restart sweep, the desktop-arrival re-drive) must
+    // retire nothing. The pending sweep counts as a first placement here for
+    // the reason the claim above gives: an open the readiness gate refused
+    // is performed by the sweep, and a missed burn there left the newest
+    // sibling's credit standing to teleport a later same-app open. Skipped
+    // when a tiling claim adopts the window below — the adopted
+    // windowOpened's takeForReopen is that open's burn — and when the open
+    // pass deferred to a tiling engine whose claim DECLINED: the burn and
+    // the reclaim pick the same newest eligible record, so burning on the
+    // open pass retired the very record the desktop-arrival reclaim needs.
+    // A missed burn fails safe (the close-time revoke takes the credit).
     //
     // WHY DesktopArrival DOES NOT BURN. burnReclaimCredit is not idempotent:
     // each call retires the newest eligible SIBLING's credit, so two calls
     // for one logical open spend two siblings' credits and strand a window
-    // that has not reopened yet. This slot now always reaches the burn on
-    // the open pass — a window a RouteToDesktop rule sends to another
-    // desktop is parked by the effect and re-enters here with
+    // that has not reopened yet. A window a RouteToDesktop rule sends to
+    // another desktop is parked by the effect and re-enters here with
     // DesktopArrival, which would be that second call. The arrival is the
     // continuation of an open that already burned, never an open of its own.
     // The other producer, the move-to-desktop shortcut, acts on an
     // already-open window and must retire nothing either.
     bool reclaimedByTiling = false;
+    bool creditLeftForArrival = false;
     const auto burnOpenCredit = [&]() {
-        if (!isOpen || reclaimedByTiling || !m_engine->isSnapModeScreen(screenId)) {
+        if (!firstPlacement || reclaimedByTiling || creditLeftForArrival || !m_engine->isSnapModeScreen(screenId)) {
             return;
         }
         const QString appId = svc->currentAppIdFor(windowId);
@@ -251,6 +270,62 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
     };
 
     if (!result.shouldSnap) {
+        // A desktop-arrival re-drive for a window the engine already holds in a
+        // zone on the desktop it landed on answers with that zone's rect rather
+        // than with nothing. The engine's "already assigned" no-op is right
+        // about the ASSIGNMENT and wrong about the window: a client on a desktop
+        // nobody is looking at is suspended, so the resize that came with the
+        // move was never acked and the compositor does not re-send it when the
+        // desktop comes back. This is the moment it can land. Re-applying a rect
+        // the window is already at costs nothing — the effect skips a geometry
+        // apply that matches.
+        //
+        // This writes the out-params itself rather than going through
+        // applySnapResult, because the assignment already exists and
+        // re-committing it here would re-run the whole snap orchestration
+        // (float clear, focus-new-windows) for a window that only needs its
+        // rect back. It therefore has to ask applySnapResult's two user-facing
+        // refusals by hand — hence snapPermittedForContext — and it is scoped
+        // to a SNAP-mode screen, since layoutForScreen answers for a tiling
+        // context too and the zone would otherwise be resolved over a desktop
+        // another engine owns.
+        //
+        // The zone is read from the ARRIVAL CONTEXT'S OWN store, not from
+        // SnapEngine::zoneForWindow. That one answers from the window's PRIMARY
+        // membership, which PerScreenStates::primaryOf documents will fall back
+        // to any membership when none is in context — so for a window snapped
+        // on another desktop it names THAT desktop's zone, and zoneGeometry
+        // resolves a zone id against whichever layout holds it. The pair hands
+        // back a valid rect of a layout this desktop does not run, which is the
+        // ghost of discussion #1104 arriving by a new route. The CONST
+        // stateForScreen overload is keyed on the screen's current desktop and
+        // creates nothing (its mutable twin does, which is why this goes
+        // through as_const), and the cast is the one the daemon's snap-state
+        // resolver makes in init_engines.cpp. A context that holds no store for
+        // this window therefore says nothing at all.
+        //
+        // Floating is read off that same store: a floated window keeps its zone
+        // assignment as the memory a float toggle resnaps into, and putting it
+        // back in the zone here would undo the float.
+        if (reason == PhosphorEngine::RestoreReason::DesktopArrival && m_engine->isSnapModeScreen(screenId)
+            && snapPermittedForContext(windowId, screenId, /*virtualDesktop=*/0)) {
+            const auto* const contextState =
+                static_cast<const PhosphorSnapEngine::SnapState*>(std::as_const(*m_engine).stateForScreen(screenId));
+            const QString heldZone = (contextState && !contextState->isFloating(windowId))
+                ? contextState->zoneForWindow(windowId)
+                : QString();
+            const QRect heldGeometry = heldZone.isEmpty() ? QRect() : svc->zoneGeometry(heldZone, screenId);
+            if (heldGeometry.isValid()) {
+                snapX = heldGeometry.x();
+                snapY = heldGeometry.y();
+                snapWidth = heldGeometry.width();
+                snapHeight = heldGeometry.height();
+                shouldSnap = true;
+                qCInfo(lcDbusWindow) << "resolveWindowRestore: desktop arrival re-applies" << windowId << "to zone"
+                                     << heldZone << heldGeometry;
+                return;
+            }
+        }
         // Nothing snapped this window. A bare RouteToScreen rule (move-to-monitor
         // with no SnapToZone) takes effect here, deliberately AFTER the snap/float
         // restore has had its chance: a SnapToZone restore or a remembered snap
@@ -259,7 +334,12 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         // the cross-screen reclaim below (it applies the final geometry). A
         // route WITH SnapToZone moved+snapped on the target via the placement
         // directive and never reaches here.
-        const bool routed = m_adaptor->applyOpenScreenRouting(windowId, screenId);
+        // Gated like the desktop route above, plus the desktop-arrival
+        // continuation: a re-drive of a visible window (the sweeps, an
+        // unminimize) must not pull a window the user dragged to another
+        // monitor back to its rule's.
+        const bool routed = (firstPlacement || reason == PhosphorEngine::RestoreReason::DesktopArrival)
+            && m_adaptor->applyOpenScreenRouting(windowId, screenId);
         // Cross-screen tiling-engine reclaim — gated on the ENGINE's explicit
         // defer verdict, never on a bare no-snap: an exclusion refusal, a
         // disabled context, or an ordinary no-match must not hand the window
@@ -269,8 +349,8 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         // adopts the window into its recorded home and its retile moves it
         // there. (Managed-screen arrivals reach the reclaim through
         // TilingAdaptor::dispatchOpenToClaimingEngine instead; windows that
-        // fail the effect's canSnapRestore gate never reach this slot at
-        // all — see setCrossScreenTileReclaim's contract.) The reason gate
+        // fail the effect's candidate gate (minimized at open) never reach
+        // this slot at all — see setCrossScreenTileReclaim's contract.) The reason gate
         // keeps the drivers that re-resolve an ALREADY-VISIBLE window (the
         // unminimize of a daemon-restart orphan, the pending-restores sweep,
         // the bring-up stacking sweep) from teleporting a window the user is
@@ -299,6 +379,13 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         // on the wrong monitor for the whole session.
         const bool mayReclaim = isOpen || reason == PhosphorEngine::RestoreReason::DesktopArrival;
         if (result.deferredToTilingEngine && !routed) {
+            // Taken BEFORE the reclaim runs. A claim that reaches
+            // takeForReopen re-binds the consumed record under this uuid with
+            // the claiming engine's slot, and a claim that then declines on
+            // its membership check leaves that record standing — so the
+            // float default below must be told what the store looked like
+            // before the attempt, not after it.
+            const bool placedBefore = m_engine->wasPlacedByPreviousLineage(windowId);
             const bool reclaimed = mayReclaim && m_crossScreenTileReclaim
                 && m_crossScreenTileReclaim(windowId, screenId, qMax(0, minWidth), qMax(0, minHeight));
             reclaimedByTiling = reclaimed;
@@ -308,8 +395,11 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
                 // defer): the engine's defer skipped its float terminal on
                 // the promise someone would manage the window, so restore
                 // the no-match float default rather than leaving it with no
-                // state in any engine.
-                m_engine->applyNoMatchFloatDefault(windowId, screenId);
+                // state in any engine. The record that earned the defer is
+                // left with its credit, so a desktop-arrival continuation
+                // can still reclaim it (see burnOpenCredit).
+                creditLeftForArrival = true;
+                m_engine->applyNoMatchFloatDefault(windowId, screenId, reason, placedBefore);
             }
         }
         // A matched route is deliberately NOT followed by the float default:
@@ -338,6 +428,54 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
     burnOpenCredit();
 }
 
+bool SnapAdaptor::snapPermittedForContext(const QString& windowId, const QString& screenId, int virtualDesktop) const
+{
+    // Global snapping kill-switch — see discussion #461 item 2. Every answer
+    // this facade's slots give funnels through here, so a single gate
+    // suppresses all auto-snap paths when the user has turned snapping off
+    // entirely. Mirrors the engine-internal gate in
+    // SnapEngine::resolveWindowRestore.
+    if (m_settings && !m_settings->snappingEnabled()) {
+        qCInfo(lcDbusWindow) << "snapPermittedForContext: refusing auto-snap of" << windowId
+                             << "— snapping is globally disabled";
+        return false;
+    }
+
+    // Disabled-context gate. The interactive drag path (WindowDragAdaptor)
+    // and autotile (Daemon::updateEngineScreens) already refuse to place
+    // windows on a monitor / desktop / activity the user marked disabled.
+    // The auto-snap-on-open restore path did not, so windows still snapped on
+    // a disabled context (discussion #461). Gating here covers all restore
+    // entry points in one place.
+    if (!m_settings || screenId.isEmpty() || !m_contextResolver) {
+        return true;
+    }
+    // Gate against the DESTINATION screen's actual mode. A restore result
+    // can cross-screen-migrate (placement rule / session restore) onto a screen
+    // whose mode differs from the caller's, so the disable list to consult
+    // is the one for that screen's mode — not a hard-coded Snapping.
+    //
+    // The destination DESKTOP is @p virtualDesktop when the answer was routed
+    // there (a RouteToDesktop placement, calculateSnapToPlacementRule),
+    // otherwise the current desktop (every other calculator opens the window on
+    // the current desktop, or refuses outright on a saved-desktop mismatch).
+    // For a routed result handleForPersisted composes the explicit destination
+    // desktop, so the disable check keys on the desktop the window will actually
+    // land on rather than the live current desktop; for a non-routed one
+    // (virtualDesktop == 0) handleFor is exact, pulling (currentVirtualDesktop,
+    // currentActivity) from the daemon's VDM/AM — the same values the snap engine
+    // sees — and routing the screen through the mode provider in one snapshot.
+    const auto handle = virtualDesktop >= 1
+        ? m_contextResolver->handleForPersisted(screenId, virtualDesktop, m_contextResolver->currentActivity())
+        : m_contextResolver->handleFor(screenId);
+    if (m_contextResolver->isDisabled(handle)) {
+        qCInfo(lcDbusWindow) << "snapPermittedForContext: refusing auto-snap of" << windowId
+                             << "— PlasmaZones is disabled for screen" << screenId;
+        return false;
+    }
+    return true;
+}
+
 bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windowId, int& snapX, int& snapY,
                                   int& snapWidth, int& snapHeight, bool& shouldSnap)
 {
@@ -348,51 +486,8 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
         return false;
     }
 
-    // Global snapping kill-switch — see discussion #461 item 2. Every snapTo*
-    // / resolveWindowRestore D-Bus slot funnels
-    // through here, so a single gate suppresses all auto-snap-on-open paths
-    // when the user has turned snapping off entirely. Mirrors the
-    // engine-internal gate in SnapEngine::resolveWindowRestore.
-    if (m_settings && !m_settings->snappingEnabled()) {
-        qCInfo(lcDbusWindow) << "applySnapResult: refusing auto-snap of" << windowId
-                             << "— snapping is globally disabled";
+    if (!snapPermittedForContext(windowId, result.screenId, result.virtualDesktop)) {
         return false;
-    }
-
-    // Disabled-context gate. The interactive drag path (WindowDragAdaptor)
-    // and autotile (Daemon::updateEngineScreens) already refuse to place
-    // windows on a monitor / desktop / activity the user marked disabled.
-    // The auto-snap-on-open restore path — every snapTo* / resolveWindowRestore
-    // slot funnels through here — did not, so windows still snapped on a
-    // disabled context (discussion #461). Gating here covers all restore
-    // entry points in one place.
-    if (m_settings && !result.screenId.isEmpty()) {
-        // Gate against the DESTINATION screen's actual mode. A restore result
-        // can cross-screen-migrate (placement rule / session restore) onto a screen
-        // whose mode differs from the caller's, so the disable list to consult
-        // is the one for result.screenId's mode — not a hard-coded Snapping.
-        //
-        // The destination DESKTOP is result.virtualDesktop when the result was
-        // routed there (a RouteToDesktop placement, calculateSnapToPlacementRule),
-        // otherwise the current desktop (every other calculator opens the window on
-        // the current desktop, or refuses outright on a saved-desktop mismatch).
-        // For a routed result handleForPersisted composes the explicit destination
-        // desktop, so the disable check keys on the desktop the window will actually
-        // land on rather than the live current desktop; for a non-routed result
-        // (virtualDesktop == 0) handleFor is exact, pulling (currentVirtualDesktop,
-        // currentActivity) from the daemon's VDM/AM — the same values the snap engine
-        // sees — and routing the screen through the mode provider in one snapshot.
-        if (m_contextResolver) {
-            const auto handle = result.virtualDesktop >= 1
-                ? m_contextResolver->handleForPersisted(result.screenId, result.virtualDesktop,
-                                                        m_contextResolver->currentActivity())
-                : m_contextResolver->handleFor(result.screenId);
-            if (m_contextResolver->isDisabled(handle)) {
-                qCInfo(lcDbusWindow) << "applySnapResult: refusing auto-snap of" << windowId
-                                     << "— PlasmaZones is disabled for screen" << result.screenId;
-                return false;
-            }
-        }
     }
 
     // A shouldSnap result can carry an empty zoneId; committing it would

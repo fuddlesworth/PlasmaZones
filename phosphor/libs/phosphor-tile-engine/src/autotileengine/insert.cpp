@@ -39,6 +39,7 @@
 #include <QVarLengthArray>
 #include <algorithm>
 #include <cmath>
+#include <optional>
 
 namespace PhosphorTileEngine {
 
@@ -90,6 +91,29 @@ void AutotileEngine::notifyAlgorithmWindowAdded(PhosphorTiles::TilingState* stat
             algo->onWindowAdded(state, idx);
         }
     }
+}
+
+QList<QSize> AutotileEngine::managedSizesOnScreen(const QString& screenId) const
+{
+    // The rects this engine last APPLIED to every tile on @p screenId,
+    // across every context of the screen: a sibling floated at open on
+    // another desktop carries that desktop's tile size as its "free" rect,
+    // and a sibling tiled in the current context has this one's. A tile
+    // inserted in the same batch whose retile is still queued has no applied
+    // rect yet; the list is best effort, and a miss only skips a refusal.
+    QList<QSize> sizes;
+    for (auto it = m_states.states().cbegin(); it != m_states.states().cend(); ++it) {
+        if (!it.value() || it.key().screenId != screenId) {
+            continue;
+        }
+        for (const QString& tiled : it.value()->tiledWindows()) {
+            const QRect rect = lastManagedRect(tiled);
+            if (rect.isValid()) {
+                sizes.append(rect.size());
+            }
+        }
+    }
+    return sizes;
 }
 
 bool AutotileEngine::insertShouldFloat(const QString& windowId, const QString& screenId) const
@@ -262,6 +286,26 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // floating accept has no desktop term). Tier 3 already carries this
     // guard through insertShouldFloat; tier 2 needs its own.
     const bool migrationReAdd = m_migrationArrival && m_migrationArrival->windowId == windowId;
+    // Whether the record restore below moved the window (full rect, size
+    // included), which makes the size-only arm at the tail redundant.
+    bool movedByRecord = false;
+    // The lineage snapshot the size arm gates on, taken BEFORE takeForReopen
+    // can re-bind a FIFO-matched sibling record under this uuid (see
+    // PlacementEngineBase::placedByPreviousLineage).
+    const bool placedBefore = m_windowTracker && placedByPreviousLineage(m_windowTracker->placementStore(), windowId);
+    // The managed-size list for THIS screen, resolved at most once per open
+    // and shared by the float-restore move gate and the size arm at the tail,
+    // which ask the same question of it. Lazy rather than eager: an ordinary
+    // tiled open reaches neither arm and must not pay the walk. In the gate's
+    // branch the take() accept makes the record's restoreScreen equal to
+    // screenId (noted at the hint below), so one list serves both.
+    std::optional<QList<QSize>> managedSizesHere;
+    const auto managedSizesForScreen = [&]() -> const QList<QSize>& {
+        if (!managedSizesHere) {
+            managedSizesHere = managedSizesOnScreen(screenId);
+        }
+        return *managedSizesHere;
+    };
     if (!inserted && hasStableAppId && m_windowTracker && !migrationReAdd) {
         using PhosphorEngine::WindowPlacement;
         // takeForReopen carries the shared accept predicate (floating slot:
@@ -304,9 +348,17 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
                     // screen would teleport the window to a third monitor with
                     // the state saying otherwise; this is the check that makes
                     // that true rather than merely intended.
+                    // A recorded rect of a live tile's size is a spawn frame
+                    // the window never chose (it missed its first size
+                    // restore and closed tiled-sized): re-applying it would
+                    // keep that record alive for every later reopen, so the
+                    // move is refused and the size arm below finds a real
+                    // source instead.
                     if (freeGeo.isValid() && restorePosition
-                        && (!m_windowTracker || m_windowTracker->geometryBelongsToScreen(freeGeo, restoreScreen))) {
+                        && (!m_windowTracker || m_windowTracker->geometryBelongsToScreen(freeGeo, restoreScreen))
+                        && !isManagedSize(managedSizesForScreen(), freeGeo.size())) {
                         Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
+                        movedByRecord = true;
                     }
                     qCInfo(PhosphorTileEngine::lcTileEngine)
                         << "insertWindow: float-restore for" << windowId << "to" << freeGeo << "on" << restoreScreen
@@ -335,6 +387,22 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // then emits windowFloatingStateSynced so the daemon mirrors the state.
     if (!state->isFloating(windowId) && insertShouldFloat(windowId, screenId)) {
         state->setFloating(windowId, true);
+    }
+
+    // A window this engine leaves floating at open, and did not move to its
+    // remembered free spot, stays where the compositor put it at the size
+    // the client asked for: for a KDE app whose sibling is tiled that is the
+    // tile's size (#1106). Give it its free size back where it stands, from
+    // its own record or a live sibling's, refusing a rect of any live tile's
+    // size. Never on a migration re-add: that window is already placed. The
+    // tiling wire carries no restore reason, so the base's lineage snapshot
+    // (placedBefore) is what tells a restart or mode-swap re-announce of a
+    // visible window from a first placement. This runs inside windowOpened,
+    // ahead of the float-state sync onWindowAdded emits, so the size-only
+    // apply precedes the sync on the wire.
+    if (state->isFloating(windowId) && !movedByRecord && !migrationReAdd) {
+        restoreFreeSizeWhereItStands(m_windowTracker, windowId, screenId, PhosphorEngine::RestoreReason::Open,
+                                     placedBefore, managedSizesForScreen());
     }
 
     // A pre-seeded window placed by a LATER tier (the advisory fall-through)

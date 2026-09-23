@@ -53,7 +53,7 @@ class NavigationController;
 class PerScreenConfigResolver;
 } // namespace PhosphorTileEngine
 
-// ScreenManager lives in libs/phosphor-screens; forward-declared here.
+// ScreenManager lives in phosphor/libs/phosphor-screens; forward-declared here.
 namespace PhosphorScreens {
 class ScreenManager;
 }
@@ -1120,14 +1120,12 @@ public:
     /// REFUSES untileable windows after keying, unlike scroll's, which
     /// floats them — an optimistic claim would phantom-key the window);
     /// decides via the store's live-instance-excluding peekForReclaim;
-    /// requires the recorded home in the LIVE autotile set AND the record's
-    /// (desktop, activity) to match the home screen's current key through
-    /// recordContextMatchesLive, which exempts the sticky and unknown-context
-    /// sentinel records; returns
-    /// the REAL adoption outcome verified by membership, sweeping the
-    /// phantom key on a refusal.
+    /// requires the recorded home in the LIVE autotile set, a matching home
+    /// context (recordContextMatchesLive) and a home open that would TILE the
+    /// window (a float is screen-local); returns the REAL adoption outcome.
     bool claimCrossScreenReopen(const QString& windowId, const QString& openingScreenId, int minWidth,
                                 int minHeight) override;
+    void noteCrossScreenClaimsExhausted(const QString& windowId, bool exhausted) override;
     QString heldScreenForWindow(const QString& windowId) const override;
     std::optional<PhosphorEngine::PlacementStateKey> heldKeyForWindow(const QString& windowId) const override;
 
@@ -1431,6 +1429,8 @@ private Q_SLOTS:
 private:
     void connectSignals();
     bool insertWindow(const QString& windowId, const QString& screenId);
+    /// The sizes a tiled window on @p screenId can have, every context (PlacementEngineBase::isManagedSize).
+    QList<QSize> managedSizesOnScreen(const QString& screenId) const;
     // Passive float-state sync after insertWindow() places a window FLOATING
     // (matched Float rule / restored saved float); a tiled placement announces
     // nothing. Shared by onWindowAdded and backfillWindows so the two cannot
@@ -1839,14 +1839,14 @@ private:
     // behaviour). See RestorePositionPredicate doc above.
     RestorePositionPredicate m_restorePositionPredicate{};
 
-    // Rule-driven open-floating gate. Empty until the daemon wires it; while empty
-    // no window is rule-floated. See FloatPredicate doc above.
+    // Rule-driven open-floating gate; empty until the daemon wires it (see FloatPredicate).
     FloatPredicate m_floatPredicate{};
 
-    // MigrationArrival moved to AutotileEngineTypes.h; alias keeps the
-    // AutotileEngine::MigrationArrival spelling valid for existing call sites.
+    // Alias for the type hoisted to AutotileEngineTypes.h.
     using MigrationArrival = ::PhosphorTileEngine::MigrationArrival;
     std::optional<MigrationArrival> m_migrationArrival;
+    /// Re-stated per announce by the dispatch (noteCrossScreenClaimsExhausted); read by the defer gate.
+    QSet<QString> m_crossScreenClaimsExhausted;
 
     /// The float state @p windowId must be inserted with: the live state it
     /// carried across a migration, else the open-time "Float this app" rule.

@@ -8,6 +8,7 @@
 #include <PhosphorEngine/WindowPlacementStore.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorTileEngine/IAutotileSettings.h>
+#include "helpers/WindowPlacementBuilders.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotileConstants.h>
 
@@ -238,6 +239,10 @@ public:
     {
         return nullptr;
     }
+    QRect screenAvailableGeometry(const QString&) const override
+    {
+        return {};
+    }
     void assignWindowToZone(const QString&, const QString&, const QString&, int) override
     {
     }
@@ -334,9 +339,9 @@ public:
     QSet<QString> liveInstances;
     void wireLiveInstanceProbe()
     {
-        m_store.setLiveInstanceProbe([this](const QString& windowId) {
-            return liveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(windowId));
-        });
+        // One probe shape for every suite (WindowPlacementBuilders.h): the
+        // set is a member, so it outlives the store the probe is installed in.
+        m_store.setLiveInstanceProbe(PlasmaZones::TestHelpers::liveInstanceProbe(liveInstances));
     }
     using PhosphorEngine::IWindowTrackingService::clearFreeGeometry;
     void clearFreeGeometry(const QString&) override

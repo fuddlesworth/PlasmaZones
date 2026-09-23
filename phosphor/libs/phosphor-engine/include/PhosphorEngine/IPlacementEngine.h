@@ -126,17 +126,11 @@ public:
     /// Default false: an engine without a cross-screen restore story (snap
     /// claims through resolveWindowRestore instead) never claims here.
     ///
-    /// Contract for implementations:
-    ///  - Self-gate on first observation by MEMBERSHIP (a window the engine
-    ///    already holds in a state is an in-session move, never a session
-    ///    restore — and the raw reverse-map key is not membership).
-    ///  - Decide via WindowPlacementStore::peekForReclaim, never plain
-    ///    peek(): the live-instance exclusion is what stops a fresh second
-    ///    instance being yanked onto its open sibling's monitor.
-    ///  - Return the REAL adoption outcome, verified by membership after the
-    ///    open-path re-entry. Answering true optimistically converts every
-    ///    downstream refusal into a window no engine manages: the caller
-    ///    hands a claimed window to no other engine.
+    /// Contract: self-gate on first observation by MEMBERSHIP (a held window
+    /// is an in-session move); decide via WindowPlacementStore::peekForReclaim,
+    /// never plain peek() (its live-instance exclusion stops a fresh second
+    /// instance being yanked onto its open sibling's monitor); return the REAL
+    /// adoption outcome verified by membership.
     virtual bool claimCrossScreenReopen(const QString& windowId, const QString& openingScreenId, int minWidth = 0,
                                         int minHeight = 0)
     {
@@ -145,6 +139,17 @@ public:
         Q_UNUSED(minWidth)
         Q_UNUSED(minHeight)
         return false;
+    }
+
+    /// OPTIONAL: whether the claim round for THIS announce of @p windowId ran
+    /// and every claimCrossScreenReopen declined. A reciprocal defer gate
+    /// reads it and adopts rather than deferring again, leaving the window
+    /// with no engine. Stated either way on every announce reaching an arrival
+    /// engine, never sticky; a claim re-entering windowOpened clears it first.
+    virtual void noteCrossScreenClaimsExhausted(const QString& windowId, bool exhausted)
+    {
+        Q_UNUSED(windowId)
+        Q_UNUSED(exhausted)
     }
 
     /// OPTIONAL: the screen this engine genuinely HOLDS the window on IN THE
@@ -219,19 +224,14 @@ public:
     /// Bracket a BURST of windowOpened calls delivered together (the
     /// adaptor's three dispatch loops: windowsOpenedBatch, the deferred-open
     /// flush, and the parked-open replay — daemon bring-up re-announce and
-    /// mode flips). The cross-screen reclaim's windowOpened re-entry is a
-    /// fourth caller: inside the tiling dispatch it inherits that loop's
-    /// bracket; off the snap facade it is deliberately UNBRACKETED — each
-    /// resolveWindowRestore is its own D-Bus message, so there is no batch
-    /// to bracket, matching the per-window cadence snap restores have always
-    /// had on that channel. An engine that applies geometry
-    /// per arrival may defer those applies until endArrivalBurst so a
-    /// restore of an unchanged session resolves one final layout instead of
-    /// N visible intermediates marching across the screen. Defaults are
-    /// no-ops: an engine whose arrivals already coalesce (autotile's queued
-    /// retile) needs nothing. Brackets may nest; only the outermost end
-    /// flushes. Model state is fully updated during the burst either way —
-    /// only the compositor-facing geometry apply is deferred.
+    /// mode flips; a cross-screen reclaim's re-entry inherits the loop's
+    /// bracket, while the snap facade's is deliberately UNBRACKETED since each
+    /// resolveWindowRestore is its own D-Bus message). An engine that applies
+    /// geometry per arrival may defer those applies until endArrivalBurst so
+    /// a restore of an unchanged session resolves one final layout instead of
+    /// N visible intermediates. Defaults are no-ops (autotile's retile already
+    /// coalesces). Brackets may nest, only the outermost end flushes, and
+    /// model state is fully updated during the burst; only the apply defers.
     virtual void beginArrivalBurst()
     {
     }

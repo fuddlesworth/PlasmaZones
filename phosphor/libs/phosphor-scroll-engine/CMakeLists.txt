@@ -9,7 +9,7 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-set(PHOSPHORSCROLLENGINE_VERSION "0.1.0")
+set(PHOSPHORSCROLLENGINE_VERSION "0.2.0")
 
 if(NOT PROJECT_VERSION)
     project(PhosphorScrollEngine VERSION ${PHOSPHORSCROLLENGINE_VERSION} LANGUAGES CXX)
@@ -51,6 +51,7 @@ add_library(PhosphorScrollEngine SHARED
     src/scrollengine/drag_autoscroll.cpp
     src/scrollengine/drag_preview.cpp
     src/scrollengine/engine_lifecycle.cpp
+    src/scrollengine/engine_float_open.cpp
     src/scrollengine/engine_focus.cpp
     src/scrollengine/engine_minsize.cpp
     src/scrollengine/engine_reopen.cpp

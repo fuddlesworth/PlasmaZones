@@ -48,7 +48,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="pruneStaleWindows">
-            <annotation name="org.gtk.GDBus.DocString" value="Remove zone assignments for windows not in the alive set. Called by KWin effect after daemon ready to clean up stale KConfig entries."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Remove zone assignments for windows not in the alive set. Called by KWin effect after daemon ready to clean up stale persisted entries."/>
             <arg name="aliveWindowIds" type="as" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window IDs currently known to KWin."/>
             </arg>
@@ -204,7 +204,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="getPendingRestoreGeometries">
             <annotation name="org.gtk.GDBus.DocString" value="Pre-computed zone geometries for pending restore entries. The effect caches these for instant window teleport on open (no D-Bus round-trip flash)."/>
             <arg name="geometriesJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON object: { appId: {x, y, width, height}, ... }"/>
+                <annotation name="org.gtk.GDBus.DocString" value="JSON object: { appId: [ {x, y, width, height, screenId, windowId}, ... ], ... }, newest record first. windowId is the record's; the effect takes the first entry whose window it cannot still see."/>
             </arg>
         </method>
         <method name="reportNavigationFeedback">
@@ -290,14 +290,30 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </method>
         <signal name="applyGeometryRequested">
             <annotation name="org.gtk.GDBus.DocString" value="Daemon requests compositor to apply geometry. zoneId empty = float restore only; zoneId set = apply and call windowSnapped."/>
-            <arg name="windowId" type="s"/>
-            <arg name="x" type="i"/>
-            <arg name="y" type="i"/>
-            <arg name="width" type="i"/>
-            <arg name="height" type="i"/>
-            <arg name="zoneId" type="s"/>
-            <arg name="screenId" type="s"/>
-            <arg name="sizeOnly" type="b"/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window to apply to. A size-only apply resolves this id exactly; a full apply may fall back to a same-app window."/>
+            </arg>
+            <arg name="x" type="i">
+                <annotation name="org.gtk.GDBus.DocString" value="Frame x in compositor coordinates. Ignored when sizeOnly is true."/>
+            </arg>
+            <arg name="y" type="i">
+                <annotation name="org.gtk.GDBus.DocString" value="Frame y in compositor coordinates. Ignored when sizeOnly is true."/>
+            </arg>
+            <arg name="width" type="i">
+                <annotation name="org.gtk.GDBus.DocString" value="Frame width."/>
+            </arg>
+            <arg name="height" type="i">
+                <annotation name="org.gtk.GDBus.DocString" value="Frame height."/>
+            </arg>
+            <arg name="zoneId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone the window is snapped into, empty for a free placement."/>
+            </arg>
+            <arg name="screenId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen the geometry belongs to."/>
+            </arg>
+            <arg name="sizeOnly" type="b">
+                <annotation name="org.gtk.GDBus.DocString" value="True to resize the window where it stands, keeping the position the compositor chooses (the drag-out unsnap keeps the top-left, a free-size restore at open keeps the centre)."/>
+            </arg>
         </signal>
         <signal name="activateWindowRequested">
             <annotation name="org.gtk.GDBus.DocString" value="Daemon requests KWin to activate (focus) a window. Used by daemon-driven focus/cycle navigation."/>
@@ -463,7 +479,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="getPreTileGeometries">
-            <annotation name="org.gtk.GDBus.DocString" value="Return every persisted pre-tile geometry (appId → rect + screen). The effect pre-populates its local cache from this on bringup so it can teleport restoring windows to their pre-tile geometry without a round-trip on every restore. Each entry carries the appId (entries persist across window close/reopen for session restore, so the per-instance windowId is not the key), the geometry rect (x,y,w,h), and the screen the geometry was captured on."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Return the pre-tile geometry of every window the daemon currently holds a LIVE record for (appId → rect + screen). The effect pre-populates its local cache from this on bringup so it can teleport restoring windows to their pre-tile geometry without a round-trip on every restore. Each entry carries the appId, the geometry rect (x,y,w,h), and the screen the geometry was captured on. Live records only: the consumer keys by appId and applies an entry to an open window of that app, so a closed instance's rect reaching it would be handed to a different window than the one that recorded it."/>
             <arg name="geometries" type="a(siiiis)" direction="out">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::PreTileGeometryList"/>
                 <annotation name="org.gtk.GDBus.DocString" value="Array of (appId, x, y, width, height, screenId) — the same marshalling shape as applyGeometriesBatch and getUpdatedWindowGeometries."/>

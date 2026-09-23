@@ -693,6 +693,15 @@ void Daemon::stop()
     // installed while member destruction frees what they deref. Each is a null-safe
     // idempotent clear, so running them on a never-inited daemon is a no-op.
 
+    // The shutdown save runs FIRST, while every borrow below is still wired:
+    // its re-capture reads the engines, predicates and context resolver, and
+    // with those severed it captured nothing. Running-path only; its guard
+    // blocks the later saves this teardown schedules, and nothing below
+    // mutates placement.
+    if (m_running && m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->saveStateOnShutdown();
+    }
+
     // Clear adaptor engine pointers BEFORE destroying the engines. Adaptors are Qt
     // children of the daemon (destroyed later); a D-Bus call arriving between engine
     // destruction and adaptor destruction would otherwise access freed memory. After
@@ -710,17 +719,13 @@ void Daemon::stop()
         m_snapAdaptor->clearEngine();
     }
 
-    // Null the WindowDragAdaptor's engine pointer for the same reason.
-    // Clear engine references before destruction
+    // Null the WindowTrackingAdaptor's engine borrows for the same reason.
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->setEngines(nullptr, nullptr, nullptr);
     }
 
-    // Clear the late-bound WTS float / mode callbacks that capture `this` (Daemon,
-    // via screenModeForWindow) — symmetric with the setShouldTrackPredicate /
-    // setShouldRestorePredicate clears, so the "every `this`-capturing predicate is
-    // cleared before teardown" contract stays grep-discoverable and survives a
-    // future ownership/order refactor.
+    // Clear the late-bound WTS float / mode callbacks that capture `this`, so
+    // the "every `this`-capturing predicate is cleared" contract stays grep-discoverable.
     if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
         auto* wts = m_windowTrackingAdaptor->service();
         wts->setEngineFloatResolver({});
@@ -729,17 +734,12 @@ void Daemon::stop()
         wts->setAutotileModePredicate({});
         wts->setEngineTiledPredicate({});
         wts->setModeEngineIdResolver({});
-        // Deliberately NOT cleared here: the snap-state resolver (setSnapStateResolver)
-        // and setSnapEngine both capture/store only QPointer(snapEngine), so they
-        // self-null when the engine is destroyed — there is no `this`/raw-pointer
-        // capture to invalidate, unlike the float callbacks above.
+        // Deliberately NOT cleared here: setSnapStateResolver and setSnapEngine
+        // store only QPointer(snapEngine), which self-nulls on destruction.
     }
-    // NOTE: the strip-state provider is deliberately NOT cleared here with
-    // the float callbacks. It captures only a QPointer, so it cannot dangle,
-    // and clearing it early makes saveState SKIP the strips write entirely —
-    // so the final shutdown save (further down, before the engine is
-    // destroyed) would drop every strip mutation from the last debounce
-    // window. It is cleared immediately before m_scrollEngine.reset() instead.
+    // NOTE: the strip-state provider is deliberately NOT cleared here either:
+    // it captures only a QPointer, and clearing it makes saveState SKIP the
+    // strips write. It is cleared just before m_scrollEngine.reset().
     // The `this`-capturing closures on the overlay service. Each is safe today
     // (every lambda re-resolves its dependency off the Daemon and null-checks
     // it), but leaving any of them installed breaks the grep-discoverable
@@ -826,9 +826,9 @@ void Daemon::stop()
         // teardown gap; this is the grep-discoverable contract, and it matches
         // the clear the tiling adaptor's identically-named borrow gets above.
         concreteSnap->setWindowRegistry(nullptr);
-        // The navigation-state provider is a raw borrow of a Qt-child adaptor,
-        // in the same class as the zone-detection pointer noted below.
+        // The navigation-state provider and cross-surface resolver: raw borrows too.
         concreteSnap->setNavigationStateProvider(nullptr);
+        concreteSnap->setCrossSurfaceResolver(nullptr);
     }
 
     // Likewise sever WindowTrackingAdaptor's borrow of m_ruleStore (used by
@@ -855,6 +855,8 @@ void Daemon::stop()
     if (auto* concreteAutotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(m_autotileEngine.get())) {
         concreteAutotile->setContextGapProvider({});
         concreteAutotile->setScrollingModeResolver({});
+        // The cross-surface resolver borrow all three engines took (enginefactory.cpp).
+        concreteAutotile->setCrossSurfaceResolver(nullptr);
     }
     // Scroll twin of the clear above: every closure below captures Daemon `this`
     // (init_engines.cpp) under the same clear-before-destroy contract.
@@ -863,6 +865,7 @@ void Daemon::stop()
         concreteScroll->setSnappingModeResolver({});
         concreteScroll->setScrollingModeResolver({});
         concreteScroll->setAutotileModeResolver({});
+        concreteScroll->setCrossSurfaceResolver(nullptr);
         concreteScroll->setPersistenceDelegate({}, {});
     }
 
@@ -1084,19 +1087,16 @@ void Daemon::stop()
         m_overlayService->clearAllScrollDropIndicatorOverrides();
     }
 
-    // Save state
+    // Save state. The window-tracking state was saved at the top of this
+    // function, before the engine borrows were severed.
     m_layoutManager->saveLayouts();
     m_layoutManager->saveAssignments();
     m_settings->save();
-    if (m_windowTrackingAdaptor) {
-        m_windowTrackingAdaptor->saveStateOnShutdown();
-    }
 
     m_reapplyGeometriesTimer.stop();
 
     // Autotile per-window restore state is included in WTA's saveStateOnShutdown()
-    // above via the unified WindowPlacementStore (refreshOpenWindowPlacements
-    // captures every open window's placement). No separate save needed.
+    // (run at the top of stop(), with the engines still wired). No separate save.
     //
     // Do NOT call setAutotileScreens({}) here — it emits windowsReleased
     // which clears WTS floating state and restarts the save timer, potentially

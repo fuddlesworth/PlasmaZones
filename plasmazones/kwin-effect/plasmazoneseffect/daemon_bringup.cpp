@@ -4,6 +4,7 @@
 #include "plasmazoneseffect.h"
 
 #include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorIdentity/WindowId.h>
 
 #include "tilinghandler/tilinghandler.h"
 #include "handlers/navigationhandler.h"
@@ -487,17 +488,54 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
             }
             QJsonObject obj = doc.object();
             m_snapHandler->clearRestoreCache();
+            // An entry built from a record whose window is STILL OPEN is that
+            // window's own placement, not a pending restore, and the daemon
+            // cannot always tell: on a daemon-only restart this reply is
+            // built before the effect re-announces the windows, so every
+            // record reads as dead there. The effect can tell. Keyed by
+            // instance id, since the daemon's record id is the registry's
+            // canonical composite and may differ in prefix from the live one.
+            // Handled windows only, like the alive walk above: a surface the
+            // effect never manages can hold no record, and an id-less one
+            // ("" from a window with no backing KWin::Window) must not read
+            // as the instance of a malformed record.
+            QSet<QString> liveInstances;
+            const auto liveWindows = KWin::effects->stackingOrder();
+            for (KWin::EffectWindow* lw : liveWindows) {
+                if (!lw || lw->isDeleted() || !shouldHandleWindow(lw)) {
+                    continue;
+                }
+                const QString liveId = ::PhosphorIdentity::WindowId::extractInstanceId(getWindowId(lw));
+                if (!liveId.isEmpty()) {
+                    liveInstances.insert(liveId);
+                }
+            }
+            // One array per app, newest record first: the first entry whose
+            // window is not visible wins, so a live sibling's record at the
+            // head (a daemon-only restart, before the re-announce) does not
+            // cost the app its instant restore.
             for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
-                QJsonObject geo = it.value().toObject();
-                // gw/gh, not w/h — `w` would shadow the lambda's watcher
-                // parameter above.
-                const int gx = geo[QLatin1String("x")].toInt();
-                const int gy = geo[QLatin1String("y")].toInt();
-                const int gw = geo[QLatin1String("width")].toInt();
-                const int gh = geo[QLatin1String("height")].toInt();
-                QString savedScreen = geo[QLatin1String("screenId")].toString();
-                if (gw > 0 && gh > 0) {
-                    m_snapHandler->cacheRestore(it.key(), CachedSnapRestore{QRect(gx, gy, gw, gh), savedScreen});
+                const QJsonArray entries = it.value().toArray();
+                for (const QJsonValue& entry : entries) {
+                    const QJsonObject geo = entry.toObject();
+                    const QString recordWindowId = geo[QLatin1String("windowId")].toString();
+                    if (!recordWindowId.isEmpty()
+                        && liveInstances.contains(::PhosphorIdentity::WindowId::extractInstanceId(recordWindowId))) {
+                        qCDebug(lcEffect) << "Skipping instant-restore entry for" << it.key() << ": its window"
+                                          << recordWindowId << "is still open";
+                        continue;
+                    }
+                    // gw/gh, not w/h — `w` would shadow the lambda's watcher
+                    // parameter above.
+                    const int gx = geo[QLatin1String("x")].toInt();
+                    const int gy = geo[QLatin1String("y")].toInt();
+                    const int gw = geo[QLatin1String("width")].toInt();
+                    const int gh = geo[QLatin1String("height")].toInt();
+                    const QString savedScreen = geo[QLatin1String("screenId")].toString();
+                    if (gw > 0 && gh > 0) {
+                        m_snapHandler->cacheRestore(it.key(), CachedSnapRestore{QRect(gx, gy, gw, gh), savedScreen});
+                        break;
+                    }
                 }
             }
             qCDebug(lcEffect) << "Cached" << m_snapHandler->restoreCacheSize() << "pending restore geometries";
@@ -592,7 +630,11 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
                 // appId would skip an untracked window whose app has another tracked
                 // window — stranding e.g. a multi-window terminal's window that raced
                 // startup. The daemon tracks restored windows by live id, matching
-                // getWindowId(). (Mirrors SnapHandler::slotPendingRestoresAvailable.)
+                // getWindowId(). (Mirrors SnapHandler::slotPendingRestoresAvailable's
+                // tracked-id skip, but NOT its current-desktop gate: this sweep is
+                // the only retry an off-desktop window gets after a daemon restart,
+                // and the daemon pins the restore to the window's own desktop from
+                // the registry, so it is never snapped through the visible one.)
                 if (trackedWindowIds.contains(getWindowId(window))) {
                     continue;
                 }

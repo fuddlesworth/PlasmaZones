@@ -286,7 +286,22 @@ Store::Store(IBackend* backend, Schema schema, QObject* parent)
     : QObject(parent)
     , d(std::make_unique<Private>(backend, std::move(schema)))
 {
-    Q_ASSERT_X(backend != nullptr, "PhosphorConfig::Store", "backend must not be null");
+    // qFatal, not Q_ASSERT_X: the resolver / version-stamp / migration blocks
+    // at the end of this constructor dereference d->backend unconditionally for
+    // any non-trivial schema, and every accessor below (sync, commit, group,
+    // readVariant, write) does the same for the store's whole lifetime — the
+    // backend is borrowed once and never reset. Q_ASSERT_X compiles out under
+    // NDEBUG, so a null backend was a debug abort and a release segfault.
+    //
+    // Guarding the accessors instead would be dead code: construction itself
+    // already dereferences, so no Store with a null backend can reach them. And
+    // a backend-less Store that merely returned defaults would be worse than
+    // the crash — every read would answer the schema default and every write
+    // would be silently discarded, which is the config equivalent of failing
+    // open. Matches LayoutRegistry's ctor, fatal for the same reason.
+    if (backend == nullptr) {
+        qFatal("PhosphorConfig::Store: backend is required — the store dereferences it on every read and write");
+    }
 
     // Schema invariant: when a KeyDef declares both `expectedType` AND a
     // non-Invalid `defaultValue`, the default's typeId must match

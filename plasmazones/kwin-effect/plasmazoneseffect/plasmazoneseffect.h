@@ -700,7 +700,6 @@ private:
      */
     static bool isXdgDesktopPortalSurface(const QString& windowClass);
 
-    bool hasOtherWindowOfClassWithDifferentPid(KWin::EffectWindow* w) const;
     bool isWindowSticky(KWin::EffectWindow* w) const;
     void updateWindowStickyState(KWin::EffectWindow* w);
 
@@ -858,6 +857,12 @@ private:
     /// walk cannot even produce a result for the one case that reaches it. Those callers want
     /// exactness; this gives it in one hash lookup.
     KWin::EffectWindow* findWindowByIdExact(const QString& windowId) const;
+    /// Exact id, else the same INSTANCE under another prefix; never a sibling.
+    KWin::EffectWindow* findWindowByInstanceId(const QString& windowId) const;
+
+    /// The size-only half of slotApplyGeometryRequested (#1106); NOT a slot (moc would publish it by name).
+    void applySizeOnlyRestore(KWin::EffectWindow* w, const QString& liveWindowId, const QString& screenId,
+                              const QSize& size, bool freshOpen);
 
     /**
      * @brief All windows matching windowId (exact or same appId).
@@ -902,17 +907,11 @@ private:
     /// passes it here instead of paying the id-cache probe twice. Behaviour is
     /// otherwise identical — the id is the ONLY thing the overloads differ on.
     QString getWindowScreenId(KWin::EffectWindow* w, const QString& windowId) const;
-    /// Resolve the KWin output a window sits on by POSITION (the output whose
-    /// geometry contains the window centre), falling back to w->screen() only
-    /// when no output contains the centre. Never trust w->screen() first: KWin
-    /// can assign a window the wrong one of two identical-model outputs
-    /// (Discussion #724). Shared by getWindowScreenId and the activation-time
-    /// desktop report in notifyWindowActivated.
+    /// The KWin output a window sits on by POSITION (centre containment),
+    /// falling back to w->screen() only when no output contains the centre
+    /// (KWin can pick the wrong one of two identical outputs, #724).
     KWin::LogicalOutput* windowOutput(KWin::EffectWindow* w) const;
-    /// Resolve a (physical or virtual) screen id back to the KWin output that
-    /// carries it. Nullptr when no connected output matches — a disconnected
-    /// or not-yet-resolved id. The counterpart to outputScreenId, for the
-    /// paths that hold an id and need the output's geometry.
+    /// The KWin output carrying a (physical or virtual) screen id, else nullptr. Counterpart to outputScreenId.
     KWin::LogicalOutput* outputForScreenId(const QString& screenId) const;
     /// The output a scroll-strip window is managed by, or nullptr when the
     /// window is not a strip column (or is exempt: user move/resize, floating,
@@ -1951,6 +1950,15 @@ private:
         m_selfRepainting = true;
         return qScopeGuard([this, previous] {
             m_selfRepainting = previous;
+        });
+    }
+    /// The daemon-driven geometry-apply bracket (m_daemonGate.inGeometryApply); save/restore so nesting composes.
+    [[nodiscard]] auto geometryApplyScope()
+    {
+        const bool previous = m_daemonGate.inGeometryApply;
+        m_daemonGate.inGeometryApply = true;
+        return qScopeGuard([this, previous] {
+            m_daemonGate.inGeometryApply = previous;
         });
     }
 
@@ -3076,16 +3084,13 @@ private:
                                int durationMs = 0, bool reverse = false, bool holdCloseGrab = false,
                                bool holdAddedGrab = false, bool animateMinimized = false,
                                std::shared_ptr<const PhosphorAnimation::Curve> progressCurve = nullptr);
-    /// Resolve the compiled shader program for @p effectId, compiling it (read
-    /// source, assemble entry point, expand includes, splice the param preamble +
-    /// HDR finalize + PLASMAZONES_KWIN define, generate the KWin custom shader,
-    /// and cache every uniform location) on the first miss. Assumes the GL
-    /// context is already current — the sole caller (beginShaderTransition) makes
-    /// it current before the call, since the same context also drives its texture
-    /// uploads. Returns a pointer to the cached entry, whose `shader` is null when
-    /// this @p effectId is a cached compile-failure sentinel. Returns nullptr on a
-    /// transient failure (missing / empty / unexpandable source) that is NOT
-    /// cached, so a later trigger re-attempts. Definition in shader_textures.cpp.
+    /// Resolve the compiled shader program for @p effectId, compiling it on
+    /// the first miss (source, entry point, includes, param preamble, HDR
+    /// finalize, KWin custom shader, uniform locations). Assumes the GL context
+    /// is current (beginShaderTransition, the sole caller, makes it so). The
+    /// cached entry's `shader` is null for a cached compile failure; nullptr
+    /// means a transient, uncached failure (missing / empty / unexpandable
+    /// source), so a later trigger re-attempts. Definition in shader_textures.cpp.
     const CachedShader* compileOrLoadAnimationShader(const QString& effectId,
                                                      const PhosphorAnimationShaders::AnimationShaderEffect& eff);
     void endShaderTransition(KWin::EffectWindow* window);
@@ -3095,18 +3100,15 @@ private:
     // it opens; endRestoreSuppression releases it once it has settled into
     // its zone / tile (or on the hard deadline). See RestoreSuppression.
     void beginRestoreSuppression(KWin::EffectWindow* window);
-    /// Re-arm an already-suppressed window's deadline (no-op when the window
-    /// is not suppressed). Used when a routing decision is deferred past the
-    /// original deadline (screen-query wait) so the window does not flash at
-    /// its spawn placement mid-route.
+    /// Re-arm a suppressed window's deadline (no-op otherwise), so a decision deferred past it cannot flash.
     void refreshRestoreSuppressionDeadline(KWin::EffectWindow* window);
     /// Consume (single-shot) and, when valid for a snap-mode screen, apply the
-    /// instant snap-restore cache entry for this window's app. Returns true
-    /// when the window was teleported (caller should re-evaluate its screen).
-    /// Shared by slotWindowAdded and the deferred-routing dispatch so a
-    /// deferred window cannot leave a stale entry for a same-app sibling.
-    bool tryInstantSnapRestore(KWin::EffectWindow* w, const QString& windowId, bool canSnapRestore);
+    /// app's instant snap-restore cache entry. True when teleported. Sole
+    /// caller: the dispatch.
+    bool tryInstantSnapRestore(KWin::EffectWindow* w, const QString& windowId);
     void endRestoreSuppression(KWin::EffectWindow* window);
+    /// endRestoreSuppression for a resolve miss; an in-flight reposition holds.
+    void releaseRestoreSuppressionOnMiss(KWin::EffectWindow* window);
 
     void loadShaderProfileFromDbus();
     void loadMotionProfileTreeFromDbus();
@@ -3718,11 +3720,9 @@ private:
     // destruction uninstalls it from InputRedirection.
     std::unique_ptr<ScrollOverhangInputFilter> m_overhangInputFilter;
 
-    // Windows withheld from compositing between windowAdded and the frame
-    // their snap-restore / autotile reposition lands — see RestoreSuppression.
-    // paintWindow draws nothing for a window present here. Entries are
-    // erased on settle, on a negative resolve, on the deadline, and on
-    // window close/delete.
+    // Windows withheld from compositing until their open reposition lands (see
+    // RestoreSuppression). Erased on settle, on a negative resolve with nothing
+    // in flight (a stamped target re-arms once), on the deadline, on close.
     QHash<KWin::EffectWindow*, RestoreSuppression> m_restoreSuppress;
 
     // The one in-flight deferred geometry replay per window (applyWindowGeometry

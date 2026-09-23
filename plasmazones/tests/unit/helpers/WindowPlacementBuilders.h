@@ -4,10 +4,14 @@
 #pragma once
 
 #include <QRect>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 
+#include <functional>
+
 #include <PhosphorEngine/WindowPlacement.h>
+#include <PhosphorIdentity/WindowId.h>
 
 namespace PlasmaZones::TestHelpers {
 
@@ -45,5 +49,22 @@ inline PhosphorEngine::WindowPlacement makePlacement(const QString& windowId, co
     }
     return p;
 }
+
+// The production live-instance probe's shape (WindowTrackingService's ctor),
+// answered from a test-owned set of live INSTANCE ids: a composite record id
+// is live when its instance component is in @p liveInstances, and a bare id
+// is never live (production refuses it too, since extractInstanceId would
+// read the whole string as the instance). Captured by reference so a test
+// flips liveness mid-slot; the set must outlive every lookup that consults
+// the probe, which in practice means declaring it before the store.
+inline std::function<bool(const QString&)> liveInstanceProbe(const QSet<QString>& liveInstances)
+{
+    return [&liveInstances](const QString& windowId) {
+        return windowId.contains(QLatin1Char('|'))
+            && liveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+    };
+}
+// A temporary set would dangle behind the reference the probe keeps.
+inline std::function<bool(const QString&)> liveInstanceProbe(QSet<QString>&&) = delete;
 
 } // namespace PlasmaZones::TestHelpers

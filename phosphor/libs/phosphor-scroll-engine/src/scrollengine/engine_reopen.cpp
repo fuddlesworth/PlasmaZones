@@ -52,6 +52,13 @@ bool ScrollEngine::claimCrossScreenReopen(const QString& rawWindowId, const QStr
                                 << "— already held here, so this is an in-session re-announce, not a restore";
         return false;
     }
+    // Any verdict still standing for this window is from an EARLIER announce:
+    // the dispatch states the flag only after the claim round, which is the
+    // round this call is part of. A successful claim below re-enters
+    // windowOpened for the recorded home, and that re-entry reads the flag —
+    // so clear it here or the home open skips a defer gate it owed on the
+    // strength of a mark that describes a different announce.
+    m_crossScreenClaimsExhausted.remove(windowId);
     // Registry-aware appId, like autotile's twin and like every record
     // producer: parsing the frozen canonical string would look in the wrong
     // bucket after an Electron/CEF class mutation, and finds nothing at all
@@ -123,6 +130,26 @@ bool ScrollEngine::claimCrossScreenReopen(const QString& rawWindowId, const QStr
                                << homeScreen << "current context — declining";
         return false;
     }
+    // A float is screen-local: the home open would mark the window floating
+    // in the HOME state and move nothing, leaving it tracked on a monitor it
+    // is not on and sized against that monitor's columns. The three verdicts
+    // insertOpenedWindow floats on, evaluated for the home screen; the
+    // arrival screen's open then floats it where it stands.
+    const ScrollLayoutParams homeParams = layoutParamsForScreen(homeScreen);
+    const int clampedMinWidth = qMax(0, minWidth);
+    const int clampedMinHeight = qMax(0, minHeight);
+    const bool oversized = homeParams.workArea.isValid()
+        && (clampedMinWidth > homeParams.workArea.width() || clampedMinHeight > homeParams.workArea.height());
+    const bool ruleFloated = m_floatPredicate && m_floatPredicate(windowId, homeScreen);
+    const bool stickyExcluded =
+        effectiveStickyWindowHandling(homeScreen) != PhosphorEngine::StickyWindowHandling::TreatAsNormal
+        && m_windowTracker->isWindowSticky(windowId);
+    if (oversized || ruleFloated || stickyExcluded) {
+        qCInfo(lcScrollEngine) << "claimCrossScreenReopen:" << windowId << "would float on" << homeScreen
+                               << "(oversized" << oversized << "rule" << ruleFloated << "sticky" << stickyExcluded
+                               << ") — declining, a float has nothing to pull home for";
+        return false;
+    }
     windowOpened(windowId, homeScreen, minWidth, minHeight);
     // Return the REAL outcome, verified by membership (ScrollState-level: a
     // legitimately floated adoption is in the floating set, not the strip).
@@ -144,6 +171,21 @@ bool ScrollEngine::claimCrossScreenReopen(const QString& rawWindowId, const QStr
     qCInfo(lcScrollEngine) << "claimCrossScreenReopen:" << windowId << "opened on" << openingScreenId
                            << "— reclaimed to recorded scrolling home" << homeScreen;
     return true;
+}
+
+void ScrollEngine::noteCrossScreenClaimsExhausted(const QString& windowId, bool exhausted)
+{
+    if (windowId.isEmpty()) {
+        return;
+    }
+    // Set AND cleared per announce, so a mark can never outlive the announce
+    // it describes (see the interface contract).
+    const QString canonical = canonicalizeForLookup(windowId);
+    if (exhausted) {
+        m_crossScreenClaimsExhausted.insert(canonical);
+    } else {
+        m_crossScreenClaimsExhausted.remove(canonical);
+    }
 }
 
 } // namespace PhosphorScrollEngine

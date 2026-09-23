@@ -38,6 +38,10 @@
 #include "scrollstubsettings.h"
 #include "scrollstubtracking.h"
 
+#include <PhosphorEngine/WindowPlacement.h>
+#include <PhosphorIdentity/WindowId.h>
+
+#include <QSet>
 #include <QSignalSpy>
 #include <QVariantMap>
 #include <QtTest>
@@ -100,6 +104,7 @@ private Q_SLOTS:
     void focusScrollLimitNamesTheWindowsPastTheCap();
     void focusScrollLimitNamesEveryTileOfABlockedColumn();
     void focusScrollLimitFailsOpen();
+    void floatAtOpenGetsSiblingFreeSizeWhereItStands();
 
 private:
     /// An engine on S1 and S2 with @p settings installed and its cached
@@ -941,6 +946,69 @@ void TestScrollEngineBehaviour::focusScrollLimitFailsOpen()
     // A lone column is the one the pointer is already on, so nothing is past
     // the cap however tight it is.
     QVERIFY(engine->windowsBeyondFocusScrollLimit(kS1, 0).isEmpty());
+}
+
+void TestScrollEngineBehaviour::floatAtOpenGetsSiblingFreeSizeWhereItStands()
+{
+    // #1106 on a scrolling screen: a second instance a Float rule leaves
+    // floating beside a column sibling comes up at the column's size (the
+    // app saved it). It gets the sibling's remembered free size back where
+    // it stands, never a rect of a live column's size.
+    // Declared BEFORE the owner that parents the tracker: the probe captures
+    // it by reference and dies with the store, so it must outlive both.
+    QSet<QString> live{QStringLiteral("first")};
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    auto* tracker = new StubWindowTracking(&owner);
+    tracker->placementStore().setLiveInstanceProbe([&live](const QString& windowId) {
+        return live.contains(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+    });
+    ScrollEngine* engine = makeEngine(&owner, settings, tracker);
+
+    const QRect siblingFree(100, 100, 640, 400);
+    PhosphorEngine::WindowPlacement sibling;
+    sibling.windowId = QStringLiteral("app|first");
+    sibling.appId = QStringLiteral("app");
+    sibling.screenId = kS1;
+    PhosphorEngine::EngineSlot tiledSlot;
+    tiledSlot.state = PhosphorEngine::WindowPlacement::stateTiled();
+    sibling.engines.insert(engine->engineId(), tiledSlot);
+    sibling.freeGeometryByScreen.insert(kS1, siblingFree);
+    QVERIFY(tracker->placementStore().record(sibling));
+    engine->windowOpened(QStringLiteral("app|first"), kS1, 0, 0);
+    QVERIFY(tiled(engine, kS1, QStringLiteral("app|first")));
+
+    engine->setFloatPredicate([](const QString& windowId, const QString&) {
+        return windowId == QStringLiteral("app|second");
+    });
+    QSignalSpy geoSpy(engine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested);
+    QSignalSpy sizeSpy(engine, &PhosphorEngine::PlacementEngineBase::sizeRestoreRequested);
+    engine->windowOpened(QStringLiteral("app|second"), kS1, 0, 0);
+    auto* s1 = static_cast<ScrollState*>(engine->stateForScreen(kS1));
+    QVERIFY(s1);
+    QVERIFY(s1->isFloating(QStringLiteral("app|second")));
+    QVERIFY2(tracker->placementStore().contains(QStringLiteral("app|first")), "the live sibling keeps its record");
+    QCOMPARE(geoSpy.count(), 0);
+    QCOMPARE(sizeSpy.count(), 1);
+    const QList<QVariant> args = sizeSpy.takeFirst();
+    QCOMPARE(args.at(0).toString(), QStringLiteral("app|second"));
+    QCOMPARE(args.at(1).toSize(), siblingFree.size());
+    QCOMPARE(args.at(2).toString(), kS1);
+
+    // A rect of exactly a live column's size is a spawn frame, not a free
+    // life, and is refused even when it is the only sibling rect.
+    const QRect columnRect = engine->lastManagedRect(QStringLiteral("app|first"));
+    QVERIFY2(columnRect.isValid(), "the column must have a laid-out rect for this case to mean anything");
+    live.insert(QStringLiteral("second"));
+    PhosphorEngine::WindowPlacement poisoned = sibling;
+    poisoned.freeGeometryByScreen.insert(kS1, QRect(QPoint(40, 40), columnRect.size()));
+    QVERIFY(tracker->placementStore().record(poisoned));
+    engine->setFloatPredicate([](const QString& windowId, const QString&) {
+        return windowId == QStringLiteral("app|third");
+    });
+    engine->windowOpened(QStringLiteral("app|third"), kS1, 0, 0);
+    QVERIFY(s1->isFloating(QStringLiteral("app|third")));
+    QCOMPARE(sizeSpy.count(), 0);
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngineBehaviour)

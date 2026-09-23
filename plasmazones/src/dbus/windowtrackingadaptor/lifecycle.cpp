@@ -623,14 +623,8 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
 
     const PhosphorEngine::WindowKind kind = PhosphorEngine::clampWindowKindFromWire(windowKind);
 
-    // Release this instance's open claim on a placement record. Consumption
-    // through take() / takeForReopen() already releases it, so this covers the
-    // window that closed without any engine having restored it — otherwise the
-    // claim would sit in the map holding a record hostage from every sibling
-    // that opens later.
-    if (m_service) {
-        m_service->placementStore().releaseOpenClaim(windowId);
-    }
+    // Release the open claim BEFORE the capture reads the store.
+    m_service->placementStore().releaseOpenClaim(windowId);
 
     // Capture the window's final live placement before teardown drops the
     // frame-geometry shadow + per-engine state below: a floated WindowPlacement at
@@ -671,11 +665,11 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
     m_service->windowClosed(windowId, kind);
 
     // Drop the shadow maps AFTER the service teardown: windowClosed's cascade
-    // can synchronously re-enter the float relay, and a relay landing between
-    // an earlier removal and the teardown would re-insert a zombie
-    // last-broadcast entry that outlives the window.
+    // can synchronously re-enter the float relay and re-insert a zombie.
     const QString shadowId = shadowWindowId(windowId);
     m_frameGeometry.remove(shadowId);
+    m_pendingOpenGeometry.remove(shadowId);
+    m_pendingOpenSize.remove(shadowId);
     m_broadcastFloating.remove(shadowId);
     // shadowId, NOT the raw windowId: shadowWindowId() IS the canonical id,
     // and tabColorRuleParams is called with ids taken from the ScrollEngine
@@ -724,9 +718,7 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
                                               const QString& activity, int windowType, const QVariantMap& extended)
 {
     if (!m_windowRegistry) {
-        // Registry not wired yet — during daemon startup the kwin-effect may
-        // fire before setWindowRegistry runs. Drop silently; the effect re-emits
-        // on every class change so state converges.
+        // Teardown or a registry-less unit test. The effect re-emits anyway.
         return;
     }
     if (instanceId.isEmpty()) {
@@ -971,12 +963,13 @@ void WindowTrackingAdaptor::setFrameGeometry(const QString& windowId, int x, int
     if (windowId.isEmpty() || width <= 0 || height <= 0) {
         return;
     }
-    // Key on the CANONICAL id. The effect reports the window's CURRENT
-    // composite, but captureWindowPlacement reaches this map with canonical
-    // ids on the engine-relay path — a raw key would make that capture miss
-    // the frame for a class-mutating app (Electron/CEF) and silently drop its
-    // float-back geometry. Every read canonicalizes to match.
-    m_frameGeometry[shadowWindowId(windowId)] = QRect(x, y, width, height);
+    // Key on the CANONICAL id: a raw key would drop a class-mutating app's
+    // float-back. Reads match.
+    const QString shadowId = shadowWindowId(windowId);
+    m_frameGeometry[shadowId] = QRect(x, y, width, height);
+    // A fresh report supersedes what the open path asked for, landed or not.
+    m_pendingOpenGeometry.remove(shadowId);
+    m_pendingOpenSize.remove(shadowId);
 }
 
 void WindowTrackingAdaptor::notifyWindowResized(const QString& windowId, int oldX, int oldY, int oldWidth,
@@ -1214,6 +1207,13 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
             ++it;
         }
     }
+    // And the two open-path pending maps (#1106), same canonical key space:
+    // a leak needs a window that died without a frame report or a close.
+    const auto dead = [&aliveInstances](const auto& it) {
+        return !aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(it.key()));
+    };
+    m_pendingOpenGeometry.removeIf(dead);
+    m_pendingOpenSize.removeIf(dead);
     // And the tab-colour rule memo, for the same reason and in the same key
     // space — it is keyed on canonical ids too, so a raw sweep would erase a
     // class-mutating app's live entry every pass.

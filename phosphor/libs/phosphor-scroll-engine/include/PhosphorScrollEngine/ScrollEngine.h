@@ -150,6 +150,7 @@ public:
     std::optional<PhosphorEngine::PlacementStateKey> heldKeyForWindow(const QString& windowId) const override;
     void beginArrivalBurst() override;
     void endArrivalBurst() override;
+    void noteCrossScreenClaimsExhausted(const QString& windowId, bool exhausted) override;
     void windowClosed(const QString& windowId) override;
     void windowFocused(const QString& windowId, const QString& screenId) override;
     void windowMinSizeUpdated(const QString& windowId, int minWidth, int minHeight) override;
@@ -1269,10 +1270,10 @@ private:
     /// active window after the batch (engine-driven navigation only).
     void applyLayout(const QString& screenId, bool focusWindowAfter = false);
     // engine_lifecycle.cpp
-    /// Place an arriving window into @p state: floated (oversized, rule, or
-    /// a floating placement record) or tiled through the stash / seed /
-    /// recorded-slot / plain-insert ladder. Returns false only when every
-    /// insert was refused — today that means the strip already holds the
+    /// Place an arriving window into @p state: floated (oversized, rule,
+    /// sticky-excluded, or a floating record) or tiled through the stash /
+    /// seed / recorded-slot / plain-insert ladder. Returns false only when
+    /// every insert was refused — today, the strip already holds the
     /// window — in which case nothing about the placement changed and the
     /// caller must not announce one. @p outOpenParams, when given, receives
     /// the per-window open-rule verdict resolved inside (default-constructed
@@ -1324,23 +1325,24 @@ private:
     /// Drop @p windowId's parked memo under @p key, reaping the inner map when
     /// it empties.
     void forgetContextMemo(const PhosphorEngine::PlacementStateKey& key, const QString& windowId);
-    /// Give a window that floats WITHOUT ever having been a strip tile
-    /// (floated at open, or arriving already-floating over the handoff) the
-    /// FloatRestore entry the clamp lives in while it floats. column stays
-    /// -1: there is no remembered slot, so unfloat opens a fresh column.
-    /// Refreshes the clamp on an existing entry rather than overwriting a
-    /// real remembered slot with a slotless one.
+    // engine_float_open.cpp
+    /// The FloatRestore entry (clamp only, column -1) for a never-tiled float.
     void seedFloatRestoreForOpen(const QString& windowId, int minWidth, int minHeight);
-    /// Consume the window's FLOATING placement record on an engine-decided
-    /// float at open (oversized / rule / sticky) and apply the gated
-    /// float-back position restore — the same record consumption and
-    /// geometry emit the record-float branch of insertOpenedWindow performs.
-    /// Without it an engine-decided float leaves the record stale in the
-    /// FIFO and forgets the remembered position autotile restores.
-    void restoreFloatRecordForOpen(const QString& windowId, const QString& screenId);
-    /// Emit geometryRestoreRequested for @p record's free rect when the gate allows it (see the definition).
-    void emitGatedFloatGeometryRestore(const QString& windowId, const PhosphorEngine::WindowPlacement& record,
-                                       const QString& screenId);
+    /// The shared tail of the two float exits: no move or size on a @p migration, no size when @p oversized.
+    void finishFloatedOpen(ScrollState* state, const QString& windowId, const QString& screenId, int minWidth,
+                           int minHeight, bool migration, bool oversized, bool placedBefore,
+                           const PhosphorEngine::WindowPlacement* record);
+    /// Consume an engine-decided float's FLOATING record, apply the gated position. True: moved.
+    bool restoreFloatRecordForOpen(const QString& windowId, const QString& screenId, const QList<QSize>& managedSizes);
+    bool emitGatedFloatGeometryRestore(const QString& windowId, const PhosphorEngine::WindowPlacement& record,
+                                       const QString& screenId, const QList<QSize>& managedSizes);
+    void restoreFreeSizeForFloatedOpen(const QString& windowId, const QString& screenId, bool placedBefore,
+                                       const QList<QSize>& managedSizes);
+    /// Every context's column-tile sizes on @p screenId (resolved plus applied rects).
+    QList<QSize> managedSizesOnScreen(const QString& screenId) const;
+    /// Consume @p windowId's EXACT stash tile on a float exit, mirroring restoreFromStripStash's blueprint carry.
+    void consumeStripStashTileForFloat(ScrollState* state, const PhosphorEngine::PlacementStateKey& key,
+                                       const QString& windowId);
     /// Active = user float (windowFloatingChanged), Passive = engine-initiated (windowFloatingStateSynced).
     enum class FloatAnnounce : quint8 {
         Active,
@@ -1488,12 +1490,12 @@ private:
     QSet<QString> m_declinedOpenFocus;
     /// Arrival-burst bracket depth (IPlacementEngine::beginArrivalBurst).
     /// While positive, windowOpened defers its per-arrival applyLayout into
-    /// m_burstPendingApplies (context key → whether any deferred arrival took
-    /// focus) and the outermost endArrivalBurst applies once per screen —
-    /// a daemon-restart re-announce then resolves the restored strip in one
-    /// geometry batch instead of N visible partial-strip intermediates.
+    /// m_burstPendingApplies (context key → whether a deferred arrival took
+    /// focus); the outermost endArrivalBurst applies once per screen.
     int m_arrivalBurstDepth = 0;
     QHash<PhosphorEngine::PlacementStateKey, bool> m_burstPendingApplies;
+    /// Re-stated per announce by the dispatch (noteCrossScreenClaimsExhausted); read by the defer gate.
+    QSet<QString> m_crossScreenClaimsExhausted;
     /// Armed by the context setters (desktop/activity switch), consumed by
     /// setActiveScreens so the identical-set re-emit only claims
     /// isDesktopSwitch=true for a REAL switch — same contract as
@@ -1678,18 +1680,16 @@ private:
     /// the screen's strip axis: a horizontal strip goes out left/right, a
     /// vertical one top/bottom. So that when the window scrolls back INTO the
     /// viewport the batch can tell the effect which side to animate it in
-    /// from. Remembered rather
-    /// than derived: the park position is direction-agnostic, so the parked
-    /// rect cannot answer. The write/consume/eviction contract (including
-    /// the two deliberate rect-drop exceptions) is documented at the park
-    /// sites in engine_apply.cpp.
+    /// from. Remembered rather than derived: the park position is
+    /// direction-agnostic, so the parked rect cannot answer. The
+    /// write/consume/eviction contract is documented at the park sites in
+    /// engine_apply.cpp.
     QHash<QString, QString> m_parkedScrollEdge;
     /// The two memos above, parked per CONTEXT for windows that hold a
-    /// column in several of one screen's strips. Both are keyed by window
-    /// alone, and applyLayout reads the park / arrive discriminator from
-    /// them, so a multi-desktop window would otherwise compare one desktop's
-    /// relayout against the rect the other desktop applied. On a context
-    /// switch the leaving context's entries are copied here under its key
+    /// column in several of one screen's strips: both are keyed by window
+    /// alone, so a multi-desktop window would otherwise compare one desktop's
+    /// relayout against the rect the other applied. On a context switch the
+    /// leaving context's entries are copied here under its key
     /// (the window-level one stays as the close-time poison guard) and the
     /// entering context's are put back. Entries die with their membership.
     QHash<PhosphorEngine::PlacementStateKey, QHash<QString, QRect>> m_contextRectMemory;

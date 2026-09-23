@@ -890,6 +890,14 @@ PhosphorScreens::ScreenManager* WindowTrackingService::screenManager() const
     return m_screenManager;
 }
 
+QRect WindowTrackingService::screenAvailableGeometry(const QString& screenId) const
+{
+    if (!m_screenManager || screenId.isEmpty()) {
+        return {};
+    }
+    return m_screenManager->screenAvailableGeometry(screenId);
+}
+
 void WindowTrackingService::setEngineFloatResolver(EngineFloatResolver resolver)
 {
     m_engineFloatResolver = std::move(resolver);

@@ -547,11 +547,10 @@ bool PlasmaZonesEffect::isExcludedBySnappingRule(KWin::EffectWindow* w,
     if (m_snappingExclusionRuleSet.isEmpty()) {
         return false;
     }
-    // Per-window verdict cache, mirroring resolveRuleActions: the hot callers
-    // (buildWindowMap per batch, hasOtherWindowOfClassWithDifferentPid's
-    // stacking-order sweep per open) would otherwise pay a full ~30-accessor
-    // ruleQuery build per window per consult — O(N^2) query builds across a
-    // login burst. Freshness matches the animation verdicts: the cache is
+    // Per-window verdict cache, mirroring resolveRuleActions: the hot caller
+    // (buildWindowMap, once per tile batch over every window on the screen)
+    // would otherwise pay a full ~30-accessor ruleQuery build per window per
+    // consult. Freshness matches the animation verdicts: the cache is
     // revision-keyed for rule edits and cleared by the same placement /
     // class-swap invalidation paths (flushPendingRuleInvalidations,
     // invalidateAllRuleCaches, the metadataChanged lambda).
@@ -1015,74 +1014,6 @@ void PlasmaZonesEffect::logWindowDiagnostics(KWin::EffectWindow* w, const char* 
     } else {
         qCDebug(lcEffectDiag) << "[window-diag]   transientFor — none";
     }
-}
-
-bool PlasmaZonesEffect::hasOtherWindowOfClassWithDifferentPid(KWin::EffectWindow* w) const
-{
-    if (!w) {
-        return false;
-    }
-
-    QString windowClass = w->windowClass();
-    const pid_t windowPid = w->pid();
-    // KWin reports -1 when the pid is unknown, notably during session restore
-    // before the client reattaches (see window_identity.cpp, which clamps it for
-    // the same reason). Comparing that sentinel as if it were a real pid makes
-    // `-1 != <real pid>` true and reports "another app spawned this class" for
-    // what is the same app — and session restore is exactly when the pid is
-    // unknown AND several same-class windows appear together.
-    //
-    // "Cannot discriminate" is reported as false. Note the two callers read that
-    // answer with OPPOSITE polarity, so this is a real behaviour choice rather
-    // than a neutral one:
-    //   * window_lifecycle.cpp, canSnapRestore = ... && !hasOther...  — false
-    //     ALLOWS the restore. This is the case the fix targets: a window
-    //     restored at login was being denied its snap position because a
-    //     same-class sibling reported a real pid against its unknown one.
-    //   * kwin-effect/handlers/snaphandler.cpp, snap-all skips when !hasOther... && the appId
-    //     is already snapped — false can now SKIP a pid-unknown window that the
-    //     old sentinel comparison would have snapped. Narrow: it needs an
-    //     unknown pid, a same-class sibling, and the appId already in the
-    //     snapped set. Accepted deliberately, because the login case is the
-    //     common one and a wrongly-denied restore is the more visible failure.
-    if (windowPid <= 0) {
-        return false;
-    }
-
-    // Check all existing windows for same class but different PID
-    // This detects when another app (e.g., Cachy Update) spawns a window
-    // of a class that the user has previously snapped (e.g., Ghostty)
-    const auto windows = KWin::effects->stackingOrder();
-    for (KWin::EffectWindow* other : windows) {
-        if (other == w) {
-            continue; // Skip self
-        }
-        if (!other || other->isDeleted()) {
-            // A close-grabbed dying window of the same class (quit-and-relaunch,
-            // app auto-restart) must not suppress the new instance's snap restore.
-            continue;
-        }
-        // Cheap discriminator FIRST: the class/pid compare is two flag
-        // reads, while a verdict-cache miss in shouldHandleWindow builds
-        // the full ~30-accessor ruleQuery — and this sweep runs per
-        // window-open over the whole stacking order (the O(N²) query-build
-        // case the cache comment names). Both are pure rejects, so the
-        // order is behaviour-neutral.
-        if (other->pid() <= 0) {
-            continue; // Unknown-pid sentinel — cannot discriminate against it either.
-        }
-        if (other->windowClass() != windowClass || other->pid() == windowPid) {
-            continue;
-        }
-        if (!shouldHandleWindow(other)) {
-            continue; // Skip non-managed windows
-        }
-        // Found another managed window of the same class with a different
-        // PID — the new window was likely spawned by a different app.
-        return true;
-    }
-
-    return false;
 }
 
 bool PlasmaZonesEffect::isDaemonReady(const char* methodName) const
