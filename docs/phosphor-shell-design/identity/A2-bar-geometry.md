@@ -4,7 +4,7 @@
 # A2 — Bar as Placement Map, Spectrum Rail, Engine-Placed Popouts
 
 Status: design spec, read-only research against the shell-design worktree (2026-09-04).
-Scope: the bar surface (`libs/phosphor-shell-bar`), its placement widget, its popouts.
+Scope: the bar surface (`phosphor-shell-libs/libs/phosphor-shell-bar`), its placement widget, its popouts.
 
 Seed (as corrected): three things and nothing else.
 
@@ -12,8 +12,8 @@ Seed (as corrected): three things and nothing else.
    purple `#A855F7` → rose `#F43F5E` on navy. In this spec the gradient is an *axis*:
    hue encodes where a window is on the screen, or along the strip. Colour is never
    decoration and never a mood.
-2. **The look the packs already share** (`data/surface/phosphor-glass`,
-   `phosphor-motes`, `border-phosphor`; `data/overlays/phosphor-flux`, `prismata`,
+2. **The look the packs already share** (`plasmazones/data/surface/phosphor-glass`,
+   `phosphor-motes`, `border-phosphor`; `plasmazones/data/overlays/phosphor-flux`, `prismata`,
    `spectrum-bloom`): dark navy glass over a real blur, the four-stop gradient flowing
    along frames, a gleam travelling the band, labels lit against navy.
 3. **Owning the placement engine.** The bar can draw the engine's geometry and can ask

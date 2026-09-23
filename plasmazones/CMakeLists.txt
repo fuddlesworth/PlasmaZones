@@ -125,7 +125,9 @@ install(CODE "
 # PhosphorProfileRegistry, with parent-chain inheritance filling in
 # unset leaves. The install(DIRECTORY) rule and the build-time
 # check-animation-profiles target were removed because there are no
-# profile JSONs to install or validate. The install(CODE) stale-cleanup
+# profile JSONs to install or validate. scripts/check-animation-profiles.py
+# itself is still in the tree as a manual tool, and says so in its
+# docstring; nothing invokes it. The install(CODE) stale-cleanup
 # block above is intentionally kept for upgrades from older builds.
 
 # Install bundled RenderNode shaders (raw GLSL, no compilation needed).

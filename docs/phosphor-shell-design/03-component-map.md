@@ -52,7 +52,7 @@ src/shell/                   The shell process (GPL)
   ShellGestures              CompositorBridge.gestureReported relay
   ShellChrome                Decoration tree + pack registry → stage lists for DecorationSlot
 
-examples/phosphor-shell/shell.qml   The composition root: every surface mounted per screen
+phosphor-shell/shell/shell.qml   The composition root: every surface mounted per screen
 ```
 
 ## Data flow

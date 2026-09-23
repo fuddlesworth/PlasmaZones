@@ -3,7 +3,7 @@
 
 # A1. Phosphor shell: identity and motion language
 
-Sources read: `libs/phosphor-theme/qml/Phosphor/Theme/Motion.qml`, `Tokens.qml`, `StateLayer.qml`; `libs/phosphor-theme/src/defaultpalette.cpp`; `data/curves/*.json` (six curves, all `typeId: cubic-bezier`); `data/schemas/curve.schema.json`; `libs/phosphor-animation/src/curveregistry.cpp` (factories `cubic-bezier`, named elastic/bounce, and `spring` with `omega`/`zeta`); `PhosphorMotionAnimation.h` (QML `Behavior` driven by a named profile, spring settle computed analytically). Packs: `data/surface/{phosphor-glass,phosphor-motes,border-phosphor,border-audio,border-pulse,border-marching,border-sweep,glow,focus-fade,rain-glass,fireflies}/metadata.json`, `data/surface/phosphor-glass/effect.frag`, `data/overlays/phosphor-flux/{metadata.json,effect.frag}`, `data/overlays/{prismata,spectrum-bloom,spectrum-pulse,liquid-canvas,magnetic-field,pulse-flow}/metadata.json`.
+Sources read: `phosphor-shell-libs/libs/phosphor-theme/qml/Phosphor/Theme/Motion.qml`, `Tokens.qml`, `StateLayer.qml`; `phosphor-shell-libs/libs/phosphor-theme/src/defaultpalette.cpp`; `plasmazones/data/curves/*.json` (six curves, all `typeId: cubic-bezier`); `phosphor/data/schemas/curve.schema.json`; `phosphor/libs/phosphor-animation/src/curveregistry.cpp` (factories `cubic-bezier`, named elastic/bounce, and `spring` with `omega`/`zeta`); `PhosphorMotionAnimation.h` (QML `Behavior` driven by a named profile, spring settle computed analytically). Packs: `plasmazones/data/surface/{phosphor-glass,phosphor-motes,border-phosphor,border-audio,border-pulse,border-marching,border-sweep,glow,focus-fade,rain-glass,fireflies}/metadata.json`, `plasmazones/data/surface/phosphor-glass/effect.frag`, `plasmazones/data/overlays/phosphor-flux/{metadata.json,effect.frag}`, `plasmazones/data/overlays/{prismata,spectrum-bloom,spectrum-pulse,liquid-canvas,magnetic-field,pulse-flow}/metadata.json`.
 
 ## 0. What the packs already agree on
 
@@ -87,7 +87,7 @@ The light theme is the same spectrum on a bright field, using the palette page's
 
 ## 3. Motion language
 
-Curve homes: existing `data/curves/*.json` where they fit; new files in the same schema (`typeId: cubic-bezier` with `x1..y2`, or `typeId: spring` with `omega`, `zeta`, as `curveregistry.cpp` accepts). In QML every primitive is `Behavior on <prop> { PhosphorMotionAnimation { profile: "phosphor.<name>" } }`. In SVG SMIL it is `<animate calcMode="spline" keySplines="x1 y1 x2 y2">`, or two chained `<animate>` elements where a spring is approximated.
+Curve homes: existing `plasmazones/data/curves/*.json` where they fit; new files in the same schema (`typeId: cubic-bezier` with `x1..y2`, or `typeId: spring` with `omega`, `zeta`, as `curveregistry.cpp` accepts). In QML every primitive is `Behavior on <prop> { PhosphorMotionAnimation { profile: "phosphor.<name>" } }`. In SVG SMIL it is `<animate calcMode="spline" keySplines="x1 y1 x2 y2">`, or two chained `<animate>` elements where a spring is approximated.
 
 Interruptibility (R7): every primitive retargets. Bezier primitives restart only the *out* phase from the current value; spring primitives retarget natively. Nothing snaps.
 

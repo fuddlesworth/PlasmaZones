@@ -134,7 +134,7 @@ Envelope ratio is the feel: enter : release ≈ 1 : 4. Stagger 6–30 ms per ite
 outward from the focus point, never top-to-bottom for its own sake. Reduced motion: release
 180 ms, enter loses overshoot, reveal becomes a 120 ms opacity enter, breathe stops.
 
-Curve files to add under `data/curves/`: `phosphor-release.json` and
+Curve files to add under `plasmazones/data/curves/`: `phosphor-release.json` and
 `phosphor-settle.json`. Breathe is not among them — an undamped spring is not
 expressible as a curve, so it is built from two release halves (A1 §3.3).
 `Motion.qml` gains `enter` / `release` / `settle` and the four durations;

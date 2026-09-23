@@ -287,7 +287,7 @@ cmake/                   — Shared CMake modules
 scripts/                 — Repo-level checks and dev harnesses
 .moon/                   — moon workspace config (see Build & Test)
 ```
-Not exhaustive: `scripts/`, `packaging/` and `docs/` sit at the root; `plasmazones/translations/`, `plasmazones/dbus/`, `plasmazones/icons/` and `phosphor/extern/` live inside their tiers.
+Not exhaustive: `scripts/`, `packaging/` and `docs/` sit at the root; `plasmazones/translations/`, `plasmazones/dbus/`, `plasmazones/icons/`, `plasmazones/scripts/` (the installed support script) and `phosphor/extern/` live inside their tiers. `phosphor-shell/` also carries its own `icons/` and `scripts/`.
 
 ## Testing
 - Qt Test: `QTEST_MAIN`, `QCOMPARE`, `QVERIFY`

@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Build-time integrity check for PhosphorAnimation shipped data.
+"""Integrity check for PhosphorAnimation shipped data. Manual tool.
 
-Validates that every `"curve": "..."` reference inside a shipped
-profile JSON under data/profiles/ resolves — either to a built-in
-curve type (bare 4-comma bezier, or `typeId:params` using a built-in
-typeId) or to a named curve under data/curves/.
+Validates that every `"curve": "..."` reference inside a profile JSON
+under plasmazones/data/profiles/ resolves — either to a built-in curve
+type (bare 4-comma bezier, or `typeId:params` using a built-in typeId)
+or to a named curve under plasmazones/data/curves/.
 
-Runs as a CMake custom-command at build time. Exits non-zero on any
-typo so a missing curve file fails the build rather than shipping and
-silently falling back to library defaults at runtime.
+NOT wired to anything. It used to run as a CMake custom-command; that
+target was removed when the tree stopped shipping per-leaf profile JSONs
+(see the note below and plasmazones/CMakeLists.txt, which records the
+removal). plasmazones/data/profiles/ does not currently exist, so a run
+returns 0 having inspected nothing. Kept as a manual tool for the day
+that tree comes back; run it by hand, or re-add a CMake target, rather
+than assuming the build checks this.
+
+Exits non-zero on any unresolved reference.
 
 ## QML profile references are NOT validated
 

@@ -10,7 +10,7 @@ clones. Everything below is designed *away* from those.
 
 ## Visual anchor
 
-The look is the one the `data/surface` and `data/overlays` packs already share:
+The look is the one the `plasmazones/data/surface` and `plasmazones/data/overlays` packs already share:
 dark navy glass with a coloured spectrum running through it. `phosphor-glass`
 (navy over blur with a brand-gradient response), `phosphor-motes` (drifting
 sparks in the spectrum colours), `phosphor-flux`, `prismata` and
@@ -839,7 +839,7 @@ surface above follows.
 ## Surface-pack hooks
 
 Which pack draws what, by default, on which surface. Surface packs live in
-`data/surface`; the spectrum overlays named here live in `data/overlays` and
+`plasmazones/data/surface`; the spectrum overlays named here live in `plasmazones/data/overlays` and
 are reused as shell grounds through the same compositor path. Today only
 `border-audio` and `frosted-glass` declare `osd` / `popup` support in their
 metadata. The table states the intended default assignments so the metadata

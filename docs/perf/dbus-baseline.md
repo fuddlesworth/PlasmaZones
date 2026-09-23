@@ -15,7 +15,7 @@ ctest --test-dir build -R bench_dbus_adaptors --output-on-failure
 profile. `-event` is the default (counts instructions). All three are useful —
 pick whichever is available on the host.
 
-Benchmarks live in `tests/unit/dbus/bench_dbus_adaptors.cpp`. They use
+Benchmarks live in `plasmazones/tests/unit/dbus/bench_dbus_adaptors.cpp`. They use
 `StubSettings` + an in-memory `LayoutManager`, so there is no disk I/O in the
 hot path and the numbers reflect pure adaptor + QJson serialization cost.
 
