@@ -22,7 +22,6 @@
 #include <PhosphorControl/SearchController.h>
 
 #include "core/types/constants.h"
-#include "daemon/rendering/surfaceshaderitem.h"
 #include "daemon/rendering/zoneshaderitem.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 
@@ -36,7 +35,6 @@
 #include <QDirIterator>
 #include <QCommandLineParser>
 #include <QIcon>
-#include <QPointer>
 #include <QQmlApplicationEngine>
 #include <QQmlComponent>
 #include <QQmlContext>
@@ -172,8 +170,15 @@ int main(int argc, char* argv[])
     }
 
     // Ensure INI→JSON migration has run (the daemon does this too, but the
-    // settings app may start before the daemon on first upgrade).
-    PlasmaZones::ConfigMigration::ensureJsonConfig();
+    // settings app may start before the daemon on first upgrade). Same
+    // failure handling as the daemon: continue with whatever the backend can
+    // load, but say so, because the pages then show defaults for every
+    // setting the old config held.
+    if (!PlasmaZones::ConfigMigration::ensureJsonConfig()) {
+        qCWarning(PlasmaZones::lcCore)
+            << "Config migration reported a failure — continuing with whatever the backend can load,"
+            << "which may mean defaults for settings the old config held";
+    }
 
     // Bootstrap the per-process PhosphorProfileRegistry so QML
     // `PhosphorMotionAnimation { profile: "..." }` lookups resolve. The
@@ -226,14 +231,11 @@ int main(int argc, char* argv[])
     }
 
     // Register ZoneShaderItem for QML (live zone-shader preview in the settings
-    // shader browser — mirrors daemon/main.cpp + editor/main.cpp).
+    // shader browser — mirrors daemon/main.cpp).
     qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
-    // SurfaceShaderItem likewise, for the live DECORATION preview: the shared
-    // SurfaceDecoration.qml chain host instantiates one per chain stage, and
-    // without this registration it resolves to "not a type" the moment the
-    // preview pane loads. Registered under the same URI the daemon uses so the
-    // one shared host works identically in both processes.
-    qmlRegisterType<PlasmaZones::SurfaceShaderItem>("PlasmaZones", 1, 0, "SurfaceShaderItem");
+    // The live DECORATION preview's SurfaceShaderItem stages need no
+    // registration: they and the SurfaceDecoration.qml chain host ship in the
+    // org.phosphor.surface module linked into this binary.
     // The raw rendering-library shader item, for the live ANIMATION preview:
     // the preview pane instantiates one over the stand-in card and drives its
     // iTime as a real transition leg's clock would. The daemon never creates

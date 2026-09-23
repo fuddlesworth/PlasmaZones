@@ -6,9 +6,9 @@ SPDX-License-Identifier: GPL-3.0-or-later
 # Overlay (zone) and surface (decoration) pack contracts
 
 Source of truth: `plasmazones/data/overlays/shared/common.glsl`, `plasmazones/src/daemon/rendering/zoneentryscaffold.cpp`,
-`phosphor/data/schemas/shader-metadata.schema.json`; `plasmazones/data/surface/shared/surface_uniforms.glsl`,
-`plasmazones/data/surface/shared/surface_lib.glsl`, `phosphor/libs/phosphor-surface/include/PhosphorSurface/SurfaceShaderEffect.h`,
-`phosphor/data/schemas/surface-metadata.schema.json`. Read the two shared headers before writing.
+`phosphor-libs/data/schemas/shader-metadata.schema.json`; `plasmazones/data/surface/shared/surface_uniforms.glsl`,
+`plasmazones/data/surface/shared/surface_lib.glsl`, `phosphor-libs/libs/phosphor-surface/include/PhosphorSurface/SurfaceShaderEffect.h`,
+`phosphor-libs/data/schemas/surface-metadata.schema.json`. Read the two shared headers before writing.
 
 | | overlay | surface |
 |---|---|---|
@@ -101,7 +101,7 @@ Required `id`, `name`, `fragmentShader`, `parameters` (may be `[]`). Top level i
 `category`, `preview`, `vertexShader`, `animated`, `audio`, `providesBorder`,
 `providesOpacityTint`, `needsBackdrop`, `interiorOpaque`, `multipass`, `bufferShaders` (max 4),
 `bufferScale` (0.125..1.0), `bufferFeedback`, `bufferWrap(s)`, `bufferFilter(s)`, `depthBuffer`,
-`halfFloatBuffers`, `paddingParam`, `textures` (max 3), and the legacy `handlesOpacity`
+`halfFloatBuffers`, `paddingParam`, `textures` (max 3), `presets`, and the legacy `handlesOpacity`
 (accepted, ignored; do not write it). Max 48 params. No `slot` field (auto-slot by
 declaration order). Param keys, and ONLY these, because the schema is
 `additionalProperties: false`: `id, name, description, group, type, default, min, max, step`.

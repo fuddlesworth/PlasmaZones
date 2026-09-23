@@ -260,7 +260,7 @@ When a finding offers two legitimate remedies (the finding itself says "either X
 Before an edit that calls a function, method, constant, enumerator, logging category, or CMake function you have not already opened here, Grep or Read its declaration first. One command:
 
 ```
-grep -rn 'bool contains'  phosphor/libs/phosphor-registry/include/PhosphorRegistry/Registry.h   # does this method exist?
+grep -rn 'bool contains'  phosphor-libs/libs/phosphor-registry/include/PhosphorRegistry/Registry.h   # does this method exist?
 grep -nE '^\s+[A-Za-z_].* [a-z][A-Za-z]*\(' <header>  # what IS the API surface?
 ```
 

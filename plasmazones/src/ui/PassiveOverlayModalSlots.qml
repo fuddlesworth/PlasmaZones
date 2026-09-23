@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import org.kde.kirigami as Kirigami
+import org.phosphor.surface as PhosphorSurface
 import org.plasmazones.common as QFZCommon
 
 /**
@@ -24,7 +26,7 @@ import org.plasmazones.common as QFZCommon
 Item {
     id: modalSlotsRoot
 
-    required property var shellRoot
+    required property Window shellRoot
 
     readonly property alias snapAssistSlotItem: snapAssistSlot
     readonly property alias layoutPickerSlotItem: layoutPickerSlot
@@ -134,7 +136,7 @@ Item {
         // Captures the loaded content's shaderAnchor (the SnapAssistContent root
         // itself carries `shaderAnchor: true`) and re-renders it through the
         // resolved "popup.snapAssist" surface pack. Inert when the source is empty.
-        QFZCommon.SurfaceDecoration {
+        PhosphorSurface.SurfaceDecoration {
             anchors.fill: parent
             contentItem: snapAssistLoader.item
             decorationChain: snapAssistSlot.decorationChain
@@ -273,7 +275,7 @@ Item {
         // Captures the loaded content's PopupFrame shaderAnchor and re-renders it
         // through the resolved "popup.layoutPicker" surface pack. Inert when the
         // source is empty.
-        QFZCommon.SurfaceDecoration {
+        PhosphorSurface.SurfaceDecoration {
             anchors.fill: parent
             contentItem: layoutPickerLoader.item
             decorationChain: layoutPickerSlot.decorationChain
@@ -374,7 +376,7 @@ Item {
         // Captures the loaded content's PopupFrame shaderAnchor and
         // re-renders it through the resolved "popup.cheatsheet" surface
         // pack. Inert when the source is empty.
-        QFZCommon.SurfaceDecoration {
+        PhosphorSurface.SurfaceDecoration {
             anchors.fill: parent
             contentItem: cheatsheetLoader.item
             decorationChain: cheatsheetSlot.decorationChain

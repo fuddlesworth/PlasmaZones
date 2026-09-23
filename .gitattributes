@@ -1,15 +1,15 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-# phosphor/extern/ holds the vendored Luau runtime and valijson as committed
+# phosphor-libs/extern/ holds the vendored Luau runtime and valijson as committed
 # source tarballs, extracted at configure time. No version is named here on
 # purpose: the authoritative pins are PHOSPHORSCRIPTING_LUAU_VERSION and
 # PHOSPHORFSLOADER_VALIJSON_VERSION, and a copy in this comment had already
 # drifted (it said 0.723 while the tree shipped 0.737). Mark the tree vendored
 # so GitHub Linguist excludes it from language statistics, and binary so the
 # archives are never diffed or merged.
-phosphor/extern/** linguist-vendored
-phosphor/extern/*.tar.gz binary
+phosphor-libs/extern/** linguist-vendored
+phosphor-libs/extern/*.tar.gz binary
 
 # Qt Linguist catalogs, not TypeScript. Linguist goes by the extension and
 # counts these as TS, which is the same misattribution the vendored rule above

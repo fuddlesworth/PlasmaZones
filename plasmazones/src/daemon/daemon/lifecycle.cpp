@@ -48,7 +48,6 @@
 #include "daemon/controllers/shortcutmanager.h"
 #include "daemon/controllers/enginefactory.h"
 #include "daemon/controllers/contextresolverwiring.h"
-#include "daemon/rendering/surfaceshaderitem.h"
 #include "daemon/rendering/zoneentryscaffold.h"
 #include "daemon/rendering/zoneshadernoderhi.h"
 
@@ -404,6 +403,15 @@ void Daemon::stop()
     m_previewNotifyTimer.stop();
     m_suppressResnapOsdWatchdog.stop();
 
+    // Both wired in init (init_adaptors.cpp), so init-origin teardown that
+    // belongs on this side of the m_running gate: the geometry-reapply
+    // debounce, and the algorithm loader whose file watcher must not fire
+    // into the teardown.
+    m_reapplyGeometriesTimer.stop();
+    if (m_scriptedAlgorithmLoader) {
+        m_scriptedAlgorithmLoader->disconnect();
+    }
+
     // The per-screen scrolling-OSD settle timers accumulate one per screen
     // id ever seen; sweep them all here so a stop() leaves no pending
     // strip-preview fire and no per-screen residue.
@@ -444,19 +452,13 @@ void Daemon::stop()
     }
 
     // Drop the layout-manager provider lambdas FIRST, before the m_running
-    // gate. They capture `this` and dereference m_settings; m_settings is
-    // declared after m_layoutManager, so reverse-order member destruction
-    // tears m_settings down BEFORE m_layoutManager. Any cascade query
-    // during ~LayoutRegistry that hits a still-installed lambda would
-    // dereference freed memory.
-    //
-    // The m_running gate skips the rest of stop() on init-without-start
-    // paths (test fixtures, early-fail constructors, double-stop). The
-    // providers, however, are installed in init() — which runs before
-    // m_running is set in start(). Clearing them must therefore not be
-    // gated, otherwise the dangling-lambda UAF still reaches the
-    // member-destruction window. clearing is null-safe and idempotent
-    // (an already-cleared std::function clears to itself).
+    // gate. They capture `this` and dereference m_settings, which is declared
+    // after m_layoutManager and so is destroyed BEFORE it; a cascade query
+    // during ~LayoutRegistry that hit a still-installed lambda would
+    // dereference freed memory. The providers are installed in init(), which
+    // runs before m_running is set in start(), so clearing them must not be
+    // gated or the init-without-start paths (test fixtures, early-fail
+    // constructors, double-stop) keep the UAF. Clearing is idempotent.
     if (m_layoutManager) {
         m_layoutManager->setDefaultLayoutIdProvider({});
         m_layoutManager->setDefaultAutotileAlgorithmProvider({});
@@ -829,6 +831,8 @@ void Daemon::stop()
         // The navigation-state provider and cross-surface resolver: raw borrows too.
         concreteSnap->setNavigationStateProvider(nullptr);
         concreteSnap->setCrossSurfaceResolver(nullptr);
+        // QPointer-only delegate; cleared for symmetry with the scroll engine.
+        concreteSnap->setPersistenceDelegate({}, {});
     }
 
     // Likewise sever WindowTrackingAdaptor's borrow of m_ruleStore (used by
@@ -842,6 +846,8 @@ void Daemon::stop()
         // D-Bus-reachable path), so this is the grep-discoverable contract
         // rather than a live fix.
         m_windowTrackingAdaptor->setZoneDetectionAdaptor(nullptr);
+        // And the registry borrow (the setter drops its recorded connections).
+        m_windowTrackingAdaptor->setWindowRegistry(nullptr);
     }
 
     // Clear the autotile context-gap provider, which captures `this` (Daemon, via
@@ -857,6 +863,7 @@ void Daemon::stop()
         concreteAutotile->setScrollingModeResolver({});
         // The cross-surface resolver borrow all three engines took (enginefactory.cpp).
         concreteAutotile->setCrossSurfaceResolver(nullptr);
+        concreteAutotile->setPersistenceDelegate({}, {});
     }
     // Scroll twin of the clear above: every closure below captures Daemon `this`
     // (init_engines.cpp) under the same clear-before-destroy contract.
@@ -1054,11 +1061,6 @@ void Daemon::stop()
     m_geometryUpdatePending = false;
     m_geometryDeferralClock.invalidate();
 
-    // Disconnect scripted algorithm loader to prevent file watcher events during teardown
-    if (m_scriptedAlgorithmLoader) {
-        m_scriptedAlgorithmLoader->disconnect();
-    }
-
     // Hide the zone overlay AND the three Escape-consuming modal slots. The
     // shortcut grabs those modals dismiss on are released just above
     // (unregisterShortcuts), so a slot left showing has no way out; on a
@@ -1092,8 +1094,6 @@ void Daemon::stop()
     m_layoutManager->saveLayouts();
     m_layoutManager->saveAssignments();
     m_settings->save();
-
-    m_reapplyGeometriesTimer.stop();
 
     // Autotile per-window restore state is included in WTA's saveStateOnShutdown()
     // (run at the top of stop(), with the engines still wired). No separate save.

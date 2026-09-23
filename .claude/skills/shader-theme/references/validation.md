@@ -18,15 +18,15 @@ repo's `plasmazones/data/` layout, with the shared pieces symlinked in:
 
 ```bash
 T=scratchpad/<theme>
-mkdir -p $T/plasmazones/data/{animations,overlays,surface,curves} $T/phosphor/data \
+mkdir -p $T/plasmazones/data/{animations,overlays,surface,curves} $T/phosphor-libs/data \
          $T/renders $T/sets/{motionsets,decorationsets,overlaysets}
-ln -sfn ../../../../phosphor/data/schemas    $T/phosphor/data/schemas
+ln -sfn ../../../../phosphor-libs/data/schemas    $T/phosphor-libs/data/schemas
 ln -sfn ../../../../plasmazones/data/schemas $T/plasmazones/data/schemas
 for f in animations overlays surface; do ln -sfn ../../../../../plasmazones/data/$f/shared $T/plasmazones/data/$f/shared; done
 ```
 
 Two schema roots, not one: the shader, animation, surface, pointer, curve and layout
-schemas live in `phosphor/data/schemas/`, while `plasmazones/data/schemas/` holds only the
+schemas live in `phosphor-libs/data/schemas/`, while `plasmazones/data/schemas/` holds only the
 scrolling-template and whatsnew ones. `validate-json-schemas.py` checks every mapped
 schema exists before it filters to the files you named, so a single missing root fails the
 gate outright rather than skipping.
@@ -146,8 +146,8 @@ present tense, reverse leg described.
 - Filename equals `slugify(name).json`.
 - No `baseline` key in set files. Motion sets use `version: 2`; decoration and overlay
   sets use `version: 1`. Non-empty `overrides`.
-- Every `path` exists in the domain taxonomy (`phosphor/libs/phosphor-animation/src/profilepaths.cpp`,
-  `phosphor/libs/phosphor-surface/include/PhosphorSurface/DecorationSupportedPaths.h`).
+- Every `path` exists in the domain taxonomy (`phosphor-libs/libs/phosphor-animation/src/profilepaths.cpp`,
+  `phosphor-libs/libs/phosphor-surface/include/PhosphorSurface/DecorationSupportedPaths.h`).
   Overlay paths instead follow `plasmazones/src/settings/pages/overlayspagecontroller_sets.cpp`:
   `overlay:global` or a layout override. Check registry UUIDs as described in `profiles.md`.
 - Every pack id in a chain or `effectId` exists in the generated set or the bundled tree.

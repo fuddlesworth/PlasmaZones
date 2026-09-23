@@ -3,6 +3,7 @@
 
 import QtQuick
 import org.kde.kirigami as Kirigami
+import org.phosphor.surface as PhosphorSurface
 import org.plasmazones.common as PZCommon
 
 /**
@@ -377,7 +378,7 @@ Item {
             title: root.cardTitle
         }
 
-        PZCommon.SurfaceDecoration {
+        PhosphorSurface.SurfaceDecoration {
             id: decoration
 
             anchors.fill: parent

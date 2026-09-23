@@ -60,7 +60,7 @@ set(plasmazones_core_SRCS
     core/utils/geometryutils.cpp
     core/utils/geometryutils.h
     core/types/spatialadjacency.h
-    # virtualscreenswapper.{h,cpp} lifted to phosphor/libs/phosphor-screens/Swapper.h -
+    # virtualscreenswapper.{h,cpp} lifted to phosphor-libs/libs/phosphor-screens/Swapper.h -
     # callers include <PhosphorScreens/Swapper.h> directly.
     core/resolve/screenmoderouter.cpp
     core/resolve/screenmoderouter.h
@@ -69,7 +69,7 @@ set(plasmazones_core_SRCS
     core/utils/dbusvariantutils.cpp
     core/utils/dbusvariantutils.h
     # zone, layout, layoututils, zonedetector, zonehighlighter, LayoutRegistry,
-    # AssignmentEntry, LayoutAssignmentKey live in phosphor/libs/phosphor-zones/ -
+    # AssignmentEntry, LayoutAssignmentKey live in phosphor-libs/libs/phosphor-zones/ -
     # consumers include <PhosphorZones/...> directly and construct the registry
     # with a borrowed PhosphorRules::RuleStore* + the
     # "plasmazones/layouts" subdir inline.
@@ -89,7 +89,7 @@ set(plasmazones_core_SRCS
     core/platform/singleinstanceservice.cpp
     core/platform/singleinstanceservice.h
     # screen_resolver.{h,cpp} and screenmanager.{h,cpp} + screenmanager/
-    # lifted to phosphor/libs/phosphor-screens. Daemon consumers take
+    # lifted to phosphor-libs/libs/phosphor-screens. Daemon consumers take
     # PhosphorScreens::ScreenManager* via constructor injection -
     # no service-locator intermediary.
     core/interfaces/shaderregistry.h  # PlasmaZones subclass (singleton + paths)
@@ -170,7 +170,7 @@ set(plasmazones_core_SRCS
     dbus/zonedetectionadaptor.h
     dbus/ruleadaptor.cpp
     dbus/ruleadaptor.h
-    # snapnavigationtargets moved to phosphor/libs/phosphor-snap-engine/
+    # snapnavigationtargets moved to phosphor-libs/libs/phosphor-snap-engine/
     dbus/windowtrackingadaptor/windowtrackingadaptor.cpp
     dbus/windowtrackingadaptor/lifecycle.cpp
     dbus/windowtrackingadaptor/queries.cpp
@@ -218,10 +218,10 @@ set(plasmazones_core_SRCS
     dbus/snapadaptor/navigation.cpp
     dbus/snapadaptor/snapadaptor.h
     # TilingAlgorithm, TilingState, SplitTree, AlgorithmRegistry, scripted-algo
-    # machinery live in phosphor/libs/phosphor-tiles/. Consumers include canonical
+    # machinery live in phosphor-libs/libs/phosphor-tiles/. Consumers include canonical
     # <PhosphorTiles/...> headers directly; no forwarding shims remain.
-    # AutotileEngine + supporting files moved to phosphor/libs/phosphor-tile-engine/.
-    # SnapEngine + SnapState + supporting files moved to phosphor/libs/phosphor-snap-engine/.
+    # AutotileEngine + supporting files moved to phosphor-libs/libs/phosphor-tile-engine/.
+    # SnapEngine + SnapState + supporting files moved to phosphor-libs/libs/phosphor-snap-engine/.
 )
 
 # Create core library
@@ -325,7 +325,7 @@ target_link_libraries(plasmazones_core
 # but is NOT re-exported to downstream targets that link
 # plasmazones_core (editor / settings) and never touch shortcuts.
 target_include_directories(plasmazones_core SYSTEM PRIVATE
-    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-shortcuts/include>
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-shortcuts/include>
 )
 
 # Conditionally link PlasmaActivities/KActivities if available
@@ -410,7 +410,7 @@ install(TARGETS plasmazones_core
 # ═══════════════════════════════════════════════════════════════════════════════
 # Layer Shell Qt Plugin - now provided by PhosphorWayland library
 # ═══════════════════════════════════════════════════════════════════════════════
-# The QPA plugin (phosphorwayland-qpa) is built and installed by phosphor/libs/phosphor-wayland/CMakeLists.txt.
+# The QPA plugin (phosphorwayland-qpa) is built and installed by phosphor-libs/libs/phosphor-wayland/CMakeLists.txt.
 # PhosphorWayland::registerLayerShellPlugin() sets
 # QT_WAYLAND_SHELL_INTEGRATION=phosphorwayland. There is no PlasmaZones::
 # forwarder; callers use the PhosphorWayland symbol directly.
@@ -426,8 +426,6 @@ set(plasmazones_rendering_SRCS
     daemon/rendering/zoneshaderitem.h
     daemon/rendering/zoneshaderitem.cpp
     daemon/rendering/zoneshaderitem/setters.cpp
-    daemon/rendering/surfaceshaderitem.h
-    daemon/rendering/surfaceshaderitem.cpp
     daemon/rendering/zonelabeltexturebuilder.h
     daemon/rendering/zonelabeltexturebuilder.cpp
 )
@@ -444,12 +442,6 @@ target_link_libraries(plasmazones_rendering
         plasmazones_core
         Qt6::Quick
         PhosphorRendering::PhosphorRendering
-        # SurfaceShaderItem constructs a PhosphorSurfaceShaders::SurfaceUniformProfile
-        # to drive the shared render node's surface UBO. Reachable transitively via
-        # plasmazones_core (which PUBLIC-links it for DecorationProfileTree), but
-        # named explicitly here because surfaceshaderitem.{h,cpp} depend on the
-        # surface library's symbols directly.
-        PhosphorSurface::PhosphorSurface
     PRIVATE
         Qt6::GuiPrivate
         Qt6::ShaderToolsPrivate
@@ -538,6 +530,7 @@ install(TARGETS plasmazones_shaderpreview
 set(plasmazones_daemon_SRCS
     daemon/main.cpp
     daemon/rendering/vulkansupport.cpp
+    daemon/rendering/vulkansupport.h
     daemon/daemon.cpp
     daemon/controllers/enginefactory.cpp
     daemon/controllers/shortcutmanager_adhoc.cpp
@@ -633,6 +626,11 @@ target_link_libraries(plasmazonesd
         plasmazones_rendering
         plasmazones_shared_qml
         plasmazones_shared_qmlplugin  # Generated by qt_add_qml_module
+        # org.phosphor.surface: the SurfaceDecoration host the overlay QML
+        # mounts and the SurfaceShaderItem stages it runs, plus the item's
+        # C++ API for the warm bake (shader_warmup.cpp).
+        PhosphorSurfaceQuick::PhosphorSurfaceQuickQml
+        PhosphorSurfaceQuickQmlplugin  # Generated by qt_add_qml_module (STATIC)
         PhosphorAnimation::PhosphorAnimation  # motion runtime + QML module + shaders + layer
         PhosphorAnimationQmlplugin  # Generated by qt_add_qml_module (STATIC)
         PhosphorLayer::PhosphorLayer  # wlr-layer-shell surface lifecycle

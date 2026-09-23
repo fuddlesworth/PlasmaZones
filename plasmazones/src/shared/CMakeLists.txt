@@ -3,10 +3,11 @@
 #
 # PlasmaZones Shared QML Components
 
-# Static QML module is linked into shared objects (KCM, editor) so all
-# targets created by qt_add_qml_module (including resource sub-targets)
-# must be compiled with -fPIC. Setting this before the call ensures all
-# generated targets inherit it.
+# Every target qt_add_qml_module creates for this STATIC module (including
+# the resource sub-targets) is compiled with -fPIC, so its objects can be
+# linked into any position-independent consumer: the daemon, editor and
+# settings executables today, and a shared library should one adopt the
+# module. Setting this before the call ensures all generated targets inherit it.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Suppress -Wmissing-include-dirs for every target defined in this
@@ -51,7 +52,6 @@ qt_add_qml_module(plasmazones_shared_qml
         PopupFrame.qml
         ShaderCompileErrorBanner.qml
         ShaderPreviewPlaceholder.qml
-        SurfaceDecoration.qml
         StripEmptyState.qml
         ParameterEditor.qml
         ShaderParamsEditor.qml

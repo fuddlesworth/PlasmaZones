@@ -39,7 +39,7 @@ pre-commit:
         - "plasmazones/data/overlays/*/metadata.json"
         - "plasmazones/data/surface/*/metadata.json"
         - "plasmazones/data/pointer/*/metadata.json"
-        - "phosphor/data/schemas/*.json"
+        - "phosphor-libs/data/schemas/*.json"
         - "plasmazones/data/schemas/*.json"
         - "plasmazones/data/whatsnew.json"
       # Hard gate: when a schema-governed data file or a schema itself is
@@ -75,8 +75,8 @@ pre-commit:
         # in data/, and whatsnew.json is a prose surface CLAUDE.md names, so
         # it needs its own entry.
         - "plasmazones/data/*.json"
-        - "phosphor/data/**/*.json"
-        - "phosphor/data/*.json"
+        - "phosphor-libs/data/**/*.json"
+        - "phosphor-libs/data/*.json"
         - "*.desktop*"
         - "*.metainfo.xml*"
         - "packaging/**"

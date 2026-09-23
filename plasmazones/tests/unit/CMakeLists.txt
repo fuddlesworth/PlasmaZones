@@ -76,8 +76,8 @@ p_add_test(test_localized_context_substitution core/test_localized_context_subst
 # Needs the FakePhysicalScreenSource: the mis-keyed free-geometry guard only engages
 # with real output geometry behind the ScreenManager (it fails open otherwise).
 add_executable(test_wts_lifecycle core/windowtracking/test_wts_lifecycle.cpp
-               ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
-target_include_directories(test_wts_lifecycle PRIVATE ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests)
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wts_lifecycle PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
 target_link_libraries(test_wts_lifecycle PRIVATE Qt6::Test Qt6::Core Qt6::DBus Qt6::Gui plasmazones_core)
 add_test(NAME test_wts_lifecycle COMMAND test_wts_lifecycle)
 
@@ -88,8 +88,8 @@ add_test(NAME test_wts_session COMMAND test_wts_session)
 # FakePhysicalScreenSource compile-in: the zone-geometry screen-resolution cases need
 # a tracked multi-output topology that resolves an empty screen id to a primary.
 add_executable(test_wts_queries core/windowtracking/test_wts_queries.cpp
-               ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
-target_include_directories(test_wts_queries PRIVATE ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests)
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wts_queries PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
 target_link_libraries(test_wts_queries PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wts_queries COMMAND test_wts_queries)
 
@@ -102,8 +102,8 @@ target_link_libraries(test_wts_clearfloat PRIVATE Qt6::Test Qt6::Core Qt6::DBus 
 add_test(NAME test_wts_clearfloat COMMAND test_wts_clearfloat)
 
 add_executable(test_wts_virtual_migration core/windowtracking/test_wts_virtual_migration.cpp
-               ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
-target_include_directories(test_wts_virtual_migration PRIVATE ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests)
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wts_virtual_migration PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
 # Qt6::Gui named explicitly, matching test_wts_lifecycle: both targets compile
 # FakePhysicalScreenSource.cpp, which uses QScreen. It resolved transitively through
 # plasmazones_core before, so the two targets disagreed about a dependency they
@@ -158,8 +158,8 @@ add_test(NAME test_snap_restore_layout_context COMMAND test_snap_restore_layout_
 # FakePhysicalScreenSource: the screen-containment gate and the size clamp only
 # engage with real output geometry behind the ScreenManager.
 add_executable(test_snap_engine_free_size core/snap/test_snap_engine_free_size.cpp helpers/SnapEngineTestFixture.h
-               ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
-target_include_directories(test_snap_engine_free_size PRIVATE ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests)
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_snap_engine_free_size PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
 target_link_libraries(test_snap_engine_free_size PRIVATE Qt6::Test Qt6::Core Qt6::DBus Qt6::Gui plasmazones_core
                                                          PhosphorSnapEngine::PhosphorSnapEngine
                                                          PhosphorPlacement::PhosphorPlacement)
@@ -203,7 +203,7 @@ add_executable(test_placement_engine_base core/test_placement_engine_base.cpp)
 # The scroll engine's tracker stub (header-only over PhosphorEngine) drives the
 # shared free-size restore without any engine fixture; PhosphorIdentity for the
 # builders' probe helper.
-target_include_directories(test_placement_engine_base PRIVATE ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-scroll-engine/tests)
+target_include_directories(test_placement_engine_base PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-scroll-engine/tests)
 target_link_libraries(test_placement_engine_base PRIVATE Qt6::Test Qt6::Core PhosphorEngine
                                                          PhosphorIdentity::PhosphorIdentity)
 add_test(NAME test_placement_engine_base COMMAND test_placement_engine_base)
@@ -265,7 +265,7 @@ add_test(NAME test_luau_engine COMMAND test_luau_engine)
 # prelude into a sandboxed VM and exercises each helper directly.
 add_executable(test_pluau_helpers scripting/test_pluau_helpers.cpp)
 set_target_properties(test_pluau_helpers PROPERTIES AUTOMOC ON)
-target_compile_definitions(test_pluau_helpers PRIVATE "PHOSPHOR_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/phosphor\"")
+target_compile_definitions(test_pluau_helpers PRIVATE "PHOSPHOR_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/phosphor-libs\"")
 target_link_libraries(test_pluau_helpers PRIVATE Qt6::Test Qt6::Core PhosphorScripting::PhosphorScripting)
 add_test(NAME test_pluau_helpers COMMAND test_pluau_helpers)
 
@@ -342,9 +342,9 @@ p_add_test(test_autotile_per_screen_desktop autotile/behavior/test_autotile_per_
 # FakePhysicalScreenSource (like the cross-surface navigation tests).
 add_executable(test_autotile_virtual
                autotile/behavior/test_autotile_virtual.cpp
-               ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
 target_include_directories(test_autotile_virtual
-               PRIVATE ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests)
+               PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
 target_link_libraries(test_autotile_virtual PRIVATE Qt6::Test Qt6::Core plasmazones_core)
 add_test(NAME test_autotile_virtual COMMAND test_autotile_virtual)
 target_compile_definitions(test_autotile_virtual PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
@@ -370,9 +370,9 @@ target_sources(test_autotile_desktop_membership PRIVATE helpers/AutotileFakes.h)
 # recalculateLayout, which bails before it without one. Same fake provider
 # test_autotile_virtual uses.
 target_sources(test_autotile_script_state_stash
-               PRIVATE ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+               PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
 target_include_directories(test_autotile_script_state_stash
-               PRIVATE ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests)
+               PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
 p_add_test(test_autotile_ext_overflow autotile/behavior/test_autotile_ext_overflow.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -883,9 +883,9 @@ target_link_libraries(test_layersurface PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6
 # PhosphorWayland private QPA headers + generated protocol headers
 target_include_directories(test_layersurface PRIVATE
     ${CMAKE_BINARY_DIR}/plasmazones/src                          # plasmazones_export.h
-    ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-wayland/src                  # private QPA headers
-    ${CMAKE_BINARY_DIR}/phosphor/libs/phosphor-wayland                      # phosphorwayland_export.h
-    ${CMAKE_BINARY_DIR}/phosphor/libs/phosphor-wayland/generated-protocols  # wlr-layer-shell protocol header
+    ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-wayland/src                  # private QPA headers
+    ${CMAKE_BINARY_DIR}/phosphor-libs/libs/phosphor-wayland                      # phosphorwayland_export.h
+    ${CMAKE_BINARY_DIR}/phosphor-libs/libs/phosphor-wayland/generated-protocols  # wlr-layer-shell protocol header
 )
 add_test(NAME test_layersurface COMMAND test_layersurface)
 
@@ -959,9 +959,9 @@ add_executable(test_navigation_cross_surface
                autotile/navigation/test_navigation_cross_surface.cpp
                # Q_OBJECT fake — listed so AUTOMOC generates its metaobject.
                helpers/AutotileFakes.h
-               ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
 target_include_directories(test_navigation_cross_surface
-               PRIVATE ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests)
+               PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
 # QTEST_MAIN expands to a QGuiApplication main whenever QT_GUI_LIB is
 # defined, which here would otherwise arrive only through plasmazones_core's
 # transitive Qt6::Gui — coincidental, not contractual (the same reason
@@ -973,18 +973,18 @@ add_test(NAME test_navigation_cross_surface COMMAND test_navigation_cross_surfac
 # the FakePhysicalScreenSource AND the bundled Luau algorithms (P_SOURCE_DIR).
 add_executable(test_navigation_retile
                autotile/navigation/test_navigation_retile.cpp
-               ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
 target_include_directories(test_navigation_retile
-               PRIVATE ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests)
+               PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
 target_compile_definitions(test_navigation_retile PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
 target_link_libraries(test_navigation_retile PRIVATE Qt6::Test Qt6::Core plasmazones_core)
 add_test(NAME test_navigation_retile COMMAND test_navigation_retile)
 
 add_executable(test_autotile_focus_retile
                autotile/behavior/test_autotile_focus_retile.cpp
-               ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
 target_include_directories(test_autotile_focus_retile
-               PRIVATE ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests)
+               PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
 target_compile_definitions(test_autotile_focus_retile PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
 target_link_libraries(test_autotile_focus_retile PRIVATE Qt6::Test Qt6::Core plasmazones_core)
 add_test(NAME test_autotile_focus_retile COMMAND test_autotile_focus_retile)
@@ -1024,9 +1024,13 @@ add_test(NAME test_zone_preview_highlight COMMAND test_zone_preview_highlight)
 # runtime hides the nested cause; this fails with the real error instead.
 # plasmazones_rendering supplies ZoneShaderItem, which the test registers under
 # "PlasmaZones 1.0" (mirroring the daemon/editor composition roots) so
-# ZoneShaderRenderer's `import PlasmaZones` resolves.
+# ZoneShaderRenderer's `import PlasmaZones` resolves. The SurfaceDecoration
+# item tests moved with the host to phosphor-surface-quick's
+# test_surfaceshaderitem; one slot here still instantiates it through the
+# org.phosphor.surface STATIC plugin link, the composition the daemon and the
+# settings app rely on, so that link is pinned from this tier too.
 add_executable(test_shared_module_load ui/test_shared_module_load.cpp)
-target_link_libraries(test_shared_module_load PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick plasmazones_shared_qmlplugin plasmazones_rendering)
+target_link_libraries(test_shared_module_load PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick plasmazones_shared_qmlplugin plasmazones_rendering PhosphorSurfaceQuick::PhosphorSurfaceQuickQml PhosphorSurfaceQuickQmlplugin)
 add_test(NAME test_shared_module_load COMMAND test_shared_module_load)
 
 # Pins the C++/QML contract the zone selector's cursor hit test depends on:
@@ -1042,15 +1046,17 @@ add_executable(test_shader_node_teardown ui/zones/test_shader_node_teardown.cpp)
 target_link_libraries(test_shader_node_teardown PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Quick Qt6::GuiPrivate PhosphorRendering)
 add_test(NAME test_shader_node_teardown COMMAND test_shader_node_teardown)
 
-add_executable(test_surface_shader_item ui/zones/test_surface_shader_item.cpp)
-# Qt6::Qml as well as Quick: one slot drives the item's wallpaperTexture from a
-# real QML binding, which is the only shape that reproduces the silent write
-# failure a QImage-typed property had.
-target_link_libraries(test_surface_shader_item PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::GuiPrivate plasmazones_rendering)
-# P_SOURCE_DIR: one slot sweeps the two QML hosts to keep them off the binding
-# shapes that silently drop a QImage on the way to the item.
-target_compile_definitions(test_surface_shader_item PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
-add_test(NAME test_surface_shader_item COMMAND test_surface_shader_item)
+# The cross-item QML binding contract: a Binding element wipes the image a
+# shader item takes through a QVariant property, so one slot sweeps every
+# shipping .qml under plasmazones/src (P_SOURCE_DIR) for that shape. The
+# SurfaceShaderItem unit tests live with the item in phosphor-surface-quick;
+# this links its C++ library only for the item's metaobject and the wipe
+# demonstration. Qt6::Qml as well as Quick: the demonstrations run a real QML
+# binding, the only shape that reproduces the silent write failure.
+add_executable(test_shader_item_qml_bindings ui/zones/test_shader_item_qml_bindings.cpp)
+target_link_libraries(test_shader_item_qml_bindings PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::GuiPrivate plasmazones_rendering PhosphorSurfaceQuick::PhosphorSurfaceQuick)
+target_compile_definitions(test_shader_item_qml_bindings PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+add_test(NAME test_shader_item_qml_bindings COMMAND test_shader_item_qml_bindings)
 
 # Pure-data byte-layout test for the zone UBO extension. No GPU / scene graph
 # required - guards against silent C++/GLSL UBO drift after a struct refactor.
@@ -1249,8 +1255,8 @@ add_test(NAME test_overlay_helpers COMMAND test_overlay_helpers)
 # dbus/ - D-Bus API Tests (convenience, schema, compositor bridge)
 # ═══════════════════════════════════════════════════════════════════════════════
 add_executable(test_wta_convenience dbus/test_wta_convenience.cpp
-               ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
-target_include_directories(test_wta_convenience PRIVATE ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests)
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_convenience PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
 # Constructs a real SnapEngine and authors Rules against a real RuleStore,
 # drives the engine-common placement API, and builds LayoutRegistry / Layout /
 # Zone directly, so these four are contractual dependencies rather than the
@@ -1303,8 +1309,8 @@ target_link_libraries(test_wta_scroll_strips PRIVATE Qt6::Test Qt6::Core Qt6::DB
 add_test(NAME test_wta_scroll_strips COMMAND test_wta_scroll_strips)
 
 add_executable(test_wta_routing dbus/test_wta_routing.cpp
-               ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
-target_include_directories(test_wta_routing PRIVATE ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests)
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_routing PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
 # Links PhosphorScrollEngine directly: the fixture constructs real ScrollEngine
 # objects, so the dependency is this target's own, not something to inherit
 # through plasmazones_core's link interface.
@@ -1318,8 +1324,8 @@ add_test(NAME test_wta_routing COMMAND test_wta_routing)
 # FakePhysicalScreenSource compile-in: the open-path routing cases need real output
 # geometry.
 add_executable(test_wta_rule_context dbus/test_wta_rule_context.cpp
-               ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
-target_include_directories(test_wta_rule_context PRIVATE ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests)
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_rule_context PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
 target_link_libraries(test_wta_rule_context PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
                       PhosphorSnapEngine::PhosphorSnapEngine PhosphorRules::PhosphorRules
                       PhosphorEngine::PhosphorEngine PhosphorZones::PhosphorZones
@@ -1327,8 +1333,8 @@ target_link_libraries(test_wta_rule_context PRIVATE Qt6::Test Qt6::Core Qt6::DBu
 add_test(NAME test_wta_rule_context COMMAND test_wta_rule_context)
 
 add_executable(test_wta_capture_guards dbus/test_wta_capture_guards.cpp
-               ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
-target_include_directories(test_wta_capture_guards PRIVATE ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests)
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_capture_guards PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
 # Links PhosphorScrollEngine directly for the same reason test_wta_routing does:
 # the close-during-hold case constructs a real ScrollEngine.
 target_link_libraries(test_wta_capture_guards PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
@@ -1341,8 +1347,8 @@ add_test(NAME test_wta_capture_guards COMMAND test_wta_capture_guards)
 # which is already at the file-size ceiling. Same shared fixture, so the same
 # FakePhysicalScreenSource compile-in and engine link set.
 add_executable(test_wta_screen_changed dbus/test_wta_screen_changed.cpp
-               ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
-target_include_directories(test_wta_screen_changed PRIVATE ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests)
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_screen_changed PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
 target_link_libraries(test_wta_screen_changed PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
                       PhosphorSnapEngine::PhosphorSnapEngine PhosphorRules::PhosphorRules
                       PhosphorEngine::PhosphorEngine PhosphorZones::PhosphorZones
@@ -1431,7 +1437,7 @@ add_executable(test_settings_registry_contract dbus/test_settings_registry_contr
 target_compile_definitions(test_settings_registry_contract
                            PRIVATE PLASMAZONES_EFFECT_SRC_DIR="${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect"
                                    PLASMAZONES_EDITOR_SRC_DIR="${CMAKE_SOURCE_DIR}/plasmazones/src/editor"
-                                   PLASMAZONES_PROTOCOL_INC_DIR="${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-protocol/include")
+                                   PLASMAZONES_PROTOCOL_INC_DIR="${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-protocol/include")
 # PhosphorAnimation: the fixture builds a real PhosphorProfileRegistry, because
 # initializeRegistry() gates the motionProfileTree getter behind a non-null one — with
 # a null registry the test would report a correctly-registered key as missing.
@@ -1521,8 +1527,8 @@ add_test(NAME test_drag_policy COMMAND test_drag_policy)
 # dead-session sweep's mark-first ordering, and TilingAdaptor's emit-time
 # desktop stamping under a per-output report burst.
 add_executable(test_windowdrag_cancel_sweeps dbus/test_windowdrag_cancel_sweeps.cpp
-               ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
-target_include_directories(test_windowdrag_cancel_sweeps PRIVATE ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-screens/tests)
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_windowdrag_cancel_sweeps PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
 # Constructs a real AutotileEngine — contractual link (see the
 # test_drag_policy rationale).
 target_link_libraries(test_windowdrag_cancel_sweeps PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
@@ -2638,11 +2644,15 @@ target_compile_definitions(test_surface_decoration_orientation PRIVATE
 target_link_libraries(test_surface_decoration_orientation
     PRIVATE
         Qt6::Test
+        Qt6::Core
         Qt6::DBus
         Qt6::Gui
         Qt6::Qml
         Qt6::Quick
-        plasmazones_rendering
+        # The STATIC org.phosphor.surface module and its plugin: the replica
+        # scene imports the module for its SurfaceShaderItem stages.
+        PhosphorSurfaceQuick::PhosphorSurfaceQuickQml
+        PhosphorSurfaceQuickQmlplugin
         PhosphorSurface::PhosphorSurface
         PhosphorProtocol::PhosphorProtocol
 )

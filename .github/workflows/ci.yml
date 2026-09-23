@@ -45,7 +45,7 @@ permissions:
   contents: read
 
 # One in-flight run per ref, matching kwin-rebuild-watch.yml and release.yml.
-# Without this every push to a PR ran the whole matrix — now five container jobs,
+# Without this every push to a PR ran the whole matrix — now seven container jobs,
 # each doing a full pacman -Syu, build and ctest — to completion, including the
 # runs whose results nobody will ever read. Cancellation is limited to pull
 # requests: a superseded PR push is genuinely dead work, whereas a push to a
@@ -456,7 +456,7 @@ jobs:
         run: |
           set -euo pipefail
           ninja -C build -t targets all > targets.txt
-          for tier in phosphor phosphor-shell-libs phosphor-shell plasmazones; do
+          for tier in phosphor-libs phosphor-shell-libs phosphor-shell plasmazones; do
             if ! grep -q "^${tier}-tier:" targets.txt; then
               echo "missing aggregate target: ${tier}-tier" >&2
               exit 1
@@ -563,7 +563,7 @@ jobs:
           fi
 
   # ─── JSON Schema: validate every bundled data file against the committed
-  # schemas under phosphor/data/schemas/ and plasmazones/data/schemas/. These are the same schema files runtime
+  # schemas under phosphor-libs/data/schemas/ and plasmazones/data/schemas/. These are the same schema files runtime
   # validation compiles (phosphor-fsloader's SchemaValidator via valijson), so
   # this is the author-time gate that keeps malformed layouts (and future
   # document types) out of the tree. Mirrors the lefthook `json-schema` hook;
@@ -619,7 +619,7 @@ jobs:
   # and the pluau standard library with luau-analyze. Catches parse and type
   # errors (a broken bundled .luau would otherwise only surface at runtime as
   # a silently-skipped algorithm). The analyzer is built from the committed
-  # vendored Luau (phosphor/extern/luau-*.tar.gz) so the lint/type ruleset is pinned exactly to
+  # vendored Luau (phosphor-libs/extern/luau-*.tar.gz) so the lint/type ruleset is pinned exactly to
   # the runtime we ship — analysis stays deterministic across CI runs and only
   # changes when we deliberately bump the vendored Luau.
   #
@@ -652,7 +652,7 @@ jobs:
           # Luau is vendored as a committed tarball; extract it before building
           # the analyzer CLI from it (same source the runtime links).
           mkdir -p luau-src
-          tar xzf phosphor/extern/luau-*.tar.gz -C luau-src --strip-components=1
+          tar xzf phosphor-libs/extern/luau-*.tar.gz -C luau-src --strip-components=1
           cmake -S luau-src -B luau-cli -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DLUAU_BUILD_CLI=ON \
@@ -667,7 +667,7 @@ jobs:
           # are advisory (lintErrors:false in .luaurc) but still printed.
           ./luau-cli/luau-analyze \
             plasmazones/data/algorithms/*.luau \
-            phosphor/libs/phosphor-tiles/src/pluau/pluau.luau
+            phosphor-libs/libs/phosphor-tiles/src/pluau/pluau.luau
 
       - name: Analyze the pluau type stubs
         run: |
@@ -697,9 +697,9 @@ jobs:
           # An all-declare file would strip to nothing; grep exits 1 on no
           # match, so `set -e` fails the step rather than analyzing an empty
           # file and passing.
-          stub_copy=phosphor/libs/phosphor-tiles/src/pluau/pluau-stub-check.luau
+          stub_copy=phosphor-libs/libs/phosphor-tiles/src/pluau/pluau-stub-check.luau
           trap 'rm -f "$stub_copy"' EXIT
-          grep -v '^declare ' phosphor/libs/phosphor-tiles/src/pluau/pluau.d.luau > "$stub_copy"
+          grep -v '^declare ' phosphor-libs/libs/phosphor-tiles/src/pluau/pluau.d.luau > "$stub_copy"
           ./luau-cli/luau-analyze "$stub_copy"
 
   # ═══════════════════════════════════════════════════════════════════════════

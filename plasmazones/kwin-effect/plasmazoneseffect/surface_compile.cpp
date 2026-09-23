@@ -217,9 +217,10 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
 
     // Include paths: each search path's /shared dir (resolves
     // `#include <surface_uniforms.glsl>`) PLUS the search path root itself,
-    // matching the daemon/validator resolution (surfaceshaderitem.cpp
-    // surfaceIncludePaths) so a pack that resolves a root-level include on the
-    // daemon and passes shadervalidate also links on the compositor.
+    // matching the daemon/validator resolution (phosphor-surface-quick's
+    // SurfaceShaderItem::surfaceIncludePaths) so a pack that resolves a
+    // root-level include on the daemon and passes shadervalidate also links
+    // on the compositor.
     QStringList includePaths;
     for (const QString& sp : m_surfaceShaderRegistry.searchPaths()) {
         const QString sharedDir = sp + QStringLiteral("/shared");
@@ -404,10 +405,13 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     // element names match the surface contract declarations in
     // surface_uniforms.glsl ("iChannel0".."iChannel3",
     // "iChannelResolution[0]".."[3]").
-    static const std::array<const char*, 4> kIChannelNames = {{"iChannel0", "iChannel1", "iChannel2", "iChannel3"}};
-    static const std::array<const char*, 4> kIChannelResNames = {
+    static constexpr int kIChannelSlots = PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses;
+    static const std::array<const char*, kIChannelSlots> kIChannelNames = {
+        {"iChannel0", "iChannel1", "iChannel2", "iChannel3"}};
+    static const std::array<const char*, kIChannelSlots> kIChannelResNames = {
         {"iChannelResolution[0]", "iChannelResolution[1]", "iChannelResolution[2]", "iChannelResolution[3]"}};
-    for (int i = 0; i < 4; ++i) {
+    static_assert(kIChannelSlots == 4, "iChannel name arrays must grow with the buffer-pass budget");
+    for (int i = 0; i < kIChannelSlots; ++i) {
         packState.iChannelLoc[i] = shader->uniformLocation(kIChannelNames[i]);
         packState.iChannelResolutionLoc[i] = shader->uniformLocation(kIChannelResNames[i]);
     }
@@ -506,7 +510,7 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
             // uniforms), exactly like the main pass above.
             pass.iAudioSpectrumSizeLoc = bufShader->uniformLocation(SC::kIAudioSpectrumSize);
             pass.uAudioSpectrumLoc = bufShader->uniformLocation(SC::kUAudioSpectrum);
-            for (int i = 0; i < 4; ++i) {
+            for (int i = 0; i < kIChannelSlots; ++i) {
                 pass.iChannelLoc[i] = bufShader->uniformLocation(kIChannelNames[i]);
                 pass.iChannelResolutionLoc[i] = bufShader->uniformLocation(kIChannelResNames[i]);
             }

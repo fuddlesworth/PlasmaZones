@@ -13,22 +13,8 @@
 #include "stripzones.h"
 #include "common/stripcardserialize.h"
 
-#include <QGuiApplication>
-#include <QFutureWatcher>
+#include <QJsonObject>
 #include <QPointer>
-#include <QStandardPaths>
-#include <QtConcurrent>
-#include <QScreen>
-#include <QDBusMessage>
-#include <QDBusObjectPath>
-#include <QDBusPendingCall>
-#include <QDBusPendingCallWatcher>
-#include <QDBusPendingReply>
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
-#include <QPluginLoader>
-#include <QRegularExpression>
 #include <QSet>
 #include <QTimer>
 #include <algorithm>
@@ -50,7 +36,6 @@
 #include "daemon/controllers/shortcutmanager.h"
 #include "daemon/controllers/enginefactory.h"
 #include "daemon/controllers/contextresolverwiring.h"
-#include "daemon/rendering/surfaceshaderitem.h"
 #include "daemon/rendering/zoneentryscaffold.h"
 #include "daemon/rendering/zoneshadernoderhi.h"
 
@@ -114,9 +99,6 @@
 #include "dbus/compositorbridgeadaptor.h"
 #include "dbus/controladaptor.h"
 #include "dbus/ruleadaptor.h"
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 
 namespace PlasmaZones {
 

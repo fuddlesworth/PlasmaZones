@@ -61,7 +61,7 @@ tasks:
       - 'CMakeLists.txt'
       - 'CMakePresets.json'
       - 'CLAUDE.md'
-      - 'phosphor/**/*'
+      - 'phosphor-libs/**/*'
       - 'phosphor-shell-libs/**/*'
       - 'phosphor-shell/**/*'
       - 'plasmazones/**/*'
@@ -75,7 +75,7 @@ tasks:
     command: 'python3 scripts/validate-json-schemas.py'
     inputs:
       - 'scripts/validate-json-schemas.py'
-      - 'phosphor/data/schemas/**/*'
+      - 'phosphor-libs/data/schemas/**/*'
       - 'plasmazones/data/**/*.json'
 
   # ECM's KDECMakeSettings registers appstreamtest at the BUILD ROOT, not
@@ -113,7 +113,7 @@ tasks:
 
   # Whole-tree install, the moon equivalent of `make install`. It lives here
   # rather than on the tiers because CMake cannot install a subset: none of
-  # the 319 install() rules declares a COMPONENT, so
+  # the install() rules declares a COMPONENT, so
   # `cmake --install build --component <tier>` would install nothing. Giving
   # each tier its own install verb means tagging every rule with a component
   # first, which is a change of its own.
@@ -127,15 +127,18 @@ tasks:
     args:
       - '--install'
       - 'build'
-    # phosphor-shell is last in the tier graph (its moon.yml dependsOn phosphor,
-    # phosphor-shell-libs and plasmazones), so this one edge builds all four
-    # through `^:build`. Depending on plasmazones alone is not enough: the debug
+    # Two edges, because the tier graph has two leaves: phosphor-shell
+    # (dependsOn phosphor-libs and phosphor-shell-libs) and plasmazones
+    # (dependsOn phosphor-libs). Layer enforcement forbids the shell depending
+    # on plasmazones, so neither leaf reaches the other through `^:build`, and
+    # depending on one alone would leave the other tier unbuilt. The debug
     # preset sets BUILD_PHOSPHOR_SHELL=ON, so the configure generates install
-    # rules for shell-tier targets, and `phosphor_tier_target()` collects only
-    # targets declared under its own directory — `cmake --install` would then
-    # hit `file(INSTALL)` on binaries that were never built.
+    # rules for every tier, and `phosphor_tier_target()` collects only targets
+    # declared under its own directory — `cmake --install` would then hit
+    # `file(INSTALL)` on binaries that were never built.
     deps:
       - 'phosphor-shell:build'
+      - 'plasmazones:build'
     options:
       cache: false
       runInCI: false

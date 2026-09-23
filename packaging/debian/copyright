@@ -30,7 +30,7 @@ License: GPL-3.0-or-later
 # All phosphor-* extracted libraries ship as LGPL so third-party
 # plugins / shells can link them without inheriting GPL — see CLAUDE.md
 # for the per-tree license rules.
-Files: phosphor/libs/phosphor-*/*
+Files: phosphor-libs/libs/phosphor-*/*
        phosphor-shell-libs/libs/phosphor-*/*
 Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: LGPL-2.1-or-later
@@ -40,7 +40,7 @@ License: LGPL-2.1-or-later
 # Files: * catch-all was asserting GPL-3 over them in the packaging metadata
 # while the sources said otherwise.
 #
-# phosphor/data/schemas/*.json matters most here: it has no header (JSON has no
+# phosphor-libs/data/schemas/*.json matters most here: it has no header (JSON has no
 # comment syntax) but is RCC-embedded into PhosphorShaders, PhosphorZones and
 # PhosphorAnimation, so declaring it GPL-3 asserts GPL over content compiled
 # into LGPL shared libraries. That is the hazard CLAUDE.md names when it says
@@ -54,9 +54,9 @@ Files: cmake/PhosphorLibTesting.cmake
        cmake/PhosphorTestIsolation.cmake
        cmake/PhosphorTier.cmake
        cmake/test-session-bus.conf
-       phosphor/CMakeLists.txt
-       phosphor/moon.yml
-       phosphor/data/*
+       phosphor-libs/CMakeLists.txt
+       phosphor-libs/moon.yml
+       phosphor-libs/data/*
        phosphor-shell-libs/CMakeLists.txt
        phosphor-shell-libs/moon.yml
 Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
@@ -157,12 +157,12 @@ License: GPL-3.0-or-later
 
 # Vendored third-party sources, committed as tarballs and extracted at build
 # time. Not ours, and not GPL.
-Files: phosphor/extern/luau-*.tar.gz
+Files: phosphor-libs/extern/luau-*.tar.gz
 Copyright: 2019-2025 Roblox Corporation
            1994-2019 Lua.org, PUC-Rio
 License: MIT
 
-Files: phosphor/extern/valijson-*.tar.gz
+Files: phosphor-libs/extern/valijson-*.tar.gz
 Copyright: 2016 Tristan Penman
            2016 Akamai Technologies, Inc.
 License: BSD-2-Clause

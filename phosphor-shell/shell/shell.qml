@@ -25,7 +25,7 @@ import Phosphor.Service.UPower
 import Phosphor.Shell
 import Phosphor.Theme
 import QtQuick
-import org.plasmazones.common as PZCommon
+import org.phosphor.surface as PhosphorSurface
 
 // Top-level composer for the dogfood shell. Phase 4.1 replaces the old
 // single TopPanel + pushed-in data sources with the production bar:
@@ -72,7 +72,7 @@ Item {
     Component {
         id: chromeDecoration
 
-        PZCommon.SurfaceDecoration {
+        PhosphorSurface.SurfaceDecoration {
             property string surfacePath: ""
             property bool focused: true
 
@@ -149,8 +149,8 @@ Item {
 
             decoration: ShellChrome.decorationComponent
             paneAnchor: "controlcenter"
-            paneWidth: 380
-            paneDepth: 460
+            paneWidth: Tokens.pane_width
+            paneDepth: Tokens.pane_depth
             // Open only on the screen the registry says owns it, so a
             // multi-head setup shows one pane, on the bar that summoned it.
             //
@@ -328,7 +328,7 @@ Item {
 
             edge: PanelWindow.Bottom
             alignment: PanelWindow.Fill
-            thickness: 96
+            thickness: Tokens.picker_thickness
             panelLayer: PanelWindow.LayerOverlay
             exclusiveZoneEnabled: false
             keyboardFocus: PanelWindow.OnDemand
@@ -883,8 +883,8 @@ Item {
         const anchored = rect.width > 0;
         // PopoutHost caps a frame at the surface width minus its margins,
         // so a band on a full-width window is centred within that cap.
-        const bandWidth = anchored ? Math.min(rect.width, screen.geometry.width - 2 * Tokens.spacing_l) : 360;
-        const x = anchored ? rect.x + (rect.width - bandWidth) / 2 : (screen.geometry.width - 360) / 2;
+        const bandWidth = anchored ? Math.min(rect.width, screen.geometry.width - 2 * Tokens.spacing_l) : Tokens.prompt_width;
+        const x = anchored ? rect.x + (rect.width - bandWidth) / 2 : (screen.geometry.width - bandWidth) / 2;
         const y = anchored ? rect.y : Tokens.bar_thickness + Tokens.spacing_l;
         PolkitRegistry.setPlacement(screen.name, anchored ? rect : Qt.rect(0, 0, 0, 0));
         Popouts.open({

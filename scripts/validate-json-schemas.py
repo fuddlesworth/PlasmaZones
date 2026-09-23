@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Validate bundled data JSON against the committed JSON Schemas.
 
-The schemas live in two trees: phosphor/data/schemas/ holds the shared
+The schemas live in two trees: phosphor-libs/data/schemas/ holds the shared
 contracts and plasmazones/data/schemas/ the app-only ones. Most are the
 single source of truth shared
 with runtime validation: phosphor-fsloader's SchemaValidator (valijson)
@@ -46,13 +46,13 @@ _BOOTSTRAP_ENV = "PZ_JSONSCHEMA_BOOTSTRAPPED"
 # validated only here, where the runtime checks those document types in C++
 # directly.
 SCHEMA_MAP: dict[str, list[str]] = {
-    "phosphor/data/schemas/layout.schema.json": ["plasmazones/data/layouts/*.json"],
+    "phosphor-libs/data/schemas/layout.schema.json": ["plasmazones/data/layouts/*.json"],
     "plasmazones/data/schemas/scrolling-template.schema.json": ["plasmazones/data/scrolling-templates/*.json"],
-    "phosphor/data/schemas/curve.schema.json": ["plasmazones/data/curves/*.json"],
-    "phosphor/data/schemas/animation-metadata.schema.json": ["plasmazones/data/animations/*/metadata.json"],
-    "phosphor/data/schemas/shader-metadata.schema.json": ["plasmazones/data/overlays/*/metadata.json"],
-    "phosphor/data/schemas/surface-metadata.schema.json": ["plasmazones/data/surface/*/metadata.json"],
-    "phosphor/data/schemas/pointer-metadata.schema.json": ["plasmazones/data/pointer/*/metadata.json"],
+    "phosphor-libs/data/schemas/curve.schema.json": ["plasmazones/data/curves/*.json"],
+    "phosphor-libs/data/schemas/animation-metadata.schema.json": ["plasmazones/data/animations/*/metadata.json"],
+    "phosphor-libs/data/schemas/shader-metadata.schema.json": ["plasmazones/data/overlays/*/metadata.json"],
+    "phosphor-libs/data/schemas/surface-metadata.schema.json": ["plasmazones/data/surface/*/metadata.json"],
+    "phosphor-libs/data/schemas/pointer-metadata.schema.json": ["plasmazones/data/pointer/*/metadata.json"],
     "plasmazones/data/schemas/whatsnew.schema.json": ["plasmazones/data/whatsnew.json"],
 }
 

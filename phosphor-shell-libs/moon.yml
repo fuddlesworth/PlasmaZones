@@ -8,7 +8,7 @@ stack: 'systems'
 tags: ['cmake']
 
 dependsOn:
-  - 'phosphor'
+  - 'phosphor-libs'
 
 project:
   name: 'Phosphor shell libraries'

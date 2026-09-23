@@ -14,6 +14,7 @@
 /// umbrella that includes both, so existing consumers are unaffected.
 
 #include <PhosphorSurface/SurfaceShaderContract.h>
+#include <PhosphorSurface/SurfaceShaderEffect.h>
 
 #include <core/region.h>
 #include <opengl/glframebuffer.h>
@@ -68,9 +69,12 @@ struct CompiledSurfaceBufferPass
     int iAudioSpectrumSizeLoc = -1;
     int uAudioSpectrumLoc = -1;
     /// iChannel0..3 sampler locations — prior buffer outputs feeding this pass.
-    std::array<int, 4> iChannelLoc{{-1, -1, -1, -1}};
+    /// Sized by the surface contract's buffer-pass budget, the same constant
+    /// surface_compile.cpp walks when it resolves them.
+    std::array<int, PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses> iChannelLoc{{-1, -1, -1, -1}};
     /// iChannelResolution[0..3] element locations (the .xy pixel size of each).
-    std::array<int, 4> iChannelResolutionLoc{{-1, -1, -1, -1}};
+    std::array<int, PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses> iChannelResolutionLoc{
+        {-1, -1, -1, -1}};
     /// Pack-declared parameter slot locations (reuse the main pass's values).
     std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomParams> customParamsLoc = []() {
         std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomParams> a;
@@ -165,8 +169,9 @@ struct CompiledSurfacePack
 
     /// MAIN-pass iChannel0..3 sampler + iChannelResolution[0..3] element
     /// locations. -1 when the linker dropped the uniform (single-pass pack).
-    std::array<int, 4> iChannelLoc{{-1, -1, -1, -1}};
-    std::array<int, 4> iChannelResolutionLoc{{-1, -1, -1, -1}};
+    std::array<int, PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses> iChannelLoc{{-1, -1, -1, -1}};
+    std::array<int, PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses> iChannelResolutionLoc{
+        {-1, -1, -1, -1}};
 
     /// User-declared image textures (metadata `textures`): sampler +
     /// iTextureResolution[N] element locations, plus the textures themselves,

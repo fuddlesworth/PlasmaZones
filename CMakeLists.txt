@@ -286,11 +286,11 @@ file(GLOB_RECURSE ALL_CLANG_FORMAT_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect/*.hpp
     ${CMAKE_SOURCE_DIR}/plasmazones/tests/*.cpp
     ${CMAKE_SOURCE_DIR}/plasmazones/tests/*.h
-    ${CMAKE_SOURCE_DIR}/phosphor/libs/*.cpp
+    ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/*.cpp
     ${CMAKE_SOURCE_DIR}/phosphor-shell-libs/libs/*.cpp
-    ${CMAKE_SOURCE_DIR}/phosphor/libs/*.h
+    ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/*.h
     ${CMAKE_SOURCE_DIR}/phosphor-shell-libs/libs/*.h
-    ${CMAKE_SOURCE_DIR}/phosphor/libs/*.hpp
+    ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/*.hpp
     ${CMAKE_SOURCE_DIR}/phosphor-shell-libs/libs/*.hpp
     ${CMAKE_SOURCE_DIR}/phosphor-shell-libs/examples/*.cpp
     ${CMAKE_SOURCE_DIR}/phosphor-shell/*.cpp
@@ -315,7 +315,7 @@ file(GLOB_RECURSE ALL_QML_FILES
     ${CMAKE_SOURCE_DIR}/plasmazones/src/*.qml
     ${CMAKE_SOURCE_DIR}/phosphor-shell/cli/*.qml
     ${CMAKE_SOURCE_DIR}/plasmazones/kcm/*.qml
-    ${CMAKE_SOURCE_DIR}/phosphor/libs/*.qml
+    ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/*.qml
     ${CMAKE_SOURCE_DIR}/phosphor-shell-libs/libs/*.qml
     ${CMAKE_SOURCE_DIR}/phosphor-shell-libs/examples/*.qml
     ${CMAKE_SOURCE_DIR}/phosphor-shell/*.qml
@@ -362,7 +362,7 @@ include_directories("${CMAKE_BINARY_DIR}/generated")
 # The tree is split into four product tiers, each a directory with its own
 # CMakeLists.txt and, in the moon workspace, its own project:
 #
-#   phosphor/            core LGPL libraries (engines, rendering, layer-shell,
+#   phosphor-libs/       core LGPL libraries (engines, rendering, layer-shell,
 #                        animation, config, ...) that need no shell
 #   phosphor-shell-libs/ the Phosphor desktop shell libraries and services,
 #                        gated behind BUILD_PHOSPHOR_SHELL
@@ -372,13 +372,11 @@ include_directories("${CMAKE_BINARY_DIR}/generated")
 #                        effect, bundled data and tests
 #
 # Every tier CMakeLists is entered from here, so the shared Qt/KF6 setup
-# above applies to all of them. Order follows the dependency chain, with
-# one known inversion: phosphor-shell links plasmazones_rendering and
-# plasmazones_shared_qml from the plasmazones tier (ShellChrome draws the
-# surface decoration through them), so it is entered last. Target-based
-# linking resolves at generate time, so the order is documentation, not
-# a constraint.
-add_subdirectory(phosphor)
+# above applies to all of them. Order follows the dependency chain:
+# phosphor-libs, then the shell libraries and the shell, then plasmazones.
+# Target-based linking resolves at generate time, so the order is
+# documentation, not a constraint.
+add_subdirectory(phosphor-libs)
 
 # Canonical list of engine library target names. Consumed by the
 # engine QML firewall below. Kept in sync with the engine
@@ -468,13 +466,10 @@ endif()
 
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(phosphor-shell-libs)
+    add_subdirectory(phosphor-shell)
 endif()
 
 add_subdirectory(plasmazones)
-
-if(BUILD_PHOSPHOR_SHELL)
-    add_subdirectory(phosphor-shell)
-endif()
 
 # Custom uninstall target that cleans up directories properly.
 # QT6_INSTALL_PLUGINS repeats phosphor-wayland's QPA install-path derivation
