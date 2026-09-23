@@ -252,3 +252,17 @@ set_tests_properties(test_phosphorshell_wallpaperservice PROPERTIES
     LABELS "phosphorshell"
     TIMEOUT 30
 )
+
+# The mock layer-shell transport lives in phosphor-layer's own test tree, which
+# is not an exported interface. Name the directory explicitly so the include
+# reads `mocks/mocktransport.h`, the same spelling phosphor-layer's tests use.
+# The previous `../../phosphor-layer/tests/mocks/...` form resolved only by
+# accident, through an -I that the PhosphorLayer link happens to contribute,
+# and would have broken silently the moment that link changed.
+foreach(_mock_consumer test_phosphorshell_persistentproperties_scan
+                       test_phosphorshell_inputregion_rearm)
+    if(TARGET ${_mock_consumer})
+        target_include_directories(${_mock_consumer}
+            PRIVATE ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-layer/tests)
+    endif()
+endforeach()

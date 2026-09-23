@@ -22,8 +22,15 @@ ApplicationWindow {
     property string lastError: ""
     // Track which preset the user last applied via the button row. The
     // store doesn't remember this (its `sourcePath` is for on-disk loads
-    // only), so the demo holds it locally for highlight state. Cleared
-    // when an external source overrides via loadFromFile.
+    // only), so the demo holds it locally for highlight state.
+    //
+    // Deliberately NOT cleared when a file load overrides the palette: the
+    // pill then keeps showing the last preset the user picked, which is
+    // slightly stale but harmless in a demo. Clearing it on paletteChanged
+    // would be wrong — that signal also fires for the preset buttons
+    // themselves — and gating on a non-empty sourcePath would be wrong too,
+    // since sourcePath stays set after a load and would then wipe the
+    // highlight of any preset clicked afterwards.
     property string activePreset: "dark"
     // Set when matugen produces a palette from a user-picked wallpaper.
     // Stays set across re-runs so the header shows what the active

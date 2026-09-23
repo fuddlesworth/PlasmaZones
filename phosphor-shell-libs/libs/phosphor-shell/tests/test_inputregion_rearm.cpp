@@ -19,8 +19,8 @@
 #include <PhosphorShell/PanelWindow.h>
 #include <PhosphorShell/ShellEngine.h>
 
-#include "../../phosphor-layer/tests/mocks/mockscreenprovider.h"
-#include "../../phosphor-layer/tests/mocks/mocktransport.h"
+#include "mocks/mockscreenprovider.h"
+#include "mocks/mocktransport.h"
 
 #include <QGuiApplication>
 #include <QQuickWindow>

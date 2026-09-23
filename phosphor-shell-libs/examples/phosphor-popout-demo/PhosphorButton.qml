@@ -2,9 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Demo-only Button skin. Wraps QtQuick.Controls Button with chrome
 // driven by Phosphor.Theme tokens so the demo doesn't look like
-// stock Qt against the rest of the Phosphor surface. A real shell
-// would consume a PhosphorButton from a Phosphor.UI library. This
-// inline copy exists so the popout demo stays self-contained.
+// stock Qt against the rest of the Phosphor surface.
+//
+// Phosphor.Widgets does now publish a four-variant PhosphorButton, and
+// phosphor-osd-demo consumes it. This inline copy is kept deliberately: the
+// demo is of the popout transport, not of the widget library, and it stays
+// readable end to end without a second module import. Prefer Phosphor.Widgets
+// in anything real.
 
 import Phosphor.Theme
 import QtQuick
