@@ -251,6 +251,33 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
     };
 
     if (!result.shouldSnap) {
+        // A desktop-arrival re-drive for a window the engine already holds in a
+        // zone on the desktop it landed on answers with that zone's rect rather
+        // than with nothing. The engine's "already assigned" no-op is right
+        // about the ASSIGNMENT and wrong about the window: a client on a desktop
+        // nobody is looking at is suspended, so the resize that came with the
+        // move was never acked and the compositor does not re-send it when the
+        // desktop comes back. This is the moment it can land. Re-applying a rect
+        // the window is already at costs nothing — the effect skips a geometry
+        // apply that matches.
+        //
+        // Floating is excluded: a floated window keeps its zone assignment as
+        // the memory a float-toggle resnaps into, and putting it back in the
+        // zone here would undo the float.
+        if (reason == PhosphorEngine::RestoreReason::DesktopArrival && !m_engine->isFloating(windowId)) {
+            const QString heldZone = m_engine->zoneForWindow(windowId);
+            const QRect heldGeometry = heldZone.isEmpty() ? QRect() : svc->zoneGeometry(heldZone, screenId);
+            if (heldGeometry.isValid()) {
+                snapX = heldGeometry.x();
+                snapY = heldGeometry.y();
+                snapWidth = heldGeometry.width();
+                snapHeight = heldGeometry.height();
+                shouldSnap = true;
+                qCInfo(lcDbusWindow) << "resolveWindowRestore: desktop arrival re-applies" << windowId << "to zone"
+                                     << heldZone << heldGeometry;
+                return;
+            }
+        }
         // Nothing snapped this window. A bare RouteToScreen rule (move-to-monitor
         // with no SnapToZone) takes effect here, deliberately AFTER the snap/float
         // restore has had its chance: a SnapToZone restore or a remembered snap
