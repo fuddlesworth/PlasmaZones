@@ -134,8 +134,8 @@ set(phosphorshaders_SRCS
 # consumers (notably PhosphorRendering) can link it.
 #
 # No QML facade target here — see the file header for rationale. If a
-# `Phosphor.Shaders` module is added later, follow phosphor-animation-qml
-# 's pattern: separate STATIC qml-module target that links this library
+# `Phosphor.Shaders` module is added later, follow phosphor-animation's
+# PhosphorAnimationQml pattern: separate STATIC qml-module target that links this library
 # (so the QML registration sub-targets don't leak into install(EXPORT)).
 
 add_library(PhosphorShaders SHARED

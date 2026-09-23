@@ -44,7 +44,7 @@ void ActionRegistry::registerBuiltinsEngine()
         .slotFor = constantSlot(ActionSlot::EngineMode),
         .validate =
             [](const QJsonObject& p) {
-                return hasNonEmptyString(p, ActionParam::Mode);
+                return hasBoundedNonEmptyString(p, ActionParam::Mode, MaxChainPackIdLength);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Mode)},
@@ -70,7 +70,7 @@ void ActionRegistry::registerBuiltinsEngine()
         .slotFor = constantSlot(ActionSlot::Layout),
         .validate =
             [](const QJsonObject& p) {
-                return hasNonEmptyString(p, ActionParam::LayoutId);
+                return hasBoundedNonEmptyString(p, ActionParam::LayoutId, MaxChainPackIdLength);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::LayoutId)},
@@ -85,7 +85,7 @@ void ActionRegistry::registerBuiltinsEngine()
         .slotFor = constantSlot(ActionSlot::Layout),
         .validate =
             [](const QJsonObject& p) {
-                return hasNonEmptyString(p, ActionParam::Algorithm);
+                return hasBoundedNonEmptyString(p, ActionParam::Algorithm, MaxChainPackIdLength);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Algorithm)},
@@ -106,7 +106,7 @@ void ActionRegistry::registerBuiltinsEngine()
         .slotFor = constantSlot(ActionSlot::ScrollingTemplate),
         .validate =
             [](const QJsonObject& p) {
-                return hasNonEmptyString(p, ActionParam::LayoutId);
+                return hasBoundedNonEmptyString(p, ActionParam::LayoutId, MaxChainPackIdLength);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::LayoutId)},
@@ -346,6 +346,13 @@ void ActionRegistry::registerBuiltinsEngine()
                             return false; // non-integral
                         }
                     }
+                    // Entry count, not just entry value: a hand-edited
+                    // million-element array would otherwise load and be walked
+                    // by the placement reader on every open. Ordinals are
+                    // 1..MaxZoneOrdinal, so more entries than that is malformed.
+                    if (arr.size() > MaxZoneOrdinal) {
+                        return false;
+                    }
                     targets += static_cast<int>(arr.size());
                 }
                 if (p.contains(ActionParam::ZoneNames)) {
@@ -354,6 +361,9 @@ void ActionRegistry::registerBuiltinsEngine()
                         return false;
                     }
                     const QJsonArray arr = v.toArray();
+                    if (arr.size() > MaxZoneOrdinal) {
+                        return false;
+                    }
                     for (const QJsonValue& e : arr) {
                         if (!e.isString()) {
                             return false;
@@ -402,7 +412,7 @@ void ActionRegistry::registerBuiltinsEngine()
                 // currently-absent monitor is legitimate (it fires when that
                 // monitor returns). The daemon's placement path no-ops a route
                 // whose target screen is not currently resolvable.
-                return hasNonEmptyString(p, ActionParam::TargetScreenId);
+                return hasBoundedNonEmptyString(p, ActionParam::TargetScreenId, MaxChainPackIdLength);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::TargetScreenId)},
@@ -454,7 +464,9 @@ void ActionRegistry::registerBuiltinsEngine()
         },
         .validate =
             [](const QJsonObject& p) {
-                if (!hasNonEmptyString(p, ActionParam::Event)) {
+                // The event is concatenated into the slot key, so its length
+                // bounds the slot id too.
+                if (!hasBoundedNonEmptyString(p, ActionParam::Event, MaxChainPackIdLength)) {
                     return false;
                 }
                 // TYPE as well as length. `"presetId": 7` used to validate and then
@@ -507,7 +519,12 @@ void ActionRegistry::registerBuiltinsEngine()
         },
         .validate =
             [](const QJsonObject& p) {
-                return hasNonEmptyString(p, ActionParam::Event)
+                // `curve` is optional here (the effect reads it from this action
+                // as well as from OverrideAnimationCurve) but when present it
+                // must be a bounded string, or a `"curve": 7` loads and is
+                // silently ignored, the presetId shape fixed above.
+                return hasBoundedNonEmptyString(p, ActionParam::Event, MaxChainPackIdLength)
+                    && hasOptionalBoundedString(p, ActionParam::Curve, MaxChainPackIdLength)
                     && hasValidOptionalDurationMs(p, ActionParam::DurationMs);
             },
         .terminal = false,
@@ -540,7 +557,8 @@ void ActionRegistry::registerBuiltinsEngine()
         },
         .validate =
             [](const QJsonObject& p) {
-                return hasNonEmptyString(p, ActionParam::Event);
+                return hasBoundedNonEmptyString(p, ActionParam::Event, MaxChainPackIdLength)
+                    && hasOptionalBoundedString(p, ActionParam::Curve, MaxChainPackIdLength);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Event), QString(ActionParam::Curve)},

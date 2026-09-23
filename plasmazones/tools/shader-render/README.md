@@ -14,7 +14,9 @@ and anyone else who needs a stable image of a built-in shader.
 ## What it does
 
 1. Loads `plasmazones/data/overlays/<id>/metadata.json` plus the shader's GLSL
-   files exactly the way the daemon does.
+   files exactly the way the daemon does. With `--pointer` it loads a
+   `plasmazones/data/pointer/<id>/` pack instead and drives a synthetic
+   pointer through the canvas so the pointer uniform tail is populated.
 2. Loads `plasmazones/data/layouts/<id>.json` to get a real zone arrangement,
    so the shader has actual zones to draw rather than a single
    mock rect.
@@ -38,7 +40,7 @@ cmake --build build --target plasmazones-shader-render
 ```
 
 It links `Qt6::Quick` plus `PhosphorRendering`, `PhosphorShaders`,
-`PhosphorWayland`, `PhosphorAudio`, and the daemon's
+`PhosphorWayland`, `PhosphorAudio`, `PhosphorPointer`, and the daemon's
 `plasmazones_rendering` target.
 For headless CI it works under software Vulkan
 (`VK_ICD_FILENAMES=$(ls /usr/share/vulkan/icd.d/lvp_icd*.json)`),
@@ -71,6 +73,15 @@ Common flags:
 | `--shader-dir` | `plasmazones/data/overlays/` (or `data/overlays/` when run from inside `plasmazones/`), then the XDG data dirs | where to find shader bundles |
 | `--layout-dir` | `plasmazones/data/layouts/`, then the XDG data dirs | where to find layout JSONs |
 | `--still-highlight` | `0` (cycling) | pin one zone, by its zone number, as the only highlighted zone |
+| `--pointer` | off | render a pointer pack: `--shader-dir` defaults to `plasmazones/data/pointer/` and a synthetic pointer drives the pointer uniform tail |
+| `--pointer-heading` | `0` | direction the synthetic pointer travels, degrees clockwise from screen right |
+| `--pointer-speed` | `900` | synthetic pointer speed in logical px per second |
+| `--pointer-still` | off | hold the pointer still at the canvas centre instead of sweeping |
+| `--press-at` | `0.4` | seconds at which the button goes down (negative: no click) |
+| `--release-at` | `0.55` | seconds at which the button comes back up (negative: held for the whole render) |
+| `--pointer-button` | `1` | which button the synthetic click uses: 1 left, 2 right, 3 middle |
+| `--no-cursor-sprite` | off | leave the cursor sprite unbound so a `needsCursor` pack renders its fallback |
+| `--cursor-size` | `24` | drawn size of the synthetic cursor sprite in logical px |
 
 Shared GLSL (`shared/common.glsl`, `audio.glsl`, `zone.vert`) resolves from the
 source tree first, then the XDG data dirs (which include `/usr/share` on a
@@ -84,9 +95,9 @@ fail to compile against a function plainly present in the file on screen.
 
 Output formats are picked by extension:
 
-- `.webm` — VP9 via `ffmpeg` (`-c:v libvpx-vp9 -b:v 600k -crf 34`)
+- `.webm` — VP9 via `ffmpeg` (`-c:v libvpx-vp9 -b:v 0 -crf 28 -row-mt 1 -deadline good`)
 - `.mp4` — H.264 via `ffmpeg` (`-c:v libx264 -crf 23`)
-- `.png` — numbered sequence (`out_0001.png`, `out_0002.png`, ...)
+- `.png` — numbered sequence (`out_000001.png`, `out_000002.png`, ...)
 
 `ffmpeg` must be on `PATH` for the video formats.
 

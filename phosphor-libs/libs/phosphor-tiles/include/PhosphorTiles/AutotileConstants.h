@@ -21,7 +21,7 @@
  * directly (`plasmazones/src/dbus/autotileadaptor/config.cpp`) or through one in-tree base
  * of the same class (`plasmazones/src/config/configdefaults_appearance.h`, which is how
  * ConfigDefaults sees them). There is no transitive re-export from
- * `core/constants.h` — that backward-source compatibility chain was removed so
+ * `core/types/constants.h` — that backward-source compatibility chain was removed so
  * unrelated layers no longer resolve the PhosphorTiles include path.
  */
 namespace PhosphorTiles {

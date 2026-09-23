@@ -373,7 +373,7 @@ include_directories("${CMAKE_BINARY_DIR}/generated")
 #
 # Every tier CMakeLists is entered from here, so the shared Qt/KF6 setup
 # above applies to all of them. Order follows the dependency chain:
-# phosphor, then the shell libraries and the shell, then plasmazones.
+# phosphor-libs, then the shell libraries and the shell, then plasmazones.
 # Target-based linking resolves at generate time, so the order is
 # documentation, not a constraint.
 add_subdirectory(phosphor-libs)

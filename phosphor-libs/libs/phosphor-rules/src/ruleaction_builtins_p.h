@@ -36,6 +36,34 @@ inline bool hasNonEmptyString(const QJsonObject& params, QLatin1StringView key)
     return v.isString() && !v.toString().isEmpty();
 }
 
+/// hasNonEmptyString plus a length cap. Every id or token a rule names
+/// (engine mode, layout, algorithm, template, screen, animation event) is
+/// carried into evaluator and cache keys verbatim, and rules.json is
+/// hand-editable, so an unbounded string is the one free-form input this
+/// vocabulary would otherwise accept without a ceiling.
+inline bool hasBoundedNonEmptyString(const QJsonObject& params, QLatin1StringView key, int maxLength)
+{
+    const QJsonValue v = params.value(key);
+    if (!v.isString()) {
+        return false;
+    }
+    const QString s = v.toString();
+    return !s.isEmpty() && s.size() <= maxLength;
+}
+
+/// An OPTIONAL string at @p key: undefined is accepted (the key may be
+/// absent), anything else must be a string no longer than @p maxLength. This
+/// is the `"presetId": 7` shape: a non-string value used to load and then be
+/// silently ignored by every consumer that reads it with toString().
+inline bool hasOptionalBoundedString(const QJsonObject& params, QLatin1StringView key, int maxLength)
+{
+    const QJsonValue v = params.value(key);
+    if (v.isUndefined()) {
+        return true;
+    }
+    return v.isString() && v.toString().size() <= maxLength;
+}
+
 /// Validates that @p params has a string at @p key, EMPTY INCLUDED. The
 /// counterpart to hasNonEmptyString, for the slots where empty is a value the
 /// user can mean rather than an unfilled field. The tab-indicator font family

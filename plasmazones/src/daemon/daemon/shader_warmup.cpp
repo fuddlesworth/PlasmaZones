@@ -11,12 +11,12 @@
 #include "daemon/rendering/zoneshadernoderhi.h"
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>
-#include <PhosphorSurfaceQuick/SurfaceShaderItem.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
 #include <PhosphorShaders/ShaderPresetStore.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
+#include <PhosphorSurfaceQuick/SurfaceShaderItem.h>
 
 #include <QDir>
 #include <QFile>

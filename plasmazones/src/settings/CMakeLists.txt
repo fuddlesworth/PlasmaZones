@@ -609,6 +609,9 @@ target_link_libraries(plasmazones-settings
     PRIVATE
         plasmazones_core
         plasmazones_rendering  # ZoneShaderItem (live zone preview); registered in main.cpp
+        PhosphorRendering::PhosphorRendering  # ShaderEffect, the raw item the animation and
+                                              # pointer previews instantiate (main.cpp and the
+                                              # two preview controllers include it directly)
         # org.phosphor.surface: the SurfaceDecoration host behind the live
         # decoration preview and the SurfaceShaderItem stages it runs.
         PhosphorSurfaceQuick::PhosphorSurfaceQuickQml

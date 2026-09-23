@@ -114,7 +114,7 @@ User-facing strings MUST read like plain, human-written prose with no LLM tics. 
 ## Settings
 
 ### Architecture
-- `ISettings` interface → `Settings` class → `IConfigBackend` (pluggable, default: JSON → `~/.config/plasmazones/config.json`)
+- `ISettings` interface → `Settings` class → `PhosphorConfig::Store` over a pluggable `PhosphorConfig::IBackend` (default `JsonBackend`: `~/.config/plasmazones/config.json`)
 - `ConfigDefaults` for all default values; the old `.kcfg` schema files were removed from the repo
 - Editor settings: separate, in `EditorController` (separate process)
 
@@ -237,7 +237,7 @@ python3 scripts/check-conventions.py --list-rules
 ```
 
 ### Per-tier builds with moon
-The repo is a [moon](https://moonrepo.dev) workspace. CMake still does every compile; moon adds the tier graph on top: one command per tier, dependency ordering, and affected-only runs locally (CI still drives CMake directly). The four tiers are the projects `phosphor`, `phosphor-shell-libs`, `phosphor-shell` and `plasmazones`, plus `repo` for the whole-tree checks. Install moon from the AUR (`moon-bin`) or with `proto install moon`.
+The repo is a [moon](https://moonrepo.dev) workspace. CMake still does every compile; moon adds the tier graph on top: one command per tier, dependency ordering, and affected-only runs locally (CI still drives CMake directly). The four tiers are the projects `phosphor-libs`, `phosphor-shell-libs`, `phosphor-shell` and `plasmazones`, plus `repo` for the whole-tree checks. Install moon from the AUR (`moon-bin`) or with `proto install moon`.
 
 ```bash
 moon run plasmazones:build          # build that tier and its upstream tiers (configure runs first each time)
@@ -253,7 +253,7 @@ moon query projects --affected      # which tiers a change reaches
 
 Configurations come from `CMakePresets.json`: `debug` configures into `build/`, `release` into `build-release/`, `relwithdebinfo` into `build-relwithdebinfo/`, and every preset turns tests, the shell and the tools on. The moon tasks are the debug ones by default and each has a `-release` twin. Plain CMake users get the same trees with `cmake --preset release && cmake --build --preset release`.
 
-How it maps onto CMake (see `.moon/tasks/cmake.yml`): every tier task runs from the workspace root against the build directory its preset names. `build` invokes the tier's aggregate target, `<tier>-tier`, declared by `phosphor_tier_target()` at the end of each tier CMakeLists; `test` runs ctest scoped to `build/<tier>`. Because the build directory is shared, moon does not cache build outputs and ccache remains the compile cache. A tier gets its own build directory, and with it a moon-cached output, once it can be configured standalone against an installed upstream tier.
+How it maps onto CMake (see `.moon/tasks/cmake.yml`): every tier task runs from the workspace root against the build directory its preset names. `build` invokes the tier's aggregate target, `<tier>-tier`, declared by `phosphor_tier_target()` near the end of each tier CMakeLists (the plasmazones one attaches its translations target after the call); `test` runs ctest scoped to `build/<tier>`. Because the build directory is shared, moon does not cache build outputs and ccache remains the compile cache. A tier gets its own build directory, and with it a moon-cached output, once it can be configured standalone against an installed upstream tier.
 
 Install is a whole-tree verb on the `repo` project, not a per-tier one, because CMake cannot install a subset here: none of the install rules declares a `COMPONENT`, so `cmake --install build --component <tier>` would install nothing. Per-tier install verbs need every rule tagged with a component first. Follow an install with `moon run repo:post-install` to refresh the KDE service cache, the same step `make post-install` runs.
 
@@ -263,18 +263,18 @@ Layer enforcement is on (`.moon/workspace.yml`): an application tier may not dep
 - `qt_add_qml_module()` — ALL QML files must be listed (missing = runtime "not a type" error)
 - `cmake -DUSE_KDE_FRAMEWORKS=ON` (default) or `OFF` for portable Qt-only build
 - KF6 deps when ON: `KCMUtils`, `GlobalAccel`, `ColorScheme` (the KWin effect's KColorScheme); optional: `Activities`
-- Pluggable backends: `IConfigBackend`, `PhosphorShortcuts::IBackend`, `IWallpaperProvider`
+- Pluggable backends: `PhosphorConfig::IBackend`, `PhosphorShortcuts::IBackend`, `IWallpaperProvider`
 - Standalone settings app (`plasmazones-settings`) + minimal KCM launcher
 
 ### Directory Structure
 The tree is four product tiers plus repo-level support directories. Each tier has its own `CMakeLists.txt` (entered from the root one) and its own `moon.yml` project.
 ```
 phosphor-libs/           — tier 1: core LGPL libraries
-  libs/phosphor-*/       — engines, rendering, layer-shell, animation, config, ...
+  libs/phosphor-*/       — engines, rendering, layer-shell, animation, config, service-idle, ...
   data/schemas/          — JSON schemas the libraries compile in
   extern/                — vendored Luau + valijson tarballs
 phosphor-shell-libs/     — tier 2: shell libraries (BUILD_PHOSPHOR_SHELL)
-  libs/phosphor-*/       — theme, popout, ipc, phosphor-shell*, phosphor-service-*
+  libs/phosphor-*/       — theme, popout, ipc, phosphor-shell*, phosphor-service-* (all but idle)
   examples/              — demos and CLI acceptance harnesses
 phosphor-shell/          — tier 3: the shell binary (BUILD_PHOSPHOR_SHELL)
   src/                   — shell process controllers and transports
@@ -324,7 +324,7 @@ Not exhaustive: `scripts/`, `packaging/` and `docs/` sit at the root; `plasmazon
 - Sanitize file paths to prevent directory traversal
 
 ## D-Bus
-- XML interface files → `qt6_add_dbus_adaptor()`
+- The daemon adaptors are hand-written `QDBusAbstractAdaptor` subclasses in `plasmazones/src/dbus`, kept in sync with the installed `plasmazones/dbus/*.xml`; only the shell service libraries generate theirs with `qt6_add_dbus_adaptor()`
 - `QDBusConnection::sessionBus()`; keep methods simple; `QVariantMap` for complex data
 
 ## Git

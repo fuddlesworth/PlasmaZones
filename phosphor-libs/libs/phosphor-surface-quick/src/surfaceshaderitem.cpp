@@ -3,18 +3,18 @@
 
 #include "PhosphorSurfaceQuick/SurfaceShaderItem.h"
 
-#include <QLoggingCategory>
-
 #include <PhosphorRendering/ShaderEffect.h>
 #include <PhosphorRendering/ShaderNodeRhi.h>
 
 #include <PhosphorShaders/ShaderRegistry.h>
+#include <PhosphorSurface/SurfaceShaderEffect.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 #include <PhosphorSurface/SurfaceUniformProfile.h>
 
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QLoggingCategory>
 #include <QStandardPaths>
 
 #include <memory>
@@ -23,6 +23,13 @@
 namespace PhosphorSurfaceQuick {
 
 Q_LOGGING_CATEGORY(lcSurfaceQuick, "phosphorsurfacequick")
+
+// The surface contract's buffer-pass budget and the rendering node's are two
+// constants in two libraries that cannot include each other (phosphor-surface
+// stays Core/Gui-only for the KWin effect). This library links both, so it is
+// where the pin lives; the animation family pins its twin in contract_pins.cpp.
+static_assert(PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses == PhosphorRendering::kMaxBufferPasses,
+              "surface buffer-pass budget must match the rendering node's iChannel slot count");
 
 // ============================================================================
 // Construction / Destruction

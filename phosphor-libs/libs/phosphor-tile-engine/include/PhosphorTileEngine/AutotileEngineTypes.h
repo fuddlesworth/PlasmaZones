@@ -8,6 +8,7 @@
 #include <QRect>
 #include <QString>
 #include <memory>
+#include <unordered_map>
 
 namespace PhosphorTiles {
 class SplitTree;

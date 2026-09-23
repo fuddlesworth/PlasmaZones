@@ -1025,9 +1025,12 @@ add_test(NAME test_zone_preview_highlight COMMAND test_zone_preview_highlight)
 # plasmazones_rendering supplies ZoneShaderItem, which the test registers under
 # "PlasmaZones 1.0" (mirroring the daemon/editor composition roots) so
 # ZoneShaderRenderer's `import PlasmaZones` resolves. The SurfaceDecoration
-# canary moved with the host to phosphor-surface-quick's test_surfaceshaderitem.
+# item tests moved with the host to phosphor-surface-quick's
+# test_surfaceshaderitem; one slot here still instantiates it through the
+# org.phosphor.surface STATIC plugin link, the composition the daemon and the
+# settings app rely on, so that link is pinned from this tier too.
 add_executable(test_shared_module_load ui/test_shared_module_load.cpp)
-target_link_libraries(test_shared_module_load PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick plasmazones_shared_qmlplugin plasmazones_rendering)
+target_link_libraries(test_shared_module_load PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick plasmazones_shared_qmlplugin plasmazones_rendering PhosphorSurfaceQuick::PhosphorSurfaceQuickQml PhosphorSurfaceQuickQmlplugin)
 add_test(NAME test_shared_module_load COMMAND test_shared_module_load)
 
 # Pins the C++/QML contract the zone selector's cursor hit test depends on:
@@ -2641,6 +2644,7 @@ target_compile_definitions(test_surface_decoration_orientation PRIVATE
 target_link_libraries(test_surface_decoration_orientation
     PRIVATE
         Qt6::Test
+        Qt6::Core
         Qt6::DBus
         Qt6::Gui
         Qt6::Qml

@@ -52,8 +52,8 @@ only touched POD types.
 ### New target layering
 
 `ScreenManager` (and its header `Manager.h`) moved to a new
-`PhosphorScreens::Runtime` target. `::Core` is now pure POD — Qt6::Core/Gui only,
-no Wayland.
+`PhosphorScreens::Runtime` target. `::Core` is now pure POD. It links Qt6::Core/Gui
+only, with no Wayland.
 
 | Consumer need                                              | Link target                |
 |------------------------------------------------------------|----------------------------|
@@ -69,7 +69,7 @@ no Wayland.
 `PhosphorScreens::Runtime`. Consumers that only use POD types stay on `::Core`
 and shed the `PhosphorWayland` dependency. `Manager.h`'s export macro changed
 from `PHOSPHORSCREENSCORE_EXPORT` to `PHOSPHORSCREENSRUNTIME_EXPORT` (this macro
-name is internal to the header — no source change at call sites).
+name is internal to the header, so call sites need no source change).
 
 ## Phase: phosphor-control scaffolding
 
@@ -111,7 +111,7 @@ that key off the shape of the emitted `QVariantMap` should be audited:
    non-positive. Now each dimension is emitted on its own when it's
    positive. A screen that reports only its width (mid-startup probe,
    partial daemon reply, etc.) will surface a map with `width` set but
-   no `height` — QML that binds `map.height` will see `undefined` for
+   no `height`. QML that binds `map.height` will see `undefined` for
    that row rather than the previous "both keys missing" sentinel.
 
 2. **`resolution` is only emitted when BOTH width and height are positive.**
@@ -138,7 +138,7 @@ that key off the shape of the emitted `QVariantMap` should be audited:
    arrangement (e.g. a proportional multi-monitor map). Unlike `width` /
    `height`, position has no sentinel: `0` is a valid origin and negative
    coordinates are normal for outputs placed left of / above the primary,
-   so `x` / `y` are emitted unconditionally — they are always present.
+   so `x` / `y` are emitted unconditionally and are always present.
 
 5. **`displayLabel` is a precomputed, always-present label string.**
 

@@ -215,7 +215,10 @@ void Daemon::initCoreAdaptors()
 
     // Drop closed windows from m_lastEngineOrders so a manual→autotile toggle
     // doesn't replay a ghost id into the TilingState (recalculateLayout would
-    // then tile N+1 windows for N actual windows).
+    // then tile N+1 windows for N actual windows). The registry is ctor-owned
+    // and survives stop(), so sever this daemon-receiver connection first: a
+    // stop() → init() cycle would otherwise stack a second prune handler.
+    disconnect(m_windowRegistry.get(), &PhosphorEngine::WindowRegistry::windowDisappeared, this, nullptr);
     connect(m_windowRegistry.get(), &PhosphorEngine::WindowRegistry::windowDisappeared, this,
             [this](const QString& instanceId) {
                 pruneEngineOrdersForWindow(instanceId);
@@ -269,6 +272,10 @@ void Daemon::initCoreAdaptors()
     // warnCompositorBridgeMissing() fires once on timeout. Connecting to the
     // adaptor (not m_windowDragAdaptor) so a re-registration also cancels it.
     m_bridgeWatchdogTimer.setSingleShot(true);
+    // Value-member timer, so it outlives stop(): sever before connecting or a
+    // stop() → init() cycle stacks the timeout handler and a missing bridge
+    // then raises one notification per cycle.
+    disconnect(&m_bridgeWatchdogTimer, &QTimer::timeout, this, nullptr);
     connect(&m_bridgeWatchdogTimer, &QTimer::timeout, this, &Daemon::warnCompositorBridgeMissing);
     connect(m_compositorBridge, &CompositorBridgeAdaptor::bridgeRegistered, &m_bridgeWatchdogTimer,
             [this](const QString&, const QString&, const QStringList&) {

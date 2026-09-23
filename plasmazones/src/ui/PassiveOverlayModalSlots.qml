@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.phosphor.surface as PhosphorSurface
 import org.plasmazones.common as QFZCommon
@@ -25,7 +26,7 @@ import org.plasmazones.common as QFZCommon
 Item {
     id: modalSlotsRoot
 
-    required property var shellRoot
+    required property Window shellRoot
 
     readonly property alias snapAssistSlotItem: snapAssistSlot
     readonly property alias layoutPickerSlotItem: layoutPickerSlot

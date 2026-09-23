@@ -55,6 +55,8 @@
 
 #include "version.h"
 
+#include <QCommandLineParser>
+#include <QCoreApplication>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QIcon>
@@ -70,6 +72,34 @@ Q_LOGGING_CATEGORY(lcShell, "phosphorshell.main")
 
 int main(int argc, char* argv[])
 {
+    // Answer --help / --help-all / --version headlessly, before any
+    // Wayland-touching work, the same shape plasmazonesd uses: a scoped
+    // QCoreApplication that never opens a display, so a box without a
+    // compositor still gets an answer on stdout instead of a silent start.
+    // parse() rather than process(): an unknown flag is not fatal here, so
+    // the shell keeps ignoring what it does not understand. --help-all gets
+    // the ordinary help text, since the extended Qt-options form is
+    // reachable only through process(). The shell tier
+    // carries no PhosphorI18n link (see barcontroller.cpp), so the
+    // description is a plain literal like every other shell-side string.
+    {
+        QCoreApplication probe(argc, argv);
+        QCoreApplication::setApplicationName(QStringLiteral("phosphor-shell"));
+        QCoreApplication::setApplicationVersion(PlasmaZones::VERSION_STRING);
+
+        QCommandLineParser parser;
+        parser.setApplicationDescription(QStringLiteral("The Phosphor desktop shell"));
+        parser.addHelpOption();
+        parser.addVersionOption();
+        parser.parse(probe.arguments());
+        if (parser.isSet(QStringLiteral("help")) || parser.isSet(QStringLiteral("help-all"))) {
+            parser.showHelp(0);
+        }
+        if (parser.isSet(QStringLiteral("version"))) {
+            parser.showVersion();
+        }
+    }
+
     // MUST run before QGuiApplication is constructed: selects the
     // phosphorwayland Wayland shell-integration plugin (via the
     // QT_WAYLAND_SHELL_INTEGRATION env var that Qt Wayland's

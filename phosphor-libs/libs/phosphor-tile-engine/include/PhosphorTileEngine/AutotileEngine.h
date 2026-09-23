@@ -1607,7 +1607,7 @@ private:
      *        desktop/activity's (CurrentContext) or every key (AllContexts).
      *
      * The clear-scope/write-scope pairing rationale lives above
-     * propagateGlobalSplitRatio in AutotileEngine.cpp.
+     * propagateGlobalSplitRatio in src/autotileengine/layout_apply.cpp.
      */
     enum class PropagateScope {
         CurrentContext,

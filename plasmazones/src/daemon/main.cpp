@@ -96,7 +96,8 @@ DaemonOptions configureParser(QCommandLineParser& parser)
 //
 // This is not a style preference. Daemon::stop() acquires QMutexes, frees heap,
 // makes blocking D-Bus round trips (unregisterObject / unregisterService), tears
-// down QFileSystemWatchers and joins a QThreadPool with waitForDone(500). Running
+// down QFileSystemWatchers and joins a QThreadPool (waitForDone(500) in stop(),
+// then the pool's destructor joins whatever is still running). Running
 // that from signal context is a real deadlock: under --log-file the installed
 // message handler takes logMutex, so a signal arriving while any thread already
 // holds it wedges the process on the first log line stop() emits.
@@ -155,7 +156,11 @@ int main(int argc, char* argv[])
         QCommandLineParser parser;
         configureParser(parser);
         parser.parse(probe.arguments());
-        if (parser.isSet(QStringLiteral("help"))) {
+        // addHelpOption() also registers --help-all. Both get the ordinary
+        // help text here: the extended Qt-options form is reachable only
+        // through process(), and the point of this block is to exit before
+        // a display is touched, not to match that output.
+        if (parser.isSet(QStringLiteral("help")) || parser.isSet(QStringLiteral("help-all"))) {
             parser.showHelp(0);
         }
         if (parser.isSet(QStringLiteral("version"))) {
@@ -171,8 +176,8 @@ int main(int argc, char* argv[])
     // This is a Wayland-only daemon, so "no wayland socket" means "nothing to
     // do". Resolving the socket path handles the empty/unset WAYLAND_DISPLAY
     // case too (Qt's default "wayland-0"), which previously bypassed this guard
-    // and let Qt abort. See queryPlasmaWorkspaceState() in daemon.cpp for the
-    // full phantom-session analysis.
+    // and let Qt abort. See queryPlasmaWorkspaceState() in daemon/lifecycle.cpp
+    // for the full phantom-session analysis.
     //
     // Skip the probe entirely when WAYLAND_SOCKET is set: libwayland (and thus
     // Qt's wayland QPA) connects via that inherited fd and ignores
@@ -458,7 +463,7 @@ int main(int argc, char* argv[])
             qCWarning(PlasmaZones::lcDaemon) << "Received signal" << signum << "- shutting down";
             // Hand the signals back to the kernel before quitting. Everything
             // after exec() returns — Daemon::stop() with its blocking D-Bus
-            // round trips and 500ms thread-pool join, then the window teardown —
+            // round trips and thread-pool join, then the window teardown —
             // runs with no event loop reading this pipe, so a second SIGTERM in
             // that window would be written and never acted on, leaving SIGKILL
             // as the only way out. Restoring the default disposition makes the

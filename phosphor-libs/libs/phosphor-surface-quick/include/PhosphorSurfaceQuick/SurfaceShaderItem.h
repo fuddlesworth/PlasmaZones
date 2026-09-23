@@ -4,8 +4,8 @@
 #pragma once
 
 #include <PhosphorRendering/ShaderEffect.h>
-
 #include <PhosphorSurfaceQuick/phosphorsurfacequick_export.h>
+
 #include <QPointF>
 #include <QRectF>
 #include <QSizeF>

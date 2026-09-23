@@ -216,7 +216,7 @@ GPL3 = "GPL-3.0-or-later"
 # Anchored to the two real data trees. An unanchored "(^|/)data/" also
 # swallowed plasmazones/tests/**/data/, quietly un-governing real GPL-3
 # sources that happened to sit in a directory called data.
-LICENSE_UNGOVERNED = re.compile(r"^(plasmazones|phosphor)/data/")
+LICENSE_UNGOVERNED = re.compile(r"^(plasmazones|phosphor-libs)/data/")
 
 
 def expected_license(path: str) -> str | None:

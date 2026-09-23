@@ -287,6 +287,12 @@ Item {
             qWarning() << "SurfaceDecoration creation errors:" << comp.errorString();
         }
         QVERIFY(obj != nullptr);
+        // Non-null is not enough: a qmldir that resolved the name to some
+        // other creatable type would pass that check. Pin the host's contract.
+        QVERIFY(obj->inherits("QQuickItem"));
+        QVERIFY(obj->property("decorationChain").isValid());
+        QVERIFY(obj->property("decorationOuterPadding").isValid());
+        QCOMPARE(obj->property("chainReady").toBool(), false);
     }
 
     /// SurfaceDecoration's readiness gate compares a stage against

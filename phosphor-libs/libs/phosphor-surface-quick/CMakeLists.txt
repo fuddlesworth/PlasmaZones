@@ -16,11 +16,15 @@
 #     also registers SurfaceShaderItem.
 #
 # Consumers: the plasmazones daemon (OSD and popup decorations), the settings
-# app (live decoration preview) and the phosphor-shell binary (ShellChrome).
+# app (live decoration preview), the phosphor-shell binary (ShellChrome) and
+# the plasmazones unit tests that exercise the host and the item's bindings.
 # The shell tier depending on this library rather than on the plasmazones
 # tier is what keeps the moon layer graph acyclic.
 
-cmake_minimum_required(VERSION 3.16)
+# 3.19 floor: this file uses cmake_language(DEFER CALL ...) for the plugin
+# rpath. A lower floor would fail mid-configure with an unknown-command error
+# instead of a clear minimum-version message.
+cmake_minimum_required(VERSION 3.19)
 
 set(PHOSPHORSURFACEQUICK_VERSION "0.1.0")
 
@@ -225,6 +229,13 @@ target_link_libraries(PhosphorSurfaceQuickQml
 # out-of-tree QML consumer that imports org.phosphor.surface from the
 # installed QML path. Same opt-in shape as phosphor-control.
 
+# Off by default: every in-tree consumer links the STATIC module, including
+# the shell binary, so the installed user-editable copy of shell.qml still
+# resolves `import org.phosphor.surface` at runtime. What the STATIC-only
+# build does not provide is qmldir/qmltypes on the installed QML path, so
+# qmllint and qmlls have no types for this module when pointed at that copy
+# (phosphor-animation installs its twin and gets them). Turn this on to ship
+# them.
 option(PHOSPHOR_SURFACE_QUICK_QML_INSTALL
     "Also build a SHARED variant of org.phosphor.surface and install it"
     OFF)
@@ -348,12 +359,25 @@ install(FILES
 if(PHOSPHOR_SURFACE_QUICK_QML_INSTALL)
     set(_phosphor_surface_quick_qml_install_dir "${KDE_INSTALL_QMLDIR}/org/phosphor/surface")
 
-    install(TARGETS PhosphorSurfaceQuickQmlShared ${_phosphor_surface_quick_qml_shared_plugin_target}
-        EXPORT PhosphorSurfaceQuickQmlTargets
+    # No EXPORT clause on purpose: QML modules are consumed through the QML
+    # import path at runtime, not through find_package, and an export set
+    # that is never install(EXPORT)ed leaves a dangling reference (the same
+    # correction phosphor-control made).
+    install(TARGETS PhosphorSurfaceQuickQmlShared
         RUNTIME DESTINATION ${_phosphor_surface_quick_qml_install_dir}
         LIBRARY DESTINATION ${_phosphor_surface_quick_qml_install_dir}
         ARCHIVE DESTINATION ${_phosphor_surface_quick_qml_install_dir}
     )
+    # Qt realises the plugin target lazily in its finalizer; gate on its
+    # existence so the module install succeeds even when it has not
+    # materialised yet (the rpath helper above warns in the same condition).
+    if(TARGET ${_phosphor_surface_quick_qml_shared_plugin_target})
+        install(TARGETS ${_phosphor_surface_quick_qml_shared_plugin_target}
+            RUNTIME DESTINATION ${_phosphor_surface_quick_qml_install_dir}
+            LIBRARY DESTINATION ${_phosphor_surface_quick_qml_install_dir}
+            ARCHIVE DESTINATION ${_phosphor_surface_quick_qml_install_dir}
+        )
+    endif()
 
     install(FILES
             ${CMAKE_BINARY_DIR}/qml_install/org/phosphor/surface/qmldir

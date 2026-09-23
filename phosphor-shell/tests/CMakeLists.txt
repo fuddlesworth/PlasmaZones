@@ -12,8 +12,9 @@ find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Test)
 # Only the shell's own src. The three plasmazones entries that used to sit here
 # (src, the generated-export-header binary dir, and tests/unit for "helpers/X.h")
 # were all dead: no file under phosphor-shell/tests includes a helpers/ header,
-# and the single plasmazones include in the shell sources is in main.cpp, which
-# no test target compiles. Leaving them would keep an undeclared tier-4 header
+# and no file under phosphor-shell/src includes a plasmazones header any more
+# (the surface decoration host now comes from phosphor-surface-quick). Leaving
+# them would keep an undeclared tier-4 header
 # path open to every future shell test, which is the reach the tier split exists
 # to make visible. If a shell test ever genuinely needs a plasmazones fixture,
 # add the path on that one target with target_include_directories and say why.

@@ -48,9 +48,14 @@ import QtQuick.Window
  * `shaderContentRect !== undefined` guard below then falls back to full-anchor
  * geometry when no PopupFrame publishes that rect.
  *
+ * Hosts must declare `shaderAnchor` as a literal (`property bool shaderAnchor:
+ * true`), never as a binding: the anchor-routing below demotes and restores it
+ * with imperative writes, and a write to a bound property severs the binding
+ * for good.
+ *
  * ## Hide-source idiom — mirrors SurfaceAnimator verbatim
  *
- * `SurfaceAnimator::attachShaderToAnchor` (libs/phosphor-animation) snapshots
+ * `SurfaceAnimator::attachShaderToAnchor` (phosphor-libs/libs/phosphor-animation) snapshots
  * the anchor via a `QQuickShaderEffectSource` with `hideSource: true`, parked
  * far off-screen and `live: true`, then feeds THAT source to the shader's
  * `setSourceItem`. `hideSource: true` is what suppresses the anchor's own direct
@@ -63,8 +68,8 @@ import QtQuick.Window
  *
  * ## Lifecycle
  *
- * The host slot (PassiveOverlayShell.osdSlot / snapAssistSlot / layoutPickerSlot
- * / zoneSelectorSlot) passes the loaded content root as `contentItem` and the
+ * The host slot (an OSD, popup or chrome slot in whichever application mounts
+ * this component) passes the loaded content root as `contentItem` and the
  * C++-resolved decoration props. When `decorationChain` is empty (no pack
  * resolves for this surface path) the component is inert: the capture/shader
  * items don't activate and the card draws normally with its native
@@ -410,8 +415,8 @@ Item {
         height: (root.shaderAnchorItem ? root.shaderAnchorItem.height : 0) + root.outerPad * 2
         x: offscreenCoord
         y: offscreenCoord
-        // MUST stay visible: SurfaceAnimator's rationale (surfaceanimator.cpp
-        // ~640) is that visible:false (and opacity:0) suppress updatePaintNode
+        // MUST stay visible: SurfaceAnimator's rationale (phosphor-animation's
+        // surfaceanimator.cpp) is that visible:false (and opacity:0) suppress updatePaintNode
         // and therefore the FBO render — starving the shader's uTexture0. The
         // off-screen park above is what hides it; Qt keeps processing it there.
         // When no pack resolves, sourceItem is null + hideSource false, so this

@@ -195,7 +195,6 @@ target_link_libraries(phosphor-shell
         PhosphorServiceSession::PhosphorServiceSession
         PhosphorLayer::PhosphorLayer
         PhosphorWayland::PhosphorWayland
-        PhosphorRendering::PhosphorRendering
         # Linked from shell/ (the bundled shell QML module): bakes the default shell.qml
         # tree into the binary as a qt-qml-module resource. Two effects:
         # (1) qmlcachegen / qmlsc run at build time (faster cold start,

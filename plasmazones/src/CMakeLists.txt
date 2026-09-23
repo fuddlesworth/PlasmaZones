@@ -530,6 +530,7 @@ install(TARGETS plasmazones_shaderpreview
 set(plasmazones_daemon_SRCS
     daemon/main.cpp
     daemon/rendering/vulkansupport.cpp
+    daemon/rendering/vulkansupport.h
     daemon/daemon.cpp
     daemon/controllers/enginefactory.cpp
     daemon/controllers/shortcutmanager_adhoc.cpp

@@ -6,7 +6,6 @@
 #include <PhosphorSurfaceQuick/SurfaceShaderItem.h>
 #include <PhosphorRendering/ZoneLabelTexture.h>
 
-#include <QColor>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -14,18 +13,13 @@
 #include <QImage>
 #include <QMetaProperty>
 #include <QMetaType>
-#include <QPointF>
 #include <QQmlApplicationEngine>
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QRegularExpression>
 #include <QSet>
-#include <QSignalSpy>
-#include <QSizeF>
 #include <QTest>
 #include <QUrl>
-#include <QVariantMap>
-#include <QVector4D>
 #include <qqml.h>
 
 using PhosphorSurfaceQuick::SurfaceShaderItem;

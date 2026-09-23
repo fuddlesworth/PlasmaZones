@@ -45,7 +45,7 @@ permissions:
   contents: read
 
 # One in-flight run per ref, matching kwin-rebuild-watch.yml and release.yml.
-# Without this every push to a PR ran the whole matrix — now five container jobs,
+# Without this every push to a PR ran the whole matrix — now seven container jobs,
 # each doing a full pacman -Syu, build and ctest — to completion, including the
 # runs whose results nobody will ever read. Cancellation is limited to pull
 # requests: a superseded PR push is genuinely dead work, whereas a push to a
@@ -456,7 +456,7 @@ jobs:
         run: |
           set -euo pipefail
           ninja -C build -t targets all > targets.txt
-          for tier in phosphor phosphor-shell-libs phosphor-shell plasmazones; do
+          for tier in phosphor-libs phosphor-shell-libs phosphor-shell plasmazones; do
             if ! grep -q "^${tier}-tier:" targets.txt; then
               echo "missing aggregate target: ${tier}-tier" >&2
               exit 1

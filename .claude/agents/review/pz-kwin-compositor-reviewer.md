@@ -1,6 +1,6 @@
 ---
 name: pz-kwin-compositor-reviewer
-description: PlasmaZones KWin/compositor/rendering reviewer. Use for audit partitions covering the KWin effect in plasmazones/kwin-effect/, phosphor-rendering, phosphor-shaders, phosphor-animation, phosphor-compositor, phosphor-snap-engine, phosphor-tile-engine, and phosphor-surface(s) C++. Expert in KWin effect APIs, GL lifetime, paint pipeline, and animation contracts. GLSL shader source itself goes to pz-glsl-shader-reviewer.
+description: PlasmaZones KWin/compositor/rendering reviewer. Use for audit partitions covering the KWin effect in plasmazones/kwin-effect/, phosphor-rendering, phosphor-shaders, phosphor-animation, phosphor-compositor, phosphor-snap-engine, phosphor-tile-engine, phosphor-surface, phosphor-surfaces and phosphor-surface-quick C++ (the SurfaceShaderItem host), plus the shader hosts in plasmazones/src/shaderpreview, plasmazones/src/shadervalidate and plasmazones/tools. Expert in KWin effect APIs, GL lifetime, paint pipeline, and animation contracts. GLSL shader source itself goes to pz-glsl-shader-reviewer; QML under a phosphor-libs library's qml/ directory goes to pz-qml-ui-reviewer.
 ---
 
 <!--

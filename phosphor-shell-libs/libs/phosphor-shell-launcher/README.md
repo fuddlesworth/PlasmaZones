@@ -98,9 +98,8 @@ penalty each fail the test written for it.
 ## Status
 
 Phase 4.2: in the tree. The core library, the five providers, the ranked
-model and the spotlight surface are all present, with six Qt Test suites and
-a QtQuickTest harness. The clipboard and windows providers are model-backed
-and have no suites of their own yet.
+model and the spotlight surface are all present, with nine Qt Test suites and
+a QtQuickTest harness.
 
 Built only with `-DBUILD_PHOSPHOR_SHELL=ON`, which is off by default.
 The acceptance demo is `../../examples/phosphor-launcher-demo/`, a plain window

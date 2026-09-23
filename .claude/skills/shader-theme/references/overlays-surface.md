@@ -101,7 +101,7 @@ Required `id`, `name`, `fragmentShader`, `parameters` (may be `[]`). Top level i
 `category`, `preview`, `vertexShader`, `animated`, `audio`, `providesBorder`,
 `providesOpacityTint`, `needsBackdrop`, `interiorOpaque`, `multipass`, `bufferShaders` (max 4),
 `bufferScale` (0.125..1.0), `bufferFeedback`, `bufferWrap(s)`, `bufferFilter(s)`, `depthBuffer`,
-`halfFloatBuffers`, `paddingParam`, `textures` (max 3), and the legacy `handlesOpacity`
+`halfFloatBuffers`, `paddingParam`, `textures` (max 3), `presets`, and the legacy `handlesOpacity`
 (accepted, ignored; do not write it). Max 48 params. No `slot` field (auto-slot by
 declaration order). Param keys, and ONLY these, because the schema is
 `additionalProperties: false`: `id, name, description, group, type, default, min, max, step`.

@@ -17,7 +17,7 @@ script, and reads the result back. It deliberately knows nothing about what the
 scripts compute.
 
 - **`LuauEngine`.** Owns one `lua_State`. Lifecycle: construct → `init`
-  (open restricted stdlib, wire the interrupt callback, install the capped
+  (open Luau's stdlib, which ships no `io` or `package` library, wire the interrupt callback, install the capped
   allocator) → `runPrelude` (zero or more, to install host globals such as a
   domain standard library) → `sandbox` (freeze globals + stdlib) → `loadModule`
   (per script) → `callModule` / `moduleField`. The public surface is entirely

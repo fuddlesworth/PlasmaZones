@@ -126,7 +126,7 @@ static_assert(static_cast<int>(PhosphorRules::MaxGap) == Defaults::MaxGap,
 static_assert(::PhosphorZones::ZoneDefaults::BorderWidthMax == 10
                   && ::PhosphorZones::ZoneDefaults::BorderRadiusMax == 50,
               "Zone-overlay border bounds moved — update kMaxOverlayBorderWidth / kMaxOverlayBorderRadius "
-              "in libs/phosphor-rules/src/ruleaction_builtins_p.h to match");
+              "in phosphor-libs/libs/phosphor-rules/src/ruleaction_builtins_p.h to match");
 
 namespace {
 
@@ -290,8 +290,9 @@ Daemon::Daemon(QObject* parent)
     m_scrollingTemplateStore->loadTemplates();
     buildStandardLayoutSourceBundle(m_layoutSources, m_layoutManager.get(), m_algorithmRegistry.get(),
                                     m_scrollingTemplateStore.get());
-    // Cache the bundle's autotile source once so the four init() wiring
-    // sites that need it don't each re-call source(QStringLiteral("autotile"))
+    // Cache the bundle's autotile source once so the three wiring sites that
+    // need it (LayoutAdaptor, OverlayService, UnifiedLayoutController) don't
+    // each re-call source(QStringLiteral("autotile"))
     // (one literal typo away from silently breaking preview-cache reuse).
     m_autotileLayoutSource = m_layoutSources.source(PhosphorTiles::autotileLayoutSourceName());
 

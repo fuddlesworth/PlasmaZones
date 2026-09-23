@@ -57,7 +57,6 @@
 #include <QProcess>
 #include <QQmlContext>
 #include <QQuickView>
-#include <QtQml/qqml.h>
 #include <QSGRendererInterface>
 #include <QSet>
 #include <QTemporaryDir>
@@ -70,8 +69,6 @@
 
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
-
-#include <PhosphorSurfaceQuick/SurfaceShaderItem.h>
 
 using PhosphorSurfaceShaders::SurfaceShaderRegistry;
 

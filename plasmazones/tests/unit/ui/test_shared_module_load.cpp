@@ -21,6 +21,11 @@ Q_IMPORT_PLUGIN(org_plasmazones_commonPlugin)
  * pins component CREATION for each public type in the shared module, so a
  * load regression fails here with the real nested error message instead of
  * silently breaking every settings page / popup that consumes the type.
+ *
+ * One slot steps outside the shared module: it instantiates SurfaceDecoration
+ * from org.phosphor.surface through the same STATIC plugin link the daemon and
+ * the settings app use, so a dropped PhosphorSurfaceQuickQmlplugin link fails
+ * here rather than as "SurfaceDecoration is not a type" on the first OSD show.
  */
 class TestSharedModuleLoad : public QObject
 {
@@ -137,6 +142,25 @@ private Q_SLOTS:
     void loadsDecorationPreviewCard()
     {
         loadType(QStringLiteral("DecorationPreviewCard"));
+    }
+    void loadsSurfaceDecorationThroughPluginLink()
+    {
+        QQmlComponent comp(&m_engine);
+        comp.setData(QByteArrayLiteral("import QtQuick\nimport org.phosphor.surface\n"
+                                       "SurfaceDecoration { decorationChain: []; decorationOuterPadding: 0 }\n"),
+                     QUrl(QStringLiteral("inline://SurfaceDecorationPluginLink.qml")));
+        QTRY_VERIFY_WITH_TIMEOUT(comp.status() != QQmlComponent::Loading, 5000);
+        if (comp.status() != QQmlComponent::Ready) {
+            qWarning() << "SurfaceDecoration status:" << comp.status() << "errors:" << comp.errorString();
+        }
+        QVERIFY2(!comp.isError(), qPrintable(comp.errorString()));
+        std::unique_ptr<QObject> obj(comp.create());
+        if (!obj) {
+            qWarning() << "SurfaceDecoration creation errors:" << comp.errorString();
+        }
+        QVERIFY(obj != nullptr);
+        QVERIFY(obj->inherits("QQuickItem"));
+        QVERIFY(obj->property("decorationChain").isValid());
     }
     void singletonResolves()
     {

@@ -32,7 +32,7 @@ The orchestrator applies your fixes without re-deriving them. A confident causal
 ## Build expertise to apply
 - `qt_add_qml_module()` (the repo uses the versionless spelling) must list EVERY QML file — a missing entry is a runtime "not a type" error, not a build error; cross-check module file lists against the directory contents.
 - AUTOMOC traps: a `Q_OBJECT` class defined after a multi-line raw string containing `//` is hidden from moc — check new raw strings in headers.
-- `USE_KDE_FRAMEWORKS=ON/OFF` must both stay buildable: KF6-only code (`KCMUtils`, `GlobalAccel`, optional `Activities`) needs guards; pluggable backends (`IConfigBackend`, `PhosphorShortcuts::IBackend`, `IWallpaperProvider`) keep the portable build honest.
+- `USE_KDE_FRAMEWORKS=ON/OFF` must both stay buildable: KF6-only code (`KCMUtils`, `GlobalAccel`, optional `Activities`) needs guards; pluggable backends (`PhosphorConfig::IBackend`, `PhosphorShortcuts::IBackend`, `IWallpaperProvider`) keep the portable build honest.
 - `find_package` ordering/visibility for phosphor-* libs has bitten before — verify new targets link what they include.
 - Never suggest `cmake --install` or sudo steps; the user installs.
 

@@ -22,7 +22,7 @@ tasks:
   # into PhosphorTiles. Either way an edit to the prelude changes what they
   # assert, and affectedness does not propagate from a dependency to its
   # dependent. So
-  # editing the prelude marks only `phosphor` affected, `moon run :test
+  # editing the prelude marks only `phosphor-libs` affected, `moon run :test
   # --affected` runs ctest against build/phosphor-libs, and the only tests that pin
   # those helpers never run. A workspace-relative input (leading `/`) closes
   # the gap; task inputs merge with the inherited set rather than replacing it.

@@ -81,7 +81,7 @@ endif()
 # LGPL-2.1's dynamic-linking exemption. Override to OFF only for
 # embedded / single-binary builds where the LGPL relinking obligation
 # is handled out-of-band (e.g. shipping the .o files alongside the
-# binary). Mirrors libs/phosphor-config's pattern.
+# binary). Mirrors phosphor-libs/libs/phosphor-config's pattern.
 option(PHOSPHOR_CONTROL_BUILD_SHARED
     "Build phosphor-control as a shared library (LGPL relinking-friendly)"
     ON)
@@ -167,7 +167,7 @@ set(phosphorcontrol_SRCS
 # it up without enumerating the ever-changing list by name; placed before
 # the first target so it also propagates to the examples/ and tests/
 # subdirectories added below. Mirrors phosphor-libs/libs/phosphor-animation and
-# src/shared — see those for the full rationale.
+# plasmazones/src/shared — see those for the full rationale.
 set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dirs")
 
 add_library(PhosphorControl ${_phosphor_control_lib_type}
@@ -266,10 +266,10 @@ target_compile_definitions(PhosphorControl PRIVATE
 #     target whose plugin .so + qmldir + qmltypes are installed under
 #     `${KDE_INSTALL_QMLDIR}/org/phosphor/control/`).
 #
-# A SHARED variant has not landed yet because every current consumer of
-# this library is in-tree (Phosphor settings app + the minimal example
-# in this directory). When the first out-of-tree consumer appears, copy
-# the phosphor-animation Shared pattern verbatim.
+# The SHARED variant (PhosphorControlQmlShared, further down) is opt-in
+# through PHOSPHOR_CONTROL_QML_INSTALL, off by default because every
+# in-tree consumer links the STATIC module. Turn it on for an out-of-tree
+# consumer that imports the module from the installed QML path.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # The QML module re-compiles the same public headers + sources as the C++

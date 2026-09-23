@@ -151,7 +151,7 @@ constexpr int DefaultAnimationSequenceMode = SequenceModeCascade;
 ///
 /// NOT clamped, and deliberately out of this library's reach:
 /// `PhosphorRendering::ShaderEffect::onPlayingTick`
-/// (`phosphor-libs/libs/phosphor-rendering/src/shadereffect.cpp`) pushes a raw
+/// (`phosphor-libs/libs/phosphor-rendering/src/shadereffect_setters.cpp`) pushes a raw
 /// wall-clock delta into a QML-hosted shader. phosphor-rendering does
 /// not link phosphor-animation, so wiring it up means adding that
 /// dependency — a layering call, not a drive-by. It self-mitigates a
