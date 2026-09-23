@@ -63,7 +63,10 @@ PanelWindow {
     readonly property bool _paneOpenEff: panel.paneOpen || panel.mapPaneOpen
     readonly property bool _paneExternalEff: panel.mapPaneOpen ? false : panel.paneExternal
     readonly property string _paneAnchorEff: panel.mapPaneOpen ? "placementmap" : panel.paneAnchor
-    readonly property int _paneWidthEff: panel.mapPaneOpen ? panel.mapPaneWidth : panel.paneWidth
+    // Keep the map width through its close animation. `mapPaneOpen` drops
+    // before the inline surface is gone, so using it here would make the
+    // map abruptly adopt the narrower host-pane width on the way out.
+    readonly property int _paneWidthEff: panel._mapPaneDisplayed ? panel.mapPaneWidth : panel.paneWidth
 
     // The map chip, once its slot has mounted it, for the expand request
     // and the urgency thickening.
