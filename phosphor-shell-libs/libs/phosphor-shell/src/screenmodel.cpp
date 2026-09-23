@@ -5,8 +5,11 @@
 
 #include <PhosphorLayer/IScreenProvider.h>
 
+#include <QLoggingCategory>
 #include <QQmlEngine>
 #include <QScreen>
+
+Q_LOGGING_CATEGORY(lcScreenModel, "phosphorshell.screenmodel")
 
 namespace PhosphorShell {
 
@@ -25,8 +28,21 @@ ScreenModel::ScreenModel(PhosphorLayer::IScreenProvider* provider, QObject* pare
     }
     m_screens = m_provider->screens();
 
-    connect(m_provider->notifier(), &PhosphorLayer::ScreenProviderNotifier::screensChanged, this,
-            &ScreenModel::onScreensChanged);
+    // Resolved once and guarded, matching ShellEngine::load: the notifier is
+    // optional — a screen provider need not expose one — and connecting to a
+    // null sender would silently do nothing but print two QObject::connect
+    // warnings per model. A null notifier means the model is a one-shot
+    // snapshot of the screens at construction: it still renders, it just never
+    // refreshes. Hoisted into a local rather than calling notifier() twice,
+    // since the interface does not promise a stable pointer across calls.
+    auto* notifier = m_provider->notifier();
+    if (notifier == nullptr) {
+        qCWarning(lcScreenModel)
+            << "screenProvider exposes no notifier — the screen list will not update on topology or primary changes";
+        return;
+    }
+
+    connect(notifier, &PhosphorLayer::ScreenProviderNotifier::screensChanged, this, &ScreenModel::onScreensChanged);
     // The provider's screensChanged signal fires for set / geometry changes
     // but not for a primary-screen swap on the same set. KDE allows changing
     // primary at runtime. We listen to the provider's primaryChanged
@@ -35,7 +51,7 @@ ScreenModel::ScreenModel(PhosphorLayer::IScreenProvider* provider, QObject* pare
     // virtual-screen provider with focused-monitor primary policy — gets
     // its bindings refreshed via its own state machine. The default
     // provider re-emits primaryChanged when qGuiApp does.
-    connect(m_provider->notifier(), &PhosphorLayer::ScreenProviderNotifier::primaryChanged, this,
+    connect(notifier, &PhosphorLayer::ScreenProviderNotifier::primaryChanged, this,
             &ScreenModel::onPrimaryScreenChanged);
 }
 
