@@ -113,7 +113,12 @@ if [ -f "$SERVICE_SRC" ]; then
     # Add LD_LIBRARY_PATH environment variable after [Service] line
     sed -i "/^\[Service\]/a Environment=\"LD_LIBRARY_PATH=$PREFIX/$LIBDIR\"" "$SERVICE_DEST"
 else
-    echo "Warning: Service file not found at $SERVICE_SRC"
+    # Fatal, not a warning: step 7 runs `systemctl --user enable --now`
+    # unguarded, which fails on the unit that was never copied, and set -e
+    # then kills the script AFTER the files and env file are written but
+    # BEFORE any of the completion guidance prints. Stop here instead.
+    echo "Error: service file not found at $SERVICE_SRC" >&2
+    exit 1
 fi
 
 # 4. Setup environment variables for KDE session

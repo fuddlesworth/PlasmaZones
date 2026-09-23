@@ -1,4 +1,12 @@
-# Trigger KDE sycoca cache rebuild when package is installed/removed
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Rebuild the KDE sycoca cache when the shipped .desktop files change.
+#
+# One interest, deliberately. dpkg trigger names are literal pathnames or
+# directory prefixes and are not globbed, so the previous
+# `/usr/lib/*/qt6/plugins/plasma/kcms` entry could never fire. The other
+# dropped entry, /usr/share/kservices6, is a directory this package installs
+# nothing into. /usr/share/applications does receive our KCM .desktop files,
+# so it is the one that matters.
 interest-noawait /usr/share/applications
-interest-noawait /usr/share/kservices6
-interest-noawait /usr/lib/*/qt6/plugins/plasma/kcms

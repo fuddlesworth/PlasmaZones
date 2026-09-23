@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2026 fuddlesworth
 # Generate packaging changelogs from CHANGELOG.md
 #
 # Usage:
@@ -210,8 +211,13 @@ generate_rpm() {
         rm -f "$headfile"
         echo "Updated %changelog in $specfile" >&2
     else
-        echo "Warning: $specfile not found, printing to stdout" >&2
-        cat "$tmpfile"
+        # Hard-fail, matching the missing-%changelog-marker branch above.
+        # Warning and returning success meant .copr/Makefile saw a clean
+        # exit and went on to rpmbuild with the spec's 1970 placeholder
+        # changelog still in place.
+        echo "Error: $specfile not found" >&2
+        rm -f "$tmpfile"
+        exit 1
     fi
 
     rm -f "$tmpfile"

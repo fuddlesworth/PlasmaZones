@@ -1,3 +1,4 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # flake.nix — PlasmaZones. Thin wiring only. The build recipe lives in

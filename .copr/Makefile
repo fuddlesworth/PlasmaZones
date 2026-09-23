@@ -1,3 +1,4 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
 # COPR SRPM build instructions
 # Called by COPR build system: make -f .copr/Makefile srpm outdir=<path>
 # Also usable locally: make -f .copr/Makefile srpm outdir=./results
@@ -27,7 +28,7 @@ srpm: $(SPEC)
 	mkdir -p /tmp/$(NAME)-srpm
 	tar czf /tmp/$(NAME)-srpm/$(NAME)-$(VERSION).tar.gz \
 		--transform 's,^\.,PlasmaZones-$(VERSION),' \
-		--exclude=.git --exclude=build .
+		--exclude=.git --exclude='build*' --exclude=.moon/cache --exclude=.claude .
 
 	# Build SRPM
 	mkdir -p /tmp/$(NAME)-rpmbuild

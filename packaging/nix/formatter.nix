@@ -1,3 +1,4 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # packaging/nix/formatter.nix — `nix fmt`. Formats Nix, C++, and QML in-tree,

@@ -128,8 +128,11 @@ done
 if [ "$REMOVE_CONFIG" = true ]; then
     echo "Removing configuration and layouts..."
     rm -rf "$PREFIX/share/plasmazones"
-    rm -f "$HOME/.config/plasmazonesrc"
-    rm -f "$HOME/.config/plasmazonesrc.bak"
+    # The user's own layouts live under XDG data, not under $PREFIX.
+    # Those coincide only when PREFIX is the default $HOME/.local, so
+    # with a --prefix elsewhere this prompt used to delete the config
+    # directory while leaving every saved layout behind.
+    rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/plasmazones"
     rm -rf "$HOME/.config/plasmazones"
     echo "Configuration removed."
 else

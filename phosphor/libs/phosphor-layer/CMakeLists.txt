@@ -219,8 +219,13 @@ if(NOT PHOSPHORLAYER_WITH_PHOSPHORWAYLAND)
     # pulls PhosphorWayland symbols, so shipping it in a minimal build would
     # break any consumer that #includes it expecting the target to resolve.
     install(CODE "
+        # \$ENV{DESTDIR}, like the two install(CODE) blocks in
+        # plasmazones/CMakeLists.txt. Without it a staged package build --
+        # which is every packaging path here: PKGBUILD, debian/rules via dh,
+        # and rpm's %cmake_install -- would delete this header from the BUILD
+        # HOST's real prefix instead of from the staging root.
         file(REMOVE
-            \"\${CMAKE_INSTALL_PREFIX}/${KDE_INSTALL_INCLUDEDIR}/PhosphorLayer/defaults/PhosphorWaylandTransport.h\")
+            \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${KDE_INSTALL_INCLUDEDIR}/PhosphorLayer/defaults/PhosphorWaylandTransport.h\")
     ")
 endif()
 
