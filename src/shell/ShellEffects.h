@@ -41,8 +41,9 @@ public:
     /// in (window-local logical pixels). An empty region disables it.
     /// Returns false when the item has no window yet or the backend is
     /// absent, so a caller can retry once the window exists.
+    /// A negative secondaryRadius uses the primary radius for both regions.
     Q_INVOKABLE static bool setBlurBehind(QQuickItem* item, const QRect& region, const QRect& secondary = {},
-                                          qreal radius = 0);
+                                          qreal radius = 0, qreal secondaryRadius = -1);
 
     /// Leave a visible region, such as the bar, available to the surface below.
     Q_INVOKABLE static bool setOverviewRegions(QQuickItem* item, const QRect& bar, const QRect& preview,

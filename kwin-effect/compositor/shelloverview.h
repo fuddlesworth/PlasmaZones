@@ -9,6 +9,7 @@
 #include <QRectF>
 #include <QTimer>
 #include <QVariantAnimation>
+#include <optional>
 namespace KWin {
 class Effect;
 class EffectWindow;
@@ -31,6 +32,10 @@ public:
     bool active() const;
     bool onOutput(KWin::LogicalOutput* output) const;
     bool appliesTo(KWin::EffectWindow* window) const;
+    // Shared identity/focus source for native titlebars, surface shaders and
+    // overview cards. Shell popups keep the last application visually focused.
+    std::optional<int> windowColorIndex(KWin::EffectWindow* window) const;
+    bool windowFocused(const QString& windowId) const;
     void transform(KWin::EffectWindow* window, KWin::WindowPaintData& data) const;
     void paint(const KWin::RenderTarget& target, const KWin::RenderViewport& viewport, KWin::EffectWindow* window,
                int mask, const KWin::Region& region, KWin::WindowPaintData& data) const;
@@ -60,6 +65,8 @@ private:
     bool m_closing = false;
     QTimer m_windowChanges;
     QString m_lastFocusedWindow;
+    // Stable for a window's lifetime; closing or reordering another window
+    // must not recolour surviving titlebars, surface shaders or overview cards.
     QHash<KWin::EffectWindow*, int> m_windowColors;
     int m_nextColor = 0;
 };

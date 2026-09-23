@@ -34,13 +34,14 @@ public:
     {
         return m_closePending;
     }
-    Q_INVOKABLE void show(const QString& screenName = QString());
-    Q_INVOKABLE void toggle(const QString& screenName = QString());
+    Q_INVOKABLE bool show(const QString& screenName = QString());
+    Q_INVOKABLE bool toggle(const QString& screenName = QString());
     Q_INVOKABLE void hide();
     Q_INVOKABLE void discard();
     Q_INVOKABLE bool apply(bool close = false);
     Q_INVOKABLE void keepEditing();
 Q_SIGNALS:
+    void openingFailed(const QString& error);
     void openScreenChanged();
     void screensChanged();
     void pageChanged();

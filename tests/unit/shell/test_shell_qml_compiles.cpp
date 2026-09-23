@@ -24,6 +24,8 @@
 // it needs no window, no D-Bus and no service daemon. What a component
 // costs to actually build is test_panel_open_cost's job.
 
+#include "shell/ControlCenterController.h"
+
 #include <PhosphorServiceBluetooth/QmlRegistration.h>
 #include <PhosphorServiceBrightness/QmlRegistration.h>
 #include <PhosphorServiceIconTheme/QmlRegistration.h>
@@ -43,7 +45,9 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
+#include <QFileInfo>
 #include <QQmlComponent>
+#include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
@@ -64,6 +68,8 @@ private Q_SLOTS:
     void everyShippedFileCompiles();
     void aBadPropertyAssignmentIsCaught();
     void statsPagesHaveWorkingLiveBindings();
+    void quickSettingsForwardsAppearanceFromForeignContext();
+    void detailPanelsForwardReturnFromForeignContext();
 
 private:
     std::unique_ptr<QQmlEngine> m_engine;
@@ -271,6 +277,147 @@ void TestShellQmlCompiles::statsPagesHaveWorkingLiveBindings()
         for (const auto& error : qvariant_cast<QList<QQmlError>>(warning.first()))
             messages.append(error.toString());
     }
+    QVERIFY2(messages.isEmpty(), qPrintable(messages.join(QLatin1Char('\n'))));
+}
+
+void TestShellQmlCompiles::quickSettingsForwardsAppearanceFromForeignContext()
+{
+    PhosphorShellApp::ControlCenterController controller(nullptr);
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty(QStringLiteral("ControlCenterRegistry"), &controller);
+    engine.rootContext()->setContextProperty(QStringLiteral("NotificationRegistry"),
+                                             QVariantMap{{QStringLiteral("doNotDisturb"), false},
+                                                         {QStringLiteral("serverActive"), false},
+                                                         {QStringLiteral("unreadCount"), 0}});
+    engine.rootContext()->setContextProperty(QStringLiteral("QuickSettings"),
+                                             QVariantMap{{QStringLiteral("nightLightEnabled"), false},
+                                                         {QStringLiteral("nightLightAvailable"), false},
+                                                         {QStringLiteral("powerProfile"), QStringLiteral("balanced")}});
+    QSignalSpy requests(&controller, &PhosphorShellApp::ControlCenterController::panelRequested);
+    QSignalSpy warnings(&engine, &QQmlEngine::warnings);
+    const auto source = QFINDTESTDATA("../../../examples/phosphor-shell/QuickSettingsSurface.qml");
+    QVERIFY(!source.isEmpty());
+    QQmlComponent hostComponent(&engine);
+    hostComponent.setData(
+        R"(
+        import QtQuick
+        import "."
+        Item {
+            id: owner
+            property string requestedPanel: ""
+            property Component popup: Component { QuickSettingsSurface { tileIds: [] } }
+            Connections {
+                target: ControlCenterRegistry
+                function onPanelRequested(panelId: string): void { owner.requestedPanel = panelId; }
+            }
+        }
+    )",
+        QUrl::fromLocalFile(QFileInfo(source).absolutePath() + QStringLiteral("/request-routing-test.qml")));
+    std::unique_ptr<QObject> host(hostComponent.create());
+    QVERIFY2(host, qPrintable(hostComponent.errorString()));
+    auto* popup = host->property("popup").value<QQmlComponent*>();
+    QVERIFY(popup);
+
+    // Match LayerPopoutTransport, which intentionally does not use the
+    // declaring component's context. The popup cannot access `owner` here.
+    std::unique_ptr<QObject> content(popup->beginCreate(engine.rootContext()));
+    popup->completeCreate();
+    QVERIFY2(content, qPrintable(popup->errorString()));
+    auto* item = qobject_cast<QQuickItem*>(content.get());
+    QVERIFY(item);
+    auto* appearance = namedItem(item, QStringLiteral("quickSettingsAppearance"));
+    QVERIFY(appearance);
+    QVERIFY(QMetaObject::invokeMethod(appearance, "clicked"));
+    QCOMPARE(requests.size(), 1);
+    QCOMPARE(requests.first().first().toString(), QStringLiteral("appearance"));
+    QCOMPARE(host->property("requestedPanel").toString(), QStringLiteral("appearance"));
+    QVERIFY(QMetaObject::invokeMethod(appearance, "clicked"));
+    QCOMPARE(requests.size(), 2);
+    QStringList messages;
+    for (const auto& warning : warnings)
+        for (const auto& error : qvariant_cast<QList<QQmlError>>(warning.first()))
+            messages.append(error.toString());
+    QVERIFY2(messages.isEmpty(), qPrintable(messages.join(QLatin1Char('\n'))));
+}
+
+void TestShellQmlCompiles::detailPanelsForwardReturnFromForeignContext()
+{
+    // LayerPopoutTransport creates these detail panels against the engine
+    // root context. Their handlers must use the registry bridge, never an
+    // id from shell.qml, or Back silently dies with a ReferenceError.
+    PhosphorShellApp::ControlCenterController controller(nullptr);
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty(QStringLiteral("ControlCenterRegistry"), &controller);
+    QSignalSpy requests(&controller, &PhosphorShellApp::ControlCenterController::controlCenterRequested);
+    QSignalSpy warnings(&engine, &QQmlEngine::warnings);
+    QQmlComponent hostComponent(&engine);
+    hostComponent.setData(
+        R"(
+        import QtQuick
+        Item {
+            property Component network: Component {
+                QtObject { signal backRequested; onBackRequested: ControlCenterRegistry.requestControlCenter("network") }
+            }
+            property Component bluetooth: Component {
+                QtObject { signal backRequested; onBackRequested: ControlCenterRegistry.requestControlCenter("bluetooth") }
+            }
+            property Component audio: Component {
+                QtObject { signal backRequested; onBackRequested: ControlCenterRegistry.requestControlCenter("audio") }
+            }
+            property Component stats: Component {
+                QtObject { signal networkSettingsRequested; onNetworkSettingsRequested: ControlCenterRegistry.requestControlCenter("systemmetrics") }
+            }
+        }
+        )",
+        QUrl(QStringLiteral("qrc:/detail-routing-test.qml")));
+    std::unique_ptr<QObject> host(hostComponent.create());
+    QVERIFY2(host, qPrintable(hostComponent.errorString()));
+
+    const auto shellPath = QFINDTESTDATA("../../../examples/phosphor-shell/shell.qml");
+    QVERIFY(!shellPath.isEmpty());
+    QFile shellFile(shellPath);
+    QVERIFY(shellFile.open(QIODevice::ReadOnly | QIODevice::Text));
+    const auto shellSource = shellFile.readAll();
+    QCOMPARE(shellSource.count("root.toggleControlCenter(root._lastPanelSource)"), 1);
+    for (const auto& panelId :
+         {QByteArray("network"), QByteArray("bluetooth"), QByteArray("audio"), QByteArray("systemmetrics")}) {
+        QByteArray needle("ControlCenterRegistry.requestControlCenter(\"");
+        needle += panelId;
+        needle += QByteArray("\")");
+        QCOMPARE(shellSource.count(needle), 1);
+    }
+
+    const auto make = [&host](const char* propertyName) {
+        auto* component = host->property(propertyName).value<QQmlComponent*>();
+        auto object = std::unique_ptr<QObject>(component->beginCreate(component->engine()->rootContext()));
+        component->completeCreate();
+        return object;
+    };
+    const auto invoke = [&requests](QObject* object, const char* signal, const QString& panelId) {
+        QVERIFY(object);
+        QVERIFY(QMetaObject::invokeMethod(object, signal));
+        QCOMPARE(requests.size(), 1);
+        QCOMPARE(requests.last().first().toString(), panelId);
+    };
+
+    // Keep each object alive until its signal has been delivered, and reset
+    // the spy so one broken route cannot make the next one look healthy.
+    auto network = make("network");
+    invoke(network.get(), "backRequested", QStringLiteral("network"));
+    requests.clear();
+    auto bluetooth = make("bluetooth");
+    invoke(bluetooth.get(), "backRequested", QStringLiteral("bluetooth"));
+    requests.clear();
+    auto audio = make("audio");
+    invoke(audio.get(), "backRequested", QStringLiteral("audio"));
+    requests.clear();
+    auto stats = make("stats");
+    invoke(stats.get(), "networkSettingsRequested", QStringLiteral("systemmetrics"));
+
+    QStringList messages;
+    for (const auto& warning : warnings)
+        for (const auto& error : qvariant_cast<QList<QQmlError>>(warning.first()))
+            messages.append(error.toString());
     QVERIFY2(messages.isEmpty(), qPrintable(messages.join(QLatin1Char('\n'))));
 }
 

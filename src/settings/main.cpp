@@ -6,6 +6,9 @@
 #include "core/platform/singleinstanceservice.h"
 #include "core/utils/translationloader.h"
 #include "config/configmigration.h"
+#ifdef PHOSPHOR_BUILD_SHELL
+#include "common/shelldecorationseeds.h"
+#endif
 #include "settings/controller/settingscontroller.h"
 #include "settingslaunchcontroller.h"
 #include "version.h"
@@ -201,6 +204,9 @@ int main(int argc, char* argv[])
     });
 
     PlasmaZones::SettingsController controller;
+#ifdef PHOSPHOR_BUILD_SHELL
+    PlasmaZones::installShellDecorationSeeds(*controller.settings());
+#endif
 
     // The animations page writes and deletes the very profile files the
     // bootstrap loader watches, and that watch is debounced by 50 ms with no

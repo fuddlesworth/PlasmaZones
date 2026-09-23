@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // NO `pragma ComponentBehavior: Bound` here, and it must not be added back.
-// Both inline Components in this file are instantiated from C++ with a context
+// Inline Components in this file are instantiated from C++ with a context
 // that is not their declaring one: PerScreenPanels builds each BarHost with a
 // fresh QQmlContext carrying `modelData`, and LayerPopoutTransport builds
 // powerMenuComponent against the engine's root context. Bound rejects exactly
@@ -44,12 +44,9 @@ Item {
         value: ShellMotion.reducedMotion || !Appearance.settings.motion
     }
 
-    // Surface packs on the chrome (A1 §2.4): the one decoration host every
-    // surface instantiates in its DecorationSlot. ShellChrome resolves the
-    // chain for the slot's surface path from the same decoration tree the
-    // Decoration pages edit; `revision` is what re-resolves it on a tree,
-    // palette or pack change. Handed to ShellChrome rather than referenced
-    // by id, because a per-screen delegate cannot see an id in this file.
+    // ShellChrome resolves the daemon's effective decoration tree, including
+    // appearance defaults and user overrides, for each surface path. Revision
+    // updates follow tree, palette and pack changes across engine reloads.
     Component {
         id: chromeDecoration
 
@@ -57,7 +54,7 @@ Item {
             property string surfacePath: ""
             property bool focused: true
 
-            decorationChain: Appearance.surfacePacks && ShellChrome.revision >= 0 && surfacePath !== "" ? ShellChrome.chainFor(surfacePath) : []
+            decorationChain: ShellChrome.revision >= 0 && surfacePath !== "" ? ShellChrome.chainFor(surfacePath) : []
             decorationOuterPadding: ShellChrome.revision >= 0 && surfacePath !== "" ? ShellChrome.outerPaddingFor(surfacePath) : 0
             surfaceFocused: focused
             animationsPaused: !Appearance.motion
@@ -115,20 +112,8 @@ Item {
 
         model: PhosphorShell.screens
 
-        // The control center is tethered to THIS bar's chip (05 §8). Phase
-        // 2 opens it as an ENGINE-PLACED PANE, a real toplevel the daemon
-        // positions (A2 §4), and the bar draws only the tether to it; the
-        // phase-1 pane painted inside the bar's surface stays as the
-        // floating fallback for an output with no placement engine.
-        //
-        // Everything the delegate reads must come from a CONTEXT PROPERTY,
-        // never an id in this file: PerScreenPanels builds each delegate
-        // with a fresh QQmlContext carrying `modelData`, so shell.qml's ids
-        // do not resolve inside one. Hence the open state lives on
-        // ControlCenterRegistry and the fallback pane content is declared
-        // inline here, in the delegate's own scope (the engine-placed
-        // pane's content is `paneComponent` below, built by the transport
-        // against the root context).
+        // Quick settings uses a layer popup. The optional pane transport keeps
+        // its bar-hosted fallback here, with ownership from its controller.
         delegate: BarHost {
             id: bar
 
@@ -145,8 +130,7 @@ Item {
             // dangles on hot-unplug, while this property is QPointer-backed
             // and simply reads null once the output dies. Hence the guard.
             paneOpen: bar.screen ? ControlCenterRegistry.openScreen === bar.screen.name : false
-            // External: the open pane is a toplevel, so no inline pane,
-            // only the tether routed to where the placement map says it is.
+            // The optional external pane uses a tether instead of inline content.
             paneExternal: ControlCenterRegistry.paneExternal
 
             // The bar is the only thing that can locate the pane (a
@@ -176,13 +160,17 @@ Item {
             readonly property string blurMaterial: Appearance.settings.material
             onBlurMaterialChanged: applyBlur()
             readonly property var bandWindow: bar.bandItem ? bar.bandItem.Window.window : null
+            readonly property real bandBlurRadius: bar.bandItem ? bar.bandItem.radius : 0
+            readonly property real mapBlurRadius: Appearance.radius
             function applyBlur(): void {
                 if (bar.bandWindow)
-                    ShellEffects.setBlurBehind(bar.bandItem, Appearance.settings.material !== "solid" ? bar.bandRect : Qt.rect(0, 0, 0, 0), Appearance.settings.material !== "solid" ? bar.mapBlurRect : Qt.rect(0, 0, 0, 0), Appearance.radius);
+                    ShellEffects.setBlurBehind(bar.bandItem, Appearance.settings.material !== "solid" ? bar.bandRect : Qt.rect(0, 0, 0, 0), Appearance.settings.material !== "solid" ? bar.mapBlurRect : Qt.rect(0, 0, 0, 0), bar.bandBlurRadius, bar.mapBlurRadius);
             }
             onBandWindowChanged: applyBlur()
             onBandRectChanged: applyBlur()
             onMapBlurRectChanged: applyBlur()
+            onBandBlurRadiusChanged: applyBlur()
+            onMapBlurRadiusChanged: applyBlur()
             Component.onCompleted: {
                 reportMode();
                 reportChip();
@@ -202,10 +190,6 @@ Item {
                 QuickSettingsSurface {
                     decoration: ShellChrome.decorationComponent
                     onCloseRequested: Popouts.close(Popouts.handleFor("control-center"))
-                    onPanelRequested: panelId => {
-                        Popouts.close(Popouts.handleFor("control-center"));
-                        root.toggleWidgetPanel(panelId, root._lastPanelSource);
-                    }
                 }
             }
         }
@@ -268,22 +252,13 @@ Item {
         locked: sessionCoordinator.lock.state !== 0
     }
 
-    // The engine-placed pane's content, built FRESH on every open by
-    // PanePopoutTransport against the engine's root context (so only
-    // context properties, never ids from this file), and destroyed with
-    // the toplevel on close. Same declaration as the fallback above; the
-    // two cannot share one Component because the delegate's is in a
-    // PerScreenPanels context the transport cannot reach.
+    // The layer popup and the optional pane transport share this content.
     Component {
         id: paneComponent
 
         QuickSettingsSurface {
             decoration: ShellChrome.decorationComponent
             onCloseRequested: Popouts.close(Popouts.handleFor("control-center"))
-            onPanelRequested: panelId => {
-                Popouts.close(Popouts.handleFor("control-center"));
-                root.toggleWidgetPanel(panelId, root._lastPanelSource);
-            }
         }
     }
 
@@ -312,7 +287,7 @@ Item {
     // delegate does not declare, where a stray binding fails silently.
     //
     // The same constraint is why this file must never gain
-    // `pragma ComponentBehavior: Bound` (see the header): both inline
+    // `pragma ComponentBehavior: Bound` (see the header): inline
     // Components here are instantiated from C++ against a foreign context.
     Component {
         id: powerMenuComponent
@@ -320,30 +295,42 @@ Item {
         PowerMenu {}
     }
 
-    // The control center is a pane tethered to the bar. main.cpp routes
-    // the "control-center" id to a PanePopoutTransport, which opens it as
-    // a toplevel the placement engine places (A2 §4), with the bar-socket
-    // transport behind it as the floating fallback (an output with no
-    // engine, or a toplevel that could not be built); both drive
-    // ControlCenterRegistry.openScreen. Going through Popouts rather than
-    // writing that property directly is what makes the Modal power menu
-    // close it, refuses it while a modal is up, and drains it on reload,
-    // all without this file remembering to.
-    //
-    // `content` is the pane's content for the toplevel; the fallback
-    // ignores it and the delegate above mounts its own. `targetScreen` is
-    // the output whose bar button fired, so a multi-head setup tethers the
-    // pane to that bar. Keyboard focus: a toplevel takes it as a window,
-    // which is what lets Escape close the pane (A2 §4.7). No dismiss on
-    // focus loss: a pane is a tile, and tiles do not vanish when you look
-    // elsewhere.
-    // The control center and the launcher share the default popout
-    // scope, so opening one CLOSES the other. That is the intended
-    // behaviour for two full-attention surfaces triggered from the same
-    // bar, and it is worth stating because nothing at either call site
-    // hints at it: give one of them its own scope and they would happily
-    // sit open together. The same scope is the A2 §4.7 arbitration for
-    // panes: a second pane id opened here replaces the first.
+    function openQuickSettingsPanel(panelId: string): void {
+        const source = root._lastPanelSource;
+        const screenName = root.controlCenterScreen || ControlCenterRegistry.screenOf(source)?.name || "";
+        Popouts.close(Popouts.handleFor("control-center"));
+        if (panelId === "appearance")
+            PickerRegistry.show(screenName);
+        else
+            root.toggleWidgetPanel(panelId, source);
+    }
+
+    Connections {
+        target: ControlCenterRegistry
+        function onPanelRequested(panelId: string): void {
+            root.openQuickSettingsPanel(panelId);
+        }
+        function onControlCenterRequested(panelId: string): void {
+            const handle = Popouts.handleFor("bar.panel." + panelId);
+            if (handle !== "")
+                Popouts.close(handle);
+            root.toggleControlCenter(root._lastPanelSource);
+        }
+    }
+
+    Connections {
+        target: PickerRegistry
+        function onOpeningFailed(error: string): void {
+            NotificationRegistry.send(qsTr("Could not open Appearance"), error);
+        }
+    }
+
+    // Track the actual layer popup, independently of the optional pane route.
+    property string controlCenterScreen: ""
+    property string controlCenterHandle: ""
+
+    // Quick settings and the launcher share a Cooperative scope. Opening one
+    // closes the other; a Modal surface closes both and prevents new opens.
     function toggleControlCenter(source: Item): void {
         // screenOf hands back a QScreen the C++ side owns; the controller
         // marks it CppOwnership before returning, so the JS GC cannot
@@ -353,7 +340,7 @@ Item {
         const target = ControlCenterRegistry.screenOf(source);
         const centre = BarRegistry.anchorCenterFor(source);
         const anchored = centre >= 0;
-        const railT = anchored && target && target.width > 0 ? Math.max(0, Math.min(1, centre / target.width)) : 0.5;
+        const railT = anchored && target && target.geometry.width > 0 ? Math.max(0, Math.min(1, centre / target.geometry.width)) : 0.5;
         const request = {
             "popoutId": "control-center",
             "content": paneComponent,
@@ -369,21 +356,19 @@ Item {
                 "panelWidth": Appearance.panelWidth
             }
         };
-        // The arbiter keys on the popout id alone, which is right for the
-        // launcher and the power menu but not for a pane that belongs to
-        // one bar. Without this check, pressing the button on a SECOND
-        // monitor while the panel is open on the first just closes it, and
-        // the screen this call went to the trouble of resolving is thrown
-        // away. Move it instead: close there, open here.
-        const openOn = ControlCenterRegistry.openScreen;
-        if (openOn !== "" && target && openOn !== target.name) {
-            const handle = Popouts.handleFor("control-center");
-            if (handle !== "")
-                Popouts.close(handle);
-            Popouts.open(request);
-            return;
+        // Repeated activation toggles on one output and transfers across outputs.
+        const previous = Popouts.handleFor("control-center");
+        if (previous !== "") {
+            const move = target && root.controlCenterScreen !== target.name;
+            Popouts.close(previous);
+            if (!move)
+                return;
         }
-        Popouts.toggle(request);
+        const handle = Popouts.open(request);
+        if (handle !== "") {
+            root.controlCenterHandle = handle;
+            root.controlCenterScreen = target ? target.name : "";
+        }
     }
 
     // `source` is the bar button that summoned it, or null for a keybind:
@@ -490,7 +475,7 @@ Item {
         NetworkPanel {
             onBackRequested: {
                 Popouts.close(Popouts.handleFor("bar.panel.network"));
-                root.toggleControlCenter(root._lastPanelSource);
+                ControlCenterRegistry.requestControlCenter("network");
             }
             onCloseRequested: Popouts.close(Popouts.handleFor("bar.panel.network"))
         }
@@ -502,7 +487,7 @@ Item {
         BluetoothPanel {
             onBackRequested: {
                 Popouts.close(Popouts.handleFor("bar.panel.bluetooth"));
-                root.toggleControlCenter(root._lastPanelSource);
+                ControlCenterRegistry.requestControlCenter("bluetooth");
             }
             onCloseRequested: Popouts.close(Popouts.handleFor("bar.panel.bluetooth"))
         }
@@ -514,7 +499,7 @@ Item {
         AudioPanel {
             onBackRequested: {
                 Popouts.close(Popouts.handleFor("bar.panel.audio"));
-                root.toggleControlCenter(root._lastPanelSource);
+                ControlCenterRegistry.requestControlCenter("audio");
             }
             onCloseRequested: Popouts.close(Popouts.handleFor("bar.panel.audio"))
         }
@@ -546,7 +531,7 @@ Item {
             onCloseRequested: Popouts.close(Popouts.handleFor("bar.panel.systemmetrics"))
             onNetworkSettingsRequested: {
                 Popouts.close(Popouts.handleFor("bar.panel.systemmetrics"));
-                root.toggleControlCenter(root._lastPanelSource);
+                ControlCenterRegistry.requestControlCenter("systemmetrics");
             }
         }
     }
@@ -593,7 +578,7 @@ Item {
         // rose-leaning one. Falls back to centre when the chip's position
         // could not be resolved.
         const screen = BarRegistry.screenOf(source);
-        const railT = anchored && screen && screen.width > 0 ? Math.max(0, Math.min(1, centre / screen.width)) : 0.5;
+        const railT = anchored && screen && screen.geometry.width > 0 ? Math.max(0, Math.min(1, centre / screen.geometry.width)) : 0.5;
         const directMenu = id === "tray" ? source?.requestedMenuKey || "" : "";
         if (directMenu && Popouts.isOpen("bar.panel.tray"))
             Popouts.close(Popouts.handleFor("bar.panel.tray"));
@@ -655,6 +640,10 @@ Item {
         }
 
         function onPopoutClosed(popoutId: string, handle: string): void {
+            if (popoutId === "control-center" && handle === root.controlCenterHandle) {
+                root.controlCenterHandle = "";
+                root.controlCenterScreen = "";
+            }
             if (popoutId === "control-center" || popoutId.startsWith("bar.panel."))
                 BarRegistry.setOpenPanel("", null);
         }
@@ -703,8 +692,8 @@ Item {
     // Typed commands also drive the nested harness through its private socket.
     IpcTarget {
         target: "appearance"
-        function show(): void {
-            PickerRegistry.show();
+        function show(): bool {
+            return PickerRegistry.show();
         }
         function presentation(name: string): bool {
             return AppearanceStore.setValue("presentation", name);
@@ -751,7 +740,7 @@ Item {
     }
 
     // The control center's wire surface, per the mockup's
-    // `phosphorctl call control-center.open`. Same show/toggle split as the
+    // `phosphorctl call control-center.show`. Same show/toggle split as the
     // power menu, and the same reason: bind a compositor key to toggle, and
     // call show from a script that wants the panel up regardless.
     //
@@ -868,12 +857,12 @@ Item {
     IpcTarget {
         target: "picker"
 
-        function show(): void {
-            PickerRegistry.show("");
+        function show(): bool {
+            return PickerRegistry.show("");
         }
 
-        function toggle(): void {
-            PickerRegistry.toggle("");
+        function toggle(): bool {
+            return PickerRegistry.toggle("");
         }
 
         function hide(): void {

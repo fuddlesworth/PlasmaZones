@@ -589,7 +589,7 @@ GridLayout {
                     onChosen: value => AppearanceStore.setValue("surfacePacks", value !== "none")
                 }
                 LookText {
-                    text: qsTr("Effects follow your palette. Turning them off keeps your colors and material.")
+                    text: qsTr("Default effects follow your palette. Per-surface choices in PlasmaZones Decorations take priority.")
                     size: 9
                     muted: true
                     Layout.fillWidth: true

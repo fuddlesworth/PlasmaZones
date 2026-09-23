@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "PickerController.h"
+#include "phosphor_i18n.h"
 #include <PhosphorLayer/IScreenProvider.h>
 #include <PhosphorTheme/AppearanceStore.h>
 #include <PhosphorShellPicker/AppearanceLibrary.h>
@@ -48,27 +49,33 @@ QVariantList PickerController::screens() const
     }
     return result;
 }
-void PickerController::show(const QString& screenName)
+bool PickerController::show(const QString& screenName)
 {
     const auto target = resolveScreen(screenName);
-    if (target.isEmpty())
-        return;
+    if (target.isEmpty()) {
+        Q_EMIT openingFailed(PhosphorI18n::tr("No display is available for Appearance."));
+        return false;
+    }
     PhosphorShellPicker::AppearanceLibrary::create(nullptr, nullptr)->rescan();
-    if (!appearance()->beginPreview())
-        return;
+    if (!appearance()->beginPreview()) {
+        Q_EMIT openingFailed(appearance()->error());
+        return false;
+    }
     if (m_selectedScreen.isEmpty()) {
         m_selectedScreen = target;
         Q_EMIT selectedScreenChanged();
     }
     setOpenScreen(target);
+    return true;
 }
-void PickerController::toggle(const QString& screenName)
+bool PickerController::toggle(const QString& screenName)
 {
     const auto target = resolveScreen(screenName);
-    if (m_openScreen == target && !target.isEmpty())
+    if (m_openScreen == target && !target.isEmpty()) {
         hide();
-    else
-        show(target);
+        return true;
+    }
+    return show(target);
 }
 void PickerController::hide()
 {

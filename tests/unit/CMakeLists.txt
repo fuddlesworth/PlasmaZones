@@ -14,21 +14,10 @@
 # unless each new subdirectory repeated it, which trades one long file for
 # several copies of the part that must not drift.
 
-# Helper macro for simple tests (Qt6::Test + Qt6::Core + plasmazones_core).
-#
-# IMPORTANT: This macro hands you Qt6::Test + Qt6::Core ONLY. If your test
-# source includes a D-Bus header, a Wayland-client header, or any other Qt
-# component not in that minimal pair, use a hand-rolled `add_executable` +
-# `target_link_libraries` with an explicit `target_link_libraries(... PRIVATE
-# Qt6::DBus ...)` instead. The macro will SEEM to work because plasmazones_core's
-# INTERFACE_LINK_LIBRARIES pulls Qt6::DBus transitively today — but that's
-# coincidental, not contractual. A future refactor that drops Qt6::DBus from
-# plasmazones_core's interface link would silently break every test that
-# relied on the transitive pull.
-#
-# Same caveat for QTEST_MAIN: with no Qt6::Gui here it expands to whichever
-# application class the transitively-linked Qt modules select, so a test that
-# genuinely needs QGuiApplication should link Qt6::Gui explicitly.
+# Simple tests get Qt6::Test, Qt6::Core, and plasmazones_core. Tests using other
+# components must declare them explicitly with target_link_libraries; transitive
+# core dependencies are not a contract. QTEST_MAIN tests needing QGuiApplication
+# must link Qt6::Gui explicitly to select the correct application type.
 macro(p_add_test _name _src)
     add_executable(${_name} ${_src})
     target_link_libraries(${_name} PRIVATE Qt6::Test Qt6::Core plasmazones_core)
@@ -2517,14 +2506,35 @@ target_link_libraries(test_shell_gestures
 target_include_directories(test_shell_gestures PRIVATE ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME test_shell_gestures COMMAND test_shell_gestures)
 
-# The chrome decoration resolver: tree JSON + the bundled packs to a stage
-# list per shell surface path.
-#
-# Gated on the theme target, unlike its siblings in this group. shellchrome.cpp
-# includes PhosphorTheme/PaletteStore.h and connects paletteChanged, and
-# libs/phosphor-theme is only added under BUILD_PHOSPHOR_SHELL, so this is the
-# one file here whose dependencies are not all unconditional. Without the guard
-# the default BUILD_TESTING=ON configure fails at generate and no test builds.
+if(BUILD_PHOSPHOR_SHELL AND TARGET PhosphorShellPicker::PhosphorShellPickerQml)
+    qt_add_executable(test_shell_appearance_entry
+        shell/test_shell_appearance_entry.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/PickerController.h
+        ${CMAKE_SOURCE_DIR}/src/shell/pickercontroller.cpp
+    )
+    target_include_directories(test_shell_appearance_entry PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_shell_appearance_entry PRIVATE
+        Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick
+        PhosphorLayer::PhosphorLayer PhosphorShell::PhosphorShell
+        PhosphorShellPickerQml PhosphorShellPickerQmlplugin
+        PhosphorShellWidgetsQml PhosphorShellWidgetsQmlplugin
+        PhosphorThemeQml PhosphorThemeQmlplugin
+        PhosphorShellQml PhosphorShellQmlplugin
+        phosphor_shell_example phosphor_shell_exampleplugin
+    )
+    add_test(NAME test_shell_appearance_entry COMMAND test_shell_appearance_entry)
+endif()
+
+if(TARGET plasmazones_shellappearance)
+    qt_add_executable(test_shell_decoration_seeds shell/test_shell_decoration_seeds.cpp)
+    target_link_libraries(test_shell_decoration_seeds PRIVATE
+        Qt6::Test Qt6::Core Qt6::Gui plasmazones_shellappearance PhosphorTheme::PhosphorTheme)
+    add_test(NAME test_shell_decoration_seeds COMMAND test_shell_decoration_seeds)
+endif()
+
+# ShellChrome resolves tree JSON and bundled packs into per-surface stages.
+# Its PaletteStore dependency exists only with BUILD_PHOSPHOR_SHELL, so guard
+# this target to keep shell-OFF test configurations valid.
 if(TARGET PhosphorTheme::PhosphorTheme)
     add_executable(test_shell_chrome
         shell/test_shell_chrome.cpp
@@ -2626,19 +2636,18 @@ if(TARGET PhosphorShellBar::PhosphorShellBarQml)
     add_test(NAME test_bar_widget_types COMMAND test_bar_widget_types)
 endif()
 
-# Every shipped shell QML file must compile. A property assignment to a name
-# that does not exist takes the whole file out with no warning, and it has
-# done so three times. The sweep walks the linked modules' resource trees, so
-# every module whose files should be covered has to be on the link line here
-# AND its plugin registrar with it: without the registrar a statically linked
-# module registers no types and each file would fail on its own imports.
-#
-# The service libraries are linked for their registerQmlTypes(), which is what
-# makes a Phosphor.Service.* import resolve — the difference between this and
-# a static qmllint run. No D-Bus daemon is contacted: the files are loaded,
-# never instantiated.
+# Compile linked shell modules using their actual service type registrations.
+# Each static module needs its plugin registrar to resolve imports. Also create
+# QuickSettings in a foreign context to exercise its controller bridge.
 if(TARGET PhosphorShellBar::PhosphorShellBarQml AND TARGET PhosphorServiceNetwork::PhosphorServiceNetwork)
-    add_executable(test_shell_qml_compiles shell/test_shell_qml_compiles.cpp)
+    add_executable(test_shell_qml_compiles
+        shell/test_shell_qml_compiles.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/ControlCenterController.h
+        ${CMAKE_SOURCE_DIR}/src/shell/controlcentercontroller.cpp
+        ${CMAKE_SOURCE_DIR}/src/shell/QmlComponentTileFactory.h
+        ${CMAKE_SOURCE_DIR}/src/shell/qmlcomponenttilefactory.cpp
+    )
+    target_include_directories(test_shell_qml_compiles PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(test_shell_qml_compiles
         PRIVATE
             Qt6::Test
@@ -2646,6 +2655,7 @@ if(TARGET PhosphorShellBar::PhosphorShellBarQml AND TARGET PhosphorServiceNetwor
             Qt6::Gui
             Qt6::Qml
             Qt6::Quick
+            PhosphorRegistry::PhosphorRegistry
             PhosphorShellBar::PhosphorShellBarQml
             PhosphorShellBarQmlplugin
             PhosphorShellControlCenterQml
@@ -2933,19 +2943,9 @@ foreach(_pz_test IN LISTS _all_tests)
     # Every add_test in this directory uses NAME == target; the guard keeps a
     # future non-target test entry from breaking the configure.
     if(TARGET ${_pz_test})
-        # The shared helper, not a hand-rolled copy. This block used to be its
-        # own implementation and the two drifted: the library trees got
-        # per-target XDG homes while this one shared a single home across ~340
-        # tests, so a parallel ctest run interleaved writes into one config dir.
-        #
-        # It supplies the private-bus TEST_LAUNCHER and a per-target XDG sandbox.
-        # The bus config declares no service directories, which is the essential
-        # part: a stock dbus-run-session bus still reads
-        # /usr/share/dbus-1/services, so the installed daemon would be activated
-        # on the private bus too — as a child of the private dbus-daemon, which
-        # then holds the test's stdout pipe open and hangs ctest AFTER the test
-        # itself passed. Several tests here compile client sources whose async
-        # calls target org.plasmazones with QDBus's default auto-start flag.
+        # Isolate XDG state per target and disable D-Bus service activation.
+        # A stock private bus can still start the installed daemon, whose
+        # inherited stdout keeps ctest hanging after the test exits.
         phosphor_apply_test_isolation(${_pz_test})
         # APPEND, never PROPERTIES ENVIRONMENT: a plain set would replace the
         # sandbox the helper just installed.
@@ -2955,22 +2955,19 @@ endforeach()
 
 # ─── ABOVE THIS LINE: ADD NEW TESTS — BELOW THIS LINE: env wiring only ───
 
-# Two outputs for the control-center controller, which the sweep above cannot
-# express because it gives every test the same single-screen offscreen QPA.
-# screenOf resolves an item's window screen and falls back to the primary, and
-# with one output those are the same pointer, so the resolution branch could be
-# deleted with the suite still green. Appended AFTER the sweep on purpose: the
-# environment list is read last-wins, so this overrides the plain offscreen
-# entry rather than fighting it.
+# Two outputs exercise screen resolution and fallback separately. Appending
+# after the sweep overrides its single-screen offscreen QPA (last value wins).
 if(TARGET test_control_center_controller)
     phosphor_append_test_environment(test_control_center_controller
         "QT_QPA_PLATFORM=offscreen:configfile=${CMAKE_CURRENT_SOURCE_DIR}/shell/two-screens.json")
 endif()
-# The drop-proxy drag test resolves the cursor's screen through the QScreen
-# under it and registers its proxy under that screen's identifier. The sweep's
-# unnamed single offscreen screen identifies as the empty string, which the
-# registration refuses; the named config gives it a real id.
+# The drop proxy requires named screens; the default offscreen empty id is rejected.
 if(TARGET test_windowdrag_drop_proxy)
     phosphor_append_test_environment(test_windowdrag_drop_proxy
+        "QT_QPA_PLATFORM=offscreen:configfile=${CMAKE_CURRENT_SOURCE_DIR}/shell/two-screens.json")
+endif()
+
+if(TARGET test_shell_appearance_entry)
+    phosphor_append_test_environment(test_shell_appearance_entry
         "QT_QPA_PLATFORM=offscreen:configfile=${CMAKE_CURRENT_SOURCE_DIR}/shell/two-screens.json")
 endif()

@@ -39,36 +39,27 @@ class TestShellChrome : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
-    void appearanceSelectsRealPacksAndTintsTheirParameters()
+    void appearanceNeverBypassesTheAuthoritativeTree()
     {
         ShellChrome chrome({QStringLiteral(PZ_BUNDLED_SURFACE_DIR)}, nullptr);
         auto settings = PhosphorTheme::AppearanceStore::defaults();
-        chrome.setAppearance(settings);
-        QVERIFY(chrome.chainFor(decorationShellPhosphorBarPath()).isEmpty());
+        const auto path = decorationShellPhosphorBarPath();
+        QVERIFY(
+            chrome.setTreeJson(treeJson(path, {QStringLiteral("glow")},
+                                        {{QStringLiteral("glow"), QVariantMap{{QStringLiteral("glowSize"), 23}}}})));
+        chrome.setAppearance(settings); // None still respects an explicit user chain.
+        QCOMPARE(chrome.chainFor(path).size(), 1);
+        QCOMPARE(chrome.outerPaddingFor(path), 23.0);
         settings[QStringLiteral("surfacePacks")] = true;
         settings[QStringLiteral("surfaceEffect")] = QStringLiteral("glass");
         chrome.setAppearance(settings);
-        const auto glass = chrome.chainFor(decorationShellPhosphorBarPath());
-        QCOMPARE(glass.size(), 1);
-        QVERIFY(
-            glass.first().toMap().value(QStringLiteral("source")).toString().contains(QLatin1String("phosphor-glass")));
-        settings[QStringLiteral("palette")] = QStringLiteral("ember");
-        chrome.setAppearance(settings);
-        QVERIFY(chrome.chainFor(decorationShellPhosphorBarPath()).first().toMap().value(QStringLiteral("params"))
-                != glass.first().toMap().value(QStringLiteral("params")));
-        settings[QStringLiteral("surfaceEffect")] = QStringLiteral("motes");
-        chrome.setAppearance(settings);
-        QVERIFY(chrome.chainFor(decorationShellPhosphorBarPath())
-                    .first()
-                    .toMap()
-                    .value(QStringLiteral("source"))
-                    .toString()
-                    .contains(QLatin1String("phosphor-motes")));
-        QVERIFY(chrome.outerPaddingFor(decorationShellPhosphorBarPath()) > 0);
-        settings[QStringLiteral("surfacePacks")] = false;
-        chrome.setAppearance(settings);
-        QVERIFY(chrome.chainFor(decorationShellPhosphorBarPath()).isEmpty());
-        QCOMPARE(chrome.outerPaddingFor(decorationShellPhosphorBarPath()), 0);
+        const auto stage = chrome.chainFor(path).first().toMap();
+        QVERIFY(stage.value(QStringLiteral("source")).toString().contains(QLatin1String("glow")));
+        QCOMPARE(chrome.outerPaddingFor(path), 23.0);
+        // Conversely, an explicit OFF from the daemon cannot be re-enabled by appearance.
+        QVERIFY(chrome.setTreeJson(treeJson(path, {})));
+        QVERIFY(chrome.chainFor(path).isEmpty());
+        QCOMPARE(chrome.outerPaddingFor(path), 0.0);
     }
     void initTestCase()
     {

@@ -2108,6 +2108,10 @@ public:
         Q_EMIT shaderProfileTreeChanged();
         Q_EMIT settingsChanged();
     }
+    PhosphorSurfaceShaders::DecorationProfileTree decorationSeedTree() const override
+    {
+        return ConfigDefaults::decorationProfileTree();
+    }
     PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree() const override
     {
         return m_decorationProfileTree;
@@ -2123,16 +2127,12 @@ public:
     }
     QString decorationProfileTreeJson() const override
     {
-        // Serialize the SAME tree the typed accessor returns, so the two
-        // accessors stay coherent for any test that reads the JSON facade.
+        // JSON and typed accessors share one tree.
         return QString::fromUtf8(QJsonDocument(decorationProfileTree().toJson()).toJson(QJsonDocument::Compact));
     }
     void setDecorationProfileTreeJson(const QString& json) override
     {
-        // Parse into the SAME tree the typed accessor exposes, so set-then-get round-trips.
-        // Dropping the value made this the one key the effect fetches by SettingProperty
-        // that no stub-backed test could move — while the comment below boasted "real
-        // storage, not no-op setters".
+        // Retain the parsed tree so D-Bus-style set-then-get tests round-trip.
         const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
         if (doc.isNull() || !doc.isObject()) {
             return;

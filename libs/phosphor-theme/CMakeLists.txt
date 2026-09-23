@@ -47,6 +47,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(phosphortheme_public_HDRS
     include/PhosphorTheme/PhosphorTheme.h
     include/PhosphorTheme/IThemeService.h
+    include/PhosphorTheme/AppearanceWatcher.h
     include/PhosphorTheme/AppearanceStore.h
     include/PhosphorTheme/ShellPalette.h
     include/PhosphorTheme/FontFaces.h
@@ -58,6 +59,7 @@ set(phosphortheme_public_HDRS
 set(phosphortheme_SRCS
     src/defaultpalette.cpp
     src/appearancestore.cpp
+    src/appearancewatcher.cpp
     src/shellpalette.cpp
     src/fontfaces.cpp
     src/matugenrunner.cpp

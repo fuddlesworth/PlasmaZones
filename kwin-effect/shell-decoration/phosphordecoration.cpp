@@ -1,23 +1,17 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "PhosphorDecoration.h"
-#include <PhosphorTheme/AppearanceStore.h>
+#include <PhosphorTheme/AppearanceWatcher.h>
 #include <PhosphorTheme/FontFaces.h>
 #include <KDecoration3/DecoratedWindow>
 #include <KDecoration3/DecorationButton>
 #include <KDecoration3/DecorationButtonGroup>
 #include <KDecoration3/DecorationSettings>
-#include <KDecoration3/DecorationShadow>
 #include <KPluginFactory>
 #include <QCoreApplication>
 #include <QDynamicPropertyChangeEvent>
-#include <QFileInfo>
-#include <QFileSystemWatcher>
 #include <QFontDatabase>
 #include <QPainter>
-#include <QPainterPath>
-#include <QStandardPaths>
-#include <QTimer>
 #include <cmath>
 
 namespace PhosphorWindow {
@@ -36,19 +30,7 @@ public:
     explicit Style(QObject* parent)
         : QObject(parent)
     {
-        m_path = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)
-            + QStringLiteral("/phosphor-shell/appearance.json");
-        m_reload.setSingleShot(true);
-        m_reload.setInterval(40);
-        connect(&m_reload, &QTimer::timeout, this, &Style::reload);
-        connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, [this] {
-            m_reload.start();
-        });
-        connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, [this] {
-            m_reload.start();
-        });
-        m_previewPoll.setInterval(500);
-        connect(&m_previewPoll, &QTimer::timeout, this, &Style::reload);
+        connect(&m_appearance, &PhosphorTheme::AppearanceWatcher::changed, this, &Style::reload);
         reload();
     }
     static Style* instance()
@@ -60,66 +42,18 @@ public:
     QVariantMap values;
     QFont font;
     qreal radius = 18;
-    bool glow = true;
-    std::shared_ptr<KDecoration3::DecorationShadow> shadow(bool active, QColor hue)
-    {
-        const quint64 key = (quint64(hue.rgba()) << 1) | active;
-        if (m_shadows.contains(key))
-            return m_shadows.value(key);
-        const int padding = 36;
-        const int corner = std::ceil(radius);
-        const int size = 2 * (padding + corner) + 1;
-        QImage image(size, size, QImage::Format_ARGB32_Premultiplied);
-        image.fill(Qt::transparent);
-        QPainter painter(&image);
-        painter.setRenderHint(QPainter::Antialiasing);
-        painter.setBrush(Qt::NoBrush);
-        const QRectF inner(padding, padding, 2 * corner + 1, 2 * corner + 1);
-        for (int spread = padding; spread > 0; --spread) {
-            const qreal strength = std::pow(1 - qreal(spread) / padding, 2) * (active ? 0.035 : 0.024);
-            painter.setPen(QPen(alpha(palette.recess.darker(150), strength), spread * 2));
-            painter.drawRoundedRect(inner, radius, radius);
-            if (active && glow) {
-                painter.setPen(QPen(alpha(hue, strength * 0.24), spread * 2));
-                painter.drawRoundedRect(inner, radius, radius);
-            }
-        }
-        painter.setCompositionMode(QPainter::CompositionMode_Source);
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(Qt::transparent);
-        painter.drawRoundedRect(inner, radius, radius);
-        painter.end();
-        auto shadow = std::make_shared<KDecoration3::DecorationShadow>();
-        shadow->setShadow(image);
-        shadow->setInnerShadowRect(inner);
-        shadow->setPadding(QMarginsF(padding, padding - 12, padding, padding + 12));
-        m_shadows.insert(key, shadow);
-        return shadow;
-    }
 Q_SIGNALS:
     void changed();
 
 private:
     void reload()
     {
-        const QFileInfo file(m_path);
-        if (file.exists() && !m_watcher.files().contains(m_path))
-            m_watcher.addPath(m_path);
-        if (QFileInfo::exists(file.path()) && !m_watcher.directories().contains(file.path()))
-            m_watcher.addPath(file.path());
-        bool preview = false;
-        const auto next = PhosphorTheme::AppearanceStore::effectiveValues(m_path, &preview);
-        if (preview && !m_previewPoll.isActive())
-            m_previewPoll.start();
-        else if (!preview)
-            m_previewPoll.stop();
+        const auto next = m_appearance.values();
         if (next == values)
             return;
         values = next;
-        m_shadows.clear();
         palette = PhosphorTheme::ShellPalette::fromSettings(values);
         radius = values.value(QStringLiteral("radius"), 18).toReal();
-        glow = values.value(QStringLiteral("glow"), true).toBool();
         QString family = values.value(QStringLiteral("uiFont")).toString();
         if (family.isEmpty())
             family = PhosphorTheme::FontFaces::resolve(PhosphorTheme::FontFaces::uiCandidates(),
@@ -128,11 +62,7 @@ private:
         font.setPixelSize(qRound(11 * values.value(QStringLiteral("textScale"), 100).toReal() / 100));
         Q_EMIT changed();
     }
-    QHash<quint64, std::shared_ptr<KDecoration3::DecorationShadow>> m_shadows;
-    QString m_path;
-    QFileSystemWatcher m_watcher;
-    QTimer m_reload;
-    QTimer m_previewPoll;
+    PhosphorTheme::AppearanceWatcher m_appearance;
 };
 
 class Button final : public KDecoration3::DecorationButton
@@ -256,17 +186,15 @@ void Decoration::layoutButtons()
 void Decoration::refresh()
 {
     const bool maximized = window()->isMaximized();
-    const qreal radius = maximized ? 0 : m_style->radius;
     setBorders(QMarginsF(maximized ? 0 : 1, 43, maximized ? 0 : 1, maximized ? 0 : 1));
     setResizeOnlyBorders(QMarginsF(6, 6, 6, 6));
-    setBorderRadius(KDecoration3::BorderRadius(radius));
-    setBorderOutline(
-        KDecoration3::BorderOutline(1, alpha(accent(), focused() ? 0.7 : 0.4), KDecoration3::BorderRadius(radius)));
+    // The surface-shader chain clips the fully composited window and paints its
+    // border and shadow. A native radius would clip the client and its Wayland
+    // subsurfaces separately, and cannot follow the user's shader profile.
     setOpaque(false);
     setBlurRegion(m_style->values.value(QStringLiteral("material")).toString() == QStringLiteral("solid")
                       ? QRegion()
                       : QRegion(QRect(0, 0, std::ceil(size().width()), 43)));
-    setShadow(maximized ? nullptr : m_style->shadow(focused(), accent()));
     layoutButtons();
 }
 bool Decoration::event(QEvent* event)
@@ -306,9 +234,6 @@ void Decoration::paint(QPainter* painter, const QRectF& repaintArea)
     painter->setRenderHint(QPainter::Antialiasing);
     painter->setClipRect(repaintArea);
     const qreal radius = window()->isMaximized() ? 0 : m_style->radius;
-    QPainterPath shape;
-    shape.addRoundedRect(rect(), radius, radius);
-    painter->setClipPath(shape, Qt::IntersectClip);
     painter->fillRect(rect(), alpha(palette().surface, palette().opacity));
     QLinearGradient tint(rect().topLeft(), QPointF(rect().width() * 0.6, 43));
     tint.setColorAt(0, alpha(accent(), 0.06));

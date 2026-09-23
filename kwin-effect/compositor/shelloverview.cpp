@@ -96,10 +96,19 @@ void ShellOverview::updateDecorations()
         if (!navigable(window))
             continue;
         if (auto* decoration = window->window()->decoration()) {
-            decoration->setProperty("phosphorColorIndex", m_windowColors.value(window, 0));
-            decoration->setProperty("phosphorFocused", effect->getWindowId(window) == m_lastFocusedWindow);
+            decoration->setProperty("phosphorColorIndex", windowColorIndex(window).value_or(0));
+            decoration->setProperty("phosphorFocused", windowFocused(effect->getWindowId(window)));
         }
     }
+}
+std::optional<int> ShellOverview::windowColorIndex(KWin::EffectWindow* window) const
+{
+    const auto it = m_windowColors.constFind(window);
+    return it == m_windowColors.cend() ? std::nullopt : std::optional<int>(*it);
+}
+bool ShellOverview::windowFocused(const QString& windowId) const
+{
+    return !windowId.isEmpty() && windowId == m_lastFocusedWindow;
 }
 QString ShellOverview::windows(const QString& screen, int desktop) const
 {
@@ -121,8 +130,8 @@ QString ShellOverview::windows(const QString& screen, int desktop) const
         result.append(QJsonObject{{QStringLiteral("windowId"), id},
                                   {QStringLiteral("appId"), effect->getWindowAppId(window)},
                                   {QStringLiteral("title"), window->caption()},
-                                  {QStringLiteral("focused"), id == m_lastFocusedWindow},
-                                  {QStringLiteral("colorIndex"), m_windowColors.value(window, 0)},
+                                  {QStringLiteral("focused"), windowFocused(id)},
+                                  {QStringLiteral("colorIndex"), windowColorIndex(window).value_or(0)},
                                   {QStringLiteral("minimized"), window->isMinimized()},
                                   {QStringLiteral("x"), rect.x()},
                                   {QStringLiteral("y"), rect.y()},

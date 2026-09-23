@@ -24,6 +24,7 @@ function(phosphortheme_add_test name)
 endfunction()
 
 phosphortheme_add_test(test_appearancestore)
+phosphortheme_add_test(test_appearancewatcher)
 phosphortheme_add_test(test_palettestore)
 # test_palettestore_files holds the loadFromFile slots; test_palettestore_hotreload
 # holds the hot-reload slots + the white-box resetToDefaults_releasesDirectoryWatch

@@ -59,10 +59,10 @@
 #     script shadows the service file so activation starts the build-tree
 #     daemon in-session instead; daemon.sh still evicts whoever holds the
 #     name, so the run has one daemon with a known pid and log.
-#   - Screenshots are NOT evidence of effect behaviour: ScreenShot2's
-#     CaptureScreen bypasses the effect chain entirely, and workspace
-#     captures run it with no output pass. Only committed geometry
-#     (dump-windows.sh) and journal diagnostics are trustworthy.
+#   - CaptureScreen includes effects on KWin 6.7; CaptureWindow uses a
+#     direct item-rendering path. capture-output.py uses CaptureScreen.
+#     Use dump-windows.sh for committed geometry because screenshot pixels
+#     can include effect transforms.
 set -eu
 OUTPUTS="${1:-2}"
 case "$OUTPUTS" in
@@ -117,6 +117,44 @@ REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/pz-nested-$(id -u)}"
 mkdir -p "$RUNTIME_DIR"
 NEST="${PZ_NESTED_DIR:-$RUNTIME_DIR/pz-nested${PZ_NESTED_SESSION:+-$PZ_NESTED_SESSION}}"
+
+# PZ_NESTED_DIR is used below in cleanup and in generated service files. Do
+# all validation and canonicalization before deriving HOME_N or touching any
+# state. Lexical depth alone accepts /tmp/.., and a symlinked ancestor can
+# make an apparently deep path resolve to a dangerous root.
+case "$NEST" in
+    /*) ;;
+    *)
+        echo "refusing: PZ_NESTED_DIR must be an absolute path, got '$NEST'" >&2
+        exit 1
+        ;;
+esac
+case "$NEST" in
+    *[!A-Za-z0-9._/-]*)
+        echo "refusing: PZ_NESTED_DIR must match [A-Za-z0-9._/-]+ (no whitespace or shell metacharacters), got '$NEST'" >&2
+        exit 1
+        ;;
+esac
+NEST=$(realpath -m -- "$NEST") || {
+    echo "refusing: could not canonicalize PZ_NESTED_DIR '$NEST'" >&2
+    exit 1
+}
+case "$NEST" in
+    *[!A-Za-z0-9._/-]*)
+        echo "refusing: canonical PZ_NESTED_DIR contains unsupported characters: '$NEST'" >&2
+        exit 1
+        ;;
+    /|/home|/root|/usr|/var|/tmp)
+        echo "refusing: PZ_NESTED_DIR resolves to an unsafe scratch root '$NEST'" >&2
+        exit 1
+        ;;
+    /*/*) ;;
+    *)
+        echo "refusing: PZ_NESTED_DIR must resolve at least two components below '/', got '$NEST'" >&2
+        exit 1
+        ;;
+esac
+
 BUILD="${PZ_NESTED_BUILD:-build}"
 HOME_N="$NEST/home"
 
@@ -185,32 +223,6 @@ if [ -f "$NEST/env.sh" ] && [ -z "${PZ_NESTED_FORCE:-}" ]; then
         exit 1
     fi
 fi
-
-# PZ_NESTED_DIR is interpolated straight into the rm -rf and the chmod below.
-# An operator typo of / or $HOME would take out /home or open the home
-# directory up, so require something that looks like a scratch dir: absolute,
-# and at least two components deep. Unset is safe already — it falls through
-# to the default above.
-#
-# The character class matters as much as the depth. This path is also written
-# unquoted into the generated D-Bus service file's Exec= line, which is parsed
-# as a command line and cannot express a path containing whitespace, and it is
-# interpolated into two heredocs where a quote or a dollar sign would either
-# break the shim or run as shell. A scratch directory has no business carrying
-# any of that.
-case "$NEST" in
-    /*/*) ;;
-    *)
-        echo "refusing: PZ_NESTED_DIR must be an absolute path at least two components deep, got '$NEST'" >&2
-        exit 1
-        ;;
-esac
-case "$NEST" in
-    *[!A-Za-z0-9._/-]*)
-        echo "refusing: PZ_NESTED_DIR must match [A-Za-z0-9._/-]+ (no whitespace or shell metacharacters), got '$NEST'" >&2
-        exit 1
-        ;;
-esac
 
 rm -rf "$HOME_N"
 # Stale control files must not survive into the new run: a daemon.sh run

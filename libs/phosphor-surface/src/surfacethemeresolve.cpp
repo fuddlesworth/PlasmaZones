@@ -50,14 +50,36 @@ void resolveThemeParamColors(const SurfaceShaderEffect& effect, QVariantMap& fri
         }
         return fallback;
     };
+    // Replace only a declared colour's RGB. Its alpha remains the pack/user's
+    // intensity, including zero, and an omitted override uses the pack default.
+    const auto tintDeclaredColor = [&](QLatin1String id, const QColor& tint) {
+        for (const auto& param : effect.parameters) {
+            if (param.id != id) {
+                continue;
+            }
+            const QString key(id);
+            const QVariant current = friendlyParams.value(key, param.defaultValue);
+            QColor color = current.value<QColor>();
+            if (!color.isValid()) {
+                color = QColor(current.toString());
+            }
+            QColor resolved = tint;
+            resolved.setAlphaF(color.isValid() ? color.alphaF() : 0.5);
+            friendlyParams.insert(key, resolved);
+            break;
+        }
+    };
+    const bool useWindowAccent =
+        theme.windowAccent.isValid() && effectiveFlag(QLatin1String("useWindowAccent")).value_or(false);
 
-    // Border colours. A neutral frame-contrast line wins over the system accent
-    // when both are engaged. activeColor / inactiveColor are set unconditionally
-    // (no packHasHalo-style declared-param guard): translateSurfaceParams only
-    // emits a lane for params the pack declares, so a key inserted for a pack
-    // that lacks it is dropped. The halo branch below guards because it has to
-    // READ the existing colour to preserve its alpha; this branch writes fresh.
-    if (effectiveFlag(QLatin1String("useThemeNeutral")).value_or(false)) {
+    // Window identity takes precedence when requested and available. Otherwise
+    // a neutral frame-contrast line wins over the system accent. The existing
+    // neutral/system modes write fresh opaque colours; identity preserves each
+    // declared colour's alpha so focused and unfocused opacities remain distinct.
+    if (useWindowAccent) {
+        tintDeclaredColor(QLatin1String("activeColor"), theme.windowAccent);
+        tintDeclaredColor(QLatin1String("inactiveColor"), theme.windowAccent);
+    } else if (effectiveFlag(QLatin1String("useThemeNeutral")).value_or(false)) {
         const QColor neutral = lerpColor(theme.background, theme.foreground,
                                          qBound(0.0, effectiveReal(QLatin1String("frameContrast"), 0.2), 1.0));
         friendlyParams.insert(QStringLiteral("activeColor"), neutral);
@@ -75,28 +97,14 @@ void resolveThemeParamColors(const SurfaceShaderEffect& effect, QVariantMap& fri
     // tracks light / dark instead of a fixed colour. The background is low-chroma,
     // so this reads as a soft theme-matched shadow rather than an additive colour
     // smear. The pack's own colour alpha (its intensity knob) is preserved.
-    if (effectiveFlag(QLatin1String("useThemeTint")).value_or(false)) {
-        for (const QLatin1String haloId : {QLatin1String("shadowColor"), QLatin1String("glowColor")}) {
-            const QString key(haloId);
-            bool packHasHalo = false;
-            QVariant current;
-            for (const auto& param : effect.parameters) {
-                if (param.id == haloId) {
-                    packHasHalo = true;
-                    current = friendlyParams.contains(key) ? friendlyParams.value(key) : param.defaultValue;
-                    break;
-                }
-            }
-            if (packHasHalo) {
-                QColor cur = current.value<QColor>();
-                if (!cur.isValid()) {
-                    cur = QColor(current.toString());
-                }
-                QColor tint = theme.background;
-                tint.setAlphaF(cur.isValid() ? cur.alphaF() : 0.5);
-                friendlyParams.insert(key, tint);
-            }
-        }
+    const bool useThemeTint = effectiveFlag(QLatin1String("useThemeTint")).value_or(false);
+    if (useThemeTint) {
+        tintDeclaredColor(QLatin1String("shadowColor"), theme.background);
+    }
+    if (useWindowAccent) {
+        tintDeclaredColor(QLatin1String("glowColor"), theme.windowAccent);
+    } else if (useThemeTint) {
+        tintDeclaredColor(QLatin1String("glowColor"), theme.background);
     }
 }
 

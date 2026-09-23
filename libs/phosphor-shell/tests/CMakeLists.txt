@@ -213,6 +213,8 @@ target_link_libraries(test_phosphorshell_persistentproperties_scan
         Qt6::Qml
         Qt6::Quick
         PhosphorShell::PhosphorShell
+        PhosphorShell::PhosphorShellQml
+        PhosphorShellQmlplugin
         PhosphorLayer::PhosphorLayer
 )
 add_test(NAME test_phosphorshell_persistentproperties_scan COMMAND test_phosphorshell_persistentproperties_scan)
@@ -231,6 +233,8 @@ target_link_libraries(test_phosphorshell_inputregion_rearm
         Qt6::Qml
         Qt6::Quick
         PhosphorShell::PhosphorShell
+        PhosphorShell::PhosphorShellQml
+        PhosphorShellQmlplugin
         PhosphorLayer::PhosphorLayer
 )
 add_test(NAME test_phosphorshell_inputregion_rearm COMMAND test_phosphorshell_inputregion_rearm)

@@ -34,12 +34,10 @@
 #   scripts/nested-shell/capture.sh Virtual-1 out.png # look at it
 #   scripts/nested-shell/shell.sh                     # restart after a rebuild
 #
-# Screenshot note, and why the nested-kwin caveat does NOT apply here:
-# ScreenShot2 bypasses the PlasmaZones EFFECT chain, which is why the
-# sibling harness treats captures as geometry-only evidence. The shell is
-# an ordinary layer-shell CLIENT, composited on the normal path, so its
-# bars, popouts and toasts DO appear in captures — screenshots are real
-# rendering evidence for this harness.
+# capture.sh uses ScreenShot2 CaptureScreen, which includes compositor
+# effects on KWin 6.7 as well as the shell's bars, popouts and toasts.
+# Use the sibling dump-windows.sh for committed geometry because captured
+# pixels can include effect transforms.
 #
 # Environment knobs (all inherited by the sibling scripts through env.sh):
 #   PZ_NESTED_SESSION                 — one name for a whole extra session,

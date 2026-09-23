@@ -90,6 +90,10 @@ namespace PhosphorAnimation {
 class IMotionClock;
 }
 
+namespace PhosphorTheme {
+class AppearanceWatcher;
+}
+
 namespace PlasmaZones {
 
 // Targeted using-declarations, not a namespace-wide directive: headers must
@@ -183,9 +187,9 @@ public:
     bool blocksDirectScanout() const override;
     void postPaintScreen() override;
     void prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data) override;
-    // Per-window borders are rendered by routing the redirected window through
-    // the offscreen border MapTexture shader (see the drawWindow override below +
-    // decorations.cpp), NOT here. paintScreen is overridden for the TWO
+    // Per-window decorations are rendered by routing the redirected window
+    // through the offscreen surface chain (see drawWindow + decorations.cpp),
+    // NOT here. paintScreen is overridden for the TWO
     // scene-replacement paths, tried in a load-bearing order: first the
     // full-screen desktop transitions (the virtual-desktop switch and the
     // show-desktop peek, which share one path) — while one is live,
@@ -201,12 +205,10 @@ public:
     void paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                      KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
                      KWin::WindowPaintData& data) override;
-    // Border render path (implemented in decorations.cpp). A static bordered window
-    // is rendered through the offscreen border shader PASSIVELY here: we bind the
-    // border shader + push its uniforms, then let OffscreenEffect::drawWindow
-    // re-blit the redirected FBO through it on EVERY composite (idle included),
-    // with no FBO re-render and no forced per-frame repaints — the
-    // KDE-Rounded-Corners model. paintWindow no longer touches the border.
+    // Composite render path (implemented in decorations.cpp). A static
+    // decorated window keeps its redirected surface chain here and is drawn
+    // through the retained composite on every frame; paintWindow does not
+    // own decoration rendering.
     void drawWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport, KWin::EffectWindow* w,
                     int mask, const KWin::Region& deviceRegion, KWin::WindowPaintData& data) override;
     void grabbedKeyboardEvent(QKeyEvent* e) override;
@@ -237,6 +239,8 @@ public:
     void pointerAxis(KWin::PointerAxisEvent* event) override;
 
 protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
     // OffscreenEffect hook: deform the redirected window's quad list.
     // For surface-extent shader transitions (metadata `fboExtent:
     // "surface"`) this replaces the window quad with one spanning the
@@ -1278,18 +1282,11 @@ private:
     PhosphorAnimation::Profile resolveEventMotionProfile(const QString& profilePath,
                                                          const PhosphorRules::WindowQuery& query,
                                                          const QString& windowId) const;
-    // CEILING on the per-frame ramp delta, not the cap itself. A window at rest
-    // (value pinned at 0 or 1) stops being force-repainted by
-    // windowSurfaceAnimates, so its FocusFadeState `lastMs` goes stale; without
-    // a cap the first frame after a focus change would see a multi-second
-    // `now - lastMs` and jump the whole ramp in one step (an instant snap
-    // instead of a fade). advanceFocusFade (decoration_render.cpp) resolves the
-    // live cap as qBound(1, focusFadeDurationMs / 2, this): the halving is what
-    // keeps a SHORT duration spanning at least two frames instead of completing
-    // inside one 50 ms resume step, and the floor of 1 keeps the step non-zero
-    // for a 1 ms duration. A live window's real frame delta is well under the
-    // ceiling, so at ordinary durations only the resume-after-idle case is
-    // tamed at all.
+    // Idle windows stop repainting, leaving FocusFadeState::lastMs stale. Cap
+    // the first resumed step so a focus change fades instead of snapping.
+    // advanceFocusFade uses qBound(1, focusFadeDurationMs / 2, this): half the
+    // duration keeps short fades across multiple frames; the 1 ms floor keeps
+    // them advancing. Normal live-frame deltas remain below this ceiling.
     static constexpr qint64 kFocusFadeMaxStepMs = 50;
 
     // Live system colours that a `BorderColorToken::Accent` sentinel in a
@@ -1301,25 +1298,22 @@ private:
     // See resolveWindowAppearance.
     QColor m_borderAccentColor;
     QColor m_borderInactiveColor;
+    // Only active while Phosphor owns the native titlebar. The seed profile
+    // supplies the chain; this supplies its declared per-window identity input.
+    bool m_shellDesktopStyleActive = false;
+    std::array<QColor, 4> m_shellWindowColors;
+#ifdef PHOSPHOR_BUILD_SHELL
+    std::unique_ptr<PhosphorTheme::AppearanceWatcher> m_shellAppearance;
+#endif
 
-    // Config-backed window appearance default: the decoration slots (border,
-    // title bar, opacity tint) plus the per-mode keep-floating-above bools
-    // that fill the window LAYER slot for a floated window. Window appearance
-    // resolves as: this default (each decoration slot gated by its scope
-    // token, the layer slot by the float state and the screen's mode) filling
-    // the slots the user's per-window rules left unset — rules still win per
-    // slot.
-    // Pushed from the daemon over the settings D-Bus wire in loadCachedSettings,
-    // re-fetched on every settingsChanged. The three colour strings carry a
-    // hex "#AARRGGBB"; a current daemon resolves its empty follow-the-theme
-    // sentinel before the value crosses D-Bus, so the "accent" token
-    // (resolved to m_borderAccentColor / m_borderInactiveColor at merge
-    // time, mirroring the rule colour path) only arrives from an older
-    // daemon or through the rule vocabulary.
-    // Scope tokens live in PhosphorCompositor::WindowAppearanceScope: "tiled"
-    // (snapped OR autotile-managed), "normal" (Normal type AND not transient),
-    // "all" (every window). Defaults match ConfigDefaults::windowBorderScope().
-    // WindowAppearanceDefault moved to effect_state.h.
+    // Config defaults fill appearance slots that per-window rules leave unset.
+    // Decoration slots use their scope; the floating layer uses float state
+    // and screen mode. loadCachedSettings refreshes these on settingsChanged.
+    // Current daemons send concrete #AARRGGBB colours. An older daemon or a
+    // rule can supply "accent", resolved against the live colours above.
+    // WindowAppearanceScope: "tiled" = snapped/autotiled, "normal" = Normal
+    // non-transient, "all" = every window. Defaults match windowBorderScope().
+    // WindowAppearanceDefault is declared in effect_state.h.
     WindowAppearanceDefault m_windowAppearanceDefault;
 
     /// True when a config-default border, hidden title bar, opacity+tint
@@ -1516,6 +1510,7 @@ private:
     void notifyWindowResized(KWin::EffectWindow* w, const QRect& oldGeometry);
 
     void updateWindowDecoration(const QString& windowId, KWin::EffectWindow* w);
+    bool decorationFocused(const QString& windowId, KWin::EffectWindow* w, const WindowDecoration& decoration) const;
 
     /// Poll-defer a decorated, minimized window's teardown while an animation
     /// still paints it. A minimized window is only isVisible() while some

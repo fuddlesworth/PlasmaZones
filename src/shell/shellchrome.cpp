@@ -95,32 +95,7 @@ void ShellChrome::setAppearance(const QVariantMap& settings)
 
 PhosphorSurfaceShaders::DecorationProfile ShellChrome::profileFor(const QString& surfacePath) const
 {
-    if (m_appearance.isEmpty() || !surfacePath.startsWith(QLatin1String("shell.phosphor.")))
-        return m_tree.resolve(surfacePath);
-    PhosphorSurfaceShaders::DecorationProfile profile;
-    const auto effect = m_appearance.value(QStringLiteral("surfaceEffect")).toString();
-    if (!m_appearance.value(QStringLiteral("surfacePacks")).toBool()
-        || (effect != QLatin1String("glass") && effect != QLatin1String("motes")))
-        return profile;
-    const QString pack = QStringLiteral("phosphor-") + effect;
-    profile.chain = QStringList{pack};
-    const auto palette = PhosphorTheme::ShellPalette::fromSettings(m_appearance);
-    // The bundled effects expose their gradient and tint as real shader
-    // parameters, so previews follow the same palette as the surrounding UI.
-    profile.parameters = QVariantMap{
-        {pack,
-         QVariantMap{{QStringLiteral("colorCyan"), palette.stops[0].name()},
-                     {QStringLiteral("colorBlue"), palette.stops[1].name()},
-                     {QStringLiteral("colorPurple"), palette.stops[2].name()},
-                     {QStringLiteral("colorRose"), palette.stops[3].name()},
-                     {QStringLiteral("colorTint"), palette.surface.name()},
-                     {QStringLiteral("cornerRadius"), m_appearance.value(QStringLiteral("radius"))},
-                     {QStringLiteral("contentOpacity"),
-                      surfacePath.endsWith(QLatin1String(".bar")) || surfacePath.endsWith(QLatin1String(".picker"))
-                              || surfacePath.endsWith(QLatin1String(".popout"))
-                          ? .94
-                          : 1.0}}}};
-    return profile;
+    return m_tree.resolve(surfacePath);
 }
 
 int ShellChrome::revision() const

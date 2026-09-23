@@ -12,6 +12,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSet>
+#include <QScopedValueRollback>
 
 namespace PlasmaZones {
 
@@ -100,8 +101,8 @@ void Settings::setShaderProfileTreeJson(const QString& json)
 // mirroring how the animation shaderProfileTree persists under
 // Animations/ShaderProfileTree. The STORE holds only user edits (schema
 // default: the empty tree); the built-in card chrome for the OSD and the
-// PopupFrame popups (ConfigDefaults::decorationProfileTree) is overlaid as a
-// lowest-precedence seed layer on every read — the same model as the
+// PopupFrame popups, plus application-provided appearance defaults, are
+// overlaid as a lowest-precedence seed layer on every read — the same model as the
 // animation seeds (PhosphorProfileRegistry's low-precedence owner tag), so
 // shipped default improvements reach users who never customized those
 // surfaces, and a user config that predates (or was written without) the
@@ -109,12 +110,30 @@ void Settings::setShaderProfileTreeJson(const QString& json)
 // override and wins; an engaged-but-empty chain keeps a surface explicitly
 // undecorated (see DecorationProfileTree::withSeedDefaults).
 
+PhosphorSurfaceShaders::DecorationProfileTree Settings::decorationSeedTree() const
+{
+    return m_decorationSeeds;
+}
+
+void Settings::setDecorationSeedTree(const PhosphorSurfaceShaders::DecorationProfileTree& seeds)
+{
+    const auto supported = PhosphorSurfaceShaders::DecorationProfileTree::fromJson(seeds.toJson());
+    if (m_decorationSeeds == supported)
+        return;
+    m_decorationSeeds = supported;
+    // Both live and committed views resolve against these defaults. Notify
+    // renderers without treating the external appearance preview as an edit.
+    const QScopedValueRollback<bool> announcing(m_announcingDecorationSeedChange, true);
+    Q_EMIT decorationProfileTreeChanged();
+    Q_EMIT settingsChanged();
+}
+
 PhosphorSurfaceShaders::DecorationProfileTree Settings::decorationProfileTree() const
 {
     const QVariantMap map =
         m_store->read<QVariantMap>(ConfigDefaults::decorationsGroup(), ConfigDefaults::decorationProfileTreeKey());
     return PhosphorSurfaceShaders::DecorationProfileTree::fromJson(QJsonObject::fromVariantMap(map))
-        .withSeedDefaults(ConfigDefaults::decorationProfileTree());
+        .withSeedDefaults(decorationSeedTree());
 }
 
 PhosphorSurfaceShaders::DecorationProfileTree Settings::committedDecorationProfileTree() const
@@ -127,7 +146,7 @@ PhosphorSurfaceShaders::DecorationProfileTree Settings::committedDecorationProfi
     const QVariantMap map =
         m_baseline.value(ConfigDefaults::decorationsGroup()).value(ConfigDefaults::decorationProfileTreeKey()).toMap();
     return PhosphorSurfaceShaders::DecorationProfileTree::fromJson(QJsonObject::fromVariantMap(map))
-        .withSeedDefaults(ConfigDefaults::decorationProfileTree());
+        .withSeedDefaults(decorationSeedTree());
 }
 
 void Settings::setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& tree)
@@ -157,7 +176,7 @@ void Settings::setDecorationProfileTree(const PhosphorSurfaceShaders::Decoration
     // (a chain-only override whose parameters would then inject, a map
     // shadowed by an engaged ancestor, or a stripped chain re-opening the
     // master gate for a descendant seed path) is left alone.
-    const auto seeds = ConfigDefaults::decorationProfileTree();
+    const auto seeds = decorationSeedTree();
     // Order-insensitive merged-view equality: the tree's operator== also
     // compares insertion order, and a strip-then-reinject legitimately moves
     // the reinjected path to the end, while resolve() ignores order entirely.
@@ -234,10 +253,9 @@ void Settings::setDecorationProfileTreeJson(const QString& json)
     if (json.isEmpty()) {
         // Empty string = reset to the canonical default, exactly like the
         // animation shaderProfileTree facade: drop every user edit (store the
-        // empty tree). The read side re-injects the built-in seed defaults
-        // (ConfigDefaults::decorationProfileTree card chrome for the OSD and
-        // PopupFrame popups); everything else returns to "no decoration"
-        // (border and titlebar visuals are rule-owned).
+        // empty tree). The read side re-injects the current runtime seed
+        // defaults for the surfaces that provide them; user overrides are
+        // cleared while authored seed defaults remain active.
         setDecorationProfileTree(PhosphorSurfaceShaders::DecorationProfileTree{});
         return;
     }

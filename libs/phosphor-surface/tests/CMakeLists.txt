@@ -28,3 +28,5 @@ phosphorsurface_add_test(test_surfaceuniformprofile)
 phosphorsurface_add_test(test_decorationprofiletree)
 phosphorsurface_add_test(test_surfaceshaderregistry)
 phosphorsurface_add_test(test_surfacechaincompose)
+
+phosphorsurface_add_test(test_surfacethemeresolve)

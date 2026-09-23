@@ -9,6 +9,8 @@ import Phosphor.Service.UPower
 ControlCenter {
     id: root
     provider: ControlCenterRegistry
+    // Popout content is created in the engine root context, outside shell.qml.
+    onPanelRequested: panelId => ControlCenterRegistry.requestPanel(panelId)
     tileIds: ControlCenterRegistry.tileIds.filter(id => id !== "idle")
     detailPanels: ({
             "network": networkPanel,

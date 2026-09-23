@@ -75,10 +75,8 @@ FocusScope {
     }
 
     implicitWidth: detailLoader.active ? 410 : root.panelWidth
-    // The taller of the two views, not just the grid. A host that sizes
-    // itself to this would otherwise clip a detail view taller than the
-    // grid behind it, and neither view scrolls or clips, so the overflow
-    // would simply be cut off.
+    // Give embedded details their own height; the main view scrolls when the
+    // output is shorter than its preferred size.
     implicitHeight: detailLoader.active ? (detailLoader.status === Loader.Ready ? detailLoader.item.implicitHeight : 760) : Math.max(main.implicitHeight, detail.implicitHeight) + 2 * (Appearance.padding + 1)
 
     /// Where this surface sits along the screen, 0..1, for the stroke and
@@ -201,18 +199,7 @@ FocusScope {
             const item = root.provider.createTile(id, grid);
             if (item) {
                 built[id] = item;
-                // Layout is the host's job, not the tile's: a tile would
-                // otherwise have to know the pane's width to span it. It
-                // declares the intent via `spansRow` and this applies it.
-                // Tiles come from a provider, so a third-party one may
-                // legitimately not span; a tile that declares nothing gets
-                // the rail default, which is to span.
-                // Cards fill their cell in both directions, so the grid
-                // distributes the zone across them instead of leaving the
-                // remainder empty. A tile that wants the full width (a
-                // level, whose underline is its control and reads better
-                // long) spans both columns.
-                const wide = item.spansRow === undefined ? false : item.spansRow;
+                // Each tile fills one column in its connection or levels group.
                 item.Layout.fillWidth = true;
                 // NOT fillHeight: a card keeps its own height. Stretching
                 // them to fill was what turned a five-control panel into
@@ -465,6 +452,7 @@ FocusScope {
                     elide: Text.ElideRight
                 }
                 ShellButton {
+                    objectName: "quickSettingsAppearance"
                     foreground: Appearance.accent
                     implicitHeight: root.shelf ? 26 : 27
                     text: qsTr("Appearance ↗")

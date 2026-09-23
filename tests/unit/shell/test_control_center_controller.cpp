@@ -172,9 +172,8 @@ void TestControlCenterController::openScreenNotifiesOncePerRealChange()
 void TestControlCenterController::tileIdsListTheBuiltInCatalogInOrder()
 {
     ControlCenterController controller(nullptr);
-    // Grid order: three half-width toggles, then the two full-width sliders
-    // so the toggles pack above them. shell.qml feeds this straight into
-    // ControlCenter.tileIds, so the order here IS the on-screen order.
+    // The catalog groups connections before levels. QuickSettingsSurface
+    // filters idle and places each group into its own column.
     const QStringList expected{QStringLiteral("network"), QStringLiteral("bluetooth"), QStringLiteral("idle"),
                                QStringLiteral("audio"), QStringLiteral("brightness")};
     QCOMPARE(controller.tileIds(), expected);

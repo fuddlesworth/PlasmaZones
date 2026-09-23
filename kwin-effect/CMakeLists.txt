@@ -283,5 +283,7 @@ target_include_directories(kwin_effect_plasmazones PRIVATE
 
 # Native titlebars share the shell palette and geometry.
 if(BUILD_PHOSPHOR_SHELL)
+    target_compile_definitions(kwin_effect_plasmazones PRIVATE PHOSPHOR_BUILD_SHELL=1)
+    target_link_libraries(kwin_effect_plasmazones PRIVATE PhosphorTheme::PhosphorTheme)
     add_subdirectory(shell-decoration)
 endif()

@@ -147,9 +147,9 @@ bool PlasmaZonesEffect::isActive() const
     // must not keep the effect in the chain.
     //
     // `!m_windowDecorations.isEmpty()` is the SAME persistent case as opacity
-    // rules: a per-window border is rendered passively in drawWindow by
-    // re-blitting the redirected window through the border shader on every
-    // composite (the KDE-Rounded-Corners / LightlyShaders model). Those
+    // rules: a per-window decoration is rendered passively in drawWindow by
+    // re-blitting the redirected window through its retained surface chain on
+    // every composite. Those
     // effects keep isActive() true whenever they manage a window; without
     // this clause an idle bordered window (no drag/animation/transition)
     // drops the effect from the chain, drawWindow is never called, and the

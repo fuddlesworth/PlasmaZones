@@ -3,7 +3,7 @@
     "name": "Drop Shadow",
     "description": "A soft dark shadow behind the window, cast slightly downward the way a real light would. It follows the frame's rounded corners and leaves the window content untouched. It softens when the window loses focus.",
     "author": "PlasmaZones",
-    "version": "1.3",
+    "version": "1.4",
     "category": "Ambience",
     "fragmentShader": "effect.frag",
     "interiorOpaque": true,
@@ -60,6 +60,13 @@
             "type": "color",
             "default": "#99000000",
             "description": "Colour of the shadow, translucent black by default"
+        },
+        {
+            "id": "hideWhenMaximized",
+            "name": "Hide when maximized",
+            "type": "bool",
+            "default": false,
+            "description": "Hide the shadow while the window is maximized or fullscreen."
         },
         {
             "id": "useThemeTint",

@@ -13,11 +13,9 @@
 # after sourcing env.sh). Delegates to nested-kwin's capture-output.py
 # with the session env loaded.
 #
-# Unlike the PlasmaZones EFFECT (whose painting ScreenShot2 bypasses,
-# hence the geometry-only caveat in the sibling harness), the shell is an
-# ordinary layer-shell client on the normal composite path: bars, popouts
-# and toasts DO appear in these captures, so they are genuine rendering
-# evidence here.
+# CaptureScreen includes compositor effects on KWin 6.7, along with the
+# shell's bars, popouts and toasts. Use the sibling dump-windows.sh for
+# committed geometry because effect transforms can change captured pixels.
 set -eu
 
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"

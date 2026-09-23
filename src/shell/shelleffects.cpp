@@ -41,7 +41,8 @@ bool ShellEffects::blurAvailable()
 #endif
 }
 
-bool ShellEffects::setBlurBehind(QQuickItem* item, const QRect& region, const QRect& secondary, qreal radius)
+bool ShellEffects::setBlurBehind(QQuickItem* item, const QRect& region, const QRect& secondary, qreal radius,
+                                 qreal secondaryRadius)
 {
     QQuickWindow* window = item ? item->window() : nullptr;
     if (!window) {
@@ -50,13 +51,17 @@ bool ShellEffects::setBlurBehind(QQuickItem* item, const QRect& region, const QR
 #ifdef PHOSPHOR_SHELL_HAVE_KWINDOWSYSTEM
     const bool enable = region.width() > 0 && region.height() > 0;
     KWindowEffects::enableBlurBehind(
-        window, enable, enable ? roundedRegion(region, radius).united(roundedRegion(secondary, radius)) : QRegion());
+        window, enable,
+        enable ? roundedRegion(region, radius)
+                     .united(roundedRegion(secondary, secondaryRadius < 0 ? radius : secondaryRadius))
+               : QRegion());
     qCDebug(lcEffects) << (enable ? "blur behind" : "blur off for") << window->title() << region;
     return true;
 #else
     Q_UNUSED(region)
     Q_UNUSED(secondary)
     Q_UNUSED(radius)
+    Q_UNUSED(secondaryRadius)
     qCDebug(lcEffects) << "no blur backend in this build; band stays a plain tint";
     return false;
 #endif

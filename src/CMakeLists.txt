@@ -218,6 +218,19 @@ set(plasmazones_core_SRCS
 add_library(plasmazones_core SHARED ${plasmazones_core_SRCS})
 
 
+# Shell appearance is an application adapter, never a dependency of core Settings.
+if(BUILD_PHOSPHOR_SHELL)
+    add_library(plasmazones_shellappearance STATIC
+        common/shelldecorationseeds.h
+        common/shelldecorationseeds.cpp
+    )
+    target_compile_definitions(plasmazones_shellappearance PUBLIC PHOSPHOR_BUILD_SHELL=1)
+    target_link_libraries(plasmazones_shellappearance
+        PUBLIC plasmazones_core PhosphorSurface::PhosphorSurface
+        PRIVATE PhosphorTheme::PhosphorTheme
+    )
+endif()
+
 # Generate export header
 generate_export_header(plasmazones_core
     EXPORT_FILE_NAME plasmazones_export.h
@@ -593,6 +606,9 @@ set(plasmazones_daemon_SRCS
 qt_add_resources(plasmazones_daemon_SRCS daemon/resources.qrc)
 
 add_executable(plasmazonesd ${plasmazones_daemon_SRCS})
+if(BUILD_PHOSPHOR_SHELL)
+    target_link_libraries(plasmazonesd PRIVATE plasmazones_shellappearance)
+endif()
 
 target_link_libraries(plasmazonesd
     PRIVATE
@@ -699,12 +715,8 @@ configure_file(
 # ═══════════════════════════════════════════════════════════════════════════════
 # Phosphor Shell (opt-in via -DBUILD_PHOSPHOR_SHELL=ON at the top level)
 # ═══════════════════════════════════════════════════════════════════════════════
-# Gated alongside libs/phosphor-shell and the gated phosphor-service-*
-# group (see the add_subdirectory block in the root CMakeLists.txt for
-# the authoritative list). Without the flag those library targets
-# don't exist, so the binary wouldn't link anyway. Wrapping the whole block also keeps
-# `install(TARGETS phosphor-shell …)` from running when the target
-# is absent.
+# Gate both build and install with the optional shell libraries declared by
+# the root CMakeLists; those dependencies do not exist in shell-OFF builds.
 
 if(BUILD_PHOSPHOR_SHELL)
     add_executable(phosphor-shell
@@ -789,25 +801,18 @@ if(BUILD_PHOSPHOR_SHELL)
             PhosphorShell::PhosphorShell
             plasmazones_core
             KF6::CoreAddons
-            # Registry core (Registry<IBarWidgetFactory> + RegistryNotifier)
-            # for BarController, and the Phosphor.Bar QML module + its plugin
-            # registrar so the bar delegates resolve at runtime.
+            # Bar widget registry, QML module, and runtime registrar.
             PhosphorRegistry::PhosphorRegistry
             PhosphorShellBar::PhosphorShellBarQml
             PhosphorShellBarQmlplugin
             PhosphorShellPower::PhosphorShellPowerQml
             PhosphorShellPowerQmlplugin
-            # Phosphor.ControlCenter + its registrar, so shell.qml's
-            # control-center popout resolves the surface and its tiles.
-            # The tiles import Phosphor.Service.* modules, which the
-            # registerQmlTypes() block in shell/main.cpp already publishes.
+            # Control-center surface and registrar; shell/main.cpp publishes
+            # the Phosphor.Service.* modules its tiles import.
             PhosphorShellControlCenter::PhosphorShellControlCenterQml
             PhosphorShellControlCenterQmlplugin
-            # The launcher: its core (LauncherModel + the built-in providers
-            # LauncherController materialises), the Phosphor.Launcher module
-            # + registrar for shell.qml's launcher popout. The clipboard
-            # service the controller owns for the clipboard provider is
-            # already listed with the other services below.
+            # Launcher model/providers, QML module, and registrar. Its clipboard
+            # service dependency is listed with the other services below.
             PhosphorShellLauncher::PhosphorShellLauncher
             PhosphorShellLauncher::PhosphorShellLauncherQml
             PhosphorShellLauncherQmlplugin
@@ -826,20 +831,15 @@ if(BUILD_PHOSPHOR_SHELL)
             # surfaces shell.qml mounts (LockSurface windows + LockScreen).
             PhosphorShellLock::PhosphorShellLockQml
             PhosphorShellLockQmlplugin
-            # Phosphor.Picker (the wallpaper and theme strip, whose C++
-            # types ride in the module) and Phosphor.Polkit (the prompt)
-            # + their registrars, for the per-screen strips and the polkit
-            # popout shell.qml mounts. The picker's committed palette is
-            # loaded at startup through PaletteStore (see main.cpp).
+            # Appearance picker: C++ API, QML surfaces, and registrar.
+            # Palette and preview ownership are composed in shell/main.cpp.
             PhosphorShellPicker::PhosphorShellPickerQml
             PhosphorShellPickerQmlplugin
             # ShellGestures subscribes to the daemon's gestureReported relay
             # by the protocol's interface constants.
             PhosphorProtocol::PhosphorProtocol
-            # ShellChrome: the decoration tree + pack registry (PhosphorSurface),
-            # the SurfaceShaderItem stage (plasmazones_rendering) and the shared
-            # SurfaceDecoration.qml host (org.plasmazones.common) that draws a
-            # pack chain on the chrome.
+            # ShellChrome: tree/registry, SurfaceShaderItem rendering, and the
+            # shared SurfaceDecoration.qml host that draws each chain.
             PhosphorSurface::PhosphorSurface
             plasmazones_rendering
             plasmazones_shared_qml
