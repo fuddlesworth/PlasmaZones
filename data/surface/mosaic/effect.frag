@@ -23,7 +23,8 @@
 #include <surface_backdrop.glsl>
 
 vec4 pSurface(vec2 uv) {
-    SurfaceSlab slab = surfaceSlabOpen(uv, p_cornerRadius * uSurfaceScale);
+    float cornerPx = p_cornerRadius * uSurfaceScale;
+    SurfaceSlab slab = surfaceSlabOpen(uv, cornerPx, p_roundBottomCorners >= 0.5 ? cornerPx : 0.0, p_edgeSoftness);
     // Fade the window content over the pane; the translucency it frees is
     // filled by the mosaic in slabComposite below.
     slab.window *= clamp(p_contentOpacity, 0.0, 1.0);

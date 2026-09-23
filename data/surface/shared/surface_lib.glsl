@@ -56,10 +56,41 @@ FrameSDF frameSdf(vec2 p, float radiusPx) {
     return fs;
 }
 
+// Rounded box with SEPARATE top and bottom corner radii, for a pane that only
+// rounds under a title bar (or only at the bottom). `p` is box-centred in the
+// TOP-DOWN px space surfacePixel yields on both runtimes, so the upper half is
+// y < 0. Within a quadrant the rounded-box distance depends only on that
+// quadrant's corner, so picking the radius by half and reusing sdRoundedBox is
+// exact (iq's per-corner variant does the same selection).
+float sdRoundedBoxSplit(vec2 p, vec2 b, float rTop, float rBottom) {
+    return sdRoundedBox(p, b, p.y < 0.0 ? rTop : rBottom);
+}
+
+// frameSdf with separate top / bottom radii (device px), each clamped to half
+// the smaller side. `radius` reports the TOP radius, which is the one the
+// glass lens builds its normal field from.
+FrameSDF frameSdfSplit(vec2 p, float topRadiusPx, float bottomRadiusPx) {
+    FrameSDF fs;
+    fs.halfSize = 0.5 * uSurfaceFrameSize;
+    fs.center = uSurfaceFrameTopLeft + fs.halfSize;
+    float cap = min(fs.halfSize.x, fs.halfSize.y);
+    fs.radius = clamp(topRadiusPx, 0.0, cap);
+    fs.d = sdRoundedBoxSplit(p - fs.center, fs.halfSize, fs.radius, clamp(bottomRadiusPx, 0.0, cap));
+    return fs;
+}
+
 // Slab AA coverage from an SDF distance (±1 px feather). Border packs use a
 // tighter ±0.7 band and pass their own width, so this is the slab form only.
 float frameMask(float d) {
     return 1.0 - smoothstep(-1.0, 1.0, d);
+}
+
+// Slab AA coverage with a caller-chosen feather (device px, ± around the
+// edge). Floored at a hair so a zero feather cannot collapse smoothstep's two
+// edges together (undefined in GLSL), the same guard standardBorderBand uses.
+float frameMask(float d, float aa) {
+    float feather = max(aa, 1e-3);
+    return 1.0 - smoothstep(-feather, feather, d);
 }
 
 // Focus dim: `lo` when unfocused, ramping to 1.0 focused, cross-faded on the
@@ -155,11 +186,16 @@ struct SurfaceSlab {
     FrameSDF fs;
     float mask;
 };
-SurfaceSlab surfaceSlabOpen(vec2 uv, float cornerRadiusPx) {
+//
+// The four-arg form is what the bundled slab packs call: separate top / bottom
+// radii (a pack's `roundBottomCorners` switch hands 0 for the bottom) and the
+// edge feather in device px (a pack's `edgeSoftness`). The two-arg form keeps
+// the original symmetric, 1 px-feather behaviour for third-party packs.
+SurfaceSlab surfaceSlabOpen(vec2 uv, float topRadiusPx, float bottomRadiusPx, float aa) {
     SurfaceSlab s;
     s.px = surfacePixel(uv);
-    s.fs = frameSdf(s.px, cornerRadiusPx);
-    s.mask = frameMask(s.fs.d);
+    s.fs = frameSdfSplit(s.px, topRadiusPx, bottomRadiusPx);
+    s.mask = frameMask(s.fs.d, aa);
     // The window sample is clipped to the same rounded frame as the pane. The
     // capture is square-cornered (the pack owns the corner radius), so an
     // unmasked window pokes its square corners past the rounded slab at any
@@ -167,6 +203,9 @@ SurfaceSlab surfaceSlabOpen(vec2 uv, float cornerRadiusPx) {
     // Premultiplied, so one multiply rounds both colour and coverage.
     s.window = surfaceTexel(uv) * s.mask;
     return s;
+}
+SurfaceSlab surfaceSlabOpen(vec2 uv, float cornerRadiusPx) {
+    return surfaceSlabOpen(uv, cornerRadiusPx, cornerRadiusPx, 1.0);
 }
 
 // The backdrop-slab family's shared no-backdrop fallback (any host where
@@ -204,6 +243,29 @@ float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float stre
 // Frame-normalized [0,1] UV for a device-px fragment.
 vec2 frameUv(vec2 px) {
     return (px - uSurfaceFrameTopLeft) / max(uSurfaceFrameSize, vec2(1.0));
+}
+
+// Inverse of surfacePixel: a top-down device-px POSITION back to the canvas uv
+// that samples it, with the same per-runtime Y flip.
+vec2 surfaceUvFromPixel(vec2 px) {
+    vec2 n = px / max(uSurfaceSize, vec2(1.0));
+#ifdef PLASMAZONES_KWIN
+    return vec2(n.x, 1.0 - n.y);
+#else
+    return n;
+#endif
+}
+
+// A canvas uv that a refraction pushed past the FRAME rect, mirrored back
+// inside it (the way Better Blur's "texture repeat" mode reflects the blur at
+// the pane edge, so a strong bend shows the pane's own interior folding over
+// rather than a stretched edge pixel). Mirrors in frame-normalized space, so
+// the fold happens at the pane's edge and not at the padded canvas's.
+vec2 frameMirrorUv(vec2 uv) {
+    vec2 f = frameUv(surfacePixel(uv));
+    vec2 t = mod(f, 2.0);
+    f = mix(t, 2.0 - t, step(1.0, t));
+    return surfaceUvFromPixel(uSurfaceFrameTopLeft + f * uSurfaceFrameSize);
 }
 
 // px-space (top-down) vector -> canvas UV offset, used for backdrop

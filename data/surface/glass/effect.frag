@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Glass pack, main pass: a refracting pane over the blurred backdrop
-// (buffer 1) — a full port of kwin-effects-glass (glass.glsl /
-// snells-glass.glsl / oklab.glsl / the noise pass). Two refraction modes,
-// switched by p_physicallyBased exactly like the reference:
+// (iChannel6) — a full port of kwin-effects-glass (glass.glsl /
+// snells-glass.glsl / oklab.glsl / the noise pass). Three refraction modes:
+// the reference's two, switched by p_physicallyBased, plus a concave lens
+// (p_concaveLens, Better Blur DX's second mode) that takes precedence:
 //
 //   CHEAP (default): displacement along the bevel normal, up to
 //   0.4 x strength of the pane at the rim, sampling INWARD so the rim
@@ -37,8 +38,16 @@
 #include <surface_noise.glsl>
 #include <surface_color.glsl>
 
+// Where a bent sample coordinate lands: clamped to the canvas (the reference
+// behaviour, an edge pixel stretched), or mirrored back inside the frame when
+// the pack's Edge mirror switch is on.
+vec2 glassCoord(vec2 c) {
+    return p_edgeMirror >= 0.5 ? frameMirrorUv(c) : clamp(c, 0.0, 1.0);
+}
+
 vec4 pSurface(vec2 uv) {
-    SurfaceSlab slab = surfaceSlabOpen(uv, p_cornerRadius * uSurfaceScale);
+    float cornerPx = p_cornerRadius * uSurfaceScale;
+    SurfaceSlab slab = surfaceSlabOpen(uv, cornerPx, p_roundBottomCorners >= 0.5 ? cornerPx : 0.0, p_edgeSoftness);
     // Fade the window content over the pane; the translucency it frees is
     // filled by the refracted backdrop in the composite below.
     slab.window *= clamp(p_contentOpacity, 0.0, 1.0);
@@ -62,6 +71,10 @@ vec4 pSurface(vec2 uv) {
         float edgePx = clamp(p_edgeWidth * uSurfaceScale, 0.1, max(minHalf * 0.9, 0.1));
         float edgeFactor = 1.0 - clamp(abs(d) / edgePx, 0.0, 1.0);
         float eased = smoothstep(0.0, 1.0, edgeFactor);
+        // Edge curve: an exponent on the bevel ramp before the circular
+        // profile (Better Blur's "normal power"). 1 is the reference bevel;
+        // below 1 pushes the bend out to the rim, above 1 spreads it inward.
+        eased = pow(eased, clamp(p_edgeCurve, 0.05, 8.0));
         float concave = 1.0 - sqrt(max(1.0 - eased * eased, 0.0));
 
         float strength = clamp(p_refractionStrength, 0.0, 2.0);
@@ -72,7 +85,27 @@ vec4 pSurface(vec2 uv) {
         float rr = clamp(radius * 2.0, min(64.0 * uSurfaceScale, minHalf), min(128.0 * uSurfaceScale, minHalf));
 
         vec3 lit;
-        if (p_physicallyBased >= 0.5) {
+        if (p_concaveLens >= 0.5) {
+            // ── Concave lens (Better Blur DX's second refraction mode) ────
+            // Scale the whole backdrop toward the pane's centre by the bevel
+            // profile, so the edges show a shrunken copy of the interior, the
+            // way a thick concave slab reads. Per channel for the fringing.
+            // 0.2 of the pane at full strength, the reference's ceiling.
+            vec2 f = frameUv(px) - 0.5;
+            float shrink = 0.2 * concave * strength;
+            vec2 fG = 0.5 + f * (1.0 - shrink);
+            vec2 fR = 0.5 + f * (1.0 - shrink * (1.0 + fringe));
+            vec2 fB = 0.5 + f * (1.0 - shrink * (1.0 - fringe));
+            vec2 topLeft = uSurfaceFrameTopLeft;
+            vec2 size = uSurfaceFrameSize;
+            vec4 g = texture(iChannel6, glassCoord(surfaceUvFromPixel(topLeft + fG * size)));
+            lit = g.rgb;
+            if (fringe > 0.001) {
+                lit.r = texture(iChannel6, glassCoord(surfaceUvFromPixel(topLeft + fR * size))).r;
+                lit.b = texture(iChannel6, glassCoord(surfaceUvFromPixel(topLeft + fB * size))).b;
+            }
+            pane.a = g.a;
+        } else if (p_physicallyBased >= 0.5) {
             // ── Snell mode (reference snells-glass.glsl) ─────────────────
             float ior = 1.0 + strength;
             float eps = min(edgePx * 0.75, max(rr * 0.6, 0.5));
@@ -97,13 +130,13 @@ vec4 pSurface(vec2 uv) {
             vec2 dirPx = length(refractG.xy) > 0.001 ? normalize(refractG.xy) : vec2(0.0);
             float magnitude = lensMagnitude * strength;
             vec2 shiftG = pxToUv(dirPx * magnitude) + lensShift;
-            vec4 g = texture(iChannel1, clamp(uv + shiftG, 0.0, 1.0));
+            vec4 g = texture(iChannel6, glassCoord(uv + shiftG));
             lit = g.rgb;
             if (fringe > 0.001) {
                 vec2 shiftR = pxToUv(dirPx * (magnitude * (1.0 + fringe))) + lensShift;
                 vec2 shiftB = pxToUv(dirPx * (magnitude * (1.0 - fringe))) + lensShift;
-                lit.r = texture(iChannel1, clamp(uv + shiftR, 0.0, 1.0)).r;
-                lit.b = texture(iChannel1, clamp(uv + shiftB, 0.0, 1.0)).b;
+                lit.r = texture(iChannel6, glassCoord(uv + shiftR)).r;
+                lit.b = texture(iChannel6, glassCoord(uv + shiftB)).b;
             }
             pane.a = g.a;
         } else {
@@ -118,9 +151,9 @@ vec4 pSurface(vec2 uv) {
             // second copy that only tracked the compositor. The frame/canvas
             // ratio stays: this offset is expressed relative to the frame.
             vec2 dirUv = pxToUv(inward * strengthUv * uSurfaceFrameSize);
-            vec4 g = texture(iChannel1, clamp(uv + dirUv, 0.0, 1.0));
-            lit = vec3(texture(iChannel1, clamp(uv + dirUv * (1.0 + fringe), 0.0, 1.0)).r, g.g,
-                       texture(iChannel1, clamp(uv + dirUv * (1.0 - fringe), 0.0, 1.0)).b);
+            vec4 g = texture(iChannel6, glassCoord(uv + dirUv));
+            lit = vec3(texture(iChannel6, glassCoord(uv + dirUv * (1.0 + fringe))).r, g.g,
+                       texture(iChannel6, glassCoord(uv + dirUv * (1.0 - fringe))).b);
             pane.a = g.a;
         }
 
@@ -152,7 +185,13 @@ vec4 pSurface(vec2 uv) {
         // OKLab saturation, then grain — the reference's pass order.
         float tintAdj = tintStrength * clamp(abs(luma601(lit) - luma601(tint)), 0.0, 1.0);
         lit = mix(lit, tint * pane.a, tintAdj);
+        // Brightness and contrast ahead of the reference's saturation step,
+        // then vibrancy after it, both on the premultiplied value the
+        // reference saturates (the backdrop under a window is effectively
+        // opaque, so the premultiply is a no-op there).
+        lit = surfaceColorAdjust(lit, p_brightness, p_contrast, 1.0);
         lit = oklabSaturate(lit, clamp(p_saturation, 0.0, 2.0));
+        lit = surfaceVibrancy(lit, p_vibrancy, p_vibrancyDarkness);
         lit += (hashSin(px) - 0.5) * 2.0 * clamp(p_noiseStrength, 0.0, 0.2);
 
         pane = vec4(lit, pane.a) * mask;

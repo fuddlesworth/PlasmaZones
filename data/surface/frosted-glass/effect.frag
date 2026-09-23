@@ -5,7 +5,7 @@
 // (examples/phosphor-shell/shaders/frosted_glass.frag) ported onto a REAL
 // blurred backdrop. The original faked frosting with a translucent tint
 // slab; here the slab is the Gaussian-blurred scene behind the surface
-// (buffer 1), and the original's layers ride on top unchanged: the
+// (iChannel6), and the original's layers ride on top unchanged: the
 // multi-octave crystalline Voronoi grain (slow-drifting on iTime), the
 // tint, the multiplicative vignette, and the rounded-corner SDF clip.
 //
@@ -20,6 +20,7 @@
 
 #include <surface_multipass.glsl>
 #include <surface_noise.glsl>
+#include <surface_color.glsl>
 
 // Animated two-colour gradient, ported from the shell's gradient.frag
 // computeGradient(): the direction turns continuously with time and the
@@ -45,7 +46,8 @@ float frostedTexture(vec2 p, float time) {
 }
 
 vec4 pSurface(vec2 uv) {
-    SurfaceSlab slab = surfaceSlabOpen(uv, p_cornerRadius * uSurfaceScale);
+    float cornerPx = p_cornerRadius * uSurfaceScale;
+    SurfaceSlab slab = surfaceSlabOpen(uv, cornerPx, p_roundBottomCorners >= 0.5 ? cornerPx : 0.0, p_edgeSoftness);
     // Fade the window content over the pane; the translucency it frees is
     // filled by the frosted backdrop in slabComposite below.
     slab.window *= clamp(p_contentOpacity, 0.0, 1.0);
@@ -68,7 +70,8 @@ vec4 pSurface(vec2 uv) {
     if (uHasBackdrop >= 0.5) {
         // Real frosting: blurred backdrop tinted by the turning gradient,
         // grained, vignetted.
-        vec4 blurred = texture(iChannel1, uv);
+        vec4 blurred = surfaceBackdropGrade(texture(iChannel6, uv), p_brightness, p_contrast, p_saturation,
+                                            p_vibrancy, p_vibrancyDarkness);
         vec3 color = mix(blurred.rgb, grad * blurred.a, gradStrength);
         color = clamp(color + vec3(variation) * blurred.a, 0.0, max(blurred.a, 0.0001));
         color *= vignette;

@@ -24,6 +24,8 @@
 // it the same way with no parameter involved.
 
 #include <surface_multipass.glsl>
+#include <surface_noise.glsl>
+#include <surface_color.glsl>
 
 // Four-stop brand gradient, t in [0, 1]: cyan → blue → purple → rose.
 vec3 fluxGradient(float t) {
@@ -41,7 +43,8 @@ float pingPong(float x) {
 }
 
 vec4 pSurface(vec2 uv) {
-    SurfaceSlab slab = surfaceSlabOpen(uv, p_cornerRadius * uSurfaceScale);
+    float cornerPx = p_cornerRadius * uSurfaceScale;
+    SurfaceSlab slab = surfaceSlabOpen(uv, cornerPx, p_roundBottomCorners >= 0.5 ? cornerPx : 0.0, p_edgeSoftness);
     // Fade the window content over the pane; the translucency it frees is
     // filled by the phosphor glass in slabComposite below.
     slab.window *= clamp(p_contentOpacity, 0.0, 1.0);
@@ -66,7 +69,8 @@ vec4 pSurface(vec2 uv) {
 
     vec4 pane;
     if (uHasBackdrop >= 0.5) {
-        vec4 blurred = texture(iChannel1, uv);
+        vec4 blurred = surfaceBackdropGrade(texture(iChannel6, uv), p_brightness, p_contrast, p_saturation,
+                                            p_vibrancy, p_vibrancyDarkness);
 
         // Un-premultiplied backdrop luminance drives the excitation.
         float lumN = blurred.a > 0.001
@@ -87,6 +91,8 @@ vec4 pSurface(vec2 uv) {
         float vignette = clamp(1.0 - length((fuv - 0.5) * vec2(0.3, 1.0)) * 0.15, 0.0, 1.0);
 
         vec3 color = (base + glowCol * response * glowStrength * blurred.a) * vignette;
+        // Driver-stable grain, weighted by the backdrop alpha.
+        color += (hash13(slab.px) - 0.5) * 2.0 * clamp(p_noiseStrength, 0.0, 0.2) * blurred.a;
         color = clamp(color, 0.0, max(blurred.a, 0.0001));
         pane = vec4(color, blurred.a) * slab.mask;
     } else {

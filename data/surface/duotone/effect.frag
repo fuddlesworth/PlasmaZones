@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Duotone pack, main pass: the Gaussian-blurred backdrop (buffer 1)
+// Duotone pack, main pass: the Kawase-blurred backdrop (iChannel6)
 // collapsed to luminance and remapped onto a two-colour gradient — the
 // concert-poster look. A contrast exponent shapes the split between the
 // shadow and highlight colours. Same slab composite as the blur family:
@@ -18,23 +18,28 @@
 
 #include <surface_multipass.glsl>
 #include <surface_color.glsl>
+#include <surface_noise.glsl>
 
 vec4 pSurface(vec2 uv) {
-    SurfaceSlab slab = surfaceSlabOpen(uv, p_cornerRadius * uSurfaceScale);
+    float cornerPx = p_cornerRadius * uSurfaceScale;
+    SurfaceSlab slab = surfaceSlabOpen(uv, cornerPx, p_roundBottomCorners >= 0.5 ? cornerPx : 0.0, p_edgeSoftness);
     // Fade the window content over the pane; the translucency it frees is
     // filled by the duotone backdrop in slabComposite below.
     slab.window *= clamp(p_contentOpacity, 0.0, 1.0);
 
     vec4 pane;
     if (uHasBackdrop >= 0.5) {
-        vec4 blurred = texture(iChannel1, uv);
+        vec4 blurred = texture(iChannel6, uv);
         // Un-premultiply before taking luminance so a translucent backdrop
         // region doesn't read darker than it is, then re-weight the mapped
         // colour by the capture's own alpha to stay premultiplied.
         float luma = blurred.a > 0.001 ? luma709(blurred.rgb / blurred.a) : 0.0;
         luma = pow(clamp(luma, 0.0, 1.0), max(p_contrast, 0.05));
         vec3 mapped = mix(p_colorA.rgb, p_colorB.rgb, luma);
-        pane = vec4(mapped * blurred.a, blurred.a) * slab.mask;
+        // Driver-stable grain over the two-tone map, which hides the banding
+        // a smooth luminance ramp otherwise shows between the two colours.
+        mapped += (hash13(slab.px) - 0.5) * 2.0 * clamp(p_noiseStrength, 0.0, 0.2);
+        pane = vec4(clamp(mapped, 0.0, 1.0) * blurred.a, blurred.a) * slab.mask;
     } else {
         // Original pseudo look with no backdrop: a vertical
         // shadow-to-highlight gradient slab at modest alpha.

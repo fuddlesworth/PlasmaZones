@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Rippled-glass pack, main pass: an INTERIOR-refracting pane over the blurred
-// backdrop (buffer 1). Where the Glass pack bends the backdrop only along an
+// backdrop (iChannel6). Where the Glass pack bends the backdrop only along an
 // edge bevel, this pack warps it across the WHOLE pane: a two-octave value-
 // noise height field models the uneven glass surface, its gradient displaces
 // the backdrop sample (gradient refraction — light bends toward the slope),
@@ -23,6 +23,7 @@
 
 #include <surface_multipass.glsl>
 #include <surface_noise.glsl>
+#include <surface_color.glsl>
 
 // The glass surface's height at ripple-space q: a dominant swell plus a
 // finer counter-drifting octave, so the warp reads as organic ripples
@@ -33,8 +34,15 @@ float rippleHeight(vec2 q, float t) {
     return swell * 0.65 + detail * 0.35;
 }
 
+// Where a bent sample lands: clamped to the canvas, or folded back inside the
+// frame when the pack's Edge mirror switch is on.
+vec2 rippleCoord(vec2 c) {
+    return p_edgeMirror >= 0.5 ? frameMirrorUv(c) : clamp(c, 0.0, 1.0);
+}
+
 vec4 pSurface(vec2 uv) {
-    SurfaceSlab slab = surfaceSlabOpen(uv, p_cornerRadius * uSurfaceScale);
+    float cornerPx = p_cornerRadius * uSurfaceScale;
+    SurfaceSlab slab = surfaceSlabOpen(uv, cornerPx, p_roundBottomCorners >= 0.5 ? cornerPx : 0.0, p_edgeSoftness);
     // Fade the window content over the pane; the translucency it frees is
     // filled by the rippled backdrop in slabComposite below.
     slab.window *= clamp(p_contentOpacity, 0.0, 1.0);
@@ -68,11 +76,11 @@ vec4 pSurface(vec2 uv) {
         vec2 dispPx = grad * clamp(p_refractionStrength, 0.0, 40.0) * uSurfaceScale;
         vec2 shift = pxToUv(dispPx);
         float fringe = clamp(p_fringing, 0.0, 1.0) * 0.3;
-        vec4 g = texture(iChannel1, clamp(uv + shift, 0.0, 1.0));
+        vec4 g = texture(iChannel6, rippleCoord(uv + shift));
         vec3 lit = g.rgb;
         if (fringe > 0.001) {
-            lit.r = texture(iChannel1, clamp(uv + shift * (1.0 + fringe), 0.0, 1.0)).r;
-            lit.b = texture(iChannel1, clamp(uv + shift * (1.0 - fringe), 0.0, 1.0)).b;
+            lit.r = texture(iChannel6, rippleCoord(uv + shift * (1.0 + fringe))).r;
+            lit.b = texture(iChannel6, rippleCoord(uv + shift * (1.0 - fringe))).b;
         }
 
         // Soft directional highlight: slopes facing the up-left "light"
@@ -87,8 +95,14 @@ vec4 pSurface(vec2 uv) {
             lit += glint * g.a;
         }
 
+        // Colour grade on the refracted, glinted sample, then the tint, then
+        // a driver-stable grain (the blur pack's pass order).
+        lit = surfaceBackdropGrade(vec4(lit, g.a), p_brightness, p_contrast, p_saturation, p_vibrancy,
+                                   p_vibrancyDarkness)
+                  .rgb;
         lit = mix(lit, tint * g.a, tintStrength);
-        pane = vec4(lit, g.a) * mask;
+        lit += (hash13(px) - 0.5) * 2.0 * clamp(p_noiseStrength, 0.0, 0.2) * g.a;
+        pane = vec4(clamp(lit, 0.0, max(g.a, 0.0001)), g.a) * mask;
     } else {
         pane = faintTintSlab(tint, tintStrength, mask);
     }

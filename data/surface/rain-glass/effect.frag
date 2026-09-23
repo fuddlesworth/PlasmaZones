@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Rain-on-glass pack, main pass: the Gaussian-blurred backdrop (buffer 1)
+// Rain-on-glass pack, main pass: the Kawase-blurred backdrop (iChannel6)
 // as fog, with procedural rain droplets running down the pane. Two moving
 // droplet layers at different scales plus one static bead layer; each
 // droplet contributes a local offset vector (pointing at its centre) that
@@ -26,6 +26,7 @@
 
 #include <surface_multipass.glsl>
 #include <surface_noise.glsl>
+#include <surface_color.glsl>
 
 // Droplet cell shape: cells ~2.5x taller than wide so each drop has a real
 // run and trails read vertically. Shared by dropLayer and the per-cell
@@ -76,7 +77,8 @@ vec3 dropLayer(vec2 st, float t) {
 }
 
 vec4 pSurface(vec2 uv) {
-    SurfaceSlab slab = surfaceSlabOpen(uv, p_cornerRadius * uSurfaceScale);
+    float cornerPx = p_cornerRadius * uSurfaceScale;
+    SurfaceSlab slab = surfaceSlabOpen(uv, cornerPx, p_roundBottomCorners >= 0.5 ? cornerPx : 0.0, p_edgeSoftness);
     // Fade the window content over the pane; the translucency it frees is
     // filled by the rained-on glass in slabComposite below.
     slab.window *= clamp(p_contentOpacity, 0.0, 1.0);
@@ -118,12 +120,19 @@ vec4 pSurface(vec2 uv) {
         // Fog everywhere; droplets refract the fogged scene toward their
         // centres (the blurred buffer keeps the lensed image soft and cheap).
         // refraction 40 = the geometric offset as-is; other values scale it.
-        vec2 sampleUv = clamp(uv + pxToUv(offsetPx * (p_refraction / 40.0)), 0.0, 1.0);
-        vec4 fog = texture(iChannel1, sampleUv);
+        vec2 bent = uv + pxToUv(offsetPx * (p_refraction / 40.0));
+        // Clamped to the canvas, or folded back inside the frame when the
+        // pack's Edge mirror switch is on.
+        vec2 sampleUv = p_edgeMirror >= 0.5 ? frameMirrorUv(bent) : clamp(bent, 0.0, 1.0);
+        vec4 fog = surfaceBackdropGrade(texture(iChannel6, sampleUv), p_brightness, p_contrast, p_saturation,
+                                        p_vibrancy, p_vibrancyDarkness);
         // Top-light: a small highlight on each droplet's upper edge (the
         // offset points down toward the centre there, so +y in px space).
         float hi = wet * clamp(offsetPx.y / max(cellPx, 1.0) * 8.0, 0.0, 1.0) * 0.3;
-        pane = vec4(fog.rgb + hi * fog.a, fog.a) * mask;
+        // Driver-stable grain over the fog, weighted by its alpha so the
+        // cleared off-capture margin stays clear.
+        float grain = (hash13(px) - 0.5) * 2.0 * clamp(p_noiseStrength, 0.0, 0.2);
+        pane = vec4(clamp(fog.rgb + (hi + grain) * fog.a, 0.0, max(fog.a, 0.0001)), fog.a) * mask;
     } else {
         // Original pseudo look with no backdrop: droplets glint over a
         // dark glass slab.
