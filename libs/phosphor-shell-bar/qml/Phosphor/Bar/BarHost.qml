@@ -78,6 +78,12 @@ PanelWindow {
         return c && c.widget ? c.widget : null;
     }
 
+    function requestOverview(): void {
+        if (panel.mapPaneOpen)
+            panel.mapPaneOpen = false;
+        panel.overviewRequested();
+    }
+
     Binding {
         target: rightSlot.cellFor("clock")?.widget ?? centerSlot.cellFor("clock")?.widget ?? leftSlot.cellFor("clock")?.widget ?? null
         property: "expanded"
@@ -101,7 +107,7 @@ PanelWindow {
 
         function onExpandRequested(menu: bool): void {
             if (Appearance.stage && !menu) {
-                panel.overviewRequested();
+                panel.requestOverview();
                 return;
             }
             // One pane per screen: the host's pane wins while it is up.
@@ -663,6 +669,7 @@ PanelWindow {
                 mapFor: index => Shell.PlacementMap.forScreenDesktop(panel.screen ? panel.screen.name : "", index)
                 menuFocused: panel.mapPaneMenuFocused
                 onCloseRequested: restoreFocus => panel.closeMapPane(restoreFocus)
+                onOverviewRequested: panel.requestOverview()
             }
         }
     }

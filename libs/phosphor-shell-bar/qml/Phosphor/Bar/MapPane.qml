@@ -13,6 +13,7 @@ FocusScope {
     property var mapFor: null
     property bool menuFocused: false
     signal closeRequested(bool restoreFocus)
+    signal overviewRequested
     implicitWidth: 700
     implicitHeight: layout.implicitHeight + (Appearance.padding + 1) * 2
     focus: true
@@ -110,8 +111,17 @@ FocusScope {
                     Accessible.name: qsTr("Placement")
                     onActivated: root.map.setPlacementMode(currentIndex)
                 }
+                ShellButton {
+                    text: qsTr("Full overview")
+                    iconName: "view-grid"
+                    outlined: true
+                    flat: true
+                    labelSize: 10
+                    Accessible.name: qsTr("Open full workspace overview")
+                    onClicked: root.overviewRequested()
+                }
                 Item {
-                    Layout.preferredWidth: root.width > 620 ? 110 : 0
+                    Layout.fillWidth: true
                 }
                 ShellButton {
                     text: root.menuFocused ? "‹" : "×"
