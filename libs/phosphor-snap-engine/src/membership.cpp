@@ -32,6 +32,8 @@
 
 #include "snapenginelogging.h"
 
+#include <QSet>
+#include <QString>
 #include <QVector>
 
 #include <algorithm>
@@ -208,6 +210,14 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
     // emitted as ONE batch after the loop, since the commit it goes through
     // mutates the very stores this loop walks.
     QVector<PhosphorEngine::ZoneAssignmentEntry> carried;
+    // The windows whose carry may also be PARKED for the effect's
+    // desktop-arrival restore. The park is asked for over
+    // windowDesktopMoveRequested, and the effect answers that with
+    // windowToDesktops(w, {target}), which REPLACES the window's desktop set —
+    // a true no-op only while the window names one desktop. For a window
+    // present on several, asking would silently drop the others, so it takes
+    // the geometry apply alone and keeps its desktops.
+    QSet<QString> parkable;
     // Planned before the release below wipes the zones it reads. Fills
     // @p carriedFrom with the context the snap was taken from when the window
     // stays snapped, and leaves it default for the float-back, which is a
@@ -226,6 +236,17 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
         for (const PlacementStateKey& stale : entry.stale) {
             const SnapState* state = m_states.stateForKey(stale);
             if (!state || state->isFloating(entry.windowId)) {
+                continue;
+            }
+            // The LIVE activity's own zone. A key can go stale because the
+            // window changed ACTIVITY rather than desktop (DesktopSpan
+            // mismatches on either axis), and the commit this plans lands
+            // under currentActivity() whatever the source key says
+            // (stateForWindowOnScreen pins {screen, desktop,
+            // currentActivity()}). Carrying across the activity boundary
+            // would therefore write another activity's zone into this one's
+            // store, so leave it to the context that owns it.
+            if (stale.activity != currentActivity()) {
                 continue;
             }
             // A LIVE snap, not frozen memory. A desktop that has since been
@@ -248,7 +269,11 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
         }
         bool snappingDestination = false;
         for (const int desktop : carryDestinationDesktops(entry.span, source.desktop)) {
-            if (const SnapState* there = m_states.stateForKey({screenId, desktop, source.activity});
+            // The very key the commit will write (see the activity guard
+            // above), so "does it already hold a zone over there" is asked of
+            // the store the carry would land in rather than a neighbouring
+            // activity's.
+            if (const SnapState* there = m_states.stateForKey({screenId, desktop, currentActivity()});
                 there && !there->zonesForWindow(entry.windowId).isEmpty()) {
                 continue; // it holds a zone of its own over there already
             }
@@ -298,8 +323,24 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
     };
     for (const PendingMembership& entry : pending) {
         PlacementStateKey carriedFrom;
-        if (const auto assign = planCarry(entry, carriedFrom)) {
+        const std::optional<PhosphorEngine::ZoneAssignmentEntry> assign = planCarry(entry, carriedFrom);
+        // The window is being carried into the very context the adopt arm
+        // below would restore a remembered zone in. The carry is committed
+        // after this loop and wins outright (the user has just moved the
+        // window, so its slot is the one that carries over), so the remembered
+        // restore would be a write nothing keeps and a log line claiming a
+        // restore that did not stand.
+        const bool carriedIntoCurrentContext = assign && assign->targetZoneId != PhosphorEngine::RestoreSentinel
+            && assign->virtualDesktop == currentKey.desktop;
+        if (assign) {
             carried.append(*assign);
+            // One desktop in the span means the move the park is asked for
+            // names the desktop the window is already on, and nothing else.
+            // The staleness that got us here is a desktop the span dropped,
+            // so the source is never counted here.
+            if (entry.span.desktops.size() == 1) {
+                parkable.insert(entry.windowId);
+            }
         }
         for (const PlacementStateKey& stale : entry.stale) {
             if (SnapState* state = m_states.stateForKey(stale)) {
@@ -345,7 +386,8 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
             // below rather than waiting for the user to snap it again.
             SnapState* state = ensureStateForKey(currentKey);
             m_states.addMembership(entry.windowId, currentKey);
-            if (state && m_windowTracker && state->zonesForWindow(entry.windowId).isEmpty()) {
+            if (state && m_windowTracker && !carriedIntoCurrentContext
+                && state->zonesForWindow(entry.windowId).isEmpty()) {
                 if (const auto rec = m_windowTracker->placementStore().peekExact(entry.windowId)) {
                     const QStringList remembered = rec->slotFor(engineId()).zonesByDesktop.value(currentKey.desktop);
                     // Only into the layout this desktop runs NOW: the zone
@@ -382,7 +424,17 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
         emitBatchedResnap(carried);
         for (const PhosphorEngine::ZoneAssignmentEntry& entry : std::as_const(carried)) {
             if (entry.targetZoneId == PhosphorEngine::RestoreSentinel || !m_windowTracker) {
-                continue; // the float-back is reported as a release and captured with it
+                // The float-back needs neither arm below. Its record is
+                // refreshed by the release it IS reported as (the daemon
+                // re-captures every released window), and the arrival park
+                // would have nothing to re-drive: the re-drive asks
+                // resolveWindowRestore for the zone this window is in, and a
+                // float-back leaves it in none. A pre-snap rect that grows the
+                // window therefore rides the same suspended-client limitation
+                // the move-to-desktop shortcut has always had, which leaves it
+                // where the compositor put it — no worse than before the carry
+                // existed, and the shrink direction lands.
+                continue;
             }
             // Same record refresh the in-app cross-desktop move does: the store
             // would otherwise keep the desktop the window was moved off, and
@@ -395,6 +447,16 @@ MembershipReconcileResult SnapEngine::applyMembershipWork(const QString& screenI
                                       << "— placement-store desktop not updated to" << entry.virtualDesktop;
             }
             if (entry.virtualDesktop == currentKey.desktop) {
+                continue;
+            }
+            if (!parkable.contains(entry.windowId)) {
+                // On several desktops, so the move the park rides would pin it
+                // to one of them (see `parkable`). It keeps its desktops and
+                // takes the geometry apply alone, which is what every carry
+                // did before the park existed.
+                qCInfo(lcSnapEngine) << "reconcileDesktopMemberships: not parking" << entry.windowId
+                                     << "— it is on more than one desktop, and the park is asked for as a move that"
+                                     << "would pin it to one";
                 continue;
             }
             // The window went to a desktop nobody is looking at, where the

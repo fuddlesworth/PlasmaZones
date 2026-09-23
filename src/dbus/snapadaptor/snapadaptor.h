@@ -361,6 +361,23 @@ private:
     bool applySnapResult(const SnapResult& result, const QString& windowId, int& snapX, int& snapY, int& snapWidth,
                          int& snapHeight, bool& shouldSnap);
 
+    /**
+     * @brief The two user-facing refusals every auto-snap answer this facade
+     *        gives has to pass.
+     *
+     * The global `snappingEnabled()` kill-switch (discussion #461 item 2) and
+     * the disabled-context gate for the context the window will land in.
+     * Extracted so applySnapResult is not the only place they live: an answer
+     * that writes its geometry out-params directly — the desktop-arrival
+     * re-apply in resolveWindowRestore — never reaches applySnapResult and
+     * would otherwise slip both, snapping a window on a monitor, desktop or
+     * activity the user has turned PlasmaZones off for.
+     *
+     * @p virtualDesktop is the desktop the window lands on, or 0 for "the one
+     * that context is showing now".
+     */
+    bool snapPermittedForContext(const QString& windowId, const QString& screenId, int virtualDesktop) const;
+
     PhosphorSnapEngine::SnapEngine* m_engine = nullptr;
     WindowTrackingAdaptor* m_adaptor = nullptr;
     ISettings* m_settings = nullptr;
