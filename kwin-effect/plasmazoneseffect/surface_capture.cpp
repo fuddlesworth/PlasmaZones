@@ -52,6 +52,18 @@
 
 namespace PlasmaZones {
 
+// The metadata scale buffer pass `index` of `eff` renders at: its own
+// `bufferScales` entry when the pack declares one, else the pack-wide
+// `bufferScale`. Callers feed the result through clampedBufferScale(). The one
+// place the per-pass fallback is spelled out, so the allocator below and the
+// backdrop-density resolver (chainBackdropScale) cannot disagree about which
+// scale a pass has. `static` with a distinct name rather than an anonymous
+// namespace: the effect builds as a Unity target.
+static qreal passBufferScaleFor(const PhosphorSurfaceShaders::SurfaceShaderEffect& eff, int index)
+{
+    return index >= 0 && index < eff.bufferScales.size() ? eff.bufferScales.at(index) : eff.bufferScale;
+}
+
 // (Re)allocate this window's composite / capture / per-pack buffer targets for the
 // current size, scale and chain, and drop every cache an allocation makes stale.
 //
@@ -163,16 +175,25 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
                 continue;
             }
             const PhosphorSurfaceShaders::SurfaceShaderEffect eff = m_surfaceShaderRegistry.effect(chain.at(k));
-            const qreal bufferScale = clampedBufferScale(eff.bufferScale);
-            const QSize bufferSize(qMax(1, qRound(textureSize.width() * bufferScale)),
-                                   qMax(1, qRound(textureSize.height() * bufferScale)));
             auto& bufs = state.chainBufferTex[k];
             auto& fbos = state.chainBufferFbo[k];
             bufs.reserve(pk->bufferPasses.size());
             fbos.reserve(pk->bufferPasses.size());
             for (size_t i = 0; i < pk->bufferPasses.size(); ++i) {
+                // Pass i renders at its own declared scale (a pyramid pack's
+                // `bufferScales`), falling back to the pack-wide bufferScale,
+                // with the user's global multiplier folded in either way.
+                const qreal bufferScale = clampedBufferScale(passBufferScaleFor(eff, static_cast<int>(i)));
+                const QSize bufferSize(qMax(1, qRound(textureSize.width() * bufferScale)),
+                                       qMax(1, qRound(textureSize.height() * bufferScale)));
                 std::unique_ptr<KWin::GLTexture> bt = KWin::GLTexture::allocate(GL_RGBA8, bufferSize);
                 if (!bt) {
+                    // Say which pass and what size: the degrade below is otherwise
+                    // silent, and the only trace is the driver's own GL_OUT_OF_MEMORY
+                    // line with nothing attributing it to a pack.
+                    qCWarning(lcEffect) << "Surface pack" << chain.at(k) << "buffer pass" << i << "allocation failed at"
+                                        << bufferSize << "(scale" << bufferScale << "canvas" << textureSize
+                                        << ") — pack renders single-pass for" << windowId;
                     // Pack k degrades to no buffers. The fold's main pass then
                     // binds the transparent fallback to every iChannel the pack
                     // still declares, so they genuinely sample 0 — an unset
@@ -194,6 +215,17 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
                 }
                 bufs.push_back(std::move(bt));
                 fbos.push_back(std::move(bfbo));
+            }
+            // Debug-level, once per (re)allocation: the pass count and sizes a
+            // pyramid pack actually got, which is the per-pass scale plumbing's
+            // one observable on a live session.
+            if (!bufs.empty()) {
+                QStringList sizes;
+                for (const auto& b : bufs) {
+                    sizes << QStringLiteral("%1x%2").arg(b->width()).arg(b->height());
+                }
+                qCDebug(lcEffect) << "Surface pack" << chain.at(k) << "buffer passes allocated for" << windowId << ":"
+                                  << sizes.join(QLatin1Char(' ')) << "(canvas" << textureSize << ")";
             }
         }
         // A different chain folds to a different composite, so neither the whole-
@@ -800,7 +832,8 @@ qreal PlasmaZonesEffect::chainBackdropScale(const WindowDecoration& deco, const 
         if (linksBackdropUniforms(pk->uBackdropLoc, pk->uHasBackdropLoc, pk->uBackdropRectLoc)) {
             return 1.0; // a sharp main-pass read caps every other answer
         }
-        for (const CompiledSurfaceBufferPass& bp : pk->bufferPasses) {
+        for (size_t bpIndex = 0; bpIndex < pk->bufferPasses.size(); ++bpIndex) {
+            const CompiledSurfaceBufferPass& bp = pk->bufferPasses[bpIndex];
             if (linksBackdropUniforms(bp.uBackdropLoc, bp.uHasBackdropLoc, bp.uBackdropRectLoc)) {
                 // Same clamp ensureSurfaceTargets applies when sizing
                 // the buffer targets themselves, so capture density
@@ -818,11 +851,16 @@ qreal PlasmaZonesEffect::chainBackdropScale(const WindowDecoration& deco, const 
                 // what it folds) plus the blur-scale-multiplier loader
                 // in daemon_settings.cpp. No count is quoted: the set
                 // of clear sites grows.
+                // The cached value is THIS pass's scale (the first pass that
+                // reads the backdrop), which under per-pass `bufferScales` is
+                // the densest read the backdrop gets: a pyramid's later passes
+                // read earlier passes, never the capture.
                 qreal packScale = 0.0;
                 if (const auto bsIt = m_packBufferScaleCache.find(packId); bsIt != m_packBufferScaleCache.end()) {
                     packScale = bsIt->second;
                 } else {
-                    packScale = clampedBufferScale(m_surfaceShaderRegistry.effect(packId).bufferScale);
+                    packScale = clampedBufferScale(
+                        passBufferScaleFor(m_surfaceShaderRegistry.effect(packId), static_cast<int>(bpIndex)));
                     m_packBufferScaleCache.emplace(packId, packScale);
                 }
                 scale = qMax(scale, packScale);

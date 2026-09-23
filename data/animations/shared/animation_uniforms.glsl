@@ -207,7 +207,7 @@ uniform sampler2D uTexture0;
 // User-declared textures — see AnimationShaderEffect::TextureSlot in
 // metadata.json or the runtime `uTexture<N>` parameter override. The
 // kwin-effect binds these to TEXTURE1..3 before drawWindow; the
-// daemon binds them to SRB bindings 8..10 via
+// daemon binds them to SRB bindings 12..14 via
 // ShaderNodeRhi::setUserTexture. Default `vec4(0)` (transparent black)
 // when neither declaration nor override resolves to a loadable file.
 uniform sampler2D uTexture1;
@@ -303,7 +303,7 @@ layout(std140, binding = 0) uniform AnimationUniforms {
     int iAudioSpectrumSize;      // offset 576 — audio spectrum bin count
     int iFlipBufferY;            // offset 580 — always 1 (Y-flip); daemon-only
     // implicit 8-byte std140 padding here — see layout note above.
-    vec4 iTextureResolution[4];  // offset 592 (64 bytes)  — user texture sizes (bindings 7-10)
+    vec4 iTextureResolution[4];  // offset 592 (64 bytes)  — user texture sizes (bindings 11-14)
     float iTimeHi;               // offset 656 — wrap-offset counterpart of iTime;
                                  //              always 0 on the animation path. Do NOT
                                  //              read in animation shaders — exists only
@@ -429,15 +429,15 @@ layout(std140, binding = 0) uniform AnimationUniforms {
 #define iMoveOffset vec2(0.0)
 #define iMoveVelocity2 vec2(0.0)
 
-layout(binding = 7) uniform sampler2D uTexture0;
+layout(binding = 11) uniform sampler2D uTexture0;
 // User-declared textures — see AnimationShaderEffect::TextureSlot or
 // the runtime `uTexture<N>` parameter override. Bindings 8..10 match
 // the overlay shader convention (data/overlays/shared/textures.glsl)
 // so animation and overlay shaders speak the same sampler-name and
 // binding-point dialect.
-layout(binding = 8) uniform sampler2D uTexture1;
-layout(binding = 9) uniform sampler2D uTexture2;
-layout(binding = 10) uniform sampler2D uTexture3;
+layout(binding = 12) uniform sampler2D uTexture1;
+layout(binding = 13) uniform sampler2D uTexture2;
+layout(binding = 14) uniform sampler2D uTexture3;
 
 #endif // PLASMAZONES_KWIN
 

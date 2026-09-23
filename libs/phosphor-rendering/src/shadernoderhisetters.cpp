@@ -588,11 +588,37 @@ void ShaderNodeRhi::setBufferFeedback(bool enable)
 void ShaderNodeRhi::setBufferScale(qreal scale)
 {
     const qreal clamped = qBound(PhosphorShaders::kMinBufferScale, scale, PhosphorShaders::kMaxBufferScale);
-    if (qFuzzyCompare(m_bufferScale, clamped)) {
+    // The single-value scale seeds every per-pass slot; setBufferScales runs
+    // after it in the sync order (ShaderEffect::updatePaintNode) and diverges
+    // the slots it names. Compare the slots too, so a pack that flips from
+    // per-pass scales back to one value reallocates.
+    bool changed = !qFuzzyCompare(m_bufferScale, clamped);
+    for (qreal s : m_bufferScales) {
+        changed = changed || !qFuzzyCompare(s, clamped);
+    }
+    if (!changed) {
         return;
     }
     m_bufferScale = clamped;
+    m_bufferScales.fill(clamped);
     resetBufferTargets();
+}
+
+void ShaderNodeRhi::setBufferScales(const QList<qreal>& scales)
+{
+    bool changed = false;
+    for (int i = 0; i < kMaxBufferPasses; ++i) {
+        const qreal use = i < scales.size()
+            ? qBound(PhosphorShaders::kMinBufferScale, scales.at(i), PhosphorShaders::kMaxBufferScale)
+            : m_bufferScale;
+        if (!qFuzzyCompare(m_bufferScales[static_cast<size_t>(i)], use)) {
+            m_bufferScales[static_cast<size_t>(i)] = use;
+            changed = true;
+        }
+    }
+    if (changed) {
+        resetBufferTargets();
+    }
 }
 
 void ShaderNodeRhi::setHalfFloatBuffers(bool enable)

@@ -6,6 +6,7 @@
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/Curve.h>
+#include <PhosphorShaders/ShaderBindings.h>
 
 #include <QByteArray>
 #include <QRectF>
@@ -364,27 +365,42 @@ static_assert(PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColor
 static_assert(PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots == 3,
               "User-texture name arrays must grow to match kMaxUserTextureSlots");
 
+/// The surface composite fold's texture-unit map, in the same order as the
+/// daemon's descriptor-binding table (PhosphorShaders/ShaderBindings.h) so the
+/// two hosts read alike: unit 0 is uTexture0, then one unit per iChannel
+/// (kSurfaceChannelCount of them), then the backdrop, the audio spectrum and
+/// the user textures.
+inline constexpr int kSurfaceChannelCount = PhosphorShaders::kMaxBufferPasses;
+inline constexpr int kSurfaceFoldChannelBaseUnit =
+    1; ///< unit of iChannel0 inside the fold (the present slot is kSurfaceChannelBaseUnit below)
+/// How many iChannelResolution[N] elements the contract declares: the UBO on
+/// the daemon carries four, so the compositor pushes four and a pass reading a
+/// later channel sizes it with textureSize().
+inline constexpr int kSurfaceChannelResolutionSlots = PhosphorShaders::Bindings::kChannelResolutionSlots;
+/// Texture unit for the backdrop capture (uBackdrop): the first past the channels.
+inline constexpr int kSurfaceBackdropUnit = kSurfaceFoldChannelBaseUnit + kSurfaceChannelCount;
+
 /// Texture unit for the audio-spectrum sampler (uAudioSpectrum) in the surface
-/// composite fold. The fold's main + buffer passes bind unit 0 (uTexture0),
-/// 1..4 (iChannel0..3), and 5 (uBackdrop); unit 6 is the first free unit.
+/// composite fold: the first free unit past uTexture0, the channels and the
+/// backdrop.
 ///
 /// The present passthrough in decoration_render.cpp (`kSurfaceChannelBaseUnit`)
-/// reuses a unit in this same range, but the two never collide: the fold
-/// completes and unbinds unit 6 before drawWindow's present pass runs, so they
-/// occupy their units in disjoint phases regardless of the exact numbers.
+/// reuses a unit inside the fold's range, but the two never collide: the fold
+/// completes and unbinds its units before drawWindow's present pass runs, so
+/// they occupy their units in disjoint phases regardless of the exact numbers.
 /// Shared here (not file-local) so the fold (surfacelayers.cpp) and the bind
 /// helper (surface_audio.cpp) agree on one value. If audio ever moves into the
 /// present phase, revisit this overlap.
-inline constexpr int kSurfaceAudioUnit = 6;
-static_assert(kSurfaceAudioUnit > 5,
-              "kSurfaceAudioUnit must clear the fold's units 0..5 (uTexture0/iChannel/backdrop)");
+inline constexpr int kSurfaceAudioUnit = kSurfaceBackdropUnit + 1;
+static_assert(kSurfaceAudioUnit > kSurfaceBackdropUnit,
+              "kSurfaceAudioUnit must clear the fold's units 0..backdrop (uTexture0/iChannel/backdrop)");
 
 /// First texture unit for SURFACE pack user textures (uTexture1..3) in the
-/// composite fold's main pass: units 7..9, clear of the fold's units 0..5 and
-/// the audio unit 6. The animation paintWindow path also binds audio at unit 6
-/// (bindSurfaceAudio) in its own phase; its user textures live at units 1..3,
-/// so the two paths' maps never meet on the same draw.
-inline constexpr int kSurfaceUserTextureBaseUnit = 7;
+/// composite fold's main pass: the units past the audio unit. The animation
+/// paintWindow path also binds audio at kSurfaceAudioUnit (bindSurfaceAudio) in
+/// its own phase; its user textures live at units 1..3, so the two paths' maps
+/// never meet on the same draw.
+inline constexpr int kSurfaceUserTextureBaseUnit = kSurfaceAudioUnit + 1;
 static_assert(kSurfaceUserTextureBaseUnit > kSurfaceAudioUnit,
               "surface user textures must sit above the audio unit — the fold binds both in the same pass");
 
@@ -396,7 +412,7 @@ static_assert(kSurfaceUserTextureBaseUnit > kSurfaceAudioUnit,
 ///   kSurfaceLayerUnit       (N+2) — the composited surface layer bound for the
 ///                                   animation shader / transition rebind
 ///   kSurfaceChannelBaseUnit (N+3) — the present passthrough's final composite
-///                                   slot (shares unit 6 with kSurfaceAudioUnit
+///                                   slot (inside the fold's iChannel unit range,
 ///                                   in the disjoint present phase, see above)
 /// Centralized here (not re-derived per call site) so the fold, the animation
 /// path, and the present rebind can't drift apart if the contract's slot count
@@ -407,13 +423,15 @@ inline constexpr int kSurfaceChannelBaseUnit =
     3 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
 static_assert(kOldSnapshotUnit < kSurfaceLayerUnit && kSurfaceLayerUnit < kSurfaceChannelBaseUnit,
               "surface decoration units must stay ordered and distinct");
-// Pin the relationship to the audio unit: today kSurfaceChannelBaseUnit == 6 ==
-// kSurfaceAudioUnit (the documented disjoint-phase overlap), while the layer /
-// old-snapshot units sit below it. A kMaxUserTextureSlots bump that pushes
-// kSurfaceLayerUnit onto the audio unit (N=4 → both 6) would silently collide
-// mid-fold, so fail at compile time instead.
-static_assert(kSurfaceLayerUnit != kSurfaceAudioUnit && kSurfaceChannelBaseUnit >= kSurfaceAudioUnit,
-              "surface layer unit must not collide with the audio unit, and the present slot must "
-              "stay at or above it — a kMaxUserTextureSlots bump needs the audio/present unit map revisited");
+// Pin the relationship to the audio unit: the layer, old-snapshot and present
+// units all sit below it today. A kMaxUserTextureSlots bump that pushed
+// kSurfaceLayerUnit onto the audio unit would silently collide mid-fold (the
+// animation draw binds both), so fail at compile time instead. The present
+// slot may share a unit with the fold's channels (disjoint phases, see
+// kSurfaceAudioUnit) but never with audio, which the animation draw binds in
+// the same phase as the present rebind.
+static_assert(kSurfaceLayerUnit != kSurfaceAudioUnit && kSurfaceChannelBaseUnit != kSurfaceAudioUnit,
+              "neither the surface layer unit nor the present slot may collide with the audio unit — "
+              "a kMaxUserTextureSlots bump needs the audio/present unit map revisited");
 
 } // namespace PlasmaZones::ShaderInternal

@@ -423,6 +423,12 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         return;
     }
     const QString basePackId = chain.first();
+    // Debug-level, once per (re)resolve rather than per frame: the one place
+    // the chain a window will fold is known, so a live session can answer
+    // "did the tree reach this window, and with which packs" from the log
+    // instead of from a screenshot.
+    qCDebug(lcEffect) << "decoration chain resolved for" << windowId << ":" << chain << "(user packs" << userPacks
+                      << "shell" << isShellSurface << ")";
 
     // Store the resolved chain. pushBorderUniforms reads live frameGeometry()/
     // expandedGeometry() + viewport.scale() per frame so a resize/move/output-scale

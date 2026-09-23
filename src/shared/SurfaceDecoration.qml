@@ -729,6 +729,7 @@ Item {
                 bufferShaderPaths: stage.stageData.multipass === true && stage.stageData.bufferShaderPaths !== undefined ? Array.from(stage.stageData.bufferShaderPaths) : []
                 bufferFeedback: stage.stageData.bufferFeedback === true
                 bufferScale: stage.stageData.bufferScale !== undefined ? stage.stageData.bufferScale : 1
+                bufferScales: stage.stageData.bufferScales !== undefined ? Array.from(stage.stageData.bufferScales) : []
                 bufferWrap: stage.stageData.bufferWrap !== undefined && stage.stageData.bufferWrap !== "" ? stage.stageData.bufferWrap : "clamp"
                 bufferWraps: stage.stageData.bufferWraps !== undefined ? Array.from(stage.stageData.bufferWraps) : []
                 bufferFilter: stage.stageData.bufferFilter !== undefined && stage.stageData.bufferFilter !== "" ? stage.stageData.bufferFilter : "linear"

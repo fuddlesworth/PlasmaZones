@@ -83,6 +83,7 @@ set(phosphorshaders_public_HDRS
     include/PhosphorShaders/ShaderPresetParse.h
     include/PhosphorShaders/ShaderPresetRegistry.h
     include/PhosphorShaders/ShaderPresetStore.h
+    include/PhosphorShaders/ShaderBindings.h
     include/PhosphorShaders/ShaderRegistry.h
 )
 
@@ -97,6 +98,7 @@ set(phosphorshaders_camelcase_HDRS
     include/PhosphorShaders/PixelUnits
     include/PhosphorShaders/ShaderEntryPoint
     include/PhosphorShaders/ShaderIncludeResolver
+    include/PhosphorShaders/ShaderBindings
     include/PhosphorShaders/ShaderPackPaths
     include/PhosphorShaders/ShaderParamPreamble
     include/PhosphorShaders/ShaderPreset

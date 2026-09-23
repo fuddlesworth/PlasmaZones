@@ -412,6 +412,42 @@ private Q_SLOTS:
         QCOMPARE(scaleFor(0.5), 0.5);
     }
 
+    /// `bufferScales` is positionally aligned with bufferShaders like the wrap
+    /// and filter lists: every entry is kept in place, each is clamped like the
+    /// single-value scale, a non-number falls back to that scale rather than
+    /// being dropped (which would shift every later pass), and the list is
+    /// capped at the pass budget. It round-trips through toJson.
+    void fromJson_keeps_per_pass_buffer_scales_aligned_and_clamped()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("id"), QStringLiteral("s"));
+        obj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        obj.insert(QLatin1String("bufferScale"), 0.25);
+        QJsonArray scales;
+        scales.append(0.5);
+        scales.append(QStringLiteral("oops"));
+        scales.append(5.0);
+        scales.append(0.001);
+        obj.insert(QLatin1String("bufferScales"), scales);
+        const SurfaceShaderEffect e = SurfaceShaderEffect::fromJson(obj);
+        QCOMPARE(e.bufferScales.size(), 4);
+        QCOMPARE(e.bufferScales.at(0), 0.5);
+        QCOMPARE(e.bufferScales.at(1), 0.25); // the non-number slot follows bufferScale
+        QCOMPARE(e.bufferScales.at(2), SurfaceShaderEffect::kMaxBufferScale);
+        QCOMPARE(e.bufferScales.at(3), SurfaceShaderEffect::kMinBufferScale);
+
+        const SurfaceShaderEffect again = SurfaceShaderEffect::fromJson(e.toJson());
+        QVERIFY(again == e);
+        QCOMPARE(again.bufferScales, e.bufferScales);
+
+        QJsonArray surplus;
+        for (int i = 0; i < SurfaceShaderEffect::kMaxBufferPasses + 2; ++i) {
+            surplus.append(0.5);
+        }
+        obj.insert(QLatin1String("bufferScales"), surplus);
+        QCOMPARE(SurfaceShaderEffect::fromJson(obj).bufferScales.size(), SurfaceShaderEffect::kMaxBufferPasses);
+    }
+
     void parseEffect_clears_orphan_buffer_overrides_on_single_pass_pack()
     {
         // A pack that declares per-buffer wrap/filter overrides WITHOUT

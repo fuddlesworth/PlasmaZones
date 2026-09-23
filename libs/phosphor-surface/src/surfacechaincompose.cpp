@@ -85,6 +85,12 @@ QVariantMap composeStageMap(const SurfaceShaderEffect& effect, const QVariantMap
         stageMap.insert(QLatin1String("bufferShaderPaths"), QVariant::fromValue(effect.bufferShaderPaths));
         stageMap.insert(QLatin1String("bufferFeedback"), effect.bufferFeedback);
         stageMap.insert(QLatin1String("bufferScale"), effect.bufferScale);
+        QVariantList scales;
+        scales.reserve(effect.bufferScales.size());
+        for (qreal s : effect.bufferScales) {
+            scales.append(s);
+        }
+        stageMap.insert(QLatin1String("bufferScales"), scales);
         stageMap.insert(QLatin1String("bufferWrap"), effect.bufferWrap);
         stageMap.insert(QLatin1String("bufferWraps"), QVariant::fromValue(effect.bufferWraps));
         stageMap.insert(QLatin1String("bufferFilter"), effect.bufferFilter);

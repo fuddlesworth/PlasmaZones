@@ -81,6 +81,12 @@ QJsonObject SurfaceShaderEffect::toJson() const
     // values like 0.125 too.
     if (!qFuzzyCompare(bufferScale + 1.0, 2.0))
         obj.insert(QLatin1String("bufferScale"), bufferScale);
+    if (!bufferScales.isEmpty()) {
+        QJsonArray arr;
+        for (qreal s : bufferScales)
+            arr.append(s);
+        obj.insert(QLatin1String("bufferScales"), arr);
+    }
     if (!bufferWrap.isEmpty())
         obj.insert(QLatin1String("bufferWrap"), bufferWrap);
     if (!bufferWraps.isEmpty()) {
@@ -223,6 +229,26 @@ SurfaceShaderEffect SurfaceShaderEffect::fromJson(const QJsonObject& obj)
         qCWarning(lcSurfaceShader) << "SurfaceShaderEffect::fromJson: effect" << e.id
                                    << "declares a non-numeric bufferScale; using the default 1.0";
         e.bufferScale = 1.0;
+    }
+    // Per-pass scales: positionally aligned with bufferShaders like the wrap
+    // and filter lists, so every entry is kept in place. A non-numeric entry
+    // falls back to the single-value scale for that slot (with a warning),
+    // never dropped, or every later pass would shift onto the wrong scale.
+    // Capped at the pass budget like its siblings.
+    const QJsonArray scalesArr = obj.value(QLatin1String("bufferScales")).toArray();
+    for (qsizetype i = 0; i < qMin<qsizetype>(scalesArr.size(), kMaxBufferPasses); ++i) {
+        const QJsonValue v = scalesArr.at(i);
+        if (v.isDouble()) {
+            e.bufferScales.append(qBound(kMinBufferScale, v.toDouble(), kMaxBufferScale));
+        } else {
+            qCWarning(lcSurfaceShader) << "SurfaceShaderEffect::fromJson: effect" << e.id << "bufferScales entry" << i
+                                       << "is not a number; that pass uses bufferScale";
+            e.bufferScales.append(e.bufferScale);
+        }
+    }
+    if (scalesArr.size() > kMaxBufferPasses) {
+        qCWarning(lcSurfaceShader) << "SurfaceShaderEffect::fromJson: bufferScales has" << scalesArr.size()
+                                   << "entries, cap is" << kMaxBufferPasses << "- surplus dropped";
     }
     // Buffer wrap/filter share the texture-slot `wrap` guard's rationale:
     // an unknown token is a typo or foreign vocabulary that the runtime
@@ -430,6 +456,12 @@ bool SurfaceShaderEffect::operator==(const SurfaceShaderEffect& other) const
         return false;
     if (!qFuzzyCompare(bufferScale + 1.0, other.bufferScale + 1.0))
         return false;
+    if (bufferScales.size() != other.bufferScales.size())
+        return false;
+    for (qsizetype i = 0; i < bufferScales.size(); ++i) {
+        if (!qFuzzyCompare(bufferScales[i] + 1.0, other.bufferScales[i] + 1.0))
+            return false;
+    }
     if (bufferShaderPaths != other.bufferShaderPaths || bufferWrap != other.bufferWrap
         || bufferWraps != other.bufferWraps || bufferFilter != other.bufferFilter
         || bufferFilters != other.bufferFilters)

@@ -6,7 +6,7 @@
 //   #include <common.glsl>   (from global shaders dir)
 //   #include "common.glsl"   (from current shader dir if copied locally)
 //
-// Bindings 0-1: UBO and labels. Channels (2-5) in multipass.glsl.
+// Bindings 0-1: UBO and labels. Channels (2-9) in multipass.glsl.
 
 #ifndef PLASMAZONES_COMMON_GLSL
 #define PLASMAZONES_COMMON_GLSL
@@ -29,7 +29,7 @@ layout(std140, binding = 0) uniform ZoneUniforms {
     int iAudioSpectrumSize;  // number of bars; 0 = disabled
     int iFlipBufferY;        // always 1; both OpenGL and Vulkan need Y-flip when sampling buffer textures
     // std140: 8 bytes implicit padding here (int+int=8 → next vec2 array aligned to 16)
-    vec2 iTextureResolution[4]; // user texture sizes (bindings 7-10); std140 pads each vec2 to 16 bytes
+    vec2 iTextureResolution[4]; // user texture sizes (bindings 11-14); std140 pads each vec2 to 16 bytes
     float iTimeHi;       // integer wrap offset (changes once per kShaderTimeWrap seconds)
     // ── Zone extension (after BaseUniforms) ──────────────────────────
     vec4 zoneRects[64];

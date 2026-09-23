@@ -618,6 +618,16 @@ void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
     node->setBufferShaderPaths(effectivePaths);
     node->setBufferFeedback(m_bufferFeedback);
     node->setBufferScale(m_bufferScale);
+    // AFTER the single-value scale, which seeds every per-pass slot; this
+    // diverges the slots the pack names.
+    {
+        QList<qreal> perPass;
+        perPass.reserve(m_bufferScales.size());
+        for (const QVariant& v : m_bufferScales) {
+            perPass.append(v.toDouble());
+        }
+        node->setBufferScales(perPass);
+    }
     node->setHalfFloatBuffers(m_halfFloatBuffers);
     node->setBufferWrap(m_bufferWrap);
     // Pushed unconditionally — an EMPTY list is a meaningful value ("no

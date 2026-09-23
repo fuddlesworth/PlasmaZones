@@ -27,7 +27,7 @@ uniform sampler2D iChannel1;
 uniform sampler2D iChannel2;
 uniform sampler2D iChannel3;
 #else
-// Bindings 2-5, matching surface_multipass.glsl and the overlay category's
+// Bindings 2-9, matching surface_multipass.glsl and the overlay category's
 // shared/multipass.glsl so every family speaks the same iChannel dialect.
 layout(binding = 2) uniform sampler2D iChannel0;
 layout(binding = 3) uniform sampler2D iChannel1;

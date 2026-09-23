@@ -20,14 +20,14 @@
 
 #include <surface_uniforms.glsl>
 
-// Audio spectrum texture (binding 6 on the daemon's RHI pipeline; a plain named
+// Audio spectrum texture (binding 10 on the daemon's RHI pipeline; a plain named
 // sampler on the compositor's classic-GL pipeline, bound to a texture unit at
 // draw time). Never sampled while iAudioSpectrumSize is 0. 1D: bar index = x,
 // y = 0; R = bar value in 0..1.
 #ifdef PLASMAZONES_KWIN
 uniform sampler2D uAudioSpectrum;
 #else
-layout(binding = 6) uniform sampler2D uAudioSpectrum;
+layout(binding = 10) uniform sampler2D uAudioSpectrum;
 #endif
 
 // Sample bar value (0..1). Returns 0 if audio is disabled or the index is out

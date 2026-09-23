@@ -578,7 +578,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             // own sampler location being -1 must not zero the gate.
             const bool backdropAvailable = backdropUsable(state);
             const bool passHasBackdrop = pass.uBackdropLoc >= 0 && backdropAvailable;
-            bool passBackdropUnitBound = false; ///< the transparent fallback went to unit 5
+            bool passBackdropUnitBound = false; ///< the transparent fallback went to the backdrop unit
             bool passAudioBound = false;
             {
                 KWin::ShaderBinder binder(pass.shader.get());
@@ -602,11 +602,11 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 if (pass.uScaleLoc >= 0) {
                     pass.shader->setUniform(pass.uScaleLoc, static_cast<float>(captureScale));
                 }
-                // Backdrop (needsBackdrop packs) on unit 5 — units 1..4
+                // Backdrop (needsBackdrop packs) on kSurfaceBackdropUnit — the units below it
                 // belong to the pass's iChannel bindings below.
                 if (passHasBackdrop) {
-                    pass.shader->setUniform(pass.uBackdropLoc, 5);
-                    glActiveTexture(GL_TEXTURE5);
+                    pass.shader->setUniform(pass.uBackdropLoc, ShaderInternal::kSurfaceBackdropUnit);
+                    glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceBackdropUnit);
                     state.backdropTex->bind();
                     glActiveTexture(GL_TEXTURE0);
                 } else if (pass.uBackdropLoc >= 0) {
@@ -618,14 +618,14 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                     // one exception, safe only because every bundled pack happens to gate on
                     // uHasBackdrop first. A third-party pack that does not is not a bug in
                     // the pack.
-                    pass.shader->setUniform(pass.uBackdropLoc, 5);
+                    pass.shader->setUniform(pass.uBackdropLoc, ShaderInternal::kSurfaceBackdropUnit);
                     // Set the uniform EVEN IF the fallback texture is null. An explicitly set sampler
                     // pointing at an unbound unit reads black, which is the safe answer; an UNSET one
                     // reads unit 0, the running composite. The lazy 1x1 upload can fail (OOM, context
                     // loss), and every other consumer of this texture null-checks it — these two were
                     // the only ones dereferencing it blind, which is a segfault in the compositor.
                     if (KWin::GLTexture* const fallback = transparentFallbackTexture()) {
-                        glActiveTexture(GL_TEXTURE5);
+                        glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceBackdropUnit);
                         fallback->bind();
                         glActiveTexture(GL_TEXTURE0);
                         passBackdropUnitBound = true;
@@ -637,13 +637,14 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 if (pass.uHasBackdropLoc >= 0) {
                     pass.shader->setUniform(pass.uHasBackdropLoc, backdropAvailable ? 1.0f : 0.0f);
                 }
-                for (size_t j = 0; j < i && j < 4; ++j) {
+                for (size_t j = 0; j < i && j < static_cast<size_t>(ShaderInternal::kSurfaceChannelCount); ++j) {
                     glActiveTexture(GL_TEXTURE1 + static_cast<int>(j));
                     bufs[j]->bind();
                     if (pass.iChannelLoc[j] >= 0) {
                         pass.shader->setUniform(pass.iChannelLoc[j], 1 + static_cast<int>(j));
                     }
-                    if (pass.iChannelResolutionLoc[j] >= 0) {
+                    if (j < static_cast<size_t>(ShaderInternal::kSurfaceChannelResolutionSlots)
+                        && pass.iChannelResolutionLoc[j] >= 0) {
                         const QVector4D res(static_cast<float>(bufs[j]->width()), static_cast<float>(bufs[j]->height()),
                                             0.0f, 0.0f);
                         pass.shader->setUniform(pass.iChannelResolutionLoc[j], res);
@@ -656,7 +657,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 // pass samples iChannel0 was reading the window back into itself. The main
                 // pass, the audio slot and the user-texture slots all bind a fallback for
                 // exactly this reason; the buffer passes were left out of it.
-                for (size_t j = i; j < 4; ++j) {
+                for (size_t j = i; j < static_cast<size_t>(ShaderInternal::kSurfaceChannelCount); ++j) {
                     if (pass.iChannelLoc[j] < 0) {
                         continue; // the pass never samples this channel
                     }
@@ -671,7 +672,8 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                     }
                     fallback->bind();
                     pass.shader->setUniform(pass.iChannelLoc[j], 1 + static_cast<int>(j));
-                    if (pass.iChannelResolutionLoc[j] >= 0) {
+                    if (j < static_cast<size_t>(ShaderInternal::kSurfaceChannelResolutionSlots)
+                        && pass.iChannelResolutionLoc[j] >= 0) {
                         pass.shader->setUniform(pass.iChannelResolutionLoc[j],
                                                 QVector4D(static_cast<float>(fallback->width()),
                                                           static_cast<float>(fallback->height()), 0.0f, 0.0f));
@@ -706,16 +708,16 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                     bindSurfaceAudio(pass.shader.get(), pass.iAudioSpectrumSizeLoc, pass.uAudioSpectrumLoc, mayAnimate);
                 drawFullscreenQuad();
             }
-            // Unbind all four channel units, not just the prior-buffer ones: the loop
+            // Unbind every channel unit, not just the prior-buffer ones: the loop
             // above also binds a transparent fallback to every channel the pass declares
             // but has no buffer for, and leaving those bound would leak this pass's state
             // into the next one.
-            for (size_t j = 0; j < 4; ++j) {
+            for (size_t j = 0; j < static_cast<size_t>(ShaderInternal::kSurfaceChannelCount); ++j) {
                 glActiveTexture(GL_TEXTURE1 + static_cast<int>(j));
                 glBindTexture(GL_TEXTURE_2D, 0);
             }
             if (passHasBackdrop || passBackdropUnitBound) {
-                glActiveTexture(GL_TEXTURE5);
+                glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceBackdropUnit);
                 glBindTexture(GL_TEXTURE_2D, 0);
             }
             if (passAudioBound) {
@@ -740,7 +742,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         // bind (frost's main reads the blurred buffers, not uBackdrop).
         const bool backdropAvailable = backdropUsable(state);
         const bool mainHasBackdrop = pk->uBackdropLoc >= 0 && backdropAvailable;
-        bool mainBackdropUnitBound = false; ///< the transparent fallback went to unit 5
+        bool mainBackdropUnitBound = false; ///< the transparent fallback went to the backdrop unit
         bool mainAudioBound = false;
         bool mainUserTexturesBound = false;
         // Highest iChannel unit bound by the main pass, +1. Tracked rather than
@@ -760,7 +762,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             // Bind only the buffers step 2a actually rendered (passCount), not
             // every allocated slot: if bufs ever outnumbers the pack's buffer
             // passes, the surplus textures are unwritten and must not be sampled.
-            const int n = qMin(static_cast<int>(passCount), 4);
+            const int n = qMin(static_cast<int>(passCount), ShaderInternal::kSurfaceChannelCount);
             for (int i = 0; i < n; ++i) {
                 glActiveTexture(GL_TEXTURE1 + i);
                 bufs[i]->bind();
@@ -768,7 +770,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 if (pk->iChannelLoc[i] >= 0) {
                     pk->shader->setUniform(pk->iChannelLoc[i], 1 + i);
                 }
-                if (pk->iChannelResolutionLoc[i] >= 0) {
+                if (i < ShaderInternal::kSurfaceChannelResolutionSlots && pk->iChannelResolutionLoc[i] >= 0) {
                     const QVector4D res(static_cast<float>(bufs[i]->width()), static_cast<float>(bufs[i]->height()),
                                         0.0f, 0.0f);
                     pk->shader->setUniform(pk->iChannelResolutionLoc[i], res);
@@ -787,7 +789,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             // successful fold, whose units now hold unrelated texels. Bind the
             // transparent fallback so an unrendered channel really does read as 0,
             // which is what the allocation-failure path claims to deliver.
-            for (int i = n; i < 4; ++i) {
+            for (int i = n; i < ShaderInternal::kSurfaceChannelCount; ++i) {
                 if (pk->iChannelLoc[i] < 0) {
                     continue; // the pack never samples this channel
                 }
@@ -804,31 +806,31 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 fallback->bind();
                 mainChannelsBound = i + 1;
                 pk->shader->setUniform(pk->iChannelLoc[i], 1 + i);
-                if (pk->iChannelResolutionLoc[i] >= 0) {
+                if (i < ShaderInternal::kSurfaceChannelResolutionSlots && pk->iChannelResolutionLoc[i] >= 0) {
                     pk->shader->setUniform(pk->iChannelResolutionLoc[i],
                                            QVector4D(static_cast<float>(fallback->width()),
                                                      static_cast<float>(fallback->height()), 0.0f, 0.0f));
                 }
                 glActiveTexture(GL_TEXTURE0);
             }
-            // Backdrop (needsBackdrop packs) on unit 5 — units 1..n above
+            // Backdrop (needsBackdrop packs) on kSurfaceBackdropUnit — units 1..n above
             // hold this pack's buffer outputs.
             if (mainHasBackdrop) {
-                pk->shader->setUniform(pk->uBackdropLoc, 5);
-                glActiveTexture(GL_TEXTURE5);
+                pk->shader->setUniform(pk->uBackdropLoc, ShaderInternal::kSurfaceBackdropUnit);
+                glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceBackdropUnit);
                 state.backdropTex->bind();
                 glActiveTexture(GL_TEXTURE0);
             } else if (pk->uBackdropLoc >= 0) {
                 // Declared with nothing behind it — the transparent fallback, for the reason
                 // given on the buffer-pass sibling above. Unit 0 is the running composite.
-                pk->shader->setUniform(pk->uBackdropLoc, 5);
+                pk->shader->setUniform(pk->uBackdropLoc, ShaderInternal::kSurfaceBackdropUnit);
                 // Set the uniform EVEN IF the fallback texture is null. An explicitly set sampler
                 // pointing at an unbound unit reads black, which is the safe answer; an UNSET one
                 // reads unit 0, the running composite. The lazy 1x1 upload can fail (OOM, context
                 // loss), and every other consumer of this texture null-checks it — these two were
                 // the only ones dereferencing it blind, which is a segfault in the compositor.
                 if (KWin::GLTexture* const fallback = transparentFallbackTexture()) {
-                    glActiveTexture(GL_TEXTURE5);
+                    glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceBackdropUnit);
                     fallback->bind();
                     glActiveTexture(GL_TEXTURE0);
                     mainBackdropUnitBound = true;
@@ -895,7 +897,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             glBindTexture(GL_TEXTURE_2D, 0);
         }
         if (mainHasBackdrop || mainBackdropUnitBound) {
-            glActiveTexture(GL_TEXTURE5);
+            glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceBackdropUnit);
             glBindTexture(GL_TEXTURE_2D, 0);
         }
         if (mainAudioBound) {

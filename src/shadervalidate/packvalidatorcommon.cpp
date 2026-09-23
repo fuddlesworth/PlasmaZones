@@ -9,6 +9,7 @@
 
 #include <PhosphorFsLoader/PackPathGuard.h>
 
+#include <PhosphorShaders/ShaderBindings.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
 #include <PhosphorShaders/ShaderPreset.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
@@ -343,12 +344,64 @@ QString padLabel(const QString& label)
 // diagnostics mapped to the author's file/line (T1.3 #line) plus the
 // did-you-mean hint. @p declared is the list of generated `p_<id>` names.
 // Returns 1 on failure, 0 on success. Shared by all four validators.
+// The descriptor-binding lint every Qt-RHI bake passes through: reflect the
+// baked stage and check each sampler and uniform block against the ONE binding
+// table (PhosphorShaders::Bindings). A contract sampler (iChannelN, uTextureN,
+// uAudioSpectrum, uWallpaper / uBackdrop, uDepthBuffer, uCursorSprite,
+// uZoneLabels) must sit at its table slot, and any other sampler must sit in
+// the consumer range. The runtime builds its SRB from the same table, so a
+// header that drifted would fail the pipeline with nothing naming the cause;
+// here it names the sampler and both numbers.
+QStringList bindingLayoutProblems(const QShader& shader)
+{
+    QStringList problems;
+    const QShaderDescription desc = shader.description();
+    for (const QShaderDescription::UniformBlock& block : desc.uniformBlocks()) {
+        if (block.binding != PhosphorShaders::Bindings::kUniformBlock) {
+            problems << QStringLiteral("uniform block %1 declared at binding %2, the contract puts it at %3")
+                            .arg(QString::fromUtf8(block.blockName))
+                            .arg(block.binding)
+                            .arg(PhosphorShaders::Bindings::kUniformBlock);
+        }
+    }
+    for (const QShaderDescription::InOutVariable& sampler : desc.combinedImageSamplers()) {
+        const QString name = QString::fromUtf8(sampler.name);
+        const int expected = PhosphorShaders::Bindings::expectedSamplerBinding(name);
+        if (expected >= 0) {
+            if (sampler.binding != expected) {
+                problems << QStringLiteral("sampler %1 declared at binding %2, the contract puts it at %3")
+                                .arg(name)
+                                .arg(sampler.binding)
+                                .arg(expected);
+            }
+        } else if (!PhosphorShaders::Bindings::isConsumerBinding(sampler.binding)) {
+            problems << QStringLiteral(
+                            "sampler %1 declared at binding %2, which is a contract slot, not a consumer "
+                            "one (%3 or %4..%5)")
+                            .arg(name)
+                            .arg(sampler.binding)
+                            .arg(PhosphorShaders::Bindings::kConsumer)
+                            .arg(PhosphorShaders::Bindings::kExtraBase)
+                            .arg(PhosphorShaders::Bindings::kMaxBinding);
+        }
+    }
+    return problems;
+}
+
 int reportCompile(QTextStream& out, const QString& label, const ShaderCompiler::Result& result,
                   const QStringList& declared)
 {
     if (result.success) {
-        out << "  " << padLabel(label) << "OK\n";
-        return 0;
+        const QStringList bindings = bindingLayoutProblems(result.shader);
+        if (bindings.isEmpty()) {
+            out << "  " << padLabel(label) << "OK\n";
+            return 0;
+        }
+        out << "  " << padLabel(label) << "ERROR\n";
+        for (const QString& problem : bindings) {
+            out << "    binding layout: " << problem << "\n";
+        }
+        return 1;
     }
     out << "  " << padLabel(label) << "ERROR\n";
     const QStringList diagLines = result.error.split(QLatin1Char('\n'), Qt::SkipEmptyParts);

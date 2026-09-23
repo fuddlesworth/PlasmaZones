@@ -13,6 +13,7 @@
 /// PhosphorSurface — the seam is real, not cosmetic. types.h remains as an
 /// umbrella that includes both, so existing consumers are unaffected.
 
+#include <PhosphorShaders/ShaderBindings.h>
 #include <PhosphorSurface/SurfaceShaderContract.h>
 
 #include <core/region.h>
@@ -67,10 +68,15 @@ struct CompiledSurfaceBufferPass
     /// signal that this buffer pass reacts to audio.
     int iAudioSpectrumSizeLoc = -1;
     int uAudioSpectrumLoc = -1;
-    /// iChannel0..3 sampler locations — prior buffer outputs feeding this pass.
-    std::array<int, 4> iChannelLoc{{-1, -1, -1, -1}};
-    /// iChannelResolution[0..3] element locations (the .xy pixel size of each).
-    std::array<int, 4> iChannelResolutionLoc{{-1, -1, -1, -1}};
+    /// iChannel0..7 sampler locations — prior buffer outputs feeding this pass.
+    std::array<int, PhosphorShaders::kMaxBufferPasses> iChannelLoc = []() {
+        std::array<int, PhosphorShaders::kMaxBufferPasses> a;
+        a.fill(-1);
+        return a;
+    }();
+    /// iChannelResolution[0..3] element locations (the .xy pixel size of each; the
+    /// contract declares four, a pass reading a later channel uses textureSize()).
+    std::array<int, PhosphorShaders::Bindings::kChannelResolutionSlots> iChannelResolutionLoc{{-1, -1, -1, -1}};
     /// Pack-declared parameter slot locations (reuse the main pass's values).
     std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomParams> customParamsLoc = []() {
         std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomParams> a;
@@ -165,8 +171,12 @@ struct CompiledSurfacePack
 
     /// MAIN-pass iChannel0..3 sampler + iChannelResolution[0..3] element
     /// locations. -1 when the linker dropped the uniform (single-pass pack).
-    std::array<int, 4> iChannelLoc{{-1, -1, -1, -1}};
-    std::array<int, 4> iChannelResolutionLoc{{-1, -1, -1, -1}};
+    std::array<int, PhosphorShaders::kMaxBufferPasses> iChannelLoc = []() {
+        std::array<int, PhosphorShaders::kMaxBufferPasses> a;
+        a.fill(-1);
+        return a;
+    }();
+    std::array<int, PhosphorShaders::Bindings::kChannelResolutionSlots> iChannelResolutionLoc{{-1, -1, -1, -1}};
 
     /// User-declared image textures (metadata `textures`): sampler +
     /// iTextureResolution[N] element locations, plus the textures themselves,

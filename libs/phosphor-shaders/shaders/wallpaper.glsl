@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// Desktop wallpaper texture binding (slot 11).
+// Desktop wallpaper texture binding (slot 15).
 // Include from effect.frag or pass*.frag with:
 //   #include <wallpaper.glsl>
 //
@@ -15,7 +15,7 @@
 #ifndef PHOSPHORSHADERS_WALLPAPER_GLSL
 #define PHOSPHORSHADERS_WALLPAPER_GLSL
 
-layout(binding = 11) uniform sampler2D uWallpaper;
+layout(binding = 15) uniform sampler2D uWallpaper;
 
 // Compute aspect-correct UV for wallpaper sampling.
 // Centers the wallpaper to fill the given area, cropping overflow.

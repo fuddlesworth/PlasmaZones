@@ -241,6 +241,47 @@ private Q_SLOTS:
         QVERIFY2(r.report.contains(QStringLiteral("wrap not in {clamp,repeat,mirror}")), qPrintable(r.report));
         QVERIFY(r.errors > 0);
     }
+
+    /// Every baked stage is reflected against the shared descriptor-binding
+    /// table. A pack that declares its own sampler inside the reserved range
+    /// (here on the iChannel1 slot) compiles fine on its own, and would then
+    /// fail the daemon's pipeline with nothing naming the cause, so the
+    /// validator names the sampler and the slot instead.
+    void aSamplerOnAReservedBindingIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        const QJsonObject obj = surfacePack(QStringLiteral("sf-binding"), QJsonArray{});
+        const QString body = QStringLiteral("layout(binding = 3) uniform sampler2D uMine;\n")
+            + QStringLiteral("vec4 pSurface(vec2 uv)\n{\n    return texture(uMine, uv);\n}\n");
+
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-binding"), obj, body);
+        QVERIFY2(r.report.contains(QStringLiteral("binding layout: sampler uMine declared at binding 3")),
+                 qPrintable(r.report));
+        QVERIFY(r.errors > 0);
+    }
+
+    /// The contract samplers must sit at their table slot: a pack that re-declares
+    /// a contract name elsewhere is a header drift, which is exactly what the
+    /// lint exists to catch.
+    void aContractSamplerOffItsSlotIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        const QJsonObject obj = surfacePack(QStringLiteral("sf-binding-drift"), QJsonArray{});
+        // uBackdrop belongs at the wallpaper slot (15); declare it at a consumer
+        // slot so the compile itself stays clean and only the table disagrees.
+        const QString body = QStringLiteral("layout(binding = 20) uniform sampler2D uBackdrop;\n")
+            + QStringLiteral("vec4 pSurface(vec2 uv)\n{\n    return texture(uBackdrop, uv);\n}\n");
+
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-binding-drift"), obj, body);
+        QVERIFY2(
+            r.report.contains(QStringLiteral("sampler uBackdrop declared at binding 20, the contract puts it at 15")),
+            qPrintable(r.report));
+        QVERIFY(r.errors > 0);
+    }
 };
 
 QTEST_MAIN(TestSurfacePackValidator)

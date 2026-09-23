@@ -30,7 +30,7 @@ uniform sampler2D uBackdrop;
 uniform vec4 uBackdropRect;
 #else
 // Daemon branch: the stand-in for "the scene behind this surface" — the desktop
-// wallpaper, where the host supplies one. Shares binding 11 with the overlay
+// wallpaper, where the host supplies one. Shares binding 15 with the overlay
 // category's wallpaper sampler, which is the same texture from the same
 // resolver, so no new binding point enters the dialect.
 //
@@ -46,7 +46,7 @@ uniform vec4 uBackdropRect;
 // answers "which part of this shared image lies behind THIS surface", because
 // every surface is handed the same desktop-sized wallpaper. Without it each one
 // samples the whole desktop squeezed into its own box.
-layout(binding = 11) uniform sampler2D uBackdrop;
+layout(binding = 15) uniform sampler2D uBackdrop;
 #endif
 
 // The scene texel BEHIND the surface at `uv` (the same uv space surfaceTexel

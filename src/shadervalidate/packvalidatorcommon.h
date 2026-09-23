@@ -116,9 +116,19 @@ QString poolName(const QString& type);
 
 // Report a compiled stage's outcome ("OK", or "ERROR" with the glslang
 // diagnostics mapped to the author's file/line plus the did-you-mean hint).
-// Returns 1 on failure, 0 on success. Shared by all the validators.
+// A stage that compiled is then reflected against the shared descriptor-binding
+// table (bindingLayoutProblems) and fails when a sampler or uniform block sits
+// at the wrong binding. Returns 1 on failure, 0 on success. Shared by all the
+// validators.
 int reportCompile(QTextStream& out, const QString& label, const PhosphorRendering::ShaderCompiler::Result& result,
                   const QStringList& declared);
+
+/// Every way a baked stage's descriptor bindings disagree with the one table all
+/// four families and the daemon's ShaderNodeRhi share (PhosphorShaders::Bindings):
+/// a contract sampler at the wrong slot, a consumer sampler inside the reserved
+/// range, or a uniform block off binding 0. Empty when the layout is right.
+/// Exposed so the tests can pin the rule without going through a whole pack.
+QStringList bindingLayoutProblems(const QShader& shader);
 
 // Build the `p_<id>` name list a pack declares, for the did-you-mean hint.
 QStringList declaredParamNames(const QList<PhosphorShaders::ShaderRegistry::ParameterInfo>& params);

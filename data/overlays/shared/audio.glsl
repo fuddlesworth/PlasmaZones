@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Audio spectrum helpers. Include after common.glsl.
-// Requires uAudioSpectrum (binding 6) and iAudioSpectrumSize from ZoneUniforms.
+// Requires uAudioSpectrum (binding 10) and iAudioSpectrumSize from ZoneUniforms.
 //
 //   #include <common.glsl>
 //   #include <audio.glsl>
@@ -10,9 +10,9 @@
 #ifndef PLASMAZONES_AUDIO_GLSL
 #define PLASMAZONES_AUDIO_GLSL
 
-// Audio spectrum texture (binding 6). 1D: bar index = x, y=0. R = bar value 0-1.
+// Audio spectrum texture (binding 10). 1D: bar index = x, y=0. R = bar value 0-1.
 // Only valid when iAudioSpectrumSize > 0. Include <audio.glsl> for helpers.
-layout(binding = 6) uniform sampler2D uAudioSpectrum;
+layout(binding = 10) uniform sampler2D uAudioSpectrum;
 
 // Sample bar value (0-1). Returns 0 if audio disabled or index out of range.
 float audioBar(int barIndex) {

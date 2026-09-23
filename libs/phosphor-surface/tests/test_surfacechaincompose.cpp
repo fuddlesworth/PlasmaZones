@@ -146,6 +146,7 @@ private Q_SLOTS:
             QStringList{QStringLiteral("/packs/blur/gaussian_h.frag"), QStringLiteral("/packs/blur/gaussian_v.frag")};
         e.bufferFeedback = true;
         e.bufferScale = 0.25;
+        e.bufferScales = QList<qreal>{0.5, 0.125};
         e.bufferWrap = QStringLiteral("clamp");
         e.bufferWraps = QStringList{QStringLiteral("clamp"), QString()};
         e.bufferFilter = QStringLiteral("linear");
@@ -158,6 +159,12 @@ private Q_SLOTS:
         QCOMPARE(stage.value(QStringLiteral("bufferShaderPaths")).toStringList(), e.bufferShaderPaths);
         QCOMPARE(stage.value(QStringLiteral("bufferFeedback")).toBool(), true);
         QCOMPARE(stage.value(QStringLiteral("bufferScale")).toDouble(), 0.25);
+        // Per-pass scales ride along as a QVariantList the QML side can
+        // Array.from(); the shader item diverges its slots from them.
+        const QVariantList scales = stage.value(QStringLiteral("bufferScales")).toList();
+        QCOMPARE(scales.size(), 2);
+        QCOMPARE(scales.at(0).toDouble(), 0.5);
+        QCOMPARE(scales.at(1).toDouble(), 0.125);
         QCOMPARE(stage.value(QStringLiteral("bufferWrap")).toString(), QStringLiteral("clamp"));
         QCOMPARE(stage.value(QStringLiteral("bufferWraps")).toStringList(), e.bufferWraps);
         QCOMPARE(stage.value(QStringLiteral("bufferFilter")).toString(), QStringLiteral("linear"));

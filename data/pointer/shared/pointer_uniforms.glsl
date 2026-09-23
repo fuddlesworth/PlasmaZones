@@ -174,17 +174,17 @@ layout(std140, binding = 0) uniform PointerUniforms {
     vec4 uPointerTrail[32];      // offset 768 (512) — newest first: .xy px, .z age s, .w speed
 };                               // total 1280 bytes, no trailing pad
 
-// The cursor sprite (metadata `needsCursor`), binding 7 — the slot the surface
+// The cursor sprite (metadata `needsCursor`), binding 11 — the slot the surface
 // family gives uTexture0, which pointer packs do not have.
-layout(binding = 7) uniform sampler2D uCursorSprite;
-// User-declared image textures (metadata `textures`), bindings 8-10 — the
+layout(binding = 11) uniform sampler2D uCursorSprite;
+// User-declared image textures (metadata `textures`), bindings 12-14 — the
 // same sampler-name and binding-point dialect the other families use,
 // provided by the base ShaderEffect's user-texture plumbing.
-layout(binding = 8) uniform sampler2D uTexture1;
-layout(binding = 9) uniform sampler2D uTexture2;
-layout(binding = 10) uniform sampler2D uTexture3;
+layout(binding = 12) uniform sampler2D uTexture1;
+layout(binding = 13) uniform sampler2D uTexture2;
+layout(binding = 14) uniform sampler2D uTexture3;
 
-// The multipass iChannel sampler bindings (2-5) live in pointer_multipass.glsl,
+// The multipass iChannel sampler bindings (2-9) live in pointer_multipass.glsl,
 // which a multipass pack includes.
 
 #endif // PLASMAZONES_KWIN

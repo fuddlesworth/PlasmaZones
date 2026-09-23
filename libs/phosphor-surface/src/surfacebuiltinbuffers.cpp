@@ -25,6 +25,16 @@ QString SurfaceShaderRegistry::resolveBuiltinBufferShader(const QString& token, 
     static const QHash<QString, QString> kBuiltinBufferShaders = {
         {QStringLiteral("builtin:gaussian-h"), QStringLiteral("gaussian_h.frag")},
         {QStringLiteral("builtin:gaussian-v"), QStringLiteral("gaussian_v.frag")},
+        // The dual Kawase pyramid the bundled blur family runs: four DOWN
+        // levels then three UP levels, declared together with the matching
+        // `bufferScales` (see data/surface/shared/surface_blur.glsl).
+        {QStringLiteral("builtin:kawase-down-0"), QStringLiteral("kawase_down_0.frag")},
+        {QStringLiteral("builtin:kawase-down-1"), QStringLiteral("kawase_down_1.frag")},
+        {QStringLiteral("builtin:kawase-down-2"), QStringLiteral("kawase_down_2.frag")},
+        {QStringLiteral("builtin:kawase-down-3"), QStringLiteral("kawase_down_3.frag")},
+        {QStringLiteral("builtin:kawase-up-0"), QStringLiteral("kawase_up_0.frag")},
+        {QStringLiteral("builtin:kawase-up-1"), QStringLiteral("kawase_up_1.frag")},
+        {QStringLiteral("builtin:kawase-up-2"), QStringLiteral("kawase_up_2.frag")},
     };
     const QString fileName = kBuiltinBufferShaders.value(token);
     if (fileName.isEmpty()) {

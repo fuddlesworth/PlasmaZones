@@ -10,7 +10,7 @@
 #ifndef PLASMAZONES_DEPTH_GLSL
 #define PLASMAZONES_DEPTH_GLSL
 
-layout(binding = 12) uniform sampler2D uDepthBuffer;
+layout(binding = 16) uniform sampler2D uDepthBuffer;
 
 // Read depth value at UV coordinates
 float readDepth(vec2 uv) {

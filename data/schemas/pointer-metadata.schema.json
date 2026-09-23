@@ -65,7 +65,7 @@
             "items": { "type": "string" },
             "maxItems": 2
         },
-        "bufferScale": { "type": "number", "minimum": 0.125, "maximum": 1.0 },
+        "bufferScale": { "type": "number", "minimum": 0.03125, "maximum": 1.0 },
         "bufferFeedback": { "type": "boolean" },
         "textures": {
             "type": "array",

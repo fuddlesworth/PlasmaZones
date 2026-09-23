@@ -181,7 +181,7 @@ inline constexpr const char* kUSurfaceOpacity = "uSurfaceOpacity";
 /// with the composite canvas, so a pack samples both with the same uv (via
 /// the `backdropTexel()` helper). The two runtimes declare it differently:
 /// the compositor branch is a loose uniform with no binding, while the daemon
-/// branch is `layout(binding = 11)`, sharing that slot with the overlay
+/// branch is `layout(binding = 15)`, sharing that slot with the overlay
 /// category's wallpaper sampler. On the daemon a host may bind the desktop
 /// wallpaper into it as a stand-in. Packs MUST still sample through
 /// `backdropTexel()`, which returns transparent when nothing was bound.
@@ -226,7 +226,7 @@ inline constexpr const char* kIMouse = "iMouse";
 
 /// `sampler2D uTexture1..3` — user-declared image textures (metadata
 /// `textures`: logo, mask, pattern). Slot N of the metadata list feeds
-/// `uTexture<N+1>` (bindings 8-10 on the daemon; dedicated units on the
+/// `uTexture<N+1>` (bindings 12-14 on the daemon; dedicated units on the
 /// compositor), and `iTextureResolution[N].xy` carries the bound texture's
 /// pixel size — the same slot layout as the animation contract, so the
 /// settings UI reuses the same editor components. A slot with no loadable
@@ -245,7 +245,7 @@ inline constexpr const char* kUTexture3 = "uTexture3";
 inline constexpr const char* kIAudioSpectrumSize = "iAudioSpectrumSize";
 
 /// `sampler2D uAudioSpectrum` — the CAVA spectrum as a `bars×1` texture (R =
-/// bar value in 0..1). Lives in surface_audio.glsl, not the UBO: `binding = 6`
+/// bar value in 0..1). Lives in surface_audio.glsl, not the UBO: `binding = 10`
 /// on the daemon's RHI pipeline, a loose named sampler on the compositor's
 /// classic-GL pipeline (the `#ifdef PLASMAZONES_KWIN` branch). Only sampled
 /// while `iAudioSpectrumSize > 0`, so an unbound sampler is never read.

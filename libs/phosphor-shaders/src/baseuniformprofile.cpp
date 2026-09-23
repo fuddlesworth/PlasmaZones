@@ -116,7 +116,7 @@ void BaseUniformProfile::fill(const UboFrameState& state)
     m_u._pad_after_audioSpectrum[0] = 0;
     m_u._pad_after_audioSpectrum[1] = 0;
 
-    // User texture resolutions (bindings 7-10) — node resolves live.
+    // User texture resolutions (bindings 11-14) — node resolves live.
     for (int i = 0; i < 4; ++i) {
         m_u.iTextureResolution[i][0] = state.textureResolution[i][0];
         m_u.iTextureResolution[i][1] = state.textureResolution[i][1];

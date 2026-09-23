@@ -227,7 +227,7 @@ private Q_SLOTS:
         QVERIFY(!zero.toJson().contains(QLatin1String("geometryGrid")));
     }
 
-    /// `bufferScale` is clamped to `[0.125, 1.0]` at parse time so a
+    /// `bufferScale` is clamped to `[kMinBufferScale, 1.0]` at parse time so a
     /// metadata.json author can't accidentally allocate gigabyte-sized
     /// FBOs by writing a >1.0 multiplier or render at sub-pixel scales
     /// that produce visible aliasing. The field still round-trips
@@ -244,7 +244,7 @@ private Q_SLOTS:
 
         obj.insert(QLatin1String("bufferScale"), 0.001);
         const AnimationShaderEffect undershoot = AnimationShaderEffect::fromJson(obj);
-        QCOMPARE(undershoot.bufferScale, qreal(0.125));
+        QCOMPARE(undershoot.bufferScale, AnimationShaderEffect::kMinBufferScale);
     }
 
     /// `fboExtent` grammar parser coverage. Accepts exactly two forms

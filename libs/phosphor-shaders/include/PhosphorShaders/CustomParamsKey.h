@@ -10,21 +10,25 @@
 namespace PhosphorShaders {
 
 /// Lower / upper bounds on a multipass `bufferScale` (FBO downscale
-/// factor). 0.125 means a 1/8 downscale on each axis (1/64 area — the
-/// lowest cost-floor that still gives Shadertoy-style buffer effects
-/// something to work with); 1.0 means full-resolution FBOs. Canonical
-/// home for every clamp site (overlay metadata parse, surface
+/// factor). 1/32 means a 1/32 downscale on each axis (1/1024 area), which
+/// is the deepest level of a Kawase pyramid that starts at quarter
+/// resolution and still has texels to average; 1.0 means full-resolution
+/// FBOs. Canonical home for every clamp site (overlay metadata parse, surface
 /// `SurfaceShaderEffect::kMin/MaxBufferScale` forwarders, and the two
 /// rendering setters), so the bounds cannot drift per-runtime.
-inline constexpr double kMinBufferScale = 0.125;
+inline constexpr double kMinBufferScale = 0.03125;
 inline constexpr double kMaxBufferScale = 1.0;
 
 /// Maximum number of multipass buffer passes a pack may declare. Canonical
-/// home shared by the overlay parser and the pack validator (the surface tree
-/// keeps its own SurfaceShaderEffect::kMaxBufferPasses at the same value, and
-/// the animation tree AnimationShaderContract::kMaxBufferPasses); every buffer
-/// pass costs a canvas-sized RGBA8 texture, so the cap bounds GPU memory.
-inline constexpr int kMaxBufferPasses = 4;
+/// home shared by the overlay parser, the pack validator and the daemon's
+/// ShaderNodeRhi binding budget (the surface tree forwards
+/// SurfaceShaderEffect::kMaxBufferPasses to it, as does the animation tree's
+/// AnimationShaderContract::kMaxBufferPasses). Eight is the depth a dual
+/// Kawase pyramid needs (four down, three up) to reach a 256 px blur from a
+/// quarter-resolution base; every buffer pass costs a texture at its declared
+/// scale, so the cap bounds GPU memory. The shared GLSL headers declare
+/// exactly this many iChannel samplers (see ShaderBindings.h).
+inline constexpr int kMaxBufferPasses = 8;
 
 /// The accepted texture / buffer `wrap` vocabulary, shared by every
 /// validation site across the shader registries (overlay image-param

@@ -226,6 +226,29 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
         };
         lintBufferArrayLen(QLatin1String("bufferWraps"));
         lintBufferArrayLen(QLatin1String("bufferFilters"));
+        // bufferScales is aligned the same way, and each entry is clamped at
+        // load like the single-value bufferScale (a non-number falls back to
+        // it with only a journal warning).
+        lintBufferArrayLen(QLatin1String("bufferScales"));
+        {
+            const QJsonArray scales = doc.object().value(QLatin1String("bufferScales")).toArray();
+            for (qsizetype i = 0; i < scales.size(); ++i) {
+                const QJsonValue v = scales.at(i);
+                if (!v.isDouble()) {
+                    lints << QStringLiteral(
+                                 "bufferScales entry %1 is not a number (that pass falls back to "
+                                 "bufferScale at load)")
+                                 .arg(i);
+                } else if (v.toDouble() < PhosphorShaders::kMinBufferScale
+                           || v.toDouble() > PhosphorShaders::kMaxBufferScale) {
+                    lints << QStringLiteral("bufferScales entry %1 out of range [%2, %3]: %4 (clamped at load)")
+                                 .arg(i)
+                                 .arg(PhosphorShaders::kMinBufferScale)
+                                 .arg(PhosphorShaders::kMaxBufferScale)
+                                 .arg(v.toDouble());
+                }
+            }
+        }
         // Vocabulary, on all four spellings. validatedWrap / validatedFilter
         // clear an unrecognised token to empty with a journal warning only.
         const auto lintSurfaceTokens = [&lints, &doc](QLatin1String key, bool wrap) {

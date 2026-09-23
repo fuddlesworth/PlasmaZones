@@ -210,10 +210,20 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     /// `iChannel<N>`). Requires `isMultipass`. Daemon-only.
     bool bufferFeedback = false;
 
-    /// Render-target scale relative to the surface size. Clamped to
-    /// `[0.125, 1.0]` at `fromJson` time. Daemon-only — the compositor
-    /// path doesn't allocate auxiliary FBOs.
+    /// Render-target scale relative to the surface size, for every buffer
+    /// pass that `bufferScales` does not name. Clamped to
+    /// `[kMinBufferScale, kMaxBufferScale]` at `fromJson` time. Both hosts
+    /// honour it: the daemon through the stage map, the compositor when it
+    /// sizes the fold's per-pack buffer textures.
     qreal bufferScale = 1.0;
+
+    /// Per-pass render-target scales, positionally aligned with
+    /// `bufferShaderPaths` (metadata `bufferScales`). A pass past the list's
+    /// end renders at `bufferScale`. Each entry is clamped like `bufferScale`
+    /// and the list is capped at `kMaxBufferPasses`. This is what lets one
+    /// pack run a resolution pyramid (the builtin dual Kawase chain renders
+    /// each level at its own scale).
+    QList<qreal> bufferScales;
 
     /// Default wrap mode for all buffer samplers. Sibling of
     /// `bufferWraps` (per-buffer overrides). Empty = runtime default.
@@ -259,14 +269,15 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
 
     /// Maximum number of buffer passes a pack may declare.
     ///
-    /// Bounded because every declared pass costs a canvas-sized RGBA16F texture and a
+    /// Bounded because every declared pass costs a texture at its scale and a
     /// fullscreen draw PER DECORATED WINDOW, PER FRAME, and the count comes from an
     /// installable pack's JSON — an unvalidated system boundary, and previously the
     /// one uncapped axis (bufferScale, outerPadding and the texture slots are all
-    /// bounded). Four is not arbitrary: the fold binds `iChannel0..3` and a pass
-    /// samples only the passes before it, so a fifth buffer is structurally
+    /// bounded). The value is the cross-family `PhosphorShaders::kMaxBufferPasses`:
+    /// the fold binds exactly that many `iChannelN` samplers and a pass samples
+    /// only the passes before it, so a buffer past the cap is structurally
     /// unreadable — allocated, cleared, drawn, and sampled by nothing.
-    static constexpr int kMaxBufferPasses = 4;
+    static constexpr int kMaxBufferPasses = PhosphorShaders::kMaxBufferPasses;
 
     /// Declared shader inputs beyond the standard surface set
     /// (uTexture0, uSurfaceSize, uSurfaceFocused, etc.). An ORDERED list of

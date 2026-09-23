@@ -445,6 +445,23 @@ void ShaderEffect::setBufferScale(qreal scale)
     update();
 }
 
+void ShaderEffect::setBufferScales(const QVariantList& scales)
+{
+    // Clamp and cap here so the stored list is what the node will use, and a
+    // QML binding that re-pushes the same values compares equal below.
+    QVariantList clamped;
+    for (int i = 0; i < scales.size() && i < kMaxBufferPasses; ++i) {
+        clamped.append(
+            qBound(PhosphorShaders::kMinBufferScale, scales.at(i).toDouble(), PhosphorShaders::kMaxBufferScale));
+    }
+    if (m_bufferScales == clamped) {
+        return;
+    }
+    m_bufferScales = clamped;
+    Q_EMIT bufferScalesChanged();
+    update();
+}
+
 void ShaderEffect::setHalfFloatBuffers(bool enable)
 {
     if (m_halfFloatBuffers == enable) {

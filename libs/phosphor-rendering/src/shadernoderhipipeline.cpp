@@ -66,6 +66,17 @@ bool ShaderNodeRhi::ensureBufferTarget()
     const int bufferW = qMax(1, qRound(m_width * m_bufferScale));
     const int bufferH = qMax(1, qRound(m_height * m_bufferScale));
     const QSize bufferSize(bufferW, bufferH);
+    // The size pass i renders at. Every pass shares the depth attachment when
+    // one is in play, and a render target's colour and depth attachments must
+    // agree in size, so a depth-buffer pack keeps every pass on the
+    // single-value scale; per-pass scales are a colour-only feature.
+    const auto passSize = [this, bufferSize](int i) -> QSize {
+        if (m_useDepthBuffer) {
+            return bufferSize;
+        }
+        const qreal s = m_bufferScales[static_cast<size_t>(i)];
+        return QSize(qMax(1, qRound(m_width * s)), qMax(1, qRound(m_height * s)));
+    };
     // Create or resize depth texture before render targets that reference it
     if (m_useDepthBuffer && (!m_depthTexture || m_depthTexture->pixelSize() != bufferSize)) {
         m_depthTexture.reset(rhi->newTexture(QRhiTexture::R32F, bufferSize, 1, QRhiTexture::RenderTarget));
@@ -131,11 +142,10 @@ bool ShaderNodeRhi::ensureBufferTarget()
     // buffer can legitimately store HDR radiance, signed data, or a feedback
     // accumulator whose decay quantises to a standstill at 8 bits.
     const QRhiTexture::Format bufferFormat = m_halfFloatBuffers ? QRhiTexture::RGBA16F : QRhiTexture::RGBA8;
-    auto createTextureAndRT = [rhi, bufferSize, bufferFormat,
+    auto createTextureAndRT = [rhi, bufferFormat,
                                this](std::unique_ptr<QRhiTexture>& tex, std::unique_ptr<QRhiTextureRenderTarget>& rt,
-                                     std::unique_ptr<QRhiRenderPassDescriptor>& rpd) -> bool {
-        tex.reset(
-            rhi->newTexture(bufferFormat, bufferSize, 1, QRhiTexture::RenderTarget | QRhiTexture::UsedWithLoadStore));
+                                     std::unique_ptr<QRhiRenderPassDescriptor>& rpd, const QSize& size) -> bool {
+        tex.reset(rhi->newTexture(bufferFormat, size, 1, QRhiTexture::RenderTarget | QRhiTexture::UsedWithLoadStore));
         // Every failure exit clears what it allocated. Callers gate the retry
         // on "does the object exist and is it the right pixelSize?", and
         // pixelSize() answers from the requested size even after a failed
@@ -181,7 +191,7 @@ bool ShaderNodeRhi::ensureBufferTarget()
         const int n = qMin(m_bufferPaths.size(), kMaxBufferPasses);
         bool needCreate = false;
         for (int i = 0; i < n; ++i) {
-            if (!m_multiBufferTextures[i] || m_multiBufferTextures[i]->pixelSize() != bufferSize) {
+            if (!m_multiBufferTextures[i] || m_multiBufferTextures[i]->pixelSize() != passSize(i)) {
                 needCreate = true;
                 break;
             }
@@ -192,7 +202,7 @@ bool ShaderNodeRhi::ensureBufferTarget()
                                  << "bufferScale=" << m_bufferScale << "passes=" << n;
             for (int i = 0; i < n; ++i) {
                 if (!createTextureAndRT(m_multiBufferTextures[i], m_multiBufferRenderTargets[i],
-                                        m_multiBufferRenderPassDescriptors[i])) {
+                                        m_multiBufferRenderPassDescriptors[i], passSize(i))) {
                     qCWarning(lcShaderNode) << "Failed to create multi-buffer texture" << i;
                     return false;
                 }
@@ -214,7 +224,7 @@ bool ShaderNodeRhi::ensureBufferTarget()
     }
 
     if (!m_bufferTexture) {
-        if (!createTextureAndRT(m_bufferTexture, m_bufferRenderTarget, m_bufferRenderPassDescriptor)) {
+        if (!createTextureAndRT(m_bufferTexture, m_bufferRenderTarget, m_bufferRenderPassDescriptor, bufferSize)) {
             qCWarning(lcShaderNode) << "Failed to create buffer texture";
             return false;
         }
@@ -222,7 +232,8 @@ bool ShaderNodeRhi::ensureBufferTarget()
             return false;
         }
         if (m_bufferFeedback
-            && !createTextureAndRT(m_bufferTextureB, m_bufferRenderTargetB, m_bufferRenderPassDescriptorB)) {
+            && !createTextureAndRT(m_bufferTextureB, m_bufferRenderTargetB, m_bufferRenderPassDescriptorB,
+                                   bufferSize)) {
             qCWarning(lcShaderNode) << "Failed to create buffer texture B (ping-pong)";
             return false;
         }
@@ -231,12 +242,13 @@ bool ShaderNodeRhi::ensureBufferTarget()
         return true;
     }
     if (m_bufferTexture->pixelSize() != bufferSize) {
-        if (!createTextureAndRT(m_bufferTexture, m_bufferRenderTarget, m_bufferRenderPassDescriptor)) {
+        if (!createTextureAndRT(m_bufferTexture, m_bufferRenderTarget, m_bufferRenderPassDescriptor, bufferSize)) {
             qCWarning(lcShaderNode) << "Failed to resize buffer texture";
             return false;
         }
         if (m_bufferFeedback
-            && !createTextureAndRT(m_bufferTextureB, m_bufferRenderTargetB, m_bufferRenderPassDescriptorB)) {
+            && !createTextureAndRT(m_bufferTextureB, m_bufferRenderTargetB, m_bufferRenderPassDescriptorB,
+                                   bufferSize)) {
             qCWarning(lcShaderNode) << "Failed to resize buffer texture B";
             return false;
         }
@@ -247,7 +259,7 @@ bool ShaderNodeRhi::ensureBufferTarget()
         m_srbB.reset();
         m_bufferFeedbackCleared = false; // New textures need clearing
     } else if (m_bufferFeedback && !m_bufferTextureB) {
-        if (!createTextureAndRT(m_bufferTextureB, m_bufferRenderTargetB, m_bufferRenderPassDescriptorB)) {
+        if (!createTextureAndRT(m_bufferTextureB, m_bufferRenderTargetB, m_bufferRenderPassDescriptorB, bufferSize)) {
             qCWarning(lcShaderNode) << "Failed to create buffer texture B (ping-pong)";
             return false;
         }
@@ -356,7 +368,7 @@ bool ShaderNodeRhi::ensureBufferPipeline()
                 std::unique_ptr<QRhiShaderResourceBindings> srb(rhi->newShaderResourceBindings());
                 QVector<QRhiShaderResourceBinding> bindings;
                 appendUboAndExtraBindings(bindings);
-                // Bind ALL 4 channel slots (bindings 2-5): pass i sees outputs of passes 0..i-1.
+                // Bind EVERY channel slot (bindings kChannelBase..): pass i sees outputs of passes 0..i-1.
                 for (int j = 0; j < kMaxBufferPasses; ++j) {
                     QRhiTexture* tex = (j < i && m_multiBufferTextures[j]) ? m_multiBufferTextures[j].get()
                                                                            : m_dummyChannelTexture.get();
@@ -364,7 +376,8 @@ bool ShaderNodeRhi::ensureBufferPipeline()
                         (j < i && m_bufferSamplers[j]) ? m_bufferSamplers[j].get() : m_dummyChannelSampler.get();
                     if (tex && sam) {
                         bindings.append(QRhiShaderResourceBinding::sampledTexture(
-                            2 + j, QRhiShaderResourceBinding::FragmentStage, tex, sam));
+                            PhosphorShaders::Bindings::kChannelBase + j, QRhiShaderResourceBinding::FragmentStage, tex,
+                            sam));
                     }
                 }
                 appendCommonTrailerBindings(bindings, DepthAccess::WrittenThisPass);
@@ -427,7 +440,7 @@ bool ShaderNodeRhi::ensureBufferPipeline()
                                                                                    : m_dummyChannelSampler.get();
             if (tex && sam) {
                 bindings.append(QRhiShaderResourceBinding::sampledTexture(
-                    2 + ch, QRhiShaderResourceBinding::FragmentStage, tex, sam));
+                    PhosphorShaders::Bindings::kChannelBase + ch, QRhiShaderResourceBinding::FragmentStage, tex, sam));
             }
         }
         appendCommonTrailerBindings(bindings, DepthAccess::WrittenThisPass);
@@ -504,7 +517,7 @@ bool ShaderNodeRhi::ensurePipeline()
             QRhiSampler* sam = (ch == 0 && channel0Sampler) ? channel0Sampler : m_dummyChannelSampler.get();
             if (tex && sam) {
                 bindings.append(QRhiShaderResourceBinding::sampledTexture(
-                    2 + ch, QRhiShaderResourceBinding::FragmentStage, tex, sam));
+                    PhosphorShaders::Bindings::kChannelBase + ch, QRhiShaderResourceBinding::FragmentStage, tex, sam));
             }
         }
         appendCommonTrailerBindings(bindings, DepthAccess::Sampled);
@@ -523,7 +536,7 @@ bool ShaderNodeRhi::ensurePipeline()
             QRhiSampler* sam = (tex == dummyTex || !m_bufferSamplers[i]) ? dummySam : m_bufferSamplers[i].get();
             if (tex && sam) {
                 bindings.append(QRhiShaderResourceBinding::sampledTexture(
-                    2 + i, QRhiShaderResourceBinding::FragmentStage, tex, sam));
+                    PhosphorShaders::Bindings::kChannelBase + i, QRhiShaderResourceBinding::FragmentStage, tex, sam));
             }
         }
         appendCommonTrailerBindings(bindings, DepthAccess::Sampled);
@@ -538,7 +551,7 @@ bool ShaderNodeRhi::ensurePipeline()
     // SRB entry (strict backends reject the mismatch; lenient ones sample
     // undefined). Every consumer now hard-requires it: a multipass shader
     // binds it into unwritten iChannel slots, and appendWallpaperBinding
-    // substitutes it at binding 11 whenever no wallpaper is bound, which a
+    // substitutes it at the wallpaper binding whenever no wallpaper is bound, which a
     // single-pass surface pack declaring uBackdrop relies on. Omitting the
     // binding instead would reproduce the very layout mismatch the dummy
     // exists to prevent, so a failed create fails the build here rather than
@@ -611,7 +624,7 @@ void ShaderNodeRhi::appendUserTextureBindings(QVector<QRhiShaderResourceBinding>
         } else if (m_userTextures[0] && m_userTextureSamplers[0]) {
             // Last resort: provider set but no fallback yet (sampler create
             // failed and fallback texture create also failed) — keep slot 0
-            // bound so the SRB build doesn't omit binding 7 entirely. This
+            // bound so the SRB build does not omit the uTexture0 binding entirely. This
             // path should only be hit on a degraded RHI.
             slot0Tex = m_userTextures[0].get();
             slot0Sam = m_userTextureSamplers[0].get();
@@ -627,7 +640,7 @@ void ShaderNodeRhi::appendUserTextureBindings(QVector<QRhiShaderResourceBinding>
                                                       m_userTextures[0].get(), m_userTextureSamplers[0].get()));
     } else if (m_dummyChannelTexture && m_dummyChannelSampler) {
         // Neither a provider nor a QImage at slot 0: bind the dummy 1x1
-        // transparent texture so binding 7 (uTexture0, declared by every
+        // transparent texture so the uTexture0 binding (declared by every
         // family's shared header and referenced by most packs) always has an
         // SRB entry — same rationale as the slots 1-3 fallback below. Hosts
         // normally wire a source before first paint; this covers the gap on
@@ -663,7 +676,8 @@ void ShaderNodeRhi::appendAudioBinding(QVector<QRhiShaderResourceBinding>& bindi
 {
     if (m_audioSpectrumTexture && m_audioSpectrumSampler) {
         bindings.append(QRhiShaderResourceBinding::sampledTexture(
-            6, QRhiShaderResourceBinding::FragmentStage, m_audioSpectrumTexture.get(), m_audioSpectrumSampler.get()));
+            PhosphorShaders::Bindings::kAudioSpectrum, QRhiShaderResourceBinding::FragmentStage,
+            m_audioSpectrumTexture.get(), m_audioSpectrumSampler.get()));
     }
 }
 
@@ -685,12 +699,12 @@ void ShaderNodeRhi::appendCommonTrailerBindings(QVector<QRhiShaderResourceBindin
 
 void ShaderNodeRhi::appendWallpaperBinding(QVector<QRhiShaderResourceBinding>& bindings) const
 {
-    // Binding 11 stays POPULATED whether or not a wallpaper is in play,
+    // The wallpaper binding stays POPULATED whether or not a wallpaper is in play,
     // substituting the 1x1 dummy — the same discipline the user-texture slots
-    // (bindings 7-10) already follow.
+    // (the uTexture slots) already follow.
     //
     // It used to be appended only when a wallpaper existed, which was safe
-    // while binding 11 belonged solely to overlay packs that opt into the
+    // while the wallpaper binding belonged solely to overlay packs that opt into the
     // wallpaper module and always enable it. Surface packs broke that
     // assumption: a needsBackdrop pack (the glass / blur family) declares
     // uBackdrop at this binding unconditionally, and its SPIR-V says so on
@@ -711,19 +725,20 @@ void ShaderNodeRhi::appendWallpaperBinding(QVector<QRhiShaderResourceBinding>& b
         // from a pipeline failure.
         if (!m_warnedWallpaperBindingOmitted) {
             m_warnedWallpaperBindingOmitted = true;
-            qCWarning(lcShaderNode) << "Wallpaper binding 11 omitted: no wallpaper and no dummy substitute"
+            qCWarning(lcShaderNode) << "Wallpaper binding omitted: no wallpaper and no dummy substitute"
                                     << "(texture:" << static_cast<bool>(tex) << "sampler:" << static_cast<bool>(sam)
                                     << ") — a pack declaring uBackdrop will fail its pipeline";
         }
         return;
     }
-    bindings.append(QRhiShaderResourceBinding::sampledTexture(11, QRhiShaderResourceBinding::FragmentStage, tex, sam));
+    bindings.append(QRhiShaderResourceBinding::sampledTexture(PhosphorShaders::Bindings::kWallpaper,
+                                                              QRhiShaderResourceBinding::FragmentStage, tex, sam));
 }
 
 void ShaderNodeRhi::appendDepthBinding(QVector<QRhiShaderResourceBinding>& bindings, DepthAccess access) const
 {
-    // Binding 12 stays POPULATED whether or not a depth buffer is in play,
-    // the same discipline appendWallpaperBinding follows for binding 11 and
+    // The depth binding stays POPULATED whether or not a depth buffer is in play,
+    // the same discipline appendWallpaperBinding follows for the wallpaper binding and
     // the user-texture slots follow for 7-10. data/overlays/shared/depth.glsl
     // declares the sampler unconditionally for any pack that includes it, so a
     // pack that includes it without also setting "depthBuffer": true would
@@ -740,7 +755,8 @@ void ShaderNodeRhi::appendDepthBinding(QVector<QRhiShaderResourceBinding>& bindi
     if (!tex || !sam) {
         return;
     }
-    bindings.append(QRhiShaderResourceBinding::sampledTexture(12, QRhiShaderResourceBinding::FragmentStage, tex, sam));
+    bindings.append(QRhiShaderResourceBinding::sampledTexture(PhosphorShaders::Bindings::kDepth,
+                                                              QRhiShaderResourceBinding::FragmentStage, tex, sam));
 }
 
 void ShaderNodeRhi::appendExtraBindings(QVector<QRhiShaderResourceBinding>& bindings) const

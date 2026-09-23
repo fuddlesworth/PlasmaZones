@@ -26,7 +26,7 @@
 #ifndef PLASMAZONES_ANIMATION_AUDIO_GLSL
 #define PLASMAZONES_ANIMATION_AUDIO_GLSL
 
-// Audio spectrum texture (binding 6 on the daemon's RHI pipeline, shared with
+// Audio spectrum texture (binding 10 on the daemon's RHI pipeline, shared with
 // the overlay convention; a plain named sampler on the compositor's classic-GL
 // pipeline, bound to a texture unit at draw time). Never sampled while
 // iAudioSpectrumSize is 0. 1D: bar index = x, y = 0; R = bar value in 0..1.
@@ -34,7 +34,7 @@
 uniform sampler2D uAudioSpectrum;
 uniform int iAudioSpectrumSize;
 #else
-layout(binding = 6) uniform sampler2D uAudioSpectrum;
+layout(binding = 10) uniform sampler2D uAudioSpectrum;
 // iAudioSpectrumSize comes from the AnimationUniforms UBO.
 #endif
 

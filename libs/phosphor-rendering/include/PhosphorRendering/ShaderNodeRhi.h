@@ -9,6 +9,7 @@
 #include <PhosphorShaders/BaseUniforms.h>
 #include <PhosphorShaders/IUboProfile.h>
 #include <PhosphorShaders/IUniformExtension.h>
+#include <PhosphorShaders/ShaderBindings.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
 
 #include <QColor>
@@ -40,40 +41,43 @@ namespace PhosphorRendering {
 // `constexpr int` at namespace scope in a header is implicitly `inline` since
 // C++17 — no `static` needed (and matches the existing `constexpr int` style
 // used by kFirstFreeConsumerBinding / kMaxConsumerBinding below).
-constexpr int kMaxBufferPasses = 4;
-constexpr int kMaxUserTextures = 4;
+constexpr int kMaxBufferPasses = PhosphorShaders::kMaxBufferPasses;
+constexpr int kMaxUserTextures = PhosphorShaders::Bindings::kUserTextureCount;
 constexpr int kMaxCustomParams = 8;
 constexpr int kMaxCustomColors = 16;
 
 // ── Consumer binding range (for setExtraBinding) ────────────────────────
-// Library-managed bindings: 0 (UBO), 2-5 (multipass buffers), 6 (audio),
-// 7-10 (user textures), 11 (wallpaper), 12 (depth). Assigning any of those
-// via setExtraBinding() would duplicate SRB entries and is rejected at
-// runtime. Binding 1 is the one "free-in-the-gap" slot; 13..31 are free as
-// well.
+// The binding table is PhosphorShaders::Bindings (ShaderBindings.h), the one
+// layout every shader family's shared GLSL header declares and the validator
+// reflects baked stages against. Library-managed bindings: 0 (UBO), 2..9
+// (multipass buffers), 10 (audio), 11..14 (user textures), 15 (wallpaper /
+// backdrop), 16 (depth). Assigning any of those via setExtraBinding() would
+// duplicate SRB entries and is rejected at runtime. Binding 1 is the one
+// "free-in-the-gap" slot; 17..31 are free as well.
 //
 // Phosphor uses binding 1 for its zone-labels texture by convention.
 // Other consumers that interoperate with Phosphor should pick from
-// 13..kMaxConsumerBinding to avoid a per-instance overwrite.
-constexpr int kFirstFreeConsumerBinding = 1; ///< First slot usable via setExtraBinding()
+// kExtraBase..kMaxConsumerBinding to avoid a per-instance overwrite.
+constexpr int kFirstFreeConsumerBinding =
+    PhosphorShaders::Bindings::kConsumer; ///< First slot usable via setExtraBinding()
 /// Highest portable SRB binding. 31 matches Qt RHI's minimum guarantee
 /// (minMaxShaderResourceBindingCount) across all backends — Vulkan/D3D11/
 /// Metal/OpenGL all advertise at least 32 bindings. Going higher risks
 /// pipeline-creation failure on conservative drivers.
-constexpr int kMaxConsumerBinding = 31;
-constexpr int kReservedBindingRangeStart = 2; ///< First library-managed binding above 0
-constexpr int kReservedBindingRangeEnd = 12; ///< Last library-managed binding
+constexpr int kMaxConsumerBinding = PhosphorShaders::Bindings::kMaxBinding;
+constexpr int kReservedBindingRangeStart =
+    PhosphorShaders::Bindings::kChannelBase; ///< First library-managed binding above 0
+constexpr int kReservedBindingRangeEnd = PhosphorShaders::Bindings::kReservedEnd; ///< Last library-managed binding
 
-/// First SRB binding for the user-texture slots (slot 0 → binding 7).
+/// First SRB binding for the user-texture slots (slot 0 → binding 11).
 /// Both `setSourceTextureProvider`'s slot-0 override and the
 /// QImage-uploaded user textures key off this base.
-constexpr int kUserTextureBaseBinding = 7;
+constexpr int kUserTextureBaseBinding = PhosphorShaders::Bindings::kUserTextureBase;
 
 /// @return true if @p binding is usable by consumers via setExtraBinding().
 constexpr bool isConsumerBinding(int binding) noexcept
 {
-    return binding >= kFirstFreeConsumerBinding && binding <= kMaxConsumerBinding
-        && (binding < kReservedBindingRangeStart || binding > kReservedBindingRangeEnd);
+    return PhosphorShaders::Bindings::isConsumerBinding(binding);
 }
 
 /**
@@ -309,7 +313,7 @@ public:
     void setUseDepthBuffer(bool use);
 
     /// @brief Live texture-provider override for user-texture slot 0
-    ///        (SRB binding 7 / `uTexture0`).
+    ///        (SRB binding 11 / `uTexture0`).
     ///
     /// When set, every SRB rebuild reads
     /// `provider->texture()->rhiTexture()` and binds that — superseding
@@ -333,6 +337,10 @@ public:
     void setBufferShaderPaths(const QStringList& paths);
     void setBufferFeedback(bool enable);
     void setBufferScale(qreal scale);
+    /// Per-pass scales aligned with the buffer paths; a slot past the list's
+    /// end follows the single-value scale. Empty means "every pass on the
+    /// single-value scale".
+    void setBufferScales(const QList<qreal>& scales);
     /// Buffer-pass texel format: RGBA16F when true (the default — safe for HDR,
     /// signed-data, and feedback buffers), RGBA8 when a pack's metadata declares
     /// its buffers hold plain clamped colour (`"halfFloatBuffers": false`).
@@ -460,10 +468,10 @@ private:
     void uploadExtensionToUbo(QRhiResourceUpdateBatch* batch);
     void releaseRhiResources();
     void appendUserTextureBindings(QVector<QRhiShaderResourceBinding>& bindings) const;
-    /// Whether binding 11 carries a real wallpaper rather than the dummy.
+    /// Whether the wallpaper binding carries a real wallpaper rather than the dummy.
     ///
     /// The single source of truth for two things that must never disagree:
-    /// which texture appendWallpaperBinding() puts at binding 11, and what
+    /// which texture appendWallpaperBinding() puts at the wallpaper binding, and what
     /// syncBaseUniforms() reports in uHasBackdrop. A pack branches on that
     /// uniform to decide whether to sample uBackdrop at all, so a gate that
     /// outran the binding would have it sampling the 1x1 dummy (or a
@@ -489,7 +497,7 @@ private:
     /// with `depthBuffer` (neon-city, voxel-terrain). Those buffer shaders only
     /// ever write depth (`layout(location = 1) out float oDepth`); reading it
     /// back is the image pass's job, and the depth.glsl helper lives on the
-    /// image side. So a writing pass gets the dummy texture at binding 12 —
+    /// image side. So a writing pass gets the dummy texture at the depth binding —
     /// a valid binding for a shader that includes depth.glsl anyway, rather
     /// than a missing one.
     enum class DepthAccess {
@@ -598,22 +606,38 @@ private:
     QShader m_fragmentShader;
     QVector<quint32> m_renderPassFormat;
 
-    // ── Multi-pass: buffer pass(es) (optional). Up to 4 paths. ────────
+    // ── Multi-pass: buffer pass(es) (optional). Up to kMaxBufferPasses paths. ──
     QString m_bufferPath;
     QStringList m_bufferPaths;
     bool m_bufferFeedback = false;
     qreal m_bufferScale = 1.0;
+    // Per-pass render-target scales (a pack's `bufferScales`), positionally
+    // aligned with m_bufferPaths. A slot without its own entry follows
+    // m_bufferScale, which setBufferScale writes into every slot; only
+    // setBufferScales diverges them. This is what lets a pyramid (dual Kawase)
+    // render each level at its own resolution inside one pack.
+    std::array<qreal, kMaxBufferPasses> m_bufferScales = []() {
+        std::array<qreal, kMaxBufferPasses> a;
+        a.fill(1.0);
+        return a;
+    }();
     // Buffer-pass texel format. Half-float by default so packs that store HDR
     // radiance, signed data, or feedback accumulators keep full precision; a
     // pack whose buffers hold plain clamped [0,1] colour opts down to RGBA8
     // via metadata to halve buffer bandwidth (which is what integrated GPUs
     // are starved of).
     bool m_halfFloatBuffers = true;
-    std::array<QString, kMaxBufferPasses> m_bufferWraps = {QStringLiteral("clamp"), QStringLiteral("clamp"),
-                                                           QStringLiteral("clamp"), QStringLiteral("clamp")};
+    std::array<QString, kMaxBufferPasses> m_bufferWraps = []() {
+        std::array<QString, kMaxBufferPasses> a;
+        a.fill(QStringLiteral("clamp"));
+        return a;
+    }();
     QString m_bufferWrapDefault = QStringLiteral("clamp");
-    std::array<QString, kMaxBufferPasses> m_bufferFilters = {QStringLiteral("linear"), QStringLiteral("linear"),
-                                                             QStringLiteral("linear"), QStringLiteral("linear")};
+    std::array<QString, kMaxBufferPasses> m_bufferFilters = []() {
+        std::array<QString, kMaxBufferPasses> a;
+        a.fill(QStringLiteral("linear"));
+        return a;
+    }();
     QString m_bufferFilterDefault = QStringLiteral("linear");
     QString m_bufferFragmentShaderSource;
     QShader m_bufferFragmentShader;
@@ -649,7 +673,7 @@ private:
     // Dummy 1x1 texture for the multipass channel-0 buffer slot (SRB
     // binding 2, GLSL `iChannel0`) when multipass is configured but the
     // backing buffer hasn't been created yet. Distinct from the user-
-    // texture slot 0 (SRB binding 7, GLSL `uTexture0`) — the iChannel0
+    // texture slot 0 (SRB binding 11, GLSL `uTexture0`) — the iChannel0
     // name here refers to the buffer-channel binding, not the renamed
     // user-texture.
     std::unique_ptr<QRhiTexture> m_dummyChannelTexture;
@@ -761,13 +785,13 @@ private:
     // ── 1x1 Transparent Fallback ───────────────────────────────────────
     QImage m_transparentFallbackImage;
 
-    // ── Audio spectrum texture (binding 6) ─────────────────────────────
+    // ── Audio spectrum texture (binding 10) ─────────────────────────────
     QVector<float> m_audioSpectrum;
     std::unique_ptr<QRhiTexture> m_audioSpectrumTexture;
     std::unique_ptr<QRhiSampler> m_audioSpectrumSampler;
     bool m_audioSpectrumDirty = false;
 
-    // ── User texture slots (bindings 7-10) ─────────────────────────────
+    // ── User texture slots (bindings 11-14) ─────────────────────────────
     std::array<QImage, kMaxUserTextures> m_userTextureImages;
     std::array<std::unique_ptr<QRhiTexture>, kMaxUserTextures> m_userTextures;
     std::array<std::unique_ptr<QRhiSampler>, kMaxUserTextures> m_userTextureSamplers;
@@ -780,7 +804,7 @@ private:
                                                                 QStringLiteral("clamp"), QStringLiteral("clamp")};
     std::array<bool, kMaxUserTextures> m_userTextureDirty = {};
 
-    // ── Source texture override (slot 0 / binding 7) ───────────────────
+    // ── Source texture override (slot 0 / binding 11) ───────────────────
     // Texture-provider source — typically a `QQuickItem::textureProvider()`
     // for a layer-enabled item. When non-null this supersedes
     // m_userTextures[0] in the SRB build, so the shader's uTexture0
@@ -812,7 +836,7 @@ private:
     /// the source provider's QRhiTexture comes from a different QRhi than our
     /// own (cross-window provider). Prevents log spam.
     bool m_warnedForeignRhi = false;
-    /// One-shot: binding 11 had neither a wallpaper nor a dummy substitute.
+    /// One-shot: the wallpaper binding had neither a wallpaper nor a dummy substitute.
     /// Mutable because appendWallpaperBinding() is const — it only reads state
     /// to build the binding list, and this is a diagnostic latch, not state the
     /// binding depends on.
@@ -833,13 +857,13 @@ private:
     std::unique_ptr<QRhiTexture> m_transparentFallbackTexture;
     bool m_transparentFallbackTextureNeedsUpload = false;
 
-    // ── Depth buffer (binding 12) ──────────────────────────────────────
+    // ── Depth buffer (binding 16) ──────────────────────────────────────
     bool m_useDepthBuffer = false;
     bool m_depthMultiBufferWarned = false;
     std::unique_ptr<QRhiTexture> m_depthTexture;
     std::unique_ptr<QRhiSampler> m_depthSampler;
 
-    // ── Desktop wallpaper texture (binding 11) ─────────────────────────
+    // ── Desktop wallpaper texture (binding 15) ─────────────────────────
     bool m_useWallpaper = false;
     QImage m_wallpaperImage;
     std::unique_ptr<QRhiTexture> m_wallpaperTexture;

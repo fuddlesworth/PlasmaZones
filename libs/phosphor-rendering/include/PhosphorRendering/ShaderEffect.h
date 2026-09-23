@@ -121,6 +121,7 @@ class PHOSPHORRENDERING_EXPORT ShaderEffect : public QQuickItem
                    bufferShaderPathsChanged FINAL)
     Q_PROPERTY(bool bufferFeedback READ bufferFeedback WRITE setBufferFeedback NOTIFY bufferFeedbackChanged FINAL)
     Q_PROPERTY(qreal bufferScale READ bufferScale WRITE setBufferScale NOTIFY bufferScaleChanged FINAL)
+    Q_PROPERTY(QVariantList bufferScales READ bufferScales WRITE setBufferScales NOTIFY bufferScalesChanged FINAL)
     Q_PROPERTY(
         bool halfFloatBuffers READ halfFloatBuffers WRITE setHalfFloatBuffers NOTIFY halfFloatBuffersChanged FINAL)
     Q_PROPERTY(QString bufferWrap READ bufferWrap WRITE setBufferWrap NOTIFY bufferWrapChanged FINAL)
@@ -293,7 +294,7 @@ public:
     ///   • `customParams<N>_<x|y|z|w>` (1-based) — float vec4 sub-slots
     ///   • `customColor<N>` (1-based) — color vec4 slots
     ///   • `uTexture<N>` (0-based, 0..3) — file path for the user-texture
-    ///     sampler at SRB binding 7..10 / GLSL `uTexture<N>`
+    ///     sampler at SRB binding 11..14 / GLSL `uTexture<N>`
     ///   • `uTexture<N>_wrap` — wrap mode string ("clamp" / "repeat" /
     ///     "mirror"); ignored if no companion `uTexture<N>` resolves
     ///   • `uTexture<N>_svgSize` — SVG rasterise max-axis dimension
@@ -355,7 +356,7 @@ public:
     /// `setUserTexture(slot, image)` upload on the GUI thread.
     static QImage loadUserTextureFile(const QString& path, int svgMaxDim);
 
-    /// @brief Live texture-provider source bound to SRB binding 7
+    /// @brief Live texture-provider source bound to SRB binding 11
     ///        (`uTexture0`).
     ///
     /// When set to a non-null QQuickItem, the shader samples that item's
@@ -408,6 +409,17 @@ public:
         return m_bufferScale;
     }
     void setBufferScale(qreal scale);
+
+    /// Per-pass render-target scales, positionally aligned with
+    /// bufferShaderPaths (a pack's `bufferScales`). A pass past the list's end
+    /// renders at bufferScale; an empty list puts every pass on it. This is
+    /// what a pyramid pack (dual Kawase) uses to give each level its own
+    /// resolution.
+    QVariantList bufferScales() const
+    {
+        return m_bufferScales;
+    }
+    void setBufferScales(const QVariantList& scales);
 
     bool halfFloatBuffers() const
     {
@@ -599,7 +611,7 @@ public:
     void setAudioSpectrum(const QVector<float>& spectrum);
 
     /**
-     * Set a user texture (slots 0-3, bindings 7-10) directly from a QImage,
+     * Set a user texture (slots 0-3, bindings 11-14) directly from a QImage,
      * bypassing the path-driven loader.
      *
      * Clears the per-slot cached path and resets the companion svgSize / wrap
@@ -768,6 +780,7 @@ Q_SIGNALS:
     void bufferShaderPathsChanged();
     void bufferFeedbackChanged();
     void bufferScaleChanged();
+    void bufferScalesChanged();
     void halfFloatBuffersChanged();
     void bufferWrapChanged();
     void bufferWrapsChanged();
@@ -967,6 +980,7 @@ private:
     QStringList m_bufferShaderPaths;
     bool m_bufferFeedback = false;
     qreal m_bufferScale = 1.0;
+    QVariantList m_bufferScales;
     bool m_halfFloatBuffers = true;
     QString m_bufferWrap = QStringLiteral("clamp");
     QStringList m_bufferWraps;

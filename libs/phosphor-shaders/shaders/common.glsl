@@ -10,7 +10,7 @@
 // Include from effect.frag or vertex shader with:
 //   #include <common.glsl>
 //
-// Bindings: 0 = UBO. Channels (2-5) in multipass.glsl.
+// Bindings: 0 = UBO. Channels (2-9) in multipass.glsl.
 
 #ifndef PHOSPHORSHADERS_COMMON_GLSL
 #define PHOSPHORSHADERS_COMMON_GLSL
@@ -33,7 +33,7 @@ layout(std140, binding = 0) uniform ShaderUniforms {
     int iAudioSpectrumSize;  // number of bars; 0 = disabled
     int iFlipBufferY;        // always 1; both OpenGL and Vulkan need Y-flip when sampling buffer textures
     // std140: 8 bytes implicit padding here (int+int=8 -> next vec2 array aligned to 16)
-    vec2 iTextureResolution[4]; // user texture sizes (bindings 7-10); std140 pads each vec2 to 16 bytes
+    vec2 iTextureResolution[4]; // user texture sizes (bindings 11-14); std140 pads each vec2 to 16 bytes
     float iTimeHi;       // integer wrap offset (changes once per kShaderTimeWrap seconds)
 };
 

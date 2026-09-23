@@ -30,8 +30,12 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
                   "UboFrameState::customParams must match the contract's kMaxCustomParams");
     static_assert(std::extent_v<decltype(state.customColors)> == kMaxCustomColors,
                   "UboFrameState::customColors must match the contract's kMaxCustomColors");
-    static_assert(std::extent_v<decltype(state.channelResolution)> == kMaxBufferPasses,
-                  "UboFrameState::channelResolution must match the contract's kMaxBufferPasses");
+    // The UBO describes only the first kChannelResolutionSlots channel sizes
+    // (its 672-byte base layout predates the eight-channel budget); a pass
+    // reading a later channel sizes it with textureSize().
+    static_assert(std::extent_v<decltype(state.channelResolution)>
+                      == PhosphorShaders::Bindings::kChannelResolutionSlots,
+                  "UboFrameState::channelResolution must match the contract's kChannelResolutionSlots");
     static_assert(std::extent_v<decltype(state.textureResolution)> == kMaxUserTextures,
                   "UboFrameState::textureResolution must match the contract's kMaxUserTextures");
 
@@ -110,7 +114,7 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
     const bool multiBufferMode = m_bufferPaths.size() > 1;
     const int numChannels = multiBufferMode ? qMin(m_bufferPaths.size(), static_cast<qsizetype>(kMaxBufferPasses))
                                             : (m_bufferShaderReady && m_bufferTexture ? 1 : 0);
-    for (int i = 0; i < kMaxBufferPasses; ++i) {
+    for (int i = 0; i < PhosphorShaders::Bindings::kChannelResolutionSlots; ++i) {
         if (i < numChannels) {
             if (multiBufferMode && m_multiBufferTextures[i]) {
                 QSize ps = m_multiBufferTextures[i]->pixelSize();

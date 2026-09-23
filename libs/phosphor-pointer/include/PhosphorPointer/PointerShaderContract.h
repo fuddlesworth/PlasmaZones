@@ -120,7 +120,7 @@ inline constexpr const char* kUPointerTrail = "uPointerTrail";
 // ── Samplers ─────────────────────────────────────────────────────────────
 
 /// `sampler2D uCursorSprite` — the cursor image, bound only for packs that
-/// declare `needsCursor`. Loose sampler on KWin, binding 7 on the UBO
+/// declare `needsCursor`. Loose sampler on KWin, binding 11 on the UBO
 /// runtime. Gate every read on `uPointerFlags.x`.
 ///
 /// A shader that samples this without declaring `needsCursor` reads whatever
@@ -141,7 +141,7 @@ inline constexpr const char* kUTexture2 = "uTexture2";
 inline constexpr const char* kUTexture3 = "uTexture3";
 
 /// `sampler2D iChannel0..3` — multipass buffers, declared by the opt-in
-/// `pointer_multipass.glsl` include (bindings 2-5 on the UBO runtime).
+/// `pointer_multipass.glsl` include (bindings 2-9 on the UBO runtime).
 inline constexpr const char* kIChannel0 = "iChannel0";
 inline constexpr const char* kIChannel1 = "iChannel1";
 inline constexpr const char* kIChannel2 = "iChannel2";

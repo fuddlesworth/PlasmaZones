@@ -220,15 +220,33 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     // matching the daemon/validator resolution (surfaceshaderitem.cpp
     // surfaceIncludePaths) so a pack that resolves a root-level include on the
     // daemon and passes shadervalidate also links on the compositor.
+    //
+    // HIGHEST priority first, because the include resolver takes the first
+    // root that holds the header. The registry lists its search paths in
+    // ASCENDING priority (system lowest, the user dir last, see
+    // ensureSurfaceRegistryPaths), so walking them verbatim resolved every
+    // `<surface_*.glsl>` from /usr/share even for a pack the user dir had won:
+    // the pack's body came from one tree and its contract headers from
+    // another, which is a compile failure whenever the two trees disagree (a
+    // development tree linked into the user dir against an older installed
+    // copy, or a user override of a shared header). The pack's OWN sibling
+    // `shared/` goes first of all, the way the validator and the daemon
+    // resolve, so a self-contained pack tree never reaches past itself.
     QStringList includePaths;
-    for (const QString& sp : m_surfaceShaderRegistry.searchPaths()) {
+    const QString currentDir = QFileInfo(eff.fragmentShaderPath).absolutePath();
+    const QString siblingShared = QFileInfo(currentDir).absolutePath() + QStringLiteral("/shared");
+    if (QDir(siblingShared).exists()) {
+        includePaths.append(siblingShared);
+    }
+    QStringList searchPaths = m_surfaceShaderRegistry.searchPaths();
+    std::reverse(searchPaths.begin(), searchPaths.end());
+    for (const QString& sp : searchPaths) {
         const QString sharedDir = sp + QStringLiteral("/shared");
-        if (QDir(sharedDir).exists()) {
+        if (QDir(sharedDir).exists() && !includePaths.contains(sharedDir)) {
             includePaths.append(sharedDir);
         }
         includePaths.append(sp);
     }
-    const QString currentDir = QFileInfo(eff.fragmentShaderPath).absolutePath();
     QString includeError;
     // Assemble an entry-only pack (a `vec4 pSurface(vec2 uv)` body with no
     // main()) into a full translation unit BEFORE include expansion — identical
@@ -398,17 +416,23 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     }
 
     // MAIN-pass multipass channel locations: the buffer-pass outputs are bound
-    // in the composite fold as iChannel0..3 so the main effect.frag can
+    // in the composite fold as iChannel0..7 so the main effect.frag can
     // sample the pre-rendered buffer textures. -1 for a single-pass pack (the
     // border never references these — the linker drops them). The literal
     // element names match the surface contract declarations in
-    // surface_uniforms.glsl ("iChannel0".."iChannel3",
-    // "iChannelResolution[0]".."[3]").
-    static const std::array<const char*, 4> kIChannelNames = {{"iChannel0", "iChannel1", "iChannel2", "iChannel3"}};
-    static const std::array<const char*, 4> kIChannelResNames = {
+    // surface_multipass.glsl ("iChannel0".."iChannel7") and
+    // surface_uniforms.glsl ("iChannelResolution[0]".."[3]": the contract
+    // declares four sizes, and a pass reading a later channel uses
+    // textureSize()).
+    static const std::array<const char*, PhosphorShaders::kMaxBufferPasses> kIChannelNames = {
+        {"iChannel0", "iChannel1", "iChannel2", "iChannel3", "iChannel4", "iChannel5", "iChannel6", "iChannel7"}};
+    static_assert(PhosphorShaders::kMaxBufferPasses == 8, "kIChannelNames literal must grow with kMaxBufferPasses");
+    static const std::array<const char*, PhosphorShaders::Bindings::kChannelResolutionSlots> kIChannelResNames = {
         {"iChannelResolution[0]", "iChannelResolution[1]", "iChannelResolution[2]", "iChannelResolution[3]"}};
-    for (int i = 0; i < 4; ++i) {
+    for (size_t i = 0; i < kIChannelNames.size(); ++i) {
         packState.iChannelLoc[i] = shader->uniformLocation(kIChannelNames[i]);
+    }
+    for (size_t i = 0; i < kIChannelResNames.size(); ++i) {
         packState.iChannelResolutionLoc[i] = shader->uniformLocation(kIChannelResNames[i]);
     }
 
@@ -506,8 +530,10 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
             // uniforms), exactly like the main pass above.
             pass.iAudioSpectrumSizeLoc = bufShader->uniformLocation(SC::kIAudioSpectrumSize);
             pass.uAudioSpectrumLoc = bufShader->uniformLocation(SC::kUAudioSpectrum);
-            for (int i = 0; i < 4; ++i) {
+            for (size_t i = 0; i < kIChannelNames.size(); ++i) {
                 pass.iChannelLoc[i] = bufShader->uniformLocation(kIChannelNames[i]);
+            }
+            for (size_t i = 0; i < kIChannelResNames.size(); ++i) {
                 pass.iChannelResolutionLoc[i] = bufShader->uniformLocation(kIChannelResNames[i]);
             }
             for (int slot = 0; slot < SC::kMaxCustomParams; ++slot) {

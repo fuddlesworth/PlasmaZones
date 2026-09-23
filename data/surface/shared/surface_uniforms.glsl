@@ -165,15 +165,15 @@ layout(std140, binding = 0) uniform SurfaceUniforms {
                                  //   texture. See surface_backdrop.glsl.
 };                               // total 672 bytes, no trailing pad
 
-layout(binding = 7) uniform sampler2D uTexture0;
-// User-declared image textures (metadata `textures`), bindings 8-10 — the
+layout(binding = 11) uniform sampler2D uTexture0;
+// User-declared image textures (metadata `textures`), bindings 12-14 — the
 // same sampler-name and binding-point dialect the animation and overlay
 // categories use, provided by the base ShaderEffect's user-texture plumbing.
-layout(binding = 8) uniform sampler2D uTexture1;
-layout(binding = 9) uniform sampler2D uTexture2;
-layout(binding = 10) uniform sampler2D uTexture3;
+layout(binding = 12) uniform sampler2D uTexture1;
+layout(binding = 13) uniform sampler2D uTexture2;
+layout(binding = 14) uniform sampler2D uTexture3;
 
-// The multipass iChannel sampler bindings (2-5) live in surface_multipass.glsl,
+// The multipass iChannel sampler bindings (2-9) live in surface_multipass.glsl,
 // which a multipass pack includes; the border and other single-pass packs bind
 // only uTexture0.
 

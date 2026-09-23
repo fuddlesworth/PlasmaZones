@@ -526,7 +526,7 @@ inline constexpr const char* kIWindowOpacity = "iWindowOpacity";
 ///
 /// Each declared texture binds to one of the canonical samplers
 /// `uTexture1` / `uTexture2` / `uTexture3`. The redirected surface
-/// itself (`uTexture0`, binding 7 on the daemon, TEXTURE0 on KWin) is
+/// itself (`uTexture0`, binding 11 on the daemon, TEXTURE0 on KWin) is
 /// not counted here — that's a separate runtime-managed slot. The
 /// daemon's `PhosphorRendering::kMaxUserTextures = 4` includes slot 0,
 /// hence the off-by-one in the budget. Pinned to the daemon constant
@@ -539,11 +539,13 @@ inline constexpr const char* kIWindowOpacity = "iWindowOpacity";
 inline constexpr int kMaxUserTextureSlots = 3;
 
 /// Multipass buffer-pass budget. Pinned to the runtime's binding budget
-/// (`PhosphorRendering::kMaxBufferPasses`, ShaderNodeRhi) and the GLSL
-/// contract's `vec4 iChannelResolution[4]`: the downstream setters read at
-/// most this many entries, so a pack declaring more would silently lose the
-/// tail — the parser caps (with a warning) at this bound instead.
-inline constexpr int kMaxBufferPasses = 4;
+/// (`PhosphorRendering::kMaxBufferPasses`, ShaderNodeRhi) through the
+/// cross-library `PhosphorShaders::kMaxBufferPasses`: the downstream setters
+/// read at most this many entries, so a pack declaring more would silently
+/// lose the tail — the parser caps (with a warning) at this bound instead.
+/// The GLSL contract's `vec4 iChannelResolution[4]` describes only the first
+/// four; a pass reading a later channel sizes it with `textureSize()`.
+inline constexpr int kMaxBufferPasses = PhosphorShaders::kMaxBufferPasses;
 
 /// `int iAudioSpectrumSize` — CAVA bar count, 0 while the audio visualizer
 /// is off or cava is unavailable. Daemon: BaseUniforms UBO member fed by
@@ -555,7 +557,7 @@ inline constexpr const char* kIAudioSpectrumSize = "iAudioSpectrumSize";
 
 /// `sampler2D uAudioSpectrum` — the CAVA spectrum texture (`bars×1`,
 /// R = bar value in 0..1). Declared by the opt-in audio.glsl module:
-/// binding 6 on the daemon (the overlay convention), a named sampler
+/// binding 10 on the daemon (the overlay convention), a named sampler
 /// bound to a dedicated unit at draw time on the kwin path. Never
 /// sampled while `iAudioSpectrumSize` is 0.
 inline constexpr const char* kUAudioSpectrum = "uAudioSpectrum";

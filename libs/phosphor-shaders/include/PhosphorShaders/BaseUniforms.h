@@ -82,7 +82,7 @@ struct alignas(16) BaseUniforms
     // contract pinned by the static_asserts below.
     int _pad_after_audioSpectrum[2]; // offset 584
 
-    // User texture resolutions (bindings 7-10)
+    // User texture resolutions (bindings 11-14)
     float iTextureResolution[4][4]; // vec4[4]: 64 bytes at offset 592
 
     // Wrap-offset counterpart of iTime

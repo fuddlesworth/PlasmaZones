@@ -13,6 +13,7 @@
 #include "daemon/rendering/zoneshaderitem.h"
 #include "daemon/rendering/zonelabeltexturebuilder.h"
 #include <PhosphorRendering/ZoneShaderCommon.h>
+#include <PhosphorShaders/CustomParamsKey.h>
 #include <PhosphorRendering/ZoneLabelTexture.h>
 #include "config/configdefaults.h"
 #include "core/types/constants.h"
@@ -256,9 +257,9 @@ private Q_SLOTS:
         // Default should be 1.0
         QVERIFY(qFuzzyCompare(item.bufferScale(), 1.0));
 
-        // Below minimum (0.125) should clamp
+        // Below the contract floor (PhosphorShaders::kMinBufferScale) should clamp
         item.setBufferScale(0.01);
-        QVERIFY(qFuzzyCompare(item.bufferScale(), 0.125));
+        QVERIFY(qFuzzyCompare(item.bufferScale(), PhosphorShaders::kMinBufferScale));
 
         // Above maximum (1.0) should clamp
         item.setBufferScale(5.0);
