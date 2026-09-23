@@ -18,7 +18,7 @@
 #     live reload, friendly-param → slot-key translation, and the
 #     generated p_<id> preamble.
 #
-# Mirrors libs/phosphor-animation's shader-pack subsystem; trimmed to the
+# Mirrors phosphor/libs/phosphor-animation's shader-pack subsystem; trimmed to the
 # parts a surface shader needs (no QML, no rendering, no surface lifecycle).
 # Multipass IS modelled here as pack metadata (SurfaceShaderEffect's
 # bufferShaderPaths / bufferScale / bufferWrap, used by the glow pack); the

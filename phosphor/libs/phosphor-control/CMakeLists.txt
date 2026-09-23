@@ -166,7 +166,7 @@ set(phosphorcontrol_SRCS
 # Set at DIRECTORY level so every implicitly-generated sub-target picks
 # it up without enumerating the ever-changing list by name; placed before
 # the first target so it also propagates to the examples/ and tests/
-# subdirectories added below. Mirrors libs/phosphor-animation and
+# subdirectories added below. Mirrors phosphor/libs/phosphor-animation and
 # src/shared — see those for the full rationale.
 set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dirs")
 

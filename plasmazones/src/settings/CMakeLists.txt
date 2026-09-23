@@ -13,7 +13,7 @@ find_package(KF6Kirigami REQUIRED)
 # the no-Q_OBJECT sub-targets (qmltyperegistration, resource init) leave
 # that dir empty or — after `--clean-first` — missing, so cc1plus fires
 # before AUTOMOC recreates it. DIRECTORY level so every implicitly-named
-# sub-target inherits it. Mirrors src/shared/CMakeLists.txt.
+# sub-target inherits it. Mirrors plasmazones/src/shared/CMakeLists.txt.
 set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dirs")
 
 set(plasmazones_settings_SRCS
@@ -177,7 +177,7 @@ set(plasmazones_settings_SRCS
     # inheritance. SettingsStagingDomain bridges SettingsController's
     # central needsSave/save()/load() to the framework's StagingDomain
     # contract. Both are scaffolding for the in-progress src/settings
-    # migration onto libs/phosphor-control.
+    # migration onto phosphor/libs/phosphor-control.
     pageadapter.h
     pageadapter.cpp
     services/settingsstagingdomain.h

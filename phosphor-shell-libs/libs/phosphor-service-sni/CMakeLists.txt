@@ -40,7 +40,7 @@ find_package(PhosphorServiceIconTheme QUIET)
 if(NOT TARGET PhosphorServiceIconTheme::PhosphorServiceIconTheme)
     message(FATAL_ERROR
         "PhosphorServiceSni requires PhosphorServiceIconTheme. "
-        "Configure libs/phosphor-service-icontheme first (the root "
+        "Configure phosphor-shell-libs/libs/phosphor-service-icontheme first (the root "
         "CMakeLists.txt does this automatically) or supply it via "
         "find_package.")
 endif()

@@ -38,7 +38,7 @@ set(CMAKE_AUTOMOC ON)
 # example carries no Q_OBJECT declarations, so AUTOMOC produces nothing
 # and the include dir is either empty or — after `--clean-first` —
 # missing entirely. cc1plus then fires the warning before AUTOMOC has a
-# chance to recreate the path. See src/shared/CMakeLists.txt for the
+# chance to recreate the path. See plasmazones/src/shared/CMakeLists.txt for the
 # same workaround applied to the shared QML module.
 set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dirs")
 

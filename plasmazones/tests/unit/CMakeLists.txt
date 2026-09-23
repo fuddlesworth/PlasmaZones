@@ -2618,7 +2618,7 @@ set_tests_properties(test_surface_decoration_orientation PROPERTIES SKIP_RETURN_
 # compiles straight into the test the same way StripViewAnimator's does. The
 # include path is the effect tree so its own "compositor/..." include resolves.
 # It stays out of the Unity blob here for the same reason it does in
-# kwin-effect/CMakeLists.txt (its file-local helpers carry generic names);
+# plasmazones/kwin-effect/CMakeLists.txt (its file-local helpers carry generic names);
 # source-file properties are directory-scoped, so the effect tree's exclusion
 # does not reach this consuming target.
 set_source_files_properties(${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect/compositor/scrolltabindicatorpainter_raster.cpp

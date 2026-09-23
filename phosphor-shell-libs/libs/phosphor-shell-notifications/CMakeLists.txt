@@ -70,7 +70,7 @@ foreach(_qml_file IN LISTS _phosphor_notifications_qml_files)
 endforeach()
 
 # Directory-scope suppression of -Wmissing-include-dirs. Full rationale:
-# src/shared/CMakeLists.txt.
+# plasmazones/src/shared/CMakeLists.txt.
 set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dirs")
 
 qt_add_qml_module(PhosphorShellNotificationsQml

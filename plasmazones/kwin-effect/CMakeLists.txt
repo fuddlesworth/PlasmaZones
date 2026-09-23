@@ -222,7 +222,7 @@ target_compile_definitions(kwin_effect_plasmazones
 # ON). snapassistthumbnailcapture.cpp must include epoxy/gl.h before any other
 # GL header; jumbo-grouping it with the other effect sources (which pull in
 # KWin's GL headers) would break that ordering. Mirrors the daemon's identical
-# guard on dmabufglimport.cpp (src/CMakeLists.txt).
+# guard on dmabufglimport.cpp (plasmazones/src/CMakeLists.txt).
 set_source_files_properties(compositor/snapassistthumbnailcapture.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 # Same ordering rule for the tab-indicator painter: it includes <epoxy/gl.h>
 # and calls gl* entry points directly, so epoxy must come before any other GL

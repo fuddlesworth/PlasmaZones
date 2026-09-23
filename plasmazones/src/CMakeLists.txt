@@ -830,7 +830,7 @@ set_source_files_properties(editor/qml/ColorUtils.js PROPERTIES
 # plasmazones-shader-validate and the add_subdirectory(settings) tree
 # further down. The suppression is harmless for those (it only silences
 # the missing-AUTOMOC-include-dir warning class). Mirrors
-# src/shared/CMakeLists.txt.
+# plasmazones/src/shared/CMakeLists.txt.
 set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dirs")
 
 # Add QML module to the executable

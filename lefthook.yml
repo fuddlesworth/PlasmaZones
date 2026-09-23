@@ -54,7 +54,8 @@ pre-commit:
       run: python3 scripts/validate-json-schemas.py
     conventions:
       # The CLAUDE.md rules that are decidable by inspection: SPDX headers,
-      # the GPL-3 app / LGPL-2.1 libs/phosphor-* split (any tier's libs/ directory), the file-size ceiling
+      # the GPL-3 app / LGPL-2.1 libs/phosphor-* split (any tier's libs/
+      # directory), the file-size ceiling
       # (growth-only, against scripts/oversize-baseline.json), i18n() in C++,
       # inline config paths that should be ConfigDefaults:: accessors, and the
       # plain-prose rules on user-facing strings. Only the staged files are
@@ -65,7 +66,12 @@ pre-commit:
       glob:
         - "*.{cpp,cc,cxx,h,hpp,qml,luau,py,frag,vert,glsl}"
         - "plasmazones/data/**/*.json"
+        # `plasmazones/data/**/*.json` does not match a file sitting directly
+        # in data/, and whatsnew.json is a prose surface CLAUDE.md names, so
+        # it needs its own entry.
+        - "plasmazones/data/*.json"
         - "phosphor/data/**/*.json"
+        - "phosphor/data/*.json"
         - "*.desktop*"
         - "*.metainfo.xml*"
         - "packaging/**"

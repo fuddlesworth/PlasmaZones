@@ -95,7 +95,7 @@ set(_phosphor_lock_qml_sources
 )
 
 # Directory-scope suppression of -Wmissing-include-dirs for the targets
-# qt_add_qml_module generates here. Full rationale: src/shared/CMakeLists.txt.
+# qt_add_qml_module generates here. Full rationale: plasmazones/src/shared/CMakeLists.txt.
 set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dirs")
 
 qt_add_qml_module(PhosphorShellLockQml

@@ -66,12 +66,12 @@ set(QT_QML_GENERATE_QMLLS_INI ON CACHE BOOL "Generate QML language server config
 # and then recreated mid-build by the autogen step, so `-Wmissing-include-dirs`
 # intermittently fires against these directories. Instead of racing the
 # clean/autogen ordering from here at configure time (which `--clean-first`
-# would wipe again), the suppression is scoped to src/shared/CMakeLists.txt
+# would wipe again), the suppression is scoped to plasmazones/src/shared/CMakeLists.txt
 # where the affected QML-module targets live - see that file for details.
 
 # KDE/Qt requirements (Plasma 6.7 target: KF 6.26, Qt 6.10, KWin 6.7)
 # Plasma 6.8 is supported by the same source: the KWin effect adapts to either
-# version's paint API at compile time (kwin-effect/kwincompat.h), so these floors
+# version's paint API at compile time (plasmazones/kwin-effect/kwincompat.h), so these floors
 # stay at the oldest supported Plasma rather than the newest.
 set(QT_MIN_VERSION "6.10.0")
 set(KF_MIN_VERSION "6.26.0")
@@ -185,7 +185,7 @@ option(BUILD_PHOSPHOR_SHELL "Build the phosphor-shell desktop shell (work in pro
 if(BUILD_PHOSPHOR_SHELL AND NOT USE_KDE_FRAMEWORKS)
     message(FATAL_ERROR
         "BUILD_PHOSPHOR_SHELL requires USE_KDE_FRAMEWORKS=ON: the shell tier "
-        "(libs/phosphor-shell-bar, libs/phosphor-shell-power, libs/phosphor-shell-control-center, libs/phosphor-shell-launcher) depends on KF6 "
+        "(phosphor-shell-libs/libs/phosphor-shell-bar, phosphor-shell-libs/libs/phosphor-shell-power, phosphor-shell-libs/libs/phosphor-shell-control-center, phosphor-shell-libs/libs/phosphor-shell-launcher) depends on KF6 "
         "Kirigami for icon rendering and has no Qt-only fallback.")
 endif()
 
@@ -262,7 +262,7 @@ include(KDEClangFormat)
 # `*` (anything except `/`). GLOB_RECURSE with a plain `*.cpp` pattern
 # already recurses into subdirectories, so the recursive form is what
 # we want; using `**/*.cpp` would require an intermediate path segment
-# and silently drop files directly under each root (e.g. src/phosphor_qml_i18n.cpp,
+# and silently drop files directly under each root (e.g. plasmazones/src/phosphor_qml_i18n.cpp,
 # any top-level kwin-effect/.cpp).
 file(GLOB_RECURSE ALL_CLANG_FORMAT_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/plasmazones/src/*.cpp
@@ -494,7 +494,7 @@ add_custom_target(uninstall
 # backend degrades gracefully when absent.
 # NOTE: this does NOT make the whole build Vulkan-optional. The dma-buf thumbnail
 # daemon path hard-requires the Vulkan SDK via find_package(Vulkan REQUIRED) in
-# src/CMakeLists.txt (dmabuftextureprovider.cpp includes <vulkan/vulkan.h>
+# plasmazones/src/CMakeLists.txt (dmabuftextureprovider.cpp includes <vulkan/vulkan.h>
 # unconditionally), so a daemon build without the Vulkan SDK fails at configure time.
 # Packaging specs (PKGBUILD, debian/control, rpm .spec, nix) already list Vulkan as a
 # hard BuildRequires, so distribution packages are unaffected.

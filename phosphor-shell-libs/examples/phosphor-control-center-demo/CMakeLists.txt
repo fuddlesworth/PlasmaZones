@@ -13,7 +13,7 @@ if(COMMAND qt_policy)
 endif()
 
 # Directory-scope suppression of -Wmissing-include-dirs. Full rationale:
-# src/shared/CMakeLists.txt.
+# plasmazones/src/shared/CMakeLists.txt.
 set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dirs")
 
 qt_add_qml_module(phosphor_control_center_demo_qml

@@ -21,11 +21,11 @@ find_package(Qt6LinguistTools QUIET)
 # catalog at runtime via PlasmaZones::loadTranslations(), so they share one
 # translation context and one source set. That set is the whole app tree, not
 # a per-binary list: partitioning it by binary is what produced every
-# extraction gap this file has had. src/daemon/daemon/lifecycle.cpp lost a
+# extraction gap this file has had. plasmazones/src/daemon/daemon/lifecycle.cpp lost a
 # user-facing notification when the daemon.cpp split moved it out of a listed
-# file, and src/editor/EditorGapsModel.cpp, src/editor/helpers/
-# BatchOperationScope.h, src/config/settingsvaluelabels.cpp
-# and src/core/utils/unifiedlayoutlist.cpp were
+# file, and plasmazones/src/editor/EditorGapsModel.cpp, src/editor/helpers/
+# BatchOperationScope.h, plasmazones/src/config/settingsvaluelabels.cpp
+# and plasmazones/src/core/utils/unifiedlayoutlist.cpp were
 # each unreachable until someone happened to notice. Headers are included
 # because PhosphorI18n::tr() calls live in them too.
 #
@@ -77,7 +77,7 @@ file(GLOB_RECURSE PLASMAZONES_I18N_QML CONFIGURE_DEPENDS
 # About KCM is a plugin inside systemsettings, which installs no
 # PhosphorLocalizedContext, so i18n() there had no backing at all and its nine
 # extracted messages could never be served. Its QML calls qsTr() and the plugin
-# installs a plain QTranslator itself (kcm/about/kcmabout.cpp), which needs no
+# installs a plain QTranslator itself (plasmazones/kcm/about/kcmabout.cpp), which needs no
 # link against plasmazones_core.
 file(GLOB_RECURSE PLASMAZONES_I18N_QML_QSTR CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-control/qml/*.qml"
