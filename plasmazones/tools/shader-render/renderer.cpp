@@ -335,7 +335,18 @@ QStringList shaderIncludePaths()
     // Absolutised: every other entry in this list is absolute, and a relative
     // include path is the one entry that can silently resolve somewhere else if
     // the process cwd is not the source tree.
-    pushRoot(QDir(QStringLiteral("data/overlays")).absolutePath());
+    //
+    // Two spellings since the tier split: the tree is plasmazones/data/overlays
+    // from the repository root and data/overlays from inside plasmazones/.
+    // Probing only one of them puts us straight back in the state described
+    // above, where the preview is a render of the last install.
+    for (const QString& prefix : {QStringLiteral("plasmazones/data/overlays"), QStringLiteral("data/overlays")}) {
+        const QString candidate = QDir(prefix).absolutePath();
+        if (QDir(candidate).exists()) {
+            pushRoot(candidate);
+            break;
+        }
+    }
 
     // GenericDataLocation + "plasmazones/overlays", matching the daemon's
     // trustedShaderRoots(). This used to be AppDataLocation + "/overlays", which

@@ -89,13 +89,34 @@ QString xdgPlasmaZonesDir(const QString& subdir)
     return {};
 }
 
+// Resolve a bundled data family from the source tree, relative to the cwd.
+//
+// Two spellings, because the tier split moved the tree: `plasmazones/data/<f>`
+// when run from the repository root, `data/<f>` when run from inside
+// plasmazones/. Returns an empty string when neither exists, which is the
+// installed-invocation case.
+//
+// The repo-root spelling has to come first. Getting this wrong is silent: the
+// tool renders against the installed packs instead of the working tree and says
+// nothing, which is the failure the source-tree-first ordering exists to
+// prevent.
+QString sourceTreeDataDir(const QString& family)
+{
+    for (const QString& prefix : {QStringLiteral("plasmazones/data/"), QStringLiteral("data/")}) {
+        const QString candidate = QDir(prefix + family).absolutePath();
+        if (QDir(candidate).exists())
+            return candidate;
+    }
+    return {};
+}
+
 QString defaultShaderDir()
 {
-    // Prefer in-tree data/overlays for development; fall back to
-    // the installed location.
-    const QString cwd = QDir(QStringLiteral("data/overlays")).absolutePath();
-    if (QDir(cwd).exists())
-        return cwd;
+    // Prefer the in-tree overlays for development; fall back to the installed
+    // location.
+    const QString inTree = sourceTreeDataDir(QStringLiteral("overlays"));
+    if (!inTree.isEmpty())
+        return inTree;
     // No hardcoded /usr/share tier: GenericDataLocation already ends with the
     // XDG_DATA_DIRS list, which contains it. A second spelling of a path the
     // walk above already covers is just a second thing to keep in sync.
@@ -107,17 +128,17 @@ QString defaultShaderDir()
 // the caller having to spell out a directory that the flag already implies.
 QString defaultPointerDir()
 {
-    const QString cwd = QDir(QStringLiteral("data/pointer")).absolutePath();
-    if (QDir(cwd).exists())
-        return cwd;
+    const QString inTree = sourceTreeDataDir(QStringLiteral("pointer"));
+    if (!inTree.isEmpty())
+        return inTree;
     return xdgPlasmaZonesDir(QStringLiteral("pointer"));
 }
 
 QString defaultLayoutDir()
 {
-    const QString cwd = QDir(QStringLiteral("data/layouts")).absolutePath();
-    if (QDir(cwd).exists())
-        return cwd;
+    const QString inTree = sourceTreeDataDir(QStringLiteral("layouts"));
+    if (!inTree.isEmpty())
+        return inTree;
     // No hardcoded /usr/share tier: GenericDataLocation already ends with the
     // XDG_DATA_DIRS list, which contains it. A second spelling of a path the
     // walk above already covers is just a second thing to keep in sync.
@@ -193,14 +214,14 @@ int main(int argc, char* argv[])
 
     QCommandLineOption shaderDirOpt(QStringLiteral("shader-dir"),
                                     QStringLiteral("Directory containing <id>/metadata.json. "
-                                                   "Defaults to data/overlays/ in the cwd, then the XDG data dirs. "
-                                                   "With --pointer the default becomes data/pointer/ instead."),
+                                                   "Defaults to the in-tree overlays, then the XDG data dirs. "
+                                                   "With --pointer the default becomes the pointer packs instead."),
                                     QStringLiteral("path"), defaultShaderDir());
     parser.addOption(shaderDirOpt);
 
     QCommandLineOption layoutDirOpt(QStringLiteral("layout-dir"),
                                     QStringLiteral("Directory containing <id>.json layout files. "
-                                                   "Defaults to data/layouts/ in the cwd, then the XDG data dirs."),
+                                                   "Defaults to the in-tree layouts, then the XDG data dirs."),
                                     QStringLiteral("path"), defaultLayoutDir());
     parser.addOption(layoutDirOpt);
 

@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import subprocess
 import sys
@@ -65,8 +64,11 @@ QML_SUFFIXES = {".qml"}
 SHADER_SUFFIXES = {".frag", ".vert", ".glsl"}
 CODE_SUFFIXES = CPP_SUFFIXES | QML_SUFFIXES | SHADER_SUFFIXES | {".luau", ".py"}
 
-# Trees that are vendored or generated and are not ours to police.
-EXCLUDED_PREFIXES = ("extern/", "build/", "build-noshell/", "build-nounity/")
+# Trees that are vendored or generated and are not ours to police. The
+# vendored tree is phosphor/extern/ since the tier split; a bare "extern/"
+# matches nothing and would quietly start policing anything vendored there.
+EXCLUDED_PREFIXES = ("phosphor/extern/", "build/", "build-off/", "build-nounity/",
+                     "build-release/", "build-relwithdebinfo/")
 
 
 def tracked_files() -> list[str]:
@@ -164,6 +166,9 @@ def line_of(text: str, index: int) -> int:
 
 # Data assets in formats with no comment syntax are exempt. CLAUDE.md names
 # these exactly; adding a header to them makes the file invalid.
+# .search(), not .match(): these are mid-path patterns, and .match() anchors
+# at position 0, so the (^|/) alternation could never fire for a tier-
+# prefixed path and the exemption guarded nothing.
 SPDX_EXEMPT = re.compile(r"(^|/)data/.*\.json$|(^|/)libs/phosphor-registry/tests/.*manifest\.json(\.in)?$")
 
 
@@ -172,7 +177,7 @@ def rule_spdx(files: list[str]) -> list[Violation]:
     for f in files:
         if Path(f).suffix not in CODE_SUFFIXES:
             continue
-        if SPDX_EXEMPT.match(f):
+        if SPDX_EXEMPT.search(f):
             continue
         # Generated editor aids are gitignored and carry no header, but if one
         # is passed explicitly, honour the documented exemption.
@@ -199,7 +204,10 @@ GPL3 = "GPL-3.0-or-later"
 # content, so it cannot be derived from the path. data/overlays and data/surface
 # are likewise un-normalised. These trees are checked for header *presence*
 # by the spdx rule and are exempt from the per-tree license rule.
-LICENSE_UNGOVERNED = re.compile(r"(^|/)data/")
+# Anchored to the two real data trees. An unanchored "(^|/)data/" also
+# swallowed plasmazones/tests/**/data/, quietly un-governing real GPL-3
+# sources that happened to sit in a directory called data.
+LICENSE_UNGOVERNED = re.compile(r"^(plasmazones|phosphor)/data/")
 
 
 def expected_license(path: str) -> str | None:
@@ -260,7 +268,7 @@ def rule_size(files: list[str]) -> list[Violation]:
     for f in files:
         if Path(f).suffix not in CODE_SUFFIXES:
             continue
-        n = read(f).count("\n") + 1
+        n = len(read(f).splitlines())
         if n <= SIZE_CEILING:
             continue
         if f not in base:
@@ -291,7 +299,7 @@ def update_baseline() -> int:
     for f in files:
         if Path(f).suffix not in CODE_SUFFIXES:
             continue
-        n = read(f).count("\n") + 1
+        n = len(read(f).splitlines())
         if n > SIZE_CEILING:
             rec[f] = n
     BASELINE.write_text(
@@ -303,7 +311,9 @@ def update_baseline() -> int:
                     "scripts/check-conventions.py fails if one of these grows or "
                     "if a new file appears over the ceiling. Shrinking a file "
                     "here is always welcome; re-run with --update-baseline to "
-                    "ratchet the recorded length down."
+                    "ratchet the recorded length down. A file whose entry was "
+                    "RAISED carries its own FILE-SIZE EXCEPTION comment saying "
+                    "what it gained and why."
                 ),
                 "ceiling": SIZE_CEILING,
                 "files": dict(sorted(rec.items())),
@@ -339,7 +349,7 @@ def rule_i18n_cpp(files: list[str]) -> list[Violation]:
     for f in files:
         if Path(f).suffix not in CPP_SUFFIXES:
             continue
-        if f in I18N_BRIDGE_ALLOW or f.startswith("tests/") or "/tests/" in f:
+        if f in I18N_BRIDGE_ALLOW or "/tests/" in f:
             continue
         code = strip_c_comments(read(f))
         for m in KLOCALIZED_INCLUDE.finditer(code):
@@ -391,7 +401,7 @@ def rule_config_keys(files: list[str]) -> list[Violation]:
         # path. Routing them through the accessor would make the assertion
         # tautological: it would then pass whatever the accessor returned,
         # including a wrong value. The rule targets production call sites.
-        if f.startswith("tests/") or "/tests/" in f:
+        if "/tests/" in f:
             continue
         code = strip_c_comments(read(f))
         for m in CONFIG_DOTPATH.finditer(code):
@@ -434,7 +444,8 @@ def is_title_separator(s: str) -> bool:
             return False
     return True
 
-PROSE_STRING_KEYS = {"name", "description", "title", "summary", "comment", "genericname", "text", "highlight", "label"}
+PROSE_STRING_KEYS = {"name", "description", "title", "summary", "comment", "genericname", "text",
+                     "highlight", "highlights", "label"}
 
 
 def prose_problems(s: str) -> list[str]:
@@ -483,8 +494,12 @@ def iter_json_prose(path: str):
                         yield trail + "/presets", preset_name
                 yield from walk(v, trail + "/" + k)
         elif isinstance(node, list):
+            # Carry the LIST's key down to its elements. Walking with the index
+            # as the trail segment meant a bare string inside an array was
+            # keyed on a digit, which is never a prose key, so every
+            # "highlights": [...] entry went unchecked.
             for i, v in enumerate(node):
-                yield from walk(v, f"{trail}/{i}")
+                yield from walk(v, trail if isinstance(v, str) else f"{trail}/{i}")
         elif isinstance(node, str):
             key = trail.rsplit("/", 1)[-1]
             if key.lower() in PROSE_STRING_KEYS:
