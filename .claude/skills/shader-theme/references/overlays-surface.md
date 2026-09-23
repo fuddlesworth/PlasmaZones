@@ -5,14 +5,14 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 # Overlay (zone) and surface (decoration) pack contracts
 
-Source of truth: `data/overlays/shared/common.glsl`, `src/daemon/rendering/zoneentryscaffold.cpp`,
-`data/schemas/shader-metadata.schema.json`; `data/surface/shared/surface_uniforms.glsl`,
-`data/surface/shared/surface_lib.glsl`, `libs/phosphor-surface/include/PhosphorSurface/SurfaceShaderEffect.h`,
-`data/schemas/surface-metadata.schema.json`. Read the two shared headers before writing.
+Source of truth: `plasmazones/data/overlays/shared/common.glsl`, `plasmazones/src/daemon/rendering/zoneentryscaffold.cpp`,
+`phosphor/data/schemas/shader-metadata.schema.json`; `plasmazones/data/surface/shared/surface_uniforms.glsl`,
+`plasmazones/data/surface/shared/surface_lib.glsl`, `phosphor/libs/phosphor-surface/include/PhosphorSurface/SurfaceShaderEffect.h`,
+`phosphor/data/schemas/surface-metadata.schema.json`. Read the two shared headers before writing.
 
 | | overlay | surface |
 |---|---|---|
-| dir | `data/overlays/<id>/` | `data/surface/<id>/` |
+| dir | `plasmazones/data/overlays/<id>/` | `plasmazones/data/surface/<id>/` |
 | files | `metadata.json`, `effect.frag`, optional `passN.frag` | `metadata.json`, `effect.frag`, optional `passN.frag`, optional vertex shader, up to three `textures` |
 | licence header | `GPL-3.0-or-later` | mixed tree: LGPL for a new PlasmaZones-original pack, but the bundled backdrop packs (blur, glass, frosted-glass, rippled-glass, rain-glass, duotone, mosaic) are `GPL-3.0-or-later`; follow the closest sibling and CLAUDE.md "License" |
 | entry | `vec4 pZone(ZoneCtx z)` or `vec4 pImage(vec2 fragCoord)` | `vec4 pSurface(vec2 uv)` |
@@ -132,7 +132,7 @@ Contract flags (declare honestly, the hosts key behaviour on them):
 - `audio`: includes `<surface_audio.glsl>`.
 - Blur, and multipass in general: declare `"multipass": true`, `"bufferScale": 0.25`,
   `"bufferShaders": ["builtin:gaussian-h", "builtin:gaussian-v"]`. The builtin tokens resolve
-  to the shared passes in `data/surface/shared/` (`gaussian_h.frag` samples `backdropTexel()`
+  to the shared passes in `plasmazones/data/surface/shared/` (`gaussian_h.frag` samples `backdropTexel()`
   at the pack's bufferScale, `gaussian_v.frag` samples that result as `iChannel0`); an unknown
   token, or any missing pack-local pass, disables multipass for the whole pack and it renders
   single-pass. The main pass includes `<surface_multipass.glsl>` and reads the finished blur as

@@ -36,7 +36,7 @@ reinvented:
 - daemon → effect: the authoritative echo rides the **apply batch entry**, not
   a bespoke signal (`engine_apply.cpp`, the `windowedFullscreen` key)
 - the decision chain lives in a header-only, unit-testable pure module
-  (`kwin-effect/tilinghandler/scrolldecisions.h`), with KWin-facing side
+  (`plasmazones/kwin-effect/tilinghandler/scrolldecisions.h`), with KWin-facing side
   effects kept at the call site in `tiling.cpp`
 
 kwin-effect has no linkable test target, so pure decision logic MUST go in
@@ -93,10 +93,10 @@ read our own write as a manual unmaximize.
 
 **Transport.** `ScrollingAdaptor` has no `toggleMaximizeColumn` — the verb is
 shortcut-only today, `ShortcutManager::scrollMaximizeColumnRequested` →
-`ScrollEngine::toggleMaximizeColumn` (`src/daemon/daemon/scrolling_init.cpp:162`,
+`ScrollEngine::toggleMaximizeColumn` (`plasmazones/src/daemon/daemon/scrolling_init.cpp:162`,
 `engine_verbs.cpp`). Add:
 
-- method in `dbus/org.plasmazones.Scrolling.xml`
+- method in `plasmazones/dbus/org.plasmazones.Scrolling.xml`
 - slot on `ScrollingAdaptor`, forwarding to the same `ScrollEngine` entry
   point the shortcut uses, with the same wire-boundary input validation as
   `clearWindowedFullscreen` (`scrollingadaptor.cpp`)

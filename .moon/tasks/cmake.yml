@@ -1,0 +1,172 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Tasks inherited by every project tagged `cmake` (the four tiers).
+#
+# One configure serves the whole tree: the root CMakeLists enters each tier
+# in dependency order and the tiers share ./build. Per-tier build and test
+# selection comes from two CMake-side hooks:
+#   - each tier CMakeLists ends with phosphor_tier_target(<tier>-tier), an
+#     aggregate target that depends on everything declared under it;
+#   - ctest --test-dir build/<tier> runs only the tests declared under it.
+#
+# The build directory is shared, so a tier's build outputs are not declared
+# as moon outputs and the build/test tasks are not cached by moon: ccache
+# already caches the compile step, and a moon cache of a shared tree would
+# restore files another tier's build had since overwritten. What moon adds
+# is ordering (^:build), affected-only runs (moon run :test --affected) and
+# one command per tier.
+$schema: 'https://moonrepo.dev/schemas/tasks.json'
+
+inheritedBy:
+  tags: ['cmake']
+
+fileGroups:
+  cmake:
+    - '/CMakeLists.txt'
+    - '/CMakePresets.json'
+    - '/cmake/**/*'
+    - 'CMakeLists.txt'
+    - '**/CMakeLists.txt'
+    - '**/*.cmake'
+    - '**/*.cmake.in'
+  # Every directory a tier builds or installs from. icons/, translations/ and
+  # scripts/ feed install rules, so leaving them out means a shipped artifact
+  # can change with nothing marked affected.
+  sources:
+    - 'src/**/*'
+    - 'libs/**/*'
+    - 'cli/**/*'
+    - 'shell/**/*'
+    - 'kcm/**/*'
+    - 'kwin-effect/**/*'
+    - 'tools/**/*'
+    - 'data/**/*'
+    - 'dbus/**/*'
+    - 'extern/**/*'
+    - 'examples/**/*'
+    - 'icons/**/*'
+    - 'translations/**/*'
+    - 'scripts/**/*'
+  tests:
+    - 'tests/**/*'
+    - 'libs/*/tests/**/*'
+
+# Parallelism is a literal 6 rather than $(nproc) throughout, matching the
+# pz-build skill: the machine has 8 cores and a higher guess has overloaded
+# it before. moon has no variable interpolation for this, so it is repeated
+# on each task that takes a -j.
+tasks:
+  # The configure step lives on the `repo` project (moon.yml at the root),
+  # not here: a per-tier configure would run once per tier in parallel
+  # against the same build directory, and concurrent cmake configures of
+  # one tree corrupt each other's generate step.
+  build:
+    command: 'cmake'
+    args:
+      - '--build'
+      - '--preset'
+      - 'debug'
+      - '--target'
+      - '$project-tier'
+      - '--parallel'
+      - '6'
+    deps:
+      - 'repo:configure'
+      - '^:build'
+    inputs:
+      - '@group(cmake)'
+      - '@group(sources)'
+      # tests too: phosphor_tier_target() collects every buildable target in
+      # the tier, which includes its test executables, so a test-only edit
+      # really does change what this task produces. Without it,
+      # `moon run <tier>:build --affected` reports nothing to do.
+      - '@group(tests)'
+    options:
+      runFromWorkspaceRoot: true
+      cache: false
+      # Sibling tiers share one build directory, and two ninja processes in
+      # the same tree race each other on common dependencies. Serialize the
+      # upstream builds; ninja's own -j provides the parallelism.
+      runDepsInParallel: false
+
+  # Release builds land in build-release/ (see CMakePresets.json), so a
+  # debug tree and a release tree coexist and switching costs nothing.
+  build-release:
+    extends: 'build'
+    args:
+      - '--build'
+      - '--preset'
+      - 'release'
+      - '--target'
+      - '$project-tier'
+      - '--parallel'
+      - '6'
+    deps:
+      - 'repo:configure-release'
+      - '^:build-release'
+    options:
+      mergeArgs: 'replace'
+      mergeDeps: 'replace'
+
+  # Every test target already carries its own private-bus TEST_LAUNCHER and
+  # XDG sandbox from cmake/PhosphorTestIsolation.cmake, so ctest is invoked
+  # bare here. Wrapping it in another dbus-run-session would put the private
+  # buses inside a second bus for no gain.
+  # A tier configured OFF has no build/<tier> directory, so ctest exits with
+  # a bare "--test-dir does not exist". If that happens for phosphor-shell or
+  # phosphor-shell-libs, the tree was configured without BUILD_PHOSPHOR_SHELL;
+  # the presets turn it on, a hand-rolled `cmake -B build` does not.
+  test:
+    command: 'ctest'
+    args:
+      - '--test-dir'
+      - 'build/$project'
+      - '--output-on-failure'
+      - '-j'
+      - '6'
+      # A ctest run that selects nothing exits 0 and prints "No tests were
+      # found!!!", so a tier whose add_subdirectory(tests) stopped being
+      # reached would report green having run nothing. Same reasoning as
+      # repo:test. test-release respells its args in full (mergeArgs:
+      # replace), so it carries its own copy.
+      - '--no-tests=error'
+    deps:
+      - '~:build'
+    # @group(cmake) matters here as much as it does for `build`: affected-ness
+    # does not propagate from a dependency to its dependent, so without it a
+    # change confined to CMake — registering a test, editing a TEST_LAUNCHER,
+    # touching cmake/PhosphorTestIsolation.cmake — leaves `moon run :test
+    # --affected` with nothing to do, and it exits 0 having run no tests.
+    inputs:
+      - '@group(cmake)'
+      - '@group(sources)'
+      - '@group(tests)'
+    # NOTE: this makes `moon run <tier>:test` slightly stronger than the
+    # plain `ctest --test-dir build/<tier>` CLAUDE.md documents alongside
+    # it. Every target already gets QT_QPA_PLATFORM=offscreen from
+    # phosphor_apply_directory_test_isolation, so this is belt-and-braces
+    # for a target registered outside a swept directory; it is NOT the
+    # mechanism the suite relies on. If the two verbs ever diverge on a
+    # display-dependent failure, this line is the difference.
+    env:
+      QT_QPA_PLATFORM: 'offscreen'
+    options:
+      runFromWorkspaceRoot: true
+      cache: false
+      runDepsInParallel: false
+
+  test-release:
+    extends: 'test'
+    args:
+      - '--test-dir'
+      - 'build-release/$project'
+      - '--output-on-failure'
+      - '-j'
+      - '6'
+      - '--no-tests=error'
+    deps:
+      - '~:build-release'
+    options:
+      mergeArgs: 'replace'
+      mergeDeps: 'replace'

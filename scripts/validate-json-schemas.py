@@ -3,7 +3,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Validate bundled data JSON against the committed JSON Schemas.
 
-Most schemas under data/schemas/ are the single source of truth shared
+The schemas live in two trees: phosphor/data/schemas/ holds the shared
+contracts and plasmazones/data/schemas/ the app-only ones. Most are the
+single source of truth shared
 with runtime validation: phosphor-fsloader's SchemaValidator (valijson)
 compiles the same schema files at load time. A few (surface-metadata,
 scrolling-template) are an author-time-only contract, because those
@@ -20,8 +22,9 @@ Usage:
 
 Both CI and the lefthook hook run with no FILE arguments, so every data file
 covered by the SCHEMA_MAP is validated (a schema edit re-checks all of its
-data). Passing explicit FILEs is a manual convenience: only those that fall
-under a mapped directory are validated, and unmapped files are ignored.
+data). Passing explicit FILEs is a manual convenience. A path that matches no
+mapped glob is REPORTED by name and exits 1 rather than being ignored, so a
+renamed or mistyped path cannot pass silently.
 """
 
 from __future__ import annotations
@@ -43,14 +46,14 @@ _BOOTSTRAP_ENV = "PZ_JSONSCHEMA_BOOTSTRAPPED"
 # validated only here, where the runtime checks those document types in C++
 # directly.
 SCHEMA_MAP: dict[str, list[str]] = {
-    "data/schemas/layout.schema.json": ["data/layouts/*.json"],
-    "data/schemas/scrolling-template.schema.json": ["data/scrolling-templates/*.json"],
-    "data/schemas/curve.schema.json": ["data/curves/*.json"],
-    "data/schemas/animation-metadata.schema.json": ["data/animations/*/metadata.json"],
-    "data/schemas/shader-metadata.schema.json": ["data/overlays/*/metadata.json"],
-    "data/schemas/surface-metadata.schema.json": ["data/surface/*/metadata.json"],
-    "data/schemas/pointer-metadata.schema.json": ["data/pointer/*/metadata.json"],
-    "data/schemas/whatsnew.schema.json": ["data/whatsnew.json"],
+    "phosphor/data/schemas/layout.schema.json": ["plasmazones/data/layouts/*.json"],
+    "plasmazones/data/schemas/scrolling-template.schema.json": ["plasmazones/data/scrolling-templates/*.json"],
+    "phosphor/data/schemas/curve.schema.json": ["plasmazones/data/curves/*.json"],
+    "phosphor/data/schemas/animation-metadata.schema.json": ["plasmazones/data/animations/*/metadata.json"],
+    "phosphor/data/schemas/shader-metadata.schema.json": ["plasmazones/data/overlays/*/metadata.json"],
+    "phosphor/data/schemas/surface-metadata.schema.json": ["plasmazones/data/surface/*/metadata.json"],
+    "phosphor/data/schemas/pointer-metadata.schema.json": ["plasmazones/data/pointer/*/metadata.json"],
+    "plasmazones/data/schemas/whatsnew.schema.json": ["plasmazones/data/whatsnew.json"],
 }
 
 # The one dialect this gate speaks. Draft7Validator is used unconditionally
@@ -188,8 +191,11 @@ def main() -> int:
     parser.add_argument(
         "--root",
         type=Path,
-        default=Path.cwd(),
-        help="Source root that the SCHEMA_MAP paths are relative to (default: cwd).",
+        default=Path(__file__).resolve().parent.parent,
+        help="Source root that the SCHEMA_MAP paths are relative to "
+             "(default: the repository containing this script). Deriving it\n"
+             "from __file__ rather than the cwd keeps the script runnable\n"
+             "from any directory; a cwd default made every schema look missing.",
     )
     parser.add_argument(
         "files",
@@ -217,6 +223,9 @@ def main() -> int:
     if args.files:
         requested = {(p if p.is_absolute() else (root / p)).resolve() for p in args.files}
 
+    # Which requested paths a glob actually matched, so one that matches
+    # nothing can be reported instead of silently dropped.
+    seen: set[Path] = set()
     failures = 0
     checked = 0
 
@@ -275,6 +284,8 @@ def main() -> int:
         for target in targets:
             if requested is not None and target.resolve() not in requested:
                 continue
+            if requested is not None:
+                seen.add(target.resolve())
             checked += 1
             rel = target.relative_to(root)
             try:
@@ -291,6 +302,14 @@ def main() -> int:
                 for err in errors:
                     location = "/" + "/".join(str(p) for p in err.path) if err.path else "(root)"
                     print(f"    {location}: {err.message}", file=sys.stderr)
+
+    if requested is not None:
+        unmatched = sorted(p for p in requested if p not in seen)
+        if unmatched:
+            for p in unmatched:
+                fail(f"{p}: matched no mapped schema glob (renamed, mistyped, "
+                     f"or outside the validated data trees)")
+            failures += len(unmatched)
 
     if failures:
         fail(f"{failures} validation failure(s) across {checked} file(s)")

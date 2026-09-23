@@ -32,15 +32,16 @@ pre-commit:
       # data). A single `data/**/*.json` does NOT match reliably in lefthook's
       # matcher, so the paths are enumerated.
       glob:
-        - "data/layouts/*.json"
-        - "data/scrolling-templates/*.json"
-        - "data/curves/*.json"
-        - "data/animations/*/metadata.json"
-        - "data/overlays/*/metadata.json"
-        - "data/surface/*/metadata.json"
-        - "data/pointer/*/metadata.json"
-        - "data/schemas/*.json"
-        - "data/whatsnew.json"
+        - "plasmazones/data/layouts/*.json"
+        - "plasmazones/data/scrolling-templates/*.json"
+        - "plasmazones/data/curves/*.json"
+        - "plasmazones/data/animations/*/metadata.json"
+        - "plasmazones/data/overlays/*/metadata.json"
+        - "plasmazones/data/surface/*/metadata.json"
+        - "plasmazones/data/pointer/*/metadata.json"
+        - "phosphor/data/schemas/*.json"
+        - "plasmazones/data/schemas/*.json"
+        - "plasmazones/data/whatsnew.json"
       # Hard gate: when a schema-governed data file or a schema itself is
       # staged, validate the whole mapped set against the committed JSON
       # Schemas (the same files runtime validation compiles) and fail the
@@ -53,7 +54,8 @@ pre-commit:
       run: python3 scripts/validate-json-schemas.py
     conventions:
       # The CLAUDE.md rules that are decidable by inspection: SPDX headers,
-      # the GPL-3 app / LGPL-2.1 libs/phosphor-* split, the file-size ceiling
+      # the GPL-3 app / LGPL-2.1 libs/phosphor-* split (any tier's libs/
+      # directory), the file-size ceiling
       # (growth-only, against scripts/oversize-baseline.json), i18n() in C++,
       # inline config paths that should be ConfigDefaults:: accessors, and the
       # plain-prose rules on user-facing strings. Only the staged files are
@@ -62,14 +64,29 @@ pre-commit:
       # Stdlib-only, so unlike the schema hook there is no venv to bootstrap
       # and this is always a hard gate.
       glob:
-        - "*.{cpp,cc,cxx,h,hpp,qml,luau,py,frag,vert,glsl}"
-        - "data/**/*.json"
+        # `js` is here for the js-pragma rule. Without it a staged .js matches
+        # no entry, lefthook passes no files, and the rule that exists to stop
+        # a pragma drifting past Qt's 128-byte window would only ever fire in
+        # CI, which is the wall-of-warnings-from-files-nobody-edited case it
+        # was written to prevent.
+        - "*.{cpp,cc,cxx,h,hpp,qml,luau,py,frag,vert,glsl,js}"
+        - "plasmazones/data/**/*.json"
+        # `plasmazones/data/**/*.json` does not match a file sitting directly
+        # in data/, and whatsnew.json is a prose surface CLAUDE.md names, so
+        # it needs its own entry.
+        - "plasmazones/data/*.json"
+        - "phosphor/data/**/*.json"
+        - "phosphor/data/*.json"
         - "*.desktop*"
         - "*.metainfo.xml*"
         - "packaging/**"
-      run: python3 scripts/check-conventions.py {staged_files}
+        # The prose rule reaches .github/workflows/*.yml for the generated
+        # pkgdesc strings; without this entry that arm is CI-only, which is
+        # the same gap the js entry above exists to close.
+        - ".github/workflows/*.yml"
+      run: python3 scripts/check-conventions.py --staged {staged_files}
     shader-validate:
-      glob: "data/overlays/**/*.{frag,vert,glsl,json}"
+      glob: "plasmazones/data/overlays/**/*.{frag,vert,glsl,json}"
       # When any bundled zone-shader file is staged, validate the whole pack set
       # (metadata parse + headless glslang bake of every stage) via T1.2's
       # plasmazones-shader-validate, so a broken p_<id>/preamble/include never
@@ -78,30 +95,30 @@ pre-commit:
       # than blocking the commit; CI's shader_validate_bundled is the hard gate.
       run: >
         sh -c 'bin=build/bin/plasmazones-shader-validate;
-        if [ -x "$bin" ]; then exec "$bin" --quiet --overlay data/overlays;
+        if [ -x "$bin" ]; then exec "$bin" --quiet --overlay plasmazones/data/overlays;
         else echo "plasmazones-shader-validate not built (build/bin/) — skipping shader validation; build the target to enable this local gate" >&2; fi'
     shader-validate-animation:
-      glob: "data/animations/**/*.{frag,vert,glsl,json}"
+      glob: "plasmazones/data/animations/**/*.{frag,vert,glsl,json}"
       # Animation packs are the second authoring model and have their own CI
       # gate (shader_validate_animations); without a local hook, edits under
       # data/animations/** were the only shader tree with no pre-commit
       # validation. Same best-effort skip when the binary isn't built.
       run: >
         sh -c 'bin=build/bin/plasmazones-shader-validate;
-        if [ -x "$bin" ]; then exec "$bin" --quiet --animation data/animations;
+        if [ -x "$bin" ]; then exec "$bin" --quiet --animation plasmazones/data/animations;
         else echo "plasmazones-shader-validate not built (build/bin/) — skipping animation shader validation; build the target to enable this local gate" >&2; fi'
     shader-validate-surface:
-      glob: "data/surface/**/*.{frag,vert,glsl,json}"
+      glob: "plasmazones/data/surface/**/*.{frag,vert,glsl,json}"
       # Surface (decoration) packs use a distinct authoring model, so validate
       # them with --surface separately from the overlay packs above. Same
       # best-effort skip when the binary isn't built; CI's
       # shader_validate_surface is the hard gate.
       run: >
         sh -c 'bin=build/bin/plasmazones-shader-validate;
-        if [ -x "$bin" ]; then exec "$bin" --quiet --surface data/surface;
+        if [ -x "$bin" ]; then exec "$bin" --quiet --surface plasmazones/data/surface;
         else echo "plasmazones-shader-validate not built (build/bin/) — skipping surface shader validation; build the target to enable this local gate" >&2; fi'
     shader-validate-pointer:
-      glob: "data/pointer/**/*.{frag,vert,glsl,json}"
+      glob: "plasmazones/data/pointer/**/*.{frag,vert,glsl,json}"
       # Pointer packs are the fourth authoring model, with their own CI gate
       # (shader_validate_pointer). Without this hook they would be the only
       # shader tree with no pre-commit validation, which is the gap the
@@ -109,7 +126,7 @@ pre-commit:
       # binary isn't built.
       run: >
         sh -c 'bin=build/bin/plasmazones-shader-validate;
-        if [ -x "$bin" ]; then exec "$bin" --quiet --pointer data/pointer;
+        if [ -x "$bin" ]; then exec "$bin" --quiet --pointer plasmazones/data/pointer;
         else echo "plasmazones-shader-validate not built (build/bin/) — skipping pointer shader validation; build the target to enable this local gate" >&2; fi'
 
 commit-msg:

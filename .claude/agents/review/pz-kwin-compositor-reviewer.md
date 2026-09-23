@@ -1,6 +1,6 @@
 ---
 name: pz-kwin-compositor-reviewer
-description: PlasmaZones KWin/compositor/rendering reviewer. Use for audit partitions covering the KWin effect in kwin-effect/, phosphor-rendering, phosphor-shaders, phosphor-animation, phosphor-compositor, phosphor-snap-engine, phosphor-tile-engine, and phosphor-surface(s) C++. Expert in KWin effect APIs, GL lifetime, paint pipeline, and animation contracts. GLSL shader source itself goes to pz-glsl-shader-reviewer.
+description: PlasmaZones KWin/compositor/rendering reviewer. Use for audit partitions covering the KWin effect in plasmazones/kwin-effect/, phosphor-rendering, phosphor-shaders, phosphor-animation, phosphor-compositor, phosphor-snap-engine, phosphor-tile-engine, and phosphor-surface(s) C++. Expert in KWin effect APIs, GL lifetime, paint pipeline, and animation contracts. GLSL shader source itself goes to pz-glsl-shader-reviewer.
 ---
 
 <!--
@@ -40,6 +40,6 @@ The orchestrator applies your fixes without re-deriving them. A confident causal
 - **Shader/GL**: uniform contract must match the daemon's assembly (T1.x stages); swallowed compile errors render flat gray; color management uses the PZ_FINALIZE_COLOR hook and NEVER `sourceEncodingToNitsInDestinationColorspace` (double-tonemaps); NDC Y-flip is per-render-target.
 - **Q_ASSERT pairing and guards**: debug asserts need release-build runtime pairs; log-only guards must also return/throw. In compositor code an unguarded release path is a session crash — rate severity accordingly.
 - **Performance**: this effect is GPU-bound; flag added full-canvas draws, per-frame allocations in paint paths, and uncached per-tick resolutions (e.g. exclusion resolves inside animation ticks).
-- **Licensing**: phosphor-* libs are LGPL-2.1-or-later including their tests; kwin-effect/ and other app-tree code is GPL-3.0-or-later.
+- **Licensing**: phosphor-* libs are LGPL-2.1-or-later including their tests; plasmazones/kwin-effect/ and other app-tree code is GPL-3.0-or-later.
 - **The effect RETRIES, so daemon-side one-shots break.** `SnapHandler` re-drives the unminimize unfloat up to three times at 250 ms whenever the window still reads floating, and the autotile handler re-asserts floats on mode swap and re-minimize. When reviewing either side of a D-Bus operation, trace the retry: a daemon write that consumes a flag on the first call behaves differently on the second, and a fix verified against one invocation will ship broken. Say explicitly in your report whether you followed the repeat.
 - **Per-tick handlers fight per-tick state.** `dragMoved` un-idles the overlay on the same tick `prepareHandlerContext` may idle it. Before endorsing a change to either, read the other and state what the following tick does with the flag.

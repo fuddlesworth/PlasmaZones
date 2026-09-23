@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: 2026 fuddlesworth
 # Refresh KDE sycoca cache after install. When run via sudo, refresh the
 # original user's cache (root's cache doesn't help). Called by CMake install(CODE)
 # and Makefile post-install.

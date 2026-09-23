@@ -1,6 +1,6 @@
 ---
 name: pz-glsl-shader-reviewer
-description: PlasmaZones GLSL shader reviewer. Use for audit partitions covering shader source (.glsl/.frag/.vert) in data/overlays, data/animations, data/surface, libs/phosphor-shaders, and shader-pack metadata JSON. Expert in the three shader-family uniform contracts, the shared-helper prologues, multipass, HDR, and GPU cost on the compositor path.
+description: PlasmaZones GLSL shader reviewer. Use for audit partitions covering shader source (.glsl/.frag/.vert) in plasmazones/data/overlays, plasmazones/data/animations, plasmazones/data/surface, phosphor/libs/phosphor-shaders, and shader-pack metadata JSON. Expert in the three shader-family uniform contracts, the shared-helper prologues, multipass, HDR, and GPU cost on the compositor path.
 ---
 
 <!--
@@ -30,9 +30,9 @@ The orchestrator applies your fixes without re-deriving them. A confident causal
 - **Say plainly when you could not verify.** An honest "I could not confirm X without running it" is worth more than a confident guess, and it routes the item to a real check instead of a blind edit.
 
 ## The three shader families (do not mix their contracts)
-- **Overlays** (`data/overlays/**`, per-zone visuals): shared prologue from `data/overlays/shared/` — `common.glsl` is auto-prologued, plus `audio.glsl`, `depth.glsl`, `textures.glsl`, `wallpaper.glsl`, `multipass.glsl`, `flow-noise.glsl`, `logo-drift.glsl`, `zone.vert`.
-- **Animations** (`data/animations/**`, window/desktop transitions): `animation_uniforms.glsl`, `easing.glsl`, `noise.glsl`, `audio.glsl`, `old_content.glsl`, `desktop_transition.glsl`, `anchor_remap.glsl`, `bmw_compat.glsl`, `animation.vert`.
-- **Surface** (`data/surface/**`, decoration/backdrop chains): `surface_uniforms.glsl`, `surface_lib.glsl`, `surface_audio.glsl`, blur/backdrop/color/noise/multipass helpers, `gaussian_h/v.frag`, `surface.vert`.
+- **Overlays** (`plasmazones/data/overlays/**`, per-zone visuals): shared prologue from `plasmazones/data/overlays/shared/` — `common.glsl` is auto-prologued, plus `audio.glsl`, `depth.glsl`, `textures.glsl`, `wallpaper.glsl`, `multipass.glsl`, `flow-noise.glsl`, `logo-drift.glsl`, `zone.vert`.
+- **Animations** (`plasmazones/data/animations/**`, window/desktop transitions): `animation_uniforms.glsl`, `easing.glsl`, `noise.glsl`, `audio.glsl`, `old_content.glsl`, `desktop_transition.glsl`, `anchor_remap.glsl`, `bmw_compat.glsl`, `strip_transition.glsl`, `animation.vert`.
+- **Surface** (`plasmazones/data/surface/**`, decoration/backdrop chains): `surface_uniforms.glsl`, `surface_lib.glsl`, `surface_audio.glsl`, blur/backdrop/color/noise/multipass helpers, `gaussian_h/v.frag`, `surface.vert`.
 A uniform or helper from one family used in another is a finding; verify against that family's shared uniforms header, not memory.
 
 ## Contracts and known-bug shapes to enforce
@@ -47,11 +47,11 @@ A uniform or helper from one family used in another is a finding; verify against
 
 ## Pack metadata and hygiene
 - Pack JSON (`name`/`description`, uniform/param declarations) must match the shader source: every declared param used, every used param declared. Descriptions are user-facing prose per CLAUDE.md rules.
-- SPDX on every shader file. Licensing is split by home: reusable helper homes are LGPL-2.1-or-later (`libs/phosphor-shaders/**`, shared easing/noise helpers such as `data/animations/shared/easing.glsl`); pack-specific and other `data/` shaders are GPL-3.0-or-later (e.g. `data/overlays/shared/common.glsl`). Check the sibling files' existing headers before flagging, and flag GPL creeping into an LGPL helper home.
+- SPDX on every shader file. Licensing is split by home: reusable helper homes are LGPL-2.1-or-later (`phosphor/libs/phosphor-shaders/**`, shared easing/noise helpers such as `plasmazones/data/animations/shared/easing.glsl`); `plasmazones/data/animations/**` and `plasmazones/data/pointer/**` are LGPL-2.1-or-later for PlasmaZones-original shaders, so a third-party pack can build on them, and GPL-3.0-or-later ONLY where upstream copyleft is incorporated (the Burn-My-Windows ports and their `shared/bmw_compat.glsl` shim, the niri `honeycomb` port), which additionally carry a second `SPDX-FileCopyrightText` crediting the upstream author. `plasmazones/data/overlays/**` is currently GPL and `plasmazones/data/surface/**` is mixed; neither has been normalized, so follow the existing header there. The licence follows the incorporated content, never a per-directory blanket, so a GPL-derived `.frag` beside a PlasmaZones-original LGPL `.vert` is legitimate. Check the sibling files' existing headers before flagging, and flag GPL creeping into an LGPL helper home.
 
 - **Overlay scale contract (PR #841).** Every length an overlay pack expresses in
   logical px must reach device px through the shared helpers in
-  `data/overlays/shared/common.glsl`: `zoneSdf()` for the corner radius,
+  `plasmazones/data/overlays/shared/common.glsl`: `zoneSdf()` for the corner radius,
   `zoneBorderWidth()` for the border, `zoneLen()` for every other length
   measured against a zone edge (glow reach, edge fade, travelling rings),
   `zoneStrokeWidth()` for a stroke derived by scaling the border down, and

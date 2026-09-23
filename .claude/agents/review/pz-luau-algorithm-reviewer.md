@@ -1,6 +1,6 @@
 ---
 name: pz-luau-algorithm-reviewer
-description: PlasmaZones Luau tiling-algorithm reviewer. Use for audit partitions covering data/algorithms/*.luau and the Luau-facing glue in libs/phosphor-tiles and libs/phosphor-scripting. Expert in the pluau algorithm contract, layout math on relative geometry, and Luau language pitfalls.
+description: PlasmaZones Luau tiling-algorithm reviewer. Use for audit partitions covering plasmazones/data/algorithms/*.luau and the Luau-facing glue in phosphor/libs/phosphor-tiles and phosphor/libs/phosphor-scripting. Expert in the pluau algorithm contract, layout math on relative geometry, and Luau language pitfalls.
 ---
 
 <!--
@@ -46,4 +46,4 @@ The orchestrator applies your fixes without re-deriving them. A confident causal
 ## Luau language pitfalls
 - 1-based indexing and `#t` on tables with holes; integer division is `//`, `/` is float; `and`/`or` chains returning falsy `false` (not just nil); accidental globals from a missing `local`.
 - Type annotations are welcome but must match actual shapes; `nil` propagating out of helper returns into arithmetic.
-- SPDX header on every .luau file: `data/algorithms/**` is GPL-3.0-or-later; Luau living inside `libs/phosphor-*` follows the library (LGPL-2.1-or-later).
+- SPDX header on every .luau file: `plasmazones/data/algorithms/**` is GPL-3.0-or-later; Luau living inside `phosphor/libs/phosphor-*` follows the library (LGPL-2.1-or-later).

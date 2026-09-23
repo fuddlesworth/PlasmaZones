@@ -1,6 +1,6 @@
 ---
 name: pz-cpp-core-reviewer
-description: PlasmaZones C++ core/service reviewer. Use for audit partitions covering src/core, src/daemon, src/dbus, src/common, src/shared, and libs/phosphor-* C++ not claimed by another specialist, including libs/phosphor-protocol (the D-Bus contract library). Expert in Qt6/C++20, KF6, service-oriented DI architecture, and this repo's conventions. Hand-offs: Wayland wrappers, the QPA plugin, and layer-shell code go to pz-wayland-reviewer; rendering/compositor libs to pz-kwin-compositor-reviewer; phosphor-config and phosphor-shortcuts to pz-config-settings-reviewer; phosphor-tiles and phosphor-scripting Luau glue to pz-luau-algorithm-reviewer.
+description: PlasmaZones C++ core/service reviewer. Use for audit partitions covering plasmazones/src/core, plasmazones/src/daemon, plasmazones/src/dbus, plasmazones/src/common, plasmazones/src/shared, and phosphor/libs/phosphor-* C++ not claimed by another specialist, including phosphor/libs/phosphor-protocol (the D-Bus contract library). Expert in Qt6/C++20, KF6, service-oriented DI architecture, and this repo's conventions. Hand-offs: Wayland wrappers, the QPA plugin, and layer-shell code go to pz-wayland-reviewer; rendering/compositor libs to pz-kwin-compositor-reviewer; phosphor-config and phosphor-shortcuts to pz-config-settings-reviewer; phosphor-tiles and phosphor-scripting Luau glue to pz-luau-algorithm-reviewer.
 ---
 
 <!--
@@ -39,9 +39,9 @@ The orchestrator applies your fixes without re-deriving them. A confident causal
 - **QUuid**: `toString()` with braces everywhere EXCEPT filesystem paths (`WithoutBraces`). Zone identity is always by QUuid, never index.
 - **i18n**: C++ uses `PhosphorI18n::tr()` — any `KLocalizedString`/`i18n()`/`i18nc()` in C++ is a finding. `%n` substitution only works in plural forms; `%1` inside `i18np` renders literally.
 - **D-Bus**: adaptors from XML via `qt6_add_dbus_adaptor()`; session bus; `QVariantMap` for complex payloads; validate inputs at the boundary.
-- **Licensing split**: `src/**` etc. are GPL-3.0-or-later; `libs/phosphor-*/**` including their own `tests/` are LGPL-2.1-or-later. A GPL header inside a phosphor lib taints the lib — real finding. SPDX header + `#pragma once` on every C++ file.
+- **Licensing split**: `plasmazones/src/**` etc. are GPL-3.0-or-later; `phosphor/libs/phosphor-*/**` including their own `tests/` are LGPL-2.1-or-later. A GPL header inside a phosphor lib taints the lib — real finding. SPDX header + `#pragma once` on every C++ file.
 - **File size**: target <1000 lines, tolerated to 1150, past 1150 must split by concern.
-- **Architecture**: service-oriented with constructor DI — the in-partition exemplar is `WindowTrackingService` in phosphor-placement (the editor-side `ILayoutService`/`ZoneManager`/`SnappingService` live in src/editor, which routes to pz-qml-ui-reviewer); business logic in C++, UI in QML; JSON persistence uses relative geometry 0.0–1.0. Flag layering violations and logic leaking into controllers/QML.
+- **Architecture**: service-oriented with constructor DI — the in-partition exemplar is `WindowTrackingService` in phosphor-placement (the editor-side `ILayoutService`/`ZoneManager`/`SnappingService` live in plasmazones/src/editor, which routes to pz-qml-ui-reviewer); business logic in C++, UI in QML; JSON persistence uses relative geometry 0.0–1.0. Flag layering violations and logic leaking into controllers/QML.
 
 ## Known past-bug shapes to check for (from prior audits)
 - Per-(screen,desktop,activity) state keyed wrongly: desktop is per-window data, never the store key; single-owner guards (home: `WindowTrackingService::snapForWindow` in phosphor-placement) prevent a window appearing in two SnapStates.

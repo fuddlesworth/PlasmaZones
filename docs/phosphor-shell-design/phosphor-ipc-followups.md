@@ -20,7 +20,7 @@ that already share the same pattern.
 
 ## 1. Per-process `MaxConnections` cap on the router
 
-**Where:** `libs/phosphor-ipc/src/ipcrouter.cpp`, `handleNewConnection()`.
+**Where:** `phosphor-shell-libs/libs/phosphor-ipc/src/ipcrouter.cpp`, `handleNewConnection()`.
 
 **Finding:** the accept loop drains all pending connections without any
 threshold check. A same-uid attacker (sandbox-escaped browser tab, hostile
@@ -43,7 +43,7 @@ declared model.
 
 ## 2. Idle-connection timeout
 
-**Where:** `libs/phosphor-ipc/src/ipcrouter.cpp`, per-socket connect path.
+**Where:** `phosphor-shell-libs/libs/phosphor-ipc/src/ipcrouter.cpp`, per-socket connect path.
 
 **Finding:** a peer can `connectToServer()` and never send a byte. The
 fd, the `QLocalSocket` QObject, and (lazily) the empty
@@ -64,7 +64,7 @@ beyond one fd per idle peer, and the existing `MaxConnections` cap (item
 
 ## 3. `SO_PEERCRED` peer credential check
 
-**Where:** `libs/phosphor-ipc/src/ipcrouter.cpp`, `handleNewConnection()`.
+**Where:** `phosphor-shell-libs/libs/phosphor-ipc/src/ipcrouter.cpp`, `handleNewConnection()`.
 
 **Finding:** the router accepts any peer that can connect to the socket
 path. Filesystem permissions limit this to same-uid attackers, but a
@@ -87,9 +87,9 @@ library doesn't yet need.
 
 ## 4. QML demos: `qsTr()` → `i18n()` migration
 
-**Where:** `examples/phosphor-ipc-demo/Main.qml` and the peer demos
-`examples/phosphor-popout-demo/Main.qml`,
-`examples/phosphor-registry-demo/Main.qml`.
+**Where:** `phosphor-shell-libs/examples/phosphor-ipc-demo/Main.qml` and the peer demos
+`phosphor-shell-libs/examples/phosphor-popout-demo/Main.qml`,
+`phosphor-shell-libs/examples/phosphor-registry-demo/Main.qml`.
 
 **Finding:** CLAUDE.md mandates `i18n()` / `i18nc()` via
 `PhosphorLocalizedContext` for QML. The phosphor-ipc demo uses `qsTr(...)` at
@@ -99,12 +99,12 @@ peer demos.
 **Why deferred:** the divergence is fleet-wide, not PR-local. Migrating
 just the ipc demo would leave the other two demos inconsistent. Should be
 one follow-up PR that wires `PhosphorLocalizedContext` into every
-`examples/*-demo/main.cpp` and switches every demo at once.
+`phosphor-shell-libs/examples/*-demo/main.cpp` and switches every demo at once.
 
 **Change shape:**
 - Add `PhosphorLocalizedContext` to each demo's `main.cpp` (single
   `engine.rootContext()->setContextObject(...)`).
-- `grep -rl qsTr examples/` → switch to `i18n` / `i18nc` per file.
+- `grep -rl qsTr phosphor-shell-libs/examples/` → switch to `i18n` / `i18nc` per file.
 - Add the demos' `.qml` files to `lupdate` if not already covered.
 
 ---
@@ -114,9 +114,9 @@ one follow-up PR that wires `PhosphorLocalizedContext` into every
 **Where:** as of audit pass 11, `grep -rln '"monospace"' examples/ src/`
 finds 6 sites across 3 files (line numbers shift as the files evolve;
 re-run the grep before starting the work):
-- `examples/phosphor-ipc-demo/Main.qml` (3 sites)
-- `examples/phosphor-registry-plugin-demo/plugins/cpu-meter/cpumeter.cpp` (1 site)
-- `src/editor/qml/DimensionTooltip.qml` (2 sites)
+- `phosphor-shell-libs/examples/phosphor-ipc-demo/Main.qml` (3 sites)
+- `phosphor-shell-libs/examples/phosphor-registry-plugin-demo/plugins/cpu-meter/cpumeter.cpp` (1 site)
+- `phosphor-shell-libs/examples/phosphor-osd-demo/Main.qml` (1 site)
 
 **Finding:** CLAUDE.md says QML should not hardcode appearance —
 `Kirigami.Theme` for colors, `Kirigami.Units` for spacing, and (by
@@ -130,7 +130,7 @@ consumer through it" — both edits should land together.
 
 **Change shape:**
 - Add `readonly property string font_family_mono: "monospace"` to
-  `libs/phosphor-theme/Tokens.qml`.
+  `phosphor-shell-libs/libs/phosphor-theme/Tokens.qml`.
 - Replace each `font.family: "monospace"` site with
   `font.family: Tokens.font_family_mono` in a single sweep:
   `grep -rln '"monospace"' examples/ src/` lists every consumer.
@@ -145,7 +145,7 @@ reviewer doesn't re-flag them and start new work on a fixed point.
 
 ### Demo IPC startup failure UX
 
-**Where:** `examples/phosphor-ipc-demo/main.cpp:64-73`.
+**Where:** `phosphor-shell-libs/examples/phosphor-ipc-demo/main.cpp:64-73`.
 
 When `router.start()` fails, the demo launches the window anyway with
 three `IpcTarget` items that each log `"target '...' is not
@@ -154,7 +154,7 @@ panel binds to `demoController.status` which reads `"router failed to
 start (see logs)"`, and the cheat-sheet panel shows a placeholder
 instead of an empty `export PHOSPHOR_SOCKET=` line.
 
-**Why no action:** behaviour matches `libs/phosphor-ipc/README.md:117`
+**Why no action:** behaviour matches `phosphor-shell-libs/libs/phosphor-ipc/README.md:112`
 ("Application can continue without IPC; failure is non-fatal"). The
 warnings are a debugging affordance.
 

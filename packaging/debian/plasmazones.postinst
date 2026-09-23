@@ -15,9 +15,9 @@ case "$1" in
             gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || true
         fi
 
-        # Refresh desktop / MIME databases. Triggers (plasmazones.triggers)
-        # cover /usr/share/applications via dpkg-trigger so these explicit
-        # calls just shorten the warmup window post-install.
+        # Refresh desktop / MIME databases. The trigger below also covers
+        # /usr/share/applications, so these explicit calls just shorten the
+        # warmup window post-install.
         if command -v update-desktop-database >/dev/null 2>&1; then
             update-desktop-database -q /usr/share/applications 2>/dev/null || true
         fi
@@ -33,6 +33,19 @@ case "$1" in
         echo "restarted to load it. Log out and back in, or run:"
         echo "  kwin_wayland --replace &"
         echo ""
+        ;;
+
+    triggered)
+        # dpkg activates an interest by running `postinst triggered <names>`.
+        # Without this arm the interest in plasmazones.triggers was declared
+        # and then ignored, so the sycoca refresh it exists to drive never ran
+        # when another package changed /usr/share/applications.
+        if command -v kbuildsycoca6 >/dev/null 2>&1; then
+            kbuildsycoca6 --noincremental 2>/dev/null || true
+        fi
+        if command -v update-desktop-database >/dev/null 2>&1; then
+            update-desktop-database -q /usr/share/applications 2>/dev/null || true
+        fi
         ;;
 esac
 

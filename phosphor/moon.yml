@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'cpp'
+layer: 'library'
+stack: 'systems'
+tags: ['cmake']
+
+project:
+  name: 'Phosphor core libraries'
+  description: 'LGPL placement engines, rendering, layer-shell, animation, config and service libraries usable without the shell.'
+
+tasks:
+  # Three tests in this tier read bundled data from the plasmazones tier at
+  # runtime: phosphor-animation/tests/test_builtin_effects.cpp reads
+  # data/animations, and phosphor-pointer's two shader tests read
+  # data/pointer/shared. `dependsOn: plasmazones` cannot express that — it would
+  # cycle, since plasmazones depends on this tier — and every fileGroup in
+  # .moon/tasks/cmake.yml is project-relative, so editing a bundled pack marks
+  # only plasmazones affected and these tests never run under `--affected`.
+  # Workspace-relative inputs (leading `/`) close the gap; task inputs merge
+  # with the inherited set rather than replacing it.
+  test:
+    inputs:
+      - '/plasmazones/data/animations/**/*'
+      - '/plasmazones/data/pointer/**/*'

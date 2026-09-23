@@ -10,44 +10,54 @@ Run every gate. A gate you skipped is a claim you cannot make. Report each one's
 ## 0. Where the packs live while you work
 
 Both the schema script and the shader validator locate their inputs by directory shape: the
-script only validates files matching `data/<family>/*/metadata.json` under its `--root`, and
+script only validates files matching `plasmazones/data/<family>/*/metadata.json` under its `--root`, and
 the validator detects a pack's family from the sibling `shared/` directory and resolves
-includes from it. A pack dropped loose in `scratchpad/<theme>/` passes gate 1 vacuously
-("OK (0 file(s) validated)") and fails gate 2's detection. So the scratchpad mirrors the
-repo's `data/` layout, with the shared pieces symlinked in:
+includes from it. A pack dropped loose in `scratchpad/<theme>/` FAILS gate 1 loudly (the script
+names each unmatched path and exits 1) and fails gate 2's detection. So the scratchpad mirrors the
+repo's `plasmazones/data/` layout, with the shared pieces symlinked in:
 
 ```bash
 T=scratchpad/<theme>
-mkdir -p $T/data/{animations,overlays,surface,curves} $T/renders $T/sets/{motionsets,decorationsets,overlaysets}
-ln -sfn ../../../data/schemas $T/data/schemas
-for f in animations overlays surface; do ln -sfn ../../../../data/$f/shared $T/data/$f/shared; done
+mkdir -p $T/plasmazones/data/{animations,overlays,surface,curves} $T/phosphor/data \
+         $T/renders $T/sets/{motionsets,decorationsets,overlaysets}
+ln -sfn ../../../../phosphor/data/schemas    $T/phosphor/data/schemas
+ln -sfn ../../../../plasmazones/data/schemas $T/plasmazones/data/schemas
+for f in animations overlays surface; do ln -sfn ../../../../../plasmazones/data/$f/shared $T/plasmazones/data/$f/shared; done
 ```
 
-Packs go in `$T/data/<family>/<id>/`, curves in `$T/data/curves/`, set files in
-`$T/sets/<kind>/`. Every gate below is written against `$P`, which is `$T/data` while the
-packs are in the scratchpad (the default, and the whole run for `--into user`) and `data`
-after they have been copied into the repo for `--into repo`:
+Two schema roots, not one: the shader, animation, surface, pointer, curve and layout
+schemas live in `phosphor/data/schemas/`, while `plasmazones/data/schemas/` holds only the
+scrolling-template and whatsnew ones. `validate-json-schemas.py` checks every mapped
+schema exists before it filters to the files you named, so a single missing root fails the
+gate outright rather than skipping.
+
+Packs go in `$T/plasmazones/data/<family>/<id>/`, curves in
+`$T/plasmazones/data/curves/`, set files in `$T/sets/<kind>/`. Every gate below is written
+against `$P`, which is `$T/plasmazones/data` while the packs are in the scratchpad (the
+default, and the whole run for `--into user`) and `plasmazones/data` after they have been
+copied into the repo for `--into repo`:
 
 ```bash
-P=$T/data      # scratchpad, or --into user
-P=data         # after the --into repo copy
+P=$T/plasmazones/data      # scratchpad, or --into user
+P=plasmazones/data         # after the --into repo copy
 ```
 
 ## 1. Schema (fast, author-time)
 
 ```bash
-python3 scripts/validate-json-schemas.py --root $T data/animations/<id>/metadata.json data/overlays/<id>/metadata.json data/surface/<id>/metadata.json data/curves/<theme>-settle.json data/curves/<theme>-release.json
+python3 scripts/validate-json-schemas.py --root $T plasmazones/data/animations/<id>/metadata.json plasmazones/data/overlays/<id>/metadata.json plasmazones/data/surface/<id>/metadata.json plasmazones/data/curves/<theme>-settle.json plasmazones/data/curves/<theme>-release.json
 ```
 This is the one gate that does NOT take `$P`: the script resolves a relative file argument
-against `--root`, not against the working directory, so the paths are written `data/...`
+against `--root`, not against the working directory, so the paths are written `plasmazones/data/...`
 whichever root is in force (`--root $T` for the scratchpad; drop the flag once the packs are
-in the repo's `data/`). A scratchpad-phase `$P/` prefix (`$T/data/...`), or any other cwd-relative
-path outside `data/<family>/`, is resolved under the root, lands outside every mapped glob,
-and is silently dropped; once `P=data` the two spellings coincide. The last line of output reads `OK (N file(s) validated)`:
-N MUST equal the number of files you passed. A file outside `<root>/data/<family>/*/` is
-skipped without a message, so `0 file(s)` means the paths or the layout are wrong, not that
-the files are fine. With no file args and no `--root` it validates every mapped file under
-the repo's `data/`.
+in the repo's `plasmazones/data/`). A scratchpad-phase `$P/` prefix (`$T/plasmazones/data/...`), or any other cwd-relative
+path outside `plasmazones/data/<family>/`, is resolved under the root and lands outside every mapped
+glob, which the script reports as `<path>: matched no mapped schema glob` with exit 1;
+once `P=plasmazones/data` the two spellings coincide. The last line of output reads `OK (N file(s) validated)`:
+N MUST equal the number of files you passed. A file outside `<root>/plasmazones/data/<family>/*/` is
+named in a failure line rather than skipped quietly, so `0 file(s)` alongside a non-zero
+exit means the paths or the layout are wrong, not that the files are fine. With no file args and no `--root` it validates every mapped file under
+the repo's `plasmazones/data/`.
 
 ## 2. Shader compile: `plasmazones-shader-validate`
 
@@ -75,7 +85,7 @@ compilation alone does not establish correct rendering or motion.
 `--emit-preamble` writes a `p_generated.glsl` sidecar for editor autocomplete. It is
 gitignored; delete it before handing over anyway.
 
-## 3. The bundled-tree tests (only when the packs live under `data/`)
+## 3. The bundled-tree tests (only when the packs live under `plasmazones/data/`)
 
 Configure once with `-DBUILD_TESTING=ON`, build with `--parallel 6`, then:
 
@@ -136,19 +146,19 @@ present tense, reverse leg described.
 - Filename equals `slugify(name).json`.
 - No `baseline` key in set files. Motion sets use `version: 2`; decoration and overlay
   sets use `version: 1`. Non-empty `overrides`.
-- Every `path` exists in the domain taxonomy (`libs/phosphor-animation/src/profilepaths.cpp`,
-  `libs/phosphor-surface/include/PhosphorSurface/DecorationSupportedPaths.h`).
-  Overlay paths instead follow `src/settings/pages/overlayspagecontroller_sets.cpp`:
+- Every `path` exists in the domain taxonomy (`phosphor/libs/phosphor-animation/src/profilepaths.cpp`,
+  `phosphor/libs/phosphor-surface/include/PhosphorSurface/DecorationSupportedPaths.h`).
+  Overlay paths instead follow `plasmazones/src/settings/pages/overlayspagecontroller_sets.cpp`:
   `overlay:global` or a layout override. Check registry UUIDs as described in `profiles.md`.
 - Every pack id in a chain or `effectId` exists in the generated set or the bundled tree.
 - Every parameter override names a declared param of that pack with a value inside min/max.
 - Every curve name referenced by a profile exists as a file or a built-in typeId. The
   resolver in `scripts/check-animation-profiles.py` (`curve_reference_resolves(spec,
-  shipped_curves)`) encodes the exact rule; its own `data/profiles` target no longer exists,
+  shipped_curves)`) encodes the exact rule; its own `plasmazones/data/profiles` target no longer exists,
   so import the function and call it on your set and profile files, passing the NEW theme
   curves' file stems as `shipped_curves`, or every `<theme>-settle` reference reports
   unresolved.
-- Motion set: run the mechanical both-halves check from `references/profiles.md`
+- Motion set: run the mechanical both-halves check from `profiles.md`
   ("Motion set: rules that bite") and paste its output. A set that quietly carries no packs
   applies cleanly, changes the durations, and leaves every animation on the pack it already
   had, with no error anywhere to notice.
@@ -183,7 +193,7 @@ helpers were not found, a non-overlay pack is then checked against the wrong fam
 overlay pack is by luck checked as the right one and fails its includes. So on the installed
 re-run pass the family flags
 (`--animation`, `--overlay`, `--surface`) so a failure is the real include miss, and if the
-helpers are absent copy `data/<family>/shared` beside the pack in the user dir for the check
+helpers are absent copy `plasmazones/data/<family>/shared` beside the pack in the user dir for the check
 only (in the installed layout the sibling is searched first, then the XDG chain), then remove
 it.
 Then verify in `journalctl --user -f | grep -i plasmazones` that the pack loads with no

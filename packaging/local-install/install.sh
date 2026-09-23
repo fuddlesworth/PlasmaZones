@@ -45,6 +45,12 @@ fi
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --prefix)
+        # Without this, a bare --prefix sets PREFIX="" and the shift fails with
+        # bash's own "shift count out of range" rather than a usable message.
+        if [[ $# -lt 2 ]]; then
+            echo "Error: --prefix needs a path" >&2
+            exit 1
+        fi
         PREFIX="$2"
         shift 2
         ;;
@@ -113,7 +119,12 @@ if [ -f "$SERVICE_SRC" ]; then
     # Add LD_LIBRARY_PATH environment variable after [Service] line
     sed -i "/^\[Service\]/a Environment=\"LD_LIBRARY_PATH=$PREFIX/$LIBDIR\"" "$SERVICE_DEST"
 else
-    echo "Warning: Service file not found at $SERVICE_SRC"
+    # Fatal, not a warning: step 7 runs `systemctl --user enable --now`
+    # unguarded, which fails on the unit that was never copied, and set -e
+    # then kills the script AFTER the files and env file are written but
+    # BEFORE any of the completion guidance prints. Stop here instead.
+    echo "Error: service file not found at $SERVICE_SRC" >&2
+    exit 1
 fi
 
 # 4. Setup environment variables for KDE session

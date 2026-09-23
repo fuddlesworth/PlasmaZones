@@ -3,11 +3,11 @@ SPDX-FileCopyrightText: 2026 fuddlesworth
 SPDX-License-Identifier: GPL-3.0-or-later
 -->
 
-# Animation pack contract (`data/animations/<id>/`)
+# Animation pack contract (`plasmazones/data/animations/<id>/`)
 
-Source of truth: `libs/phosphor-animation/src/animationshadereffect.cpp` (`fromJson`),
-`data/animations/shared/animation_uniforms.glsl`, `data/schemas/animation-metadata.schema.json`,
-`tests/unit/ui/shaders/test_animation_shader_param_wiring.cpp`. Re-read those if anything here
+Source of truth: `phosphor/libs/phosphor-animation/src/animationshadereffect.cpp` (`fromJson`),
+`plasmazones/data/animations/shared/animation_uniforms.glsl`, `phosphor/data/schemas/animation-metadata.schema.json`,
+`plasmazones/tests/unit/ui/shaders/test_animation_shader_param_wiring.cpp`. Re-read those if anything here
 looks stale; the tests are the bar bundled packs must clear.
 
 ## Files
@@ -19,7 +19,7 @@ looks stale; the tests are the bar bundled packs must clear.
 <id>/*.png             only when declared under "textures" (max 3)
 ```
 
-No `preview.png`. Previews are rendered live by the settings app. `data/animations/shared/`
+No `preview.png`. Previews are rendered live by the settings app. `plasmazones/data/animations/shared/`
 is skipped by every scanner; never put a pack there.
 
 Runtime user dir: `~/.local/share/plasmazones/animations/<id>/`. Discovery is a directory
