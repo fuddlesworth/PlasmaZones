@@ -12,7 +12,7 @@ $schema: 'https://moonrepo.dev/schemas/workspace.json'
 
 projects:
   repo: '.'
-  phosphor: 'phosphor'
+  phosphor-libs: 'phosphor-libs'
   phosphor-shell-libs: 'phosphor-shell-libs'
   phosphor-shell: 'phosphor-shell'
   plasmazones: 'plasmazones'
@@ -27,7 +27,7 @@ constraints:
   # product order this workspace enforces: phosphor-shell and plasmazones are
   # both applications and neither may list the other in dependsOn. The shell
   # used to link three plasmazones targets for its surface decoration; those
-  # now live in phosphor/libs/phosphor-surface-quick.
+  # now live in phosphor-libs/libs/phosphor-surface-quick.
   #
   # What this does NOT police: runtime data reads that no dependsOn records.
   # Three tier-1 tests read tier-4 data (phosphor-animation and

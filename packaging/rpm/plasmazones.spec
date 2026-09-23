@@ -28,13 +28,13 @@ URL:            https://github.com/fuddlesworth/PlasmaZones
 Source0:        %{url}/archive/refs/tags/v%{version}/%{name}-%{version}.tar.gz
 
 # Luau and valijson are vendored as committed source tarballs
-# (phosphor/extern/luau-<ver>.tar.gz, phosphor/extern/valijson-<ver>.tar.gz) and built into the
+# (phosphor-libs/extern/luau-<ver>.tar.gz, phosphor-libs/extern/valijson-<ver>.tar.gz) and built into the
 # shipped objects, so declare the bundled provides per Fedora's bundled-library
 # policy — this lets security tooling track CVEs against the bundled copies.
 # valijson is header-only, which does not exempt it: its code still lands in
 # libPhosphorFsLoader. Keep both versions in sync with
-# PHOSPHORSCRIPTING_LUAU_VERSION in phosphor/libs/phosphor-scripting/CMakeLists.txt and
-# PHOSPHORFSLOADER_VALIJSON_VERSION in phosphor/libs/phosphor-fsloader/CMakeLists.txt.
+# PHOSPHORSCRIPTING_LUAU_VERSION in phosphor-libs/libs/phosphor-scripting/CMakeLists.txt and
+# PHOSPHORFSLOADER_VALIJSON_VERSION in phosphor-libs/libs/phosphor-fsloader/CMakeLists.txt.
 Provides:       bundled(luau) = 0.737
 Provides:       bundled(valijson) = 1.1.3
 
@@ -43,7 +43,7 @@ ExclusiveArch:  x86_64 aarch64
 
 # Build tools
 # wayland-scanner: protocol-glue code generator, located by CMake via
-# find_program (CMakeLists.txt:247, phosphor/libs/phosphor-wayland/CMakeLists.txt:46).
+# find_program (CMakeLists.txt:247, phosphor-libs/libs/phosphor-wayland/CMakeLists.txt:46).
 # Depend on the pkgconfig(wayland-scanner) capability, not the bare
 # /usr/bin/wayland-scanner file path: the file-path form is reported
 # unresolvable by OBS on openSUSE Tumbleweed. wayland-devel ships both the
@@ -278,8 +278,8 @@ echo ""
 %files
 %license LICENSE
 %license COPYING.LESSER
-# MIT licence of the vendored Luau runtime (phosphor/extern/luau) and BSD-2-Clause
-# licence of the vendored valijson headers (phosphor/extern/valijson), installed by the
+# MIT licence of the vendored Luau runtime (phosphor-libs/extern/luau) and BSD-2-Clause
+# licence of the vendored valijson headers (phosphor-libs/extern/valijson), installed by the
 # phosphor-scripting / phosphor-fsloader CMake in the default vendored build.
 %license %{_datadir}/licenses/plasmazones/LICENSE.Luau
 %license %{_datadir}/licenses/plasmazones/LICENSE.valijson

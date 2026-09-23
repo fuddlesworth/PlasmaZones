@@ -7,7 +7,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 Source of truth: `plasmazones/src/settings/stores/shadersetstore.cpp`, `plasmazones/src/settings/services/motionsetdomain.cpp`,
 `plasmazones/src/settings/pages/decorationpagecontroller_sets.cpp`, `plasmazones/src/settings/pages/animationspagecontroller_overrides.cpp`,
-`phosphor/libs/phosphor-animation/src/curveloader.cpp`, `plasmazones/src/config/configdefaults_shaders.h`
+`phosphor-libs/libs/phosphor-animation/src/curveloader.cpp`, `plasmazones/src/config/configdefaults_shaders.h`
 (`ConfigDefaults::decorationProfileTree()` is the canonical well-formed chain example).
 
 There is NO single theme/bundle object in PlasmaZones. A theme is applied through the
@@ -85,7 +85,7 @@ with `parameters` but no `effectId` overrides only the map over an inherited pac
 `shader` key entirely means "leave this event's pack alone", which is what every format-1 set
 means. An entry may carry the shader half alone, with no timing keys.
 All optional (omit = inherit from parent path). Paths: any built-in event path from
-`phosphor/libs/phosphor-animation/src/profilepaths.cpp` (see animations.md table; parents like
+`phosphor-libs/libs/phosphor-animation/src/profilepaths.cpp` (see animations.md table; parents like
 `window.appearance`, `window.movement`, `desktop`, `popup`, `osd` are real cascade parents).
 
 ### Motion set: rules that bite
@@ -153,7 +153,7 @@ read once on the upgrade and ignored afterwards.
 Every pack id in a chain must exist AND belong to the surface family: an unknown id, or a
 pointer pack on a surface path, refuses the whole decoration set on apply and import
 (`decorationpagecontroller_sets.cpp`), unlike a parameter typo, which is ignored.
-Supported surface paths (`phosphor/libs/phosphor-surface/include/PhosphorSurface/DecorationSupportedPaths.h`,
+Supported surface paths (`phosphor-libs/libs/phosphor-surface/include/PhosphorSurface/DecorationSupportedPaths.h`,
 verified 2026-09-07). Leaves: `window.tiled`, `window.snapped`, `window.floating`, `osd`,
 `popup.snapAssist`, `popup.zoneSelector`, `popup.layoutPicker`, `popup.cheatsheet`,
 `shell.panel`, `shell.appletPopup`, `shell.phosphor.{bar,popout,osd,notification,picker,lock}`,
@@ -163,7 +163,7 @@ Cascade parents: `window`, `popup`, `shell`, `shell.phosphor`. A theme set write
 `shell.appletPopup`. Re-read that header before writing paths. There are no focused/unfocused
 slots; packs read focus themselves via `focusDim()`.
 Parameter values must name declared params of that pack. Nothing validates them: an
-undeclared id is silently ignored at stage compose (`phosphor/libs/phosphor-surface/src/surfacechaincompose.cpp`
+undeclared id is silently ignored at stage compose (`phosphor-libs/libs/phosphor-surface/src/surfacechaincompose.cpp`
 walks the pack's declared parameters and looks each one up in the override), so a typo
 leaves the default in place with no warning.
 
@@ -230,7 +230,7 @@ in config.json, as one global baseline plus a per-layout override keyed by layou
 overlay set carries the baseline and every override together.
 
 Overlay `shaderId` is the registry's braced UUID, not the metadata slug used by animation
-and surface packs. The parser in `phosphor/libs/phosphor-shaders/src/shaderregistry_parse.cpp`
+and surface packs. The parser in `phosphor-libs/libs/phosphor-shaders/src/shaderregistry_parse.cpp`
 derives it with UUIDv5 from `shaderNamespaceUuid()` and the metadata `id`. Resolve it
 through the registry or that parser before writing a set. Encode the global default as
 an `overrides` entry with `path: "overlay:global"` and

@@ -18,7 +18,7 @@ Phase 4.2 deliverable per
 ## The contract
 
 `PhosphorRegistry::ILauncherProvider` (in
-[`phosphor-registry`](../../../phosphor/libs/phosphor-registry/README.md)) is the seam. A
+[`phosphor-registry`](../../../phosphor-libs/libs/phosphor-registry/README.md)) is the seam. A
 provider is a pure data source: `setQuery()` pushes the text,
 `resultsChanged()` says `results()` would now answer differently, and
 `activate(id, Primary | Alternate)` performs a row's action. It owns no

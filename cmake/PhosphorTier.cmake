@@ -6,7 +6,7 @@
 # Declares an aggregate custom target named <name> that depends on every
 # buildable target declared under the calling directory, recursively. Each
 # tier CMakeLists calls it last, so `cmake --build build --target
-# phosphor-tier` builds exactly that tier (and, through ordinary link
+# phosphor-libs-tier` builds exactly that tier (and, through ordinary link
 # dependencies, whatever upstream tiers it needs) and nothing else. The
 # moon workspace's per-project build task is built on this, and ctest's
 # --test-dir <build>/<tier> covers the matching test selection, so the two

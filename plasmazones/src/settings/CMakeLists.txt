@@ -177,7 +177,7 @@ set(plasmazones_settings_SRCS
     # inheritance. SettingsStagingDomain bridges SettingsController's
     # central needsSave/save()/load() to the framework's StagingDomain
     # contract. Both are scaffolding for the in-progress src/settings
-    # migration onto phosphor/libs/phosphor-control.
+    # migration onto phosphor-libs/libs/phosphor-control.
     pageadapter.h
     pageadapter.cpp
     services/settingsstagingdomain.h

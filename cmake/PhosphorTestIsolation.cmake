@@ -37,7 +37,7 @@ find_program(_phosphor_dbus_run_session dbus-run-session)
 #
 # This does NOT make the module reachable from a standalone library configure.
 # Every caller includes it as `${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake`,
-# which in a standalone configure of e.g. phosphor/libs/phosphor-fsloader resolves inside
+# which in a standalone configure of e.g. phosphor-libs/libs/phosphor-fsloader resolves inside
 # that library, where there is no `cmake/` directory — so the `include()` errors
 # out before this path is consulted. A standalone build that wants the isolation
 # has to guard its own include.

@@ -57,7 +57,7 @@ file(GLOB_RECURSE PLASMAZONES_I18N_QML CONFIGURE_DEPENDS
     # so that the day someone adds a real i18n() call to the settings chrome it
     # is picked up instead of silently going missing, which is the failure this
     # whole file exists to prevent.
-    "${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-control/qml/*.qml"
+    "${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-control/qml/*.qml"
 )
 
 # phosphor-control's QML is ALSO handed to lupdate raw, below. Its chrome
@@ -80,7 +80,7 @@ file(GLOB_RECURSE PLASMAZONES_I18N_QML CONFIGURE_DEPENDS
 # installs a plain QTranslator itself (plasmazones/kcm/about/kcmabout.cpp), which needs no
 # link against plasmazones_core.
 file(GLOB_RECURSE PLASMAZONES_I18N_QML_QSTR CONFIGURE_DEPENDS
-    "${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-control/qml/*.qml"
+    "${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-control/qml/*.qml"
     "${CMAKE_SOURCE_DIR}/plasmazones/kcm/*.qml"
 )
 

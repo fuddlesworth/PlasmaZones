@@ -266,6 +266,6 @@ foreach(_mock_consumer test_phosphorshell_persistentproperties_scan
                        test_phosphorshell_inputregion_rearm)
     if(TARGET ${_mock_consumer})
         target_include_directories(${_mock_consumer}
-            PRIVATE ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-layer/tests)
+            PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-layer/tests)
     endif()
 endforeach()

@@ -74,9 +74,9 @@ CODE_SUFFIXES = CPP_SUFFIXES | QML_SUFFIXES | SHADER_SUFFIXES | {".luau", ".py",
 _SELECTED_RULES: set[str] = set()
 
 # Trees that are vendored or generated and are not ours to police. The
-# vendored tree is phosphor/extern/ since the tier split; a bare "extern/"
+# vendored tree is phosphor-libs/extern/ since the tier split; a bare "extern/"
 # matches nothing and would quietly start policing anything vendored there.
-EXCLUDED_PREFIXES = ("phosphor/extern/", "build/", "build-off/", "build-nounity/",
+EXCLUDED_PREFIXES = ("phosphor-libs/extern/", "build/", "build-off/", "build-nounity/",
                      "build-release/", "build-relwithdebinfo/")
 
 
@@ -350,8 +350,8 @@ I18N_BRIDGE_ALLOW = {
     "plasmazones/src/phosphor_i18n.h",
     "plasmazones/src/phosphor_qml_i18n.h",
     "plasmazones/src/phosphor_qml_i18n.cpp",
-    "phosphor/libs/phosphor-control/include/PhosphorControl/LocalizedContext.h",
-    "phosphor/libs/phosphor-control/src/localizedcontext.cpp",
+    "phosphor-libs/libs/phosphor-control/include/PhosphorControl/LocalizedContext.h",
+    "phosphor-libs/libs/phosphor-control/src/localizedcontext.cpp",
 }
 
 I18N_CALL = re.compile(r"(?<![\w:.])(i18n|i18nc|i18np|i18ncp)\s*\(")

@@ -180,6 +180,6 @@ is the failure this whole tool exists to avoid.
 
 `ZoneUniformExtension` and the `ZoneShaderUniforms` UBO struct no
 longer contribute to that coupling. They live in
-`phosphor/libs/phosphor-rendering/` and arrive through the linked
+`phosphor-libs/libs/phosphor-rendering/` and arrive through the linked
 `PhosphorRendering::PhosphorRendering` target like any other
 library header.

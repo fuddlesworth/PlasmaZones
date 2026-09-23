@@ -61,7 +61,7 @@ tasks:
       - 'CMakeLists.txt'
       - 'CMakePresets.json'
       - 'CLAUDE.md'
-      - 'phosphor/**/*'
+      - 'phosphor-libs/**/*'
       - 'phosphor-shell-libs/**/*'
       - 'phosphor-shell/**/*'
       - 'plasmazones/**/*'
@@ -75,7 +75,7 @@ tasks:
     command: 'python3 scripts/validate-json-schemas.py'
     inputs:
       - 'scripts/validate-json-schemas.py'
-      - 'phosphor/data/schemas/**/*'
+      - 'phosphor-libs/data/schemas/**/*'
       - 'plasmazones/data/**/*.json'
 
   # ECM's KDECMakeSettings registers appstreamtest at the BUILD ROOT, not

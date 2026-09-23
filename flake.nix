@@ -97,7 +97,7 @@
             # every tier-graph tweak.
             ./.moon
             ./moon.yml
-            ./phosphor/moon.yml
+            ./phosphor-libs/moon.yml
             ./phosphor-shell-libs/moon.yml
             ./phosphor-shell/moon.yml
             ./plasmazones/moon.yml

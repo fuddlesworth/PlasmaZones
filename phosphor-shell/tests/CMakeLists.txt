@@ -209,7 +209,7 @@ if(TARGET PhosphorPopout::PhosphorPopoutQml AND TARGET PhosphorLayer::PhosphorLa
             ${CMAKE_SOURCE_DIR}/phosphor-shell/src
             # The reusable phosphor-layer test mocks (mocks/mocktransport.h,
             # mocks/mockscreenprovider.h).
-            ${CMAKE_SOURCE_DIR}/phosphor/libs/phosphor-layer/tests
+            ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-layer/tests
     )
     target_link_libraries(test_layer_popout_transport
         PRIVATE
