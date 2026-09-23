@@ -30,18 +30,29 @@ ifneq ($(TERM),)
   endif
 endif
 
-.PHONY: all configure build release install post-install uninstall clean test \
+.PHONY: all configure build release rebuild install post-install uninstall clean test \
         editor daemon run-editor run-daemon help format format-cpp format-qml
 
 # Default target
 all: build
 
-# Configure the build
+# Configure the build.
+#
+# -G Ninja and the three ON flags are not optional here, they are what keeps this
+# target compatible with CMakePresets.json. The `debug` preset also binaries
+# into build/, with Ninja and BUILD_TESTING/BUILD_PHOSPHOR_SHELL/BUILD_TOOLS all
+# ON. Configuring the same directory without them gives it the platform default
+# generator, and CMake then refuses every later `cmake --preset debug` (and so
+# every moon task) with "does not match the generator used previously" until
+# someone deletes build/. It also produced a tree with no shell tier, so
+# `make test` ran a suite that silently omitted it.
 configure:
 	@echo "$(BLUE)>>> Configuring $(BUILD_TYPE) build...$(NC)"
-	@cmake -B $(BUILD_DIR) -S . \
+	@cmake -B $(BUILD_DIR) -S . -G Ninja \
 		-DCMAKE_BUILD_TYPE=$(BUILD_TYPE) \
 		-DBUILD_TESTING=ON \
+		-DBUILD_PHOSPHOR_SHELL=ON \
+		-DBUILD_TOOLS=ON \
 		$(CMAKE_FLAGS)
 	@echo "$(GREEN)>>> Configuration complete$(NC)"
 
@@ -52,12 +63,21 @@ build: configure
 	@echo "$(GREEN)>>> Build complete$(NC)"
 	@echo "Binaries in: $(BUILD_DIR)/bin/"
 
-# Release build
+# Release build. Uses build-release/, matching the `release` preset in
+# CMakePresets.json, so a release build never flips build/ between build types
+# and forces a full reconfigure of the debug tree.
 release:
-	@$(MAKE) BUILD_TYPE=Release build
+	@$(MAKE) BUILD_TYPE=Release BUILD_DIR=build-release build
 
-# Install to system (only installs files; packaging handles sycoca/service enable)
-install: build
+# Install to system (only installs files; packaging handles sycoca/service enable).
+# Deliberately does NOT depend on `build`: the documented invocation is
+# `sudo make install`, and building under sudo leaves root-owned objects in
+# build/ that break the user's next unprivileged make. Build first, then install.
+install:
+	@if [ ! -d $(BUILD_DIR) ]; then \
+		echo "$(RED)>>> No build found. Run 'make' first, then 'sudo make install'.$(NC)"; \
+		exit 1; \
+	fi
 	@echo "$(YELLOW)>>> Installing (may require sudo)...$(NC)"
 	@cmake --install $(BUILD_DIR)
 	@echo "$(GREEN)>>> Installation complete$(NC)"
@@ -76,7 +96,7 @@ uninstall:
 		echo "$(GREEN)>>> Uninstall complete$(NC)"; \
 	elif [ -f $(BUILD_DIR)/install_manifest.txt ]; then \
 		echo "$(YELLOW)>>> Uninstalling via manifest only (may require sudo)...$(NC)"; \
-		xargs rm -vf < $(BUILD_DIR)/install_manifest.txt; \
+		xargs -r -d '\n' rm -vf < $(BUILD_DIR)/install_manifest.txt; \
 		echo "$(GREEN)>>> Uninstall complete$(NC)"; \
 	else \
 		echo "$(RED)>>> No build found. Run 'make' and 'make install' first.$(NC)"; \

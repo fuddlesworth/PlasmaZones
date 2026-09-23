@@ -435,10 +435,14 @@ jobs:
           # Filter to source files we actually format, exclude
           # generator-output headers (they get regenerated, no point
           # round-tripping clang-format against them).
+          # Split so a failing diff is fatal. The `|| true` exists for
+          # grep's exit 1 on no matches, and it used to cover the diff as
+          # well, which would leave changed.txt empty and both lint steps
+          # reporting "nothing changed" on what reads as a green run.
           git diff --name-only --diff-filter=ACMR "$RANGE" -- \
-              '*.cpp' '*.h' '*.qml' \
-            | grep -v '^[a-z-]*/libs/.*/include/.*_export\.h$' \
-            > changed.txt || true
+              '*.cpp' '*.h' '*.qml' > all-changed.txt
+          grep -v '^[a-z-]*/libs/.*/include/.*_export\.h$' \
+              all-changed.txt > changed.txt || true
           echo "Changed files:"
           cat changed.txt
           # Emit the file list for the downstream steps.
@@ -647,10 +651,15 @@ jobs:
         run: nix build -L --fallback .#default
 
       - name: Verify binary
+        # `--version || true` passed whatever the binary printed, including
+        # nothing, so this step could not fail. Require some output.
+        shell: bash
         run: |
           echo "=== Package contents ==="
           ls -la result/bin/
-          ./result/bin/plasmazonesd --version || true
+          got="$(./result/bin/plasmazonesd --version)"
+          echo "Built: $got"
+          test -n "$got" || { echo "::error::plasmazonesd --version printed nothing"; exit 1; }
 
       - name: Verify devShell
         run: nix develop --fallback -c echo "devShell OK"

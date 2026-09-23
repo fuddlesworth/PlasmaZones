@@ -451,7 +451,12 @@ jobs:
           fi
 
       - name: Create source tarball
+        # pipefail: the producing tar's exit status is otherwise discarded, and
+        # the consuming tar still exits 0, so a partial copy would be packed
+        # into the SRPM and shipped without the step ever going red.
+        shell: bash
         run: |
+          set -o pipefail
           VERSION="${{ needs.version.outputs.version }}"
           mkdir -p PlasmaZones-${VERSION}
           # Copy source files. Exclude anything produced by prior steps
@@ -619,7 +624,12 @@ jobs:
           fi
 
       - name: Create source tarball
+        # pipefail: the producing tar's exit status is otherwise discarded, and
+        # the consuming tar still exits 0, so a partial copy would be packed
+        # into the SRPM and shipped without the step ever going red.
+        shell: bash
         run: |
+          set -o pipefail
           VERSION="${{ needs.version.outputs.version }}"
           mkdir -p PlasmaZones-${VERSION}
           # Same exclude list as build-rpm above — keep them in sync.
@@ -909,10 +919,18 @@ jobs:
         run: nix build -L --fallback .#default
 
       - name: Verify package version
+        # Actually compare. `--version || true` reported success for any output,
+        # including none, so a step named Verify verified nothing.
+        shell: bash
         run: |
           VERSION="${{ needs.version.outputs.version }}"
           echo "Expected version: $VERSION"
-          ./result/bin/plasmazonesd --version || true
+          got="$(./result/bin/plasmazonesd --version)"
+          echo "Built: $got"
+          case "$got" in
+              *"$VERSION"*) ;;
+              *) echo "::error::built '$got', expected to contain '$VERSION'"; exit 1 ;;
+          esac
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Create GitHub Release
