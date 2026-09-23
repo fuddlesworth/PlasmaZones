@@ -248,8 +248,10 @@ Q_SIGNALS:
     /// pointer is permitted for callers that do not need the verdict.
     void crossModeFocusRequested(const QString& targetScreenId, const QString& direction, bool* handled);
 
-    /// Emitted to sync floating state without restoring geometry.
-    /// Passive state-sync: engine-internal divergence correction.
+    /// Emitted to sync floating state without restoring geometry: engine-internal
+    /// divergence correction, an engine-initiated float (rules, oversize, the
+    /// compositor's own-fullscreen hold), and a release-time clear, which carries
+    /// an EMPTY screenId.
     void windowFloatingStateSynced(const QString& windowId, bool floating, const QString& screenId);
 
     /// Emitted when overflow windows are batch-floated during applyTiling.

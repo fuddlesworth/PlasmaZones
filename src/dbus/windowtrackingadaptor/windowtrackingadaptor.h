@@ -1596,6 +1596,7 @@ private Q_SLOTS:
     void onPanelGeometryReady();
 
 public:
+    void forgetClosedFullscreenHold(const QString& windowId); ///< the scroll engine's closed-mid-hold memory is spent
     /// Resolve a resnap filter (empty / physical / virtual screen id) into
     /// the concrete list of snap-mode screens the resnap should touch.
     /// Consults the shared ScreenModeRouter to drop autotile screens from
@@ -1793,8 +1794,7 @@ private:
     PhosphorWorkspaces::ActivityManager* m_activityManager;
     std::unique_ptr<PhosphorConfig::IBackend> m_sessionBackend; // Session state (session.json)
 
-    // Engine references for per-screen routing (set via setEngines())
-    // QPointer auto-nulls on engine destruction, guarding against late D-Bus calls
+    // Engine references for per-screen routing (setEngines()); QPointer nulls on destruction.
     QPointer<PhosphorEngine::PlacementEngineBase> m_snapEngine;
     QPointer<PhosphorEngine::PlacementEngineBase> m_autotileEngine;
     QPointer<PhosphorEngine::PlacementEngineBase> m_scrollEngine;

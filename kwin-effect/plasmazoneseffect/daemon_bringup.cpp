@@ -445,7 +445,13 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
         for (KWin::EffectWindow* w : windows) {
             // !isDeleted: a close-grabbed dying window is NOT alive — listing
             // it would shield its stale persisted snap entry from the prune.
-            if (w && !w->isDeleted() && shouldHandleWindow(w)) {
+            // A live fullscreen window IS alive: setScrollingScreens({}) has
+            // run on the serviceRegistered edge and refills async, so no screen
+            // is scrolling here and the plain call would list every
+            // own-fullscreen strip tile as dead, dropping the engine's hold
+            // (and its reclaim credit and frame shadow) before the exit could
+            // return it.
+            if (w && !w->isDeleted() && shouldHandleWindow(w, nullptr, /*exemptFullscreen=*/w->isFullScreen())) {
                 aliveWindowIds.append(getWindowId(w));
             }
         }

@@ -941,6 +941,12 @@ void TilingAdaptor::releaseWindowTrackingVia(const QString& windowId, PhosphorEn
     if (PhosphorEngine::IPlacementEngine* engine = owner ? owner : engineOwningWindow(windowId)) {
         engine->windowClosed(windowId);
     }
+    // A LIVE window released here gets no WindowTracking.windowClosed, so the
+    // scroll engine's closed-mid-hold memory (seeded by windowClosed above)
+    // would preserve every later capture of it. Spend it now.
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->forgetClosedFullscreenHold(windowId);
+    }
     if (!releasingScreen.isEmpty()) {
         refreshFocusedWindow(releasingScreen);
     }

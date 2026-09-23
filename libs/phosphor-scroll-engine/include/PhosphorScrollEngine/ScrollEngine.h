@@ -83,7 +83,8 @@ namespace PhosphorScrollEngine {
  * leaves the strip (its column closes up) and the engine remembers the
  * column index so unfloat / unminimize restores the slot. The effect's
  * minimize machinery reports minimize as a float toggle, so slot memory
- * covers minimize for free.
+ * covers minimize for free. The compositor's own-fullscreen hold
+ * (setWindowFullscreenFloat) is a third producer, announced passively.
  *
  * @see PhosphorEngine::IPlacementEngine, ScrollStrip, ScrollState
  */
@@ -195,16 +196,12 @@ public:
     void pushToEmptyZone(const PhosphorEngine::NavigationContext& ctx) override;
     void restoreFocusedWindow(const PhosphorEngine::NavigationContext& ctx) override;
     void toggleFocusedFloat(const PhosphorEngine::NavigationContext& ctx) override;
-    /// niri switch-focus-between-floating-and-tiling (IPlacementEngine
-    /// override — the daemon reaches it by virtual dispatch, not the
-    /// scroll-specific mode-check-and-cast route below).
+    /// niri switch-focus-between-floating-and-tiling (IPlacementEngine override).
     void switchFocusBetweenFloatingAndTiling(const QString& screenId) override;
 
 private:
-    /// Shared body of toggleFocusedFloat and restoreFocusedWindow: resolve
-    /// the focused window and toggle its float state, reporting the
-    /// no-window failure under @p failureAction so each verb's OSD carries
-    /// its own token ("float" vs "restore").
+    /// Shared body of toggleFocusedFloat and restoreFocusedWindow; the no-window
+    /// failure is reported under @p failureAction so each verb's OSD has its token.
     void toggleFocusedFloatAs(const PhosphorEngine::NavigationContext& ctx, const QString& failureAction);
 
 public:
@@ -227,8 +224,20 @@ public:
     /// Windowed fullscreen (niri toggle-windowed-fullscreen) on the active
     /// window: layout-neutral per-tile flag, see Tile::windowedFullscreen.
     void toggleWindowedFullscreen(const QString& screenId);
-    /// Compositor-driven reconciliation: the client left fullscreen on its
-    /// own, so drop the flag and re-apply that window's screen.
+    /// Compositor-driven: hold a strip tile out for its OWN fullscreen or return it, with a
+    /// user float's slot memory but a PASSIVE announcement (no OSD, no free-geometry
+    /// restore). True when the engine holds, or has returned, this call's own float: a first
+    /// hold of a strip tile, a repeat hold of a tile this call already holds, or a return of a
+    /// tile this call held. False for an empty or untracked window, a window that floats under
+    /// another owner, and a return of a window this call did not hold.
+    bool setWindowFullscreenFloat(const QString& windowId, bool floating, const QString& screenId);
+    /// True while the slot carries the compositor's hold, and for a window that CLOSED mid-hold
+    /// until WindowTracking.windowClosed has taken its capture (forgetClosedFullscreenHold).
+    bool isFullscreenFloated(const QString& windowId) const;
+    /// Drop the closed-mid-hold memory once the daemon's close capture has read it, or a live
+    /// release left no capture to read it.
+    void forgetClosedFullscreenHold(const QString& windowId);
+    /// Compositor-driven reconciliation: the client left fullscreen on its own.
     void clearWindowedFullscreen(const QString& windowId);
     /// Compositor-driven repair: the compositor moved this window behind
     /// the engine's back (KWin's fullscreen-exit restore), so evict its
@@ -238,31 +247,17 @@ public:
     void cycleColumnPresetWidth(int delta, const QString& screenId);
     /// deltaPercent of the work area's MAIN extent (e.g. +10 / -10).
     void adjustColumnWidth(qreal deltaPercent, const QString& screenId);
-    /// Toggle the maximized state of a column on @p screenId. An empty
-    /// @p windowId targets the ACTIVE column (the keyboard shortcut's
-    /// meaning); a named window targets the column owning it and refuses when
-    /// the strip does not hold it, which is what the compositor's maximize
-    /// interception needs — that request names one window and the active
-    /// column is frequently a different one.
-    ///
-    /// Answers whether the strip actually CHANGED, which is the contract the
-    /// compositor's maximize interception is built on. That interception
-    /// dispatches toggleMaximizeToEdges below rather than this verb, and both
-    /// twins answer the same way so the wire shape and the effect's reply
-    /// handling do not have to fork: a request the engine quietly does nothing
-    /// with (no state for the context, an empty strip, a window no column
-    /// holds, a column the verb refuses) leaves the window holding the state
-    /// the USER asked for with no batch coming to impose the strip's answer.
-    /// False is the effect's cue to put the bit back where the engine last had
-    /// it.
+    /// Toggle the maximized state of a column on @p screenId. An empty @p windowId
+    /// targets the ACTIVE column; a named window targets the column owning it and
+    /// refuses when the strip does not hold it. Answers whether the strip CHANGED, like
+    /// its twin below: false means no batch is coming, so the effect puts KWin's bit back.
     bool toggleMaximizeColumn(const QString& screenId, const QString& windowId = QString());
     /// Toggle a column's maximize-to-edges state (full raw work area on both
     /// axes, gap-free; niri maximize-window-to-edges generalized to the
-    /// column). Same window/screen addressing and the same changed-reporting
-    /// return as toggleMaximizeColumn, and this is the verb the compositor's
-    /// maximize interception dispatches: the KWin maximize bit mirrors THIS
-    /// state alone, toggleMaximizeColumn being a pure width verb with no
-    /// mirror.
+    /// column). Addressing and return as toggleMaximizeColumn. A named window
+    /// that is the active tile of a SHARED column is first expelled into its own
+    /// column. This is the verb the compositor's maximize interception
+    /// dispatches, and the KWin maximize bit mirrors THIS state alone.
     bool toggleMaximizeToEdges(const QString& screenId, const QString& windowId = QString());
     void expandColumnToAvailableWidth(const QString& screenId);
     /// Equal shares of the viewport for every fully visible column
@@ -1093,22 +1088,19 @@ private:
     ScrollState* stateForKey(const PhosphorEngine::PlacementStateKey& key, bool createIfMissing);
     /// Point the live preview's drop target at the view's leading (@p
     /// direction < 0) or trailing new-column slot, the two shapes the band
-    /// hit-test already produces at the view's extremes. Called on every
-    /// auto-scroll tick INSTEAD of the hit-test, so the target cannot churn
-    /// as columns slide under a stationary cursor (drag_autoscroll.cpp).
-    /// Returns true when the stored target actually changed. @p cursorPos
-    /// feeds the defensive empty-viewport arm's re-aim only.
+    /// hit-test produces at the view's extremes. Called on every auto-scroll
+    /// tick INSTEAD of the hit-test, so the target cannot churn as columns
+    /// slide under a stationary cursor (drag_autoscroll.cpp). Returns true when
+    /// the target changed. @p cursorPos feeds the empty-viewport re-aim only.
     ///
     /// PRECONDITION: m_dragInsertPreview must be live (asserted, with a
     /// release-build refusal, since the signature reads preview-independent).
     bool writeDragAutoScrollTarget(const ScrollState& state, const ScrollLayoutParams& params, int direction,
                                    const QPoint& cursorPos);
-    /// Re-aim the live preview's drop target at @p cursorPos with the
-    /// ordinary hit-test, undoing an edge slot the auto-scroll wrote. Called
-    /// wherever ownership ends with a usable cursor on the preview's own
-    /// screen. Returns true when the stored target actually changed.
-    ///
-    /// PRECONDITION: m_dragInsertPreview must be live.
+    /// Re-aim the live preview's drop target at @p cursorPos with the ordinary
+    /// hit-test, undoing an edge slot the auto-scroll wrote. Called wherever
+    /// ownership ends with a usable cursor on the preview's own screen. Returns
+    /// true when the target changed. PRECONDITION: m_dragInsertPreview is live.
     bool repairDragAutoScrollTarget(const QPoint& cursorPos);
     ScrollState* stateForWindow(const QString& canonicalId, PhosphorEngine::PlacementStateKey* outKey = nullptr) const;
     /// The screen the engine should operate on for a screen-hinted verb:
@@ -1123,30 +1115,23 @@ private:
     /// state would invalidate the live iterator. A caller must not assume the
     /// clear has landed by the time this returns.
     ///
-    /// It deliberately does NOT drop the mode-specific float markers or the
-    /// last-applied rects. Both are INPUTS to the daemon's windowsReleased
-    /// handler, which runs after this returns: it reads
-    /// isModeSpecificFloated() to decide whether a window still needs its
-    /// snap float cleared and its snap slot restored (and clears the marker
-    /// itself, per window), and the adaptor reads lastManagedRect() as the
-    /// float-back tile-rect poison guard. Clearing either here reports every
-    /// scroll-floated window as not-floated and the window stays floated at
-    /// its scroll-float geometry. The rects are reclaimed by
-    /// pruneStaleWindows instead. AutotileEngine documents the same contract
-    /// on releaseScreenStateForTeardown.
+    /// It deliberately does NOT drop the mode-specific float markers or the last-applied rects:
+    /// both are INPUTS to the daemon's windowsReleased handler, which reads isModeSpecificFloated()
+    /// (clearing it per window) and lastManagedRect() (the float-back poison guard). A fullscreen
+    /// HOLD is queued for announceReleasedFullscreenHolds, which fires before windowsReleased; the
+    /// daemon's passive-false arm clears the WTS bit but leaves an UNTRACKED window's marker alone,
+    /// so the handler still sees it. pruneStaleWindows reclaims the rects. AutotileEngine has the same.
     void releaseScreenState(ScrollState* state, QStringList& releasedWindows);
     /// Latch-guarded tab-strip clear: emits the "[]" payload once for a
     /// screen that had a strip showing, no-op otherwise.
     void clearTabStripsForScreen(const QString& screenId);
     // engine_context.cpp
-    /// Shared per-window side-map sweep for the SILENT prune paths (desktop
-    /// and activity teardown), which emit no windowsReleased and so have no
-    /// downstream consumer of the float marker or the last-applied rect.
-    ///
-    /// The removed-output prune is NOT one of them: it releases live windows
-    /// and emits, so it goes through releaseScreenState and sweeps the side
-    /// maps only AFTER the emit. The mode-transition release path likewise
-    /// uses releaseScreenState; see the contract there.
+    /// Shared per-window side-map sweep for the SILENT prune paths (desktop and activity teardown),
+    /// which emit no windowsReleased. A fullscreen hold found here is queued for
+    /// announceReleasedFullscreenHolds, which the prune runs after its reverse-map sweep; nothing else
+    /// reads the float marker or the last-applied rect. The closed-hold memory is not seeded here, so
+    /// a close while still fullscreen after a silent prune records the output rect. The removed-output
+    /// prune releases live windows and emits, so it goes through releaseScreenState instead.
     void dropWindowBookkeeping(const PhosphorEngine::PlacementStateKey& key, const ScrollState* state);
     /// Consume @p windowId from a screen's mode-transition seed (marking it
     /// in m_consumedInitialOrder; the list itself keeps its positions) and
@@ -1349,21 +1334,32 @@ private:
                            const PhosphorEngine::WindowPlacement* record);
     /// Consume an engine-decided float's FLOATING record, apply the gated position. True: moved.
     bool restoreFloatRecordForOpen(const QString& windowId, const QString& screenId, const QList<QSize>& managedSizes);
-    /// Emit geometryRestoreRequested for @p record's free rect when the gate allows (see the definition).
     bool emitGatedFloatGeometryRestore(const QString& windowId, const PhosphorEngine::WindowPlacement& record,
                                        const QString& screenId, const QList<QSize>& managedSizes);
-    /// The scroll arm of restoreFreeSizeWhereItStands; @p managedSizes is finishFloatedOpen's.
     void restoreFreeSizeForFloatedOpen(const QString& windowId, const QString& screenId, bool placedBefore,
                                        const QList<QSize>& managedSizes);
-    /// The sizes a column tile on @p screenId can have, every context (resolved plus applied rects).
+    /// Every context's column-tile sizes on @p screenId (resolved plus applied rects).
     QList<QSize> managedSizesOnScreen(const QString& screenId) const;
     /// Consume @p windowId's EXACT stash tile on a float exit, mirroring restoreFromStripStash's blueprint carry.
     void consumeStripStashTileForFloat(ScrollState* state, const PhosphorEngine::PlacementStateKey& key,
                                        const QString& windowId);
+    /// Active = user float (windowFloatingChanged), Passive = engine-initiated (windowFloatingStateSynced).
+    enum class FloatAnnounce : quint8 {
+        Active,
+        Passive
+    };
+    void announceFloat(FloatAnnounce announce, const QString& windowId, bool floating, const QString& screenId);
+    /// Queue @p windowId for announceReleasedFullscreenHolds when its slot carries the hold.
+    void rememberReleasedFullscreenHold(const QString& windowId);
+    void announceReleasedFullscreenHolds();
+    /// A same-key re-announce of a held window is the compositor's return (its record is gone).
+    /// @p fullscreenHold on floatWindowInternal stamps the hold on the slot BEFORE the announce.
+    void settleReannouncedFullscreenHold(const QString& windowId);
     bool floatWindowInternal(ScrollState* state, const PhosphorEngine::PlacementStateKey& key, const QString& windowId,
-                             const QString& screenId);
+                             const QString& screenId, FloatAnnounce announce = FloatAnnounce::Active,
+                             bool fullscreenHold = false);
     bool unfloatWindowInternal(ScrollState* state, const QString& windowId, const QString& screenId,
-                               bool applyAfter = true);
+                               bool applyAfter = true, FloatAnnounce announce = FloatAnnounce::Active);
     // engine_navigation.cpp
     /// Move the active window off the strip's boundary onto the adjacent
     /// output in @p direction. Scroll→scroll crossings migrate internally;
@@ -1703,6 +1699,11 @@ private:
     /// column must not come back as the default width). Value type hoisted
     /// to ScrollStashTypes.h (the stash types' file-size-ceiling precedent).
     QHash<QString, FloatRestore> m_floatRestore;
+    /// Holds found by releaseScreenState and the silent prunes, announced clear before the emit.
+    QStringList m_releasedFullscreenHolds;
+    /// Ids that CLOSED while held: isFullscreenFloated keeps answering true so the daemon's close
+    /// capture (after Tiling.windowClosed dropped the slot) reads a suspension. Consumed by the WTA.
+    QSet<QString> m_closedFullscreenHolds;
     /// Live drag-insert preview state (drag_preview.cpp). The structural
     /// edits a preview makes while it is LIVE are signal-silent, mirroring
     /// autotile's contract, so the daemon's float bookkeeping never sees the

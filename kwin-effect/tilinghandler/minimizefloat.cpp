@@ -9,23 +9,23 @@
 // minimize/unminimize pairs), and an unminimize hands it back — with a
 // deferred, revalidated commit so the stock minimize animation is not torn
 // mid-flight, plus a bounded retry for the window where the daemon has not yet
-// claimed the screen. The rest of signals.cpp is the D-Bus slot surface.
+// claimed the screen. signals.cpp keeps the daemon's D-Bus slots (enabled
+// state, per-window float echo) and KWin's per-window maximized and fullscreen
+// slots.
 
 #include "tilinghandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
-#include "handlers/navigationhandler.h"
 #include "compositor/effectlogging.h"
 #include "handlers/snaphandler.h" // cross-mode minimize-float adoption
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
-#include <PhosphorIdentity/WindowId.h>
 
 #include <effect/effect.h> // Effect::animationTime, the deferred-unfloat grace
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
-#include <window.h>
-#include <workspace.h>
 
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <QLoggingCategory>
 #include <QPointer>
 #include <QTimer>
@@ -59,12 +59,26 @@ void TilingHandler::cancelPendingUnminimizeUnfloat(const QString& windowId)
     m_pendingUnminimizeUnfloat.cancel(windowId);
 }
 
+// Clears three things despite the name, which dates from when it held only the
+// first: the debounced minimize-float commits, the deferred unminimize-unfloat
+// timers (grace and retry alike), and the fullscreen-hold records (record,
+// unanswered return and generation stamp). The minimize-float MARKERS and the
+// in-flight unfloat map are not touched here.
 void TilingHandler::clearAllPendingMinimizeFloats()
 {
     m_pendingMinimizeFloat.cancelAll();
     // The restore-side timers must not fire against a disabled engine or a
     // torn-down handler either.
     m_pendingUnminimizeUnfloat.cancelAll();
+    // The fullscreen-float records go with them, for both callers. A new daemon
+    // session never held the float, and its re-announce rejects the
+    // still-fullscreen window at first contact, so the exit takes the
+    // never-tracked arm. A disabled engine has nothing to unfloat into. Either
+    // way an exit that found the record would send an unfloat for a float the
+    // daemon does not have.
+    m_fullscreenFloatedWindows.clear();
+    m_fullscreenUnfloatInFlight.clear();
+    m_fullscreenHoldGeneration.clear();
 }
 
 bool TilingHandler::beginUnminimizeUnfloat(const QString& windowId)
@@ -153,7 +167,7 @@ void TilingHandler::scheduleUnminimizeUnfloatRetry(const QString& windowId)
         || m_unfloatRetryAttempts.value(windowId) >= kAutotileMaxUnfloatRetries) {
         return;
     }
-    KWin::EffectWindow* window = m_effect->findWindowById(windowId);
+    KWin::EffectWindow* window = m_effect->findWindowByIdExact(windowId);
     if (!window || window->isDeleted() || window->isMinimized()) {
         return;
     }
@@ -161,6 +175,12 @@ void TilingHandler::scheduleUnminimizeUnfloatRetry(const QString& windowId)
     ++m_unfloatRetryAttempts[windowId];
     m_pendingUnminimizeUnfloat.schedule(windowId, kAutotileUnfloatRetryDelayMs, [this, windowId, safeWindow]() {
         if (!safeWindow || safeWindow->isDeleted() || safeWindow->isMinimized()) {
+            return;
+        }
+        // Same bail as the grace lambda: a window that re-fullscreened in the
+        // gap must not be unfloated into the strip as a fullscreen column.
+        if (!m_effect->shouldHandleWindow(safeWindow.data()) || !m_effect->isTileableWindow(safeWindow.data())) {
+            qCDebug(lcEffect) << "Autotile: unfloat retry no longer handleable, skipping:" << windowId;
             return;
         }
         const QString screenId = m_effect->getWindowScreenId(safeWindow.data());
