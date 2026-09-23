@@ -35,7 +35,7 @@ import org.plasmazones.common as PZCommon
 // clock/CPU/memory/battery into a panel.
 //
 // BarHost reads the BarRegistry context property (the IBarWidgetFactory
-// owner, set by src/shell/main.cpp) to mount its widgets.
+// owner, set by phosphor-shell/src/main.cpp) to mount its widgets.
 //
 // PerScreenPanels rather than a Repeater: ShellEngine discovers panels by
 // walking QObject children and then takes ownership of each one, so the
@@ -698,7 +698,7 @@ Item {
     //
     // Launcher paints its own card, so unlike the control center it needs
     // no panel wrapped around it. Everything it reads comes from the
-    // LauncherResults context property src/shell/main.cpp installs on
+    // LauncherResults context property phosphor-shell/src/main.cpp installs on
     // every engine, and Popouts is a context property too, so this
     // Component is safe to build against the root context the transport
     // uses (the constraint that bit the power menu).
@@ -930,7 +930,7 @@ Item {
     // Built fresh per open against the root context, so everything it
     // reads is a singleton, an attached property or a context property:
     // Workspaces and PlacementMap (Phosphor.Shell), Screen, and
-    // DashboardMedia (the MprisHost src/shell/main.cpp installs).
+    // DashboardMedia (the MprisHost phosphor-shell/src/main.cpp installs).
     //
     // Close runs in two steps so the release scale plays: closeRequested
     // (Escape, a click, a desktop chosen) flips `open`, and `released`

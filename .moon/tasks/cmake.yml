@@ -131,6 +131,13 @@ tasks:
       - '@group(cmake)'
       - '@group(sources)'
       - '@group(tests)'
+    # NOTE: this makes `moon run <tier>:test` slightly stronger than the
+    # plain `ctest --test-dir build/<tier>` CLAUDE.md documents alongside
+    # it. Every target already gets QT_QPA_PLATFORM=offscreen from
+    # phosphor_apply_directory_test_isolation, so this is belt-and-braces
+    # for a target registered outside a swept directory; it is NOT the
+    # mechanism the suite relies on. If the two verbs ever diverge on a
+    # display-dependent failure, this line is the difference.
     env:
       QT_QPA_PLATFORM: 'offscreen'
     options:

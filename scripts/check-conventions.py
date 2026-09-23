@@ -622,6 +622,14 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("files", nargs="*", help="limit the check to these paths (default: the whole tree)")
     ap.add_argument("--rules", help="comma-separated subset of rules to run")
+    ap.add_argument(
+        "--staged",
+        action="store_true",
+        help="treat an empty FILES list as nothing to check rather than as "
+             "the whole tree. For pre-commit hooks, where the glob can "
+             "filter every staged path away and a bare invocation would "
+             "otherwise silently become a whole-tree run.",
+    )
     ap.add_argument("--list-rules", action="store_true")
     ap.add_argument("--update-baseline", action="store_true", help="re-record the oversize-file baseline")
     args = ap.parse_args()
@@ -644,6 +652,11 @@ def main() -> int:
 
     global _SELECTED_RULES
     _SELECTED_RULES = set(selected)
+
+    if args.staged and not args.files:
+        # Nothing staged matched the hook's globs. Not an error, and not a
+        # reason to sweep the tree.
+        return 0
 
     if args.files:
         files = []

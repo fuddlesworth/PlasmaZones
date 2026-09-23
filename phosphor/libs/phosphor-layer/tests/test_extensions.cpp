@@ -301,7 +301,7 @@ private Q_SLOTS:
         a.cancel(nullptr); // no-throw
     }
 
-    void noOpAnimator_tolleratesNullCallback()
+    void noOpAnimator_toleratesNullCallback()
     {
         NoOpSurfaceAnimator a;
         QQuickItem item;

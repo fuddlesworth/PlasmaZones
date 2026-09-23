@@ -7,8 +7,8 @@ include(CMakeFindDependencyMacro)
 
 # Network for QLocalServer / QLocalSocket; Qml for IpcTarget's
 # QML_ELEMENT registration. Gui is intentionally absent: no public
-# header in libs/phosphor-ipc/include/ references a QtGui type, so
-# out-of-tree CLI consumers (phosphorctl-style binaries) don't need
+# header in phosphor-shell-libs/libs/phosphor-ipc/include/ references a
+# QtGui type, so out-of-tree CLI consumers (phosphorctl-style) don't need
 # qt6-gui installed just to find_package(PhosphorIpc).
 #
 # This config file exports the `PhosphorIpc::PhosphorIpc` core

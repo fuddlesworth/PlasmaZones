@@ -75,7 +75,7 @@ pre-commit:
         - "*.desktop*"
         - "*.metainfo.xml*"
         - "packaging/**"
-      run: python3 scripts/check-conventions.py {staged_files}
+      run: python3 scripts/check-conventions.py --staged {staged_files}
     shader-validate:
       glob: "plasmazones/data/overlays/**/*.{frag,vert,glsl,json}"
       # When any bundled zone-shader file is staged, validate the whole pack set

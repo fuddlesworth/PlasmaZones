@@ -7,7 +7,7 @@
 // while the field is empty and unfocused.
 //
 //   PhosphorTextField {
-//       placeholderText: i18n("Search")
+//       placeholderText: qsTr("Search")
 //       onAccepted: launcher.run(text)
 //   }
 //

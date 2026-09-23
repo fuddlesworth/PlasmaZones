@@ -66,8 +66,10 @@ set(QT_QML_GENERATE_QMLLS_INI ON CACHE BOOL "Generate QML language server config
 # and then recreated mid-build by the autogen step, so `-Wmissing-include-dirs`
 # intermittently fires against these directories. Instead of racing the
 # clean/autogen ordering from here at configure time (which `--clean-first`
-# would wipe again), the suppression is scoped to plasmazones/src/shared/CMakeLists.txt
-# where the affected QML-module targets live - see that file for details.
+# would wipe again), the suppression is applied per target rather than
+# globally here. plasmazones/src/shared/CMakeLists.txt carries the full
+# rationale; 34 CMakeLists across the tiers apply it, so do not read this
+# as "one file opts out".
 
 # KDE/Qt requirements (Plasma 6.7 target: KF 6.26, Qt 6.10, KWin 6.7)
 # Plasma 6.8 is supported by the same source: the KWin effect adapts to either

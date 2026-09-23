@@ -9,7 +9,7 @@
 // Outlined (medium emphasis), Text (low emphasis).
 //
 //   PhosphorButton {
-//       text: i18n("Apply")
+//       text: qsTr("Apply")
 //       variant: PhosphorButton.Filled
 //       onClicked: controller.apply()
 //   }

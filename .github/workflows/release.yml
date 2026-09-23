@@ -19,16 +19,26 @@ on:
         required: false
         default: ''
 
-# Default scope is read-only. Only the `release` job and the AUR publish
-# need writes — they opt in via per-job permissions blocks.
+# Default scope is read-only. Only the `release` job opts into writes, via
+# its own permissions block. publish-aur and publish-obs deliberately have
+# none: they push over SSH with AUR_SSH_PRIVATE_KEY and to OBS with osc
+# credentials, so neither needs GITHUB_TOKEN writes. Do not "restore" a
+# permissions block for them — that would hand a write token to jobs whose
+# whole purpose is pushing to third-party hosts.
 permissions:
   contents: read
 
 # Two tag pushes (or a re-run of the same tag dispatch) must not race
-# the delete-and-recreate dance in the `release` job. Serialising per
-# ref keeps multiple in-flight releases out of each other's way.
+# the delete-and-recreate dance in the `release` job.
+#
+# Keyed on the resolved TAG, not github.ref: on a tag push the ref is
+# refs/tags/vX.Y.Z, but on workflow_dispatch it is whatever ref the
+# dispatch was fired against — kwin-rebuild-watch.yml passes a branch. Those
+# landed in two different concurrency groups, so a dispatch and a push for
+# the SAME tag could run simultaneously, which is exactly the case the
+# comment claimed to cover.
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -859,9 +869,15 @@ jobs:
           su builder -c "makepkg -p PKGBUILD.ci -sf --noconfirm"
 
       - name: Validate package
+        # continue-on-error rather than `|| true`, matching ci.yml's draft
+        # step: namcap's advisory warnings should not red a release, but the
+        # intent belongs in the step definition where it is visible, not
+        # hidden in a shell operator that makes the step unconditionally
+        # green.
+        continue-on-error: true
         run: |
           cd packaging/arch
-          namcap *.pkg.tar.zst || true
+          namcap *.pkg.tar.zst
 
       - name: Move artifacts
         run: |

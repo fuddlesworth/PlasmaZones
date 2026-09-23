@@ -1,5 +1,11 @@
-build/
+# build*, not build: CMakePresets.json creates build-release/ and
+# build-relwithdebinfo/, and a dev tree also carries build-nounity/ and
+# build-off/. All of them were being uploaded into the build context.
+build*/
 .git/
+.moon/cache/
+.claude/
+.codex/
 *.o
 *.a
 *.so

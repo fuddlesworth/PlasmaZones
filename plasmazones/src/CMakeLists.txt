@@ -395,6 +395,12 @@ if(ENABLE_PCH)
 endif()
 
 install(TARGETS plasmazones_core
+    # NOTE: PlasmaZonesTargets is assigned here but never installed -- there
+    # is no install(EXPORT PlasmaZonesTargets) and no PlasmaZonesConfig.cmake
+    # anywhere in the tree, so find_package(PlasmaZones) cannot work and the
+    # INSTALL_INTERFACE include dirs below are inert. Kept because dropping
+    # the keyword changes install() semantics; wire up the config-file pair
+    # if the app tier is ever meant to be consumable.
     EXPORT PlasmaZonesTargets
     LIBRARY DESTINATION ${KDE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
@@ -466,6 +472,12 @@ set_target_properties(plasmazones_rendering PROPERTIES
 )
 
 install(TARGETS plasmazones_rendering
+    # NOTE: PlasmaZonesTargets is assigned here but never installed -- there
+    # is no install(EXPORT PlasmaZonesTargets) and no PlasmaZonesConfig.cmake
+    # anywhere in the tree, so find_package(PlasmaZones) cannot work and the
+    # INSTALL_INTERFACE include dirs below are inert. Kept because dropping
+    # the keyword changes install() semantics; wire up the config-file pair
+    # if the app tier is ever meant to be consumable.
     EXPORT PlasmaZonesTargets
     LIBRARY DESTINATION ${KDE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
@@ -509,6 +521,12 @@ set_target_properties(plasmazones_shaderpreview PROPERTIES
 )
 
 install(TARGETS plasmazones_shaderpreview
+    # NOTE: PlasmaZonesTargets is assigned here but never installed -- there
+    # is no install(EXPORT PlasmaZonesTargets) and no PlasmaZonesConfig.cmake
+    # anywhere in the tree, so find_package(PlasmaZones) cannot work and the
+    # INSTALL_INTERFACE include dirs below are inert. Kept because dropping
+    # the keyword changes install() semantics; wire up the config-file pair
+    # if the app tier is ever meant to be consumable.
     EXPORT PlasmaZonesTargets
     LIBRARY DESTINATION ${KDE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}

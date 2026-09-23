@@ -22,6 +22,11 @@ FROM fedora:44
 # that test FAILS rather than skips without it). Not a build dep, so it is
 # deliberately absent from the packaging specs this list was copied from --
 # those all configure with -DBUILD_TESTING=OFF, and this image does not.
+# The last four packages are the shell tier's dependencies. They are here
+# because the ENTRYPOINT configures with BUILD_PHOSPHOR_SHELL=ON: without
+# that flag the image built happily and `docker run ... ctest` reported
+# green having run none of the shell tier's suites, which is the trap
+# CLAUDE.md's Build & Test section describes. Mirrors ci.yml's build-shell.
 RUN dnf install -y --setopt=install_weak_deps=False \
         /usr/bin/wayland-scanner \
         cmake \
@@ -50,6 +55,10 @@ RUN dnf install -y --setopt=install_weak_deps=False \
         plasma-activities-devel \
         systemd-rpm-macros \
         /usr/bin/dbus-run-session \
+        pipewire-devel \
+        polkit-qt6-1-devel \
+        pam-devel \
+        ddcutil-devel \
     && dnf clean all
 
 WORKDIR /build
@@ -64,6 +73,8 @@ ENTRYPOINT ["/bin/bash", "-c", "\
         -DCMAKE_BUILD_TYPE=Debug \
         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
         -DBUILD_TESTING=ON \
+        -DBUILD_PHOSPHOR_SHELL=ON \
+        -DBUILD_TOOLS=ON \
     && cmake --build /build --parallel $(nproc) \
     && export XDG_RUNTIME_DIR=\"$(mktemp -d)\" \
     && \"$@\"", "--"]
