@@ -20,7 +20,9 @@
 #include <PhosphorWayland/LayerShellPluginLoader.h>
 #include <PhosphorWayland/LayerSurface.h>
 
+#include <QCommandLineOption>
 #include <QCommandLineParser>
+#include <QCoreApplication>
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QFile>
@@ -48,12 +50,46 @@ using namespace PlasmaZones;
 
 namespace {
 
-// The KGlobalAccel component key, and the name printed for --version. Named
-// once because two sites need it and they must not drift: the early --version
-// path at the top of main() runs before QGuiApplication exists, while
-// app.setApplicationName() feeds QCommandLineParser's own showVersion() for
-// every other invocation. Must match plasmazonesd.desktop.
+// The KGlobalAccel component key, and the name the parser prints for --version
+// and in the --help usage line. Named once because two sites set it and they
+// must not drift: the early help/version path at the top of main() and normal
+// startup below. Must match plasmazonesd.desktop.
 constexpr const char* kApplicationName = "plasmazonesd";
+
+// The options this daemon accepts, handed back so callers can query them.
+// Held by value because QCommandLineParser::isSet/value take the option object.
+struct DaemonOptions
+{
+    QCommandLineOption replace;
+    QCommandLineOption debug;
+    QCommandLineOption logFile;
+};
+
+// THE option table — the only one. Called twice: once from the early
+// help/version path at the top of main(), which runs before QGuiApplication
+// exists, and once during normal startup. One function rather than two lists
+// is the whole point: a flag added here appears in --help and is accepted by
+// the daemon in the same edit, and --help cannot come to describe a set of
+// options the daemon does not have.
+DaemonOptions configureParser(QCommandLineParser& parser)
+{
+    parser.setApplicationDescription(PhosphorI18n::tr("Window snapping, tiling and scrolling"));
+    parser.addHelpOption();
+    parser.addVersionOption();
+
+    DaemonOptions options{
+        QCommandLineOption(QStringList{QStringLiteral("r"), QStringLiteral("replace")},
+                           PhosphorI18n::tr("Replace existing daemon instance")),
+        QCommandLineOption(QStringList{QStringLiteral("d"), QStringLiteral("debug")},
+                           PhosphorI18n::tr("Enable debug logging for all PlasmaZones categories")),
+        QCommandLineOption(QStringList{QStringLiteral("l"), QStringLiteral("log-file")},
+                           PhosphorI18n::tr("Write log output to <file> instead of stderr"), PhosphorI18n::tr("file")),
+    };
+    parser.addOption(options.replace);
+    parser.addOption(options.debug);
+    parser.addOption(options.logFile);
+    return options;
+}
 
 // Self-pipe for signal delivery. The handler may only touch async-signal-safe
 // calls, so it writes one byte here and returns; the real shutdown runs on the
@@ -81,24 +117,50 @@ extern "C" void signalHandler(int signum)
 
 int main(int argc, char* argv[])
 {
-    // --version is answered HERE, before everything, because everything below
-    // assumes a live session. The Wayland guard exits cleanly on a machine with
-    // no compositor, and QCommandLineParser only reaches --version at the
-    // bottom of this function, after a QGuiApplication whose constructor is the
-    // very thing that guard exists to avoid calling headless. So without this,
-    // asking the binary what it is from a package build, a container or a bug
-    // report printed nothing on stdout and exited 0.
+    // --help and --version are answered HERE, before everything else, because
+    // everything below assumes a live session: the Wayland guard exits cleanly
+    // on a machine with no compositor, and the real parser is not reached until
+    // the bottom of this function, behind a QGuiApplication whose constructor
+    // is the very thing that guard exists to avoid calling headless. Without
+    // this, asking the binary what it is — from a package build, a container or
+    // a bug report — printed nothing on stdout and exited 0.
     //
-    // Answered by hand rather than through the parser, and deliberately kept to
-    // the version alone: reproducing the --help option table here would
-    // duplicate the real one twenty lines down and drift from it. --help still
-    // needs a session. The format matches QCommandLineParser::showVersion()
-    // ("<name> <version>") so a headless --version and a session --version
-    // cannot disagree. `-v` is included because addVersionOption() binds it.
-    for (int i = 1; i < argc; ++i) {
-        if (std::strcmp(argv[i], "--version") == 0 || std::strcmp(argv[i], "-v") == 0) {
-            std::printf("%s %s\n", kApplicationName, PlasmaZones::VERSION_STRING.toLocal8Bit().constData());
-            return 0;
+    // A QCoreApplication rather than a hand-rolled argv scan. It needs no
+    // display, and it is what makes this authentic rather than a reimplementation:
+    //   - configureParser() below is the SAME function normal startup calls, so
+    //     --help lists exactly the flags the daemon accepts and cannot drift
+    //     from them.
+    //   - the parser knows which options take values, so `--log-file --version`
+    //     is correctly read as a log file named "--version" and falls through to
+    //     start the daemon, as it always did. A scan matching tokens anywhere in
+    //     argv gets that wrong.
+    //   - loadTranslations() runs here too, so headless --help is translated
+    //     identically to in-session --help.
+    // Without a QCoreApplication the usage line reads "<executable_name>"
+    // instead of the program name, so the instance is required, not incidental.
+    //
+    // parse() rather than process(): process() treats an unknown option as a
+    // fatal error, which would move ALL argument validation ahead of the
+    // Wayland guard and change what a bad flag does on a headless box. parse()
+    // only populates, leaving that behaviour where it was.
+    //
+    // Scoped so the QCoreApplication is destroyed before the QGuiApplication
+    // below is constructed. showHelp()/showVersion() exit, so the fall-through
+    // path is the one where neither was asked for.
+    {
+        QCoreApplication probe(argc, argv);
+        QCoreApplication::setApplicationName(QString::fromLatin1(kApplicationName));
+        QCoreApplication::setApplicationVersion(PlasmaZones::VERSION_STRING);
+        PlasmaZones::loadTranslations(&probe);
+
+        QCommandLineParser parser;
+        configureParser(parser);
+        parser.parse(probe.arguments());
+        if (parser.isSet(QStringLiteral("help"))) {
+            parser.showHelp(0);
+        }
+        if (parser.isSet(QStringLiteral("version"))) {
+            parser.showVersion();
         }
     }
 
@@ -274,25 +336,10 @@ int main(int argc, char* argv[])
     app.setDesktopFileName(QStringLiteral("org.plasmazones.daemon"));
     app.setWindowIcon(QIcon::fromTheme(QStringLiteral("plasmazones")));
 
-    // Command line options
+    // Command line options. Same table the early help/version path at the top
+    // of main() registers — see configureParser().
     QCommandLineParser parser;
-    parser.setApplicationDescription(PhosphorI18n::tr("Window snapping, tiling and scrolling"));
-    parser.addHelpOption();
-    parser.addVersionOption();
-
-    QCommandLineOption replaceOption(QStringList{QStringLiteral("r"), QStringLiteral("replace")},
-                                     PhosphorI18n::tr("Replace existing daemon instance"));
-    parser.addOption(replaceOption);
-
-    QCommandLineOption debugOption(QStringList{QStringLiteral("d"), QStringLiteral("debug")},
-                                   PhosphorI18n::tr("Enable debug logging for all PlasmaZones categories"));
-    parser.addOption(debugOption);
-
-    QCommandLineOption logFileOption(QStringList{QStringLiteral("l"), QStringLiteral("log-file")},
-                                     PhosphorI18n::tr("Write log output to <file> instead of stderr"),
-                                     PhosphorI18n::tr("file"));
-    parser.addOption(logFileOption);
-
+    const DaemonOptions options = configureParser(parser);
     parser.process(app);
 
     // --log-file: redirect Qt message output to a file.
@@ -302,8 +349,8 @@ int main(int argc, char* argv[])
     // shutdown messages.
     static FILE* logFile = nullptr;
     static QMutex* logMutex = nullptr;
-    if (parser.isSet(logFileOption)) {
-        const QByteArray pathLocal = parser.value(logFileOption).toLocal8Bit();
+    if (parser.isSet(options.logFile)) {
+        const QByteArray pathLocal = parser.value(options.logFile).toLocal8Bit();
         logFile = fopen(pathLocal.constData(), "a");
         if (logFile) {
             logMutex = new QMutex;
@@ -316,11 +363,11 @@ int main(int argc, char* argv[])
             fprintf(stderr, "plasmazonesd: logging to %s\n", pathLocal.constData());
         } else {
             qCWarning(PlasmaZones::lcDaemon)
-                << "Failed to open log file:" << parser.value(logFileOption) << "-" << strerror(errno);
+                << "Failed to open log file:" << parser.value(options.logFile) << "-" << strerror(errno);
         }
     }
 
-    if (parser.isSet(debugOption)) {
+    if (parser.isSet(options.debug)) {
         QLoggingCategory::setFilterRules(QStringLiteral("plasmazones.*=true"));
     }
 
@@ -342,7 +389,7 @@ int main(int argc, char* argv[])
     }
 
     if (!bus.registerService(serviceName)) {
-        if (parser.isSet(replaceOption)) {
+        if (parser.isSet(options.replace)) {
             // Ask the incumbent to quit, then wait for the name to come free.
             //
             // The object path and interface must be the ones the daemon actually
