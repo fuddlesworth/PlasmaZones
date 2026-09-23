@@ -3,6 +3,39 @@
 
 # 04: Implementation Record
 
+## Shortcut reference (mockups-v3)
+
+Native port: `dae0e6635`.
+
+The approved reference now runs as a bounded native sheet with the mode sidebar,
+field guides, search, grouped keycaps, expandable families and action details,
+assigned-only filtering, and explicit service/loading/empty states. Layout,
+palette, material, surface effects and live text scaling follow Appearance.
+Tab stays inside the modal; focused rows scroll into view; Escape clears a
+search before closing. Browsing another mode never changes window placement.
+
+`ShortcutReferenceModel` organizes effective daemon bindings, preserves every
+alternative, compresses only uniform families, and searches key aliases without
+combining keys from separate alternatives. `ShortcutCatalog` handles retries,
+owner replacement and stale replies. Layout support comes from the live engine
+capability, including updates when settings change. Externally managed shell
+actions remain explicitly unassigned.
+
+The daemon's registered `toggle_cheatsheet` routes to the shell's
+`cheatsheet.toggleForScreen` IPC action. Requests retain their target output and
+serialize rapid toggles. An absent or older shell keeps the daemon overlay as
+fallback; an ambiguous reply never opens a second overlay. The shell's normal
+show/toggle/hide IPC commands use the same reference.
+
+Validation: shell-ON and shell-OFF non-unity builds pass without warnings.
+Ten focused CTest targets cover the model, catalog, IPC bridge, capabilities,
+screen targeting, QML interactions and shell composition. Native nested-KWin
+captures cover all three modes, custom chords, Phosphor/Paper/Ember and a
+640×480 viewport with 115% text. The real registered daemon action opens and
+closes the native reference, and stopping the shell restores the old overlay.
+The reusable `scripts/nested-shell/shortcuts-preview.sh` fixture uses private
+session/system buses and config paths for repeatable rendering checks.
+
 ## Quick settings details (mockups-v3)
 
 The approved Wi-Fi, Bluetooth and Output/Input/Apps studies now run as native

@@ -9,7 +9,7 @@ Stage, compact quick settings, calendar, visualizers and scrolling with
 four and ten windows.
 
 The [shortcut-reference study](mockups-v3/index.html#navigator/shortcuts) is
-ready for design review. Tiling, Scrolling and Snapping each have a visual
+implemented by the native shell. Tiling, Scrolling and Snapping each have a visual
 guide, with searchable actions, expandable shortcut families, alternative
 bindings and an assigned-only filter. General and Shell sections separate
 registered actions from compositor-configured commands. The preview includes
@@ -19,12 +19,18 @@ bindings. Captures: [Phosphor](mockups-v3/shortcuts.png),
 [Scrolling](mockups-v3/shortcuts-scrolling.png),
 [Paper](mockups-v3/shortcuts-paper.png), and [Ember](mockups-v3/shortcuts-ember.png).
 
-The native port is pending design approval. It should consume effective
-`ShortcutCatalog` bindings and every alternative, preserve layout capability
-filtering, and connect the registered `toggle_cheatsheet` action to the new
-surface. That action currently opens the daemon's overlay, while the shell's
-`cheatsheet.toggle` IPC command opens a separate reference. Shell action
-bindings must come from configuration instead of assuming suggested defaults.
+The native reference consumes effective `ShortcutCatalog` bindings and every
+alternative, with live layout capability filtering. The registered
+`toggle_cheatsheet` action opens this surface on the cursor's display, as does
+the shell's `cheatsheet.toggle` IPC command. The daemon overlay remains available
+when the shell is absent. Shell actions whose bindings are managed externally
+are marked “Set in compositor” without inventing defaults.
+
+For isolated native visual checks, start a nested compositor and run
+`scripts/nested-shell/shortcuts-preview.sh run` with the same `PZ_NESTED_SESSION`.
+Its `preview` IPC target controls mode, custom/unassigned bindings, service
+states, palette, viewport size and text scaling. Stop the foreground preview
+with Ctrl+C before restarting it. See the implementation record for validation.
 
 The new **quick-settings detail studies** are ready for design review:
 [Wi-Fi](mockups-v3/index.html#navigator/controls/wifi),
