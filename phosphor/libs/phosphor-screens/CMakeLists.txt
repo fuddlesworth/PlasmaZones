@@ -7,7 +7,7 @@
 # or QtDBus surface they never use:
 #
 #   PhosphorScreens::Core     — pure POD/serialiser surface: ScreenInfo,
-#                               ScreenIdentity, Swapper, QtScreenProvider,
+#                               ScreenIdentity, Swapper, QtPhysicalScreenSource,
 #                               VirtualScreen, and the IConfigStore /
 #                               IPanelSource interfaces. Qt6::Core/Gui only —
 #                               NO Wayland. POD-only consumers (zones, overlay)
@@ -140,7 +140,7 @@ set(phosphorscreenscore_public_HDRS
     include/PhosphorScreens/IPhysicalScreenSource.h
     include/PhosphorScreens/NoOpPanelSource.h
     include/PhosphorScreens/PhysicalScreen.h
-    include/PhosphorScreens/QtScreenProvider.h
+    include/PhosphorScreens/QtPhysicalScreenSource.h
     include/PhosphorScreens/ScreenIdentity.h
     include/PhosphorScreens/ScreenInfo.h
     include/PhosphorScreens/Swapper.h
@@ -150,7 +150,7 @@ set(phosphorscreenscore_public_HDRS
 add_library(PhosphorScreensCore SHARED
     ${phosphorscreenscore_public_HDRS}
     src/screenslogging.h
-    src/qtscreenprovider.cpp
+    src/qtphysicalscreensource.cpp
     src/screenidentity.cpp
     src/screeninfo.cpp
     src/screenslogging.cpp
@@ -228,7 +228,7 @@ target_include_directories(PhosphorScreensRuntime
 
 target_link_libraries(PhosphorScreensRuntime
     PUBLIC
-        # Manager.h surfaces QtScreenProvider / IConfigStore / VirtualScreen
+        # Manager.h surfaces QtPhysicalScreenSource / IConfigStore / VirtualScreen
         # (all Core POD types), so Core is a PUBLIC dependency.
         PhosphorScreens::Core
         Qt6::Core

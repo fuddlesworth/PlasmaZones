@@ -43,7 +43,7 @@
 #include "core/utils/utils.h"
 #include "helpers/IsolatedConfigGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
-#include "FakeScreenProvider.h"
+#include "FakePhysicalScreenSource.h"
 
 using namespace PlasmaZones;
 using PhosphorEngine::ZoneAssignmentEntry;
@@ -440,11 +440,11 @@ private Q_SLOTS:
         // DP-2's frame is the positive control: a resolvable id still answers a
         // real rect on the output it names, so the refusal below is the empty /
         // unknown id being rejected and not the whole path being dead.
-        PhosphorScreens::FakeScreenProvider fake;
+        PhosphorScreens::FakePhysicalScreenSource fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
         fake.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080));
         PhosphorScreens::ScreenManager screenMgr(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         screenMgr.start();
 
         // The hazard: an empty id is NOT unresolvable to the screen manager, it

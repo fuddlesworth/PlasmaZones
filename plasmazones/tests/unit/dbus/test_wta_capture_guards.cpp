@@ -8,7 +8,7 @@
  *        no-engine contract (frozen per-mode snap slot preserved).
  *
  * Unlike test_wta_convenience's shared fixture, these tests wire a REAL
- * ScreenManager (FakeScreenProvider): the untracked-window regression only
+ * ScreenManager (FakePhysicalScreenSource): the untracked-window regression only
  * reproduces when the orchestrator can resolve a screen for the live frame —
  * with a null ScreenManager the fabricated slot has no geometry and
  * hasRestorableContent() drops it before it can clobber the record, making the
@@ -34,7 +34,7 @@
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
-#include "FakeScreenProvider.h"
+#include "FakePhysicalScreenSource.h"
 #include "dbus/tilingadaptor/tilingadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "helpers/AutotileTestHelpers.h"
@@ -186,10 +186,10 @@ private Q_SLOTS:
         // AUTOTILE slot and passes nullptr for scroll, so deleting the scroll
         // arm failed nothing. This is the same scenario as
         // testRefusesStillTiledFrameAsFloatBack with the stub in the scroll slot.
-        PhosphorScreens::FakeScreenProvider fake;
+        PhosphorScreens::FakePhysicalScreenSource fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3072, 1728), QStringLiteral("DP-1"));
         PhosphorScreens::ScreenManager screenMgr(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         screenMgr.start();
 
         // Declared BEFORE `parent` (and therefore before wta) so the stub
@@ -244,10 +244,10 @@ private Q_SLOTS:
 
     void testRefusesStillTiledFrameAsFloatBack()
     {
-        PhosphorScreens::FakeScreenProvider fake;
+        PhosphorScreens::FakePhysicalScreenSource fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3072, 1728), QStringLiteral("DP-1"));
         PhosphorScreens::ScreenManager screenMgr(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         screenMgr.start();
 
         // Declared BEFORE parent (and therefore before wta) so the stub
@@ -320,10 +320,10 @@ private Q_SLOTS:
     // leave the record untouched instead.
     void testUntrackedWindowPreservesFrozenSnapSlot()
     {
-        PhosphorScreens::FakeScreenProvider fake;
+        PhosphorScreens::FakePhysicalScreenSource fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3072, 1728), QStringLiteral("DP-1"));
         PhosphorScreens::ScreenManager screenMgr(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         screenMgr.start();
 
         // Engine before parent — see testMinimizedCapturePreservesPreMinimizePlacement.
@@ -377,10 +377,10 @@ private Q_SLOTS:
     // compositor reports the window hidden.
     void testMinimizedCapturePreservesPreMinimizePlacement()
     {
-        PhosphorScreens::FakeScreenProvider fake;
+        PhosphorScreens::FakePhysicalScreenSource fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3072, 1728), QStringLiteral("DP-1"));
         PhosphorScreens::ScreenManager screenMgr(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         screenMgr.start();
 
         PhosphorEngine::WindowRegistry registry;
@@ -463,10 +463,10 @@ private Q_SLOTS:
         // engine, so the persisted slot carries the LIVE order — obtainable
         // only pre-untrack (the engine's capturePlacement answers nullopt the
         // moment it drops the window).
-        PhosphorScreens::FakeScreenProvider fake;
+        PhosphorScreens::FakePhysicalScreenSource fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3072, 1728), QStringLiteral("DP-1"));
         PhosphorScreens::ScreenManager screenMgr(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         screenMgr.start();
 
         QObject parent;
@@ -507,10 +507,10 @@ private Q_SLOTS:
         // slot — under the old snap-hardcoded key (or the engines.isEmpty()
         // gate with a foreign slot present) the reopening tiling engine saw
         // no verdict and re-tiled a window that was floating pre-minimize.
-        PhosphorScreens::FakeScreenProvider fake;
+        PhosphorScreens::FakePhysicalScreenSource fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3072, 1728), QStringLiteral("DP-1"));
         PhosphorScreens::ScreenManager screenMgr(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         screenMgr.start();
 
         PhosphorEngine::WindowRegistry registry;
@@ -565,10 +565,10 @@ private Q_SLOTS:
         // A minimized window closing under a MUTATED appId prefix must re-key its
         // durable record to the current windowId instead of stranding it under
         // the old prefix (where a reopen under the new class could never find it).
-        PhosphorScreens::FakeScreenProvider fake;
+        PhosphorScreens::FakePhysicalScreenSource fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3072, 1728), QStringLiteral("DP-1"));
         PhosphorScreens::ScreenManager screenMgr(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         screenMgr.start();
 
         PhosphorEngine::WindowRegistry registry;
@@ -624,10 +624,10 @@ private Q_SLOTS:
     // from the minimize branch, not from some always-on path.
     void testNotMinimizedCloseLeavesRecordUntouched()
     {
-        PhosphorScreens::FakeScreenProvider fake;
+        PhosphorScreens::FakePhysicalScreenSource fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3072, 1728), QStringLiteral("DP-1"));
         PhosphorScreens::ScreenManager screenMgr(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         screenMgr.start();
 
         PhosphorEngine::WindowRegistry registry;
@@ -683,10 +683,10 @@ private Q_SLOTS:
     // close frame OFF the tile rect records normally.
     void testClosePathRefusesStillTiledFrame()
     {
-        PhosphorScreens::FakeScreenProvider fake;
+        PhosphorScreens::FakePhysicalScreenSource fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3072, 1728), QStringLiteral("DP-1"));
         PhosphorScreens::ScreenManager screenMgr(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         screenMgr.start();
 
         // Same structural stub-before-parent ordering as the primary-path test.
@@ -745,11 +745,11 @@ private Q_SLOTS:
     // rect and recorded the OUTPUT as its float-back.
     void testCloseDuringFullscreenHoldKeepsFreeGeometry()
     {
-        PhosphorScreens::FakeScreenProvider fake;
+        PhosphorScreens::FakePhysicalScreenSource fake;
         const QRect output(0, 0, 3072, 1728);
         fake.addScreen(QStringLiteral("DP-1"), output, QStringLiteral("DP-1"));
         PhosphorScreens::ScreenManager screenMgr(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         screenMgr.start();
 
         QObject owner;

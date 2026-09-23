@@ -22,11 +22,11 @@ namespace PhosphorScreens {
  * needs no explicit start/stop — matching QGuiApplication's own always-on
  * screen tracking. Construct one and inject it via ScreenManagerConfig.
  */
-class PHOSPHORSCREENSCORE_EXPORT QtScreenProvider : public IPhysicalScreenSource
+class PHOSPHORSCREENSCORE_EXPORT QtPhysicalScreenSource : public IPhysicalScreenSource
 {
     Q_OBJECT
 public:
-    explicit QtScreenProvider(QObject* parent = nullptr);
+    explicit QtPhysicalScreenSource(QObject* parent = nullptr);
 
     QVector<PhysicalScreen> screens() const override;
     PhysicalScreen primaryScreen() const override;

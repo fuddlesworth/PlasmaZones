@@ -1,21 +1,21 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "FakeScreenProvider.h"
+#include "FakePhysicalScreenSource.h"
 
 namespace PhosphorScreens {
 
-FakeScreenProvider::FakeScreenProvider(QObject* parent)
+FakePhysicalScreenSource::FakePhysicalScreenSource(QObject* parent)
     : IPhysicalScreenSource(parent)
 {
 }
 
-QVector<PhysicalScreen> FakeScreenProvider::screens() const
+QVector<PhysicalScreen> FakePhysicalScreenSource::screens() const
 {
     return m_screens;
 }
 
-PhysicalScreen FakeScreenProvider::primaryScreen() const
+PhysicalScreen FakePhysicalScreenSource::primaryScreen() const
 {
     for (const auto& screen : m_screens) {
         if (screen.name == m_primaryName) {
@@ -25,7 +25,7 @@ PhysicalScreen FakeScreenProvider::primaryScreen() const
     return m_screens.isEmpty() ? PhysicalScreen{} : m_screens.first();
 }
 
-void FakeScreenProvider::addScreen(const QString& name, const QRect& geometry, const QString& identifier)
+void FakePhysicalScreenSource::addScreen(const QString& name, const QRect& geometry, const QString& identifier)
 {
     // Connector names are unique among connected outputs — PhysicalScreen
     // identity keys on `name`, and the manager's name-keyed caches assume
@@ -34,7 +34,7 @@ void FakeScreenProvider::addScreen(const QString& name, const QRect& geometry, c
     // against an impossible topology.
     for (const auto& existing : m_screens) {
         if (existing.name == name) {
-            qWarning("FakeScreenProvider::addScreen: connector '%s' already present — ignoring duplicate",
+            qWarning("FakePhysicalScreenSource::addScreen: connector '%s' already present — ignoring duplicate",
                      qPrintable(name));
             return;
         }
@@ -53,7 +53,7 @@ void FakeScreenProvider::addScreen(const QString& name, const QRect& geometry, c
     Q_EMIT screenAdded(screen);
 }
 
-void FakeScreenProvider::removeScreen(const QString& name)
+void FakePhysicalScreenSource::removeScreen(const QString& name)
 {
     for (int i = 0; i < m_screens.size(); ++i) {
         if (m_screens[i].name == name) {
@@ -67,15 +67,15 @@ void FakeScreenProvider::removeScreen(const QString& name)
     }
     // Removing a connector that was never added is a mis-sequenced test —
     // warn rather than no-op silently, matching addScreen's fail-loud stance.
-    qWarning("FakeScreenProvider::removeScreen: connector '%s' not present — nothing removed", qPrintable(name));
+    qWarning("FakePhysicalScreenSource::removeScreen: connector '%s' not present — nothing removed", qPrintable(name));
 }
 
-void FakeScreenProvider::moveScreen(const QString& name, const QRect& newGeometry)
+void FakePhysicalScreenSource::moveScreen(const QString& name, const QRect& newGeometry)
 {
     for (auto& screen : m_screens) {
         if (screen.name == name) {
             if (screen.geometry == newGeometry) {
-                // No geometry delta — skip the emit. QtScreenProvider relays
+                // No geometry delta — skip the emit. QtPhysicalScreenSource relays
                 // QScreen::geometryChanged, which Qt does not fire when
                 // geometry() is unchanged; the fake mirrors that for the
                 // geometry-move case it models. (It does not model the
@@ -89,10 +89,10 @@ void FakeScreenProvider::moveScreen(const QString& name, const QRect& newGeometr
     }
     // Moving a connector that was never added is a mis-sequenced test —
     // warn rather than no-op silently, matching removeScreen / setPrimary.
-    qWarning("FakeScreenProvider::moveScreen: connector '%s' not present — nothing moved", qPrintable(name));
+    qWarning("FakePhysicalScreenSource::moveScreen: connector '%s' not present — nothing moved", qPrintable(name));
 }
 
-void FakeScreenProvider::setPrimary(const QString& name)
+void FakePhysicalScreenSource::setPrimary(const QString& name)
 {
     for (const auto& screen : m_screens) {
         if (screen.name == name) {
@@ -103,7 +103,7 @@ void FakeScreenProvider::setPrimary(const QString& name)
     // A primary that is not among the connected outputs cannot exist —
     // reject it so primaryScreen() does not silently fall through to
     // m_screens.first() and mask a typo'd connector name in a test.
-    qWarning("FakeScreenProvider::setPrimary: connector '%s' not present — primary unchanged", qPrintable(name));
+    qWarning("FakePhysicalScreenSource::setPrimary: connector '%s' not present — primary unchanged", qPrintable(name));
 }
 
 } // namespace PhosphorScreens

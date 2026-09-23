@@ -3,12 +3,12 @@
 //
 // Regression tests for ScreenManager's screen add / remove / move / resize
 // -> available-geometry recompute sequence. Driven through a
-// FakeScreenProvider so the topology changes that QScreen cannot stage in a
+// FakePhysicalScreenSource so the topology changes that QScreen cannot stage in a
 // unit test (the bugs behind discussions #461 / #465 escaped CI precisely
 // because QScreen is uninstantiable by test code) become deterministically
 // reproducible.
 
-#include "FakeScreenProvider.h"
+#include "FakePhysicalScreenSource.h"
 
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/PhysicalScreen.h>
@@ -16,7 +16,7 @@
 #include <QSignalSpy>
 #include <QTest>
 
-using PhosphorScreens::FakeScreenProvider;
+using PhosphorScreens::FakePhysicalScreenSource;
 using PhosphorScreens::PhysicalScreen;
 using PhosphorScreens::ScreenManager;
 using PhosphorScreens::ScreenManagerConfig;
@@ -34,14 +34,14 @@ private Q_SLOTS:
         qRegisterMetaType<PhysicalScreen>();
     }
 
-    // The manager's tracked set mirrors the provider — both the screens
+    // The manager's tracked set mirrors the source — both the screens
     // present before start() and hot-plug add/remove afterward.
-    void testTracksProviderScreenSet()
+    void testTracksSourceScreenSet()
     {
-        FakeScreenProvider fake;
+        FakePhysicalScreenSource fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
 
-        ScreenManager mgr(ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        ScreenManager mgr(ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         mgr.start();
         QCOMPARE(mgr.screens().size(), 1);
         QCOMPARE(mgr.screens().first().name, QStringLiteral("DP-1"));
@@ -67,10 +67,10 @@ private Q_SLOTS:
     // actualAvailableGeometry kept returning the stale origin rect.
     void testMoveRecomputesAvailableGeometry()
     {
-        FakeScreenProvider fake;
+        FakePhysicalScreenSource fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
 
-        ScreenManager mgr(ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        ScreenManager mgr(ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         mgr.start();
 
         QSignalSpy geomSpy(&mgr, &ScreenManager::screenGeometryChanged);
@@ -96,10 +96,10 @@ private Q_SLOTS:
     // A resize (origin fixed, extent changed) runs the same recompute path.
     void testResizeRecomputesAvailableGeometry()
     {
-        FakeScreenProvider fake;
+        FakePhysicalScreenSource fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
 
-        ScreenManager mgr(ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        ScreenManager mgr(ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         mgr.start();
 
         QSignalSpy availSpy(&mgr, &ScreenManager::availableGeometryChanged);
@@ -113,7 +113,7 @@ private Q_SLOTS:
         QCOMPARE(mgr.actualAvailableGeometry(mgr.physicalScreenFor(QStringLiteral("DP-1"))), resized);
 
         // A no-op resize (identical geometry) is suppressed by
-        // FakeScreenProvider — mirroring Qt, which does not fire
+        // FakePhysicalScreenSource — mirroring Qt, which does not fire
         // QScreen::geometryChanged when geometry() is unchanged — so it
         // triggers no recompute and no further availableGeometryChanged.
         fake.moveScreen(QStringLiteral("DP-1"), resized);
@@ -125,10 +125,10 @@ private Q_SLOTS:
     // The settle must propagate to the available-geometry cache.
     void testReAddAtTransientOriginThenSettle()
     {
-        FakeScreenProvider fake;
+        FakePhysicalScreenSource fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
 
-        ScreenManager mgr(ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        ScreenManager mgr(ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         mgr.start();
 
         // Output drops on DPMS-off, then re-appears at a transient origin.
@@ -162,10 +162,10 @@ private Q_SLOTS:
     // to the bottom edge — the compositor source pins the correct top inset.
     void testCompositorGeometryOverridesHeuristic()
     {
-        FakeScreenProvider fake;
+        FakePhysicalScreenSource fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
 
-        ScreenManager mgr(ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        ScreenManager mgr(ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         mgr.start();
 
         const PhysicalScreen screen = mgr.physicalScreenFor(QStringLiteral("DP-1"));
@@ -198,10 +198,10 @@ private Q_SLOTS:
     // relative-geometry math.
     void testCompositorGeometryClampedToScreen()
     {
-        FakeScreenProvider fake;
+        FakePhysicalScreenSource fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
 
-        ScreenManager mgr(ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        ScreenManager mgr(ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         mgr.start();
 
         // 32px top inset but height still the full 1080 — bottom edge spills
@@ -215,10 +215,10 @@ private Q_SLOTS:
     // rect for the old output.
     void testCompositorGeometryDroppedOnScreenRemoval()
     {
-        FakeScreenProvider fake;
+        FakePhysicalScreenSource fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
 
-        ScreenManager mgr(ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        ScreenManager mgr(ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         mgr.start();
 
         mgr.setCompositorAvailableGeometry(QStringLiteral("DP-1"), QRect(0, 32, 1920, 1048));

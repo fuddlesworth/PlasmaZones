@@ -31,7 +31,7 @@
 #include <PhosphorScreens/VirtualScreen.h>
 #include <QJsonObject>
 
-#include "FakeScreenProvider.h"
+#include "FakePhysicalScreenSource.h"
 #include "helpers/ScriptedAlgoTestSetup.h"
 #include "helpers/VirtualScreenTestHelpers.h"
 
@@ -114,15 +114,15 @@ private Q_SLOTS:
     void tilingStateForScreen_acceptsValidVirtualScreenId_withScreenManager()
     {
         // The complement of the rejection above: a virtual screen ID whose config
-        // IS set must be accepted. A FakeScreenProvider gives the physical screen
+        // IS set must be accepted. A FakePhysicalScreenSource gives the physical screen
         // real geometry without a QScreen, so the manager's virtual geometry cache
         // resolves each half to a valid rect and tilingStateForScreen's
         // screenGeometry() validation passes.
         const QString physId = QStringLiteral("Dell:U2722D:115107");
-        PhosphorScreens::FakeScreenProvider provider;
+        PhosphorScreens::FakePhysicalScreenSource provider;
         provider.addScreen(physId, QRect(0, 0, 1920, 1080));
         PhosphorScreens::ScreenManager screenMgr(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &provider, .useGeometrySensors = false});
         screenMgr.start();
         PhosphorScreens::VirtualScreenConfig config = makeSplitConfig(physId);
         QVERIFY(screenMgr.setVirtualScreenConfig(physId, config));
@@ -174,10 +174,10 @@ private Q_SLOTS:
     void virtualScreensChanged_dropsStashedScriptStateForOrphanedIds()
     {
         const QString physId = QStringLiteral("Dell:U2722D:115107");
-        PhosphorScreens::FakeScreenProvider provider;
+        PhosphorScreens::FakePhysicalScreenSource provider;
         provider.addScreen(physId, QRect(0, 0, 1920, 1080));
         PhosphorScreens::ScreenManager screenMgr(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &provider, .useGeometrySensors = false});
         screenMgr.start();
         QVERIFY(screenMgr.setVirtualScreenConfig(physId, makeSplitConfig(physId)));
 

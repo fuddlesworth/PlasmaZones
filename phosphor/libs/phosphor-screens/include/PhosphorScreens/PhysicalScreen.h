@@ -20,13 +20,13 @@ namespace PhosphorScreens {
  * pointers so the screen add / remove / move / resize sequence can be
  * driven by a fake in tests (QScreen cannot be instantiated by non-
  * platform code). The production IPhysicalScreenSource wraps real QScreens and
- * fills @ref qscreen; a test provider synthesizes screens with arbitrary
+ * fills @ref qscreen; a test source synthesizes screens with arbitrary
  * geometry and leaves @ref qscreen null.
  *
  * This is a value snapshot, not a live handle. IPhysicalScreenSource emits a
  * fresh PhysicalScreen with every screenGeometryChanged, and ScreenManager
  * replaces its stored copy — so a stored PhysicalScreen is current as long
- * as the manager keeps up with the provider's signals, which it does.
+ * as the manager keeps up with the source's signals, which it does.
  *
  * Identity is the connector @ref name: it is unique among connected
  * outputs and stable for the life of a connection (geometry and even the

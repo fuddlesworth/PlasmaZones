@@ -32,7 +32,7 @@
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScreens/Manager.h>
-#include "FakeScreenProvider.h"
+#include "FakePhysicalScreenSource.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
@@ -574,13 +574,13 @@ private Q_SLOTS:
         // through the key instead of through a fallback.
         //
         // Needs REAL output geometry, so this builds its own service over a
-        // FakeScreenProvider rather than using m_service (constructed with a
+        // FakePhysicalScreenSource rather than using m_service (constructed with a
         // null ScreenManager, under which the guard fails open by design).
-        PhosphorScreens::FakeScreenProvider provider;
+        PhosphorScreens::FakePhysicalScreenSource provider;
         provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
         provider.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080));
         PhosphorScreens::ScreenManager manager(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &provider, .useGeometrySensors = false});
         manager.start();
 
         auto svc = std::make_unique<PhosphorPlacement::WindowTrackingService>(m_layoutManager, &manager, nullptr);

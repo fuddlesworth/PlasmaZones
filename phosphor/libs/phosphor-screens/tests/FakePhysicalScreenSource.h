@@ -15,17 +15,17 @@ namespace PhosphorScreens {
  *
  * QScreen cannot be constructed by non-platform code, so the screen
  * add / remove / move / resize sequence is otherwise undrivable in a unit
- * test. FakeScreenProvider lets a test build an output topology and then
+ * test. FakePhysicalScreenSource lets a test build an output topology and then
  * fire the lifecycle signals on demand — `moveScreen` in particular
  * reproduces the transient-origin DPMS-wake scenario behind discussion
  * #465. Synthetic screens carry no QScreen (`PhysicalScreen::qscreen` is
  * null).
  */
-class FakeScreenProvider : public IPhysicalScreenSource
+class FakePhysicalScreenSource : public IPhysicalScreenSource
 {
     Q_OBJECT
 public:
-    explicit FakeScreenProvider(QObject* parent = nullptr);
+    explicit FakePhysicalScreenSource(QObject* parent = nullptr);
 
     QVector<PhysicalScreen> screens() const override;
     PhysicalScreen primaryScreen() const override;

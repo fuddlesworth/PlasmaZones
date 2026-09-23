@@ -439,16 +439,16 @@ private Q_SLOTS:
         // from the live frame's position, so a floating window's geometry is always
         // captured.
         //
-        // A local WTA wired to a deterministic ScreenManager (FakeScreenProvider) is
+        // A local WTA wired to a deterministic ScreenManager (FakePhysicalScreenSource) is
         // used so the frame → screen resolution is independent of the test QPA
         // (offscreen has no usable screen identifier). The shared fixture's WTA has a
         // null ScreenManager, which is the very gap this exercises.
         const QString screenId = QStringLiteral("DP-9");
         const QRect screenRect(0, 0, 1920, 1080);
-        PhosphorScreens::FakeScreenProvider fake;
+        PhosphorScreens::FakePhysicalScreenSource fake;
         fake.addScreen(screenId, screenRect, screenId); // before the manager so it is in the initial snapshot
         PhosphorScreens::ScreenManager screenMgr(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         screenMgr.start(); // ingest the provider's screens into the tracked snapshot
         QCOMPARE(screenMgr.effectiveScreenAt(QPoint(500, 400)), screenId); // resolution sanity
 
@@ -501,10 +501,10 @@ private Q_SLOTS:
         // the genuine prior free geometry stays intact.
         const QString screenId = QStringLiteral("DP-9");
         const QRect screenRect(0, 0, 3840, 2160);
-        PhosphorScreens::FakeScreenProvider fake;
+        PhosphorScreens::FakePhysicalScreenSource fake;
         fake.addScreen(screenId, screenRect, screenId);
         PhosphorScreens::ScreenManager screenMgr(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         screenMgr.start();
 
         QObject parent;

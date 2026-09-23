@@ -16,7 +16,7 @@
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/TilingState.h>
 
-#include "FakeScreenProvider.h"
+#include "FakePhysicalScreenSource.h"
 
 #include "helpers/AutotileTestHelpers.h"
 #include "helpers/ScriptedAlgoTestSetup.h"
@@ -55,10 +55,10 @@ private Q_SLOTS:
 
     void theater_focusChange_movesSpotlight()
     {
-        PhosphorScreens::FakeScreenProvider provider;
+        PhosphorScreens::FakePhysicalScreenSource provider;
         provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
         PhosphorScreens::ScreenManager manager(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &provider, .useGeometrySensors = false});
         manager.start();
 
         AutotileEngine engine(nullptr, nullptr, &manager, PlasmaZones::TestHelpers::testRegistry());
@@ -100,10 +100,10 @@ private Q_SLOTS:
         // notification must be stashed and replayed once the window is added —
         // otherwise Theater has no focused window and defaults the spotlight to
         // index 0 until the user clicks around.
-        PhosphorScreens::FakeScreenProvider provider;
+        PhosphorScreens::FakePhysicalScreenSource provider;
         provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
         PhosphorScreens::ScreenManager manager(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &provider, .useGeometrySensors = false});
         manager.start();
 
         AutotileEngine engine(nullptr, nullptr, &manager, PlasmaZones::TestHelpers::testRegistry());
@@ -127,10 +127,10 @@ private Q_SLOTS:
 
     void columns_focusChange_doesNotRetile()
     {
-        PhosphorScreens::FakeScreenProvider provider;
+        PhosphorScreens::FakePhysicalScreenSource provider;
         provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
         PhosphorScreens::ScreenManager manager(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &provider, .useGeometrySensors = false});
         manager.start();
 
         AutotileEngine engine(nullptr, nullptr, &manager, PlasmaZones::TestHelpers::testRegistry());
@@ -155,10 +155,10 @@ private Q_SLOTS:
 
     void theater_refocusSameWindow_doesNotRetile()
     {
-        PhosphorScreens::FakeScreenProvider provider;
+        PhosphorScreens::FakePhysicalScreenSource provider;
         provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
         PhosphorScreens::ScreenManager manager(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &provider, .useGeometrySensors = false});
         manager.start();
 
         AutotileEngine engine(nullptr, nullptr, &manager, PlasmaZones::TestHelpers::testRegistry());
@@ -183,10 +183,10 @@ private Q_SLOTS:
 
     void theater_floatingWindowFocus_doesNotRetile()
     {
-        PhosphorScreens::FakeScreenProvider provider;
+        PhosphorScreens::FakePhysicalScreenSource provider;
         provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
         PhosphorScreens::ScreenManager manager(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &provider, .useGeometrySensors = false});
         manager.start();
 
         AutotileEngine engine(nullptr, nullptr, &manager, PlasmaZones::TestHelpers::testRegistry());

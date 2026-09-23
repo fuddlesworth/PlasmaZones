@@ -32,7 +32,7 @@
 #include <QTest>
 
 #include <PhosphorRules/RuleStore.h>
-#include "FakeScreenProvider.h"
+#include "FakePhysicalScreenSource.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/TilingState.h>
@@ -203,11 +203,11 @@ private Q_SLOTS:
         auto store = std::make_unique<PhosphorRules::RuleStore>(ConfigDefaults::rulesFilePath());
         auto registry = std::make_unique<PhosphorZones::LayoutRegistry>(store.get(), ConfigKeys::layoutsSubdir());
 
-        PhosphorScreens::FakeScreenProvider fake;
+        PhosphorScreens::FakePhysicalScreenSource fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080), QStringLiteral("DP-1"));
         fake.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080), QStringLiteral("DP-2"));
         PhosphorScreens::ScreenManager screenMgr(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         screenMgr.start();
 
         PhosphorWorkspaces::VirtualDesktopManager vdm;

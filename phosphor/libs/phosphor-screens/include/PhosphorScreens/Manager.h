@@ -29,8 +29,8 @@ class IPhysicalScreenSource;
  * @brief Construction-time wiring for ScreenManager.
  *
  * All members default-construct to a "nothing fancy" state:
- *   - screenProvider null → ScreenManager builds its own QtScreenProvider
- *     (the live QGuiApplication-backed source). Inject a FakeScreenProvider
+ *   - physicalScreenSource null → ScreenManager builds its own QtPhysicalScreenSource
+ *     (the live QGuiApplication-backed source). Inject a FakePhysicalScreenSource
  *     to drive the add/remove/move/resize sequence from a test.
  *   - panelSource null  → ScreenManager treats panel offsets as zero,
  *     emits @ref ScreenManager::panelGeometryReady on the next event
@@ -39,9 +39,9 @@ class IPhysicalScreenSource;
  *   - useGeometrySensors true → create layer-shell sensor windows for
  *     real-time available-area tracking.
  *
- * Pointers are non-owning EXCEPT a null @ref screenProvider, where the
- * manager owns the QtScreenProvider it constructs. An injected source /
- * store / provider must outlive the manager.
+ * Pointers are non-owning EXCEPT a null @ref physicalScreenSource, where the
+ * manager owns the QtPhysicalScreenSource it constructs. An injected source /
+ * store / source must outlive the manager.
  *
  * Top-level (not nested in ScreenManager) so its in-class member
  * initialisers are reachable at the @ref ScreenManager constructor's
@@ -49,7 +49,7 @@ class IPhysicalScreenSource;
  */
 struct ScreenManagerConfig
 {
-    IPhysicalScreenSource* screenProvider = nullptr;
+    IPhysicalScreenSource* physicalScreenSource = nullptr;
     IPanelSource* panelSource = nullptr;
     IConfigStore* configStore = nullptr;
     bool useGeometrySensors = true;
@@ -84,7 +84,7 @@ public:
     /**
      * @brief Begin tracking screens.
      *
-     * Connects to the screen provider's add/remove/geometry signals,
+     * Connects to the screen source's add/remove/geometry signals,
      * snapshots the current output set, attaches per-screen geometry
      * sensors (when enabled), starts the panel source, and subscribes to
      * the config store's @c changed signal for VS refresh.
@@ -97,7 +97,7 @@ public:
     // ─── Physical screen queries ─────────────────────────────────────────
     //
     // screens() / primaryScreen() / screenByName() reflect the screen
-    // provider's LIVE output set. physicalScreenFor() and the
+    // source's LIVE output set. physicalScreenFor() and the
     // screenGeometry() / screenAvailableGeometry() resolvers below instead
     // read the TRACKED snapshot refreshed on each lifecycle signal — the two
     // agree except transiently, inside a lifecycle slot mid-resync. Prefer
@@ -315,13 +315,13 @@ protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private Q_SLOTS:
-    void onProviderScreenAdded(const PhysicalScreen& screen);
-    void onProviderScreenRemoved(const PhysicalScreen& screen);
-    void onProviderScreenGeometryChanged(const PhysicalScreen& screen);
+    void onSourceScreenAdded(const PhysicalScreen& screen);
+    void onSourceScreenRemoved(const PhysicalScreen& screen);
+    void onSourceScreenGeometryChanged(const PhysicalScreen& screen);
 
 private:
-    // Rebuild m_trackedScreens from the provider's current output set.
-    // The provider is the single source of truth — every lifecycle slot
+    // Rebuild m_trackedScreens from the source's current output set.
+    // The source is authoritative — every lifecycle slot
     // resyncs through this rather than mutating the vector incrementally.
     void syncTrackedScreens();
 
@@ -348,10 +348,10 @@ private:
 
     Config m_cfg;
 
-    // The effective screen provider — either the injected one or a
-    // QtScreenProvider the manager constructed (parented to `this`) when
+    // The effective screen source — either the injected one or a
+    // QtPhysicalScreenSource the manager constructed (parented to `this`) when
     // the config left it null.
-    IPhysicalScreenSource* m_screenProvider = nullptr;
+    IPhysicalScreenSource* m_physicalScreenSource = nullptr;
 
     bool m_running = false;
     bool m_panelGeometryReadyEmitted = false;

@@ -26,7 +26,7 @@
 #include "helpers/IsolatedConfigGuard.h"
 #include <PhosphorScreens/VirtualScreen.h>
 
-#include "FakeScreenProvider.h"
+#include "FakePhysicalScreenSource.h"
 #include "core/resolve/crosssurfaceresolver.h"
 
 #include "helpers/AutotileFakes.h"
@@ -197,7 +197,7 @@ void TestNavigationCrossSurface::swap_exchangesWithSpatialNeighbour()
 // ── Cross-output: two side-by-side 1920x1080 outputs, real ScreenManager ──
 //
 // Cross-output resolution needs real output geometry, so these build the
-// engine over a FakeScreenProvider-backed ScreenManager and inject the daemon
+// engine over a FakePhysicalScreenSource-backed ScreenManager and inject the daemon
 // CrossSurfaceResolver. Per-window zones are still injected (global coords) so
 // the layout is exact; the screen geometry the resolver reads is the fake
 // provider's.
@@ -205,7 +205,7 @@ namespace {
 
 struct TwoOutputFixture
 {
-    PhosphorScreens::FakeScreenProvider provider;
+    PhosphorScreens::FakePhysicalScreenSource provider;
     // Only reachable by the engine when the fixture is built with
     // withStickyPolicy — the sticky arm of shouldTileWindow() needs BOTH a
     // window tracker (to answer isWindowSticky) and an IAutotileSettings (to
@@ -225,7 +225,7 @@ struct TwoOutputFixture
         provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
         provider.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080));
         manager = std::make_unique<PhosphorScreens::ScreenManager>(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &provider, .useGeometrySensors = false});
         manager->start();
         engine = std::make_unique<AutotileEngine>(nullptr, withStickyPolicy ? &tracker : nullptr, manager.get(),
                                                   PlasmaZones::TestHelpers::testRegistry());
@@ -258,11 +258,11 @@ void TestNavigationCrossSurface::crossOutput_focusTowardNonAutotileOutput_defers
     // engine's cross-mode focus arm. A handler that activates sets the
     // DirectConnection out-param, and the verb announces the crossing on the
     // TARGET screen.
-    PhosphorScreens::FakeScreenProvider provider;
+    PhosphorScreens::FakePhysicalScreenSource provider;
     provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
     provider.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080));
     auto manager = std::make_unique<PhosphorScreens::ScreenManager>(
-        PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+        PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &provider, .useGeometrySensors = false});
     manager->start();
     // resolver before engine: the engine keeps it as a raw pointer, and locals
     // are destroyed in reverse declaration order.
@@ -303,11 +303,11 @@ void TestNavigationCrossSurface::crossOutput_focusTowardNonAutotileOutput_unhand
     // Same shape, but no handler sets the out-param (an empty neighbour
     // surface is an everyday state for a focus): the verb must NOT announce a
     // crossing that never happened — it falls through to the boundary refusal.
-    PhosphorScreens::FakeScreenProvider provider;
+    PhosphorScreens::FakePhysicalScreenSource provider;
     provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
     provider.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080));
     auto manager = std::make_unique<PhosphorScreens::ScreenManager>(
-        PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+        PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &provider, .useGeometrySensors = false});
     manager->start();
     auto resolver = std::make_unique<PlasmaZones::CrossSurfaceResolver>(manager.get(), nullptr);
     auto engine =
@@ -435,11 +435,11 @@ void TestNavigationCrossSurface::crossOutput_swapTowardNonAutotileOutput_emitsCr
     // DP-2 is a SNAP (non-autotile) neighbour. An autotile SWAP toward it is a
     // cross-MODE swap: crossOutputMove must emit crossModeSwapRequested (the
     // daemon does the two-way exchange) — NOT crossModeMoveRequested.
-    PhosphorScreens::FakeScreenProvider provider;
+    PhosphorScreens::FakePhysicalScreenSource provider;
     provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
     provider.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080));
     auto manager = std::make_unique<PhosphorScreens::ScreenManager>(
-        PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+        PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &provider, .useGeometrySensors = false});
     manager->start();
     // resolver before engine: the engine keeps it as a raw pointer, and locals
     // are destroyed in reverse declaration order.
@@ -480,11 +480,11 @@ void TestNavigationCrossSurface::crossOutput_moveTowardNonAutotileOutput_doesNot
     // marker (the engine doesn't perform the output move — the daemon does).
     // Instead it emits crossModeMoveRequested and leaves a2 tiled/tracked on DP-1
     // until the daemon handoff relocates it.
-    PhosphorScreens::FakeScreenProvider provider;
+    PhosphorScreens::FakePhysicalScreenSource provider;
     provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
     provider.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080));
     auto manager = std::make_unique<PhosphorScreens::ScreenManager>(
-        PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+        PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &provider, .useGeometrySensors = false});
     manager->start();
     // resolver before engine: the engine keeps it as a raw pointer, and locals
     // are destroyed in reverse declaration order.
@@ -780,10 +780,10 @@ void TestNavigationCrossSurface::crossVirtualScreen_focusRight_crossesToSiblingV
     // iterates effectiveScreenIds() (which yields the vs IDs) and reads their
     // virtual geometry, exactly like physical outputs.
     const QString physId = QStringLiteral("DP-1");
-    PhosphorScreens::FakeScreenProvider provider;
+    PhosphorScreens::FakePhysicalScreenSource provider;
     provider.addScreen(physId, QRect(0, 0, 1920, 1080));
     PhosphorScreens::ScreenManager manager(
-        PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+        PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &provider, .useGeometrySensors = false});
     manager.start();
     manager.setVirtualScreenConfig(physId, PlasmaZones::TestHelpers::makeSplitConfig(physId));
 

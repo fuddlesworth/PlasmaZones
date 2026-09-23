@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "PhosphorScreens/QtScreenProvider.h"
+#include "PhosphorScreens/QtPhysicalScreenSource.h"
 
 #include "PhosphorScreens/ScreenIdentity.h"
 #include "screenslogging.h"
@@ -26,27 +26,27 @@ PhysicalScreen toPhysicalScreen(QScreen* screen)
 }
 } // namespace
 
-QtScreenProvider::QtScreenProvider(QObject* parent)
+QtPhysicalScreenSource::QtPhysicalScreenSource(QObject* parent)
     : IPhysicalScreenSource(parent)
 {
     if (!qApp) {
         // Constructed before QGuiApplication exists — Qt's screen signals
-        // cannot be wired up, so this provider would stay permanently deaf
+        // cannot be wired up, so this source would stay permanently deaf
         // to add/remove/geometry events. Surface it rather than fail
-        // silently; the default-provider path runs in ScreenManager's own
+        // silently; the default-source path runs in ScreenManager's own
         // constructor, so a misordered host setup lands here.
-        qCWarning(lcPhosphorScreens) << "QtScreenProvider constructed before QGuiApplication exists — "
+        qCWarning(lcPhosphorScreens) << "QtPhysicalScreenSource constructed before QGuiApplication exists — "
                                         "screen add/remove/geometry events will not be delivered.";
         return;
     }
-    connect(qApp, &QGuiApplication::screenAdded, this, &QtScreenProvider::onQtScreenAdded);
-    connect(qApp, &QGuiApplication::screenRemoved, this, &QtScreenProvider::onQtScreenRemoved);
+    connect(qApp, &QGuiApplication::screenAdded, this, &QtPhysicalScreenSource::onQtScreenAdded);
+    connect(qApp, &QGuiApplication::screenRemoved, this, &QtPhysicalScreenSource::onQtScreenRemoved);
     for (auto* screen : QGuiApplication::screens()) {
         watchScreen(screen);
     }
 }
 
-QVector<PhysicalScreen> QtScreenProvider::screens() const
+QVector<PhysicalScreen> QtPhysicalScreenSource::screens() const
 {
     QVector<PhysicalScreen> result;
     const auto qtScreens = QGuiApplication::screens();
@@ -57,12 +57,12 @@ QVector<PhysicalScreen> QtScreenProvider::screens() const
     return result;
 }
 
-PhysicalScreen QtScreenProvider::primaryScreen() const
+PhysicalScreen QtPhysicalScreenSource::primaryScreen() const
 {
     return toPhysicalScreen(QGuiApplication::primaryScreen());
 }
 
-void QtScreenProvider::watchScreen(QScreen* screen)
+void QtPhysicalScreenSource::watchScreen(QScreen* screen)
 {
     if (!screen) {
         return;
@@ -75,7 +75,7 @@ void QtScreenProvider::watchScreen(QScreen* screen)
     });
 }
 
-void QtScreenProvider::onQtScreenAdded(QScreen* screen)
+void QtPhysicalScreenSource::onQtScreenAdded(QScreen* screen)
 {
     // A topology change can promote or demote identical-monitor
     // disambiguation suffixes on screens OTHER than this one, so drop the
@@ -87,7 +87,7 @@ void QtScreenProvider::onQtScreenAdded(QScreen* screen)
     Q_EMIT screenAdded(toPhysicalScreen(screen));
 }
 
-void QtScreenProvider::onQtScreenRemoved(QScreen* screen)
+void QtPhysicalScreenSource::onQtScreenRemoved(QScreen* screen)
 {
     // QGuiApplication emits screenRemoved while the QScreen is still
     // valid, so snapshot it — with its pre-removal identifier — before any

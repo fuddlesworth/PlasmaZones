@@ -10,7 +10,7 @@
 
 #include "helpers/AutotileTestHelpers.h"
 #include "helpers/ScriptedAlgoTestSetup.h"
-#include "FakeScreenProvider.h"
+#include "FakePhysicalScreenSource.h"
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
@@ -130,10 +130,10 @@ private Q_SLOTS:
         // retile actually runs — the restore hangs off that path, not off state
         // creation, so a geometry-less fixture would never reach it.
         const QString screen = QStringLiteral("eDP-1");
-        PhosphorScreens::FakeScreenProvider provider;
+        PhosphorScreens::FakePhysicalScreenSource provider;
         provider.addScreen(screen, QRect(0, 0, 1920, 1080));
         PhosphorScreens::ScreenManager screenMgr(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &provider, .useGeometrySensors = false});
         screenMgr.start();
 
         AutotileEngine engine(nullptr, nullptr, &screenMgr, PlasmaZones::TestHelpers::testRegistry());

@@ -179,7 +179,7 @@ QStringList ScreenManager::effectiveScreenIds() const
             // A tracked screen with no identifier carries no persistable ID
             // — skip it rather than emit an empty effective-screen entry
             // that no VS config or layout could ever key against. The
-            // production provider always derives at least a connector-name
+            // production source always derives at least a connector-name
             // identifier, so this only guards synthetic identity-less
             // screens.
             continue;

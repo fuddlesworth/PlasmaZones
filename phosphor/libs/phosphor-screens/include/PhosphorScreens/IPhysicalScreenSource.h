@@ -16,8 +16,8 @@ namespace PhosphorScreens {
  *
  * ScreenManager enumerates outputs and reacts to add / remove / move /
  * resize through this interface instead of touching `QGuiApplication` and
- * `QScreen` directly. The production implementation (`QtScreenProvider`)
- * is a thin wrapper over Qt; a test implementation (`FakeScreenProvider`)
+ * `QScreen` directly. The production implementation (`QtPhysicalScreenSource`)
+ * is a thin wrapper over Qt; a test implementation (`FakePhysicalScreenSource`)
  * synthesizes outputs with arbitrary geometry and fires the lifecycle
  * signals on demand — which is what makes the geometry-recompute path
  * regression-testable (QScreen itself cannot be constructed by test code).

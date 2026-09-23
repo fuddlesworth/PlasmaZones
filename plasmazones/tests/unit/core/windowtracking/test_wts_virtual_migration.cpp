@@ -7,7 +7,7 @@
  *
  * Tests cover:
  * 1. Migration from physical to virtual screen IDs, including the
- *    geometry-routing happy path (headless, via FakeScreenProvider) and the
+ *    geometry-routing happy path (headless, via FakePhysicalScreenSource) and the
  *    two guard clauses, each isolated so the conjunct it names is the
  *    deciding one.
  * 2. Migration from virtual back to physical screen IDs, including the
@@ -40,7 +40,7 @@
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorScreens/Manager.h>
-#include "FakeScreenProvider.h"
+#include "FakePhysicalScreenSource.h"
 #include "core/utils/utils.h"
 #include "helpers/IsolatedConfigGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
@@ -118,7 +118,7 @@ private Q_SLOTS:
     //
     // migrateScreenAssignmentsToVirtual needs a ScreenManager for the
     // geometry lookups, and gets one here: ScreenManager takes an injected
-    // IPhysicalScreenSource, so FakeScreenProvider stages the physical output
+    // IPhysicalScreenSource, so FakePhysicalScreenSource stages the physical output
     // headlessly and no QGuiApplication or real QScreen is involved. The
     // happy path is covered by testMigrateToVirtual_routesZoneToItsHalf
     // below; the two guard clauses (null manager, empty virtual list) are
@@ -133,10 +133,10 @@ private Q_SLOTS:
     void testMigrateToVirtual_routesZoneToItsHalf()
     {
         const QString physId = QStringLiteral("Dell:U2722D:115107");
-        PhosphorScreens::FakeScreenProvider fake;
+        PhosphorScreens::FakePhysicalScreenSource fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3840, 2160), physId);
         PhosphorScreens::ScreenManager mgr(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         mgr.start();
         QVERIFY(mgr.physicalScreenFor(physId).isValid());
         QVERIFY(mgr.setVirtualScreenConfig(physId, makeHorizontalSplit(physId)));
@@ -250,11 +250,11 @@ private Q_SLOTS:
         // screen filter is what leaves the LG window alone. Passing nullptr
         // here would short-circuit on the guard clause instead, and the test
         // would pass even if the filter were removed entirely.
-        PhosphorScreens::FakeScreenProvider fake;
+        PhosphorScreens::FakePhysicalScreenSource fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3840, 2160), physId);
         fake.addScreen(QStringLiteral("DP-2"), QRect(3840, 0, 1920, 1080), otherPhysId);
         PhosphorScreens::ScreenManager mgr(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         mgr.start();
         QVERIFY(mgr.setVirtualScreenConfig(physId, makeHorizontalSplit(physId)));
         const QStringList virtualIds = mgr.virtualScreenIdsFor(physId);
@@ -458,10 +458,10 @@ private Q_SLOTS:
         // fires. The sibling test covers the null-manager conjunct; passing
         // both falsy here would let either half of the guard be deleted
         // without a test noticing.
-        PhosphorScreens::FakeScreenProvider fake;
+        PhosphorScreens::FakePhysicalScreenSource fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3840, 2160), physId);
         PhosphorScreens::ScreenManager mgr(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
         mgr.start();
 
         m_service->migrateScreenAssignmentsToVirtual(physId, {}, &mgr);

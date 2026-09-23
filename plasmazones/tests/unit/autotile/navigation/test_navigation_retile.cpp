@@ -22,7 +22,7 @@
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/TilingState.h>
 
-#include "FakeScreenProvider.h"
+#include "FakePhysicalScreenSource.h"
 #include "core/resolve/crosssurfaceresolver.h"
 
 #include "helpers/AutotileTestHelpers.h"
@@ -74,11 +74,11 @@ private Q_SLOTS:
         // about source reflow + move-back, which the marker-free swap exercises
         // cleanly. The MOVE-path marker/stranding semantics are covered in
         // test_navigation_cross_surface.cpp.
-        PhosphorScreens::FakeScreenProvider provider;
+        PhosphorScreens::FakePhysicalScreenSource provider;
         provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
         provider.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080));
         PhosphorScreens::ScreenManager manager(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &provider, .useGeometrySensors = false});
         manager.start();
 
         AutotileEngine engine(nullptr, nullptr, &manager, PlasmaZones::TestHelpers::testRegistry());
@@ -141,10 +141,10 @@ private Q_SLOTS:
     // context reflows AND the reflow geometry is emitted, with a real algorithm.
     void contextRemoval_reactiveWindowClosed_reflowsSource()
     {
-        PhosphorScreens::FakeScreenProvider provider;
+        PhosphorScreens::FakePhysicalScreenSource provider;
         provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
         PhosphorScreens::ScreenManager manager(
-            PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &provider, .useGeometrySensors = false});
         manager.start();
 
         AutotileEngine engine(nullptr, nullptr, &manager, PlasmaZones::TestHelpers::testRegistry());

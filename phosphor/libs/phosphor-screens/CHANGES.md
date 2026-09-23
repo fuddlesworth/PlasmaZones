@@ -8,6 +8,38 @@ shape changes) so consumers can audit their binding code on upgrade. Library
 SOVERSION still follows semver; entries here flag the kind of behaviour
 churn that won't be caught by an ABI break.
 
+## Phase: IScreenProvider renamed to IPhysicalScreenSource
+
+`PhosphorScreens::IScreenProvider` is now `PhosphorScreens::IPhysicalScreenSource`,
+and its header moved from `IScreenProvider.h` to `IPhysicalScreenSource.h`. The
+interface is otherwise unchanged. No method signatures, signals or semantics
+moved with the rename.
+
+The old name collided with the unrelated `PhosphorLayer::IScreenProvider`. The
+two are different seams at different layers and neither library links the other,
+so the collision never reached a compiler, but it did mean a search for
+`IScreenProvider` returned both hierarchies as though they were one. This one
+answers which physical outputs exist and what just happened to them, in
+`PhysicalScreen` value snapshots. The layer one answers which `QScreen*` a
+surface should attach to. Deliberately not merged. This interface avoids
+handing out `QScreen*` precisely so a test can synthesise outputs, which is the
+whole reason the seam exists.
+
+The implementations and the injection point follow the interface, matching how
+`IPanelSource` and `IConfigStore` name theirs in this library:
+
+| Old                                  | New                                        |
+|--------------------------------------|--------------------------------------------|
+| `IScreenProvider`                    | `IPhysicalScreenSource`                    |
+| `QtScreenProvider`                   | `QtPhysicalScreenSource`                   |
+| `FakeScreenProvider` (test double)   | `FakePhysicalScreenSource`                 |
+| `ScreenManagerConfig::screenProvider`| `ScreenManagerConfig::physicalScreenSource`|
+
+**Action for downstream consumers:** this is a source-compatibility break with
+no deprecated alias. Update the type name, the header include, and any
+designated initialiser that sets the config field. Every use is a compile
+error until it is updated, so nothing fails silently at runtime.
+
 ## Phase: Core split into Core (POD) + Runtime (ScreenManager)
 
 `PhosphorScreens::Core` previously bundled the pure POD/serialiser surface
