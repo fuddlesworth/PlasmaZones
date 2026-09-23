@@ -201,12 +201,17 @@ DecorationProfile withPresetsResolved(const DecorationProfile& profile,
     // schema-predating parameter value to reach the uniform unbounded, which is the
     // one thing this function is positioned to prevent: the flatten is the last
     // place the declared ranges and the stored values are both in hand.
+    //
+    // ONE named return object on every path (the early exit returns the same
+    // `out` the flatten fills), so the copy is elided the same way on both and
+    // GCC 16's -Wmaybe-uninitialized stops losing track of the presetIds
+    // optional's engaged flag across the two differently-shaped returns.
+    DecorationProfile out = profile;
     if ((!profile.presetIds || profile.presetIds->isEmpty())
         && (!profile.parameters || profile.parameters->isEmpty())) {
-        return profile;
+        return out;
     }
 
-    DecorationProfile out = profile;
     // storedParameters(), not effectiveParameters(): this IS the flatten, so reading
     // the raw map while the presets are still engaged is exactly right, and the
     // effective getter would warn about the one read that is not a mistake.
@@ -269,18 +274,23 @@ DecorationProfile withPresetsResolved(const DecorationProfile& profile,
             blocking.insert(it.key(), QString());
         }
     }
+    // Decide the final presetIds in a fresh optional and assign it ONCE. Assigning
+    // the three outcomes into `out.presetIds` in place tripped GCC 16's
+    // -Wmaybe-uninitialized on the optional's payload (it lost track of the
+    // engaged flag across the inlined QMap move); one move-assignment of a
+    // value it has watched from construction keeps the analysis whole.
+    std::optional<QVariantMap> resolvedPresetIds;
     if (!blocking.isEmpty()) {
-        out.presetIds = blocking;
+        resolvedPresetIds = std::move(blocking);
     } else if (profile.presetIds.has_value() && profile.presetIds->isEmpty()) {
         // ENGAGED-EMPTY in, engaged-empty out. `{}` is the user's explicit "no presets
         // for any pack here", and resetting it to nullopt revoked that statement —
         // while the early return above preserves it for the same input when
         // `parameters` happens to be empty too, so the answer depended on an unrelated
         // field.
-        out.presetIds = QVariantMap();
-    } else {
-        out.presetIds.reset();
+        resolvedPresetIds = QVariantMap();
     }
+    out.presetIds = std::move(resolvedPresetIds);
     return out;
 }
 
