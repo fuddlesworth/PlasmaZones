@@ -45,7 +45,23 @@ hasher:
   # must stay out of a hash needs an explicit ignorePatterns entry below.
   walkStrategy: 'vcs'
   ignorePatterns:
-    - 'build*/**'
+    # NOTE the asymmetry, and do not "tidy" it. Measured on moon 2.5.5:
+    #
+    #   '**/build*/**'  REQUIRED. The bare 'build*/**' had been here since the
+    #     reorg's first commit and excluded NOTHING: repo:configure is the one
+    #     task whose input globs are workspace-root-relative and unbounded
+    #     ('**/CMakeLists.txt', '**/*.cmake'), and it was hashing 8560
+    #     generated files of 8781 inputs, across all five build trees. With
+    #     the prefix: 221 inputs, 0 from a build tree.
+    #
+    #   '.claude/**' and '.codex/**'  MUST STAY BARE. Prefixing them collapsed
+    #     the input set to ZERO, because a git worktree of this repo lives at
+    #     .claude/worktrees/<name>, so '**/.claude/**' matches every file in
+    #     it. Bare, they are root-relative and correct. They exclude nothing
+    #     from repo:configure today, since that task globs only CMake files
+    #     and .claude/ holds none, but they still guard a future task whose
+    #     inputs reach them.
+    - '**/build*/**'
     - '.claude/**'
     - '.codex/**'
     # Editor and interpreter droppings that sit inside the `src/**` and
