@@ -110,6 +110,7 @@ FocusScope {
         }
     }
     onWindowsChanged: reconcile()
+    onSelectedIndexChanged: Qt.callLater(revealSelection)
     onMapChanged: {
         reconcile();
         if (map)
@@ -140,6 +141,11 @@ FocusScope {
     function reconcile() {
         select(selectedIndex < 0 ? Math.max(0, windows.findIndex(w => w.focused)) : selectedIndex);
     }
+    function revealSelection() {
+        if (!scrolling || selectedIndex < 0 || windowList.count <= selectedIndex)
+            return;
+        windowList.positionViewAtIndex(selectedIndex, ListView.Contain);
+    }
     function select(index) {
         if (!windows.length) {
             selectedId = "";
@@ -147,7 +153,7 @@ FocusScope {
         }
         const i = Math.max(0, Math.min(windows.length - 1, index));
         selectedId = windows[i].windowId;
-        windowList.positionViewAtIndex(i, ListView.Contain);
+        Qt.callLater(revealSelection);
     }
     function openSelected() {
         if (map && selectedWindow)
@@ -336,7 +342,10 @@ FocusScope {
                 height: frame.height
                 visible: !modelData.offscreen && !modelData.minimized
                 Accessible.name: modelData.title || modelData.appId
-                onClicked: root.select(index)
+                onClicked: {
+                    root.select(index);
+                    root.forceActiveFocus();
+                }
                 onDoubleClicked: root.openSelected()
                 background: StageWindowFrame {
                     windowInfo: liveWindow.modelData
@@ -554,6 +563,20 @@ FocusScope {
         boundsBehavior: Flickable.StopAtBounds
         model: root.windows
         ScrollBar.horizontal: ScrollBar {}
+        // A horizontal strip should respond to the usual vertical wheel too;
+        // otherwise a mouse wheel appears to do nothing unless the user finds
+        // the tiny scrollbar handle.
+        WheelHandler {
+            target: null
+            onWheel: event => {
+                const delta = event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x;
+                if (delta === 0)
+                    return;
+                const maximum = Math.max(0, windowList.contentWidth - windowList.width);
+                windowList.contentX = Math.max(0, Math.min(maximum, windowList.contentX - delta));
+                event.accepted = true;
+            }
+        }
         delegate: WindowMapCard {
             required property var modelData
             required property int index
@@ -563,7 +586,10 @@ FocusScope {
             windowInfo: modelData
             colorIndex: modelData.colorIndex >= 0 ? modelData.colorIndex : index
             selected: root.selectedId === modelData.windowId
-            onClicked: root.select(index)
+            onClicked: {
+                root.select(index);
+                root.forceActiveFocus();
+            }
             onDoubleClicked: root.openSelected()
         }
     }

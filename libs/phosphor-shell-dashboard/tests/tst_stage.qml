@@ -200,6 +200,28 @@ TestCase {
         verify(card.width <= 220);
         verify(card.contentItem.clip);
     }
+    function test_scrollingWindowStripFollowsSelection() {
+        const map = createTemporaryObject(mapComponent, testCase);
+        map.mode = 2;
+        map.windows = [];
+        for (let i = 0; i < 12; ++i) {
+            map.windows.push({
+                windowId: "window-" + i,
+                appId: "org.kde.konsole",
+                title: "Window " + i,
+                nativeRect: Qt.rect(i / 12, 0, 0.2, 1)
+            });
+        }
+        const stage = createTemporaryObject(stageComponent, testCase, {
+            mapFor: () => map,
+            open: true
+        });
+        waitForRendering(stage);
+        const strip = findChild(stage, "stage-window-list");
+        stage.select(11);
+        tryCompare(strip, "contentX", strip.contentWidth - strip.width, 1000);
+        compare(stage.selectedId, "window-11");
+    }
     function test_desktopCanvasMapsToPreviewAcrossOutputShapes() {
         const map = createTemporaryObject(mapComponent, testCase);
         const stage = createTemporaryObject(stageComponent, testCase, {
