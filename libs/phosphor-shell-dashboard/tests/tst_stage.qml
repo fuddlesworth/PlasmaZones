@@ -34,6 +34,7 @@ TestCase {
             property int overflowLeft: 0
             property int overflowRight: 0
             property int stripExtentPx: 0
+            property int scrollDelta: 0
             property real aspect: 1.6
             property var menuModel: []
             property string activated: ""
@@ -42,6 +43,9 @@ TestCase {
             }
             function activateNavigationWindow(id) {
                 activated = id;
+            }
+            function scrollViewByPx(px) {
+                scrollDelta += px;
             }
         }
     }
@@ -221,6 +225,48 @@ TestCase {
         stage.select(11);
         tryCompare(strip, "contentX", strip.contentWidth - strip.width, 1000);
         compare(stage.selectedId, "window-11");
+    }
+    function test_scrollingSelectionPansTheLiveLensToAnOffscreenWindow() {
+        const map = createTemporaryObject(mapComponent, testCase);
+        map.mode = 2;
+        map.stripExtentPx = 1000;
+        map.lens = {
+            x: 0,
+            y: 0,
+            w: 0.25,
+            h: 1,
+            vertical: false
+        };
+        map.windows = [
+            {
+                windowId: "visible",
+                appId: "org.kde.konsole",
+                stripT: 0.05,
+                x: 0.05,
+                y: 0,
+                w: 0.2,
+                h: 1,
+                offscreen: false
+            },
+            {
+                windowId: "offscreen",
+                appId: "org.kde.konsole",
+                stripT: 0.82,
+                x: 3.28,
+                y: 0,
+                w: 0.2,
+                h: 1,
+                offscreen: true
+            }
+        ];
+        const stage = createTemporaryObject(stageComponent, testCase, {
+            mapFor: () => map,
+            open: true
+        });
+        waitForRendering(stage);
+        stage.select(1);
+        tryCompare(map, "scrollDelta", 695, 1000);
+        compare(stage.selectedId, "offscreen");
     }
     function test_desktopCanvasMapsToPreviewAcrossOutputShapes() {
         const map = createTemporaryObject(mapComponent, testCase);

@@ -110,7 +110,10 @@ FocusScope {
         }
     }
     onWindowsChanged: reconcile()
-    onSelectedIndexChanged: Qt.callLater(revealSelection)
+    onSelectedIndexChanged: {
+        Qt.callLater(revealSelection);
+        Qt.callLater(revealMapSelection);
+    }
     onMapChanged: {
         reconcile();
         if (map)
@@ -145,6 +148,29 @@ FocusScope {
         if (!scrolling || selectedIndex < 0 || windowList.count <= selectedIndex)
             return;
         windowList.positionViewAtIndex(selectedIndex, ListView.Contain);
+    }
+    // The scrolling engine's lens is the real desktop viewport. Selecting a
+    // card that lives outside it must pan that lens as well as revealing the
+    // card in the overview's own list; otherwise the selection points at a
+    // window the live aperture still cannot show.
+    function revealMapSelection() {
+        if (!scrolling || !map || selectedIndex < 0 || typeof map.scrollViewByPx !== "function")
+            return;
+        const lens = map.lens || {};
+        const extent = Number(map.stripExtentPx || 0);
+        const position = Number(selectedWindow ? selectedWindow.stripT : NaN);
+        const start = lens.vertical ? Number(lens.y || 0) : Number(lens.x || 0);
+        const size = lens.vertical ? Number(lens.h || 0) : Number(lens.w || 0);
+        if (!(extent > 0 && size > 0 && position >= 0))
+            return;
+        const windowSize = lens.vertical ? Number(selectedWindow.h || 0) * size : Number(selectedWindow.w || 0) * size;
+        const end = position + Math.max(0, windowSize);
+        if (position >= start && end <= start + size)
+            return;
+        const target = Math.max(0, Math.min(1 - size, position - size * 0.5));
+        const delta = Math.round((target - start) * extent);
+        if (delta !== 0)
+            map.scrollViewByPx(delta);
     }
     function select(index) {
         if (!windows.length) {
