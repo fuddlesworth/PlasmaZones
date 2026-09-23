@@ -3,7 +3,7 @@
 //
 // Unit tests for the shared pluau helper functions added during the algorithm
 // DRY pass: guardArea, stripLayout, resizeRatioGrow/Shrink, clamp, minSizeAt,
-// gridShape, cumulativeOffsets, center. Each helper is exercised directly by
+// gridShape, cumulativeOffsets, center, masterStackResize. Each helper is exercised directly by
 // loading the real pluau.luau prelude into a sandboxed Luau VM (the same way the
 // production loader injects it) and calling the function from a probe module.
 //

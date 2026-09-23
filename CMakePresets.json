@@ -21,7 +21,7 @@
     },
     {
       "name": "release",
-      "displayName": "Release with LTO (build-release/)",
+      "displayName": "Release (build-release/)",
       "inherits": "base",
       "binaryDir": "${sourceDir}/build-release",
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }

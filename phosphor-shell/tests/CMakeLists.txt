@@ -114,7 +114,7 @@ add_test(NAME test_shell_gestures COMMAND test_shell_gestures)
 #
 # Gated on the theme target, unlike its siblings in this group. shellchrome.cpp
 # includes PhosphorTheme/PaletteStore.h and connects paletteChanged, and
-# libs/phosphor-theme is only added under BUILD_PHOSPHOR_SHELL, so this is the
+# phosphor-shell-libs/libs/phosphor-theme is only added under BUILD_PHOSPHOR_SHELL, so this is the
 # one file here whose dependencies are not all unconditional. Without the guard
 # the default BUILD_TESTING=ON configure fails at generate and no test builds.
 if(TARGET PhosphorTheme::PhosphorTheme)

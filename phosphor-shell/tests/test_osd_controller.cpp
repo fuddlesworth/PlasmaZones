@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Unit tests for the shell's OSD registry owner and its QML-component
-// factory, in the top-level GPL test tree because the classes ship in the
-// GPL shell binary (src/shell), not in the LGPL OSD module. The QML bands
-// themselves are covered by libs/phosphor-shell-osd/tests; what matters
+// factory, in the phosphor-shell test tree because the classes ship in the
+// GPL shell binary (phosphor-shell/src), not in the LGPL OSD module. The QML bands
+// themselves are covered by phosphor-shell-libs/libs/phosphor-shell-osd/tests; what matters
 // here is the C++ contract: which kinds register, every guard on the
 // createOSD path, and the host fan-out an IPC trigger rides.
 

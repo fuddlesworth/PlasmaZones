@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Unit tests for the bar's registry owner and its generic QML-component
-// factory. These live in the top-level GPL test tree rather than in
-// libs/phosphor-shell-bar/tests because the classes under test ship in the
-// GPL shell binary (src/shell), not in the LGPL bar module.
+// factory. These live in the phosphor-shell test tree rather than in
+// phosphor-shell-libs/libs/phosphor-shell-bar/tests because the classes under test ship in the
+// GPL shell binary (phosphor-shell/src), not in the LGPL bar module.
 //
 // The QML delegates themselves are covered by the QuickTest cases in
-// libs/phosphor-shell-bar/tests; what matters here is the C++ contract:
+// phosphor-shell-libs/libs/phosphor-shell-bar/tests; what matters here is the C++ contract:
 // which ids are registered, the ordering handed to QML, and every guard on
 // the createWidget path (a wrong guard silently drops a widget from the
 // bar, or leaks one).

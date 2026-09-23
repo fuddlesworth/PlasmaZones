@@ -5,7 +5,7 @@
 // ship in the Phosphor.Bar module.
 //
 // The built-ins are bound by STRING across two trees: BarController names
-// a type, and the module supplies it from libs/phosphor-shell-bar. Renaming a
+// a type, and the module supplies it from phosphor-shell-libs/libs/phosphor-shell-bar. Renaming a
 // QML file, dropping it from QML_FILES, or changing its QT_RESOURCE_ALIAS all
 // compile and link cleanly and degrade to a runtime warning plus a widget
 // that silently never appears in the bar. Nothing but this test catches that.

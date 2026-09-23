@@ -3,7 +3,7 @@
 //
 // ShellChrome turns the decoration tree the daemon publishes into the
 // stage list SurfaceDecoration draws, one stage per installed pack in a
-// surface's enabled chain, against the bundled packs in data/surface.
+// surface's enabled chain, against the bundled packs in plasmazones/data/surface.
 
 #include "ShellChrome.h"
 
@@ -109,6 +109,21 @@ private Q_SLOTS:
     void initTestCase()
     {
         QVERIFY2(QDir(QStringLiteral(PZ_BUNDLED_SURFACE_DIR)).exists(), "bundled surface packs not found");
+    }
+
+    // writeSurfacePreset() drops JSON into the target's XDG_DATA_HOME, which
+    // the isolation sandbox gives us but does not clear between ctest runs. A
+    // second run would therefore start with the previous run's shell-live
+    // preset already at glowSize 40, so the "the preset's value, not the
+    // pack's default" assertions would pass without the write under test
+    // having done anything.
+    void cleanup()
+    {
+        const QString dir = PhosphorShaders::userPresetDirectory(PhosphorShaders::standardUserPresetRoot(),
+                                                                 PhosphorShaders::ShaderFamily::Surface);
+        for (const QString& id : {QStringLiteral("shell-wide"), QStringLiteral("shell-live")}) {
+            QFile::remove(QDir(dir).filePath(id + QStringLiteral(".json")));
+        }
     }
 
     void emptyTreeDecoratesNothing()

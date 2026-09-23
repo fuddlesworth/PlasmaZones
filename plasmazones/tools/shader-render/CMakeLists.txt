@@ -84,10 +84,15 @@ target_compile_features(plasmazones-shader-render PRIVATE cxx_std_20)
 
 # Don't install by default — this is a developer tool, not a
 # user-facing binary.  Enable explicitly if a packager wants it.
+#
+# GNUInstallDirs BEFORE the option(), not inside the if() below: the help
+# string interpolates CMAKE_INSTALL_BINDIR, and included afterwards the
+# variable was still empty at that point, so `cmake -LH` showed
+# "Install plasmazones-shader-render to ".
+include(GNUInstallDirs)
 option(INSTALL_SHADER_RENDER_TOOL
     "Install plasmazones-shader-render to ${CMAKE_INSTALL_BINDIR}" OFF)
 if(INSTALL_SHADER_RENDER_TOOL)
-    include(GNUInstallDirs)
     install(TARGETS plasmazones-shader-render
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()

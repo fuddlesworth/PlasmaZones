@@ -22,6 +22,16 @@ class TestShellMotion : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    // Every slot below sets PHOSPHOR_REDUCED_MOTION, which is process-global.
+    // Without this the last value written leaked into whatever ran next, and
+    // the suite only stayed correct because Qt runs private slots in
+    // declaration order and the one slot that sets "1" resets it by hand.
+    // Restoring here removes the dependency on that ordering.
+    void cleanup()
+    {
+        qunsetenv("PHOSPHOR_REDUCED_MOTION");
+    }
+
     void settleIsASpringAtItsPath()
     {
         qputenv("PHOSPHOR_REDUCED_MOTION", "0");

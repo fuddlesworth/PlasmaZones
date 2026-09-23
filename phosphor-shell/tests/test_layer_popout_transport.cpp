@@ -437,9 +437,10 @@ void TestLayerPopoutTransport::aFailedSurfaceRoutesToTheCallback()
     if (handle.isEmpty()) {
         // Some factory configurations surface the refusal synchronously as
         // a failed create; that is the same contract honoured earlier
-        // (refusal = empty handle, controller row untouched), so nothing
-        // further to assert.
-        return;
+        // (refusal = empty handle, controller row untouched). QSKIP rather
+        // than return, so a run that never reached the onSurfaceGone leg this
+        // slot exists to cover says so instead of reporting a plain pass.
+        QSKIP("factory refused the attach synchronously; the onSurfaceGone leg was not exercised");
     }
     QTRY_COMPARE(m_dismissed, QStringList{handle});
     // The entry is gone; closing it again is a no-op.

@@ -52,6 +52,10 @@ fileGroups:
     - 'tests/**/*'
     - 'libs/*/tests/**/*'
 
+# Parallelism is a literal 6 rather than $(nproc) throughout, matching the
+# pz-build skill: the machine has 8 cores and a higher guess has overloaded
+# it before. moon has no variable interpolation for this, so it is repeated
+# on each task that takes a -j.
 tasks:
   # The configure step lives on the `repo` project (moon.yml at the root),
   # not here: a per-tier configure would run once per tier in parallel
@@ -104,6 +108,10 @@ tasks:
   # XDG sandbox from cmake/PhosphorTestIsolation.cmake, so ctest is invoked
   # bare here. Wrapping it in another dbus-run-session would put the private
   # buses inside a second bus for no gain.
+  # A tier configured OFF has no build/<tier> directory, so ctest exits with
+  # a bare "--test-dir does not exist". If that happens for phosphor-shell or
+  # phosphor-shell-libs, the tree was configured without BUILD_PHOSPHOR_SHELL;
+  # the presets turn it on, a hand-rolled `cmake -B build` does not.
   test:
     command: 'ctest'
     args:
