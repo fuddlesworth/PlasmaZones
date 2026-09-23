@@ -164,7 +164,7 @@ Compute scope size from the inventory:
 For partitioned scopes:
 
 1. Group files by coherent domain (e.g. `controller/`, `rendering/`, `qml/`, `tests/`, `config/`). 4-6 partitions is typical; aim for ≤15 files per partition.
-2. **Reviewer selection.** Check the available agent types for project-defined domain reviewers (by convention in `.claude/agents/review/`, e.g. `pz-*-reviewer` in PlasmaZones; each one's description names the directories/domains it covers). If any exist, partition boundaries SHOULD follow the specialists' domains, and each partition MUST be dispatched to the specialist whose description matches it — a specialist encodes stack expertise and past-bug patterns a generic reviewer lacks. Only for a partition no specialist covers (or when a project defines none) fall back to `subagent_type=code-analyzer`. Dispatch ONE `Agent` call per partition; all Agent calls go in a SINGLE message so they run in parallel.
+2. **Reviewer selection.** Check the available agent types for project-defined domain reviewers (by convention in `.claude/agents/review/`, e.g. `pz-*-reviewer` in PlasmaZones; each one's description names the directories/domains it covers). If any exist, partition boundaries SHOULD follow the specialists' domains, and each partition MUST be dispatched to the specialist whose description matches it — a specialist encodes stack expertise and past-bug patterns a generic reviewer lacks. Only for a partition no specialist covers (or when a project defines none) fall back to `subagent_type=general-purpose`. Dispatch ONE `Agent` call per partition; all Agent calls go in a SINGLE message so they run in parallel.
 3. Each agent prompt MUST include:
    - The exact file paths in its partition (explicit paths, not a directory glob).
    - Instructions to read every file FULLY (no partial reads, no diff-only).
@@ -260,7 +260,7 @@ When a finding offers two legitimate remedies (the finding itself says "either X
 Before an edit that calls a function, method, constant, enumerator, logging category, or CMake function you have not already opened here, Grep or Read its declaration first. One command:
 
 ```
-grep -rn 'bool contains'  libs/.../Registry.h        # does this method exist?
+grep -rn 'bool contains'  phosphor/libs/phosphor-registry/include/PhosphorRegistry/Registry.h   # does this method exist?
 grep -nE '^\s+[A-Za-z_].* [a-z][A-Za-z]*\(' <header>  # what IS the API surface?
 ```
 

@@ -41,7 +41,7 @@ The orchestrator applies your fixes without re-deriving them. A confident causal
 - ctest MUST run under the D-Bus isolation setup (TEST_LAUNCHER `dbus-run-session` with a no-servicedir conf) — a test reaching the stock session bus can activate the installed daemon and hang ctest via the stdout pipe. Any new test target must inherit the launcher.
 - `QVERIFY` inside a data-driven loop aborts the remaining rows — flag loops where later rows silently never run.
 - A guard-claim in a fix deserves a mutation check: if a test exists to prove a guard, deleting the guard should fail it.
-- Licensing: top-level `plasmazones/tests/**` is GPL-3.0-or-later, but `phosphor/libs/phosphor-*/tests/**` follows the library (LGPL-2.1-or-later). A GPL header inside a phosphor lib's tests is a finding.
+- Licensing: top-level `plasmazones/tests/**` is GPL-3.0-or-later, but `phosphor/libs/phosphor-*/tests/**` AND `phosphor-shell-libs/libs/phosphor-*/tests/**` follow their library (LGPL-2.1-or-later). A GPL header inside a phosphor lib's tests is a finding.
 
 ## Data/prose expertise to apply
 - All user-visible text in `plasmazones/data/**/*.json` (`description`/`name`), `plasmazones/data/whatsnew.json`, and `CHANGELOG.md` must follow CLAUDE.md's plain-prose rules (`.luau` metadata prose is covered by pz-luau-algorithm-reviewer): no em-dash clause splices, no clause-joining semicolons, no ` - ` stand-in dashes, no dramatic "Label: payload" colons, no rule-of-three flourish. Keep-a-Changelog `**Term**:` lead-ins and literal separators like `%1 — %2` are fine.

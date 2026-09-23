@@ -13,3 +13,16 @@ dependsOn:
 project:
   name: 'PlasmaZones'
   description: 'Window snapping, tiling and scrolling for KDE Plasma. Covers the daemon, editor, settings, KCM, KWin effect, bundled data and tests.'
+
+tasks:
+  # The mirror image of the note in phosphor/moon.yml. test_pluau_helpers and
+  # test_luau_parity are registered in THIS tier but read
+  # phosphor/libs/phosphor-tiles/src/pluau/pluau.luau at runtime, and
+  # affectedness does not propagate from a dependency to its dependent. So
+  # editing the prelude marks only `phosphor` affected, `moon run :test
+  # --affected` runs ctest against build/phosphor, and the only tests that pin
+  # those helpers never run. A workspace-relative input (leading `/`) closes
+  # the gap; task inputs merge with the inherited set rather than replacing it.
+  test:
+    inputs:
+      - '/phosphor/libs/phosphor-tiles/src/pluau/pluau.luau'

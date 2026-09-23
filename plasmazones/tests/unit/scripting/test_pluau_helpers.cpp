@@ -108,7 +108,7 @@ void TestPluauHelpers::guardArea()
     const QByteArray body = R"LUA(
         return { run = function()
             local big = { x = 0, y = 0, width = 1000, height = 1000 }
-            local tiny = { x = 5, y = 7, width = 10, height = 1000 }
+            local tiny = { x = 5, y = 7, width = 0, height = 1000 }
             local zero = pluau.guardArea(big, 0)
             local small = pluau.guardArea(tiny, 3)
             local proceed = pluau.guardArea(big, 3)
@@ -116,17 +116,22 @@ void TestPluauHelpers::guardArea()
                 zeroIsNil = zero == nil, zeroLen = zero and #zero or -1,
                 smallIsNil = small == nil, smallLen = small and #small or -1,
                 smallW = (small and small[1] and small[1].width) or -1,
+                smallX = (small and small[1] and small[1].x) or -1,
                 proceedIsNil = proceed == nil,
             }
         end }
     )LUA";
     const QVariantMap r = run(body).toMap();
-    VERIFY_KEYS(r, "zeroIsNil", "zeroLen", "smallIsNil", "smallLen", "smallW", "proceedIsNil");
+    VERIFY_KEYS(r, "zeroIsNil", "zeroLen", "smallIsNil", "smallLen", "smallW", "smallX", "proceedIsNil");
     QCOMPARE(r.value(QStringLiteral("zeroIsNil")).toBool(), false);
     QCOMPARE(r.value(QStringLiteral("zeroLen")).toInt(), 0);
     QCOMPARE(r.value(QStringLiteral("smallIsNil")).toBool(), false);
     QCOMPARE(r.value(QStringLiteral("smallLen")).toInt(), 3);
-    QCOMPARE(r.value(QStringLiteral("smallW")).toInt(), 10); // fillArea uses max(1, width)
+    // width 0, so this is the assertion that actually exercises fillArea's
+    // max(1, width) clamp rather than just echoing the input back.
+    QCOMPARE(r.value(QStringLiteral("smallW")).toInt(), 1);
+    // And the fallback must carry the host rect's origin, not reset to 0.
+    QCOMPARE(r.value(QStringLiteral("smallX")).toInt(), 5);
     QCOMPARE(r.value(QStringLiteral("proceedIsNil")).toBool(), true);
 }
 
@@ -175,15 +180,19 @@ void TestPluauHelpers::resizeRatio()
     const QByteArray body = R"LUA(
         return { run = function()
             return {
-                grow = pluau.resizeRatioGrow(120, 100, 0.5),
-                shrink = pluau.resizeRatioShrink(120, 100, 0.5),
+                grow = pluau.resizeRatioGrow(120, 100, 0.25),
+                shrink = pluau.resizeRatioShrink(120, 100, 0.25),
             }
         end }
     )LUA";
     const QVariantMap r = run(body).toMap();
     VERIFY_KEYS(r, "grow", "shrink");
-    QCOMPARE(r.value(QStringLiteral("grow")).toDouble(), 0.6); // 120 * 0.5 / 100
-    QCOMPARE(r.value(QStringLiteral("shrink")).toDouble(), 0.4); // 1 - 120 * 0.5 / 100
+    // 0.25, deliberately NOT 0.5. grow uses oldRatio and shrink uses
+    // (1 - oldRatio), so at exactly 0.5 the two closed forms compute the same
+    // number and swapping the functions leaves the assertions green. 0.25
+    // separates them: 0.3 against 0.1.
+    QCOMPARE(r.value(QStringLiteral("grow")).toDouble(), 0.3); // 120 * 0.25 / 100
+    QCOMPARE(r.value(QStringLiteral("shrink")).toDouble(), 0.1); // 1 - 120 * (1 - 0.25) / 100
 }
 
 void TestPluauHelpers::masterStackResize()
@@ -205,43 +214,43 @@ void TestPluauHelpers::masterStackResize()
             end
             -- Vertical seam (width axis): master (idx 0) right edge grows.
             local vGrow = pluau.masterStackResize(
-                { windowCount = 3, masterCount = 1, splitRatio = 0.5 },
-                ev(0, { width = 100, height = 100 }, { width = 120, height = 100 }, edge("right")),
+                { windowCount = 3, masterCount = 1, splitRatio = 0.25 },
+                ev(0, { width = 100, height = 80 }, { width = 120, height = 80 }, edge("right")),
                 false)
             -- Vertical seam: stack (idx 1) left edge shrinks.
             local vShrink = pluau.masterStackResize(
-                { windowCount = 3, masterCount = 1, splitRatio = 0.5 },
-                ev(1, { width = 100, height = 100 }, { width = 120, height = 100 }, edge("left")),
+                { windowCount = 3, masterCount = 1, splitRatio = 0.25 },
+                ev(1, { width = 100, height = 80 }, { width = 120, height = 80 }, edge("left")),
                 false)
             -- Horizontal seam (height axis): master bottom edge grows.
             local hGrow = pluau.masterStackResize(
-                { windowCount = 3, masterCount = 1, splitRatio = 0.5 },
-                ev(0, { width = 100, height = 100 }, { width = 100, height = 120 }, edge("bottom")),
+                { windowCount = 3, masterCount = 1, splitRatio = 0.25 },
+                ev(0, { width = 100, height = 80 }, { width = 100, height = 100 }, edge("bottom")),
                 true)
             -- Horizontal seam: stack top edge shrinks.
             local hShrink = pluau.masterStackResize(
-                { windowCount = 3, masterCount = 1, splitRatio = 0.5 },
-                ev(1, { width = 100, height = 100 }, { width = 100, height = 120 }, edge("top")),
+                { windowCount = 3, masterCount = 1, splitRatio = 0.25 },
+                ev(1, { width = 100, height = 80 }, { width = 100, height = 100 }, edge("top")),
                 true)
             -- count <= masterCount → no seam → nil.
             local single = pluau.masterStackResize(
-                { windowCount = 1, masterCount = 1, splitRatio = 0.5 },
-                ev(0, { width = 100, height = 100 }, { width = 120, height = 100 }, edge("right")),
+                { windowCount = 1, masterCount = 1, splitRatio = 0.25 },
+                ev(0, { width = 100, height = 80 }, { width = 120, height = 80 }, edge("right")),
                 false)
             -- Out-of-range oldRatio (>= 1) → nil.
             local badRatio = pluau.masterStackResize(
                 { windowCount = 3, masterCount = 1, splitRatio = 1.0 },
-                ev(0, { width = 100, height = 100 }, { width = 120, height = 100 }, edge("right")),
+                ev(0, { width = 100, height = 80 }, { width = 120, height = 80 }, edge("right")),
                 false)
             -- Zero old dimension → nil.
             local zeroDim = pluau.masterStackResize(
-                { windowCount = 3, masterCount = 1, splitRatio = 0.5 },
-                ev(0, { width = 0, height = 100 }, { width = 120, height = 100 }, edge("right")),
+                { windowCount = 3, masterCount = 1, splitRatio = 0.25 },
+                ev(0, { width = 0, height = 80 }, { width = 120, height = 80 }, edge("right")),
                 false)
             -- Correct index but wrong edge → nil.
             local wrongEdge = pluau.masterStackResize(
-                { windowCount = 3, masterCount = 1, splitRatio = 0.5 },
-                ev(0, { width = 100, height = 100 }, { width = 120, height = 100 }, noEdge),
+                { windowCount = 3, masterCount = 1, splitRatio = 0.25 },
+                ev(0, { width = 100, height = 80 }, { width = 120, height = 80 }, noEdge),
                 false)
             return {
                 vGrow = vGrow and vGrow.splitRatio or -1,
@@ -258,10 +267,15 @@ void TestPluauHelpers::masterStackResize()
     const QVariantMap r = run(body).toMap();
     VERIFY_KEYS(r, "vGrow", "vShrink", "hGrow", "hShrink", "singleIsNil", "badRatioIsNil", "zeroDimIsNil",
                 "wrongEdgeIsNil");
-    QCOMPARE(r.value(QStringLiteral("vGrow")).toDouble(), 0.6); // 120 * 0.5 / 100
-    QCOMPARE(r.value(QStringLiteral("vShrink")).toDouble(), 0.4); // 1 - 120 * 0.5 / 100
-    QCOMPARE(r.value(QStringLiteral("hGrow")).toDouble(), 0.6); // height axis, same closed form
-    QCOMPARE(r.value(QStringLiteral("hShrink")).toDouble(), 0.4);
+    // The old rect is 100x80, not square, and the ratio is 0.25. Both matter.
+    // A square rect hides an axis mix-up confined to oldDim, and ratio 0.5
+    // makes the grow and shrink closed forms compute the same number. With
+    // these inputs the width axis gives 0.3/0.1 and the height axis gives
+    // 0.3125/0.0625, so swapping either the axis or the two forms fails.
+    QCOMPARE(r.value(QStringLiteral("vGrow")).toDouble(), 0.3); // 120 * 0.25 / 100
+    QCOMPARE(r.value(QStringLiteral("vShrink")).toDouble(), 0.1); // 1 - 120 * 0.75 / 100
+    QCOMPARE(r.value(QStringLiteral("hGrow")).toDouble(), 0.3125); // 100 * 0.25 / 80
+    QCOMPARE(r.value(QStringLiteral("hShrink")).toDouble(), 0.0625); // 1 - 100 * 0.75 / 80
     QCOMPARE(r.value(QStringLiteral("singleIsNil")).toBool(), true);
     QCOMPARE(r.value(QStringLiteral("badRatioIsNil")).toBool(), true);
     QCOMPARE(r.value(QStringLiteral("zeroDimIsNil")).toBool(), true);

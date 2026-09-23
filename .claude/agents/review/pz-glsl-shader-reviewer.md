@@ -31,7 +31,7 @@ The orchestrator applies your fixes without re-deriving them. A confident causal
 
 ## The three shader families (do not mix their contracts)
 - **Overlays** (`plasmazones/data/overlays/**`, per-zone visuals): shared prologue from `plasmazones/data/overlays/shared/` — `common.glsl` is auto-prologued, plus `audio.glsl`, `depth.glsl`, `textures.glsl`, `wallpaper.glsl`, `multipass.glsl`, `flow-noise.glsl`, `logo-drift.glsl`, `zone.vert`.
-- **Animations** (`plasmazones/data/animations/**`, window/desktop transitions): `animation_uniforms.glsl`, `easing.glsl`, `noise.glsl`, `audio.glsl`, `old_content.glsl`, `desktop_transition.glsl`, `anchor_remap.glsl`, `bmw_compat.glsl`, `animation.vert`.
+- **Animations** (`plasmazones/data/animations/**`, window/desktop transitions): `animation_uniforms.glsl`, `easing.glsl`, `noise.glsl`, `audio.glsl`, `old_content.glsl`, `desktop_transition.glsl`, `anchor_remap.glsl`, `bmw_compat.glsl`, `strip_transition.glsl`, `animation.vert`.
 - **Surface** (`plasmazones/data/surface/**`, decoration/backdrop chains): `surface_uniforms.glsl`, `surface_lib.glsl`, `surface_audio.glsl`, blur/backdrop/color/noise/multipass helpers, `gaussian_h/v.frag`, `surface.vert`.
 A uniform or helper from one family used in another is a finding; verify against that family's shared uniforms header, not memory.
 

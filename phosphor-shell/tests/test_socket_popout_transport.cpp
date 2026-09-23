@@ -32,10 +32,15 @@ namespace {
 // refusesAnOutputWithNoName, whose whole subject is the empty-name resolver.
 // Both keep their own setup.
 //
-// No headless Qt platform names its screens, so the name has to come from the
-// injectable seam rather than QScreen::name(). That seam is itself the thing
-// under test in the two excluded slots, which is why it stays a resolver here
-// rather than becoming a constant.
+// The bare offscreen platform gives its screen an EMPTY name (measured: length
+// 0), and an empty name is exactly what the transport treats as "closed
+// everywhere" and refuses on. So these slots inject a fixed name through the
+// seam rather than depending on QScreen::name().
+//
+// theDefaultResolverNamesTheRequestedOutput is the one slot that must exercise
+// the real resolver, and it therefore needs genuinely named outputs. The CMake
+// entry for this target passes offscreen a configfile (two-screens.json,
+// TEST-0 / TEST-1) for precisely that slot.
 //
 // Declaration order matters: transport takes &controller in its initialiser,
 // so controller has to be declared first.
@@ -44,9 +49,17 @@ struct Harness
     ControlCenterController controller{nullptr};
     SocketPopoutTransport transport{&controller};
 
+    // What the transport handed the resolver on the last open. Recorded rather
+    // than discarded because otherwise nothing in the suite pins that
+    // PopoutRequest::targetScreen reaches the resolver at all: every slot
+    // passed a null screen, so replacing the real argument with a literal
+    // nullptr in the transport left every assertion true.
+    QScreen* sawScreen = nullptr;
+
     Harness()
     {
-        transport.setScreenNameResolver([](QScreen*) {
+        transport.setScreenNameResolver([this](QScreen* requested) {
+            sawScreen = requested;
             return QStringLiteral("DP-1");
         });
     }
@@ -66,6 +79,7 @@ private Q_SLOTS:
     void closeIgnoresAStaleOrEmptyHandle();
     void drainClearsWithoutNotifying();
     void handlesUseTheSocketPrefix();
+    void theDefaultResolverNamesTheRequestedOutput();
 
 private:
     [[nodiscard]] static PopoutRequest requestFor(const QString& id, QScreen* screen);
@@ -115,8 +129,17 @@ void TestSocketPopoutTransport::opensOnTheRequestedScreenAndWritesOpenScreenOnce
     Harness h;
     QSignalSpy spy(&h.controller, &ControlCenterController::openScreenChanged);
 
-    const QString handle = h.transport.openSurface(requestFor(QStringLiteral("control-center"), nullptr));
+    // A REAL screen, not nullptr: this is the slot that claims to open on the
+    // requested one, so the request has to carry a screen for that claim to
+    // mean anything.
+    QScreen* const requested = QGuiApplication::primaryScreen();
+    QVERIFY(requested);
+    const QString handle = h.transport.openSurface(requestFor(QStringLiteral("control-center"), requested));
     QVERIFY(!handle.isEmpty());
+
+    // The transport must route the request's screen to the resolver rather
+    // than resolving against the primary and ignoring what it was handed.
+    QCOMPARE(h.sawScreen, requested);
 
     // The controller names the output whose bar should grow the pocket, and
     // it is written exactly once: the property is change-gated, so a second
@@ -195,6 +218,29 @@ void TestSocketPopoutTransport::drainClearsWithoutNotifying()
     // Draining twice is a no-op rather than an error.
     h.transport.drain();
     QCOMPARE(h.controller.openScreen(), QString());
+}
+
+// The transport installs a default screen-name resolver in its constructor, and
+// until this slot existed nothing ever ran it: refusesWithoutAController returns
+// before reaching it, refusesAnOutputWithNoName replaces it, and every Harness
+// slot replaces it too. So the production path -- the one the shell actually
+// uses -- had no coverage at all while the suite reported green.
+//
+// No Harness here, deliberately: installing a resolver is exactly what this
+// slot must not do.
+void TestSocketPopoutTransport::theDefaultResolverNamesTheRequestedOutput()
+{
+    ControlCenterController controller(nullptr);
+    SocketPopoutTransport transport(&controller);
+
+    QScreen* const requested = QGuiApplication::primaryScreen();
+    QVERIFY(requested);
+    // The offscreen platform names its screen, so this is a real name rather
+    // than the empty string the refusal path keys on.
+    QVERIFY(!requested->name().isEmpty());
+
+    QVERIFY(!transport.openSurface(requestFor(QStringLiteral("control-center"), requested)).isEmpty());
+    QCOMPARE(controller.openScreen(), requested->name());
 }
 
 void TestSocketPopoutTransport::handlesUseTheSocketPrefix()

@@ -3,7 +3,6 @@
 
 import QtQuick
 import QtQuick.Controls
-import org.kde.kirigami as Kirigami
 
 /**
  * @brief Context menu for zone operations
@@ -14,8 +13,18 @@ import org.kde.kirigami as Kirigami
 Menu {
     id: contextMenu
 
-    // Required properties
-    required property var editorController
+    // Required properties.
+    //
+    // QtObject, not var, and the type is load-bearing for the `enabled` guards
+    // below. A binding that evaluates to `undefined` does NOT write false to a
+    // bool property: QML leaves the property at its default, and `enabled`
+    // defaults to true. So with a `var` holding undefined, both
+    // `editorController` and `editorController !== null` leave the item
+    // ENABLED, and the guard fails open. Declaring the type makes QML coerce
+    // undefined to null on assignment, at which point every spelling below
+    // evaluates false. Measured with qml6 6.11.2 on plain Item and on
+    // QQC2 MenuItem.
+    required property QtObject editorController
     required property string zoneId
 
     // Signals for zone operations

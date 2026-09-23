@@ -31,7 +31,6 @@ License: LGPL-2.1-or-later
 # .frag may be a port while its .vert is PlasmaZones-original.
 Files: plasmazones/data/animations/broken-glass/effect.frag
        plasmazones/data/animations/fire/effect.frag
-       plasmazones/data/animations/focus/effect.frag
        plasmazones/data/animations/glide/effect.frag
        plasmazones/data/animations/incinerate/effect.frag
        plasmazones/data/animations/matrix/effect.frag
@@ -39,16 +38,38 @@ Files: plasmazones/data/animations/broken-glass/effect.frag
        plasmazones/data/animations/tv-glitch/effect.frag
        plasmazones/data/animations/wisps/effect.frag
        plasmazones/data/animations/shared/bmw_compat.glsl
-       plasmazones/data/surface/blur/effect.frag
+Copyright: 2021-2024 Simon Schneegans (Burn-My-Windows)
+           2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+License: GPL-3.0-or-later
+
+# focus is the only Burn-My-Windows port that also carries Justin Garza, so he
+# is named here and not on the nine above. Each Copyright field lists the
+# holders of the files in its own stanza, not the union across the pack set.
+Files: plasmazones/data/animations/focus/effect.frag
+Copyright: 2021-2024 Simon Schneegans (Burn-My-Windows)
+           2021-2024 Justin Garza
+           2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+License: GPL-3.0-or-later
+
+# GPL-3 for a different reason: these carry no upstream copyright line. Each
+# one's own header credits only fuddlesworth, so the two Burn-My-Windows
+# authors above must NOT be named here, whatever the shared licence suggests.
+# They sit in their own stanza after the LGPL data stanza so last-match-wins
+# still resolves them to GPL-3.
+#
+# glass/effect.frag describes itself as a port of kwin-effects-glass and
+# frosted-glass/effect.frag as a port of the phosphor-shell frosted panel
+# shader, but neither carries the second SPDX-FileCopyrightText that CLAUDE.md
+# requires of a port. That is a question about those headers, not about this
+# file, and it must not be answered by inventing a holder here.
+Files: plasmazones/data/surface/blur/effect.frag
        plasmazones/data/surface/duotone/effect.frag
        plasmazones/data/surface/frosted-glass/effect.frag
        plasmazones/data/surface/glass/effect.frag
        plasmazones/data/surface/mosaic/effect.frag
        plasmazones/data/surface/rain-glass/effect.frag
        plasmazones/data/surface/rippled-glass/effect.frag
-Copyright: 2021-2024 Simon Schneegans (Burn-My-Windows)
-           2021-2024 Justin Garza
-           2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: GPL-3.0-or-later
 
 Files: plasmazones/data/animations/honeycomb/effect.frag

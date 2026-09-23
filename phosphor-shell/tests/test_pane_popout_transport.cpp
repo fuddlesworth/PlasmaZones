@@ -23,6 +23,7 @@
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQuickItem>
+#include <QPointer>
 #include <QQuickWindow>
 #include <QRegularExpression>
 #include <QScreen>

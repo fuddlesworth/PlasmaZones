@@ -64,7 +64,12 @@ pre-commit:
       # Stdlib-only, so unlike the schema hook there is no venv to bootstrap
       # and this is always a hard gate.
       glob:
-        - "*.{cpp,cc,cxx,h,hpp,qml,luau,py,frag,vert,glsl}"
+        # `js` is here for the js-pragma rule. Without it a staged .js matches
+        # no entry, lefthook passes no files, and the rule that exists to stop
+        # a pragma drifting past Qt's 128-byte window would only ever fire in
+        # CI, which is the wall-of-warnings-from-files-nobody-edited case it
+        # was written to prevent.
+        - "*.{cpp,cc,cxx,h,hpp,qml,luau,py,frag,vert,glsl,js}"
         - "plasmazones/data/**/*.json"
         # `plasmazones/data/**/*.json` does not match a file sitting directly
         # in data/, and whatsnew.json is a prose surface CLAUDE.md names, so

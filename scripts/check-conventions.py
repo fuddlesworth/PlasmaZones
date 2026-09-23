@@ -28,8 +28,10 @@ Exit status is 1 if any violation was found, 0 otherwise.
 from __future__ import annotations
 
 import argparse
+import codecs
 import json
 import re
+import string
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -634,29 +636,63 @@ def rule_js_pragma(files: list[str]) -> list[Violation]:
     out = []
     for f in files:
         name = Path(f).name
-        # Mirrors Qt's own guard: lowercase basenames get no qmldir entry, so
-        # they are never checked and the pragma is irrelevant to them.
-        if Path(f).suffix != ".js" or not name[:1].isupper():
+        # Mirrors Qt's own guards, which are narrower than they look:
+        #   - lowercase basenames get no qmldir entry, so Qt never checks them;
+        #   - the gate is `qml_file_ext STREQUAL ".js"`, and CMake's EXT for
+        #     Foo.bar.js is ".bar.js", so a multi-dot name is skipped there
+        #     while Path.suffix would still say ".js";
+        #   - Qt's MATCHES "^[A-Z]" is ASCII, while str.isupper() is Unicode,
+        #     so "Ärger.js" would be flagged here and skipped by Qt.
+        # Neither multi-dot nor non-ASCII-initial .js exists in the tree today;
+        # matching Qt exactly keeps it that way if one ever lands.
+        #
+        # NOT modelled: QT_QML_SKIP_QMLDIR_ENTRY. Qt runs the pragma check only
+        # when that source-file property is unset, and plasmazones/src/
+        # CMakeLists.txt sets it TRUE on editor/qml/ColorUtils.js, which Qt
+        # therefore never inspects. Parsing CMake to learn that is not worth it
+        # for one file, so the rule is stricter than Qt there by design.
+        if name.count(".") != 1 or not name.endswith(".js"):
+            continue
+        if name[:1] not in string.ascii_uppercase:
             continue
         try:
             whole = (REPO / f).read_bytes()
         except OSError:
             continue
+        # CMake's file(STRINGS) strips a UTF-8 BOM before matching, so a BOM'd
+        # file satisfies Qt. Strip it here too, and offset the byte figures
+        # back so they still describe the real file.
+        bom = len(codecs.BOM_UTF8) if whole.startswith(codecs.BOM_UTF8) else 0
+        body = whole[bom:]
         # Anchored per line, like Qt's regex: a `.pragma library` sitting
         # inside a comment or trailing another statement is not what CMake
         # matches, so it must not satisfy this rule either.
-        head = whole[:JS_PRAGMA_WINDOW]
+        head = body[:JS_PRAGMA_WINDOW]
         if any(ln.strip(b"\r") == JS_PRAGMA for ln in head.split(b"\n")):
             continue
-        idx = whole.find(JS_PRAGMA)
+        idx = body.find(JS_PRAGMA)
         if idx < 0:
             out.append(Violation("js-pragma", f, 0,
                                  "no '.pragma library'; Qt will warn that this file is re-evaluated "
                                  "per importing document (rename it lowercase if that is intended)"))
-        else:
-            out.append(Violation("js-pragma", f, line_of(whole.decode("utf-8", "replace"), idx),
-                                 f"'.pragma library' ends at byte {idx + len(JS_PRAGMA)}, past Qt's "
+            continue
+        # Count newlines in BYTES. line_of() counts characters, so handing it a
+        # byte offset misreports the line for any file with multibyte UTF-8
+        # above the pragma.
+        line = body.count(b"\n", 0, idx) + 1
+        end = bom + idx + len(JS_PRAGMA)
+        if end > JS_PRAGMA_WINDOW:
+            out.append(Violation("js-pragma", f, line,
+                                 f"'.pragma library' ends at byte {end}, past Qt's "
                                  f"{JS_PRAGMA_WINDOW}-byte window; move it above the description"))
+        else:
+            # Inside the window, so the only way the line scan missed it is
+            # that it is not alone on its own line. Saying "past the window"
+            # here would send the reader to move a line already in the right
+            # place.
+            out.append(Violation("js-pragma", f, line,
+                                 "'.pragma library' is present but not alone on its own line; "
+                                 "Qt matches the anchored regex ^\\.pragma library$"))
     return out
 
 

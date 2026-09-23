@@ -138,6 +138,11 @@ install(CODE "
 install(DIRECTORY data/overlays/
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/overlays
     PATTERN ".*" EXCLUDE
+    # plasmazones-shader-validate --emit-preamble writes this
+    # gitignored editor aid for ALL FOUR pack families, not just the
+    # two that already excluded it. It carries no SPDX header, so
+    # installing one after a local emit ships an unheadered file.
+    PATTERN "p_generated.glsl" EXCLUDE
 )
 
 # The bundled overlay packs no longer ship preview.png card screenshots
@@ -165,6 +170,11 @@ install(CODE "
 install(DIRECTORY data/animations/
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/animations
     PATTERN ".*" EXCLUDE
+    # plasmazones-shader-validate --emit-preamble writes this
+    # gitignored editor aid for ALL FOUR pack families, not just the
+    # two that already excluded it. It carries no SPDX header, so
+    # installing one after a local emit ships an unheadered file.
+    PATTERN "p_generated.glsl" EXCLUDE
 )
 
 # Install bundled surface shader packs (window border / rounded corners today;

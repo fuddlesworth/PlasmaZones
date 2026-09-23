@@ -11,8 +11,15 @@ tags: ['cmake']
 # plasmazones_shared_qmlplugin from the plasmazones tier (ShellChrome hosts
 # the surface decoration through them), so the graph records that edge until
 # all three move into a phosphor library. Drop the plasmazones entry when
-# that lands. phosphor-shell/tests also reads plasmazones/data/surface and
-# rides this same exception.
+# that lands.
+#
+# phosphor-shell/tests also reads plasmazones/data/surface at runtime
+# (PZ_BUNDLED_SURFACE_DIR, test_shell_chrome), and `dependsOn` does NOT cover
+# that: affectedness does not propagate from a dependency to its dependent, so
+# editing a bundled surface pack would mark only plasmazones affected and this
+# tier's tests would not run under `--affected`. The workspace-relative test
+# input below is what closes it, the same way phosphor/moon.yml does for
+# data/animations and data/pointer.
 dependsOn:
   - 'phosphor'
   - 'phosphor-shell-libs'
@@ -21,3 +28,8 @@ dependsOn:
 project:
   name: 'Phosphor shell'
   description: 'The phosphor-shell binary, the phosphorctl IPC CLI, the bundled shell QML tree and the shell unit tests.'
+
+tasks:
+  test:
+    inputs:
+      - '/plasmazones/data/surface/**/*'

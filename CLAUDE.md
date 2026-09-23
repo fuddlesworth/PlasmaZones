@@ -26,13 +26,17 @@ Shared placement policy lives in `phosphor/libs/phosphor-engine`. A verdict from
 - NEVER use temporary workarounds, TODOs, "for now" hacks, or deferred fixes — solve the root cause properly the first time
 
 ## File Organization
-- NEVER save to root folder — use the directories below
-- Use `/src` for source code files
-- Use `/tests` for test files
+- NEVER save to the root folder — use the directories below
+- Source, tests and data live INSIDE a tier, not at the root. There is no
+  top-level `/src`, `/tests`, `/config` or `/examples`:
+  - `plasmazones/{src,tests,data}` for the app tier
+  - `phosphor/libs/<lib>/{src,include,tests}` for a tier-1 library
+  - `phosphor-shell-libs/{libs/<lib>,examples}` for the shell libraries and their demos
+  - `phosphor-shell/{src,shell,tests}` for the shell binary and its bundled QML
 - Use `/docs` for documentation and markdown files
-- Use `/config` for configuration files
-- Use `/scripts` for utility scripts
-- Use `/examples` for example code
+- Use `/scripts` for repo-level checks and dev harnesses
+- The full layout is the Directory Structure block further down; it is the
+  authoritative one.
 
 ## License
 - SPDX headers on every file whose format supports comments: `// SPDX-FileCopyrightText: 2026 fuddlesworth`. Data assets in formats with no comment syntax are exempt, which in practice means `plasmazones/data/**/*.json` and the `manifest.json.in` fixtures under `phosphor/libs/phosphor-registry/tests/` — never add a header to those, it makes the file invalid.
@@ -59,7 +63,7 @@ Shared placement policy lives in `phosphor/libs/phosphor-engine`. A verdict from
 - Forward declare in headers; group includes: own header → project → KDE → Qt
 - `PLASMAZONES_EXPORT` on public API classes
 - Keep files under 1000 lines, with a 15% grace (hard ceiling 1150). Under 1000 is the target; 1000–1150 is tolerated and not a review finding on its own. Past 1150, split by concern.
-- The ceiling binds NEW files and files being substantially rewritten. Around 63 existing files are already over it (the largest are `plasmazones/kwin-effect/plasmazoneseffect/plasmazoneseffect.h`, `plasmazones/kwin-effect/tilinghandler/tiling.cpp` and `plasmazones/tests/unit/helpers/StubSettings.h`); those are grandfathered. Do not raise an existing overrun as a review finding on its own, and do not split one as a drive-by. Growing one further, or adding a new file over the ceiling, is a finding.
+- The ceiling binds NEW files and files being substantially rewritten. Around 61 existing files are already over it (the largest are `plasmazones/kwin-effect/plasmazoneseffect/plasmazoneseffect.h`, `plasmazones/kwin-effect/tilinghandler/tiling.cpp` and `plasmazones/tests/unit/helpers/StubSettings.h`); those are grandfathered. Do not raise an existing overrun as a review finding on its own, and do not split one as a drive-by. Growing one further, or adding a new file over the ceiling, is a finding.
 - Input validation at system boundaries
 
 ### Qt6 String Literals (CRITICAL)
@@ -196,7 +200,7 @@ On Linux (native):
 cmake -B build -DBUILD_TESTING=ON -DBUILD_PHOSPHOR_SHELL=ON
 
 # Build
-cmake --build build --parallel $(nproc)
+cmake --build build --parallel 6   # literal 6, not $(nproc): see the pz-build skill
 
 # Test
 ctest --test-dir build --output-on-failure
@@ -207,7 +211,14 @@ ctest --test-dir build --output-on-failure
 # inspection: SPDX headers, the GPL-3 app / LGPL-2.1 libs split, the file-size
 # ceiling (growth-only, baselined in scripts/oversize-baseline.json),
 # PhosphorI18n::tr() over i18n() in C++, ConfigDefaults:: accessors over inline
-# config paths, and the plain-prose rules on user-facing strings. Stdlib only.
+# config paths, `.pragma library` inside Qt's 128-byte window in QML .js
+# libraries (see QML Style), and the plain-prose rules on the user-facing
+# strings it can reach. Stdlib only.
+#
+# The prose rule reaches data JSON, tr()/i18n(), settings-schema descriptions,
+# .desktop, AppStream, packaging and algorithm .luau. It does NOT reach
+# CHANGELOG.md entries or icon SVG <desc>, which are in the rule below but
+# stay review-only.
 # Also runs on pre-commit (staged files) and in CI (whole tree).
 python3 scripts/check-conventions.py
 python3 scripts/check-conventions.py --list-rules
@@ -234,7 +245,7 @@ How it maps onto CMake (see `.moon/tasks/cmake.yml`): every tier task runs from 
 
 Install is a whole-tree verb on the `repo` project, not a per-tier one, because CMake cannot install a subset here: none of the install rules declares a `COMPONENT`, so `cmake --install build --component <tier>` would install nothing. Per-tier install verbs need every rule tagged with a component first. Follow an install with `moon run repo:post-install` to refresh the KDE service cache, the same step `make post-install` runs.
 
-Known tier inversion: `phosphor-shell` links `plasmazones_rendering` and `plasmazones_shared_qml` from the plasmazones tier, so its `moon.yml` lists `plasmazones` as a dependency and `.moon/workspace.yml` turns layer enforcement off. Both go away together when those two targets move into a phosphor library.
+Known tier inversion: `phosphor-shell` links `plasmazones_rendering`, `plasmazones_shared_qml` and `plasmazones_shared_qmlplugin` from the plasmazones tier, so its `moon.yml` lists `plasmazones` as a dependency and `.moon/workspace.yml` turns layer enforcement off. Moving those three targets into a phosphor library is necessary but not sufficient: a second inversion, tier-1 tests reading tier-4 data under `plasmazones/data/`, has to go too before layer enforcement can be re-enabled. See `.moon/workspace.yml`.
 
 - CMake with `CMAKE_AUTOMOC/AUTORCC/AUTOUIC ON`
 - `qt_add_qml_module()` — ALL QML files must be listed (missing = runtime "not a type" error)

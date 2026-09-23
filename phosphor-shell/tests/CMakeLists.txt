@@ -434,3 +434,15 @@ if(TARGET test_control_center_controller)
     phosphor_append_test_environment(test_control_center_controller
         "QT_QPA_PLATFORM=offscreen:configfile=${CMAKE_CURRENT_SOURCE_DIR}/two-screens.json")
 endif()
+
+# Same fixture, different reason. SocketPopoutTransport's PRODUCTION default
+# screen-name resolver returns QScreen::name(), and the transport refuses an
+# empty name outright. The bare offscreen platform names its screen "", so
+# without a configfile that resolver can only ever take the refusal path and
+# the shipped code path stays untested. The named outputs let
+# theDefaultResolverNamesTheRequestedOutput run it for real. Appended after the
+# sweep for the last-wins reason above.
+if(TARGET test_socket_popout_transport)
+    phosphor_append_test_environment(test_socket_popout_transport
+        "QT_QPA_PLATFORM=offscreen:configfile=${CMAKE_CURRENT_SOURCE_DIR}/two-screens.json")
+endif()

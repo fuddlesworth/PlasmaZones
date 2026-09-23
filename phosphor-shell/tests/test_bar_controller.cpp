@@ -86,12 +86,13 @@ void TestBarController::registersEveryBuiltin()
 
     QCOMPARE(ids.size(), expected.size());
     QCOMPARE(ids, expected);
-    // Workspaces was held back through Phase 4.1 for want of a data source
-    // and landed with the Workspaces QML singleton behind it. Asserted by
-    // name because its absence was previously pinned here, and a silent
-    // regression to that state would otherwise read as an ordinary count
-    // change.
-    QVERIFY(ids.contains(QStringLiteral("placementmap")));
+    // Nothing follows the exact-list QCOMPARE above: it already requires
+    // every id and only those, and QCOMPARE returns on failure, so a
+    // contains() check here could never fail. The widget the Workspaces QML
+    // singleton backs is "placementmap" (shell.qml binds `workspaces:
+    // Workspaces` on it); there is no "workspaces" id in builtinWidgets(),
+    // so the name to look for when chasing that feature is the one in the
+    // list above.
 }
 
 void TestBarController::factoryIdsAreSorted()

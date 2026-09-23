@@ -31,9 +31,20 @@ tasks:
     options:
       cache: false
 
+  # Overrides `args`, not `command`, and replaces rather than appends. moon
+  # splits `command: 'cmake --preset debug'` into command `cmake` plus args
+  # `[--preset, debug]`, and the default arg merge is APPEND, so overriding
+  # only the command string resolved to `cmake --preset debug --preset
+  # release`. That configured the right tree purely because CMake takes the
+  # last --preset, which is a tiebreak this workflow should not depend on.
+  # build-release and test-release already spell it this way.
   configure-release:
     extends: 'configure'
-    command: 'cmake --preset release'
+    args:
+      - '--preset'
+      - 'release'
+    options:
+      mergeArgs: 'replace'
 
   # The checker walks every tracked file, so the input set has to be just as
   # wide or moon serves a cached PASS for a change it never inspected. cmake/
