@@ -203,6 +203,8 @@ TestCase {
         verify(card.row);
         verify(card.width <= 220);
         verify(card.contentItem.clip);
+        const footer = findChild(stage, "stage-footer");
+        verify(footer.y >= strip.y + strip.height + 12);
     }
     function test_scrollingWindowStripFollowsSelection() {
         const map = createTemporaryObject(mapComponent, testCase);

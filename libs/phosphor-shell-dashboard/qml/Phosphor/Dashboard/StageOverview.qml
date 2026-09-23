@@ -42,6 +42,15 @@ FocusScope {
     readonly property rect fittedPreview: scrolling ? Qt.rect(previewRect.x + (previewRect.width - canvas.width * previewScale) / 2, previewRect.y + (previewRect.height - canvas.height * previewScale) / 2, canvas.width * previewScale, canvas.height * previewScale) : previewRect
     readonly property rect nativeRect: Qt.rect(fittedPreview.x - canvas.x * fittedPreview.width / canvas.width, fittedPreview.y - canvas.y * fittedPreview.height / canvas.height, width * fittedPreview.width / canvas.width, height * fittedPreview.height / canvas.height)
     readonly property rect barRect: Qt.rect(Appearance.barInset, Appearance.bottom ? height - Appearance.barOffset - Appearance.barHeight : Appearance.barOffset, width - Appearance.barInset * 2, Appearance.barHeight)
+    readonly property real footerY: {
+        const defaultY = height - Math.min(130, height * 0.14);
+        if (!scrolling)
+            return defaultY;
+        // The scrolling strip is an extra row below the live preview. Keep
+        // the keyboard legend below that row instead of letting it sit on
+        // top of the card bottoms on shorter outputs.
+        return Math.min(height - 32, Math.max(defaultY, windowList.y + windowList.height + 12));
+    }
     function desktopFrame(window) {
         const frame = window.nativeRect && window.nativeRect.width > 0 ? window.nativeRect : Qt.rect(window.x, window.y, window.w, window.h);
         return Qt.rect(workArea.x + frame.x * workArea.width, workArea.y + frame.y * workArea.height, frame.width * workArea.width, frame.height * workArea.height);
@@ -620,8 +629,9 @@ FocusScope {
         }
     }
     Item {
+        objectName: "stage-footer"
         x: root.previewRect.x + 2
-        y: root.height - Math.min(130, root.height * 0.14)
+        y: root.footerY
         width: root.previewRect.width - 4
         height: 20
         Row {
