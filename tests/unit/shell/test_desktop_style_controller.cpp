@@ -3,11 +3,33 @@
 #include "shell/DesktopStyleController.h"
 #include "config/configdefaults.h"
 #include <PhosphorConfig/JsonBackend.h>
+#include <QDir>
+#include <QFile>
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QTest>
+#include <functional>
+#include <utility>
 using PhosphorShellApp::DesktopStyleController;
 using CD = PlasmaZones::ConfigDefaults;
+
+class FailingBackend : public PhosphorConfig::JsonBackend
+{
+public:
+    using JsonBackend::JsonBackend;
+    bool failNextCommit = false;
+    std::function<void()> afterCommit;
+    bool commit() override
+    {
+        if (std::exchange(failNextCommit, false))
+            return false;
+        const bool committed = JsonBackend::commit();
+        if (committed && afterCommit)
+            std::exchange(afterCommit, {})();
+        return committed;
+    }
+};
+
 class TestDesktopStyleController : public QObject
 {
     Q_OBJECT
@@ -86,6 +108,193 @@ private Q_SLOTS:
         QCOMPARE(group->readInt(CD::innerGapKey()), 11);
         QVERIFY(!group->hasKey(CD::outerGapTopKey()));
     }
+    void failedUpdateStillRestoresLastSuccessfulValues()
+    {
+        QTemporaryDir dir;
+        const auto path = dir.filePath(QStringLiteral("config.json"));
+        auto backend = std::make_unique<FailingBackend>(path);
+        auto* read = backend.get();
+        {
+            auto group = read->group(CD::gapsGroup());
+            group->writeInt(CD::innerGapKey(), 9);
+        }
+        QVERIFY(read->commit());
+        DesktopStyleController controller(dir.filePath(QStringLiteral("kwinrc")),
+                                          dir.filePath(QStringLiteral("session.json")), std::move(backend), true,
+                                          QDBusConnection(QString()));
+        controller.apply({{QStringLiteral("gap"), 16}});
+        read->failNextCommit = true;
+        QTest::ignoreMessage(QtWarningMsg, "Could not apply the shell window spacing");
+        controller.apply({{QStringLiteral("gap"), 24}});
+
+        PhosphorConfig::JsonBackend disk(path);
+        {
+            auto group = disk.group(CD::gapsGroup());
+            QCOMPARE(group->readInt(CD::innerGapKey()), 16);
+        }
+        QVERIFY(controller.restore());
+        disk.reparseConfiguration();
+        auto group = disk.group(CD::gapsGroup());
+        QCOMPARE(group->readInt(CD::innerGapKey()), 9);
+        QVERIFY(!group->hasKey(CD::outerGapTopKey()));
+    }
+
+    void retryAfterFailedUpdateKeepsOriginalBaseline()
+    {
+        QTemporaryDir dir;
+        const auto path = dir.filePath(QStringLiteral("config.json"));
+        auto backend = std::make_unique<FailingBackend>(path);
+        auto* read = backend.get();
+        {
+            auto group = read->group(CD::gapsGroup());
+            group->writeInt(CD::innerGapKey(), 9);
+        }
+        QVERIFY(read->commit());
+        DesktopStyleController controller(dir.filePath(QStringLiteral("kwinrc")),
+                                          dir.filePath(QStringLiteral("session.json")), std::move(backend), true,
+                                          QDBusConnection(QString()));
+        controller.apply({{QStringLiteral("gap"), 16}});
+        read->failNextCommit = true;
+        QTest::ignoreMessage(QtWarningMsg, "Could not apply the shell window spacing");
+        controller.apply({{QStringLiteral("gap"), 24}});
+        controller.apply({{QStringLiteral("gap"), 24}});
+        {
+            auto group = read->group(CD::gapsGroup());
+            QCOMPARE(group->readInt(CD::innerGapKey()), 24);
+        }
+        QVERIFY(controller.restore());
+        auto group = read->group(CD::gapsGroup());
+        QCOMPARE(group->readInt(CD::innerGapKey()), 9);
+        QVERIFY(!group->hasKey(CD::outerGapTopKey()));
+    }
+
+    void interruptedUpdateRecoversAcrossRestart_data()
+    {
+        QTest::addColumn<bool>("committed");
+        QTest::newRow("before-backend-commit") << false;
+        QTest::newRow("after-backend-commit") << true;
+    }
+
+    void failedCompletionRecordDoesNotRetainStaleApplyCache()
+    {
+        QTemporaryDir dir;
+        const auto path = dir.filePath(QStringLiteral("config.json"));
+        const auto journalPath = dir.filePath(QStringLiteral("session.json"));
+        const auto backup = dir.filePath(QStringLiteral("journal-backup.json"));
+        auto backend = std::make_unique<FailingBackend>(path);
+        auto* read = backend.get();
+        {
+            auto group = read->group(CD::gapsGroup());
+            group->writeInt(CD::innerGapKey(), 9);
+        }
+        QVERIFY(read->commit());
+        DesktopStyleController controller(dir.filePath(QStringLiteral("kwinrc")), journalPath, std::move(backend), true,
+                                          QDBusConnection(QString()));
+        controller.apply({{QStringLiteral("gap"), 16}});
+        read->afterCommit = [&] {
+            QVERIFY(QFile::rename(journalPath, backup));
+            QVERIFY(QDir().mkpath(journalPath));
+        };
+        QTest::ignoreMessage(QtWarningMsg, "Could not record the applied shell window spacing");
+        controller.apply({{QStringLiteral("gap"), 24}});
+        QVERIFY(QDir().rmdir(journalPath));
+        QVERIFY(QFile::rename(backup, journalPath));
+        controller.apply({{QStringLiteral("gap"), 16}});
+        {
+            auto group = read->group(CD::gapsGroup());
+            QCOMPARE(group->readInt(CD::innerGapKey()), 16);
+        }
+        QVERIFY(controller.restore());
+        auto group = read->group(CD::gapsGroup());
+        QCOMPARE(group->readInt(CD::innerGapKey()), 9);
+    }
+
+    void interruptedUpdateRecoversAcrossRestart()
+    {
+        QFETCH(bool, committed);
+        QTemporaryDir dir;
+        const auto path = dir.filePath(QStringLiteral("config.json"));
+        const auto journalPath = dir.filePath(QStringLiteral("session.json"));
+        const auto kwinPath = dir.filePath(QStringLiteral("kwinrc"));
+        QByteArray interruptedJournal;
+        {
+            auto backend = std::make_unique<FailingBackend>(path);
+            auto* read = backend.get();
+            {
+                auto group = read->group(CD::gapsGroup());
+                group->writeInt(CD::innerGapKey(), 9);
+            }
+            QVERIFY(read->commit());
+            DesktopStyleController controller(kwinPath, journalPath, std::move(backend), true,
+                                              QDBusConnection(QString()));
+            controller.apply({{QStringLiteral("gap"), 16}});
+            read->afterCommit = [&] {
+                QFile journal(journalPath);
+                QVERIFY(journal.open(QIODevice::ReadOnly));
+                interruptedJournal = journal.readAll();
+            };
+            controller.apply({{QStringLiteral("gap"), 24}});
+        }
+        QVERIFY(!interruptedJournal.isEmpty());
+        // Recreate either atomic disk outcome with the journal captured
+        // between the backend commit and the completion record.
+        PhosphorConfig::JsonBackend disk(path);
+        {
+            auto group = disk.group(CD::gapsGroup());
+            const auto gaps = DesktopStyleController::gaps({{QStringLiteral("gap"), committed ? 24 : 16}});
+            for (auto it = gaps.cbegin(); it != gaps.cend(); ++it)
+                group->writeJson(it.key(), QJsonValue::fromVariant(it.value()));
+            group->writeInt(CD::outerGapRightKey(), 11);
+        }
+        QVERIFY(disk.commit());
+        {
+            QFile journal(journalPath);
+            QVERIFY(journal.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            QCOMPARE(journal.write(interruptedJournal), interruptedJournal.size());
+        }
+        DesktopStyleController recovered(kwinPath, journalPath, std::make_unique<PhosphorConfig::JsonBackend>(path),
+                                         true, QDBusConnection(QString()));
+        QVERIFY(recovered.restore());
+        disk.reparseConfiguration();
+        auto group = disk.group(CD::gapsGroup());
+        QCOMPARE(group->readInt(CD::innerGapKey()), 9);
+        QCOMPARE(group->readInt(CD::outerGapRightKey()), 11);
+        QVERIFY(!group->hasKey(CD::outerGapTopKey()));
+    }
+
+    void failedRestoreCompletionDoesNotRetainStaleApplyCache()
+    {
+        QTemporaryDir dir;
+        const auto path = dir.filePath(QStringLiteral("config.json"));
+        const auto journalPath = dir.filePath(QStringLiteral("session.json"));
+        const auto backup = dir.filePath(QStringLiteral("journal-backup.json"));
+        auto backend = std::make_unique<FailingBackend>(path);
+        auto* read = backend.get();
+        {
+            auto group = read->group(CD::gapsGroup());
+            group->writeInt(CD::innerGapKey(), 9);
+        }
+        QVERIFY(read->commit());
+        DesktopStyleController controller(dir.filePath(QStringLiteral("kwinrc")), journalPath, std::move(backend), true,
+                                          QDBusConnection(QString()));
+        controller.apply({{QStringLiteral("gap"), 16}});
+        read->afterCommit = [&] {
+            QVERIFY(QFile::rename(journalPath, backup));
+            QVERIFY(QDir().mkpath(journalPath));
+        };
+        QVERIFY(!controller.restore());
+        QVERIFY(QDir().rmdir(journalPath));
+        QVERIFY(QFile::rename(backup, journalPath));
+        controller.apply({{QStringLiteral("gap"), 16}});
+        {
+            auto group = read->group(CD::gapsGroup());
+            QCOMPARE(group->readInt(CD::innerGapKey()), 16);
+        }
+        QVERIFY(controller.restore());
+        auto group = read->group(CD::gapsGroup());
+        QCOMPARE(group->readInt(CD::innerGapKey()), 9);
+    }
+
     void missingPluginLeavesDesktopUntouched()
     {
         QTemporaryDir dir;

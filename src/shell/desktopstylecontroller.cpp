@@ -14,6 +14,7 @@
 #include <QSaveFile>
 #include <QSettings>
 #include <QStandardPaths>
+#include <utility>
 
 namespace PhosphorShellApp {
 namespace {
@@ -110,8 +111,10 @@ void DesktopStyleController::apply(const QVariantMap& settings)
                      {QStringLiteral("library"), kwin.value(LibraryKey)}};
     }
     const auto previous = m_journal;
-    m_journal[QStringLiteral("appliedGaps")] = desired;
-    // Persist the restoration data before changing either external file.
+    m_journal[QStringLiteral("pendingGaps")] = desired;
+    // Retain the last successful values while journaling the next write.
+    // Recovery accepts either set: a crash may happen before or after the
+    // atomic backend commit, before the journal records its completion.
     if (!saveJournal()) {
         m_journal = previous;
         qWarning("Could not journal the shell desktop style");
@@ -127,8 +130,15 @@ void DesktopStyleController::apply(const QVariantMap& settings)
         qWarning("Could not apply the shell window spacing");
         return;
     }
+    m_settings.clear();
     if (spacingChanged)
         reloadPlacement();
+    m_journal[QStringLiteral("appliedGaps")] = desired;
+    m_journal.remove(QStringLiteral("pendingGaps"));
+    if (!saveJournal()) {
+        qWarning("Could not record the applied shell window spacing");
+        return;
+    }
     const bool changed = kwin.value(LibraryKey).toString() != Library;
     kwin.setValue(LibraryKey, Library);
     kwin.sync();
@@ -147,10 +157,19 @@ bool DesktopStyleController::restore()
     m_backend->reparseConfiguration();
     const auto original = m_journal.value(QStringLiteral("originalGaps")).toMap();
     const auto applied = m_journal.value(QStringLiteral("appliedGaps")).toMap();
+    const auto pending = m_journal.value(QStringLiteral("pendingGaps")).toMap();
+    auto owned = applied;
+    for (auto it = pending.cbegin(); it != pending.cend(); ++it)
+        owned.insert(it.key(), it.value());
     {
         const auto group = m_backend->group(CD::gapsGroup());
-        for (auto it = applied.cbegin(); it != applied.cend(); ++it) {
-            if (group->readJson(it.key()) != QJsonValue::fromVariant(it.value()))
+        for (auto it = owned.cbegin(); it != owned.cend(); ++it) {
+            const auto current = group->readJson(it.key());
+            const bool matchesApplied =
+                applied.contains(it.key()) && current == QJsonValue::fromVariant(applied.value(it.key()));
+            const bool matchesPending =
+                pending.contains(it.key()) && current == QJsonValue::fromVariant(pending.value(it.key()));
+            if (!matchesApplied && !matchesPending)
                 continue;
             if (original.contains(it.key()))
                 group->writeJson(it.key(), QJsonValue::fromVariant(original.value(it.key())));
@@ -161,6 +180,7 @@ bool DesktopStyleController::restore()
     const bool spacingChanged = m_backend->isDirty();
     if (!m_backend->commit())
         return false;
+    m_settings.clear();
     if (spacingChanged)
         reloadPlacement();
     QSettings kwin(m_kwinPath, QSettings::IniFormat);
