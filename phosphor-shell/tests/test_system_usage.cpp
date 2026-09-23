@@ -5,9 +5,15 @@
 // used to live in QML and was moved to C++ precisely so it could be pinned:
 // the jiffy accounting, the busy-rate delta arithmetic (including the
 // no-usable-rate sentinel and both clamps), the malformed-layout
-// rejections, the interval floor, and the change-notification guards. The
-// parse and rate entry points are static and take values, so no filesystem
-// or timer is involved.
+// rejections, the interval floor, and the change-notification guards.
+//
+// Most slots drive the parse and rate entry points, which are static and take
+// values, so no filesystem or timer is involved there. Three (the interval
+// floor, the change-notification guard and the enable re-baseline) do need a
+// live SystemUsage, which owns a sampling timer and reads /proc. They are
+// written to stay deterministic anyway: none asserts a specific CPU or memory
+// figure, only that a value does not change when the contract says it must
+// not, so a busy or idle machine gives the same verdict.
 
 #include <PhosphorShell/SystemUsage.h>
 

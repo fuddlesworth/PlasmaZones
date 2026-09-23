@@ -16,6 +16,10 @@ Rectangle {
     // Layout.fillWidth so columns share the row evenly. 220 is the
     // intrinsic minimum that still fits the longest token name without
     // eliding.
+    //
+    // Main.qml's GridLayout derives its column count from this same number
+    // (its swatchMinWidth). The two must change together, or the grid
+    // overflows the viewport or leaves a dead column.
     implicitWidth: 220
     height: 88
     radius: Tokens.radius_m

@@ -76,6 +76,13 @@ private Q_SLOTS:
     void initialPropertiesReachTheTile();
 
 private:
+    // Shared across slots with no cleanup() between them, deliberately. The
+    // two slots that build a tile leave it parented to m_parent, so children
+    // do accumulate over the run, but nothing here reads m_parent's child
+    // list or count, and each slot asserts only on the pointer it just got
+    // back. Rebuilding the engine per slot would cost a QML type-registration
+    // cycle for no change in what is tested. Add a cleanup() if a slot ever
+    // starts counting children, because then the leftovers become visible.
     QQmlEngine m_engine;
     QQuickItem m_parent;
 };

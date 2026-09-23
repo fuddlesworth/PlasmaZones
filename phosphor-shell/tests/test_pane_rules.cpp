@@ -87,6 +87,7 @@ void TestPaneRules::controlCenterRuleCarriesThePerModePlacement()
     QVERIFY(byType.contains(QString(ActionType::OpenColumnWidth)));
     QVERIFY(qFuzzyCompare(byType.value(QString(ActionType::OpenColumnWidth)).value(ActionParam::Value).toDouble(),
                           1.0 / 3.0));
+    QVERIFY(byType.contains(QString(ActionType::OpenColumnPlacement)));
     QCOMPARE(byType.value(QString(ActionType::OpenColumnPlacement)).value(ActionParam::Value).toString(),
              QString(ColumnPlacementToken::NewColumn));
     // Tiling has no per-window insert-position action (it is a context

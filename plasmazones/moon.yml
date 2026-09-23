@@ -12,4 +12,4 @@ dependsOn:
 
 project:
   name: 'PlasmaZones'
-  description: 'Window snapping, tiling and scrolling for KDE Plasma: daemon, editor, settings, KCM, KWin effect, bundled data and tests.'
+  description: 'Window snapping, tiling and scrolling for KDE Plasma. Covers the daemon, editor, settings, KCM, KWin effect, bundled data and tests.'

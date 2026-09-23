@@ -60,6 +60,25 @@ tasks:
       - 'phosphor/data/schemas/**/*'
       - 'plasmazones/data/**/*.json'
 
+  # ECM's KDECMakeSettings registers appstreamtest at the BUILD ROOT, not
+  # under any tier, so `ctest --test-dir build/<tier>` never sees it and no
+  # tier's test task runs it. It is the only such entry (1 of 568), hence
+  # the explicit name rather than a directory scope; if ECM ever adds
+  # another root-scoped test, it belongs on this line.
+  #
+  # It validates the installed .metainfo.xml against install_manifest.txt,
+  # so it is only meaningful in a tree that has been installed. Without a
+  # manifest appstreamtest.cmake prints "Not installed yet, skipping" and
+  # passes having checked nothing, which is why this is not a dep of
+  # repo:check -- a green run here does not by itself mean the metadata
+  # was validated.
+  test:
+    command: 'ctest --test-dir build -R ^appstreamtest$'
+    deps:
+      - 'phosphor-shell:build'
+    options:
+      cache: false
+
   check:
     deps:
       - '~:conventions'

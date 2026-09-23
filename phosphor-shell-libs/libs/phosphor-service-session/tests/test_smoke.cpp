@@ -67,6 +67,23 @@ private Q_SLOTS:
     void inertActionsAreNoOps()
     {
         SessionHost host(QDBusConnection::sessionBus(), QStringLiteral("org.freedesktop.login1.invalid.test"));
+
+        // Assert the gate is shut BEFORE calling reboot/powerOff/halt, rather
+        // than trusting it. These are the most destructive verbs in the
+        // library, and what makes calling them here safe is that every
+        // capability is Unknown so the gate refuses before a message is built.
+        // Unasserted, a regression that opened the gate would turn this slot
+        // into a real PowerOff() call the moment it ran against a bus where
+        // the name resolved. The bogus service name is the second line of
+        // defence, not the first, and only the first one is the contract.
+        QCOMPARE(host.canSuspend(), SessionHost::Availability::Unknown);
+        QCOMPARE(host.canHibernate(), SessionHost::Availability::Unknown);
+        QCOMPARE(host.canHybridSleep(), SessionHost::Availability::Unknown);
+        QCOMPARE(host.canSuspendThenHibernate(), SessionHost::Availability::Unknown);
+        QCOMPARE(host.canReboot(), SessionHost::Availability::Unknown);
+        QCOMPARE(host.canPowerOff(), SessionHost::Availability::Unknown);
+        QCOMPARE(host.canHalt(), SessionHost::Availability::Unknown);
+
         host.suspend();
         host.hibernate();
         host.hybridSleep();
@@ -77,6 +94,13 @@ private Q_SLOTS:
         host.lock();
         host.terminateSession();
         QTest::qWait(20);
+
+        // Still shut afterwards: no action may open the gate as a side effect,
+        // and the async Can* replies (errors, the name is bogus) must resolve
+        // to Unknown rather than flipping to a real availability.
+        QCOMPARE(host.canReboot(), SessionHost::Availability::Unknown);
+        QCOMPARE(host.canPowerOff(), SessionHost::Availability::Unknown);
+        QCOMPARE(host.canHalt(), SessionHost::Availability::Unknown);
     }
 
     // logout() is a pure signal: it emits logoutRequested() for the shell to act

@@ -7,6 +7,12 @@ import QtQuick.Layouts
 import org.kde.kcmutils as KCMUtils
 import org.kde.kirigami as Kirigami
 
+// The strings below use qsTr(), not the i18n()/i18nc() the rest of the
+// tier's QML uses. That is deliberate and is the one exception: i18n() needs
+// a PhosphorLocalizedContext on the engine, which lives in plasmazones_core,
+// and linking that into a minimal About plugin would pull the daemon's world
+// into the systemsettings process to translate nine strings. kcmabout.cpp
+// installs a plain QTranslator instead and carries the full reasoning.
 KCMUtils.SimpleKCM {
     id: root
 

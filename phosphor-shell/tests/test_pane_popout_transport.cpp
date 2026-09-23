@@ -78,36 +78,9 @@ class TestPanePopoutTransport : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
-    void nearestZonePrefersTheTopEdgeThenTheNearestCentre()
-    {
-        const auto cell = [](int zone, int x, int y, int w) {
-            QVariantMap m;
-            m.insert(QStringLiteral("zoneNumber"), zone);
-            m.insert(QStringLiteral("x"), x);
-            m.insert(QStringLiteral("y"), y);
-            m.insert(QStringLiteral("w"), w);
-            m.insert(QStringLiteral("h"), 500);
-            return QVariant(m);
-        };
-        const QRect workArea(0, 28, 1920, 1052);
-        // Two zones along the top edge, one below them. A chip at the far
-        // right lands in the right top zone, a chip at the left in the left one.
-        const QVariantList cells{cell(1, 0, 28, 960), cell(2, 960, 28, 960), cell(3, 0, 600, 1920)};
-        QCOMPARE(PanePopoutTransport::nearestZone(cells, workArea, 1800), 2);
-        QCOMPARE(PanePopoutTransport::nearestZone(cells, workArea, 100), 1);
-        // With nothing on the top edge, every zone competes by centre.
-        const QVariantList lower{cell(4, 0, 600, 960), cell(5, 960, 600, 960)};
-        QCOMPARE(PanePopoutTransport::nearestZone(lower, workArea, 1800), 5);
-        // Cells without a zone number (tiles, columns) never answer.
-        QVariantMap tile;
-        tile.insert(QStringLiteral("x"), 1500);
-        tile.insert(QStringLiteral("w"), 400);
-        QCOMPARE(PanePopoutTransport::nearestZone({QVariant(tile)}, workArea, 1800), 0);
-        QCOMPARE(PanePopoutTransport::nearestZone({}, QRect(), 0), 0);
-    }
-
     void init();
     void cleanup();
+    void nearestZonePrefersTheTopEdgeThenTheNearestCentre();
     void appIdIsThePanePrefixPlusThePopoutId();
     void opensOneToplevelWithThePaneIdentity();
     void closeReleasesThenUnmapsWithoutNotifying();
@@ -129,6 +102,34 @@ private:
     std::unique_ptr<PanePopoutTransport> m_transport;
     QStringList m_dismissed;
 };
+
+void TestPanePopoutTransport::nearestZonePrefersTheTopEdgeThenTheNearestCentre()
+{
+    const auto cell = [](int zone, int x, int y, int w) {
+        QVariantMap m;
+        m.insert(QStringLiteral("zoneNumber"), zone);
+        m.insert(QStringLiteral("x"), x);
+        m.insert(QStringLiteral("y"), y);
+        m.insert(QStringLiteral("w"), w);
+        m.insert(QStringLiteral("h"), 500);
+        return QVariant(m);
+    };
+    const QRect workArea(0, 28, 1920, 1052);
+    // Two zones along the top edge, one below them. A chip at the far
+    // right lands in the right top zone, a chip at the left in the left one.
+    const QVariantList cells{cell(1, 0, 28, 960), cell(2, 960, 28, 960), cell(3, 0, 600, 1920)};
+    QCOMPARE(PanePopoutTransport::nearestZone(cells, workArea, 1800), 2);
+    QCOMPARE(PanePopoutTransport::nearestZone(cells, workArea, 100), 1);
+    // With nothing on the top edge, every zone competes by centre.
+    const QVariantList lower{cell(4, 0, 600, 960), cell(5, 960, 600, 960)};
+    QCOMPARE(PanePopoutTransport::nearestZone(lower, workArea, 1800), 5);
+    // Cells without a zone number (tiles, columns) never answer.
+    QVariantMap tile;
+    tile.insert(QStringLiteral("x"), 1500);
+    tile.insert(QStringLiteral("w"), 400);
+    QCOMPARE(PanePopoutTransport::nearestZone({QVariant(tile)}, workArea, 1800), 0);
+    QCOMPARE(PanePopoutTransport::nearestZone({}, QRect(), 0), 0);
+}
 
 void TestPanePopoutTransport::init()
 {

@@ -59,7 +59,7 @@ Menu {
     MenuItem {
         text: i18nc("@action", "Copy")
         icon.name: "edit-copy"
-        enabled: contextMenu.zoneId !== "" && contextMenu.editorController !== null
+        enabled: contextMenu.zoneId !== "" && contextMenu.editorController
         onTriggered: {
             let ctrl = contextMenu.editorController;
             let id = contextMenu.zoneId;
@@ -76,7 +76,7 @@ Menu {
     MenuItem {
         text: i18nc("@action", "Cut")
         icon.name: "edit-cut"
-        enabled: contextMenu.zoneId !== "" && contextMenu.editorController !== null
+        enabled: contextMenu.zoneId !== "" && contextMenu.editorController
         onTriggered: {
             let ctrl = contextMenu.editorController;
             let id = contextMenu.zoneId;

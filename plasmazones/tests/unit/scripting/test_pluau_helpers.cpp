@@ -33,6 +33,23 @@ QByteArray preludeSource()
 }
 } // namespace
 
+// QVariantMap::value() hands back a default-constructed QVariant for a key that
+// is not there, so toBool() yields false, toInt() yields 0 and toString() yields
+// empty. Every assertion below that expects one of those values would therefore
+// pass just as happily against a probe table that never set the field, which is
+// what a rename in pluau.luau or a typo in a probe body produces. QVERIFY on
+// isEmpty() does not help: it only proves SOME key came back.
+//
+// So each slot names the exact keys it is about to read. QVERIFY2 expands to a
+// return, so a missing key aborts that slot naming the field rather than
+// reporting a confusing value mismatch further down.
+#define VERIFY_KEYS(map, ...)                                                                                          \
+    do {                                                                                                               \
+        for (const char* _key : {__VA_ARGS__}) {                                                                       \
+            QVERIFY2((map).contains(QLatin1String(_key)), _key);                                                       \
+        }                                                                                                              \
+    } while (false)
+
 class TestPluauHelpers : public QObject
 {
     Q_OBJECT
@@ -104,7 +121,7 @@ void TestPluauHelpers::guardArea()
         end }
     )LUA";
     const QVariantMap r = run(body).toMap();
-    QVERIFY(!r.isEmpty());
+    VERIFY_KEYS(r, "zeroIsNil", "zeroLen", "smallIsNil", "smallLen", "smallW", "proceedIsNil");
     QCOMPARE(r.value(QStringLiteral("zeroIsNil")).toBool(), false);
     QCOMPARE(r.value(QStringLiteral("zeroLen")).toInt(), 0);
     QCOMPARE(r.value(QStringLiteral("smallIsNil")).toBool(), false);
@@ -133,7 +150,8 @@ void TestPluauHelpers::stripLayoutEvenAndDegenerate()
         end }
     )LUA";
     const QVariantMap r = run(body).toMap();
-    QVERIFY(!r.isEmpty());
+    VERIFY_KEYS(r, "vertLen", "vertW", "vertX", "horizLen", "horizH", "horizY", "degenLen", "degenH1", "degenH2",
+                "degenH3", "degenX", "degenW");
     // Vertical strip: fixed width = panelW, fixed x = startX, height distributed.
     QCOMPARE(r.value(QStringLiteral("vertLen")).toInt(), 3);
     QCOMPARE(r.value(QStringLiteral("vertW")).toInt(), 100);
@@ -163,7 +181,7 @@ void TestPluauHelpers::resizeRatio()
         end }
     )LUA";
     const QVariantMap r = run(body).toMap();
-    QVERIFY(!r.isEmpty());
+    VERIFY_KEYS(r, "grow", "shrink");
     QCOMPARE(r.value(QStringLiteral("grow")).toDouble(), 0.6); // 120 * 0.5 / 100
     QCOMPARE(r.value(QStringLiteral("shrink")).toDouble(), 0.4); // 1 - 120 * 0.5 / 100
 }
@@ -238,7 +256,8 @@ void TestPluauHelpers::masterStackResize()
         end }
     )LUA";
     const QVariantMap r = run(body).toMap();
-    QVERIFY(!r.isEmpty());
+    VERIFY_KEYS(r, "vGrow", "vShrink", "hGrow", "hShrink", "singleIsNil", "badRatioIsNil", "zeroDimIsNil",
+                "wrongEdgeIsNil");
     QCOMPARE(r.value(QStringLiteral("vGrow")).toDouble(), 0.6); // 120 * 0.5 / 100
     QCOMPARE(r.value(QStringLiteral("vShrink")).toDouble(), 0.4); // 1 - 120 * 0.5 / 100
     QCOMPARE(r.value(QStringLiteral("hGrow")).toDouble(), 0.6); // height axis, same closed form
@@ -263,7 +282,7 @@ void TestPluauHelpers::clampBoundsAndNaN()
         end }
     )LUA";
     const QVariantMap r = run(body).toMap();
-    QVERIFY(!r.isEmpty());
+    VERIFY_KEYS(r, "mid", "lo", "hi", "nanIsNil", "strIsNil");
     QCOMPARE(r.value(QStringLiteral("mid")).toDouble(), 0.5);
     QCOMPARE(r.value(QStringLiteral("lo")).toDouble(), 0.1);
     QCOMPARE(r.value(QStringLiteral("hi")).toDouble(), 0.9);
@@ -284,7 +303,7 @@ void TestPluauHelpers::minSizeAt()
         end }
     )LUA";
     const QVariantMap r = run(body).toMap();
-    QVERIFY(!r.isEmpty());
+    VERIFY_KEYS(r, "w0", "h0", "w1", "h1", "w5", "h5", "we", "he");
     QCOMPARE(r.value(QStringLiteral("w0")).toInt(), 200);
     QCOMPARE(r.value(QStringLiteral("h0")).toInt(), 150);
     QCOMPARE(r.value(QStringLiteral("w1")).toInt(), 0); // w = 0 is not > 0
@@ -307,7 +326,7 @@ void TestPluauHelpers::gridShape()
         end }
     )LUA";
     const QVariantMap r = run(body).toMap();
-    QVERIFY(!r.isEmpty());
+    VERIFY_KEYS(r, "c1", "r1", "c4", "r4", "c5", "r5", "c9", "r9");
     QCOMPARE(r.value(QStringLiteral("c1")).toInt(), 1);
     QCOMPARE(r.value(QStringLiteral("r1")).toInt(), 1);
     QCOMPARE(r.value(QStringLiteral("c4")).toInt(), 2);
@@ -328,7 +347,7 @@ void TestPluauHelpers::cumulativeOffsets()
         end }
     )LUA";
     const QVariantMap r = run(body).toMap();
-    QVERIFY(!r.isEmpty());
+    VERIFY_KEYS(r, "len", "o1", "o2", "o3", "elen", "e1");
     QCOMPARE(r.value(QStringLiteral("len")).toInt(), 3);
     QCOMPARE(r.value(QStringLiteral("o1")).toInt(), 100);
     QCOMPARE(r.value(QStringLiteral("o2")).toInt(), 160); // 100 + 50 + 10
@@ -349,7 +368,7 @@ void TestPluauHelpers::center()
         end }
     )LUA";
     const QVariantMap r = run(body).toMap();
-    QVERIFY(!r.isEmpty());
+    VERIFY_KEYS(r, "a", "b");
     QCOMPARE(r.value(QStringLiteral("a")).toInt(), 30); // 0 + floor((100 - 40) / 2)
     QCOMPARE(r.value(QStringLiteral("b")).toInt(), 39); // 10 + floor((100 - 41) / 2)
 }

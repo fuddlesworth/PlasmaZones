@@ -36,13 +36,20 @@ PerScreen {
             height: 200
             visible: true
             title: screenWindow.name
+
+            // Raw hex rather than Phosphor.Theme tokens, unlike the other
+            // demos. Deliberate: this one demonstrates PerScreen's delegate
+            // lifecycle, and importing Phosphor.Theme would make it link the
+            // theme library and its QML plugin to paint two labels. The
+            // colors are chrome for a diagnostic window, not a palette
+            // example, so there is nothing here for a token to carry.
             color: "#202028"
 
             Text {
                 anchors.centerIn: parent
                 color: "#ffffff"
                 font.pixelSize: 20
-                text: screenWindow.name + (screenWindow.isPrimary ? "  [PRIMARY]" : "")
+                text: screenWindow.name + (screenWindow.isPrimary ? qsTr("  [PRIMARY]") : "")
             }
 
             Text {
@@ -51,7 +58,7 @@ PerScreen {
                 anchors.margins: 12
                 color: "#a0a0c0"
                 font.pixelSize: 12
-                text: "index " + screenWindow.index
+                text: qsTr("index %1").arg(screenWindow.index)
             }
         }
     }

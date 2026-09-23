@@ -21,6 +21,13 @@ Item {
     // Parent window width (passed from parent for sizing)
     property real windowWidth: parent ? parent.width : 0
 
+    // Both banners hang off the same anchor and share one width cap, so the
+    // two expressions live here rather than being repeated per banner. The
+    // error banner starts from baseY and adds the success banner's height
+    // when both are up.
+    readonly property real baseY: notifications.anchorItem ? (notifications.anchorItem.y + notifications.anchorItem.height + Kirigami.Units.gridUnit * 2) : Kirigami.Units.gridUnit * 2
+    readonly property real bannerWidth: Math.min(Kirigami.Units.gridUnit * 50, notifications.windowWidth * 0.8)
+
     // Public functions to show notifications
     function showSuccess(message) {
         successNotification.show(message);
@@ -39,8 +46,8 @@ Item {
         dismissTimeout: 3000
         accessibleRoleName: i18nc("@info:accessibility", "Success notification")
         anchors.horizontalCenter: parent.horizontalCenter
-        y: notifications.anchorItem ? (notifications.anchorItem.y + notifications.anchorItem.height + Kirigami.Units.gridUnit * 2) : Kirigami.Units.gridUnit * 2
-        width: Math.min(Kirigami.Units.gridUnit * 50, notifications.windowWidth * 0.8)
+        y: notifications.baseY
+        width: notifications.bannerWidth
     }
 
     // Error notification — offset below success banner when both are visible
@@ -54,13 +61,12 @@ Item {
         accessibleRoleName: i18nc("@info:accessibility", "Error notification")
         anchors.horizontalCenter: parent.horizontalCenter
         y: {
-            let baseY = notifications.anchorItem ? (notifications.anchorItem.y + notifications.anchorItem.height + Kirigami.Units.gridUnit * 2) : Kirigami.Units.gridUnit * 2;
             if (successNotification.visible)
-                return baseY + successNotification.height + Kirigami.Units.smallSpacing;
+                return notifications.baseY + successNotification.height + Kirigami.Units.smallSpacing;
 
-            return baseY;
+            return notifications.baseY;
         }
-        width: Math.min(Kirigami.Units.gridUnit * 50, notifications.windowWidth * 0.8)
+        width: notifications.bannerWidth
 
         // Position transition when success banner fades and error slides up.
         // Banners are editor-shell surfaces (osd.show is for the in-shell OSD);

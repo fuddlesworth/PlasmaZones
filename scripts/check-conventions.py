@@ -605,6 +605,62 @@ def rule_prose(files: list[str]) -> list[Violation]:
 
 
 # --------------------------------------------------------------------------
+# Rule: js-pragma
+# --------------------------------------------------------------------------
+
+# qt_add_qml_module writes a qmldir entry for every .js whose basename starts
+# uppercase, and for those it checks that the file declares itself a shared
+# library:
+#
+#     file(STRINGS ${qml_file_src} pragma_library
+#          REGEX "^\.pragma library$" LIMIT_COUNT 1 LIMIT_INPUT 128)
+#
+# (Qt6QmlMacros.cmake). Only the first 128 BYTES are searched. Push
+# `.pragma library` past that and Qt emits an AUTHOR_WARNING saying the file
+# will be re-evaluated in every importing document. The file still behaves as
+# a library, so the warning is false, but it is indistinguishable from a real
+# one and there is no way to silence it short of moving the line back.
+#
+# This is worth a gate rather than a comment because the margin is thin and
+# shared: two SPDX lines plus a blank put the pragma at byte ~105 in most of
+# these files, leaving around twenty bytes. One more header line, or a longer
+# licence identifier applied tree-wide, would trip every one of them at once
+# and the failure would arrive as a wall of warnings from files nobody edited.
+JS_PRAGMA_WINDOW = 128
+JS_PRAGMA = b".pragma library"
+
+
+def rule_js_pragma(files: list[str]) -> list[Violation]:
+    out = []
+    for f in files:
+        name = Path(f).name
+        # Mirrors Qt's own guard: lowercase basenames get no qmldir entry, so
+        # they are never checked and the pragma is irrelevant to them.
+        if Path(f).suffix != ".js" or not name[:1].isupper():
+            continue
+        try:
+            whole = (REPO / f).read_bytes()
+        except OSError:
+            continue
+        # Anchored per line, like Qt's regex: a `.pragma library` sitting
+        # inside a comment or trailing another statement is not what CMake
+        # matches, so it must not satisfy this rule either.
+        head = whole[:JS_PRAGMA_WINDOW]
+        if any(ln.strip(b"\r") == JS_PRAGMA for ln in head.split(b"\n")):
+            continue
+        idx = whole.find(JS_PRAGMA)
+        if idx < 0:
+            out.append(Violation("js-pragma", f, 0,
+                                 "no '.pragma library'; Qt will warn that this file is re-evaluated "
+                                 "per importing document (rename it lowercase if that is intended)"))
+        else:
+            out.append(Violation("js-pragma", f, line_of(whole.decode("utf-8", "replace"), idx),
+                                 f"'.pragma library' ends at byte {idx + len(JS_PRAGMA)}, past Qt's "
+                                 f"{JS_PRAGMA_WINDOW}-byte window; move it above the description"))
+    return out
+
+
+# --------------------------------------------------------------------------
 # Driver
 # --------------------------------------------------------------------------
 
@@ -615,6 +671,7 @@ RULES = {
     "i18n-cpp": (rule_i18n_cpp, "C++ uses PhosphorI18n::tr(), never i18n()/KLocalizedString"),
     "config-keys": (rule_config_keys, "config group/key strings go through ConfigDefaults:: accessors"),
     "prose": (rule_prose, "user-facing strings carry no em-dash splice, clause semicolon or spaced hyphen"),
+    "js-pragma": (rule_js_pragma, f"QML .js libraries declare '.pragma library' in Qt's first {JS_PRAGMA_WINDOW} bytes"),
 }
 
 

@@ -73,7 +73,7 @@ ApplicationWindow {
         target: Theme.paletteStore
     }
 
-    // Matugen subprocess. Spawned on-demand from the "Wallpaper..." button.
+    // Matugen subprocess. Spawned on-demand from the "wallpaper…" pill.
     // Failures (matugen missing, image unreadable, unexpected JSON shape)
     // route through the same status bar PaletteStore uses, so any single
     // visible error surface tells the user what went wrong.
@@ -330,10 +330,17 @@ ApplicationWindow {
             contentWidth: availableWidth
 
             GridLayout {
+                // Must track Swatch.qml's implicitWidth. The column count is
+                // derived from the card's intrinsic minimum, so if the two
+                // drift the grid either overflows the viewport or leaves a
+                // dead column. Swatch.qml owns the number and carries the
+                // reciprocal note; change it there and here together.
+                readonly property int swatchMinWidth: 220
+
                 width: scrollView.availableWidth
                 columnSpacing: Tokens.spacing_m
                 rowSpacing: Tokens.spacing_m
-                columns: Math.max(1, Math.floor((width + columnSpacing) / (220 + columnSpacing)))
+                columns: Math.max(1, Math.floor((width + columnSpacing) / (swatchMinWidth + columnSpacing)))
 
                 Repeater {
                     // Bind to the cached key list (see root.swatchKeys)

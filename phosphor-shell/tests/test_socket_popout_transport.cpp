@@ -25,6 +25,34 @@ using PhosphorPopout::PopoutRequest;
 using PhosphorShellApp::ControlCenterController;
 using PhosphorShellApp::SocketPopoutTransport;
 
+namespace {
+// Six of the eight slots open against a named output, and each was repeating
+// the same four lines to get there. The two that do not are refusesWithoutA-
+// Controller, which constructs the transport with no controller at all, and
+// refusesAnOutputWithNoName, whose whole subject is the empty-name resolver.
+// Both keep their own setup.
+//
+// No headless Qt platform names its screens, so the name has to come from the
+// injectable seam rather than QScreen::name(). That seam is itself the thing
+// under test in the two excluded slots, which is why it stays a resolver here
+// rather than becoming a constant.
+//
+// Declaration order matters: transport takes &controller in its initialiser,
+// so controller has to be declared first.
+struct Harness
+{
+    ControlCenterController controller{nullptr};
+    SocketPopoutTransport transport{&controller};
+
+    Harness()
+    {
+        transport.setScreenNameResolver([](QScreen*) {
+            return QStringLiteral("DP-1");
+        });
+    }
+};
+} // namespace
+
 class TestSocketPopoutTransport : public QObject
 {
     Q_OBJECT
@@ -84,136 +112,100 @@ void TestSocketPopoutTransport::refusesAnOutputWithNoName()
 
 void TestSocketPopoutTransport::opensOnTheRequestedScreenAndWritesOpenScreenOnce()
 {
-    ControlCenterController controller(nullptr);
-    SocketPopoutTransport transport(&controller);
-    // No headless Qt platform names its screens, so resolve through the
-    // injectable seam rather than QScreen::name().
-    transport.setScreenNameResolver([](QScreen*) {
-        return QStringLiteral("DP-1");
-    });
-    QSignalSpy spy(&controller, &ControlCenterController::openScreenChanged);
+    Harness h;
+    QSignalSpy spy(&h.controller, &ControlCenterController::openScreenChanged);
 
-    const QString handle = transport.openSurface(requestFor(QStringLiteral("control-center"), nullptr));
+    const QString handle = h.transport.openSurface(requestFor(QStringLiteral("control-center"), nullptr));
     QVERIFY(!handle.isEmpty());
 
     // The controller names the output whose bar should grow the pocket, and
     // it is written exactly once: the property is change-gated, so a second
     // identical write must not re-notify a bound binding.
-    QCOMPARE(controller.openScreen(), QStringLiteral("DP-1"));
+    QCOMPARE(h.controller.openScreen(), QStringLiteral("DP-1"));
     QCOMPARE(spy.count(), 1);
 }
 
 void TestSocketPopoutTransport::refusesASecondOpenWhileOneIsUp()
 {
-    ControlCenterController controller(nullptr);
-    SocketPopoutTransport transport(&controller);
-    // No headless Qt platform names its screens, so resolve through the
-    // injectable seam rather than QScreen::name().
-    transport.setScreenNameResolver([](QScreen*) {
-        return QStringLiteral("DP-1");
-    });
+    Harness h;
 
-    const QString first = transport.openSurface(requestFor(QStringLiteral("control-center"), nullptr));
+    const QString first = h.transport.openSurface(requestFor(QStringLiteral("control-center"), nullptr));
     QVERIFY(!first.isEmpty());
 
     // The bar has one pocket. A second open is refused rather than moved,
     // and it must not disturb the one already up. The routing test's fake
     // cannot express this, which is why it needs pinning here.
     QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("socket is already open")));
-    QVERIFY(transport.openSurface(requestFor(QStringLiteral("other"), nullptr)).isEmpty());
-    QCOMPARE(controller.openScreen(), QStringLiteral("DP-1"));
+    QVERIFY(h.transport.openSurface(requestFor(QStringLiteral("other"), nullptr)).isEmpty());
+    QCOMPARE(h.controller.openScreen(), QStringLiteral("DP-1"));
 }
 
 void TestSocketPopoutTransport::closeClearsTheScreenAndReleasesTheSocket()
 {
-    ControlCenterController controller(nullptr);
-    SocketPopoutTransport transport(&controller);
-    // No headless Qt platform names its screens, so resolve through the
-    // injectable seam rather than QScreen::name().
-    transport.setScreenNameResolver([](QScreen*) {
-        return QStringLiteral("DP-1");
-    });
+    Harness h;
 
-    const QString first = transport.openSurface(requestFor(QStringLiteral("control-center"), nullptr));
+    const QString first = h.transport.openSurface(requestFor(QStringLiteral("control-center"), nullptr));
     QVERIFY(!first.isEmpty());
-    transport.closeSurface(first);
+    h.transport.closeSurface(first);
     // Empty means "closed everywhere" to the controller.
-    QCOMPARE(controller.openScreen(), QString());
+    QCOMPARE(h.controller.openScreen(), QString());
 
     // And the socket is genuinely free again, not merely blanked.
-    const QString second = transport.openSurface(requestFor(QStringLiteral("control-center"), nullptr));
+    const QString second = h.transport.openSurface(requestFor(QStringLiteral("control-center"), nullptr));
     QVERIFY(!second.isEmpty());
     QVERIFY(second != first);
-    QCOMPARE(controller.openScreen(), QStringLiteral("DP-1"));
+    QCOMPARE(h.controller.openScreen(), QStringLiteral("DP-1"));
 }
 
 void TestSocketPopoutTransport::closeIgnoresAStaleOrEmptyHandle()
 {
-    ControlCenterController controller(nullptr);
-    SocketPopoutTransport transport(&controller);
-    // No headless Qt platform names its screens, so resolve through the
-    // injectable seam rather than QScreen::name().
-    transport.setScreenNameResolver([](QScreen*) {
-        return QStringLiteral("DP-1");
-    });
+    Harness h;
 
-    const QString first = transport.openSurface(requestFor(QStringLiteral("control-center"), nullptr));
+    const QString first = h.transport.openSurface(requestFor(QStringLiteral("control-center"), nullptr));
     QVERIFY(!first.isEmpty());
-    transport.closeSurface(first);
-    const QString second = transport.openSurface(requestFor(QStringLiteral("control-center"), nullptr));
+    h.transport.closeSurface(first);
+    const QString second = h.transport.openSurface(requestFor(QStringLiteral("control-center"), nullptr));
     QVERIFY(!second.isEmpty());
 
     // A handle from an earlier cycle must not close a later one, or a
     // delayed close would tear down a pocket the user has since reopened.
-    transport.closeSurface(first);
-    QCOMPARE(controller.openScreen(), QStringLiteral("DP-1"));
-    transport.closeSurface(QString());
-    QCOMPARE(controller.openScreen(), QStringLiteral("DP-1"));
+    h.transport.closeSurface(first);
+    QCOMPARE(h.controller.openScreen(), QStringLiteral("DP-1"));
+    h.transport.closeSurface(QString());
+    QCOMPARE(h.controller.openScreen(), QStringLiteral("DP-1"));
 }
 
 void TestSocketPopoutTransport::drainClearsWithoutNotifying()
 {
-    ControlCenterController controller(nullptr);
-    SocketPopoutTransport transport(&controller);
-    // No headless Qt platform names its screens, so resolve through the
-    // injectable seam rather than QScreen::name().
-    transport.setScreenNameResolver([](QScreen*) {
-        return QStringLiteral("DP-1");
-    });
+    Harness h;
 
     int dismissals = 0;
-    transport.setSurfaceDismissedCallback([&dismissals](const QString&) {
+    h.transport.setSurfaceDismissedCallback([&dismissals](const QString&) {
         ++dismissals;
     });
 
-    QVERIFY(!transport.openSurface(requestFor(QStringLiteral("control-center"), nullptr)).isEmpty());
-    transport.drain();
+    QVERIFY(!h.transport.openSurface(requestFor(QStringLiteral("control-center"), nullptr)).isEmpty());
+    h.transport.drain();
 
     // Drain is the shutdown and hot-reload path: the state goes, but nothing
     // is reported upward, because the caller is the one doing the tearing
     // down and its own tables are already gone.
-    QCOMPARE(controller.openScreen(), QString());
+    QCOMPARE(h.controller.openScreen(), QString());
     QCOMPARE(dismissals, 0);
     // Draining twice is a no-op rather than an error.
-    transport.drain();
-    QCOMPARE(controller.openScreen(), QString());
+    h.transport.drain();
+    QCOMPARE(h.controller.openScreen(), QString());
 }
 
 void TestSocketPopoutTransport::handlesUseTheSocketPrefix()
 {
-    ControlCenterController controller(nullptr);
-    SocketPopoutTransport transport(&controller);
-    // No headless Qt platform names its screens, so resolve through the
-    // injectable seam rather than QScreen::name().
-    transport.setScreenNameResolver([](QScreen*) {
-        return QStringLiteral("DP-1");
-    });
+    Harness h;
 
     // RoutingPopoutTransport keys close-routing on the handle string and
     // documents the two transports' prefixes as disjoint by construction.
     // Nothing enforced that, so a copy-paste that made this mint "popout-"
     // would route closes to the wrong transport with the suite still green.
-    const QString handle = transport.openSurface(requestFor(QStringLiteral("control-center"), nullptr));
+    const QString handle = h.transport.openSurface(requestFor(QStringLiteral("control-center"), nullptr));
     QVERIFY2(handle.startsWith(QLatin1String("socket-")), qPrintable(QStringLiteral("handle was ") + handle));
 }
 
