@@ -81,6 +81,29 @@ public:
 
     /// Notifier for signal-driven updates. Pointer is owned by the provider;
     /// consumers must not delete it. Lifetime >= the provider's.
+    ///
+    /// MAY RETURN NULLPTR, and every consumer must handle it. A provider that
+    /// cannot observe screen changes at all ships null here rather than an
+    /// inert notifier that never emits, so the inability is visible to the
+    /// consumer instead of looking like a topology that simply never changes.
+    /// @ref DefaultScreenProvider always returns non-null; the null case is
+    /// covered by `test_topology`'s `nullNotifierFromProviderDoesNotCrash`.
+    ///
+    /// This stays nullable even if every in-tree provider comes to return
+    /// non-null. The header is installed and the class is exported, so the
+    /// implementations this repo can see are not the whole set, and a
+    /// third-party provider that cannot observe screens is precisely the case
+    /// null is here for. Do not tighten the contract, or delete a consumer's
+    /// null branch, on the strength of an in-tree sweep.
+    ///
+    /// A consumer that gets null degrades to a one-shot snapshot taken at
+    /// construction: it still answers queries, it just never refreshes. It
+    /// must NOT pass the null on to `connect()` — a null sender is not a
+    /// crash, but it silently drops the connection and prints one
+    /// QObject::connect warning per attempt, which reads as a Qt bug rather
+    /// than an unsupported provider. Resolve the pointer ONCE into a local
+    /// and branch on it; the interface does not promise a stable pointer
+    /// across repeated calls.
     virtual ScreenProviderNotifier* notifier() const = 0;
 };
 

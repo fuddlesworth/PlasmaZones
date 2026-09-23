@@ -35,6 +35,10 @@ public:
     QList<QScreen*> screens() const override;
     QScreen* primary() const override;
     QScreen* focused() const override;
+    /// Never null: the notifier is constructed with this provider and owned
+    /// for its whole lifetime. The base interface permits null, so consumers
+    /// written against IScreenProvider still have to branch; consumers that
+    /// hold a DefaultScreenProvider concretely do not.
     ScreenProviderNotifier* notifier() const override;
 
 private:
