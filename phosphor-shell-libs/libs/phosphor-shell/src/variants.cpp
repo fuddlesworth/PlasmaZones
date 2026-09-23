@@ -177,6 +177,24 @@ void Variants::onRowsMoved(const QModelIndex& sourceParent, int sourceStart, int
     // clamping to a coherent-looking-but-wrong index.
     Q_ASSERT_X(insertAt >= 0 && insertAt <= m_instances.size(), "Variants::onRowsMoved",
                "destRow out of range — source model emitted rowsMoved with invalid destination");
+    // Release-build pair. The assert compiles out under NDEBUG, and
+    // QList::insert with an out-of-range index is undefined behaviour, so
+    // without this the "surface it loudly" intent above produced a silent
+    // out-of-bounds write instead. Still not clamped — a coherent-looking
+    // wrong index is exactly what the comment above rejects.
+    //
+    // The rows were already taken out of m_instances, so the refusal has to
+    // put them back rather than return: dropping `moving` on the floor would
+    // orphan every delegate in the range. Restoring at sourceStart leaves the
+    // list exactly as it was, which is stale but recoverable.
+    if (insertAt < 0 || insertAt > m_instances.size()) {
+        qCCritical(lcVariants) << "Variants::onRowsMoved: destRow" << insertAt << "out of range for"
+                               << m_instances.size() << "rows — refusing the move and restoring the range";
+        for (int i = 0; i < moving.size(); ++i) {
+            m_instances.insert(sourceStart + i, moving.at(i));
+        }
+        return;
+    }
     for (int i = 0; i < moving.size(); ++i) {
         m_instances.insert(insertAt + i, moving.at(i));
     }

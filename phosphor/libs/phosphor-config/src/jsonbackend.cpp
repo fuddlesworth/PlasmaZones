@@ -564,6 +564,17 @@ JsonBackend::~JsonBackend()
 {
     Q_ASSERT_X(d->activeGroupCount == 0, "PhosphorConfig::JsonBackend::~JsonBackend",
                "JsonGroup still alive when backend is being destroyed");
+    // Release-build pair. reparseConfiguration, deleteGroup and replaceRoot all
+    // refuse when a group is live; a destructor cannot refuse, and the
+    // consequence is concrete rather than theoretical — JsonGroup::~JsonGroup
+    // calls decActiveGroupCount() on m_backend, which is about to dangle. So at
+    // least make the use-after-free diagnosable instead of silent.
+    if (d->activeGroupCount != 0) {
+        qCritical(
+            "PhosphorConfig::JsonBackend: destroyed with %d live JsonGroup view(s) — "
+            "each now holds a dangling backend pointer",
+            d->activeGroupCount);
+    }
     // Flush any dirty in-memory state to disk before destruction. Covers
     // both Deferred mode (pending debounce timer) and Synchronous mode where
     // a consumer has written without calling sync() — matching QSettings'

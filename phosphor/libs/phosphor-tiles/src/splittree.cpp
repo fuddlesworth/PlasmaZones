@@ -263,6 +263,16 @@ void SplitTree::remove(const QString& windowId)
 
     SplitNode* parent = leaf->parent;
     Q_ASSERT(parent);
+    // Release-build pair, matching splitLeaf's `Q_ASSERT(leaf); if (!leaf)
+    // return;`. A non-root leaf with no parent is the same corrupt-tree class
+    // the sibling check below already detects and recovers from, so asserting
+    // it in debug and dereferencing it in release was inconsistent with the
+    // very next branch.
+    if (!parent) {
+        qCWarning(PhosphorTiles::lcTilesLib)
+            << "SplitTree::remove: leaf is not the root but has no parent — tree corrupt";
+        return;
+    }
 
     // Determine sibling (the other child of parent)
     std::unique_ptr<SplitNode> sibling;

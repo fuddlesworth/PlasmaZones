@@ -34,8 +34,23 @@ ZoneDetectionAdaptor::ZoneDetectionAdaptor(PhosphorZones::IZoneDetector* detecto
     Q_ASSERT(settings);
 }
 
+bool ZoneDetectionAdaptor::ensureDeps(const char* methodName) const
+{
+    // Release-build pair of the ctor Q_ASSERTs. These slots are callable from
+    // the session bus, so a wiring bug must degrade to a warning rather than a
+    // crash an external caller can trigger.
+    if (!m_zoneDetector || !m_layoutManager || !m_settings) {
+        qCWarning(lcDbus) << "Cannot" << methodName << "- zone detection dependencies not available";
+        return false;
+    }
+    return true;
+}
+
 PhosphorZones::Layout* ZoneDetectionAdaptor::resolveActiveLayoutForScreen(const QString& screenId) const
 {
+    if (!ensureDeps("resolveActiveLayoutForScreen")) {
+        return nullptr;
+    }
     if (!screenId.isEmpty()
         && m_layoutManager->isContextActiveLayoutSuppressed(
             screenId, m_layoutManager->currentVirtualDesktopForScreen(screenId), m_layoutManager->currentActivity())) {
@@ -46,6 +61,9 @@ PhosphorZones::Layout* ZoneDetectionAdaptor::resolveActiveLayoutForScreen(const 
 
 QString ZoneDetectionAdaptor::detectZoneAtPosition(int x, int y)
 {
+    if (!ensureDeps("detectZoneAtPosition")) {
+        return {};
+    }
     // Determine which screen contains (x,y), fall back to primary
     QScreen* screen = QGuiApplication::screenAt(QPoint(x, y));
     if (!screen) {
@@ -97,6 +115,9 @@ QString ZoneDetectionAdaptor::detectZoneAtPosition(int x, int y)
 
 PhosphorProtocol::ZoneGeometryRect ZoneDetectionAdaptor::getZoneGeometry(const QString& zoneId)
 {
+    if (!ensureDeps("getZoneGeometry")) {
+        return {};
+    }
     // Use empty screen name to fall back to primary screen
     return getZoneGeometryForScreen(zoneId, QString());
 }
@@ -136,6 +157,9 @@ PhosphorProtocol::ZoneGeometryRect ZoneDetectionAdaptor::getZoneGeometryForScree
 
 QStringList ZoneDetectionAdaptor::getZonesForScreen(const QString& screenId)
 {
+    if (!ensureDeps("getZonesForScreen")) {
+        return {};
+    }
     QStringList zoneIds;
 
     // Use per-screen layout (falls back to activeLayout if no assignment)
@@ -155,6 +179,9 @@ QStringList ZoneDetectionAdaptor::getZonesForScreen(const QString& screenId)
 
 QStringList ZoneDetectionAdaptor::detectMultiZoneAtPosition(int x, int y)
 {
+    if (!ensureDeps("detectMultiZoneAtPosition")) {
+        return {};
+    }
     QStringList zoneIds;
 
     // Determine which screen contains (x,y), fall back to primary
@@ -298,6 +325,9 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
 
 QString ZoneDetectionAdaptor::getZoneByNumber(int zoneNumber, const QString& screenId)
 {
+    if (!ensureDeps("getZoneByNumber")) {
+        return {};
+    }
     QString resolvedId = DbusHelpers::resolveScreenId(m_screenManager, screenId);
     auto* layout = resolveActiveLayoutForScreen(resolvedId);
     if (!layout) {
@@ -314,6 +344,9 @@ QString ZoneDetectionAdaptor::getZoneByNumber(int zoneNumber, const QString& scr
 
 PhosphorProtocol::NamedZoneGeometryList ZoneDetectionAdaptor::getAllZoneGeometries(const QString& screenId)
 {
+    if (!ensureDeps("getAllZoneGeometries")) {
+        return {};
+    }
     PhosphorProtocol::NamedZoneGeometryList result;
 
     QString resolvedScreenId = DbusHelpers::resolveScreenId(m_screenManager, screenId);
@@ -364,6 +397,9 @@ int ZoneDetectionAdaptor::getKeyboardModifiers()
 
 QString ZoneDetectionAdaptor::detectZoneWithModifiers(int x, int y)
 {
+    if (!ensureDeps("detectZoneWithModifiers")) {
+        return {};
+    }
     // Get modifiers first (before any potential delays from zone detection)
     int modifiers = getKeyboardModifiers();
 

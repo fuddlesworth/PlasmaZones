@@ -51,10 +51,16 @@ public:
     }
     const UboUploadRegion& operator[](int i) const
     {
-        // Match push()'s defensive style: assert the caller stays within the
-        // populated range. Callers iterate [0, size()) via begin()/end(), so a
-        // stray index is a programming error.
+        // Debug-assert AND release-guard the same bound, which is what
+        // "match push()'s defensive style" was supposed to mean: the assert
+        // alone compiles out under NDEBUG and left an out-of-bounds read on
+        // the std::array. Production consumers iterate via begin()/end(); the
+        // indexed form is used by the profile tests.
         Q_ASSERT(i >= 0 && i < m_count);
+        if (i < 0 || i >= m_count) {
+            static const UboUploadRegion empty{};
+            return empty;
+        }
         return m_regions[static_cast<size_t>(i)];
     }
     const UboUploadRegion* begin() const

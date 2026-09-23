@@ -112,6 +112,13 @@ Q_SIGNALS:
     void zoneDetected(const QString& zoneId, const PhosphorProtocol::ZoneGeometryRect& geometry);
 
 private:
+    /// Release-build pair of the ctor Q_ASSERTs. Every slot on this adaptor is
+    /// reachable from the session bus, so a wiring bug has to degrade to a
+    /// warning rather than a crash an external caller can trigger. Mirrors
+    /// AutotileAdaptor::ensureRegistry and OverlayAdaptor's per-method guards,
+    /// which this class was the only adaptor in the family to lack.
+    bool ensureDeps(const char* methodName) const;
+
     /// Suppress-aware layout resolve (#724 family): returns nullptr when the
     /// screen's context has no active zone layout because the default
     /// assignment is suppressed, instead of resolveLayoutForScreen's
