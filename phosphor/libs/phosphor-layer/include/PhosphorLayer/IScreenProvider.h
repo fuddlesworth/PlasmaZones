@@ -90,11 +90,12 @@ public:
     /// covered by `test_topology`'s `nullNotifierFromProviderDoesNotCrash`.
     ///
     /// This stays nullable even if every in-tree provider comes to return
-    /// non-null. The header is installed and the class is exported, so the
-    /// implementations this repo can see are not the whole set, and a
-    /// third-party provider that cannot observe screens is precisely the case
-    /// null is here for. Do not tighten the contract, or delete a consumer's
-    /// null branch, on the strength of an in-tree sweep.
+    /// non-null — the test above is the reason, and it does not depend on who
+    /// else implements this. The header is also installed and the class
+    /// exported, so the implementations this repo can see need not be the
+    /// whole set, and a provider that cannot observe screens is precisely the
+    /// case null is here for. Do not tighten the contract, or delete a
+    /// consumer's null branch, on the strength of an in-tree sweep.
     ///
     /// A consumer that gets null degrades to a one-shot snapshot taken at
     /// construction: it still answers queries, it just never refreshes. It
