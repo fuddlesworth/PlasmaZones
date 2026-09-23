@@ -148,10 +148,14 @@ jobs:
           # surface (offscreen QPA can't host RHI textures).
           # Parallel ctest with $(nproc); xvfb-run wraps when available so
           # surface-needing tests have a display.
+          # --no-tests=error on every ctest in this file: a build dir
+          # configured without BUILD_TESTING produces no tests, and bare ctest
+          # reports "No tests were found" and exits 0, so the gate would pass
+          # having run nothing.
           if command -v xvfb-run >/dev/null 2>&1; then
-            xvfb-run -a ctest --test-dir build --output-on-failure -j "$(nproc)"
+            xvfb-run -a ctest --test-dir build --output-on-failure --no-tests=error -j "$(nproc)"
           else
-            ctest --test-dir build --output-on-failure -j "$(nproc)"
+            ctest --test-dir build --output-on-failure --no-tests=error -j "$(nproc)"
           fi
 
       - name: Install (DESTDIR)
@@ -243,9 +247,9 @@ jobs:
           # other Phase 2 test). Making them QSKIP-aware is the proper follow-up.
           EXCLUDE='phosphorservicepipewire_smoke|phosphorservicebluetooth_smoke'
           if command -v xvfb-run >/dev/null 2>&1; then
-            xvfb-run -a ctest --test-dir build --output-on-failure -j "$(nproc)" -E "$EXCLUDE"
+            xvfb-run -a ctest --test-dir build --output-on-failure --no-tests=error -j "$(nproc)" -E "$EXCLUDE"
           else
-            ctest --test-dir build --output-on-failure -j "$(nproc)" -E "$EXCLUDE"
+            ctest --test-dir build --output-on-failure --no-tests=error -j "$(nproc)" -E "$EXCLUDE"
           fi
 
   # ─── Build against the NEXT Plasma: the `build` job above uses Arch's
@@ -282,12 +286,26 @@ jobs:
           printf '[kde-unstable]\nInclude = /etc/pacman.d/mirrorlist\n\n' > /tmp/kde-unstable.conf
           cat /tmp/kde-unstable.conf /etc/pacman.conf > /tmp/pacman.conf.new
           mv /tmp/pacman.conf.new /etc/pacman.conf
-          # Same package set as the `build` job's "Setup (Arch)" and as
-          # `build-shell`. FOUR hand-maintained copies (build, build-shell, build-plasma-next, presets): a dependency added to one
-          # and not the others makes this job quietly build a different
-          # configuration from the one it exists to mirror — the same class of
-          # false equivalence the verify step below guards against for the paint
-          # API. Change one, change all four.
+          # Byte-identical to the `build` job's "Setup (Arch)". Those two are
+          # the shell-OFF set; a dependency added to one and not the other
+          # makes this job quietly build a different configuration from the one
+          # it exists to mirror — the same class of false equivalence the
+          # verify step below guards against for the paint API. Change one,
+          # change the other.
+          #
+          # There are FIVE hand-maintained pacman lists in this file, in three
+          # groups. Do not assume an edit here reaches the rest:
+          #   * shell-OFF, identical: `build`, `build-plasma-next` (this one).
+          #   * shell-ON: `build-shell`, and `presets` which is the same set
+          #     minus ccache, xorg-server-xvfb and mesa because it neither
+          #     caches nor runs the suite. Both add libpipewire, polkit-qt6,
+          #     pam and ddcutil for the three shell libraries with hard
+          #     configure-time requirements.
+          #   * `build-arch-draft`, deliberately not a copy of either: it
+          #     bootstraps a makepkg host (base-devel, sudo, namcap) and lets
+          #     `makepkg -s` resolve the real dependencies from the PKGBUILD.
+          #     A new build dependency belongs in `packaging/` for that job,
+          #     not in its pacman line.
           #
           # NOT hoisted into a composite action under .github/actions, which is
           # the obvious fix: a LOCAL action is only readable once
@@ -366,9 +384,9 @@ jobs:
           # makes Qt emit a warning that warning-asserting tests then fail on.
           export XDG_RUNTIME_DIR="$(mktemp -d)"
           if command -v xvfb-run >/dev/null 2>&1; then
-            xvfb-run -a ctest --test-dir build --output-on-failure -j "$(nproc)"
+            xvfb-run -a ctest --test-dir build --output-on-failure --no-tests=error -j "$(nproc)"
           else
-            ctest --test-dir build --output-on-failure -j "$(nproc)"
+            ctest --test-dir build --output-on-failure --no-tests=error -j "$(nproc)"
           fi
 
   # ─── Lint: clang-format + qmlformat mirror the lefthook hooks so a
@@ -403,8 +421,10 @@ jobs:
       image: archlinux:latest
     steps:
       - name: Setup (Arch)
-        # This list mirrors build-shell's, NOT the default build job's. The
-        # debug preset sets BUILD_PHOSPHOR_SHELL=ON, and three shell libraries
+        # This list follows build-shell's, NOT the default build job's: same
+        # set minus ccache, xorg-server-xvfb and mesa, which this job needs
+        # neither to cache nor to run the suite. The debug preset sets
+        # BUILD_PHOSPHOR_SHELL=ON, and three shell libraries
         # have hard CONFIGURE-time requirements — phosphor-service-pipewire's
         # pkg_check_modules(... REQUIRED), phosphor-service-polkit's
         # find_package(PolkitQt6-1 REQUIRED), and phosphor-service-lock's

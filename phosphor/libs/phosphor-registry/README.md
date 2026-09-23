@@ -53,9 +53,9 @@ once per UI seam.
 | `PhosphorRegistry::RegistryNotifier` | QObject signal carrier the template owns. The template itself can't be Q_OBJECT, so signals route through this. Reached via `registry.notifier()`. |
 | `PhosphorRegistry::IFactoryBase` | Common base for the five interface families. Declares `id()`, `displayName()`, `capabilities()`. |
 | `PhosphorRegistry::IBarWidgetFactory` | Factory for one top-bar widget (clock, workspaces, tray, etc.). Adds `createWidget(QQmlEngine*, QObject*)`. |
-| `PhosphorRegistry::IControlCenterTileFactory` | Factory for one tile inside the Control Center popout. Adds `createTile(QQmlEngine*, QObject*)`. Consumed by `libs/phosphor-shell-control-center`, over the registry `phosphor-shell/src/ControlCenterController` populates. The returned item must be handed to `JavaScriptOwnership`, because the surface destroys the tiles it built. |
+| `PhosphorRegistry::IControlCenterTileFactory` | Factory for one tile inside the Control Center popout. Adds `createTile(QQmlEngine*, QObject*)`. Consumed by `phosphor-shell-libs/libs/phosphor-shell-control-center`, over the registry `phosphor-shell/src/ControlCenterController` populates. The returned item must be handed to `JavaScriptOwnership`, because the surface destroys the tiles it built. |
 | `PhosphorRegistry::ILauncherProvider` | The launcher's query contract, implemented by each provider. Declares `setQuery()`, `results()`, `resultsChanged()` and `activate(id, Primary\|Alternate)`. Returning false from `activate` leaves the surface open. |
-| `PhosphorRegistry::ILauncherProviderFactory` | Factory for a launcher query provider (apps, calculator, etc.). Adds `createProvider(QObject*) -> ILauncherProvider*`. Consumed by `libs/phosphor-shell-launcher`, over the registry `phosphor-shell/src/LauncherController` populates. |
+| `PhosphorRegistry::ILauncherProviderFactory` | Factory for a launcher query provider (apps, calculator, etc.). Adds `createProvider(QObject*) -> ILauncherProvider*`. Consumed by `phosphor-shell-libs/libs/phosphor-shell-launcher`, over the registry `phosphor-shell/src/LauncherController` populates. |
 | `PhosphorRegistry::IOSDFactory` | Factory for an on-screen display (volume / mic / brightness). Adds `createOSD(QQmlEngine*, QObject*)`. **No consumer yet**, reserved for a future OSD surface. |
 | `PhosphorRegistry::IDesktopWidgetFactory` | Factory for a desktop card / widget. Adds `createWidget(QQmlEngine*, QObject*)`. **No consumer yet**, reserved for a future desktop-widget surface. |
 | `PhosphorRegistry::Manifest` | Plain-old-data mirror of `manifest.json`. `Manifest::parse` reads the file, and `parseObject` exists for tests. Rejects ABI mismatch, missing fields, id / directory mismatch. |
@@ -92,7 +92,7 @@ widget construction as a `Q_INVOKABLE`. The library stays QML-free so
 consumers own their own facade. This controller pattern is what both
 phosphor-registry demos use. The snippets below name it `BarController`
 to match the production-shell shape (a top-bar widget controller).
-`examples/phosphor-registry-demo/Main.qml` wires the same pattern under
+`phosphor-shell-libs/examples/phosphor-registry-demo/Main.qml` wires the same pattern under
 the context-property name `demoController` to keep the demo's QML
 self-describing.
 
@@ -173,8 +173,8 @@ Row {
 
 The bar refreshes automatically when plugins load or unload because
 `factoryIdsChanged` re-evaluates the Repeater's `model` binding. See
-`examples/phosphor-registry-demo/` for the in-process variant and
-`examples/phosphor-registry-plugin-demo/` for the same pattern with a
+`phosphor-shell-libs/examples/phosphor-registry-demo/` for the in-process variant and
+`phosphor-shell-libs/examples/phosphor-registry-plugin-demo/` for the same pattern with a
 third widget loaded from a separate `.so`.
 
 **Plugin author side**: a plugin is a `.so` exporting one extern "C"
@@ -251,10 +251,10 @@ loader enforces this so on-disk layout and registry keys stay aligned.
 
 ## See also
 
-- `examples/phosphor-registry-demo/`: toy bar with two built-in widgets
+- `phosphor-shell-libs/examples/phosphor-registry-demo/`: toy bar with two built-in widgets
   registered explicitly. Proves the registry seam.
-- `examples/phosphor-registry-plugin-demo/`: same toy bar plus a third
+- `phosphor-shell-libs/examples/phosphor-registry-plugin-demo/`: same toy bar plus a third
   widget loaded from a separate `.so`. Proves the plugin ABI and
   hot-reload.
-- `libs/phosphor-layout-api/ILayoutSourceFactory`: the pre-existing
+- `phosphor-layout-api/ILayoutSourceFactory`: the pre-existing
   registry pattern this library generalises.

@@ -107,9 +107,10 @@ QQuickItem* QmlComponentTileFactory::createTile(QQmlEngine* engine, QObject* par
         // the grid the surface believes it filled.
         qCWarning(lcControlCenterTiles) << "QmlComponentTileFactory: parent is not a QQuickItem for" << m_id
                                         << "— refusing rather than returning an item nothing will show";
-        // deleteLater(), not delete: this runs from a QML-invoked path and the
-        // item may be on the current call stack. Matches the sibling branch
-        // above and CLAUDE.md's never-manual-delete rule.
+        // deleteLater(), not delete: CLAUDE.md's never-manual-delete rule, and
+        // the engine still holds creation-time bookkeeping for an object it
+        // just built. Matches the not-a-QQuickItem branch above, which disposes
+        // of the same object the same way.
         item->deleteLater();
         return nullptr;
     }

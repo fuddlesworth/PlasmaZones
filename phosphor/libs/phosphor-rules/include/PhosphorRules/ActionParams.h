@@ -15,7 +15,7 @@
 // descriptor validators check every one of them at load, and the APPEARANCE numbers
 // (MaxBorderWidth, MaxAnimationDurationMs) are re-checked on the way out by the
 // compositor, which static_asserts against these very constants
-// (kwin-effect/plasmazoneseffect/shader_resolve.cpp). The chain and preset bounds
+// (plasmazones/kwin-effect/plasmazoneseffect/shader_resolve.cpp). The chain and preset bounds
 // below are enforced at this load boundary ONLY — no consumer re-derives them — so
 // they live here for one vocabulary rather than for a second check.
 //
@@ -31,7 +31,7 @@ namespace PhosphorRules {
 // ruleaction_builtins_appearance.cpp / ruleaction_builtins_indicators.cpp, the
 // config-layer v3→v4 migration that ports legacy AnimationAppRule entries, the
 // rule-editor UI, and the KWin-effect-side resolvers in
-// `kwin-effect/plasmazoneseffect/shader_resolve.cpp`).
+// `plasmazones/kwin-effect/plasmazoneseffect/shader_resolve.cpp`).
 // A future rename (e.g. `effectId` → `effect_id`) updates one entry here and
 // flows everywhere instead of being hard-coded once per reader.
 namespace ActionParam {

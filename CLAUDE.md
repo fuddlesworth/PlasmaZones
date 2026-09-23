@@ -39,7 +39,7 @@ Shared placement policy lives in `phosphor/libs/phosphor-engine`. A verdict from
   authoritative one.
 
 ## License
-- SPDX headers on every file whose format supports comments: `// SPDX-FileCopyrightText: 2026 fuddlesworth`. Data assets in formats with no comment syntax are exempt, which in practice means `plasmazones/data/**/*.json` and the `manifest.json.in` fixtures under `phosphor/libs/phosphor-registry/tests/` — never add a header to those, it makes the file invalid.
+- SPDX headers on every file whose format supports comments: `// SPDX-FileCopyrightText: 2026 fuddlesworth`. Data assets in formats with no comment syntax are exempt, which in practice means `plasmazones/data/**/*.json`, the six `phosphor/data/schemas/*.json` files, and the `manifest.json.in` fixtures under `phosphor/libs/phosphor-registry/tests/` — never add a header to those, it makes the file invalid.
 - License identifier depends on the tree:
   - **App tiers** (`plasmazones/**` except its `data/` trees, `phosphor-shell/**`, `phosphor-shell-libs/examples/**`, `scripts/**`): `GPL-3.0-or-later`
   - **Reusable libraries, including their own tests** (`phosphor/libs/phosphor-*/**` and `phosphor-shell-libs/libs/phosphor-*/**`, which subsumes each library's `tests/`): `LGPL-2.1-or-later`
@@ -194,6 +194,13 @@ On Linux (native):
 # rather than skipping. Install your distro's glslang package before running
 # ctest. Not needed to build, and not needed with BUILD_TESTING=OFF.
 #
+# SECOND TEST-TIME DEPENDENCY: `appstreamcli` (distro package `appstream`).
+# ECM registers the `appstreamtest` test only when it finds appstreamcli AT
+# CONFIGURE TIME, and otherwise just prints a STATUS line. `moon run repo:test`
+# is `ctest -R ^appstreamtest$ --no-tests=error`, so on a machine without it
+# that task fails with "no tests were found" rather than skipping. Install
+# appstream before running repo:test, or reconfigure after installing it.
+#
 # BUILD_PHOSPHOR_SHELL also defaults to OFF, and it gates the whole Phosphor
 # shell tier: phosphor-shell-libs/libs/phosphor-shell*, the bar, control center, launcher, power
 # and popout libraries, their demos, and their tests. Configure without it and
@@ -220,7 +227,8 @@ ctest --test-dir build --output-on-failure
 # strings it can reach. Stdlib only.
 #
 # The prose rule reaches data JSON, tr()/i18n(), settings-schema descriptions,
-# .desktop, AppStream, packaging and algorithm .luau. It does NOT reach
+# .desktop, AppStream, packaging, .github/workflows/*.yml (through the pkgdesc
+# arm) and algorithm .luau. It does NOT reach
 # CHANGELOG.md entries or icon SVG <desc>, which are in the rule below but
 # stay review-only.
 # Also runs on pre-commit (staged files) and in CI (whole tree).

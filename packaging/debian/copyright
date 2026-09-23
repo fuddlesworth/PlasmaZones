@@ -15,6 +15,41 @@ Files: phosphor/libs/phosphor-*/*
 Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: LGPL-2.1-or-later
 
+# The LGPL tiers' own scaffolding, which the libs/phosphor-* globs above do not
+# reach. These carry LGPL-2.1-or-later in their own SPDX headers, so the
+# Files: * catch-all was asserting GPL-3 over them in the packaging metadata
+# while the sources said otherwise.
+#
+# phosphor/data/schemas/*.json matters most here: it has no header (JSON has no
+# comment syntax) but is RCC-embedded into PhosphorShaders, PhosphorZones and
+# PhosphorAnimation, so declaring it GPL-3 asserts GPL over content compiled
+# into LGPL shared libraries. That is the hazard CLAUDE.md names when it says
+# never to "fix" a lib header to GPL-3, expressed in packaging metadata rather
+# than in a header.
+# cmake/ is MIXED, so its LGPL members are named one by one rather than
+# globbed: format-qml.cmake, PhosphorCPack.cmake, PhosphorTranslations.cmake,
+# post-install-sycoca.sh and uninstall.cmake.in are GPL-3 and must keep
+# resolving to the catch-all.
+Files: cmake/PhosphorLibTesting.cmake
+       cmake/PhosphorTestIsolation.cmake
+       cmake/PhosphorTier.cmake
+       cmake/test-session-bus.conf
+       phosphor/CMakeLists.txt
+       phosphor/moon.yml
+       phosphor/data/*
+       phosphor-shell-libs/CMakeLists.txt
+       phosphor-shell-libs/moon.yml
+Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+License: LGPL-2.1-or-later
+
+# AppStream metadata. Both files declare CC0-1.0 in their own headers, which is
+# the usual licence for distro metadata so downstreams can redistribute and
+# translate it freely.
+Files: plasmazones/src/editor/org.plasmazones.editor.metainfo.xml
+       plasmazones/src/settings/org.plasmazones.settings.metainfo.xml
+Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+License: CC0-1.0
+
 # Bundled shader packs. PlasmaZones-original shaders are LGPL so a third-party
 # pack or tool can build on them; data/overlays is still GPL throughout and is
 # covered by the Files: * stanza above. DEP-5 is last-match-wins, so the
@@ -179,3 +214,15 @@ License: GPL-3.0-or-later
  .
  On Debian systems, the full text of the GNU General Public License
  version 3 can be found in the file '/usr/share/common-licenses/GPL-3'.
+
+License: CC0-1.0
+ To the extent possible under law, the author(s) have dedicated all copyright
+ and related and neighboring rights to this software to the public domain
+ worldwide. This software is distributed without any warranty.
+ .
+ You should have received a copy of the CC0 Public Domain Dedication along with
+ this software. If not, see
+ <https://creativecommons.org/publicdomain/zero/1.0/>.
+ .
+ On Debian systems the full text of the CC0 1.0 Universal license can be found
+ in /usr/share/common-licenses/CC0-1.0.

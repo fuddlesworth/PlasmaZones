@@ -38,10 +38,20 @@ constraints:
   enforceLayerRelationships: false
 
 hasher:
-  # Hash from the git index so gitignored build trees never enter an input
-  # set. The build/ directory is shared by every tier and must not be hashed.
+  # Walk the git index rather than the filesystem. This is a SPEED choice, not
+  # a filter: `vcs` does NOT exclude gitignored files from an input set.
+  # Measured on moon 2.5.5 -- `repo:conventions` hashed 3745 inputs, 35 of them
+  # gitignored (33 `.qmlls.ini`, 2 under `scripts/__pycache__`). Anything that
+  # must stay out of a hash needs an explicit ignorePatterns entry below.
   walkStrategy: 'vcs'
   ignorePatterns:
     - 'build*/**'
     - '.claude/**'
     - '.codex/**'
+    # Editor and interpreter droppings that sit inside the `src/**` and
+    # `libs/**` source globs. qmlls rewrites `.qmlls.ini` whenever a QML build
+    # target changes and python rewrites `__pycache__` on every script run, so
+    # without these two every such run invalidates the cache for work that
+    # touched no tracked file.
+    - '**/.qmlls.ini'
+    - '**/__pycache__/**'

@@ -12,7 +12,7 @@ and built on the [`phosphor-shell-widgets`](../phosphor-shell-widgets/README.md)
 atoms.
 
 Phase 3.4 deliverable per
-[`docs/phosphor-shell-design/04-implementation-plan.md`](../../docs/phosphor-shell-design/04-implementation-plan.md).
+[`docs/phosphor-shell-design/04-implementation-plan.md`](../../../docs/phosphor-shell-design/04-implementation-plan.md).
 
 ## Responsibility
 

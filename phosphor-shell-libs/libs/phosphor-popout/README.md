@@ -175,5 +175,5 @@ name, so it does not put the enums in scope unqualified. A bare
 
 ## See also
 
-- `libs/phosphor-layer/`. The policy layer over `wlr-layer-shell`
+- `phosphor/libs/phosphor-layer/`. The policy layer over `wlr-layer-shell`
   that the shell's `LayerPopoutTransport` consumes.

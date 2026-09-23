@@ -59,6 +59,13 @@ private:
     QString m_label;
 };
 
+// A registered type that is a QObject but NOT a QQuickItem, so the factory's
+// "component is not a QQuickItem" branch has something real to reject.
+class FakeNonItem : public QObject
+{
+    Q_OBJECT
+};
+
 constexpr auto kTestUri = "Phosphor.Test.Tiles";
 
 } // namespace
@@ -72,6 +79,8 @@ private Q_SLOTS:
     void metadataIsWhatItWasBuiltWith();
     void aNullEngineIsRefused();
     void anUnknownTypeIsRefused();
+    void aNonItemComponentIsRefused();
+    void aNonItemParentIsRefused();
     void theTileIsHandedToTheJavaScriptGarbageCollector();
     void initialPropertiesReachTheTile();
 
@@ -90,6 +99,7 @@ private:
 void TestQmlComponentTileFactory::initTestCase()
 {
     qmlRegisterType<FakeTile>(kTestUri, 1, 0, "FakeTile");
+    qmlRegisterType<FakeNonItem>(kTestUri, 1, 0, "FakeNonItem");
 }
 
 void TestQmlComponentTileFactory::metadataIsWhatItWasBuiltWith()
@@ -124,6 +134,34 @@ void TestQmlComponentTileFactory::anUnknownTypeIsRefused()
     // unnoticed.
     QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("component error for")));
     QVERIFY(!factory.createTile(&m_engine, &m_parent));
+}
+
+void TestQmlComponentTileFactory::aNonItemComponentIsRefused()
+{
+    QmlComponentTileFactory factory(QStringLiteral("t"), QStringLiteral("T"), QString::fromLatin1(kTestUri),
+                                    QStringLiteral("FakeNonItem"), {}, {});
+    // The type resolves and CONSTRUCTS fine, so this is not the unknown-type
+    // path above: the component is Ready and createWithInitialProperties
+    // returns a live QObject. It is the qobject_cast that fails. The object is
+    // disposed of with deleteLater() rather than returned, because a surface
+    // handed a non-item would try to parent it and get nothing on screen.
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("component is not a QQuickItem")));
+    QVERIFY(!factory.createTile(&m_engine, &m_parent));
+}
+
+void TestQmlComponentTileFactory::aNonItemParentIsRefused()
+{
+    QmlComponentTileFactory factory(QStringLiteral("t"), QStringLiteral("T"), QString::fromLatin1(kTestUri),
+                                    QStringLiteral("FakeTile"), {}, {});
+    // createTile takes a QObject* parent, so a caller CAN pass something that
+    // is not an item. This is the branch where the tile factory deliberately
+    // diverges from the bar's widget factory: the bar setParent()s and returns
+    // the widget anyway, costing one slot, whereas rebuild() counts tiles, so
+    // an invisible one leaves a hole the surface believes it filled. Refusing
+    // is the contract, and without this slot the divergence is undefended.
+    QObject nonItemParent;
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("parent is not a QQuickItem")));
+    QVERIFY(!factory.createTile(&m_engine, &nonItemParent));
 }
 
 void TestQmlComponentTileFactory::theTileIsHandedToTheJavaScriptGarbageCollector()

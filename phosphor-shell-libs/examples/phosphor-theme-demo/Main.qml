@@ -219,6 +219,8 @@ ApplicationWindow {
                 model: PresetPalettes.names()
 
                 Rectangle {
+                    id: presetPill
+
                     required property string modelData
                     readonly property bool isActive: root.activePreset === modelData
                     readonly property bool isHovered: hover.containsMouse
@@ -234,8 +236,8 @@ ApplicationWindow {
                         id: label
 
                         anchors.centerIn: parent
-                        text: modelData
-                        color: parent.isActive ? Theme.on_primary : Theme.on_surface
+                        text: presetPill.modelData
+                        color: presetPill.isActive ? Theme.on_primary : Theme.on_surface
                         font.pixelSize: Tokens.font_size_label_l
                         font.family: Tokens.font_family
                         font.weight: Tokens.font_weight_medium
@@ -263,6 +265,8 @@ ApplicationWindow {
             // palette to PaletteStore. While the subprocess is in flight
             // the pill swaps to a "running…" label and is non-interactive.
             Rectangle {
+                id: wallpaperPill
+
                 readonly property bool isActive: root.activePreset === "wallpaper"
                 readonly property bool isHovered: wallpaperHover.containsMouse && !matugen.running
                 readonly property string pillLabel: matugen.running ? qsTr("running…") : qsTr("wallpaper…")
@@ -279,8 +283,8 @@ ApplicationWindow {
                     id: wallpaperLabel
 
                     anchors.centerIn: parent
-                    text: parent.pillLabel
-                    color: parent.isActive ? Theme.on_tertiary : Theme.on_surface
+                    text: wallpaperPill.pillLabel
+                    color: wallpaperPill.isActive ? Theme.on_tertiary : Theme.on_surface
                     font.pixelSize: Tokens.font_size_label_l
                     font.family: Tokens.font_family
                     font.weight: Tokens.font_weight_medium
@@ -310,7 +314,7 @@ ApplicationWindow {
         // glance.
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 48
+            Layout.preferredHeight: Tokens.spacing_xxxl
             radius: Tokens.radius_l
             border.color: Theme.outline_variant
             border.width: 1
@@ -388,21 +392,26 @@ ApplicationWindow {
             Layout.fillWidth: true
             Layout.preferredHeight: Tokens.spacing_xxl
             visible: root.lastError.length > 0
-            // Theme.error, not error_container: on_error is the foreground token
-            // defined for error, and pairing it with error_container renders
-            // near-invisible in two of the three bundled palettes (light gives
-            // white on #FEE2E2, sunset gives near-black on #7F1D1D at roughly
-            // 1.7:1). This is the surface that reports a broken palette, so it
-            // has to stay readable exactly when the palette is wrong. The token
-            // set has no on_error_container to pair instead.
-            color: Theme.error
+            // error_container background with an on_surface foreground. The
+            // token set defines on_error only against error, and has no
+            // on_error_container, so the container background has to borrow the
+            // surface foreground instead. Pairing on_error with error_container
+            // fails WCAG AA in two of the four bundled palettes (light gives
+            // white on #FEE2E2 at 1.22:1, sunset near-black on #7F1D1D at
+            // 1.94:1), and pairing on_error with error fails the other two
+            // (dark 3.34:1, forest 3.76:1). on_surface on error_container is
+            // the only pairing that clears 4.5:1 everywhere: dark 8.16, light
+            // 13.96, sunset 8.51, forest 9.34. This is the surface that reports
+            // a broken palette, so it has to stay readable exactly when the
+            // palette is wrong.
+            color: Theme.error_container
             radius: Tokens.radius_s
 
             Text {
                 anchors.fill: parent
                 anchors.margins: Tokens.spacing_s
                 text: root.lastError
-                color: Theme.on_error
+                color: Theme.on_surface
                 font.pixelSize: Tokens.font_size_body_s
                 font.family: Tokens.font_family
                 elide: Text.ElideMiddle

@@ -59,7 +59,7 @@ The test suite lives in `tests/`. Run it with:
 
 ```bash
 cd build
-ctest --output-on-failure
+ctest --output-on-failure --no-tests=error
 ```
 
 If you're adding new functionality, add tests for it. If you're fixing a bug, a test that would have caught it is appreciated.

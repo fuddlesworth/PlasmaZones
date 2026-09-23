@@ -98,7 +98,7 @@ the standard service dirs, so the installed `plasmazonesd` gets activated on the
 private bus, reparents when the bus dies, holds the test's stdout pipe open, and
 **ctest hangs after the test passes**. New tests must be added ABOVE the
 directory sweep at the bottom of `plasmazones/tests/unit/CMakeLists.txt`, so the
-`phosphor_apply_test_isolation` loop there picks them up. A test registered
+`phosphor_apply_directory_test_isolation()` sweep there picks them up. A test registered
 below that line gets no launcher and no XDG sandbox.
 
 Never `pkill -f plasmazonesd`; that kills the user's real desktop daemon. Kill

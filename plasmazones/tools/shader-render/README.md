@@ -170,8 +170,8 @@ Known gaps to verify on first run:
 
 ## Tech debt
 
-`tools/shader-render/CMakeLists.txt` still adds
-`src/daemon/rendering/` to the include path, now only for
+`plasmazones/tools/shader-render/CMakeLists.txt` still adds
+`plasmazones/src/daemon/rendering/` to the include path, now only for
 `zoneentryscaffold.h`. The tool needs the daemon's entry-point
 scaffold so a pack that defines `pZone` or `pImage` is assembled
 the same way the daemon assembles it. Get that wrong and the
@@ -180,6 +180,6 @@ is the failure this whole tool exists to avoid.
 
 `ZoneUniformExtension` and the `ZoneShaderUniforms` UBO struct no
 longer contribute to that coupling. They live in
-`libs/phosphor-rendering/` and arrive through the linked
+`phosphor/libs/phosphor-rendering/` and arrive through the linked
 `PhosphorRendering::PhosphorRendering` target like any other
 library header.

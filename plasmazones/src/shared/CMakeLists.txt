@@ -10,8 +10,10 @@
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Suppress -Wmissing-include-dirs for every target defined in this
-# subdirectory (main module, qmlplugin, qmlplugin_init, resource_1/_2,
-# qmltyperegistration — all generated implicitly by qt_add_qml_module).
+# subdirectory, including the several that qt_add_qml_module generates
+# implicitly. They are deliberately NOT enumerated here: the set changes
+# between Qt versions, and a stale list reads as a promise this directory
+# cannot keep. See the DIRECTORY-scope note below.
 # KDECompilerSettings enables -Wmissing-include-dirs globally, and
 # Qt adds `<target>_autogen/include` to each sub-target's -I list. That
 # directory is populated by AUTOMOC as a build-time side effect; since

@@ -139,39 +139,62 @@ void TestPluauHelpers::stripLayoutEvenAndDegenerate()
 {
     const QByteArray body = R"LUA(
         return { run = function()
+            -- startX 11 and startY 23 are deliberately DISTINCT and non-zero.
+            -- With (0, 0) the fixed and distributed axes both start at 0, so
+            -- swapping x for y in the fixed axis produces identical output and
+            -- ships green.
             local vert = {}
-            pluau.stripLayout(vert, 0, 0, 100, 300, 3, 10, false)
+            pluau.stripLayout(vert, 11, 23, 100, 300, 3, 10, false)
             local horiz = {}
-            pluau.stripLayout(horiz, 0, 0, 300, 100, 3, 10, true)
+            pluau.stripLayout(horiz, 11, 23, 300, 100, 3, 10, true)
             local degen = {}
-            pluau.stripLayout(degen, 0, 0, 100, 20, 3, 20, false)
+            pluau.stripLayout(degen, 11, 23, 100, 20, 3, 20, false)
             return {
                 vertLen = #vert, vertW = vert[1].width, vertX = vert[1].x,
+                vertY1 = vert[1].y, vertY2 = vert[2].y, vertY3 = vert[3].y,
+                vertH1 = vert[1].height, vertH3 = vert[3].height,
                 horizLen = #horiz, horizH = horiz[1].height, horizY = horiz[1].y,
+                horizX1 = horiz[1].x, horizX2 = horiz[2].x, horizX3 = horiz[3].x,
+                horizW1 = horiz[1].width, horizW3 = horiz[3].width,
                 degenLen = #degen,
                 degenH1 = degen[1].height, degenH2 = degen[2].height, degenH3 = degen[3].height,
-                degenX = degen[1].x, degenW = degen[1].width,
+                degenX = degen[1].x, degenY = degen[1].y, degenW = degen[1].width,
             }
         end }
     )LUA";
     const QVariantMap r = run(body).toMap();
-    VERIFY_KEYS(r, "vertLen", "vertW", "vertX", "horizLen", "horizH", "horizY", "degenLen", "degenH1", "degenH2",
-                "degenH3", "degenX", "degenW");
-    // Vertical strip: fixed width = panelW, fixed x = startX, height distributed.
+    VERIFY_KEYS(r, "vertLen", "vertW", "vertX", "vertY1", "vertY2", "vertY3", "vertH1", "vertH3", "horizLen", "horizH",
+                "horizY", "horizX1", "horizX2", "horizX3", "horizW1", "horizW3", "degenLen", "degenH1", "degenH2",
+                "degenH3", "degenX", "degenY", "degenW");
+    // Vertical strip: fixed width = panelW, fixed x = startX, height distributed
+    // down from startY. 300 less two 10px gaps is 280; 280/3 is 93 remainder 1,
+    // and the remainder lands on the LAST cell, so heights are 93, 93, 94 and
+    // the y origins are 23, 23+93+10, 23+93+10+93+10.
     QCOMPARE(r.value(QStringLiteral("vertLen")).toInt(), 3);
     QCOMPARE(r.value(QStringLiteral("vertW")).toInt(), 100);
-    QCOMPARE(r.value(QStringLiteral("vertX")).toInt(), 0);
-    // Horizontal strip: fixed height = panelH, fixed y = startY, width distributed.
+    QCOMPARE(r.value(QStringLiteral("vertX")).toInt(), 11);
+    QCOMPARE(r.value(QStringLiteral("vertY1")).toInt(), 23);
+    QCOMPARE(r.value(QStringLiteral("vertY2")).toInt(), 126);
+    QCOMPARE(r.value(QStringLiteral("vertY3")).toInt(), 229);
+    QCOMPARE(r.value(QStringLiteral("vertH1")).toInt(), 93);
+    QCOMPARE(r.value(QStringLiteral("vertH3")).toInt(), 94);
+    // Horizontal strip: the exact mirror, with the same remainder rule on x.
     QCOMPARE(r.value(QStringLiteral("horizLen")).toInt(), 3);
     QCOMPARE(r.value(QStringLiteral("horizH")).toInt(), 100);
-    QCOMPARE(r.value(QStringLiteral("horizY")).toInt(), 0);
+    QCOMPARE(r.value(QStringLiteral("horizY")).toInt(), 23);
+    QCOMPARE(r.value(QStringLiteral("horizX1")).toInt(), 11);
+    QCOMPARE(r.value(QStringLiteral("horizX2")).toInt(), 114);
+    QCOMPARE(r.value(QStringLiteral("horizX3")).toInt(), 217);
+    QCOMPARE(r.value(QStringLiteral("horizW1")).toInt(), 93);
+    QCOMPARE(r.value(QStringLiteral("horizW3")).toInt(), 94);
     // Degenerate gap ((count-1)*gap >= totalSize): equal, overlapping fills of
     // floor(totalSize/count) = floor(20/3) = 6, all anchored at (startX, startY).
     QCOMPARE(r.value(QStringLiteral("degenLen")).toInt(), 3);
     QCOMPARE(r.value(QStringLiteral("degenH1")).toInt(), 6);
     QCOMPARE(r.value(QStringLiteral("degenH2")).toInt(), 6);
     QCOMPARE(r.value(QStringLiteral("degenH3")).toInt(), 6);
-    QCOMPARE(r.value(QStringLiteral("degenX")).toInt(), 0);
+    QCOMPARE(r.value(QStringLiteral("degenX")).toInt(), 11);
+    QCOMPARE(r.value(QStringLiteral("degenY")).toInt(), 23);
     QCOMPARE(r.value(QStringLiteral("degenW")).toInt(), 100);
 }
 
@@ -254,7 +277,30 @@ void TestPluauHelpers::masterStackResize()
                 { windowCount = 3, masterCount = 1, splitRatio = 0.25 },
                 ev(0, { width = 100, height = 80 }, { width = 120, height = 80 }, noEdge),
                 false)
+            -- The two SEAM-SIDE mismatches. Each index owns exactly one edge of
+            -- the seam: the master drives it from the right, the stack from the
+            -- left. Giving a valid index the OTHER side's edge must be refused,
+            -- and neither leg was covered -- wrongEdge above passes no edge at
+            -- all, which a "did any edge flag get set" check would also accept.
+            local masterWrongSide = pluau.masterStackResize(
+                { windowCount = 3, masterCount = 1, splitRatio = 0.25 },
+                ev(0, { width = 100, height = 80 }, { width = 120, height = 80 }, edge("left")),
+                false)
+            local stackWrongSide = pluau.masterStackResize(
+                { windowCount = 3, masterCount = 1, splitRatio = 0.25 },
+                ev(1, { width = 100, height = 80 }, { width = 120, height = 80 }, edge("right")),
+                false)
+            -- Out-of-range oldRatio at the LOW end. badRatio above only covers
+            -- >= 1, so a guard written `oldRatio >= 1` instead of
+            -- `oldRatio <= 0 or oldRatio >= 1` shipped green.
+            local zeroRatio = pluau.masterStackResize(
+                { windowCount = 3, masterCount = 1, splitRatio = 0.0 },
+                ev(0, { width = 100, height = 80 }, { width = 120, height = 80 }, edge("right")),
+                false)
             return {
+                masterWrongSideIsNil = masterWrongSide == nil,
+                stackWrongSideIsNil = stackWrongSide == nil,
+                zeroRatioIsNil = zeroRatio == nil,
                 vGrow = vGrow and vGrow.splitRatio or -1,
                 vShrink = vShrink and vShrink.splitRatio or -1,
                 hGrow = hGrow and hGrow.splitRatio or -1,
@@ -268,7 +314,7 @@ void TestPluauHelpers::masterStackResize()
     )LUA";
     const QVariantMap r = run(body).toMap();
     VERIFY_KEYS(r, "vGrow", "vShrink", "hGrow", "hShrink", "singleIsNil", "badRatioIsNil", "zeroDimIsNil",
-                "wrongEdgeIsNil");
+                "wrongEdgeIsNil", "masterWrongSideIsNil", "stackWrongSideIsNil", "zeroRatioIsNil");
     // The old rect is 100x80, deliberately NOT square: a square one hides an
     // axis mix-up confined to oldDim, because both axes then produce the
     // same number. Here the width axis gives 0.3/0.1 and the height axis
@@ -278,13 +324,20 @@ void TestPluauHelpers::masterStackResize()
     // the ratio (see resizeRatio above for the algebra), which both axes
     // satisfy: 120 against 100, and 100 against 80.
     QCOMPARE(r.value(QStringLiteral("vGrow")).toDouble(), 0.3); // 120 * 0.25 / 100
-    QCOMPARE(r.value(QStringLiteral("vShrink")).toDouble(), 0.1); // 1 - 120 * 0.75 / 100
+    // 1 - 120 * 0.75 / 100. Exact in decimal, NOT in binary: 0.9 has no exact
+    // double, so this arrives as 0.09999999999999998. QCOMPARE on doubles is
+    // qFuzzyCompare, which is why the literal 0.1 passes. Do not "tighten"
+    // this to a bitwise compare.
+    QCOMPARE(r.value(QStringLiteral("vShrink")).toDouble(), 0.1);
     QCOMPARE(r.value(QStringLiteral("hGrow")).toDouble(), 0.3125); // 100 * 0.25 / 80
     QCOMPARE(r.value(QStringLiteral("hShrink")).toDouble(), 0.0625); // 1 - 100 * 0.75 / 80
     QCOMPARE(r.value(QStringLiteral("singleIsNil")).toBool(), true);
     QCOMPARE(r.value(QStringLiteral("badRatioIsNil")).toBool(), true);
     QCOMPARE(r.value(QStringLiteral("zeroDimIsNil")).toBool(), true);
     QCOMPARE(r.value(QStringLiteral("wrongEdgeIsNil")).toBool(), true);
+    QCOMPARE(r.value(QStringLiteral("masterWrongSideIsNil")).toBool(), true);
+    QCOMPARE(r.value(QStringLiteral("stackWrongSideIsNil")).toBool(), true);
+    QCOMPARE(r.value(QStringLiteral("zeroRatioIsNil")).toBool(), true);
 }
 
 void TestPluauHelpers::clampBoundsAndNaN()
@@ -342,12 +395,15 @@ void TestPluauHelpers::gridShape()
             local c5, r5 = pluau.gridShape(5)
             local c9, r9 = pluau.gridShape(9)
             local c0, r0 = pluau.gridShape(0)
+            local cNeg, rNeg = pluau.gridShape(-1)
             return { c1 = c1, r1 = r1, c4 = c4, r4 = r4, c5 = c5, r5 = r5, c9 = c9, r9 = r9,
-                     c0 = c0, r0 = r0, r0IsNan = r0 ~= r0 }
+                     c0 = c0, r0 = r0, r0IsNan = r0 ~= r0,
+                     cNeg = cNeg, rNeg = rNeg, cNegIsNan = cNeg ~= cNeg, rNegIsNan = rNeg ~= rNeg }
         end }
     )LUA";
     const QVariantMap r = run(body).toMap();
-    VERIFY_KEYS(r, "c1", "r1", "c4", "r4", "c5", "r5", "c9", "r9", "c0", "r0", "r0IsNan");
+    VERIFY_KEYS(r, "c1", "r1", "c4", "r4", "c5", "r5", "c9", "r9", "c0", "r0", "r0IsNan", "cNeg", "rNeg", "cNegIsNan",
+                "rNegIsNan");
     QCOMPARE(r.value(QStringLiteral("c1")).toInt(), 1);
     QCOMPARE(r.value(QStringLiteral("r1")).toInt(), 1);
     QCOMPARE(r.value(QStringLiteral("c4")).toInt(), 2);
@@ -367,6 +423,16 @@ void TestPluauHelpers::gridShape()
     // values, so the r0 compare above would have passed against the old
     // 0 x nan too. This is the leg that actually pins "not nan".
     QCOMPARE(r.value(QStringLiteral("r0IsNan")).toBool(), false);
+    // NEGATIVE count is what actually pins the max() argument order, and count
+    // 0 above does not: sqrt(0) is 0, so max(1, 0) and max(0, 1) both give 1
+    // and the shape is 1 x 0 either way. Only below zero does sqrt return nan,
+    // where max(1, nan) is 1 but max(nan, 1) is nan. Measured on the real
+    // prelude: gridShape(-1) is (1, -1) as written and (nan, nan) with the
+    // arguments swapped. Without this leg a swap ships green.
+    QCOMPARE(r.value(QStringLiteral("cNeg")).toInt(), 1);
+    QCOMPARE(r.value(QStringLiteral("rNeg")).toInt(), -1);
+    QCOMPARE(r.value(QStringLiteral("cNegIsNan")).toBool(), false);
+    QCOMPARE(r.value(QStringLiteral("rNegIsNan")).toBool(), false);
 }
 
 void TestPluauHelpers::cumulativeOffsets()

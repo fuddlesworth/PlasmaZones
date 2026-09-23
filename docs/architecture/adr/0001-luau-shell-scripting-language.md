@@ -166,9 +166,9 @@ separate future work for actual shell UI surfaces.
 ## Open follow-ups
 
 **Done.** The full tiling increment shipped — impl-plan phases 0–7 are complete:
-`libs/phosphor-scripting` (LGPL Luau host: engine, `luaL_sandbox`, interrupt
+`phosphor/libs/phosphor-scripting` (LGPL Luau host: engine, `luaL_sandbox`, interrupt
 watchdog, a per-script **heap cap** via a custom capped `lua_Alloc` enforced
-once sandboxed, compile/load, QVariant marshalling), `libs/phosphor-tiles`
+once sandboxed, compile/load, QVariant marshalling), `phosphor/libs/phosphor-tiles`
 (`LuauTileAlgorithm` + the `pluau` stdlib), all 25 algorithms ported under a
 golden-snapshot parity test, the loader swapped to `.luau`, the QJSEngine path
 deleted, and a CI **`luau-analyze` gate** over the bundled algorithms + `pluau`

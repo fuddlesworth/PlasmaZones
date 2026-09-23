@@ -53,7 +53,7 @@ PerScreen {
                 anchors.centerIn: parent
                 color: "#ffffff"
                 font.pixelSize: 20
-                text: screenWindow.name + (screenWindow.isPrimary ? "  " + qsTr("[PRIMARY]") : "")
+                text: screenWindow.isPrimary ? qsTr("%1  [PRIMARY]").arg(screenWindow.name) : screenWindow.name
             }
 
             Text {

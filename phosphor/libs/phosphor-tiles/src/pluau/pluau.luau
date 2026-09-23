@@ -1023,7 +1023,7 @@ local function center(start, total, size)
     return start + math.floor((total - size) / 2)
 end
 
--- Square-ish grid. max(1, ...) NOT max(..., 1): max(1, nan) is 1, max(nan, 1) is nan. Keeps count <= 0 off nan.
+-- Square-ish grid. max(1, ...) NOT max(..., 1): max(1, nan) is 1, max(nan, 1) is nan. Keeps count < 0 off nan.
 local function gridShape(count)
     local cols = math.max(1, math.ceil(math.sqrt(count)))
     local rows = math.ceil(count / cols)

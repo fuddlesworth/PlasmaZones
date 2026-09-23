@@ -63,6 +63,15 @@ QQuickItem* QmlComponentTileFactory::createTile(QQmlEngine* engine, QObject* par
                                        << component.errorString();
         return nullptr;
     }
+    // A component that is neither Ready nor Error is still loading, and
+    // creating from it returns null with an EMPTY errorString, so the
+    // failure below would log a blank reason. The bar's widget factory
+    // carries the same guard.
+    if (component.status() != QQmlComponent::Ready) {
+        qCWarning(lcControlCenterDemo) << "QmlComponentTileFactory: component not ready for" << m_id << "— status"
+                                       << component.status();
+        return nullptr;
+    }
     // createWithInitialProperties, not create() + assignment: a tile may
     // declare a `required property` the host has to satisfy, and a required
     // property is only settable at construction. Assigning afterwards
@@ -81,11 +90,26 @@ QQuickItem* QmlComponentTileFactory::createTile(QQmlEngine* engine, QObject* par
         obj->deleteLater();
         return nullptr;
     }
-    if (auto* parentItem = qobject_cast<QQuickItem*>(parent)) {
-        item->setParentItem(parentItem);
-    } else {
-        item->setParent(parent);
+    auto* parentItem = qobject_cast<QQuickItem*>(parent);
+    if (!parentItem) {
+        // Refused, not merely reported. This demo drives the SAME
+        // Phosphor.ControlCenter surface the shell does, and its rebuild()
+        // counts what it materialised, so returning a QObject-parented item
+        // here leaves a hole in the grid the surface believes it filled. The
+        // old setParent() fallback did exactly that.
+        //
+        // This is also where the tile factory and the bar's widget factory
+        // deliberately DIVERGE: the bar setParent()s, warns "widget will be
+        // invisible" and still returns the item, because a bar widget that
+        // fails to appear costs one slot rather than corrupting a count.
+        qCWarning(lcControlCenterDemo) << "QmlComponentTileFactory: parent is not a QQuickItem for" << m_id
+                                       << "— refusing rather than returning an item nothing will show";
+        // deleteLater(), not delete: the engine still holds creation-time
+        // bookkeeping for an object it just built.
+        item->deleteLater();
+        return nullptr;
     }
+    item->setParentItem(parentItem);
     // ControlCenter owns the tile's lifetime: rebuild() destroys what it
     // built. A QObject-parented item defaults to CppOwnership, which makes
     // the host's QML destroy() throw "indestructible object" and then leak

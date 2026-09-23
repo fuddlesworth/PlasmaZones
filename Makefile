@@ -114,7 +114,7 @@ clean:
 # Build and run tests
 test: build
 	@echo "$(BLUE)>>> Running tests...$(NC)"
-	@cd $(BUILD_DIR) && ctest --output-on-failure
+	@cd $(BUILD_DIR) && ctest --output-on-failure --no-tests=error
 	@echo "$(GREEN)>>> Tests complete$(NC)"
 
 # Build only the editor

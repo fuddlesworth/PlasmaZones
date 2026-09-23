@@ -113,7 +113,7 @@ multi-stage timeout ladder built on `PhosphorWayland::IdleNotifier`
 `currentStageName` / `idle` report the live position, and `idled(stage)` /
 `resumed()` mark the transitions. `inhibit()` / `release(cookie)` reference-count
 idle inhibition, disarming the ladder while held. The
-`examples/phosphor-service-idle-cli` demo registers stages and logs each fire
+`phosphor-shell-libs/examples/phosphor-service-idle-cli` demo registers stages and logs each fire
 with a timestamp against a live session. Five test binaries pin the deterministic
 surface with no compositor: the smoke harness (registration idempotency, inert
 construction), the facade test (stage round trip + sort, inhibition toggle), the

@@ -63,11 +63,11 @@ single import:
 ## Dependencies
 
 - `Qt6::Core`, `Qt6::Gui`, `Qt6::Quick`, `Qt6::Qml`
-- [`phosphor-layer`](../phosphor-layer/README.md), [`phosphor-rendering`](../phosphor-rendering/README.md), [`phosphor-shaders`](../phosphor-shaders/README.md), [`phosphor-wayland`](../phosphor-wayland/README.md)
+- [`phosphor-layer`](../../../phosphor/libs/phosphor-layer/README.md), [`phosphor-rendering`](../../../phosphor/libs/phosphor-rendering/README.md), [`phosphor-shaders`](../../../phosphor/libs/phosphor-shaders/README.md), [`phosphor-wayland`](../../../phosphor/libs/phosphor-wayland/README.md)
 
 The shell binary is gated behind the `BUILD_PHOSPHOR_SHELL` CMake option
-(default OFF). The example under `examples/phosphor-shell/` is the
-working reference for consumers.
+(default OFF). The bundled shell QML tree at `phosphor-shell/shell/` is
+the working reference for consumers.
 
 ## See also
 
@@ -75,5 +75,5 @@ working reference for consumers.
 - [`phosphor-service-mpris`](../phosphor-service-mpris/README.md): MPRIS2 media-player discovery + control.
 - [`phosphor-service-upower`](../phosphor-service-upower/README.md): battery + power-supply readouts.
 - [`phosphor-service-icontheme`](../phosphor-service-icontheme/README.md): XDG icon-theme resolver + Qt image provider used by the tray.
-- [`phosphor-layer`](../phosphor-layer/README.md): Role vocabulary the window types compose from.
-- [`phosphor-shell-patterns`](../phosphor-shell-patterns/README.md): named Role recipes the panels use.
+- [`phosphor-layer`](../../../phosphor/libs/phosphor-layer/README.md): Role vocabulary the window types compose from.
+- [`phosphor-shell-patterns`](../../../phosphor/libs/phosphor-shell-patterns/README.md): named Role recipes the panels use.

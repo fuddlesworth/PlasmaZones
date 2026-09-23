@@ -79,4 +79,4 @@ ENTRYPOINT ["/bin/bash", "-c", "\
     && export XDG_RUNTIME_DIR=\"$(mktemp -d)\" \
     && \"$@\"", "--"]
 
-CMD ["ctest", "--output-on-failure"]
+CMD ["ctest", "--output-on-failure", "--no-tests=error"]

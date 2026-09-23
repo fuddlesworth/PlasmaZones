@@ -470,15 +470,20 @@ def prose_problems(s: str) -> list[str]:
     # in a label.
     s = "\n".join(ln for ln in s.split("\n") if not ln.lstrip().startswith("#"))
     core = s.strip()
-    if "—" in s or "&mdash;" in s:
+    # Backticked code is out of scope for ALL THREE punctuation arms, not just
+    # the semicolon one: CLAUDE.md puts code out of scope generally, and a
+    # `--flag - value` or an em-dash inside a quoted command is code the reader
+    # must see verbatim. Strip once, up front, and test every arm against the
+    # stripped copy.
+    without_code = re.sub(r"`[^`]*`", "", s)
+    if "—" in without_code or "&mdash;" in without_code:
         if not is_title_separator(core):
             problems.append("em-dash splice; write two sentences or join with a plain word")
-    if " - " in s:
+    if " - " in without_code:
         problems.append("spaced hyphen used as a dash; rewrite the sentence")
     # Clause-splicing semicolon: only when both sides look like independent
-    # clauses. Semicolons inside backticked code and those separating genuine
-    # comma-bearing list items are legitimate, so both are excluded.
-    without_code = re.sub(r"`[^`]*`", "", s)
+    # clauses. Semicolons separating genuine comma-bearing list items are
+    # legitimate, so those are excluded too.
     # Segment first, then look for the splice inside a segment. The comma
     # exclusion below is about the clause pair around THIS semicolon; applied
     # to the whole string it meant that one comma anywhere in a multi-paragraph
@@ -568,7 +573,13 @@ NIX_LONG_DESC = re.compile(r"^\s*longDescription\s*=\s*''(.*?)''", re.M | re.S)
 # clean longDescription followed anywhere later by an ordinary ''${...}
 # wrapper hook fired this rule spuriously. Stopping at the FIRST '' means
 # the lookahead only ever inspects this body's own terminator.
-NIX_LONG_DESC_ESCAPE = re.compile(r"^\s*longDescription\s*=\s*''(?:(?!'').)*''(?=[$'])", re.M | re.S)
+#
+# The class is [$'\\] because Nix has THREE escapes that begin with '', not
+# two: ''${ for a literal interpolation, ''' for a literal '', and ''\<char>
+# for a character escape (''\n, ''\t, ''\', ''\\). Omitting the backslash let
+# a body whose first escape was ''\n read as terminated there, so everything
+# after it went unchecked.
+NIX_LONG_DESC_ESCAPE = re.compile(r"^\s*longDescription\s*=\s*''(?:(?!'').)*''(?=[$'\\])", re.M | re.S)
 
 # RPM's %description body runs from the directive to the next % section. The
 # PKG_DESC pattern cannot see it, so `dnf info` printed sixteen ungated lines.

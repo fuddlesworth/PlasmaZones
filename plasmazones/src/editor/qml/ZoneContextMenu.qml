@@ -25,10 +25,12 @@ Menu {
     // Declaring the type closes it, but NOT by coercing: a typed object
     // property simply refuses an undefined write and keeps its PRIOR value.
     // On the BINDING path this file uses (EditorWindow passes
-    // `editorController: editorWindow._editorController`) the refusal is
-    // SILENT -- no warning is logged at all. Only a direct JS assignment
-    // surfaces it, and that throws `Error: Cannot assign [undefined] to
-    // QObject*` rather than logging it.
+    // `editorController: editorWindow._editorController`) QML logs
+    // `Unable to assign [undefined] to QObject*` at the binding's line. The
+    // warning is queued and emitted AFTER component completion, not during it,
+    // so a probe that calls Qt.quit() from Component.onCompleted truncates it
+    // and the refusal looks silent. A direct JS assignment instead throws
+    // `Error: Cannot assign [undefined] to QObject*`.
     // For a required property that has never held anything, that prior value
     // is null, so every spelling below evaluates false. The consequence worth
     // knowing: if this ever held a real controller and its source later went

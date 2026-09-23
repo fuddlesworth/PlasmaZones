@@ -86,4 +86,4 @@ Shipped. Extracted from the original `phosphor-services` umbrella as one of four
 
 - `phosphor-service-sni` calls `IconThemeResolver::instance()->iconForName(...)` for XDG-themed tray icons and routes raw IconPixmap blobs through `IconImageProvider::setImage` for QML binding.
 
-The QML singleton (`IconThemeResolver` under `Phosphor.Service.IconTheme 1.0`) is registered for future bar widgets and third-party shells. The bundled `examples/phosphor-shell/` does not import it yet.
+The QML singleton (`IconThemeResolver` under `Phosphor.Service.IconTheme 1.0`) is registered for future bar widgets and third-party shells. The bundled shell QML tree at `phosphor-shell/shell/` does not import it yet.

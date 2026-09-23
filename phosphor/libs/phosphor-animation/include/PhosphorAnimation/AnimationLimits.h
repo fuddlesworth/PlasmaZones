@@ -29,7 +29,7 @@
  *    (`shader_config_dbus.cpp`), which bounds the motion cascade's
  *    resolved DURATION at the source,
  *  - `ShaderInternal::resolveTransitionLifetimeMs`
- *    (`kwin-effect/plasmazoneseffect/shader_internal.h`), which bounds a
+ *    (`plasmazones/kwin-effect/plasmazoneseffect/shader_internal.h`), which bounds a
  *    shader transition's LIFETIME and folds in the spring settle-time
  *    rule. Both the per-window transition (`shader_transitions.cpp`) and
  *    the desktop switch (`desktoptransitionmanager.cpp`) route through
@@ -146,7 +146,7 @@ constexpr int DefaultAnimationSequenceMode = SequenceModeCascade;
 ///    Neither `paint_pipeline.cpp` nor `desktoptransitionmanager.cpp`
 ///    clamps the integrator dt itself; they route through this helper.
 ///    The desktop switch uploads no `iTimeDelta` uniform.
-/// A synthetic fixed step (`tools/shader-render` renders at 1/fps)
+/// A synthetic fixed step (`plasmazones/tools/shader-render` renders at 1/fps)
 /// cannot spike and needs no clamp.
 ///
 /// NOT clamped, and deliberately out of this library's reach:

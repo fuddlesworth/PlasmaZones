@@ -18,8 +18,8 @@
  * without dragging cross-layer headers along.
  *
  * Non-algorithm consumers reach these symbols by including this header, either
- * directly (`src/dbus/autotileadaptor/config.cpp`) or through one in-tree base
- * of the same class (`src/config/configdefaults_appearance.h`, which is how
+ * directly (`plasmazones/src/dbus/autotileadaptor/config.cpp`) or through one in-tree base
+ * of the same class (`plasmazones/src/config/configdefaults_appearance.h`, which is how
  * ConfigDefaults sees them). There is no transitive re-export from
  * `core/constants.h` — that backward-source compatibility chain was removed so
  * unrelated layers no longer resolve the PhosphorTiles include path.

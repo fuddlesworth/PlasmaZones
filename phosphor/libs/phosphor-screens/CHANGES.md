@@ -42,7 +42,7 @@ name is internal to the header — no source change at call sites).
 ## Phase: phosphor-control scaffolding
 
 Context: lift-and-shift refactor extracting common QML/Qt6 settings
-chrome and helpers (see `libs/phosphor-control/`). The phosphor-screens
+chrome and helpers (see `phosphor/libs/phosphor-control/`). The phosphor-screens
 side picked up several QML-payload tweaks in the same window so the new
 settings chrome could render screen pickers from the library's POD without
 duplicating label-building logic in QML.

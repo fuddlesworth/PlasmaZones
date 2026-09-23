@@ -26,7 +26,7 @@ namespace {
 /// Placeholder label for a desktop KWin gave no name to.
 ///
 /// Deliberately untranslated. `PhosphorI18n::tr()` — the project's only
-/// sanctioned translation entry point for C++ — lives in `src/phosphor_i18n.h`,
+/// sanctioned translation entry point for C++ — lives in `plasmazones/src/phosphor_i18n.h`,
 /// inside the GPL-3.0 application tree. This library is LGPL-2.1 precisely so
 /// third-party tools can link it without inheriting GPL, so reaching into that
 /// header would defeat the licence split the project maintains on purpose.

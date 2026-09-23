@@ -121,8 +121,9 @@ add_test(NAME test_shell_gestures COMMAND test_shell_gestures)
 # PhosphorTheme/PaletteStore.h and connects paletteChanged. NOT because the
 # guard can fire: this directory is reached only from phosphor-shell/, which
 # the root enters under BUILD_PHOSPHOR_SHELL, so every shell-tier target
-# exists here. Five sibling targets in this file are guarded the same way for
-# the same reason -- see the note at the top of the file.
+# exists here. Nine such guard blocks in this file cover ten of its fifteen
+# targets for the same reason; the other five are declared unguarded. The
+# split is historical, not meaningful -- see the note at the top of the file.
 if(TARGET PhosphorTheme::PhosphorTheme)
     add_executable(test_shell_chrome
         test_shell_chrome.cpp

@@ -309,9 +309,10 @@ private Q_SLOTS:
         // of the two bounds rather than a second copy of it.
         QVERIFY(clamped < static_cast<double>(PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx));
 
-        // And a negative request floors at zero rather than shrinking the surface.
-        // Clamped to the declared MIN of 4 on the way through, then the padding
-        // request's own floor; either way the surface never loses room.
+        // And a negative request never shrinks the surface. It is clamped to the
+        // pack's declared MIN of 4 on the way through, so the result is 4 rather
+        // than 0: the declared range is the binding floor here, not the padding
+        // request's own non-negative floor.
         QVariantMap negative;
         QVariantMap shrink;
         shrink.insert(QStringLiteral("glowSize"), -60);

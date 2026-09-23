@@ -75,7 +75,7 @@ WindowTrackingAdaptor delta persistence (Phase 3) has no dedicated
 bench — the optimization gates disk I/O on a per-field dirty bitfield,
 and the win scales with `(#fields not changed) × JSON size`, which
 only shows up in a realistic long-running session. The correctness
-invariant is covered by `tests/unit/core/test_wts_dirty_mask.cpp`.
+invariant is covered by `plasmazones/tests/unit/core/windowtracking/test_wts_dirty_mask.cpp`.
 
 ## How to reproduce
 
