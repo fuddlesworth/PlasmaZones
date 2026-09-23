@@ -19,11 +19,11 @@ namespace PhosphorScreens {
  * ScreenManager operates on PhysicalScreen values rather than QScreen
  * pointers so the screen add / remove / move / resize sequence can be
  * driven by a fake in tests (QScreen cannot be instantiated by non-
- * platform code). The production IScreenProvider wraps real QScreens and
+ * platform code). The production IPhysicalScreenSource wraps real QScreens and
  * fills @ref qscreen; a test provider synthesizes screens with arbitrary
  * geometry and leaves @ref qscreen null.
  *
- * This is a value snapshot, not a live handle. IScreenProvider emits a
+ * This is a value snapshot, not a live handle. IPhysicalScreenSource emits a
  * fresh PhysicalScreen with every screenGeometryChanged, and ScreenManager
  * replaces its stored copy — so a stored PhysicalScreen is current as long
  * as the manager keeps up with the provider's signals, which it does.
@@ -76,6 +76,6 @@ inline size_t qHash(const PhysicalScreen& screen, size_t seed = 0)
 
 } // namespace PhosphorScreens
 
-// PhysicalScreen travels on the ScreenManager / IScreenProvider signals —
+// PhysicalScreen travels on the ScreenManager / IPhysicalScreenSource signals —
 // register it as a metatype so queued connections and QSignalSpy can carry it.
 Q_DECLARE_METATYPE(PhosphorScreens::PhysicalScreen)

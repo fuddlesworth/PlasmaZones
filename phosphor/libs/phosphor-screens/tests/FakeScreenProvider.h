@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "PhosphorScreens/IScreenProvider.h"
+#include "PhosphorScreens/IPhysicalScreenSource.h"
 
 #include <QString>
 #include <QVector>
@@ -11,7 +11,7 @@
 namespace PhosphorScreens {
 
 /**
- * @brief Test IScreenProvider — synthesizes outputs with arbitrary geometry.
+ * @brief Test IPhysicalScreenSource — synthesizes outputs with arbitrary geometry.
  *
  * QScreen cannot be constructed by non-platform code, so the screen
  * add / remove / move / resize sequence is otherwise undrivable in a unit
@@ -21,7 +21,7 @@ namespace PhosphorScreens {
  * #465. Synthetic screens carry no QScreen (`PhysicalScreen::qscreen` is
  * null).
  */
-class FakeScreenProvider : public IScreenProvider
+class FakeScreenProvider : public IPhysicalScreenSource
 {
     Q_OBJECT
 public:
@@ -46,7 +46,7 @@ public:
     void moveScreen(const QString& name, const QRect& newGeometry);
 
     /// Designate @p name the primary output (no signal — primary is a
-    /// pull-only query in the IScreenProvider contract). Warns and leaves the
+    /// pull-only query in the IPhysicalScreenSource contract). Warns and leaves the
     /// primary unchanged if @p name is not a connected output.
     void setPrimary(const QString& name);
 

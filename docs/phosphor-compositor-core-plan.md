@@ -82,9 +82,9 @@ src/compositor/    — The compositor binary (main(), wiring)
 - Atomic modesetting only (no legacy path — all modern HW supports it)
 - `GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING` for primary plane buffers
 - Page-flip fd integrated into wayland event loop via `wl_event_loop_add_fd`
-- `DrmScreenProvider : PhosphorScreens::IScreenProvider` translates DRM connectors → PhysicalScreen objects
+- `DrmScreenProvider : PhosphorScreens::IPhysicalScreenSource` translates DRM connectors → PhysicalScreen objects
 
-**Integrates:** `phosphor-screens` (IScreenProvider, PhysicalScreen, ScreenManager)
+**Integrates:** `phosphor-screens` (IPhysicalScreenSource, PhysicalScreen, ScreenManager)
 
 **Verify:** Compositor launches on TTY, outputs enumerated, VT switch works, monitor hotplug detected
 
@@ -252,7 +252,7 @@ Phases 7, 8, and 9 are largely independent once Phase 6 lands.
 - `plasmazones/kwin-effect/compositor/compositorbridge.h` — Reference bridge implementation (KWin)
 - `phosphor/libs/phosphor-compositor/include/PhosphorCompositor/DecorationManager.h` — Decoration state (reuse directly)
 - `phosphor/libs/phosphor-rendering/include/PhosphorRendering/ShaderNodeRhi.h` — Qt RHI rendering (effects build on this)
-- `phosphor/libs/phosphor-screens/include/PhosphorScreens/IScreenProvider.h` — DRM backend implements this
+- `phosphor/libs/phosphor-screens/include/PhosphorScreens/IPhysicalScreenSource.h` — DRM backend implements this
 - `phosphor/libs/phosphor-shortcuts/include/PhosphorShortcuts/IBackend.h` — Compositor shortcut backend
 - `phosphor/libs/phosphor-scripting/include/PhosphorScripting/LuauEngine.h` — Plugin tier 1
 - `phosphor/libs/phosphor-registry/include/PhosphorRegistry/PluginLoader.h` — Plugin tier 2/3

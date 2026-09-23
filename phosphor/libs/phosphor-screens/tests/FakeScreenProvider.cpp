@@ -6,7 +6,7 @@
 namespace PhosphorScreens {
 
 FakeScreenProvider::FakeScreenProvider(QObject* parent)
-    : IScreenProvider(parent)
+    : IPhysicalScreenSource(parent)
 {
 }
 

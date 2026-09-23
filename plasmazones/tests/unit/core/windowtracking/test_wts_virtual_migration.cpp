@@ -118,7 +118,7 @@ private Q_SLOTS:
     //
     // migrateScreenAssignmentsToVirtual needs a ScreenManager for the
     // geometry lookups, and gets one here: ScreenManager takes an injected
-    // IScreenProvider, so FakeScreenProvider stages the physical output
+    // IPhysicalScreenSource, so FakeScreenProvider stages the physical output
     // headlessly and no QGuiApplication or real QScreen is involved. The
     // happy path is covered by testMigrateToVirtual_routesZoneToItsHalf
     // below; the two guard clauses (null manager, empty virtual list) are

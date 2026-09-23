@@ -26,14 +26,24 @@ namespace PhosphorScreens {
  * concrete provider is injected via ScreenManagerConfig and owned by the
  * consumer; it must outlive the ScreenManager that holds the pointer.
  *
+ * NOT to be confused with `PhosphorLayer::IScreenProvider`, which this was
+ * called until the two names collided in review. They are different seams
+ * at different layers and neither library links the other. This one answers
+ * "which physical outputs exist, and what just happened to them", in
+ * @ref PhysicalScreen value snapshots, and deliberately does NOT hand out
+ * `QScreen*` — that is the whole point, since QScreen cannot be constructed
+ * by test code. The layer one answers "which `QScreen*` should this surface
+ * attach to" and must traffic in Qt's type because layer-shell surfaces bind
+ * to real Qt screens. Merging them would defeat one or the other.
+ *
  * Threading: ScreenManager calls `screens()` / `primaryScreen()` from the
  * GUI thread; implementations must emit the signals on the GUI thread.
  */
-class PHOSPHORSCREENSCORE_EXPORT IScreenProvider : public QObject
+class PHOSPHORSCREENSCORE_EXPORT IPhysicalScreenSource : public QObject
 {
     Q_OBJECT
 public:
-    explicit IScreenProvider(QObject* parent = nullptr)
+    explicit IPhysicalScreenSource(QObject* parent = nullptr)
         : QObject(parent)
     {
         // PhysicalScreen rides this interface's signals — register it so a
@@ -41,7 +51,7 @@ public:
         // is idempotent, so paying it per provider construction is harmless.
         qRegisterMetaType<PhysicalScreen>();
     }
-    ~IScreenProvider() override = default;
+    ~IPhysicalScreenSource() override = default;
 
     /// Every currently-connected output. Order is not significant.
     virtual QVector<PhysicalScreen> screens() const = 0;

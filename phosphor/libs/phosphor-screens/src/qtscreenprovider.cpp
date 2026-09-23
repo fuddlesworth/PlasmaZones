@@ -27,7 +27,7 @@ PhysicalScreen toPhysicalScreen(QScreen* screen)
 } // namespace
 
 QtScreenProvider::QtScreenProvider(QObject* parent)
-    : IScreenProvider(parent)
+    : IPhysicalScreenSource(parent)
 {
     if (!qApp) {
         // Constructed before QGuiApplication exists — Qt's screen signals

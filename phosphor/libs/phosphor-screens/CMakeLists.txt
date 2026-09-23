@@ -137,7 +137,7 @@ set(phosphorscreenscore_public_HDRS
     include/PhosphorScreens/IConfigStore.h
     include/PhosphorScreens/InMemoryConfigStore.h
     include/PhosphorScreens/IPanelSource.h
-    include/PhosphorScreens/IScreenProvider.h
+    include/PhosphorScreens/IPhysicalScreenSource.h
     include/PhosphorScreens/NoOpPanelSource.h
     include/PhosphorScreens/PhysicalScreen.h
     include/PhosphorScreens/QtScreenProvider.h

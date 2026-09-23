@@ -5,7 +5,7 @@
 
 #include "PhosphorScreens/IConfigStore.h"
 #include "PhosphorScreens/IPanelSource.h"
-#include "PhosphorScreens/IScreenProvider.h"
+#include "PhosphorScreens/IPhysicalScreenSource.h"
 #include "PhosphorScreens/QtScreenProvider.h"
 #include "reservationsplit.h"
 #include "screenslogging.h"
@@ -47,9 +47,9 @@ void ScreenManager::start()
     }
     m_running = true;
 
-    connect(m_screenProvider, &IScreenProvider::screenAdded, this, &ScreenManager::onProviderScreenAdded);
-    connect(m_screenProvider, &IScreenProvider::screenRemoved, this, &ScreenManager::onProviderScreenRemoved);
-    connect(m_screenProvider, &IScreenProvider::screenGeometryChanged, this,
+    connect(m_screenProvider, &IPhysicalScreenSource::screenAdded, this, &ScreenManager::onProviderScreenAdded);
+    connect(m_screenProvider, &IPhysicalScreenSource::screenRemoved, this, &ScreenManager::onProviderScreenRemoved);
+    connect(m_screenProvider, &IPhysicalScreenSource::screenGeometryChanged, this,
             &ScreenManager::onProviderScreenGeometryChanged);
 
     // Populate m_trackedScreens BEFORE any signal-emitting step that follows
@@ -136,9 +136,9 @@ void ScreenManager::stop()
     m_trackedScreens.clear();
 
     // Explicit per-signal disconnects, matching the start() connects.
-    disconnect(m_screenProvider, &IScreenProvider::screenAdded, this, &ScreenManager::onProviderScreenAdded);
-    disconnect(m_screenProvider, &IScreenProvider::screenRemoved, this, &ScreenManager::onProviderScreenRemoved);
-    disconnect(m_screenProvider, &IScreenProvider::screenGeometryChanged, this,
+    disconnect(m_screenProvider, &IPhysicalScreenSource::screenAdded, this, &ScreenManager::onProviderScreenAdded);
+    disconnect(m_screenProvider, &IPhysicalScreenSource::screenRemoved, this, &ScreenManager::onProviderScreenRemoved);
+    disconnect(m_screenProvider, &IPhysicalScreenSource::screenGeometryChanged, this,
                &ScreenManager::onProviderScreenGeometryChanged);
 
     m_availableGeometryCache.clear();
@@ -746,7 +746,7 @@ void ScreenManager::propagateIdentifierDrift(const QHash<QString, QString>& oldI
 void ScreenManager::onProviderScreenAdded(const PhysicalScreen& screen)
 {
     // Mutates the GUI-thread-only caches via syncTrackedScreens / sensor
-    // creation — assert the IScreenProvider emitted on the GUI thread.
+    // creation — assert the IPhysicalScreenSource emitted on the GUI thread.
     PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
     if (!screen.isValid()) {
         return;
@@ -780,7 +780,7 @@ void ScreenManager::onProviderScreenAdded(const PhysicalScreen& screen)
 void ScreenManager::onProviderScreenRemoved(const PhysicalScreen& screen)
 {
     // Mutates the GUI-thread-only caches (virtual-geometry cache, sensor map)
-    // — assert the IScreenProvider emitted on the GUI thread.
+    // — assert the IPhysicalScreenSource emitted on the GUI thread.
     PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
     if (!screen.isValid()) {
         return;
@@ -818,7 +818,7 @@ void ScreenManager::onProviderScreenRemoved(const PhysicalScreen& screen)
 void ScreenManager::onProviderScreenGeometryChanged(const PhysicalScreen& screen)
 {
     // Mutates the GUI-thread-only caches (virtual-geometry + available-geometry)
-    // — assert the IScreenProvider emitted on the GUI thread.
+    // — assert the IPhysicalScreenSource emitted on the GUI thread.
     PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
     if (!screen.isValid()) {
         return;

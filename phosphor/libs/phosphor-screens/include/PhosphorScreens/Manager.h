@@ -23,7 +23,7 @@ namespace PhosphorScreens {
 
 class IConfigStore;
 class IPanelSource;
-class IScreenProvider;
+class IPhysicalScreenSource;
 
 /**
  * @brief Construction-time wiring for ScreenManager.
@@ -49,7 +49,7 @@ class IScreenProvider;
  */
 struct ScreenManagerConfig
 {
-    IScreenProvider* screenProvider = nullptr;
+    IPhysicalScreenSource* screenProvider = nullptr;
     IPanelSource* panelSource = nullptr;
     IConfigStore* configStore = nullptr;
     bool useGeometrySensors = true;
@@ -60,7 +60,7 @@ struct ScreenManagerConfig
  * @brief Centralized screen-topology service.
  *
  * Owns:
- *   • physical screen monitoring (via an injected IScreenProvider —
+ *   • physical screen monitoring (via an injected IPhysicalScreenSource —
  *     add/remove/geometry lifecycle, decoupled from QGuiApplication)
  *   • virtual-screen subdivision cache (synced from an injected IConfigStore)
  *   • per-screen available-geometry computation (panel offsets via an
@@ -351,7 +351,7 @@ private:
     // The effective screen provider — either the injected one or a
     // QtScreenProvider the manager constructed (parented to `this`) when
     // the config left it null.
-    IScreenProvider* m_screenProvider = nullptr;
+    IPhysicalScreenSource* m_screenProvider = nullptr;
 
     bool m_running = false;
     bool m_panelGeometryReadyEmitted = false;
