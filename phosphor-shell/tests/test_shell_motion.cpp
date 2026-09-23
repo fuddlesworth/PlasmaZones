@@ -22,7 +22,9 @@ class TestShellMotion : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
-    // Every slot below sets PHOSPHOR_REDUCED_MOTION, which is process-global.
+    // Every slot that constructs a ShellMotion sets PHOSPHOR_REDUCED_MOTION,
+    // which is process-global. (portalKeysDecode and its _data build no
+    // ShellMotion and set nothing.)
     // Without this the last value written leaked into whatever ran next, and
     // the suite only stayed correct because Qt runs private slots in
     // declaration order and the one slot that sets "1" resets it by hand.

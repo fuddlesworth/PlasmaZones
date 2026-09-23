@@ -134,10 +134,16 @@ void TestControlCenterController::screenOfAnItemInAWindowResolvesThatWindowsScre
     // block left the suite green. This runs on a SECOND screen, so the
     // resolved answer and the fallback are different pointers and the
     // block has to actually run.
+    // QVERIFY2, not QSKIP. The CMake entry for this target appends a
+    // configfile giving the offscreen plugin two named screens, so a
+    // single-screen run means that wiring was lost, not that the
+    // environment is merely unsuitable. A SKIP would let the only slot
+    // covering the window-resolution branch quietly stop running while
+    // ctest still reported green.
     const auto screens = QGuiApplication::screens();
-    if (screens.size() < 2) {
-        QSKIP("needs two screens; the test is registered with the offscreen plugin's two-screen config");
-    }
+    QVERIFY2(screens.size() >= 2,
+             "expected the two-screen offscreen configfile; see this target's "
+             "phosphor_append_test_environment entry in tests/CMakeLists.txt");
     QScreen* other = screens.at(0) == QGuiApplication::primaryScreen() ? screens.at(1) : screens.at(0);
     QVERIFY(other != QGuiApplication::primaryScreen());
 

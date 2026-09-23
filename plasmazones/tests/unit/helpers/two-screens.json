@@ -11,9 +11,9 @@
         "outputs here gives the fixture a real screen id to register against.",
         "",
         "The offscreen platform plugin accepts this file via",
-        "QT_QPA_PLATFORM=offscreen:configfile=<path>. Two sibling copies exist",
-        "for the shell tiers and describe their own reasons; this one is the",
-        "plasmazones copy."
+        "QT_QPA_PLATFORM=offscreen:configfile=<path>. Sibling copies live in the",
+        "phosphor and shell tiers and describe their own reasons. This one is",
+        "the plasmazones copy."
     ],
     "screens": [
         {

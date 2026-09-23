@@ -72,7 +72,7 @@ add_subdirectory(libs/phosphor-audio)       # audio spectrum provider (CAVA back
 add_subdirectory(libs/phosphor-surfaces)    # managed surface lifecycle (engine, keep-alive, scope gen)
 add_subdirectory(libs/phosphor-overlay)     # per-screen shell-host + slot mechanism (rides on layer/shell-patterns/surfaces/animation/screens)
 # ───────────────────────────────────────────────────────────────────────
-# Declared last, because the shell tier looks these up
+# Declared before the root enters the shell tier, which looks these up
 # ───────────────────────────────────────────────────────────────────────
 # Everything in this file is unconditional: the shell-tier libraries (theme,
 # popout, ipc), the phosphorctl CLI and the phosphor-shell binary live in

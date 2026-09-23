@@ -60,7 +60,7 @@ ApplicationWindow {
 
     Connections {
         function onLoadError(path, reason) {
-            root.lastError = path + ": " + reason;
+            root.lastError = qsTr("%1: %2").arg(path).arg(reason);
         }
 
         function onPaletteChanged() {

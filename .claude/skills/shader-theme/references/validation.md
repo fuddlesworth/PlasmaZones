@@ -12,8 +12,8 @@ Run every gate. A gate you skipped is a claim you cannot make. Report each one's
 Both the schema script and the shader validator locate their inputs by directory shape: the
 script only validates files matching `plasmazones/data/<family>/*/metadata.json` under its `--root`, and
 the validator detects a pack's family from the sibling `shared/` directory and resolves
-includes from it. A pack dropped loose in `scratchpad/<theme>/` passes gate 1 vacuously
-("OK (0 file(s) validated)") and fails gate 2's detection. So the scratchpad mirrors the
+includes from it. A pack dropped loose in `scratchpad/<theme>/` FAILS gate 1 loudly (the script
+names each unmatched path and exits 1) and fails gate 2's detection. So the scratchpad mirrors the
 repo's `plasmazones/data/` layout, with the shared pieces symlinked in:
 
 ```bash
@@ -51,11 +51,12 @@ This is the one gate that does NOT take `$P`: the script resolves a relative fil
 against `--root`, not against the working directory, so the paths are written `plasmazones/data/...`
 whichever root is in force (`--root $T` for the scratchpad; drop the flag once the packs are
 in the repo's `plasmazones/data/`). A scratchpad-phase `$P/` prefix (`$T/plasmazones/data/...`), or any other cwd-relative
-path outside `plasmazones/data/<family>/`, is resolved under the root, lands outside every mapped glob,
-and is silently dropped; once `P=plasmazones/data` the two spellings coincide. The last line of output reads `OK (N file(s) validated)`:
+path outside `plasmazones/data/<family>/`, is resolved under the root and lands outside every mapped
+glob, which the script reports as `<path>: matched no mapped schema glob` with exit 1;
+once `P=plasmazones/data` the two spellings coincide. The last line of output reads `OK (N file(s) validated)`:
 N MUST equal the number of files you passed. A file outside `<root>/plasmazones/data/<family>/*/` is
-skipped without a message, so `0 file(s)` means the paths or the layout are wrong, not that
-the files are fine. With no file args and no `--root` it validates every mapped file under
+named in a failure line rather than skipped quietly, so `0 file(s)` alongside a non-zero
+exit means the paths or the layout are wrong, not that the files are fine. With no file args and no `--root` it validates every mapped file under
 the repo's `plasmazones/data/`.
 
 ## 2. Shader compile: `plasmazones-shader-validate`

@@ -385,6 +385,55 @@ jobs:
   # initializer-list packing), so pinning CI to whatever Ubuntu ships
   # would force every contributor to also keep an older clang-format
   # on PATH for the pre-commit hook to agree with CI.
+  # Nothing else in CI touches CMakePresets.json or the moon workspace: every
+  # other job hand-writes its `cmake -B build -G Ninja -D...` line. So the
+  # presets, the five moon.yml projects and the phosphor_tier_target()
+  # aggregates could all break without turning CI red, while CLAUDE.md
+  # documents `moon run <tier>:build` and `cmake --preset release` as
+  # first-class entry points.
+  #
+  # Configure only, no build: this gate is about the tier graph existing, and
+  # the `build` job above already compiles the tree. That keeps it to about a
+  # minute.
+  presets:
+    name: Presets and tier graph
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'labeled' && github.event.action != 'unlabeled')
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Setup (Arch)
+        run: |
+          set -euo pipefail
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm --needed \
+            git base-devel cmake ninja extra-cmake-modules \
+            qt6-base qt6-declarative qt6-tools qt6-shadertools qt6-svg \
+            qt6-wayland wayland plasma-wayland-protocols wayland-protocols \
+            kwin kconfig kconfigwidgets kcmutils kglobalaccel kcolorscheme \
+            kirigami plasma-activities vulkan-headers vulkan-icd-loader glslang \
+            cava ffmpeg
+
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # The debug preset turns tests, the shell tier and the tools all ON, so
+      # this also proves the shell tier still configures.
+      - name: Configure from the debug preset
+        run: cmake --preset debug
+
+      - name: Every tier declares its aggregate target
+        run: |
+          set -euo pipefail
+          ninja -C build -t targets all > targets.txt
+          for tier in phosphor phosphor-shell-libs phosphor-shell plasmazones; do
+            if ! grep -q "^${tier}-tier:" targets.txt; then
+              echo "missing aggregate target: ${tier}-tier" >&2
+              exit 1
+            fi
+            echo "ok: ${tier}-tier"
+          done
+
   lint:
     name: Lint
     # Same trigger gate as `build` — skip label-change events and
@@ -435,12 +484,23 @@ jobs:
           # Filter to source files we actually format, exclude
           # generator-output headers (they get regenerated, no point
           # round-tripping clang-format against them).
+          #
+          # The extension list mirrors lefthook's clang-format hook, which
+          # globs *.{cpp,h,hpp,cc,cxx}. Without the last three, a .hpp pushed
+          # with --no-verify was not checked here either, though the comment
+          # above claims this job mirrors the hooks.
+          #
+          # The _export.h filter is a tripwire rather than a live filter:
+          # every *_export.h is generate_export_header() output and none is
+          # tracked, so it matches nothing today. It costs one grep and would
+          # catch one committed by hand.
+          #
           # Split so a failing diff is fatal. The `|| true` exists for
           # grep's exit 1 on no matches, and it used to cover the diff as
           # well, which would leave changed.txt empty and both lint steps
           # reporting "nothing changed" on what reads as a green run.
           git diff --name-only --diff-filter=ACMR "$RANGE" -- \
-              '*.cpp' '*.h' '*.qml' > all-changed.txt
+              '*.cpp' '*.h' '*.hpp' '*.cc' '*.cxx' '*.qml' > all-changed.txt
           grep -v '^[a-z-]*/libs/.*/include/.*_export\.h$' \
               all-changed.txt > changed.txt || true
           echo "Changed files:"
@@ -451,7 +511,7 @@ jobs:
       - name: clang-format
         run: |
           set -euo pipefail
-          mapfile -t files < <(grep -E '\.(cpp|h)$' changed.txt || true)
+          mapfile -t files < <(grep -E '\.(cpp|h|hpp|cc|cxx)$' changed.txt || true)
           if [ "${#files[@]}" -gt 0 ]; then
             clang-format --dry-run -Werror "${files[@]}"
           else
@@ -852,7 +912,7 @@ jobs:
           pkgname=plasmazones-pr
           pkgver=__PKGVER__
           pkgrel=1
-          pkgdesc="PlasmaZones — draft build for PR #__PR_NUMBER__ (__BRANCH__@__SHORT_SHA__)"
+          pkgdesc="PlasmaZones draft build for PR #__PR_NUMBER__ (__BRANCH__@__SHORT_SHA__)"
           arch=('x86_64')
           url="https://github.com/fuddlesworth/PlasmaZones"
           license=('GPL-3.0-or-later' 'LGPL-2.1-or-later')
@@ -948,7 +1008,7 @@ jobs:
           # clone that breaks describe still upgrades cleanly.
           pkgver=${{ steps.meta.outputs.pkgver }}
           pkgrel=1
-          pkgdesc="PlasmaZones — draft build for PR #${{ steps.meta.outputs.pr_number }} (${BRANCH})"
+          pkgdesc="PlasmaZones draft build for PR #${{ steps.meta.outputs.pr_number }} (${BRANCH})"
           arch=('x86_64')
           url="https://github.com/fuddlesworth/PlasmaZones"
           license=('GPL-3.0-or-later' 'LGPL-2.1-or-later')

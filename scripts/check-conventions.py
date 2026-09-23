@@ -545,6 +545,17 @@ DESKTOP_FIELD = re.compile(r"^(Name|GenericName|Comment)(\[[^\]]+\])?\s*=\s*(.+)
 XML_PROSE = re.compile(r"<(summary|p|name|caption)(?:\s[^>]*)?>(.*?)</\1>", re.S)
 PKG_DESC = re.compile(r"^\s*(?:pkgdesc|Summary|Description)\s*[=:]\s*(.+)$", re.M)
 
+# Nix meta. CLAUDE.md names it, but the pattern above never matched it: it is
+# case-sensitive and Nix spells the attribute `description`. `longDescription`
+# uses Nix's '' ... '' multi-line form, so it needs its own arm rather than a
+# line match.
+NIX_DESC = re.compile(r"^\s*description\s*=\s*\"((?:[^\"\\]|\\.)*)\"", re.M)
+NIX_LONG_DESC = re.compile(r"^\s*longDescription\s*=\s*''(.*?)''", re.M | re.S)
+
+# RPM's %description body runs from the directive to the next % section. The
+# PKG_DESC pattern cannot see it, so `dnf info` printed sixteen ungated lines.
+RPM_DESC = re.compile(r"^%description[^\n]*\n(.*?)(?=^%\w)", re.M | re.S)
+
 
 def rule_prose(files: list[str]) -> list[Violation]:
     out = []
@@ -591,9 +602,25 @@ def rule_prose(files: list[str]) -> list[Violation]:
             continue
 
         if f.startswith("packaging/"):
-            for m in PKG_DESC.finditer(strip_hash_comments(read(f))):
+            body = read(f)
+            stripped = strip_hash_comments(body)
+            for m in PKG_DESC.finditer(stripped):
                 for p in prose_problems(m.group(1)):
                     out.append(Violation("prose", f, 0, f"{p} -> {m.group(1)[:80]!r}"))
+            # Nix and RPM bodies the line-oriented pattern above cannot reach.
+            # Read from the raw text, not the hash-stripped copy: `#` is not a
+            # comment inside a Nix string or an RPM %description.
+            if suffix == ".nix":
+                for pat in (NIX_DESC, NIX_LONG_DESC):
+                    for m in pat.finditer(body):
+                        for p in prose_problems(m.group(1)):
+                            out.append(Violation("prose", f, line_of(body, m.start()),
+                                                 f"{p} -> {m.group(1).strip()[:80]!r}"))
+            if suffix == ".spec":
+                for m in RPM_DESC.finditer(body):
+                    for p in prose_problems(m.group(1)):
+                        out.append(Violation("prose", f, line_of(body, m.start()),
+                                             f"{p} -> {m.group(1).strip()[:80]!r}"))
             continue
 
         if f.startswith("plasmazones/data/algorithms/") and suffix == ".luau":

@@ -29,6 +29,7 @@ grep -E "^(BUILD_TESTING|BUILD_PHOSPHOR_SHELL|BUILD_TOOLS|CMAKE_UNITY_BUILD):" b
 | `build-release` | ON | ON | ON | the release preset, optimized |
 | `build-off` | ON | **OFF** | ON | confirming a shell-tier change still builds shell-OFF |
 | `build-nounity` | ON | ON | OFF | packager parity and the clangd compile database |
+| `build-make` | ON | **OFF** | ON | Unix Makefiles generator parity; tools OFF too, so a green ctest here covers neither the shell tier nor the tools |
 
 `build` is what `cmake --preset debug` produces, and `CMakePresets.json` sets
 `BUILD_TESTING`, `BUILD_PHOSPHOR_SHELL` and `BUILD_TOOLS` all ON there, so the
@@ -126,8 +127,8 @@ a function with internal linkage (a `static` in an anonymous namespace), which
 only ever links under unity.
 
 Shell-tier changes need **both** a shell-ON and a shell-OFF configure
-(`build-nounity` and `build-off`). The Makefile generator rejects ninja's
-`-k 0`.
+(`build-nounity` and `build-off`). Both of those are Ninja trees; `build-make`
+is the only Unix Makefiles one, and that generator rejects ninja's `-k 0`.
 
 ## Conventions gate
 

@@ -7,8 +7,10 @@
 // openSurface refusal leg, the successful open (surface attached, host
 // built, handle returned), closeSurface's controller-initiated-close
 // suppression of the dismissed callback plus its idempotence, drain()
-// emptying the entries without invoking the callback, and the
-// failed-surface path routing through onSurfaceGone into the callback.
+// emptying the entries without invoking the callback, the failed-surface
+// path routing through onSurfaceGone into the callback, the anchor-to-
+// placement mappings (bar anchors with and without a provider, screen
+// centre, custom, at-pointer), and the reopen-while-closing retirement.
 
 #include "LayerPopoutTransport.h"
 
@@ -242,6 +244,10 @@ void TestLayerPopoutTransport::barAnchorWithoutAProviderHangsFromTheScreenEdge()
     QQuickItem* host = lastHost();
     QVERIFY(host);
     QCOMPARE(host->property("placement").toString(), QStringLiteral("barLeft"));
+    // isValid() first: property() on a missing name returns an invalid
+    // QVariant whose toInt() is also 0, so without this the compare cannot
+    // tell "correctly wrote no margin" from "reservedTop was renamed away".
+    QVERIFY(host->property("reservedTop").isValid());
     QCOMPARE(host->property("reservedTop").toInt(), 0);
 
     transport.drain();
@@ -289,6 +295,9 @@ void TestLayerPopoutTransport::screenCenterAndCustomAnchorsMapToTheirPlacements(
     host = lastHost();
     QVERIFY(host);
     QCOMPARE(host->property("placement").toString(), QStringLiteral("center"));
+    // Same guard the ScreenCenter and Custom legs carry: AtPointer also
+    // degrades to center, so it must not have gone looking for a bar.
+    QVERIFY(!asked);
     transport.drain();
 }
 

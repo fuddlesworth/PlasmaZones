@@ -13,6 +13,12 @@
 // screen puts its clock, date and auth field. Pure geometry, no QML, so it
 // is unit-testable and reusable by any surface that wants free space.
 
+// NOTE: `.pragma library` means one shared instance per process, and every
+// top-level binding here is an export. `Region.Epsilon = 0` from any
+// importer would change the geometry for every other importer in the
+// process. The underscore prefixes on _num/_axis/_stop are the only thing
+// marking them private; nothing enforces it. Only largestEmptyRect() is
+// meant to be called from outside.
 var Epsilon = 1e-6;
 
 function _num(v) {
@@ -102,7 +108,7 @@ function largestEmptyRect(cells, width, height) {
     for (var b = 0; b < nx; ++b)
         bars[b] = 0;
     var best = null;
-    var bestArea = 0;
+    var bestArea = -1;
 
     for (var j = 0; j < ny; ++j) {
         var rowH = ys[j + 1] - ys[j];
@@ -121,6 +127,12 @@ function largestEmptyRect(cells, width, height) {
                 var left = stack.length > 0 ? stack[stack.length - 1] + 1 : 0;
                 var rw = xs[i3] - xs[left];
                 var area = rw * barH;
+                // bestArea starts at -1, not 0. With 0 the `> bestArea +
+                // Epsilon` test can never be satisfied by a region whose
+                // area is itself below Epsilon, so in fraction mode (width
+                // and height 1) a real but tiny gap returned null, which
+                // this file documents as meaning "the cells cover
+                // everything". Those are different answers.
                 if (area > bestArea + Epsilon) {
                     bestArea = area;
                     best = { x: xs[left], y: ys[j + 1] - barH, width: rw, height: barH };

@@ -336,11 +336,13 @@ void TestPluauHelpers::gridShape()
             local c4, r4 = pluau.gridShape(4)
             local c5, r5 = pluau.gridShape(5)
             local c9, r9 = pluau.gridShape(9)
-            return { c1 = c1, r1 = r1, c4 = c4, r4 = r4, c5 = c5, r5 = r5, c9 = c9, r9 = r9 }
+            local c0, r0 = pluau.gridShape(0)
+            return { c1 = c1, r1 = r1, c4 = c4, r4 = r4, c5 = c5, r5 = r5, c9 = c9, r9 = r9,
+                     c0 = c0, r0 = r0 }
         end }
     )LUA";
     const QVariantMap r = run(body).toMap();
-    VERIFY_KEYS(r, "c1", "r1", "c4", "r4", "c5", "r5", "c9", "r9");
+    VERIFY_KEYS(r, "c1", "r1", "c4", "r4", "c5", "r5", "c9", "r9", "c0", "r0");
     QCOMPARE(r.value(QStringLiteral("c1")).toInt(), 1);
     QCOMPARE(r.value(QStringLiteral("r1")).toInt(), 1);
     QCOMPARE(r.value(QStringLiteral("c4")).toInt(), 2);
@@ -349,6 +351,12 @@ void TestPluauHelpers::gridShape()
     QCOMPARE(r.value(QStringLiteral("r5")).toInt(), 2); // ceil(5 / 3) = 2
     QCOMPARE(r.value(QStringLiteral("c9")).toInt(), 3);
     QCOMPARE(r.value(QStringLiteral("r9")).toInt(), 3);
+    // count 0 gives 1 x 0. What matters is that it is not 0 x ceil(0/0):
+    // cols was 0, so rows came back nan and propagated silently into any
+    // caller that did not guard first. All three bundled callers do
+    // guard, but a user script need not.
+    QCOMPARE(r.value(QStringLiteral("c0")).toInt(), 1);
+    QCOMPARE(r.value(QStringLiteral("r0")).toInt(), 0);
 }
 
 void TestPluauHelpers::cumulativeOffsets()
@@ -386,6 +394,8 @@ void TestPluauHelpers::center()
     QCOMPARE(r.value(QStringLiteral("a")).toInt(), 30); // 0 + floor((100 - 40) / 2)
     QCOMPARE(r.value(QStringLiteral("b")).toInt(), 39); // 10 + floor((100 - 41) / 2)
 }
+
+#undef VERIFY_KEYS
 
 QTEST_MAIN(TestPluauHelpers)
 #include "test_pluau_helpers.moc"

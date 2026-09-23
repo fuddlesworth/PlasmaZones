@@ -120,8 +120,12 @@ void TestBarController::unknownIdYieldsNull()
 void TestBarController::nullParentYieldsNull()
 {
     // The engine is resolved from the parent, so a null parent has to be
-    // refused rather than dereferenced.
+    // refused rather than dereferenced. Pin the message too, the way the
+    // sibling factoryRejectsNullParent and the OSD test do: a bare null
+    // return does not distinguish the null-parent guard from the no-engine
+    // one, and both return null.
     BarController controller;
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("null parent for")));
     QCOMPARE(controller.createWidgetFor(QStringLiteral("clock"), nullptr), nullptr);
 }
 

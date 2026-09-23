@@ -1898,8 +1898,9 @@ add_test(NAME test_animations_stale_params COMMAND test_animations_stale_params)
 # plasmazones_core); the split _paths / _browser / _sets TUs carry
 # parentChain(), the shader-browser bridge and the set-store wiring.
 #
-# One source list, shared by the page-controller test and the decoration-set
-# test below, so a new controller TU can't silently miss one of the two.
+# One source list, shared by test_decorationpagecontroller,
+# test_decoration_sets and test_decoration_sets_validation below, so a new
+# controller TU can't silently miss one of the three.
 set(_decoration_ctrl_SRCS
     ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/decorationpagecontroller.cpp
     # The page controller constructs one of these in its ctor, so every TU that
@@ -1950,8 +1951,9 @@ target_link_libraries(test_decorationpagecontroller
 target_compile_definitions(test_decorationpagecontroller PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
 add_test(NAME test_decorationpagecontroller COMMAND test_decorationpagecontroller)
 
-# One source list, shared by the overlay controller test and the QML-contract
-# test below, so a new controller TU can't silently miss one of the two.
+# One source list, shared by test_overlays_page_controller,
+# test_overlays_qml_contracts and test_overlays_sets below, so a new
+# controller TU can't silently miss one of the three.
 set(_overlays_ctrl_SRCS
     ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/overlayspagecontroller.cpp
     # The ctor builds the set store, so every TU linking the controller needs
@@ -2308,7 +2310,13 @@ add_test(NAME bench_dbus_adaptors COMMAND bench_dbus_adaptors)
 # LABELS=bench lets CI skip the verbose benchmark output via
 # `ctest -LE bench` while still letting `ctest -L bench` select it
 # explicitly for the perf-regression run.
-set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench")
+# TIMEOUT 0 (unbounded) is set explicitly, not left to the directory sweep.
+# phosphor_apply_directory_test_isolation() only supplies its 120s default
+# when a test has no TIMEOUT of its own, and a micro-benchmark is the test
+# here most likely to exceed two minutes on a loaded machine -- at which
+# point it would FAIL rather than report numbers. The helper honours an
+# explicit 0.
+set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench" TIMEOUT 0)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # compositor-common/ - Shared Library Types Tests
@@ -2320,7 +2328,8 @@ set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench")
 #   test_strip_motion_sampler: StripMotionSampler distance/speed sampling
 #   test_exact_trigger_match: trigger-set exact-match resolution
 #   test_scroll_behaviour_parse: scrolling behaviour token parsing
-#   test_scroll_tab_layout: tab-indicator layout geometry
+#   test_scroll_tab_layout: tab-indicator layout geometry (declared ~300
+#     lines below this block, not with the ten that follow it)
 #   test_transition_pass_pure: transition-pass pure helpers
 #   test_modifier_utils: modifier parsing (source lives in core/, declared here)
 # ═══════════════════════════════════════════════════════════════════════════════

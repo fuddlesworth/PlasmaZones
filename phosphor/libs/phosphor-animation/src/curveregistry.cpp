@@ -186,7 +186,8 @@ void CurveRegistry::Impl::registerBuiltins()
     // Easing::fromString (which dispatches on "no letters" → bezier).
     //
     // Register under BOTH "bezier" and "cubic-bezier" — the loader and the
-    // build-time check-animation-profiles.py validator both treat
+    // check-animation-profiles.py validator (a manual tool; its CMake target
+    // was removed with the per-leaf profile tree) both treat
     // "cubic-bezier" as a known builtin (CurveLoader::Sink::parseFile
     // accepts `"typeId": "cubic-bezier"`, isBuiltinTypeId() lists it,
     // BUILTIN_CURVE_TYPEIDS contains it). Without the alias, a profile

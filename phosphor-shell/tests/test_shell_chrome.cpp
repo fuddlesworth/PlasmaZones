@@ -112,11 +112,14 @@ private Q_SLOTS:
     }
 
     // writeSurfacePreset() drops JSON into the target's XDG_DATA_HOME, which
-    // the isolation sandbox gives us but does not clear between ctest runs. A
-    // second run would therefore start with the previous run's shell-live
-    // preset already at glowSize 40, so the "the preset's value, not the
-    // pack's default" assertions would pass without the write under test
-    // having done anything.
+    // the isolation sandbox gives us but does not clear between ctest runs.
+    //
+    // The hazard is cross-SLOT, not cross-run-of-this-slot: the slot that
+    // retunes a preset writes its value fresh before constructing the
+    // chrome, so its own assertions are safe either way. What a crashed or
+    // interrupted run leaves behind is a preset visible to the OTHER slots,
+    // which expect the pack defaults and would silently read the leftover
+    // instead.
     void cleanup()
     {
         const QString dir = PhosphorShaders::userPresetDirectory(PhosphorShaders::standardUserPresetRoot(),

@@ -38,9 +38,10 @@ set(plasmazones_core_SRCS
     core/types/enums.h
     core/interfaces/interfaces.h
     core/interfaces/interfaces.cpp
-    # ilayoutmanager / izonedetector shims removed - consumers include
-    # <PhosphorZones/ILayoutManager.h> / <PhosphorZones/IZoneDetector.h>
-    # directly.
+    # ilayoutmanager / izonedetector shims removed. Consumers include
+    # <PhosphorZones/IZoneLayoutRegistry.h> and
+    # <PhosphorZones/IZoneDetector.h> directly. (There is no
+    # PhosphorZones/ILayoutManager.h; that name survives only in prose.)
     core/interfaces/ioverlayservice.h
     core/interfaces/isettings.h
     core/interfaces/settings_interfaces.h

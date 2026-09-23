@@ -83,8 +83,11 @@ def curve_reference_resolves(spec: str, shipped_curves: set[str]) -> bool:
         typeid = spec[:colon].strip().lower()
         return typeid in BUILTIN_CURVE_TYPEIDS or typeid in shipped_curves
     # Bare identifier: either a built-in typeId (no params) or a named
-    # curve registered by CurveLoader.
-    return spec in BUILTIN_CURVE_TYPEIDS or spec in shipped_curves
+    # curve registered by CurveLoader. Lowercased like the typeId:params
+    # branch above, which otherwise accepted "Spring:0.5,10" while
+    # rejecting a bare "Spring".
+    bare = spec.strip().lower()
+    return bare in BUILTIN_CURVE_TYPEIDS or bare in shipped_curves
 
 
 def check_profile_curve_references(

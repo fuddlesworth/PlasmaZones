@@ -123,7 +123,9 @@ struct PopulatedControllerFixture
 {
     /// REQUIRES `P_SOURCE_DIR` to be defined by the including target. Every
     /// target that compiles a TU including this header has to carry
-    /// `target_compile_definitions(... P_SOURCE_DIR="${CMAKE_SOURCE_DIR}")`;
+    /// `target_compile_definitions(... P_SOURCE_DIR="${CMAKE_SOURCE_DIR}/plasmazones")`
+    /// — with the tier suffix, which is how all 178 call sites spell it and what
+    /// dataDir() below depends on;
     /// without it this is a bare preprocessor error rather than anything that
     /// points at the cause.
     static QString dataDir()

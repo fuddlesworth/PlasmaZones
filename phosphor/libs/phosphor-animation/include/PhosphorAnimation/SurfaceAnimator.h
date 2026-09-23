@@ -139,10 +139,11 @@ public:
      * library default Profile (150 ms OutCubic) — same fallback as
      * `PhosphorMotionAnimation` in the QML bindings. The fallback is
      * surfaced at `qCWarning` so a typo doesn't silently degrade the
-     * animation; the QML-side `check-animation-profiles.py` build-time
-     * lint catches QML references but cannot inspect C++ literals, so
-     * the runtime warning is the backstop for `setupSurfaceAnimator`-
-     * style registrations.
+     * animation. `check-animation-profiles.py` does not help here: it is a
+     * manual tool with no CMake target any more, and it reads profile JSON
+     * under plasmazones/data/profiles rather than QML or C++ literals. The
+     * runtime warning is the only backstop for `setupSurfaceAnimator`-style
+     * registrations.
      *
      * @note **Pre-1.0 ABI.** Config is a plain aggregate exposed across
      * the DSO boundary. Adding or reordering fields between releases is

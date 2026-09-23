@@ -80,6 +80,10 @@ void TestPaneRules::controlCenterRuleCarriesThePerModePlacement()
     for (const RuleAction& action : rule.actions) {
         byType.insert(action.type, action.params);
     }
+    // insert() overwrites, so two actions of the same type would collapse
+    // into one and read as correct here. Sizes must agree for the lookups
+    // below to mean what they appear to.
+    QCOMPARE(byType.size(), rule.actions.size());
     // Snapping: zone 1, the fixed stand-in for "nearest the chip".
     QVERIFY(byType.contains(QString(ActionType::SnapToZone)));
     QCOMPARE(byType.value(QString(ActionType::SnapToZone)).value(ActionParam::Zones).toArray(), QJsonArray{1});

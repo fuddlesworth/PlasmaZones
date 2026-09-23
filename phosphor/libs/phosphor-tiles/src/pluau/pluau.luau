@@ -1023,9 +1023,9 @@ local function center(start, total, size)
     return start + math.floor((total - size) / 2)
 end
 
--- Square-ish grid shape for `count` cells: cols = ceil(sqrt), rows = ceil(count/cols).
+-- Square-ish grid: cols = max(1, ceil(sqrt(count))), rows = ceil(count/cols). The max keeps count <= 0 at 1 x 0, not 0 x nan.
 local function gridShape(count)
-    local cols = math.ceil(math.sqrt(count))
+    local cols = math.max(1, math.ceil(math.sqrt(count)))
     local rows = math.ceil(count / cols)
     return cols, rows
 end

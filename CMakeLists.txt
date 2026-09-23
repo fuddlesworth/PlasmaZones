@@ -169,12 +169,13 @@ add_compile_definitions(QT_NO_CAST_FROM_ASCII)
 option(USE_KDE_FRAMEWORKS "Build with KDE Frameworks integration" ON)
 
 # Opt-in build for the in-progress phosphor-shell desktop shell and its
-# supporting libraries (libs/phosphor-shell + the gated phosphor-service-*
-# group; see the add_subdirectory block farther down in this file for
-# the authoritative list) + the bundled `phosphor-shell` example binary
-# + the example QML/shader tree under examples/phosphor-shell. Default
-# OFF so packaging / downstream installs of PlasmaZones don't pick up
-# shell artefacts before the shell ships. Enable explicitly for shell
+# supporting libraries (phosphor-shell-libs/libs/phosphor-shell plus the
+# gated phosphor-service-* group; phosphor-shell-libs/CMakeLists.txt holds
+# the authoritative list, since this file now only enters the two tier
+# directories). Also builds the phosphor-shell binary and phosphorctl, and
+# the bundled shell QML tree under phosphor-shell/shell/. Default OFF so
+# packaging / downstream installs of PlasmaZones don't pick up shell
+# artefacts before the shell ships. Enable explicitly for shell
 # development:
 #   cmake -DBUILD_PHOSPHOR_SHELL=ON
 option(BUILD_PHOSPHOR_SHELL "Build the phosphor-shell desktop shell (work in progress)" OFF)
@@ -293,6 +294,13 @@ file(GLOB_RECURSE ALL_CLANG_FORMAT_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/phosphor-shell/*.h
     ${CMAKE_SOURCE_DIR}/phosphor-shell-libs/examples/*.hpp
     ${CMAKE_SOURCE_DIR}/phosphor-shell/*.hpp
+    # Built only with -DBUILD_TOOLS=ON, but this glob is filesystem-based
+    # rather than target-based, so the entry is unconditional. Without it
+    # the clang-format target skipped shader-render and
+    # settings-schema-dump entirely; only lefthook reached them.
+    ${CMAKE_SOURCE_DIR}/plasmazones/tools/*.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/tools/*.h
+    ${CMAKE_SOURCE_DIR}/plasmazones/tools/*.hpp
 )
 kde_clang_format(${ALL_CLANG_FORMAT_SOURCE_FILES})
 

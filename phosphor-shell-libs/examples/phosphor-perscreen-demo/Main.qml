@@ -21,9 +21,11 @@ PerScreen {
             required property bool isPrimary
 
             // Position the window at (40, 40) relative to its target
-            // screen's virtual-desktop origin. The QML `Window.screen`
-            // property is read-only QQuickScreenInfo (NOT QScreen*),
-            // so we can't directly setScreen() from QML — but x/y in
+            // screen's virtual-desktop origin. `Window.screen` is writable
+            // (qquickwindowmodule_p.h declares it READ screen WRITE
+            // setScreen), but it is typed QQuickScreenInfo* while
+            // phosphorScreen is a QScreen*, so the two do not assign and
+            // setScreen() is not reachable from here — but x/y in
             // virtual-desktop coordinates put the window over the
             // right monitor on X11, and on Wayland the compositor
             // routes the surface based on its position. The delegate
@@ -49,7 +51,7 @@ PerScreen {
                 anchors.centerIn: parent
                 color: "#ffffff"
                 font.pixelSize: 20
-                text: screenWindow.name + (screenWindow.isPrimary ? qsTr("  [PRIMARY]") : "")
+                text: screenWindow.name + (screenWindow.isPrimary ? "  " + qsTr("[PRIMARY]") : "")
             }
 
             Text {

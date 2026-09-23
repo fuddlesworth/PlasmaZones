@@ -1,6 +1,5 @@
 # PlasmaZones RPM Spec File
 # Window snapping, tiling and scrolling for KDE Plasma
-# SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Requires Plasma 6.7+ (KF6 6.26, Qt 6.10, KWin 6.7+). Builds against 6.7 and 6.8.
 #
@@ -44,7 +43,7 @@ ExclusiveArch:  x86_64 aarch64
 
 # Build tools
 # wayland-scanner: protocol-glue code generator, located by CMake via
-# find_program (CMakeLists.txt:186, phosphor/libs/phosphor-wayland/CMakeLists.txt:46).
+# find_program (CMakeLists.txt:247, phosphor/libs/phosphor-wayland/CMakeLists.txt:46).
 # Depend on the pkgconfig(wayland-scanner) capability, not the bare
 # /usr/bin/wayland-scanner file path: the file-path form is reported
 # unresolvable by OBS on openSUSE Tumbleweed. wayland-devel ships both the
@@ -75,7 +74,7 @@ BuildRequires:  cmake(Qt6ShaderToolsPrivate)
 BuildRequires:  qt6-svg-devel
 BuildRequires:  qt6-core-private-devel
 BuildRequires:  qt6-gui-private-devel
-# Qt6QuickPrivate (CMakeLists.txt:120). openSUSE ships the private Quick
+# Qt6QuickPrivate (CMakeLists.txt:141). openSUSE ships the private Quick
 # CMake config in this explicit package; it does not auto-provide a
 # cmake(Qt6QuickPrivate) capability, unlike Qt6ShaderToolsPrivate.
 BuildRequires:  qt6-quick-private-devel

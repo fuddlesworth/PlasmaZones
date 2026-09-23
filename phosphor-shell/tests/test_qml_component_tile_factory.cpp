@@ -117,7 +117,12 @@ void TestQmlComponentTileFactory::anUnknownTypeIsRefused()
     // A type the module does not export. The factory reports and returns
     // null, which the surface reads as "unavailable here" rather than as an
     // error, so a mistyped type name must not take the whole grid down.
-    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("component (error|not ready)")));
+    // "component error for", not the (error|not ready) alternation: an
+    // unknown type name resolves synchronously, so the component lands in
+    // Error and never in the NotReady state the other branch logs.
+    // Accepting both would let a change in which state is reached pass
+    // unnoticed.
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("component error for")));
     QVERIFY(!factory.createTile(&m_engine, &m_parent));
 }
 
