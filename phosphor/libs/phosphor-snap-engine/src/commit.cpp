@@ -148,6 +148,14 @@ void SnapEngine::uncommitSnap(const QString& windowId)
     if (!m_globals) {
         return;
     }
+    // Guarded locally like m_globals, per the ctor contract: the tracker derefs
+    // below are unconditional, and a stub-dependency engine would crash here in
+    // release where the assert compiles out.
+    Q_ASSERT(m_windowTracker);
+    if (!m_windowTracker) {
+        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "uncommitSnap: no window tracker for" << windowId;
+        return;
+    }
     if (windowId.isEmpty()) {
         return;
     }
@@ -184,6 +192,11 @@ PhosphorProtocol::WindowGeometryList SnapEngine::applyBatchAssignments(const QVe
     // pass against a half-dead engine.
     Q_ASSERT(m_globals);
     if (!m_globals) {
+        return geometries;
+    }
+    Q_ASSERT(m_windowTracker);
+    if (!m_windowTracker) {
+        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "applyBatchAssignments: no window tracker";
         return geometries;
     }
 

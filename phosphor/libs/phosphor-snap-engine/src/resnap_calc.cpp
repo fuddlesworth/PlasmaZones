@@ -25,6 +25,13 @@ using PhosphorEngine::ZoneAssignmentEntry;
 
 QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
 {
+    // Guarded locally per the ctor contract: the tracker derefs below are
+    // unconditional, so a stub-dependency engine crashes here in release.
+    Q_ASSERT(m_windowTracker);
+    if (!m_windowTracker) {
+        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "calculateResnapFromPreviousLayout: no window tracker";
+        return {};
+    }
     QVector<ZoneAssignmentEntry> result;
     const QVector<ResnapEntry> resnapBuffer = m_windowTracker->takeResnapBuffer();
     if (resnapBuffer.isEmpty()) {
@@ -536,6 +543,13 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateSnapAllWindowEntries(const QSt
 
 QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const QString& screenFilter) const
 {
+    // Guarded locally per the ctor contract: the tracker derefs below are
+    // unconditional, so a stub-dependency engine crashes here in release.
+    Q_ASSERT(m_windowTracker);
+    if (!m_windowTracker) {
+        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "calculateRotation: no window tracker";
+        return {};
+    }
     QVector<ZoneAssignmentEntry> result;
 
     // Group snapped windows by screen so each screen rotates independently
