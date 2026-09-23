@@ -249,6 +249,14 @@ if [ -f "$NEST/daemon.pid" ]; then
 fi
 rm -f "$NEST/env.sh" "$NEST/daemon.pid" "$NEST/daemon.log"
 mkdir -p "$HOME_N/config" "$HOME_N/data" "$HOME_N/cache" "$HOME_N/state"
+# Seed the repository's data packs into the isolated user data home. Without
+# this, the branch binaries still run but registry-backed packs fall through
+# to /usr/share; newly added packs (for example surface/top-rail) then appear
+# as missing in Settings and the nested run is testing the installed data.
+if [ -d "$REPO/data" ]; then
+    mkdir -p "$HOME_N/data/plasmazones"
+    cp -a "$REPO/data/." "$HOME_N/data/plasmazones/"
+fi
 # env.sh carries the session bus address; keep the tree private even when
 # PZ_NESTED_DIR points somewhere world-traversable.
 chmod 700 "$NEST"
@@ -263,6 +271,12 @@ export XDG_DATA_HOME="$HOME_N/data"
 export XDG_CACHE_HOME="$HOME_N/cache"
 export XDG_STATE_HOME="$HOME_N/state"
 export QT_QPA_PLATFORM=wayland
+# Put the worktree's executable directory first. The daemon launches the
+# settings app and editor by name (and D-Bus activation inherits this
+# environment), so leaving PATH untouched makes those actions silently start
+# the installed system binaries while the shell/effect themselves use the
+# build tree. Keep the host PATH after it for non-PlasmaZones helpers.
+export PATH="$REPO/$BUILD/bin:${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}"
 # build/bin carries the KWin effect (kwin/effects/plugins/...);
 # build/plugins carries the layer-shell QPA integration
 # (wayland-shell-integration/phosphorwayland-qpa.so). Without the second
@@ -381,6 +395,7 @@ exec dbus-run-session -- sh -c "
     echo \"export XDG_STATE_HOME='$XDG_STATE_HOME'\"
     echo \"export XDG_DATA_DIRS='$XDG_DATA_DIRS'\"
     echo \"export QT_QPA_PLATFORM=wayland\"
+    echo \"export PATH='$PATH'\"
     echo \"export QT_PLUGIN_PATH='$QT_PLUGIN_PATH'\"
     echo \"export KWIN_SCREENSHOT_NO_PERMISSION_CHECKS=1\"
     echo \"export QT_LOGGING_RULES='$QT_LOGGING_RULES'\"
