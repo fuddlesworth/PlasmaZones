@@ -245,6 +245,7 @@ FocusScope {
         contentItem: ground
         surfacePath: "shell.phosphor.picker"
         focused: picker.open
+        layeredStages: true
     }
 
     Rectangle {

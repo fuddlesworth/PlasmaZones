@@ -145,6 +145,7 @@ FocusScope {
         component: root.decoration
         contentItem: ground
         surfacePath: "shell.phosphor.popout"
+        layeredStages: true
     }
     Item {
         id: header

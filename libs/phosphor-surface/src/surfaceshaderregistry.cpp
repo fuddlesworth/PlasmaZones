@@ -801,7 +801,11 @@ QList<PhosphorShaders::EntryCandidate> SurfaceShaderRegistry::surfaceEntryCandid
     // packs have no per-element loop (that is the overlay category's pZone).
     static const QString surfaceMain = QStringLiteral(
         "void main() {\n"
+        "#ifndef PLASMAZONES_KWIN\n"
+        "    fragColor = pSurface(vTexCoord) * qt_Opacity;\n"
+        "#else\n"
         "    fragColor = pSurface(vTexCoord);\n"
+        "#endif\n"
         "}\n");
     return {PhosphorShaders::EntryCandidate{QStringLiteral("pSurface"), surfaceMain}};
 }

@@ -23,6 +23,7 @@ Item {
         contentItem: surface
         surfacePath: "shell.phosphor.notification"
         focused: root.held
+        layeredStages: true
     }
     ShellSurface {
         id: surface

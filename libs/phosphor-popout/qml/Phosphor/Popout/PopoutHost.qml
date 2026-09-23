@@ -118,6 +118,10 @@ FocusScope {
         if (surfaceEffects && !contentFrame.fullScreen)
             surfaceEffects.setBlurBehind(root, materialBlurred ? materialRect : Qt.rect(0, 0, 0, 0), materialBlurred ? secondaryMaterialRect : Qt.rect(0, 0, 0, 0), materialRadius);
     }
+    function clearMaterial() {
+        if (surfaceEffects)
+            surfaceEffects.setBlurBehind(root, Qt.rect(0, 0, 0, 0), Qt.rect(0, 0, 0, 0), materialRadius);
+    }
     onMaterialRectChanged: Qt.callLater(applyMaterial)
     onSecondaryMaterialRectChanged: Qt.callLater(applyMaterial)
     onSurfaceEffectsChanged: Qt.callLater(applyMaterial)
@@ -257,6 +261,11 @@ FocusScope {
             if (root.keyboardFocus && !root.contentItem)
                 contentFrame.focusContentIfIdle();
         } else {
+            // Blur is a compositor effect on the whole layer surface, so it
+            // outlives the fading QML card unless explicitly cleared. Leave
+            // the surface itself to animate, but remove the blur region on
+            // the close edge so the old blue panel cannot remain behind it.
+            root.clearMaterial();
             // Known limitation: QTimer samples interval at start(), so
             // a Motion-token retune (theme switch mid-close) updates
             // dismissEmitter.interval via the binding below but does
@@ -686,7 +695,16 @@ FocusScope {
             component: contentFrame.fullScreen ? null : root.decoration
             contentItem: contentFrame
             surfacePath: "shell.phosphor.popout"
-            focused: root.open
+            // Keep the active surface treatment through the close animation.
+            // `open` drops on the close edge, but the host remains rendered
+            // until dismissed fires; changing surface state mid-fade creates
+            // a distracting style jump.
+            focused: root.open || dismissEmitter.running
+            // SurfaceShaderItem is a custom render node and does not inherit
+            // the content frame's close transform directly. Route popup
+            // stages through layers so the finished decoration fades and
+            // scales with the content instead of lingering as a blue slab.
+            layeredStages: true
         }
 
         // Hit-blocker. Without this, gaps inside the content area

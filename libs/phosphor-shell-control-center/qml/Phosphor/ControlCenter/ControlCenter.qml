@@ -97,6 +97,7 @@ FocusScope {
         component: root.decoration
         contentItem: ground
         surfacePath: "shell.phosphor.popout"
+        layeredStages: true
     }
     property var mediaPlayer: null
     property var spectrum: AudioSpectrum

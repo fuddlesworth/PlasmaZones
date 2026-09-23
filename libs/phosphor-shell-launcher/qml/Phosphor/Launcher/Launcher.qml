@@ -92,6 +92,7 @@ FocusScope {
         contentItem: ground
         surfacePath: "shell.phosphor.popout"
         focused: root.activeFocus
+        layeredStages: true
     }
     ColumnLayout {
         anchors.fill: parent

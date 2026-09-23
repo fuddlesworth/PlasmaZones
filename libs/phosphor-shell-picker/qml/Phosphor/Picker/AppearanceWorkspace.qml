@@ -110,6 +110,7 @@ FocusScope {
         contentItem: ground
         surfacePath: "shell.phosphor.picker"
         focused: root.activeFocus
+        layeredStages: true
     }
     MouseArea {
         anchors.fill: parent
