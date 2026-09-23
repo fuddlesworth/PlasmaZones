@@ -11,6 +11,7 @@
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
 #include <QScreen>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -91,6 +92,17 @@ PhosphorProtocol::PreTileGeometryList WindowTrackingAdaptor::getPreTileGeometrie
     // not apply here — mirroring the snap engine's floating-branch policy in
     // SnapEngine::resolveWindowRestore.
     for (const PhosphorEngine::WindowPlacement& p : m_service->placementStore().records()) {
+        // LIVE records only. The consumer (TilingHandler's pre-tile fetch)
+        // keys each entry by appId, matches it against the live windows on
+        // the screen and skips when more than one matches — so the only entry
+        // it can ever apply belongs to a window that is open right now. A
+        // dead sibling's record reaching it is the cross-instance borrow
+        // getValidatedPreTileGeometry refuses by construction, handed to the
+        // live window as its own pre-tile rect; a live window's own record is
+        // exactly what the seed is for.
+        if (!m_service->placementStore().isLiveInstance(p.windowId)) {
+            continue;
+        }
         for (auto it = p.freeGeometryByScreen.constBegin(); it != p.freeGeometryByScreen.constEnd(); ++it) {
             const QRect& geo = it.value();
             if (!geo.isValid()) {
@@ -181,27 +193,38 @@ QString WindowTrackingAdaptor::getPendingRestoreGeometries()
     // guards saveState, loadState and the engine restore path so all four
     // paths can never drift.
     //
-    // resolveWindowRestore carries no per-restore desktop, so the current
-    // virtual desktop is used — consistent with the snap-side
-    // setShouldRestorePredicate gate. Activity is left unset: snap-mode storage
-    // carries no per-window activity tag (see isPersistedContextDisabled).
+    // The gate keys on the record screen's CURRENT desktop, the same
+    // two-argument check saveState and loadState apply; the record's own
+    // activity is deliberately not part of it (isPersistedContextDisabled
+    // asks about the screen and desktop only).
+    //
+    // One ARRAY per appId, newest record first: the effect takes the first
+    // entry whose window it cannot see, so on a daemon-only restart (where
+    // the daemon's liveness probe answers false for everything) a live
+    // sibling's record at the head does not cost the app its instant restore.
     QJsonObject result;
     for (auto it = targets.constBegin(); it != targets.constEnd(); ++it) {
-        const auto& target = it.value();
-        // Per-output virtual desktops (#648): gate each record on ITS screen's desktop.
-        const int desktop = currentDesktopForScreen(target.screenId);
-        if (isPersistedContextDisabled(target.screenId, desktop)) {
-            qCDebug(lcDbusWindow) << "getPendingRestoreGeometries: skipping" << it.key()
-                                  << "— disabled context on screen" << target.screenId;
-            continue;
+        QJsonArray entries;
+        for (const auto& target : it.value()) {
+            // Per-output virtual desktops (#648): gate each record on ITS screen's desktop.
+            const int desktop = currentDesktopForScreen(target.screenId);
+            if (isPersistedContextDisabled(target.screenId, desktop)) {
+                qCDebug(lcDbusWindow) << "getPendingRestoreGeometries: skipping" << it.key()
+                                      << "— disabled context on screen" << target.screenId;
+                continue;
+            }
+            QJsonObject geoObj;
+            geoObj[QLatin1String("x")] = target.geometry.x();
+            geoObj[QLatin1String("y")] = target.geometry.y();
+            geoObj[QLatin1String("width")] = target.geometry.width();
+            geoObj[QLatin1String("height")] = target.geometry.height();
+            geoObj[QLatin1String("screenId")] = target.screenId;
+            geoObj[QLatin1String("windowId")] = target.windowId;
+            entries.append(geoObj);
         }
-        QJsonObject geoObj;
-        geoObj[QLatin1String("x")] = target.geometry.x();
-        geoObj[QLatin1String("y")] = target.geometry.y();
-        geoObj[QLatin1String("width")] = target.geometry.width();
-        geoObj[QLatin1String("height")] = target.geometry.height();
-        geoObj[QLatin1String("screenId")] = target.screenId;
-        result[it.key()] = geoObj;
+        if (!entries.isEmpty()) {
+            result[it.key()] = entries;
+        }
     }
 
     qCDebug(lcDbusWindow) << "Returning pending restore geometries for" << result.size() << "apps";

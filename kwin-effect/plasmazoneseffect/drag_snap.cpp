@@ -336,12 +336,12 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     // and center it in the zone — see constrainTileGeometry.
     geo = constrainTileGeometry(window, geo);
 
-    // If this window is held invisible until it is repositioned on open
-    // (first-frame suppression — see RestoreSuppression), stamp the
-    // resolved rect as its settle target. The windowFrameGeometryChanged
-    // handler treats the next geometry change as the real reposition (not
-    // the client's own initial sizing) only once this target is set.
-    if (auto supIt = m_restoreSuppress.find(window); supIt != m_restoreSuppress.end()) {
+    // A window held invisible until repositioned on open (RestoreSuppression)
+    // gets the resolved rect stamped as its settle target, which the frame
+    // hook needs before it treats a geometry change as the reposition. Not
+    // when deferred to a user move's end (the replay stamps then).
+    const bool deferredToMoveEnd = !allowDuringDrag && (window->isUserMove() || window->isUserResize());
+    if (auto supIt = m_restoreSuppress.find(window); supIt != m_restoreSuppress.end() && !deferredToMoveEnd) {
         supIt->targetGeometry = geo;
     }
 
@@ -393,7 +393,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     // In KWin 6, we use the window's moveResize methods
     // When allowDuringDrag is false: defer if window is in user move/resize (snap on release)
     // When allowDuringDrag is true: apply immediately (snap-on-hover during drag)
-    if (!allowDuringDrag && (window->isUserMove() || window->isUserResize())) {
+    if (deferredToMoveEnd) {
         qCDebug(lcEffect) << "Window in user move/resize, deferring geometry via windowFinishUserMovedResized";
         QPointer<KWin::EffectWindow> safeWindow = window;
         // Snapshot the batch-supersession context at defer time: the fire can

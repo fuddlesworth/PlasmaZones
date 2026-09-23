@@ -155,8 +155,11 @@ public Q_SLOTS:
      *                   placement record now carries the kind, so it no longer gates restore.
      * @param restoreReason Why this resolve is running — see
      *                   PhosphorEngine::RestoreReason. Clamped from the wire, so an
-     *                   unrecognised value reads as Open. Gates the cross-screen
-     *                   tile reclaim and the per-open reclaim-credit burn.
+     *                   unrecognised value reads as Open. Gates the open claim, the
+     *                   RouteToDesktop / RouteToScreen routing, the cross-screen
+     *                   tile reclaim and the per-open reclaim-credit burn, and is
+     *                   forwarded to the engine, where it gates the free-size
+     *                   restore of a floated open (#1106).
      */
     void resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int windowKind,
                               int restoreReason, int minWidth, int minHeight, int& snapX, int& snapY, int& snapWidth,
@@ -326,11 +329,12 @@ public:
     /// homes it TILED elsewhere would otherwise never be offered to the
     /// engine that owns it. The effect drives resolveWindowRestore for a
     /// window on a non-managed screen, and for a managed-screen window that
-    /// is also a snap-restore candidate; both are gated on canSnapRestore
-    /// (kwin-effect/plasmazoneseffect/window_lifecycle.cpp), so a window
-    /// failing that gate — minimized at open, or a multi-instance sibling
-    /// with a different pid — reaches this channel not at all and is covered
-    /// only by the tiling dispatch. Wired by the daemon over both pipeline
+    /// is also a snap-restore candidate; both are gated on the effect's
+    /// candidate test (kwin-effect/plasmazoneseffect/window_lifecycle.cpp),
+    /// so a window failing that gate — minimized at open — reaches this
+    /// channel not at all and is covered only by the tiling dispatch. (The
+    /// different-pid sibling exclusion that gate used to carry is gone since
+    /// #1106.) Wired by the daemon over both pipeline
     /// engines' claimCrossScreenReopen; cleared in clearEngine and in
     /// Daemon::stop (same contract as the engines' injected closures).
     /// Unset → no reclaim (headless/test path).

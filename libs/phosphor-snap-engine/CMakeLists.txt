@@ -5,7 +5,7 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-set(PHOSPHORSNAPENGINE_VERSION "0.1.0")
+set(PHOSPHORSNAPENGINE_VERSION "0.2.0")
 
 if(NOT PROJECT_VERSION)
     project(PhosphorSnapEngine VERSION ${PHOSPHORSNAPENGINE_VERSION} LANGUAGES CXX)
@@ -33,6 +33,7 @@ add_library(PhosphorSnapEngine SHARED
     src/calculate.cpp
     src/commit.cpp
     src/float.cpp
+    src/free_size.cpp
     src/lifecycle.cpp
     src/navigation.cpp
     src/navigation_actions.cpp

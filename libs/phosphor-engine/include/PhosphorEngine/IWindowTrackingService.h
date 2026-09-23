@@ -46,6 +46,12 @@ public:
 
     virtual PhosphorScreens::ScreenManager* screenManager() const = 0;
 
+    /// The area of @p screenId a window may occupy (the output minus panels
+    /// and struts), or an invalid rect when the screen cannot be resolved.
+    /// Exposed here so an engine that must not link the screens library
+    /// (the LGPL engine base) can still clamp a restored size to the output.
+    virtual QRect screenAvailableGeometry(const QString& screenId) const = 0;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Zone assignment management
     // ═══════════════════════════════════════════════════════════════════════════

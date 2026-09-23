@@ -14,7 +14,7 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-set(PHOSPHORENGINE_VERSION "0.2.0")
+set(PHOSPHORENGINE_VERSION "0.3.0")
 
 if(NOT PROJECT_VERSION)
     project(PhosphorEngine VERSION ${PHOSPHORENGINE_VERSION} LANGUAGES CXX)
@@ -43,6 +43,7 @@ add_library(PhosphorEngine SHARED
     src/ScreenContextTracker.cpp
     src/WindowPlacementStore.cpp
     src/WindowPlacementStore_serialize.cpp
+    src/WindowPlacementStore_claims.cpp
     src/GeometryUtils.cpp
     src/WindowRegistry.cpp
     include/PhosphorEngine/WindowRegistry.h

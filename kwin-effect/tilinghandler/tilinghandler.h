@@ -244,7 +244,12 @@ public:
     {
         m_savedPreTileForDesktopMove.remove(windowId);
     }
-    void deferWindowRouting(KWin::EffectWindow* window, bool canSnapRestore);
+    void deferWindowRouting(KWin::EffectWindow* window);
+    /// An announce is in flight (see SnapHandler::hasOpenResolveInFlight).
+    bool announceInFlight(const QString& id) const
+    {
+        return m_announceGen.contains(id);
+    }
     /// Flags-settle eviction backstop: re-run the structural placement
     /// filters for an already-announced window whose keep-above /
     /// skip-switcher flag just changed, and release it from its engine
@@ -1631,21 +1636,16 @@ private:
     bool m_initialScreenQueryPending = false;
     QSet<QString> m_pendingFreshWindows;
     /// Monotonic stamp source for windowOpened / windowsOpenedBatch announces,
-    /// session-global for the same reason m_crossScreenRestoreSeq is: a stamp is
-    /// never reused, so an ERASED map entry reads back as 0 and can never match a
-    /// captured stamp.
+    /// session-global like m_crossScreenRestoreSeq: a stamp is never reused, so
+    /// an ERASED map entry reads back as 0 and can never match a captured stamp.
     quint64 m_announceSeq = 0;
-    /// Per-window stamp of the newest in-flight announce. Both error arms capture
-    /// their stamp and roll back only while it still matches, so an error for
-    /// announce N-1 cannot erase the tracking announce N established, and a
-    /// corpse's error arm (the entry erased by cleanupAutotileTracking) reads
-    /// back 0, mismatches, and no-ops instead of re-inserting a spawn-provenance
-    /// marker for a dead window, which would leak until the tail prune.
+    /// Per-window stamp of the newest in-flight announce. Both error arms roll
+    /// back only while their stamp matches, so an error for announce N-1 cannot
+    /// erase announce N's tracking, and a corpse's arm reads 0 and re-inserts nothing.
     QHash<QString, quint64> m_announceGen;
     struct DeferredWindowRoute
     {
         QPointer<KWin::EffectWindow> window;
-        bool canSnapRestore = false;
     };
     QHash<QString, DeferredWindowRoute> m_deferredWindowRoutes;
     /// One zero-tick dispatch armed at a time for the settle defer

@@ -17,6 +17,7 @@
 #include <QLoggingCategory>
 #include <QPointer>
 
+#include "desktopvisibility.h"
 #include "tilinghandler/tilinghandler.h"
 #include "handlers/snaphandler.h"
 #include "handlers/dragtracker.h"
@@ -66,9 +67,63 @@ void PlasmaZonesEffect::endRestoreSuppression(KWin::EffectWindow* window)
     }
 }
 
-bool PlasmaZonesEffect::tryInstantSnapRestore(KWin::EffectWindow* w, const QString& windowId, bool canSnapRestore)
+// The resolve-miss release. A daemon resolve that placed nothing normally
+// ends the suppression: no reposition is coming, so the window must paint.
+// But a size-only apply can precede that reply on the same connection (the
+// open-path free-size restore, #1106): applyWindowGeometry has then stamped
+// the entry's targetGeometry and the Wayland configure is still in flight.
+// Releasing here would composite the window at its zone-sized spawn frame
+// for every frame until the client acks the shrink, the very pop the
+// teleport exists to hide. So a stamped entry is left to the settle hook
+// (windowFrameGeometryChanged releases once the frame leaves the spawn
+// rect), with the deadline re-armed ONCE as the backstop. The backstop is
+// what releases a client whose ack leaves the frame unchanged (a fixed-size
+// toplevel refusing the size): such a window is held up to one more
+// deadline past the miss instead of being released at it. A second miss
+// for the same entry (the unminimize retry burst, a desktop-arrival
+// re-drive) releases rather than extending the hold again.
+void PlasmaZonesEffect::releaseRestoreSuppressionOnMiss(KWin::EffectWindow* window)
 {
-    if (!canSnapRestore || !w || w->isDeleted() || m_snapHandler->restoreCacheEmpty()) {
+    if (!window) {
+        return;
+    }
+    const auto it = m_restoreSuppress.find(window);
+    if (it == m_restoreSuppress.end()) {
+        return;
+    }
+    if (it->targetGeometry.isValid() && !it->missRearmed) {
+        it->missRearmed = true;
+        it->deadlineMs = ShaderInternal::shaderClockNowMs() + kRestoreSuppressDeadlineMs;
+        return;
+    }
+    endRestoreSuppression(window);
+}
+
+KWin::EffectWindow* PlasmaZonesEffect::findWindowByInstanceId(const QString& windowId) const
+{
+    if (windowId.isEmpty()) {
+        return nullptr;
+    }
+    // Exact first: the common case and O(1).
+    if (KWin::EffectWindow* const exact = findWindowByIdExact(windowId)) {
+        return exact;
+    }
+    // Same INSTANCE under another prefix: the tiling engines address a
+    // window by the daemon's first-seen composite, which drifts from the
+    // effect's own after a class mutation or a daemon restart. Never a
+    // same-app sibling, unlike findWindowById's fallback.
+    const auto windows = KWin::effects->stackingOrder();
+    for (KWin::EffectWindow* w : windows) {
+        if (w && !w->isDeleted() && ::PhosphorIdentity::WindowId::sameWindowInstance(getWindowId(w), windowId)) {
+            return w;
+        }
+    }
+    return nullptr;
+}
+
+bool PlasmaZonesEffect::tryInstantSnapRestore(KWin::EffectWindow* w, const QString& windowId)
+{
+    if (!w || w->isDeleted() || m_snapHandler->restoreCacheEmpty()) {
         return false;
     }
     const QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
@@ -172,11 +227,6 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     bool tileableWindow = shouldHandleWindow(w) && isTileableWindow(w);
     bool tileableAppWindow = tileableWindow && !w->isMinimized();
 
-    // Whether this window is a snap-restore candidate — it may be
-    // teleported into a saved zone moments after opening (instantly from
-    // cache, or after an async daemon resolve). Stricter than
-    // tileableAppWindow: also excludes multi-instance siblings.
-    bool canSnapRestore = tileableAppWindow && !hasOtherWindowOfClassWithDifferentPid(w);
     // window.open shader transition. Gate on the animation filter
     // (shouldAnimateWindow, enforced inside tryBeginShaderForEvent) — NOT on
     // tiling eligibility. isTileableWindow() rejects every transient / dialog /
@@ -230,8 +280,10 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // uSurfaceLayer — so the border flies in WITH the window instead of
     // popping in at transition end. updateWindowDecoration self-gates and is
     // idempotent (snap/autotile re-running it later is harmless).
-    // Current-desktop only, matching updateAllDecorations.
-    if (w->isOnCurrentDesktop()) {
+    // Current-desktop only, matching updateAllDecorations, and read per
+    // output: under per-output virtual desktops the window's own output may
+    // be showing a different desktop than the global current one.
+    if (isOnOwnOutputCurrentDesktop(w)) {
         updateWindowDecoration(windowId, w);
     }
     // Apply any SetWindowLayer rule to the new window right away (persistent
@@ -262,7 +314,6 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     if (m_shaderManager.hasOpenFullscreenRules()) {
         tileableWindow = shouldHandleWindow(w) && isTileableWindow(w);
         tileableAppWindow = tileableWindow && !w->isMinimized();
-        canSnapRestore = tileableAppWindow && !hasOtherWindowOfClassWithDifferentPid(w);
     }
 
     // One-tick settle defer: EVERY tileable window routes through the
@@ -281,21 +332,30 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // the eviction arm's job (reevaluateWindowEligibility).
     if (tileableWindow) {
         if (tileableAppWindow) {
-            // DELIBERATELY broader than the dispatch-side gate
-            // (canSnapRestore || onManagedScreen): the screen's mode may be
-            // mid-query and cannot discriminate here. The dispatch releases
-            // non-repositioned windows promptly and re-arms the deadline for
-            // the rest (refreshRestoreSuppressionDeadline), so the
-            // over-suppression costs one event-loop turn, or the query
-            // latency when one is in flight.
+            // Armed for every tileable app window whatever screen it is on:
+            // the screen's mode may be mid-query and cannot discriminate
+            // here. The dispatch releases non-repositioned windows promptly
+            // and re-arms the deadline for the rest
+            // (refreshRestoreSuppressionDeadline), so the over-suppression
+            // costs one event-loop turn, or the query latency when one is
+            // in flight.
             beginRestoreSuppression(w);
         }
-        m_tilingHandler->deferWindowRouting(w, canSnapRestore);
+        // Every tileable app window is a snap-restore candidate: it may be
+        // teleported into a saved zone moments after opening (instantly
+        // from cache, or after an async daemon resolve). A same-class
+        // sibling of another pid used to be excluded here, to stop a second
+        // instance taking the first's record; that belongs to the daemon,
+        // whose placement store refuses a live sibling's record, and the
+        // exclusion cost every multi-process app (Dolphin and its kind) its
+        // second window's open resolve entirely (discussion #1106). The
+        // dispatch re-runs the structural filters against the settled flags.
+        m_tilingHandler->deferWindowRouting(w);
         return;
     }
 
     // Non-tileable windows only from here on (every tileable window returned
-    // through the defer above, and canSnapRestore implies tileable). The
+    // through the defer above, and a snap-restore candidate is tileable). The
     // snap-restore, instant-restore and suppression arms that used to live
     // inline here run in completeDeferredWindowRoutes now. One announce is
     // still live for THIS path: isEligibleForTilingNotify carries a

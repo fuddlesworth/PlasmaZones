@@ -61,17 +61,52 @@ public:
     /// whatever state it holds. Lets a caller restore the most meaningful record
     /// (e.g. a snapped placement) ahead of a contentless free/floating sibling that
     /// is merely older in the FIFO.
+    ///
+    /// The appId branch never consumes a record bound to a still-LIVE sibling
+    /// (per the live-instance probe), the same exclusion takeForReopen and
+    /// claimForOpen apply. Such a record describes a different, open window,
+    /// never this one's history: a second Dolphin opened beside a snapped
+    /// first one used to take the first's record, snap-restore into the same
+    /// zone and re-bind the record under its own id, stripping the live
+    /// sibling of its float-back. Unwired (tests) means no exclusion.
     std::optional<WindowPlacement> take(const QString& windowId, const QString& appId,
                                         const std::function<bool(const WindowPlacement&)>& accept = {},
                                         const std::function<bool(const WindowPlacement&)>& preferred = {});
 
+    /// The EARLIEST-RECORDED record in @p appId's bucket that is bound to a
+    /// live window OTHER than @p windowId's instance and passes @p accept, or
+    /// nullopt. Non-consuming. This is the record a fresh same-app window
+    /// inherits its free SIZE from when nothing places it: KDE apps write
+    /// their window size to their own config on every resize, a snap is a
+    /// resize, so a second instance opened beside a snapped sibling comes up
+    /// at the zone's size (discussion #1106). The sibling's record still
+    /// carries the free geometry the sibling had before its snap.
+    ///
+    /// Earliest by bucket POSITION, not newest by sequence, and filtered by
+    /// @p accept, which carries the real discrimination: the caller skips
+    /// records with no usable rect for its screen (including a rect of a
+    /// zone's size, the spawn frame of a sibling the auto-snap chain placed at
+    /// open) instead of settling for the first live sibling. Position is only
+    /// the tie-break: first-recorded order mid-session, the persisted bucket
+    /// order for saved records after a restart, and re-announce order for
+    /// anything the save missed, so it cannot be trusted on its own.
+    /// Answers nullopt on an empty @p windowId or @p appId, without a
+    /// live-instance probe, and for the window opened in the daemon-restart
+    /// gap before the effect has re-announced its siblings: the production
+    /// probe reads the registry, so until then no sibling reads as live. The
+    /// last is unknowable from inside the store and is accepted.
+    std::optional<WindowPlacement>
+    peekLiveSibling(const QString& windowId, const QString& appId,
+                    const std::function<bool(const WindowPlacement&)>& accept = {}) const;
+
     /// Reopen resolve: the shared consumption pattern the TILING engines'
     /// open-time restores use (SnapEngine::resolveWindowRestore keeps its own
     /// take + re-bind: its snapped records restore cross-screen and its accept
-    /// depends on a mode-defer bypass, so rule 1 below does not fit it — and
-    /// note the snap path therefore also keeps take()'s oldest-first order
-    /// WITHOUT the live-instance exclusion below; that asymmetry is a
-    /// documented property of the snap flow, not an oversight) —
+    /// depends on a mode-defer bypass, so rule 1 below does not fit it. The
+    /// snap path keeps take()'s oldest-first ORDER plus its `preferred`
+    /// ranking pass, burns no reclaim credit in the store (the snap adaptor
+    /// burns after the resolve) and, since #1106, shares the live-instance
+    /// exclusion below) —
     /// take() wrapped in the accept predicate both tiling engines share and
     /// the two rules that make a close/reopen (fresh uuid, appId-FIFO match)
     /// behave correctly.
@@ -149,8 +184,16 @@ public:
     /// the NEWEST record in the appId bucket whose `accept` passes. Leaves the
     /// store unchanged — for live reads such as the float-back geometry lookup,
     /// where the record must stay put for the eventual restore/capture.
+    ///
+    /// @p excludeLiveSiblings makes the appId branch skip records bound to a
+    /// still-open sibling, exactly as take() does. A caller that peeks to
+    /// decide whether a later take() will find something (the snap engine's
+    /// cross-screen ownership gate) must pass true, or the gate and the
+    /// consume disagree on a live sibling's record. Off by default because
+    /// float-back geometry reads legitimately consult a live sibling's record.
     std::optional<WindowPlacement> peek(const QString& windowId, const QString& appId,
-                                        const std::function<bool(const WindowPlacement&)>& accept = {}) const;
+                                        const std::function<bool(const WindowPlacement&)>& accept = {},
+                                        bool excludeLiveSiblings = false) const;
 
     /// Same-instance peek: branch 1 of peek() only, never the appId-FIFO
     /// fallback. The instance component remains stable if a live window's appId
@@ -164,11 +207,11 @@ public:
     /// Non-consuming lookup for the cross-screen reclaim
     /// (IPlacementEngine::claimCrossScreenReopen). Differs from peek() in the
     /// two ways that make a reclaim verdict sound:
-    ///  - It applies the LIVE-INSTANCE exclusion takeForReopen's appId
-    ///    fallback applies: a record bound to a still-OPEN sibling describes a
-    ///    different, living window, never this window's history, so it must
-    ///    not justify a cross-screen pull. peek() deliberately lacks the
-    ///    exclusion (float-back geometry reads legitimately consult a live
+    ///  - It applies the LIVE-INSTANCE exclusion take() and takeForReopen's
+    ///    appId fallback apply: a record bound to a still-OPEN sibling
+    ///    describes a different, living window, never this window's history,
+    ///    so it must not justify a cross-screen pull. peek() applies it only
+    ///    on request (float-back geometry reads legitimately consult a live
     ///    sibling's record); a reclaim through plain peek() teleported a
     ///    fresh second instance onto its open sibling's monitor on EVERY
     ///    open, mid-session, repeatedly.
@@ -300,19 +343,34 @@ public:
     /// Returns the claimed record, or nullopt when nothing is claimable.
     std::optional<WindowPlacement> claimForOpen(const QString& windowId, const QString& appId);
 
-    /// Drop @p windowId's open claim. Called when the window closes, so a claim
-    /// never outlives the instance that made it. Consumption through take() /
-    /// takeForReopen() releases it too — after the re-bind the record IS the
-    /// window's own, and the claim is redundant identity.
+    /// Drop @p windowId's open claim, so a claim never outlives the instance
+    /// that made it. The daemon calls it from the observed close; the store
+    /// calls it itself from markInstanceClosed (which the alive-set prune
+    /// backstop reaches for a window that died without a close signal) and
+    /// from clear(). Consumption through take() / takeForReopen() releases it
+    /// too — after the re-bind the record IS the window's own, and the claim
+    /// is redundant identity.
     void releaseOpenClaim(const QString& windowId);
 
-    /// Inject the live-window probe takeForReopen's appId fallback uses to
-    /// skip records bound to a still-open window (see its doc). Answers per
-    /// full windowId; evaluated at consume time. Unwired (tests) means no
+    /// Inject the live-window probe behind every live-sibling exclusion in the
+    /// store (take, takeForReopen, claimForOpen, peekForReclaim,
+    /// burnReclaimCredit, peekLiveSibling, peek's opt-in, the eviction and
+    /// collapse tiers) and behind serialize()'s liveAtSave derivation. Answers
+    /// per full windowId; evaluated at lookup time. Unwired (tests) means no
     /// exclusion.
     void setLiveInstanceProbe(std::function<bool(const QString& windowId)> probe)
     {
         m_liveInstanceProbe = std::move(probe);
+    }
+
+    /// Whether the probe reports @p windowId's instance as a still-open
+    /// window. False without a probe. For callers outside the store that
+    /// enumerate records and must skip the ones describing a live window (the
+    /// effect's instant-restore cache, which otherwise teleports a fresh
+    /// second instance into its open sibling's zone).
+    bool isLiveInstance(const QString& windowId) const
+    {
+        return m_liveInstanceProbe && m_liveInstanceProbe(windowId);
     }
 
     /// Collapse stale pure-float duplicates for an app, keeping @p keepWindowId.
@@ -337,8 +395,9 @@ public:
     /// the credit unabsorbable — markInstanceClosed revokes the keeper's own
     /// credit immediately after the capture that runs this. A pruned sibling's
     /// engine slots and other-screen geometry are absorbed fill-gaps-only.
-    /// Without the collapse, a consuming reopen — take()'s oldest-first for
-    /// snap, or a probe-excluded tail for the tiling engines — can rotate a
+    /// Without the collapse, a consuming reopen — take()'s live-excluded
+    /// oldest-first for snap, or takeForReopen's live-excluded newest-first
+    /// tail for the tiling engines — can rotate a
     /// reopening window between the duplicates: it "opens in a different spot
     /// each time."
     ///
@@ -457,6 +516,18 @@ private:
     /// that remove a record out from under a possible claim.
     void dropClaimsNaming(const QString& recordWindowId);
 
+    /// Whether @p p is bound to a still-open window that is NOT the instance
+    /// behind @p askingWindowId. The one predicate every live-SIBLING
+    /// exclusion in the store applies (the eviction and collapse tiers, which
+    /// protect ANY live record, and takeForReopen's fallback, where take()'s
+    /// same-instance branch and the accept together already keep the asker's
+    /// own record out, read the probe directly): a window's own record is its
+    /// history, live or not (daemon restart: same uuid, window open), while
+    /// an open sibling's record describes a different window and is never
+    /// this one's. With an empty @p askingWindowId every live record is
+    /// "other", which is what peek()'s opt-in exclusion relies on.
+    bool boundToLiveOther(const QString& askingWindowId, const WindowPlacement& p) const;
+
 public:
     /// Per-app record cap (public so tests can pin the eviction contract).
     static constexpr int MaxPerApp = 16;
@@ -474,10 +545,11 @@ public:
 
 private:
     /// appId → list of records in positional FIFO order. The POSITION order
-    /// governs take()'s oldest-first consumption (the snap paths) and the
-    /// eviction's last-resort tier; takeForReopen's fallback consumes by
-    /// SEQUENCE (newest first, live-excluded) instead, and multi-instance
-    /// distribution there rests on the live-instance probe, not on position.
+    /// governs take()'s oldest-first consumption (the snap paths), the
+    /// eviction's last-resort tier and peekLiveSibling's earliest-recorded
+    /// pick; takeForReopen's fallback consumes by SEQUENCE (newest first)
+    /// instead. Both consumers are live-excluded, so multi-instance
+    /// distribution rests on the live-instance probe, not on position alone.
     QHash<QString, QList<WindowPlacement>> m_byApp;
     quint64 m_sequence = 0;
     std::function<bool(const QString&)> m_liveInstanceProbe;
@@ -489,10 +561,12 @@ private:
     ///
     /// Kept in lockstep, and kept TRUE: every path that removes a record drops
     /// the claim naming it, so a claim in these maps always names a record that
-    /// is still in the store. That invariant is what lets the lookups be hash
-    /// hits instead of a full-store scan on a per-open hot path. The lookup
-    /// still fails open if the two ever disagree, because refusing an instance
-    /// every record is worse than the disagreement the claim exists to fix.
+    /// is still in the store. That invariant is what lets pairingAllows answer
+    /// from two hash hits per candidate; claimForOpen itself still walks the
+    /// buckets once per open to find the record by id, which is bounded by
+    /// MaxPerApp times the number of apps. The lookup still fails open if the
+    /// two ever disagree, because refusing an instance every record is worse
+    /// than the disagreement the claim exists to fix.
     QHash<QString, QString> m_openPairing;
     QHash<QString, QString> m_claimedBy;
 

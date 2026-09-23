@@ -342,13 +342,24 @@ bool WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, cons
         return true;
     }
     // The daemon's frame-geometry shadow is written only by the effect's DEBOUNCED
-    // flush, while this runs inside the synchronous window-open round trip — so
-    // for a genuinely new window the shadow is usually still empty here, and
-    // returning on that would make a bare RouteToScreen rule silently no-op for
-    // exactly the case it exists to handle. The registry metadata carries the
-    // frame rect and is pushed by the setWindowMetadata call that precedes the
-    // restore, so fall back to it before declining.
+    // flush, while this runs inside the synchronous window-open round trip. The
+    // snap handler seeds the shadow immediately before an OPEN resolve, so the
+    // open path usually does find an entry; the other drivers this route admits
+    // (pending sweep, desktop arrival) push no seed, and for those the shadow is
+    // still empty here. Returning on that would make a bare RouteToScreen rule
+    // silently no-op for exactly the case it exists to handle, so the registry
+    // metadata — pushed by the setWindowMetadata call that precedes the restore —
+    // is the fallback.
     QRect cur = frameGeometry(windowId);
+    const QString pendingKey = shadowWindowId(windowId);
+    const auto pendingRect = m_pendingOpenGeometry.constFind(pendingKey);
+    const bool havePendingRect = pendingRect != m_pendingOpenGeometry.constEnd() && pendingRect->isValid();
+    // The open path may have asked the effect for a float-position restore
+    // moments ago, inside this very resolve; the shadow cannot know yet, so
+    // read what was asked for (see m_pendingOpenGeometry).
+    if (havePendingRect) {
+        cur = *pendingRect;
+    }
     if (!cur.isValid() && !m_windowRegistry.isNull()) {
         const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
         if (const std::optional<PhosphorEngine::WindowMetadata> meta = m_windowRegistry->metadata(instanceId)) {
@@ -356,6 +367,19 @@ bool WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, cons
                 && *meta->height > 0) {
                 cur = QRect(*meta->positionX, *meta->positionY, *meta->width, *meta->height);
             }
+        }
+    }
+    // The pending free SIZE is applied last, AFTER the metadata fallback has
+    // had its chance to supply a position: the size restore and the metadata
+    // push describe the same window at different moments, and the metadata
+    // carries the un-restored managed size. Applying the size only when the
+    // shadow already held a rect left the fallback path translating the very
+    // size this open just asked the effect to replace. Skipped when a pending
+    // RECT won above, since that rect already carries the restored size.
+    if (!havePendingRect && cur.isValid()) {
+        if (const auto pendingSize = m_pendingOpenSize.constFind(pendingKey);
+            pendingSize != m_pendingOpenSize.constEnd() && pendingSize->isValid()) {
+            cur.setSize(*pendingSize);
         }
     }
     if (!cur.isValid()) {

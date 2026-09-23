@@ -17,6 +17,9 @@
  *   4. Legacy fixtures (composite ids in config files) still work because
  *      currentAppIdFor() strips the composite form via extractInstanceId
  *      before consulting the registry.
+ *   5. The instant-restore cache source (pendingRestoreGeometries) judges a
+ *      record's liveness through the registry: composite record ids against
+ *      bare registry keys, which is exactly the strip the probe performs.
  */
 
 #include <QCoreApplication>
@@ -24,6 +27,7 @@
 #include <QRectF>
 #include <QSignalSpy>
 #include <QTest>
+#include <QUuid>
 #include <memory>
 
 #include "core/interfaces/interfaces.h"
@@ -37,61 +41,10 @@
 
 #include "helpers/IsolatedConfigGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
-#include "helpers/StubSettings.h"
 
 using namespace PlasmaZones;
 using namespace PhosphorSnapEngine;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
-
-class StubZoneDetectorRegIntegration : public PhosphorZones::IZoneDetector
-{
-    Q_OBJECT
-public:
-    explicit StubZoneDetectorRegIntegration(QObject* parent = nullptr)
-        : PhosphorZones::IZoneDetector(parent)
-    {
-    }
-    PhosphorZones::Layout* layout() const override
-    {
-        return m_layout;
-    }
-    void setLayout(PhosphorZones::Layout* layout) override
-    {
-        m_layout = layout;
-    }
-    PhosphorZones::ZoneDetectionResult detectZone(const QPointF&) const override
-    {
-        return {};
-    }
-    PhosphorZones::ZoneDetectionResult detectMultiZone(const QPointF&) const override
-    {
-        return {};
-    }
-    PhosphorZones::Zone* zoneAtPoint(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    PhosphorZones::Zone* nearestZone(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    QVector<PhosphorZones::Zone*> expandPaintedZonesToRect(const QVector<PhosphorZones::Zone*>&) const override
-    {
-        return {};
-    }
-    void highlightZone(PhosphorZones::Zone*) override
-    {
-    }
-    void highlightZones(const QVector<PhosphorZones::Zone*>&) override
-    {
-    }
-    void clearHighlights() override
-    {
-    }
-
-private:
-    PhosphorZones::Layout* m_layout = nullptr;
-};
 
 static PhosphorZones::Layout* createTestLayout(int zoneCount, QObject* parent)
 {
@@ -116,8 +69,6 @@ private Q_SLOTS:
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
         m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
-        m_settings = new StubSettings(nullptr);
-        m_zoneDetector = new StubZoneDetectorRegIntegration(nullptr);
         m_registry = new PhosphorEngine::WindowRegistry(nullptr);
         m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, nullptr, nullptr);
         m_snapState = new PhosphorSnapEngine::SnapState(QString(), nullptr);
@@ -144,10 +95,6 @@ private Q_SLOTS:
         m_service = nullptr;
         delete m_registry;
         m_registry = nullptr;
-        delete m_zoneDetector;
-        m_zoneDetector = nullptr;
-        delete m_settings;
-        m_settings = nullptr;
         delete m_layoutManager;
         m_layoutManager = nullptr;
         m_testLayout = nullptr;
@@ -243,11 +190,86 @@ private Q_SLOTS:
         QVERIFY(m_service->pendingRestoreQueues().contains(QStringLiteral("firefox")));
     }
 
+    // ────────────────────────────────────────────────────────────────────
+    // pendingRestoreGeometries — the effect's instant-restore cache source
+    // ────────────────────────────────────────────────────────────────────
+
+    // A snapped record whose window is still open (per the registry-backed
+    // live probe) is that window's own placement, not a pending restore:
+    // served through the appId-keyed cache it teleported a fresh second
+    // instance into its open sibling's zone (#1106). Only records of closed
+    // windows feed the cache, and each entry names its record's window so
+    // the effect can drop one the daemon could not tell was live.
+    void pendingRestoreGeometries_skipsRecordsOfLiveWindows()
+    {
+        // Positive control first: with no live window the snapped record IS
+        // a pending restore and resolves to a real zone rect.
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("firefox|closed-uuid");
+        rec.appId = QStringLiteral("firefox");
+        rec.screenId = m_screenId;
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        slot.zoneIds = QStringList{m_zoneIds[0]};
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        QVERIFY(m_service->placementStore().record(rec));
+
+        auto targets = m_service->pendingRestoreGeometries();
+        QVERIFY2(targets.contains(QStringLiteral("firefox")), "a closed window's snapped record feeds the cache");
+        QCOMPARE(targets.value(QStringLiteral("firefox")).size(), 1);
+        QVERIFY(targets.value(QStringLiteral("firefox")).first().geometry.isValid());
+        QCOMPARE(targets.value(QStringLiteral("firefox")).first().windowId, QStringLiteral("firefox|closed-uuid"));
+
+        // The same record's window is live: no entry.
+        m_registry->upsert(QStringLiteral("closed-uuid"), {QStringLiteral("firefox"), QString(), QString()});
+        targets = m_service->pendingRestoreGeometries();
+        QVERIFY2(!targets.contains(QStringLiteral("firefox")), "a live window's record is not a pending restore");
+
+        // A closed record beside the live one feeds the cache whichever is
+        // newer: the live record is skipped, not merely out-ranked.
+        PhosphorEngine::WindowPlacement closed = rec;
+        closed.windowId = QStringLiteral("firefox|other-closed");
+        closed.engines[PhosphorEngine::WindowPlacement::snapEngineId()].zoneIds = QStringList{m_zoneIds[1]};
+        QVERIFY(m_service->placementStore().record(closed));
+        PhosphorEngine::WindowPlacement liveNewer = rec;
+        liveNewer.windowId = QStringLiteral("firefox|live-newer");
+        QVERIFY(m_service->placementStore().record(liveNewer));
+        m_registry->upsert(QStringLiteral("live-newer"), {QStringLiteral("firefox"), QString(), QString()});
+        targets = m_service->pendingRestoreGeometries();
+        QCOMPARE(targets.value(QStringLiteral("firefox")).size(), 1);
+        QCOMPARE(targets.value(QStringLiteral("firefox")).first().windowId, QStringLiteral("firefox|other-closed"));
+
+        // Every closed record is served, NEWEST first: the open claim hands
+        // the newest unclaimed record to the first opener, so the head is the
+        // zone the resolve will confirm and the next opener gets the next.
+        PhosphorEngine::WindowPlacement c1 = rec;
+        c1.windowId = QStringLiteral("firefox|c1");
+        QVERIFY(m_service->placementStore().record(c1));
+        PhosphorEngine::WindowPlacement c2 = rec;
+        c2.windowId = QStringLiteral("firefox|c2");
+        QVERIFY(m_service->placementStore().record(c2));
+        targets = m_service->pendingRestoreGeometries();
+        const auto firefox = targets.value(QStringLiteral("firefox"));
+        QCOMPARE(firefox.size(), 3);
+        QCOMPARE(firefox.at(0).windowId, QStringLiteral("firefox|c2"));
+        QCOMPARE(firefox.at(1).windowId, QStringLiteral("firefox|c1"));
+        QCOMPARE(firefox.at(2).windowId, QStringLiteral("firefox|other-closed"));
+
+        // A record naming a zone the context's layout no longer holds is
+        // not served (the #1104 layout gate the async resolver applies).
+        PhosphorEngine::WindowPlacement ghost = rec;
+        ghost.windowId = QStringLiteral("firefox|ghost");
+        ghost.engines[PhosphorEngine::WindowPlacement::snapEngineId()].zoneIds =
+            QStringList{QUuid::createUuid().toString()};
+        QVERIFY(m_service->placementStore().record(ghost));
+        targets = m_service->pendingRestoreGeometries();
+        QCOMPARE(targets.value(QStringLiteral("firefox")).size(), 3);
+        QCOMPARE(targets.value(QStringLiteral("firefox")).first().windowId, QStringLiteral("firefox|c2"));
+    }
+
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
-    StubSettings* m_settings = nullptr;
-    StubZoneDetectorRegIntegration* m_zoneDetector = nullptr;
     PhosphorSnapEngine::SnapState* m_snapState = nullptr;
     PhosphorEngine::WindowRegistry* m_registry = nullptr;
     PhosphorPlacement::WindowTrackingService* m_service = nullptr;

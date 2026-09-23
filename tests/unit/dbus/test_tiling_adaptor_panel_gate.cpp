@@ -116,6 +116,16 @@ public:
         reclaimOffers.append(windowId);
         return false; // decline, so the arrival-screen dispatch still runs
     }
+    /// The per-announce claims verdict the adaptor stated, as "<id>=1" or
+    /// "<id>=0", in order. The engines' defer gates read it to adopt rather
+    /// than defer a second time, so it must be stated on EVERY announce: true
+    /// when a claim round ran and declined, false when the round was
+    /// suppressed, which clears an earlier announce's mark.
+    QStringList claimsExhaustedNotes;
+    void noteCrossScreenClaimsExhausted(const QString& windowId, bool exhausted) override
+    {
+        claimsExhaustedNotes.append(windowId + (exhausted ? QStringLiteral("=1") : QStringLiteral("=0")));
+    }
     void beginArrivalBurst() override
     {
         ++burstDepth;
@@ -273,6 +283,9 @@ private Q_SLOTS:
         adaptor.windowOpened(QStringLiteral("kate|a"), QStringLiteral("HDMI-1"), 0, 0);
         QCOMPARE(engine.reclaimOffers, QStringList{QStringLiteral("kate|a")});
         QCOMPARE(engine.dispatched.size(), 1);
+        // The declined round is reported to the engine BEFORE the arrival
+        // dispatch, so its defer gate adopts instead of deferring again.
+        QCOMPARE(engine.claimsExhaustedNotes, QStringList{QStringLiteral("kate|a=1")});
 
         // A live move release arms the one-shot; the re-announce skips the
         // claim round and is adopted by the arrival screen's engine instead.
@@ -280,6 +293,10 @@ private Q_SLOTS:
         adaptor.windowOpened(QStringLiteral("kate|a"), QStringLiteral("HDMI-2"), 0, 0);
         QCOMPARE(engine.reclaimOffers.size(), 1); // unchanged — suppressed
         QCOMPARE(engine.dispatched.size(), 2); // but still dispatched
+        // Still STATED, as false: a suppressed round must clear the mark the
+        // previous announce set, or the gate spends a stale one.
+        QCOMPARE(engine.claimsExhaustedNotes.size(), 2);
+        QCOMPARE(engine.claimsExhaustedNotes.last(), QStringLiteral("kate|a=0"));
 
         // ONE shot. The next announce for the same live window is offered
         // again, or a single move would disarm the session reclaim for that
@@ -287,6 +304,11 @@ private Q_SLOTS:
         adaptor.windowOpened(QStringLiteral("kate|a"), QStringLiteral("HDMI-2"), 0, 0);
         QCOMPARE(engine.reclaimOffers.size(), 2);
         QCOMPARE(engine.reclaimOffers.last(), QStringLiteral("kate|a"));
+        // And the verdict is re-armed with it: the round ran and declined
+        // again, so this announce states true where the suppressed one
+        // stated false. That is the last direction of the state machine.
+        QCOMPARE(engine.claimsExhaustedNotes.size(), 3);
+        QCOMPARE(engine.claimsExhaustedNotes.last(), QStringLiteral("kate|a=1"));
     }
 
     // -------------------------------------------------------------------------

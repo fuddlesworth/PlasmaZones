@@ -289,6 +289,165 @@ private Q_SLOTS:
         QCOMPARE(quietSpy.count(), 0);
     }
 
+    // The snap open path runs RouteToDesktop for a FIRST placement only. An
+    // Open and a PendingSweep (a window that opened before the daemon was
+    // ready) route; the unminimize re-drive, the daemon-restart sweep and the
+    // desktop-arrival continuation act on a window that is already where it
+    // belongs, and re-routing it would yank it back on every re-announce.
+    void testResolveWindowRestore_routesToDesktopOnFirstPlacementOnly()
+    {
+        auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
+        m_wta->setWindowRegistry(registry);
+        m_wta->setWindowMetadata(QStringLiteral("inst5"), QStringLiteral("deskapp"), QString(), QString(), QString(), 0,
+                                 0, QString(), 0, QVariantMap());
+
+        using namespace PhosphorRules;
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.enabled = true;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("deskapp"));
+        RuleAction desk;
+        desk.type = QString(ActionType::RouteToDesktop);
+        desk.params.insert(QString(ActionParam::TargetDesktop), 3);
+        rule.actions = {desk};
+
+        RuleStore store(ConfigDefaults::rulesFilePath(), nullptr);
+        QVERIFY(store.addRule(rule));
+        m_wta->setRuleStore(&store);
+        const auto teardown = qScopeGuard([this] {
+            m_wta->setRuleStore(nullptr);
+            m_wta->setWindowRegistry(nullptr);
+        });
+
+        using PhosphorEngine::RestoreReason;
+        const auto drive = [this](RestoreReason reason) {
+            QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+            int x = 0;
+            int y = 0;
+            int w = 0;
+            int h = 0;
+            bool shouldSnap = false;
+            m_snapAdaptor->resolveWindowRestore(QStringLiteral("deskapp|inst5"), QStringLiteral("DP-1"), false,
+                                                static_cast<int>(PhosphorEngine::WindowKind::Unknown),
+                                                static_cast<int>(reason), 0, 0, x, y, w, h, shouldSnap);
+            return desktopSpy.count();
+        };
+        QCOMPARE(drive(RestoreReason::Open), 1);
+        QCOMPARE(drive(RestoreReason::PendingSweep), 1);
+        QCOMPARE(drive(RestoreReason::Unminimize), 0);
+        QCOMPARE(drive(RestoreReason::DaemonRestartSweep), 0);
+        QCOMPARE(drive(RestoreReason::DesktopArrival), 0);
+    }
+
+    // A tiling claim that DECLINES leaves the window to the snap engine's
+    // float default, and two things have to survive that round trip: the
+    // record's reclaim credit (so a later desktop arrival can still claim
+    // it) and the lineage snapshot the free-size restore gates on.
+    //
+    // The snapshot is the subtle one. A claim that got as far as takeForReopen
+    // re-binds the consumed record under the OPENING window's uuid with the
+    // claiming engine's slot, and a claim that then declines on its membership
+    // check leaves that record standing. Recomputing the snapshot inside the
+    // float default would read "already placed" for a window no engine ever
+    // placed, and silently skip the resize (#1106). The hook below reproduces
+    // exactly that store mutation.
+    void testDeclinedTilingReclaim_keepsCreditAndStillRestoresTheFreeSize()
+    {
+        using PhosphorEngine::WindowPlacement;
+        const QString appId = QStringLiteral("reclaimapp");
+        const QString opener = QStringLiteral("reclaimapp|second");
+
+        auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
+        m_wta->setWindowRegistry(registry);
+        m_wta->setWindowMetadata(QStringLiteral("second"), appId, QString(), QString(), QString(), 0, 0, QString(), 0,
+                                 QVariantMap());
+        const auto teardown = qScopeGuard([this] {
+            m_wta->setWindowRegistry(nullptr);
+            m_snapAdaptor->setCrossScreenTileReclaim({});
+        });
+
+        // DP-2 runs autotile, so a record tiled there is a cross-screen
+        // tiling record and the snap engine defers rather than placing.
+        PhosphorZones::AssignmentEntry autotile;
+        autotile.mode = PhosphorZones::AssignmentEntry::Autotile;
+        autotile.tilingAlgorithm = QStringLiteral("dwindle");
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), autotile);
+
+        PhosphorEngine::WindowPlacementStore& store = m_wta->service()->placementStore();
+        // The record that earns the defer: tiled on the autotile screen.
+        WindowPlacement tiledElsewhere;
+        tiledElsewhere.windowId = QStringLiteral("reclaimapp|old");
+        tiledElsewhere.appId = appId;
+        tiledElsewhere.screenId = QStringLiteral("DP-2");
+        PhosphorEngine::EngineSlot tiledSlot;
+        tiledSlot.state = QString(WindowPlacement::stateTiled());
+        tiledElsewhere.engines.insert(QString(WindowPlacement::autotileEngineId()), tiledSlot);
+        QVERIFY(store.record(tiledElsewhere));
+        // A closed sibling carrying the free size the opener should inherit.
+        const QRect siblingFree(80, 60, 910, 620);
+        WindowPlacement closedSibling;
+        closedSibling.windowId = QStringLiteral("reclaimapp|closed");
+        closedSibling.appId = appId;
+        closedSibling.screenId = m_screenId;
+        closedSibling.freeGeometryByScreen.insert(m_screenId, siblingFree);
+        QVERIFY(store.record(closedSibling));
+
+        // The claim: consumes and re-binds under the opener's uuid, exactly
+        // as takeForReopen does, then declines.
+        bool hookRan = false;
+        bool reBindLanded = false;
+        m_snapAdaptor->setCrossScreenTileReclaim([&](const QString& windowId, const QString&, int, int) {
+            hookRan = true;
+            WindowPlacement reBound;
+            reBound.windowId = windowId;
+            reBound.appId = appId;
+            reBound.screenId = m_screenId;
+            PhosphorEngine::EngineSlot slot;
+            slot.state = QString(WindowPlacement::stateTiled());
+            reBound.engines.insert(QString(WindowPlacement::autotileEngineId()), slot);
+            reBound.freeGeometryByScreen.clear();
+            // Captured, not swallowed by a `&& false`: if record() ever
+            // refused this shape the opener would have no slot-bearing
+            // record, placedBefore would read false either way, and the test
+            // would pass while covering nothing.
+            reBindLanded = store.record(reBound);
+            return false;
+        });
+
+        QSignalSpy sizeSpy(m_snapEngine, &PhosphorEngine::PlacementEngineBase::sizeRestoreRequested);
+        QSignalSpy floatSpy(m_snapEngine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+        int x = 0;
+        int y = 0;
+        int w = 0;
+        int h = 0;
+        bool shouldSnap = false;
+        m_snapAdaptor->resolveWindowRestore(
+            opener, m_screenId, false, static_cast<int>(PhosphorEngine::WindowKind::Unknown),
+            static_cast<int>(PhosphorEngine::RestoreReason::Open), 0, 0, x, y, w, h, shouldSnap);
+
+        QVERIFY2(hookRan, "the cross-screen tiling reclaim must be offered for a deferred open");
+        QVERIFY2(reBindLanded, "the claim's re-bind must land, or this test covers nothing about the snapshot");
+        QVERIFY(!shouldSnap);
+        QVERIFY2(m_snapEngine->isFloating(opener), "a declined claim falls back to the snap float default");
+        QCOMPARE(floatSpy.count(), 1);
+        QCOMPARE(sizeSpy.count(), 1);
+        const QList<QVariant> args = sizeSpy.takeFirst();
+        QCOMPARE(args.at(0).toString(), opener);
+        QCOMPARE(args.at(1).toSize(), siblingFree.size());
+
+        // And no record in the bucket lost its credit, so the desktop-arrival
+        // continuation can still reclaim. BOTH are asserted: burnReclaimCredit
+        // retires the HIGHEST-sequence eligible record, which is the sibling
+        // recorded second, so checking only the deferred one would pass even
+        // with the credit guard deleted.
+        const auto keptDeferred = store.peekExact(QStringLiteral("reclaimapp|old"));
+        QVERIFY(keptDeferred);
+        QVERIFY2(keptDeferred->reclaimEligible, "a declined claim must not spend the open's reclaim credit");
+        const auto keptSibling = store.peekExact(QStringLiteral("reclaimapp|closed"));
+        QVERIFY(keptSibling);
+        QVERIFY2(keptSibling->reclaimEligible, "nor the credit of the newest record in the same bucket");
+    }
+
     void testEmitRouteToDesktop_matchedButUnusableTargetStillReportsAMatch()
     {
         // A matched RouteToDesktop owns this window's desktop whether or not its
@@ -436,6 +595,162 @@ private Q_SLOTS:
         QCOMPARE(args.at(6).toString(), QStringLiteral("DP-2"));
         const int x = args.at(1).toInt();
         QVERIFY2(x >= 1920 && x < 3840, "the window must land within DP-2's geometry");
+    }
+
+    // The open path may have asked the effect for a free SIZE moments ago,
+    // inside this very resolve, and the frame shadow cannot know yet. The
+    // route must translate the RESTORED size onto the target monitor.
+    //
+    // The case that matters is shadow-EMPTY: the snap handler seeds the
+    // shadow only on an Open, so a pending sweep or a desktop arrival reaches
+    // the route with nothing there, the registry metadata supplies the rect,
+    // and that metadata still carries the un-restored managed size. Applying
+    // the pending size only when the shadow was already populated left those
+    // drivers routing the very size the restore had just replaced.
+    void testApplyOpenScreenRouting_pendingFreeSizeWinsOverMetadata()
+    {
+        PhosphorScreens::FakeScreenProvider fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080), QStringLiteral("DP-1"));
+        fake.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080), QStringLiteral("DP-2"));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        auto* snap = new SnapEngine(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        wta->service()->setSnapState(snap->snapState());
+        wta->service()->setSnapEngine(snap);
+        wta->setEngines(snap, nullptr, nullptr);
+
+        auto* registry = new PhosphorEngine::WindowRegistry(&parent);
+        wta->setWindowRegistry(registry);
+        // Metadata carries the ZONE-sized frame the app opened at — the size
+        // the free-size restore exists to undo. It reaches the registry
+        // through the extended map, the same way the effect pushes it.
+        namespace MetaKey = PhosphorProtocol::Service::WindowMetadataKey;
+        QVariantMap frame;
+        frame.insert(QString(MetaKey::PositionX), 100);
+        frame.insert(QString(MetaKey::PositionY), 100);
+        frame.insert(QString(MetaKey::Width), 960);
+        frame.insert(QString(MetaKey::Height), 1040);
+        wta->setWindowMetadata(QStringLiteral("inst7"), QStringLiteral("sizeapp"), QString(), QString(), QString(), 0,
+                               0, QString(), 0, frame);
+
+        using namespace PhosphorRules;
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.enabled = true;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("sizeapp"));
+        RuleAction route;
+        route.type = QString(ActionType::RouteToScreen);
+        route.params.insert(QString(ActionParam::TargetScreenId), QStringLiteral("DP-2"));
+        rule.actions = {route};
+        RuleStore store(ConfigDefaults::rulesFilePath(), &parent);
+        QVERIFY(store.addRule(rule));
+        wta->setRuleStore(&store);
+        const auto teardown = qScopeGuard([wta, snap] {
+            wta->setRuleStore(nullptr);
+            wta->setWindowRegistry(nullptr);
+            wta->service()->setSnapEngine(nullptr);
+            wta->service()->setSnapState(nullptr);
+            delete snap;
+        });
+
+        // No setFrameGeometry: this is the driver that pushes no seed. The
+        // engine's size restore lands through the ordinary relay first.
+        const QString w = QStringLiteral("sizeapp|inst7");
+        const QSize restored(880, 640);
+        Q_EMIT snap->sizeRestoreRequested(w, restored, QStringLiteral("DP-1"));
+
+        QSignalSpy geomSpy(wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        QVERIFY(wta->applyOpenScreenRouting(w, QStringLiteral("DP-1")));
+
+        // The relay's own size-only apply, then the route's free placement.
+        QVERIFY(geomSpy.count() >= 1);
+        const auto args = geomSpy.last();
+        QCOMPARE(args.at(0).toString(), w);
+        QCOMPARE(args.at(6).toString(), QStringLiteral("DP-2"));
+        QVERIFY2(!args.at(7).toBool(), "the route's own apply is a full placement, not size-only");
+        QCOMPARE(QSize(args.at(3).toInt(), args.at(4).toInt()), restored);
+    }
+
+    // pruneStaleWindows is the backstop for a window that died without a close
+    // signal, and it must reach the two open-path pending maps as well: their
+    // normal clears are the next frame report and windowClosed, neither of
+    // which arrives for such a window. Driven through the observable the maps
+    // feed, the open route's size translation.
+    void testPruneStaleWindows_dropsThePendingOpenMaps()
+    {
+        PhosphorScreens::FakeScreenProvider fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080), QStringLiteral("DP-1"));
+        fake.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080), QStringLiteral("DP-2"));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        auto* snap = new SnapEngine(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        wta->service()->setSnapState(snap->snapState());
+        wta->service()->setSnapEngine(snap);
+        wta->setEngines(snap, nullptr, nullptr);
+
+        auto* registry = new PhosphorEngine::WindowRegistry(&parent);
+        wta->setWindowRegistry(registry);
+        namespace MetaKey = PhosphorProtocol::Service::WindowMetadataKey;
+        QVariantMap frame;
+        frame.insert(QString(MetaKey::PositionX), 100);
+        frame.insert(QString(MetaKey::PositionY), 100);
+        frame.insert(QString(MetaKey::Width), 960);
+        frame.insert(QString(MetaKey::Height), 1040);
+        wta->setWindowMetadata(QStringLiteral("inst8"), QStringLiteral("pruneapp"), QString(), QString(), QString(), 0,
+                               0, QString(), 0, frame);
+
+        using namespace PhosphorRules;
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.enabled = true;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("pruneapp"));
+        RuleAction route;
+        route.type = QString(ActionType::RouteToScreen);
+        route.params.insert(QString(ActionParam::TargetScreenId), QStringLiteral("DP-2"));
+        rule.actions = {route};
+        RuleStore store(ConfigDefaults::rulesFilePath(), &parent);
+        QVERIFY(store.addRule(rule));
+        wta->setRuleStore(&store);
+        const auto teardown = qScopeGuard([wta, snap] {
+            wta->setRuleStore(nullptr);
+            wta->setWindowRegistry(nullptr);
+            wta->service()->setSnapEngine(nullptr);
+            wta->service()->setSnapState(nullptr);
+            delete snap;
+        });
+
+        const QString w = QStringLiteral("pruneapp|inst8");
+        const QSize restored(880, 640);
+        Q_EMIT snap->sizeRestoreRequested(w, restored, QStringLiteral("DP-1"));
+
+        // Present: the route carries the restored size.
+        QSignalSpy before(wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        QVERIFY(wta->applyOpenScreenRouting(w, QStringLiteral("DP-1")));
+        QVERIFY(before.count() >= 1);
+        QCOMPARE(QSize(before.last().at(3).toInt(), before.last().at(4).toInt()), restored);
+
+        // The window dies with no close signal, and the sweep runs for a set
+        // that does not name it. The same sweep also drops the registry
+        // metadata, which the rule query needs, so that half is re-seeded
+        // afterwards: this test is about the pending maps, and without their
+        // sweep the restored size would survive and be routed again.
+        wta->pruneStaleWindows(QStringList{QStringLiteral("someone-else")});
+        wta->setWindowMetadata(QStringLiteral("inst8"), QStringLiteral("pruneapp"), QString(), QString(), QString(), 0,
+                               0, QString(), 0, frame);
+        QSignalSpy after(wta, &WindowTrackingAdaptor::applyGeometryRequested);
+        QVERIFY(wta->applyOpenScreenRouting(w, QStringLiteral("DP-1")));
+        QVERIFY(after.count() >= 1);
+        QCOMPARE(QSize(after.last().at(3).toInt(), after.last().at(4).toInt()), QSize(960, 1040));
     }
 
     // A rule carrying BOTH SnapToZone and RouteToScreen is still moved by
