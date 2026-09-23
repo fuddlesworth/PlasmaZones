@@ -541,11 +541,12 @@ FocusScope {
     }
     ListView {
         id: windowList
+        objectName: "stage-window-list"
         onWidthChanged: Qt.callLater(root.reconcile)
         x: root.previewRect.x
         y: root.previewRect.y + root.previewRect.height + 8
         width: root.previewRect.width
-        height: 36
+        height: 56
         visible: root.scrolling
         orientation: ListView.Horizontal
         spacing: 8
@@ -553,14 +554,15 @@ FocusScope {
         boundsBehavior: Flickable.StopAtBounds
         model: root.windows
         ScrollBar.horizontal: ScrollBar {}
-        delegate: ShellButton {
+        delegate: WindowMapCard {
             required property var modelData
             required property int index
-            width: 144
-            height: 30
-            text: (index + 1) + "  " + (modelData.title || modelData.appId)
-            labelSize: 10
-            highlighted: root.selectedId === modelData.windowId
+            width: Math.max(150, Math.min(220, root.previewRect.width))
+            height: 48
+            row: true
+            windowInfo: modelData
+            colorIndex: modelData.colorIndex >= 0 ? modelData.colorIndex : index
+            selected: root.selectedId === modelData.windowId
             onClicked: root.select(index)
             onDoubleClicked: root.openSelected()
         }

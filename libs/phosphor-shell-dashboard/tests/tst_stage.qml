@@ -177,6 +177,29 @@ TestCase {
         verify(left.x >= stage.previewRect.x - 0.001);
         verify(right.x + right.width <= stage.previewRect.x + stage.previewRect.width + 0.001);
     }
+    function test_scrollingWindowStripUsesBoundedTitleCards() {
+        const map = createTemporaryObject(mapComponent, testCase);
+        map.mode = 2;
+        map.windows = [
+            {
+                windowId: "long-title",
+                appId: "org.kde.konsole",
+                title: "~/Projects/PlasmaZones/.claude/worktrees/shell-design - fish — Konsole"
+            }
+        ];
+        const stage = createTemporaryObject(stageComponent, testCase, {
+            mapFor: () => map,
+            open: true
+        });
+        waitForRendering(stage);
+        const strip = findChild(stage, "stage-window-list");
+        verify(strip.visible);
+        const card = strip.itemAtIndex(0);
+        verify(card);
+        verify(card.row);
+        verify(card.width <= 220);
+        verify(card.contentItem.clip);
+    }
     function test_desktopCanvasMapsToPreviewAcrossOutputShapes() {
         const map = createTemporaryObject(mapComponent, testCase);
         const stage = createTemporaryObject(stageComponent, testCase, {
