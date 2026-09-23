@@ -71,8 +71,9 @@
           throw "plasmazones: could not parse VERSION from CMakeLists.txt";
 
       # Scope the build source so edits to docs / CI / flake files don't
-      # invalidate the build. `self` is already git-clean (build/, .claude/ are
-      # gitignored); this additionally drops tracked-but-build-irrelevant paths.
+      # invalidate the build. `self` is git-clean, so build/ is already out, but
+      # NOT .claude/: .gitignore deliberately un-ignores 22 tracked files under
+      # it. Everything below is subtracted explicitly.
       src = lib.fileset.toSource {
         root = ./.;
         fileset = lib.fileset.difference ./. (
@@ -101,7 +102,14 @@
             ./phosphor-shell/moon.yml
             ./plasmazones/moon.yml
             ./AGENTS.md
+            # .agents holds only symlinks INTO .claude/skills, so excluding it
+            # alone achieved nothing: .gitignore un-ignores 22 tracked files
+            # under .claude/ (agents/review, agents/shader-theme, five skills
+            # trees, settings.json) plus 2 under .codex/, and editing any of
+            # them changed the src hash and forced a full rebuild.
             ./.agents
+            ./.claude
+            ./.codex
           ]
         );
       };

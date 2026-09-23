@@ -197,9 +197,10 @@ void SplitTree::insertAtEndImpl(const QString& windowId, qreal initialRatio)
     splitLeaf(rm, windowId, initialRatio);
 }
 
-// NOTE: insertAtEndRaw has no depth guard of its own. It relies on the caller
-// (rebuildFromOrder) to cap the input list at MaxRuntimeTreeDepth entries,
-// since a right-leaning chain of N leaves has height N.
+// NOTE: insertAtEndRaw carries its own depth guard (below), AND the caller
+// (rebuildFromOrder) caps the input list at MaxRuntimeTreeDepth entries.
+// The two are belt-and-braces: a right-leaning chain of N leaves has
+// height N, so either alone would bound it.
 void SplitTree::insertAtEndRaw(const QString& windowId, qreal initialRatio)
 {
     if (leafForWindow(windowId)) {

@@ -45,6 +45,12 @@ fi
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --prefix)
+        # Without this, a bare --prefix sets PREFIX="" and the shift fails with
+        # bash's own "shift count out of range" rather than a usable message.
+        if [[ $# -lt 2 ]]; then
+            echo "Error: --prefix needs a path" >&2
+            exit 1
+        fi
         PREFIX="$2"
         shift 2
         ;;

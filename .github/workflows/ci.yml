@@ -293,8 +293,10 @@ jobs:
           # verify step below guards against for the paint API. Change one,
           # change the other.
           #
-          # There are FIVE hand-maintained pacman lists in this file, in three
-          # groups. Do not assume an edit here reaches the rest:
+          # There are SEVEN hand-maintained pacman lists in this file: five
+          # build-dependency lists in three groups, plus two small tool lists
+          # (`lint` and `luau-analyze`) that install neither Qt nor KF6.
+          # Do not assume an edit here reaches the rest:
           #   * shell-OFF, identical: `build`, `build-plasma-next` (this one).
           #   * shell-ON: `build-shell`, and `presets` which is the same set
           #     minus ccache, xorg-server-xvfb and mesa because it neither

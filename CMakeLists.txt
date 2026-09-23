@@ -69,9 +69,11 @@ set(QT_QML_GENERATE_QMLLS_INI ON CACHE BOOL "Generate QML language server config
 # would wipe again), the suppression is applied per target rather than
 # globally here. plasmazones/src/shared/CMakeLists.txt carries the full
 # rationale. Dozens of CMakeLists across the tiers apply it, so do not read
-# this as "one file opts out" -- grep for `Wno-missing-include-dirs` for the
-# current set rather than trusting a count written here, which drifts every
-# time a QML module is added.
+# this as "one file opts out". For the current set, grep for the full
+# `set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dirs")`
+# line rather than the bare flag, which also matches this comment; and
+# rather than a count written here, which drifts whenever a directory that
+# builds a QML module is added.
 
 # KDE/Qt requirements (Plasma 6.7 target: KF 6.26, Qt 6.10, KWin 6.7)
 # Plasma 6.8 is supported by the same source: the KWin effect adapts to either
@@ -190,7 +192,7 @@ option(BUILD_PHOSPHOR_SHELL "Build the phosphor-shell desktop shell (work in pro
 if(BUILD_PHOSPHOR_SHELL AND NOT USE_KDE_FRAMEWORKS)
     message(FATAL_ERROR
         "BUILD_PHOSPHOR_SHELL requires USE_KDE_FRAMEWORKS=ON: the shell tier "
-        "(phosphor-shell-libs/libs/phosphor-shell-bar, phosphor-shell-libs/libs/phosphor-shell-power, phosphor-shell-libs/libs/phosphor-shell-control-center, phosphor-shell-libs/libs/phosphor-shell-launcher) depends on KF6 "
+        "(phosphor-shell-libs/libs/phosphor-shell-bar, phosphor-shell-libs/libs/phosphor-shell-power, phosphor-shell-libs/libs/phosphor-shell-control-center, phosphor-shell-libs/libs/phosphor-shell-launcher, phosphor-shell-libs/libs/phosphor-shell-lock) depends on KF6 "
         "Kirigami for icon rendering and has no Qt-only fallback.")
 endif()
 

@@ -514,7 +514,7 @@ void VirtualDesktopManager::stop()
     // registers hooks keyed on signal name plus path, and its disconnect()
     // returns false for a null slot or an empty signal name — a wildcard
     // "drop everything for this interface" call compiles, runs, and removes
-    // nothing at all. Mirrors the six connect() calls in initKWinDBus.
+    // nothing at all. Mirrors the six connect() calls in subscribeToKWin().
     // Not constexpr: SLOT() expands to a qFlagLocation() call.
     const std::array<std::pair<const char*, const char*>, 6> subscriptions{{
         {"currentChanged", SLOT(onKWinCurrentChanged(QString))},

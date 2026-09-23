@@ -235,7 +235,7 @@ generate_export_header(plasmazones_core
 )
 
 # Layer-shell: implementation moved to PhosphorWayland library.
-# The compatibility wrappers (core/qpa/*.h) are header-only - no sources to compile.
+# The compatibility wrappers were removed with the move; nothing remains here.
 # PhosphorWayland provides the QPA plugin, protocol code, and LayerSurface implementation.
 
 # All seven TUs below are excluded from unity build:
@@ -411,8 +411,9 @@ install(TARGETS plasmazones_core
 # Layer Shell Qt Plugin - now provided by PhosphorWayland library
 # ═══════════════════════════════════════════════════════════════════════════════
 # The QPA plugin (phosphorwayland-qpa) is built and installed by phosphor/libs/phosphor-wayland/CMakeLists.txt.
-# PlasmaZones::registerLayerShellPlugin() forwards to PhosphorWayland::registerLayerShellPlugin()
-# which sets QT_WAYLAND_SHELL_INTEGRATION=phosphorwayland.
+# PhosphorWayland::registerLayerShellPlugin() sets
+# QT_WAYLAND_SHELL_INTEGRATION=phosphorwayland. There is no PlasmaZones::
+# forwarder; callers use the PhosphorWayland symbol directly.
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Rendering Library (ZoneShaderItem, shared between the daemon and the settings app)
@@ -845,7 +846,9 @@ set_source_files_properties(editor/qml/ColorUtils.js PROPERTIES
 # cc1plus fires before AUTOMOC recreates it. Set here (after the core /
 # rendering / shaderpreview / daemon targets above, which are unaffected). NOTE: directory
 # COMPILE_OPTIONS apply to EVERY target created after this point in the
-# scope — the editor QML sub-targets just below, but also
+# scope — plasmazones-editor itself just below (an executable, so
+# qt_add_qml_module compiles its QML into the target rather than into
+# sub-targets), but also
 # plasmazones-shader-validate and the add_subdirectory(settings) tree
 # further down. The suppression is harmless for those (it only silences
 # the missing-AUTOMOC-include-dir warning class). Mirrors

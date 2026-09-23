@@ -254,8 +254,15 @@ Item {
                     "index": i,
                     "isPrimary": isPrimary
                 });
-                if (inst)
+                if (inst) {
                     root._instances.set(screen, inst);
+                } else {
+                    // Swallowing this leaves the screen with no delegate and
+                    // root.count under-reporting, with nothing to show for it.
+                    // Same silent-nothing hazard the delegate guard above exists
+                    // to prevent.
+                    console.warn("PerScreen: delegate creation failed for screen", name, "--", root.delegate.errorString());
+                }
             }
         }
         root.count = root._instances.size;

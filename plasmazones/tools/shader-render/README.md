@@ -13,9 +13,9 @@ and anyone else who needs a stable image of a built-in shader.
 
 ## What it does
 
-1. Loads `data/overlays/<id>/metadata.json` plus the shader's GLSL
+1. Loads `plasmazones/data/overlays/<id>/metadata.json` plus the shader's GLSL
    files exactly the way the daemon does.
-2. Loads `data/layouts/<id>.json` to get a real zone arrangement,
+2. Loads `plasmazones/data/layouts/<id>.json` to get a real zone arrangement,
    so the shader has actual zones to draw rather than a single
    mock rect.
 3. Boots a Qt Quick scene under `QQuickRenderControl` (offscreen,
@@ -68,8 +68,8 @@ Common flags:
 | `--fps` | `30` | frame rate (drives `iTime` advancement) |
 | `--out` | `<id>.webm` | output path; extension picks the format |
 | `--audio-mode` | `sine` | one of `silent`, `sine`, `noise`, `sweep` |
-| `--shader-dir` | `data/overlays/`, then the XDG data dirs | where to find shader bundles |
-| `--layout-dir` | `data/layouts/`, then the XDG data dirs | where to find layout JSONs |
+| `--shader-dir` | `plasmazones/data/overlays/` (or `data/overlays/` when run from inside `plasmazones/`), then the XDG data dirs | where to find shader bundles |
+| `--layout-dir` | `plasmazones/data/layouts/`, then the XDG data dirs | where to find layout JSONs |
 | `--still-highlight` | `0` (cycling) | pin one zone, by its zone number, as the only highlighted zone |
 
 Shared GLSL (`shared/common.glsl`, `audio.glsl`, `zone.vert`) resolves from the
@@ -126,7 +126,7 @@ done
 
 Run on a developer machine once per release; commit the resulting
 `.webm` files to the docs repo. Or run it as a CI step against
-PRs that touch `data/overlays/`.
+PRs that touch `plasmazones/data/overlays/`.
 
 ## Status / known limitations
 

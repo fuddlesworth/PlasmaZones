@@ -10,7 +10,7 @@
 // CppOwnership object throws and leaks the old tile behind the new one, so
 // the factory MUST mark what it returns JavaScriptOwnership. The mirror
 // image of that rule, a Q_INVOKABLE handing QML a parentless QObject it
-// then garbage-collects, took the shell down five times, which is how much
+// then garbage-collects, took the shell down six times, which is how much
 // a wrong answer here costs.
 //
 // The type it builds is a trivial one registered into a test-local URI, so

@@ -221,7 +221,7 @@ Testing/
 # Test executables are NOT ignored by name here, deliberately.
 #
 # There used to be a `test_*` rule with a list of `!test_*.<ext>` negations,
-# plus bare `*_test` and `*_tests` rules. They were unfixable in two ways at
+# plus root-anchored `/*_test` and `/*_tests` rules. They were unfixable in two ways at
 # once. A gitignore pattern matches directories as well as files and git never
 # descends into an excluded one, so a fixture directory named test_*/ would
 # vanish whole and no negation could reach inside it. And a negation list can

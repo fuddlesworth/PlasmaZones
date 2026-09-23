@@ -11,6 +11,11 @@ NAME := plasmazones
 
 # Extract version from CMakeLists.txt (spec has placeholder 0.0.0; CI stamps it)
 VERSION := $(shell sed -n 's/^project(PlasmaZones VERSION \([^ )]*\).*/\1/p' CMakeLists.txt)
+# An empty parse would write "Version:" with no value into the spec and tar to
+# plasmazones-.tar.gz. Both other consumers of this parse guard it the same way.
+ifeq ($(strip $(VERSION)),)
+$(error Could not parse VERSION from CMakeLists.txt)
+endif
 
 srpm: $(SPEC)
 	@echo "=== Building SRPM for $(NAME)-$(VERSION) ==="

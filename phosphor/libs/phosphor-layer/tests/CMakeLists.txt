@@ -58,13 +58,16 @@ pl_add_test(pl_test_surface_animator_dispatch test_surface_animator_dispatch.cpp
 
 # Two named outputs for the tests that cannot observe anything with one.
 #
-# The offscreen plugin's default screen is unnamed, so identifierFor() gives
-# the empty string and every test needing a physical id skipped itself. Append
-# AFTER the per-test environment above: the list is read last-wins, so this
-# overrides the plain offscreen entry rather than fighting it.
-foreach(_two_screen_test pl_test_registry)
-    if(TEST ${_two_screen_test})
-        phosphor_append_test_environment(${_two_screen_test}
-            "QT_QPA_PLATFORM=offscreen:configfile=${CMAKE_CURRENT_SOURCE_DIR}/two-screens.json")
-    endif()
-endforeach()
+# test_registry's syncToScreens legs need a SECOND output to observe one
+# going away; with a single screen they skipped themselves at
+# test_registry.cpp's `screens().size() < 2` guard. (The identifierFor()
+# rationale belongs to phosphor-screens, whose block this was copied from;
+# this lib's tests never call it.) Append AFTER the per-test environment
+# above: the list is read last-wins, so this overrides the plain offscreen
+# entry rather than fighting it.
+# No if(TEST ...) guard: pl_test_registry is registered unconditionally above,
+# and set_property(TEST <missing>) is a hard CMake error. Guarding it would turn
+# a loud configure failure into a silently dropped fixture, which puts the
+# assertions back to skipping -- the exact thing this file exists to stop.
+phosphor_append_test_environment(pl_test_registry
+    "QT_QPA_PLATFORM=offscreen:configfile=${CMAKE_CURRENT_SOURCE_DIR}/two-screens.json")

@@ -31,7 +31,7 @@
 
 find_program(_phosphor_dbus_run_session dbus-run-session)
 
-# Beside this module rather than under `tests/unit`, so an LGPL library test tree
+# Beside this module rather than under `plasmazones/tests/unit`, so an LGPL library test tree
 # does not reach into the GPL app test tree for it. (The conf file is LGPL for the
 # same reason.)
 #

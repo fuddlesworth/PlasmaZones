@@ -20,7 +20,7 @@ namespace PhosphorShellApp {
 // shell's counterpart of QmlComponentBarWidgetFactory. createOSD builds
 // the type via QQmlComponent(engine, uri, typeName), so the factory names
 // the registered module type rather than a qrc path. The demo under
-// examples/phosphor-osd-demo keeps its own copy on purpose: an example
+// phosphor-shell-libs/examples/phosphor-osd-demo keeps its own copy on purpose: an example
 // must not depend on the shell binary's sources.
 class QmlComponentOSDFactory : public PhosphorRegistry::IOSDFactory
 {

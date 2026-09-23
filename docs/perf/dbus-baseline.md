@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2026 fuddlesworth
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
 # D-Bus Performance Baseline
 
 Tracks before/after numbers for the refactor on branch `refactor/dbus-performance`.

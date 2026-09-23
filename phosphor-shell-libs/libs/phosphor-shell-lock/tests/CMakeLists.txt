@@ -41,7 +41,11 @@ function(phosphorshelllock_isolate_test name)
         # isolation call just installed.
         phosphor_append_test_environment(${name} "QT_QPA_PLATFORM=offscreen")
     else()
-        set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+        # TIMEOUT too: the isolation branch above gets one from
+        # phosphor_apply_test_isolation, but this standalone-configure branch
+        # would otherwise leave both lock tests with no hang guard at all. The
+        # three sibling wrappers (popout, bar, power) all use 30.
+        set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
     endif()
     set_property(TEST ${name} APPEND PROPERTY LABELS "phosphorshelllock")
 endfunction()

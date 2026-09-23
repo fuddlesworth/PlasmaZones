@@ -21,7 +21,7 @@ else()
     set(_phosphorshellpower_have_isolation FALSE)
 endif()
 
-# Isolation + environment through one seam; see libs/phosphor-shell/tests for
+# Isolation + environment through one seam; see phosphor-shell-libs/libs/phosphor-shell/tests for
 # the rationale on both branches.
 function(phosphorshellpower_isolate_test name)
     if(_phosphorshellpower_have_isolation)

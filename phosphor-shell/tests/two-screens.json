@@ -14,11 +14,7 @@
         "offscreen platform names its screen \"\", so without named outputs that",
         "resolver could only ever take the refusal path.",
         "",
-        "ControlCenterController::screenOf falls back to the primary screen when it",
-        "cannot resolve one from the item. With a single output the resolved answer",
-        "and the fallback are the same pointer, so the resolution branch could be",
-        "deleted outright with the suite still green. A second output makes the two",
-        "distinguishable. The offscreen platform plugin accepts this file via",
+        "The offscreen platform plugin accepts this file via",
         "QT_QPA_PLATFORM=offscreen:configfile=<path>."
     ],
     "screens": [

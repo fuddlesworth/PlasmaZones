@@ -33,7 +33,7 @@ private Q_SLOTS:
     // Startup/init
     // =========================================================================
 
-    void testStartup_pendingOrderTimeoutCleansUp()
+    void testStartup_initialOrderAdoptsBothWindows()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");

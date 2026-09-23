@@ -20,7 +20,8 @@ namespace {
 Q_LOGGING_CATEGORY(lcControlCenterTiles, "phosphorshell.controlcenter.tiles")
 } // namespace
 
-// NOTE: examples/phosphor-control-center-demo/qmlcomponenttilefactory.cpp carries a copy of this class.
+// NOTE: phosphor-shell-libs/examples/phosphor-control-center-demo/
+// qmlcomponenttilefactory.cpp carries a copy of this class.
 // The duplication is deliberate, so the example stands alone and can be
 // lifted into another project, but the two have already drifted once.
 // A change here almost certainly belongs there too.
@@ -107,10 +108,14 @@ QQuickItem* QmlComponentTileFactory::createTile(QQmlEngine* engine, QObject* par
         // the grid the surface believes it filled.
         qCWarning(lcControlCenterTiles) << "QmlComponentTileFactory: parent is not a QQuickItem for" << m_id
                                         << "— refusing rather than returning an item nothing will show";
-        // deleteLater(), not delete: CLAUDE.md's never-manual-delete rule, and
-        // the engine still holds creation-time bookkeeping for an object it
-        // just built. Matches the not-a-QQuickItem branch above, which disposes
-        // of the same object the same way.
+        // deleteLater(), not delete: CLAUDE.md's never-manual-delete rule.
+        // Matches the not-a-QQuickItem branch above, which disposes of the same
+        // object the same way. Two audit passes have each invented a mechanism
+        // here (an object "on the call stack", then engine "creation-time
+        // bookkeeping") and both were measured false: a plain delete on the
+        // next statement is safe for an object from
+        // createWithInitialProperties. The rule is the whole reason. Do not
+        // add another.
         item->deleteLater();
         return nullptr;
     }

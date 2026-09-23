@@ -99,12 +99,12 @@ peer demos.
 **Why deferred:** the divergence is fleet-wide, not PR-local. Migrating
 just the ipc demo would leave the other two demos inconsistent. Should be
 one follow-up PR that wires `PhosphorLocalizedContext` into every
-`examples/*-demo/main.cpp` and switches every demo at once.
+`phosphor-shell-libs/examples/*-demo/main.cpp` and switches every demo at once.
 
 **Change shape:**
 - Add `PhosphorLocalizedContext` to each demo's `main.cpp` (single
   `engine.rootContext()->setContextObject(...)`).
-- `grep -rl qsTr examples/` → switch to `i18n` / `i18nc` per file.
+- `grep -rl qsTr phosphor-shell-libs/examples/` → switch to `i18n` / `i18nc` per file.
 - Add the demos' `.qml` files to `lupdate` if not already covered.
 
 ---
@@ -116,7 +116,7 @@ finds 6 sites across 3 files (line numbers shift as the files evolve;
 re-run the grep before starting the work):
 - `phosphor-shell-libs/examples/phosphor-ipc-demo/Main.qml` (3 sites)
 - `phosphor-shell-libs/examples/phosphor-registry-plugin-demo/plugins/cpu-meter/cpumeter.cpp` (1 site)
-- `plasmazones/src/editor/qml/DimensionTooltip.qml` (2 sites)
+- `phosphor-shell-libs/examples/phosphor-osd-demo/Main.qml` (1 site)
 
 **Finding:** CLAUDE.md says QML should not hardcode appearance —
 `Kirigami.Theme` for colors, `Kirigami.Units` for spacing, and (by
@@ -154,7 +154,7 @@ panel binds to `demoController.status` which reads `"router failed to
 start (see logs)"`, and the cheat-sheet panel shows a placeholder
 instead of an empty `export PHOSPHOR_SOCKET=` line.
 
-**Why no action:** behaviour matches `phosphor-shell-libs/libs/phosphor-ipc/README.md:117`
+**Why no action:** behaviour matches `phosphor-shell-libs/libs/phosphor-ipc/README.md:112`
 ("Application can continue without IPC; failure is non-fatal"). The
 warnings are a debugging affordance.
 

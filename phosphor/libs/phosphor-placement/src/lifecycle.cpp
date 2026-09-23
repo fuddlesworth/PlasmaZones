@@ -305,7 +305,9 @@ void WindowTrackingService::onLayoutChanged()
             QString zoneId = zoneIdList.isEmpty() ? QString() : zoneIdList.first();
             int pos = globalZoneIdToPosition.value(zoneId, 0);
             if (pos <= 0) {
-                // Handle zoneselector synthetic IDs: "zoneselector-{layoutId}-{index}"
+                // Handle zone-selector synthetic IDs, which the code tests by the
+                // kZoneSelectorIdPrefix constant ("zone-selector:"). Do NOT fold the
+                // two spellings together -- see the note in commit.cpp.
                 if (zoneId.startsWith(kZoneSelectorIdPrefix)) {
                     int lastDash = zoneId.lastIndexOf(QLatin1Char('-'));
                     if (lastDash > 0) {

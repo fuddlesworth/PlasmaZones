@@ -249,7 +249,7 @@ Phases 7, 8, and 9 are largely independent once Phase 6 lands.
 ## Critical Integration Files (existing)
 
 - `phosphor/libs/phosphor-compositor/include/PhosphorCompositor/ICompositorBridge.h` — The 23-method interface to implement
-- `plasmazones/kwin-effect/kwin_compositor_bridge.h` — Reference bridge implementation (KWin)
+- `plasmazones/kwin-effect/compositor/compositorbridge.h` — Reference bridge implementation (KWin)
 - `phosphor/libs/phosphor-compositor/include/PhosphorCompositor/DecorationManager.h` — Decoration state (reuse directly)
 - `phosphor/libs/phosphor-rendering/include/PhosphorRendering/ShaderNodeRhi.h` — Qt RHI rendering (effects build on this)
 - `phosphor/libs/phosphor-screens/include/PhosphorScreens/IScreenProvider.h` — DRM backend implements this

@@ -530,7 +530,7 @@ inline constexpr const char* kIWindowOpacity = "iWindowOpacity";
 /// not counted here — that's a separate runtime-managed slot. The
 /// daemon's `PhosphorRendering::kMaxUserTextures = 4` includes slot 0,
 /// hence the off-by-one in the budget. Pinned to the daemon constant
-/// by the `static_assert` in `libs/phosphor-animation/src/contract_pins.cpp`.
+/// by the `static_assert` in `phosphor/libs/phosphor-animation/src/contract_pins.cpp`.
 ///
 /// The compile-time pin against PhosphorRendering::kMaxUserTextures
 /// lives in src/contract_pins.cpp — see the comment there explaining
@@ -737,7 +737,7 @@ inline bool isValidFilterToken(const QString& filter)
 
 // The compile-time link between AnimationShaderContract::kMaxUserTextureSlots
 // and PhosphorRendering::kMaxUserTextures lives in
-// libs/phosphor-animation/src/contract_pins.cpp. It cannot live in this header
+// phosphor/libs/phosphor-animation/src/contract_pins.cpp. It cannot live in this header
 // because translation units that only need contract definitions (notably the
 // kwin-effect, which already pulls in epoxy/gl.h via KWin) must not be forced
 // to also pull in <QtQuick/QSGTextureProvider> via ShaderNodeRhi.h — epoxy and

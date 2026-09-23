@@ -112,8 +112,8 @@ Q_SIGNALS:
     void zoneDetected(const QString& zoneId, const PhosphorProtocol::ZoneGeometryRect& geometry);
 
 private:
-    /// Release-build pair of the ctor Q_ASSERTs. Every slot on this adaptor is
-    /// reachable from the session bus, so a wiring bug has to degrade to a
+    /// Release-build pair of the ctor Q_ASSERTs. Nearly every slot on this
+    /// adaptor is reachable from the session bus, so a wiring bug has to degrade to a
     /// warning rather than a crash an external caller can trigger. Mirrors
     /// AutotileAdaptor::ensureRegistry and OverlayAdaptor's per-method guards,
     /// which this class was the only adaptor in the family to lack.

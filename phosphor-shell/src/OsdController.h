@@ -18,7 +18,7 @@ QT_END_NAMESPACE
 namespace PhosphorShellApp {
 
 // QML-exposed provider for the Phosphor.OSD surface, the shell's owner of
-// what examples/phosphor-osd-demo keeps a private copy of. Owns a
+// what phosphor-shell-libs/examples/phosphor-osd-demo keeps a private copy of. Owns a
 // Registry<IOSDFactory>, registers the four built-in OSDs at construction,
 // and exposes createOSD(kind, parent) so OSDHost can be wired as
 // `provider: OsdRegistry` (the context property phosphor-shell/src/main.cpp

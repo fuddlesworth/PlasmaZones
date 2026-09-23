@@ -96,6 +96,6 @@ it was visible or still queued.
 ## Status
 
 Shipped. `ToastHost` and `Toast` are in the tree with a QtQuickTest suite
-and an acceptance demo (`examples/phosphor-toast-demo/`, fed by
+and an acceptance demo (`../../examples/phosphor-toast-demo/`, fed by
 `phosphor-service-notifications` so `notify-send` raises a toast). The
 window-anchored placement landed with the spectrum identity work.

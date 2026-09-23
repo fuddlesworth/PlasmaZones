@@ -89,7 +89,7 @@ class MyPlugin : public PhosphorCompositor::IGeometryHandler,
 
 | Compositor | Adapter | Location |
 |------------|---------|----------|
-| KWin 6 | `KWinCompositorBridge` | `kwin-effect/kwin_compositor_bridge.{h,cpp}` |
+| KWin 6 | `KWinCompositorBridge` | `plasmazones/kwin-effect/compositor/compositorbridge.{h,cpp}` |
 | river | planned | — |
 
 ## Architecture

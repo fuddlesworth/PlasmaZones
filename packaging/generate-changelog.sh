@@ -67,7 +67,7 @@ parse_changelog() {
 
 # Convert ISO date (2026-02-05) to RFC 2822 (Wed, 05 Feb 2026 00:00:00 +0000)
 iso_to_rfc2822() {
-    date -d "$1" -u '+%a, %d %b %Y %H:%M:%S +0000' 2>/dev/null || \
+    LC_ALL=C date -d "$1" -u '+%a, %d %b %Y %H:%M:%S +0000' 2>/dev/null || \
     python3 -c "
 from datetime import datetime
 d = datetime.strptime('$1', '%Y-%m-%d')
@@ -78,7 +78,7 @@ print(d.strftime('%a, %d %b %Y 00:00:00 +0000'))
 
 # Convert ISO date (2026-02-05) to RPM format (Wed Feb  5 2026)
 iso_to_rpm() {
-    date -d "$1" -u '+%a %b %e %Y' 2>/dev/null || \
+    LC_ALL=C date -d "$1" -u '+%a %b %e %Y' 2>/dev/null || \
     python3 -c "
 from datetime import datetime
 d = datetime.strptime('$1', '%Y-%m-%d')

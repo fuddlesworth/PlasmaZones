@@ -10,7 +10,7 @@
 # QVariant API. The lua_State is kept private so no Luau symbols leak across the
 # shared-library boundary.
 #
-# Luau is vendored as a committed source tarball (extern/luau-<ver>.tar.gz,
+# Luau is vendored as a committed source tarball (phosphor/extern/luau-<ver>.tar.gz,
 # pinned to PHOSPHORSCRIPTING_LUAU_VERSION below), extracted from that LOCAL file at configure time and built as
 # part of this project by default; pass -DPLASMAZONES_SYSTEM_LUAU=ON to link a
 # system-provided Luau instead. Committing the tarball (not a submodule, not the
@@ -25,7 +25,7 @@ cmake_minimum_required(VERSION 3.18)
 
 set(PHOSPHORSCRIPTING_VERSION "0.1.0")
 
-# Pinned vendored Luau. To bump: drop the new extern/luau-<ver>.tar.gz in,
+# Pinned vendored Luau. To bump: drop the new phosphor/extern/luau-<ver>.tar.gz in,
 # update both lines, and delete the old tarball.
 set(PHOSPHORSCRIPTING_LUAU_VERSION "0.737")
 set(PHOSPHORSCRIPTING_LUAU_SHA256 "767b872f084518ca9a79b021f83b40e6a051be4c1f91dd712a949417a4e979c6")
@@ -46,7 +46,7 @@ find_package(Threads REQUIRED)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 option(PLASMAZONES_SYSTEM_LUAU
-    "Link a system-provided Luau instead of the committed extern/luau-*.tar.gz" OFF)
+    "Link a system-provided Luau instead of the committed phosphor/extern/luau-*.tar.gz" OFF)
 
 if(PLASMAZONES_SYSTEM_LUAU)
     find_path(LUAU_INCLUDE_DIR NAMES lua.h PATH_SUFFIXES luau Luau)

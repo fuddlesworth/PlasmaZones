@@ -59,7 +59,8 @@ function _stop(axis, v) {
 // empty or inverted cells are ignored.
 //
 // Returns {x, y, width, height}, the whole area when there are no cells, or
-// null when the cells cover everything.
+// null when the cells cover everything OR the area has non-positive width
+// or height. Those two null cases are not distinguished.
 //
 // Method: compress both axes to the distinct cell edges, mark the grid
 // tiles the cells cover, then run the maximal-rectangle histogram scan

@@ -173,7 +173,7 @@ once sandboxed, compile/load, QVariant marshalling), `phosphor/libs/phosphor-til
 golden-snapshot parity test, the loader swapped to `.luau`, the QJSEngine path
 deleted, and a CI **`luau-analyze` gate** over the bundled algorithms + `pluau`
 stdlib. Vendoring landed as a **committed source tarball**
-(`extern/luau-0.723.tar.gz`, extracted at configure time from that local file
+(`phosphor/extern/luau-0.737.tar.gz`, extracted at configure time from that local file
 via `file(ARCHIVE_EXTRACT)`) rather than a submodule or the unpacked tree, so source
 tarballs stay self-contained for every distro with no network, while the repo
 carries one ~2 MB blob instead of ~950 files;

@@ -7,7 +7,7 @@
 # Usage:
 #   docker build -t plasmazones-build .
 #   docker run --rm -v "$PWD":/src plasmazones-build
-#   docker run --rm -v "$PWD":/src plasmazones-build ctest --output-on-failure
+#   docker run --rm -v "$PWD":/src plasmazones-build ctest --output-on-failure --no-tests=error
 
 FROM fedora:44
 

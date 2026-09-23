@@ -15,7 +15,7 @@
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes QuickTest)
 
-# Same private-bus isolation as libs/phosphor-shell/tests. Nothing in the
+# Same private-bus isolation as phosphor-shell-libs/libs/phosphor-shell/tests. Nothing in the
 # bar's QML touches D-Bus today, but this is a QtQuickTest that instantiates
 # real QML, and the moment a bar file imports a Phosphor.Service.* type it
 # would start reading the developer's session bus with no diff to signal it.

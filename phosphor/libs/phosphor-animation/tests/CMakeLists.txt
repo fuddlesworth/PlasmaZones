@@ -139,7 +139,7 @@ pa_add_test(pa_test_shaderparamtranslation test_shaderparamtranslation.cpp)
 set_tests_properties(pa_test_shaderparamtranslation PROPERTIES
     LABELS "phosphoranimation;phosphoranimationshaders")
 
-# Integration test against the actual data/animations/ packs.
+# Integration test against the actual plasmazones/data/animations/ packs.
 pas_add_test(pas_test_builtin_effects test_builtin_effects.cpp)
 target_compile_definitions(pas_test_builtin_effects PRIVATE
     "PLASMAZONES_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\""

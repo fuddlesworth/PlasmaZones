@@ -66,7 +66,7 @@ if (out.status == LuauEngine::CallStatus::Ok) {
 
 ## Vendored Luau
 
-Luau is vendored as a committed source tarball (`extern/luau-<ver>.tar.gz`,
+Luau is vendored as a committed source tarball (`phosphor/extern/luau-<ver>.tar.gz`,
 pinned to the version in `PHOSPHORSCRIPTING_LUAU_VERSION` in this library's
 `CMakeLists.txt`), extracted at configure time via `file(ARCHIVE_EXTRACT)` and
 built as part of this library, so source tarballs and offline distro builds are
@@ -91,7 +91,7 @@ project's global build settings.
 ## Dependencies
 
 - `QtCore`, `Threads`
-- Vendored Luau (`extern/luau-*.tar.gz`), or a system Luau via `-DPLASMAZONES_SYSTEM_LUAU=ON`
+- Vendored Luau (`phosphor/extern/luau-*.tar.gz`), or a system Luau via `-DPLASMAZONES_SYSTEM_LUAU=ON`
 
 ## See also
 

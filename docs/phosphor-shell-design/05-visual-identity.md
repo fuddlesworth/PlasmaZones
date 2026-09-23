@@ -195,8 +195,9 @@ accent that came from the wallpaper, it is not Phosphor.
 
 ## 10. Build notes
 
-- First cut is buildable on existing D-Bus (A2 §8). Seven `[NEW]` daemon surfaces are listed
-  there in priority order; `Scrolling.stripModelJson` and `Tiling.currentTilesJson` first.
+- First cut is buildable on existing D-Bus (A2 §8). The seven `[NEW]` daemon surfaces listed
+  there have all since SHIPPED (phases 1 to 6), so that list is a record of what this document
+  asked for rather than work outstanding. A2's own preamble says the same.
 - Retired: `BarHost.qml` socket/pocket machinery and `BarCanvas.sockets`, `Slot.qml` chip
   rectangles, `barThickness 44`, `screenInset spacing_xl`, `ElevationShadow` on chrome, the
   tile-grid `ControlCenter.qml`, the centred `OsdHost`, the top-right toast stack.

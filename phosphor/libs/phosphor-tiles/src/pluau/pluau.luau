@@ -893,6 +893,7 @@ end
 
 -- Port of threeColumnLayout.js
 local function threeColumnLayout(area, count, gap, splitRatio, masterCount, minSizes)
+    if count <= 0 then return {} end -- parity with every other exported layout helper
     local stackCount = count - masterCount
     local leftCount = math.ceil(stackCount / 2)
     local rightCount = stackCount - leftCount
@@ -995,8 +996,7 @@ end
 -- behaviour-preserving: identical output to the inline code it replaces.
 
 -- Standard tile() preamble: no windows → empty; a work area below the minimum
--- tile size → the host's fill fallback. Returns the early-out zone list, or nil
--- when the caller should proceed. Call as:
+-- tile size → pluau fillArea. Returns the early-out list, or nil to proceed:
 --   local early = pluau.guardArea(ctx.area, count); if early then return early end
 local function guardArea(area, count)
     if count <= 0 then return {} end

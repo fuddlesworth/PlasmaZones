@@ -510,8 +510,8 @@ UnfloatResult SnapEngine::resolveFallbackUnfloatGeometry(const QString& windowId
     // Resolve the window's effective screen — the CALLER's screen first, else
     // the window's tracked float screen. The caller's screen is the effect's
     // authoritative live output threaded down from setWindowFloatingForScreen,
-    // and it wins for the same reason setWindowFloat's tier list gives it tier 1
-    // (:104-114): the tracked association goes stale the moment a floating
+    // and it wins for the same reason setWindowFloat's tier list gives it tier 1:
+    // the tracked association goes stale the moment a floating
     // window drifts across monitors without a windowScreenChanged (Discussion
     // #724), and this screen is load-bearing twice over — the fallback zone is
     // resolved on it AND the rule predicate below stamps ScreenId / derives Mode

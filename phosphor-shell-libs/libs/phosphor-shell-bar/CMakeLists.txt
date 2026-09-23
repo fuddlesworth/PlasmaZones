@@ -12,8 +12,8 @@
 # atoms (SpectrumRail, SpectrumStroke, PhosphorRipple). This lib depends on
 # KF6 Kirigami, for Kirigami.Icon's named-icon resolution in the status
 # widgets. The other shell-tier libraries that need it for the same reason
-# are phosphor-shell-power, phosphor-shell-control-center and
-# phosphor-shell-launcher.
+# are phosphor-shell-power, phosphor-shell-control-center,
+# phosphor-shell-launcher and phosphor-shell-lock.
 #
 # Phase 4.1 deliverable per docs/phosphor-shell-design/04-implementation-plan.md.
 

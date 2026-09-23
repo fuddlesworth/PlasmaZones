@@ -103,6 +103,6 @@ a QtQuickTest harness. The clipboard and windows providers are model-backed
 and have no suites of their own yet.
 
 Built only with `-DBUILD_PHOSPHOR_SHELL=ON`, which is off by default.
-The acceptance demo is `examples/phosphor-launcher-demo/`, a plain window
+The acceptance demo is `../../examples/phosphor-launcher-demo/`, a plain window
 that hosts the surface over the real providers, so it lists the running
 session's applications, clipboard and PATH.

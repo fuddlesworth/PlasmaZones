@@ -108,8 +108,13 @@ while IFS= read -r line; do
     FILE_PATH="$PREFIX/$line"
     # Remove both regular files and symlinks
     if [ -f "$FILE_PATH" ] || [ -L "$FILE_PATH" ]; then
-        rm -f "$FILE_PATH" || echo "Warning: Failed to remove $FILE_PATH"
-        REMOVED_COUNT=$((REMOVED_COUNT + 1))
+        # Count only what was actually removed: an unconditional increment
+        # reported failures as successes in the summary below.
+        if rm -f "$FILE_PATH"; then
+            REMOVED_COUNT=$((REMOVED_COUNT + 1))
+        else
+            echo "Warning: Failed to remove $FILE_PATH"
+        fi
     fi
 done < "$MANIFEST_FILE"
 

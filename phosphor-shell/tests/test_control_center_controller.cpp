@@ -7,7 +7,7 @@
 // The screenOf ownership case is the one that matters. A QScreen has no
 // QObject parent, and a Q_INVOKABLE returning a parentless QObject* hands
 // QML JavaScriptOwnership by default, which lets the JS garbage collector
-// DELETE the live screen. That took the shell down five times on
+// DELETE the live screen. That took the shell down six times on
 // 2026-09-03: on hot reload (ScreenModel dereferenced the freed screen) and,
 // with different GC timing, mid-IPC-toggle. The controller must mark the
 // screen CppOwnership before returning it, and this pins that it does.

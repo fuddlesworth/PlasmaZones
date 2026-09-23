@@ -43,7 +43,7 @@ ApplicationWindow {
     // tokens are added/removed (rare, matugen never removes tokens
     // thanks to PaletteStore's merge semantics), so a JSON-stringify
     // comparison cheaply gates the assignment.
-    property var swatchKeys: []
+    property list<string> swatchKeys: []
 
     function refreshSwatchKeys() {
         const next = Object.keys(Theme.palette).sort();
@@ -250,11 +250,11 @@ ApplicationWindow {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         Accessible.role: Accessible.Button
-                        Accessible.name: qsTr("Apply %1 preset").arg(modelData)
+                        Accessible.name: qsTr("Apply %1 preset").arg(presetPill.modelData)
                         onClicked: {
-                            const tokens = PresetPalettes.byName(modelData);
+                            const tokens = PresetPalettes.byName(presetPill.modelData);
                             Theme.paletteStore.applyTokens(tokens);
-                            root.activePreset = modelData;
+                            root.activePreset = presetPill.modelData;
                         }
                     }
                 }
@@ -400,10 +400,14 @@ ApplicationWindow {
             // white on #FEE2E2 at 1.22:1, sunset near-black on #7F1D1D at
             // 1.94:1), and pairing on_error with error fails the other two
             // (dark 3.34:1, forest 3.76:1). on_surface on error_container is
-            // the only pairing that clears 4.5:1 everywhere: dark 8.16, light
-            // 13.96, sunset 8.51, forest 9.34. This is the surface that reports
+            // the pairing with the most headroom of those that clear 4.5:1 in
+            // all four: dark 8.16, light 13.96, sunset 8.51, forest 9.34.
+            // (on_primary_container/error_container and background/error also
+            // clear it, with lower minimums.) This is the surface that reports
             // a broken palette, so it has to stay readable exactly when the
-            // palette is wrong.
+            // palette is wrong. Note the guarantee covers the four BUNDLED
+            // palettes; PaletteStore.loadFromFile and MatugenRunner can install
+            // arbitrary token maps.
             color: Theme.error_container
             radius: Tokens.radius_s
 

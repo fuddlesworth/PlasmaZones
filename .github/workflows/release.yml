@@ -1491,15 +1491,18 @@ jobs:
           # which hangs the runner. The file is chmod 600 and lives only
           # on the ephemeral CI VM; GitHub masks the secret values in logs.
           mkdir -p ~/.config/osc
-          cat > ~/.config/osc/oscrc << EOF
-          [general]
-          apiurl = https://api.opensuse.org
-
-          [https://api.opensuse.org]
-          credentials_mgr_class = osc.credentials.PlaintextConfigFileCredentialsManager
-          user = $OBS_USERNAME
-          pass = $OBS_PASSWORD
-          EOF
+          # printf with %s, not an unquoted heredoc: the heredoc expanded the
+          # credentials through the shell, so a password containing $, a
+          # backtick or a backslash was mangled or command-substituted. A
+          # QUOTED heredoc is not the fix either -- it would write the literal
+          # \$OBS_PASSWORD and break every upload. Values go in as arguments.
+          {
+            printf '[general]\napiurl = https://api.opensuse.org\n\n'
+            printf '[https://api.opensuse.org]\n'
+            printf 'credentials_mgr_class = osc.credentials.PlaintextConfigFileCredentialsManager\n'
+            printf 'user = %s\n' "$OBS_USERNAME"
+            printf 'pass = %s\n' "$OBS_PASSWORD"
+          } > ~/.config/osc/oscrc
           chmod 600 ~/.config/osc/oscrc
 
       - name: Stamp version and changelog into spec

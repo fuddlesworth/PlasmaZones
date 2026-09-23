@@ -90,9 +90,7 @@ target_link_libraries(ps_test_dbusscreenadaptor PRIVATE PhosphorScreens::Phospho
 # came from a configfile. Those assertions have never run, so this is a
 # pre-existing gap rather than a regression; left skipping until someone
 # settles the manager's behaviour rather than shipping a red suite.
-foreach(_two_screen_test ps_test_dbusscreenadaptor)
-    if(TEST ${_two_screen_test})
-        phosphor_append_test_environment(${_two_screen_test}
-            "QT_QPA_PLATFORM=offscreen:configfile=${CMAKE_CURRENT_SOURCE_DIR}/two-screens.json")
-    endif()
-endforeach()
+# No if(TEST ...) guard: see the note in phosphor-layer/tests/CMakeLists.txt.
+# ps_test_dbusscreenadaptor is registered unconditionally above.
+phosphor_append_test_environment(ps_test_dbusscreenadaptor
+    "QT_QPA_PLATFORM=offscreen:configfile=${CMAKE_CURRENT_SOURCE_DIR}/two-screens.json")

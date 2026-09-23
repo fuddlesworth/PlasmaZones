@@ -7,6 +7,26 @@ Files: *
 Copyright: 2024-2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: GPL-3.0-or-later
 
+# Files whose own SPDX-FileCopyrightText names a holder the catch-all above
+# does not. Licence is unchanged; only the credit differs, and dropping it in
+# the packaging metadata would assert sole authorship of someone else's work.
+#
+# mesh_sim is a port of KWin's wobblywindows spring model, so the upstream
+# author is credited alongside. The two are the only files in the tree
+# carrying a second holder that no other stanza already covers.
+Files: plasmazones/kwin-effect/plasmazoneseffect/mesh_sim.h
+       plasmazones/kwin-effect/plasmazoneseffect/mesh_sim.cpp
+Copyright: 2008 Cédric Borgese <cedric.borgese@gmail.com>
+           2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+License: GPL-3.0-or-later
+
+# Contributed by abirkel, whose header is the sole copyright line on all three.
+Files: packaging/local-install/install.sh
+       packaging/local-install/uninstall.sh
+       packaging/local-install/web-install.sh
+Copyright: 2026 abirkel <abirkel@users.noreply.github.com>
+License: GPL-3.0-or-later
+
 # All phosphor-* extracted libraries ship as LGPL so third-party
 # plugins / shells can link them without inheriting GPL — see CLAUDE.md
 # for the per-tree license rules.

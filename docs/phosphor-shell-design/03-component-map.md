@@ -10,7 +10,8 @@ all of it.
 ## Layout
 
 ```
-libs/
+phosphor/libs/ and phosphor-shell-libs/libs/  (the two library tiers; the
+                             rows below span both)
   phosphor-theme/            Phosphor.Theme: Theme, Tokens, Motion, StateLayer, Spectrum,
                              PaletteStore, FontFaces, MatugenRunner, TemplateEngine
   phosphor-shell-widgets/    Phosphor.Widgets: SpectrumRail/Stroke/Underline, TabularText,

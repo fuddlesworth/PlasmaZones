@@ -2676,7 +2676,8 @@ phosphor_apply_directory_test_isolation()
 # under it and registers its proxy under that screen's identifier. The sweep's
 # unnamed single offscreen screen identifies as the empty string, which the
 # registration refuses; the named config gives it a real id.
-if(TARGET test_windowdrag_drop_proxy)
-    phosphor_append_test_environment(test_windowdrag_drop_proxy
-        "QT_QPA_PLATFORM=offscreen:configfile=${CMAKE_CURRENT_SOURCE_DIR}/helpers/two-screens.json")
-endif()
+# No if(TARGET ...) guard: test_windowdrag_drop_proxy is declared
+# unconditionally above, and set_property(TEST <missing>) is a hard CMake
+# error, so the guard could only ever hide a rename.
+phosphor_append_test_environment(test_windowdrag_drop_proxy
+    "QT_QPA_PLATFORM=offscreen:configfile=${CMAKE_CURRENT_SOURCE_DIR}/helpers/two-screens.json")

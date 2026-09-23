@@ -7,7 +7,7 @@
  * @file AnimationsControllerFixture.h
  * @brief Shared AnimationsPageController fixtures for the animations tests.
  *
- * Eleven TUs now include this, covering both the shader and the timing sides —
+ * Ten TUs now include this, covering both the shader and the timing sides —
  * test_animations_shader_overrides.cpp (per-path writes, resolution, picker
  * contract, leaf isolation) and test_animations_shader_param_writes.cpp (the
  * group writers and the group readers) are the two it was written for. They
@@ -124,8 +124,7 @@ struct PopulatedControllerFixture
     /// REQUIRES `P_SOURCE_DIR` to be defined by the including target. Every
     /// target that compiles a TU including this header has to carry
     /// `target_compile_definitions(... P_SOURCE_DIR="${CMAKE_SOURCE_DIR}/plasmazones")`
-    /// — with the tier suffix, which is how all 178 call sites spell it and what
-    /// dataDir() below depends on;
+    /// — with the tier suffix, which is what dataDir() below depends on;
     /// without it this is a bare preprocessor error rather than anything that
     /// points at the cause.
     static QString dataDir()

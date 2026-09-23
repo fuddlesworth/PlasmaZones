@@ -22,7 +22,7 @@ add_subdirectory(libs/phosphor-shell-osd)      # Phosphor.OSD on-screen-display 
 add_subdirectory(libs/phosphor-shell-notifications) # Phosphor.Notifications toast framework (Phase 3.4); depends on theme + widgets
 add_subdirectory(libs/phosphor-shell-control-center) # Phosphor.ControlCenter tile surface (Phase 4.4); depends on theme + widgets + Kirigami
 add_subdirectory(libs/phosphor-shell-launcher)       # Launcher core: ILauncherProvider implementations, fzf-style matcher, .desktop scanner (Phase 4.2); depends on registry
-add_subdirectory(libs/phosphor-shell-bar)      # Phosphor.Bar connected-corner bar surface (Phase 4.1). Depends on theme + widgets, and is one of the shell-tier libs that also require KF6 Kirigami (bar, power, control-center and launcher)
+add_subdirectory(libs/phosphor-shell-bar)      # Phosphor.Bar connected-corner bar surface (Phase 4.1). Depends on theme + widgets, and is one of the shell-tier libs that also require KF6 Kirigami (bar, power, control-center, launcher and lock)
 add_subdirectory(libs/phosphor-shell-power)    # Phosphor.Power session menu (Phase 4.6); depends on theme + widgets + Kirigami
 add_subdirectory(libs/phosphor-shell-dashboard) # Phosphor.Dashboard: dashboard grid + keybind cheatsheet on the placement map (Phase 4); depends on theme + widgets + protocol
 add_subdirectory(libs/phosphor-shell-picker)   # Phosphor.Picker wallpaper and theme strip (Phase 4); depends on theme + widgets

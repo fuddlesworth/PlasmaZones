@@ -26,11 +26,12 @@ Menu {
     // property simply refuses an undefined write and keeps its PRIOR value.
     // On the BINDING path this file uses (EditorWindow passes
     // `editorController: editorWindow._editorController`) QML logs
-    // `Unable to assign [undefined] to QObject*` at the binding's line. The
-    // warning is queued and emitted AFTER component completion, not during it,
-    // so a probe that calls Qt.quit() from Component.onCompleted truncates it
-    // and the refusal looks silent. A direct JS assignment instead throws
-    // `Error: Cannot assign [undefined] to QObject*`.
+    // `Unable to assign [undefined] to QObject*` at the binding's line, after
+    // the Component.onCompleted handlers have run. A direct JS assignment
+    // instead throws `Error: Cannot assign [undefined] to QObject*`.
+    // Both measured. An earlier pass claimed the binding-path refusal was
+    // SILENT and a later one blamed a probe quitting too early; neither
+    // reproduces, so state only the ordering, which does.
     // For a required property that has never held anything, that prior value
     // is null, so every spelling below evaluates false. The consequence worth
     // knowing: if this ever held a real controller and its source later went

@@ -149,6 +149,20 @@ void TestPluauHelpers::stripLayoutEvenAndDegenerate()
             pluau.stripLayout(horiz, 11, 23, 300, 100, 3, 10, true)
             local degen = {}
             pluau.stripLayout(degen, 11, 23, 100, 20, 3, 20, false)
+            -- The degenerate leg above is strictly past the boundary
+            -- ((count-1)*gap = 40 > 20), so it does not pin WHICH side of
+            -- `>=` the equality falls on. This one sits exactly on it:
+            -- (3-1)*150 == 300. `>` was the only mutation of this branch that
+            -- survived the three legs above; this leg closes it.
+            local bound = {}
+            pluau.stripLayout(bound, 11, 23, 100, 300, 3, 150, false)
+            -- count == 1 is the ONLY shape the only production consumer
+            -- produces: floating-center.luau's two side-strip calls are each
+            -- guarded by `> 0` on a count that can only be 0 or 1. So the
+            -- multi-slot legs above have no production caller, and this one
+            -- carries the whole real path. It must be an exact identity.
+            local one = {}
+            pluau.stripLayout(one, 11, 23, 100, 300, 1, 10, false)
             return {
                 vertLen = #vert, vertW = vert[1].width, vertX = vert[1].x,
                 vertY1 = vert[1].y, vertY2 = vert[2].y, vertY3 = vert[3].y,
@@ -159,13 +173,17 @@ void TestPluauHelpers::stripLayoutEvenAndDegenerate()
                 degenLen = #degen,
                 degenH1 = degen[1].height, degenH2 = degen[2].height, degenH3 = degen[3].height,
                 degenX = degen[1].x, degenY = degen[1].y, degenW = degen[1].width,
+                boundH1 = bound[1].height, boundH2 = bound[2].height, boundH3 = bound[3].height,
+                boundY1 = bound[1].y, boundY2 = bound[2].y, boundY3 = bound[3].y,
+                oneLen = #one, oneX = one[1].x, oneY = one[1].y, oneW = one[1].width, oneH = one[1].height,
             }
         end }
     )LUA";
     const QVariantMap r = run(body).toMap();
     VERIFY_KEYS(r, "vertLen", "vertW", "vertX", "vertY1", "vertY2", "vertY3", "vertH1", "vertH3", "horizLen", "horizH",
                 "horizY", "horizX1", "horizX2", "horizX3", "horizW1", "horizW3", "degenLen", "degenH1", "degenH2",
-                "degenH3", "degenX", "degenY", "degenW");
+                "degenH3", "degenX", "degenY", "degenW", "boundH1", "boundH2", "boundH3", "boundY1", "boundY2",
+                "boundY3", "oneLen", "oneX", "oneY", "oneW", "oneH");
     // Vertical strip: fixed width = panelW, fixed x = startX, height distributed
     // down from startY. 300 less two 10px gaps is 280; 280/3 is 93 remainder 1,
     // and the remainder lands on the LAST cell, so heights are 93, 93, 94 and
@@ -196,6 +214,25 @@ void TestPluauHelpers::stripLayoutEvenAndDegenerate()
     QCOMPARE(r.value(QStringLiteral("degenX")).toInt(), 11);
     QCOMPARE(r.value(QStringLiteral("degenY")).toInt(), 23);
     QCOMPARE(r.value(QStringLiteral("degenW")).toInt(), 100);
+    // Exactly ON the boundary the guard spells `>=`: equality takes the
+    // DEGENERATE branch, so all three are full-height fills stacked at startY.
+    // With `>` it would fall through to the even branch and give three 1px
+    // slivers at y 23/172/321 instead, which is what this pins.
+    QCOMPARE(r.value(QStringLiteral("boundH1")).toInt(), 100);
+    QCOMPARE(r.value(QStringLiteral("boundH2")).toInt(), 100);
+    QCOMPARE(r.value(QStringLiteral("boundH3")).toInt(), 100);
+    QCOMPARE(r.value(QStringLiteral("boundY1")).toInt(), 23);
+    QCOMPARE(r.value(QStringLiteral("boundY2")).toInt(), 23);
+    QCOMPARE(r.value(QStringLiteral("boundY3")).toInt(), 23);
+    // Exact identity: one zone, the panel verbatim. distributeEvenly takes its
+    // count==1 early return here, and mutating that return changes 16446 of
+    // 31680 floating-center configurations, all of which shipped green before
+    // this leg existed.
+    QCOMPARE(r.value(QStringLiteral("oneLen")).toInt(), 1);
+    QCOMPARE(r.value(QStringLiteral("oneX")).toInt(), 11);
+    QCOMPARE(r.value(QStringLiteral("oneY")).toInt(), 23);
+    QCOMPARE(r.value(QStringLiteral("oneW")).toInt(), 100);
+    QCOMPARE(r.value(QStringLiteral("oneH")).toInt(), 300);
 }
 
 void TestPluauHelpers::resizeRatio()
@@ -371,11 +408,24 @@ void TestPluauHelpers::minSizeAt()
             local w1, h1 = pluau.minSizeAt(ms, 1)
             local w5, h5 = pluau.minSizeAt(ms, 5)
             local we, he = pluau.minSizeAt({}, 0)
-            return { w0 = w0, h0 = h0, w1 = w1, h1 = h1, w5 = w5, h5 = h5, we = we, he = he }
+            -- A NEGATIVE entry: w1 above uses 0, which the `and entry.w or 0`
+            -- fallback already yields, so it cannot tell the `> 0` filter from
+            -- no filter at all. -5 can.
+            local wNeg, hNeg = pluau.minSizeAt({ { w = -5, h = -7 } }, 0)
+            -- A SPARSE array, where #ms stops short of a populated index. w5
+            -- above reads past a DENSE array, which yields nil and is caught by
+            -- the `and entry` term, so it exercises the nil path rather than
+            -- the `i < #minSizes` bound. This does.
+            local sparse = {}
+            sparse[1] = { w = 10, h = 10 }
+            sparse[3] = { w = 99, h = 99 }
+            local wSp, hSp = pluau.minSizeAt(sparse, 2)
+            return { w0 = w0, h0 = h0, w1 = w1, h1 = h1, w5 = w5, h5 = h5, we = we, he = he,
+                     wNeg = wNeg, hNeg = hNeg, wSp = wSp, hSp = hSp }
         end }
     )LUA";
     const QVariantMap r = run(body).toMap();
-    VERIFY_KEYS(r, "w0", "h0", "w1", "h1", "w5", "h5", "we", "he");
+    VERIFY_KEYS(r, "w0", "h0", "w1", "h1", "w5", "h5", "we", "he", "wNeg", "hNeg", "wSp", "hSp");
     QCOMPARE(r.value(QStringLiteral("w0")).toInt(), 200);
     QCOMPARE(r.value(QStringLiteral("h0")).toInt(), 150);
     QCOMPARE(r.value(QStringLiteral("w1")).toInt(), 0); // w = 0 is not > 0
@@ -384,6 +434,14 @@ void TestPluauHelpers::minSizeAt()
     QCOMPARE(r.value(QStringLiteral("h5")).toInt(), 0);
     QCOMPARE(r.value(QStringLiteral("we")).toInt(), 0); // empty minSizes
     QCOMPARE(r.value(QStringLiteral("he")).toInt(), 0);
+    // Without the `> 0` filter these would be -5 / -7 and a negative minimum
+    // would propagate into the layout arithmetic.
+    QCOMPARE(r.value(QStringLiteral("wNeg")).toInt(), 0);
+    QCOMPARE(r.value(QStringLiteral("hNeg")).toInt(), 0);
+    // Without the `i < #minSizes` bound this would read sparse[3] and return
+    // 99 / 99 for an index the array does not densely cover.
+    QCOMPARE(r.value(QStringLiteral("wSp")).toInt(), 0);
+    QCOMPARE(r.value(QStringLiteral("hSp")).toInt(), 0);
 }
 
 void TestPluauHelpers::gridShape()

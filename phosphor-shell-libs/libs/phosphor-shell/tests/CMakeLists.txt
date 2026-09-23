@@ -106,10 +106,9 @@ set_tests_properties(test_phosphorshell_panelwindow_setters PROPERTIES
     LABELS "phosphorshell"
 )
 
-# Workspaces singleton + its list model. Talks to the real session bus, so
-# it exercises the compositor branch on a KWin desktop and the
-# no-compositor branch on a headless runner, skipping whichever did not
-# apply.
+# Workspaces singleton + its list model. Isolated onto the private bus like
+# every other test here, so under ctest it always takes the no-compositor
+# branch, on a KWin desktop as much as on CI.
 add_executable(test_phosphorshell_workspaces test_workspaces.cpp)
 target_link_libraries(test_phosphorshell_workspaces
     PRIVATE
@@ -131,6 +130,10 @@ target_link_libraries(test_phosphorshell_placementmapparser
 )
 add_test(NAME test_phosphorshell_placementmapparser COMMAND test_phosphorshell_placementmapparser)
 phosphorshell_isolate_test(test_phosphorshell_placementmapparser "QT_QPA_PLATFORM=offscreen")
+set_tests_properties(test_phosphorshell_placementmapparser PROPERTIES LABELS "phosphorshell")
+
+# Workspaces isolation, deliberately here rather than beside its add_test
+# above: interleaving the two is what left placementmapparser unlabelled.
 phosphorshell_isolate_test(test_phosphorshell_workspaces "QT_QPA_PLATFORM=offscreen")
 # TIMEOUT set AFTER the isolation call, which only supplies its 120s default
 # when no TIMEOUT is set yet — last write wins.

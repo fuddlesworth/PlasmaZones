@@ -158,7 +158,7 @@ present tense, reverse leg described.
   so import the function and call it on your set and profile files, passing the NEW theme
   curves' file stems as `shipped_curves`, or every `<theme>-settle` reference reports
   unresolved.
-- Motion set: run the mechanical both-halves check from `references/profiles.md`
+- Motion set: run the mechanical both-halves check from `profiles.md`
   ("Motion set: rules that bite") and paste its output. A set that quietly carries no packs
   applies cleanly, changes the durations, and leaves every animation on the pack it already
   had, with no error anywhere to notice.

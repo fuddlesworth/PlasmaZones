@@ -469,13 +469,13 @@ def prose_problems(s: str) -> list[str]:
     # scope, and that does not stop being true because the snippet is rendered
     # in a label.
     s = "\n".join(ln for ln in s.split("\n") if not ln.lstrip().startswith("#"))
-    core = s.strip()
     # Backticked code is out of scope for ALL THREE punctuation arms, not just
     # the semicolon one: CLAUDE.md puts code out of scope generally, and a
     # `--flag - value` or an em-dash inside a quoted command is code the reader
     # must see verbatim. Strip once, up front, and test every arm against the
     # stripped copy.
     without_code = re.sub(r"`[^`]*`", "", s)
+    core = without_code.strip()
     if "—" in without_code or "&mdash;" in without_code:
         if not is_title_separator(core):
             problems.append("em-dash splice; write two sentences or join with a plain word")

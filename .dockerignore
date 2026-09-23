@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 # build*, not build: CMakePresets.json creates build-release/ and
 # build-relwithdebinfo/, and a dev tree also carries build-nounity/ and
 # build-off/. All of them were being uploaded into the build context.
