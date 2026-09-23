@@ -15,6 +15,12 @@ FocusScope {
     readonly property int selectedIndex: windows.findIndex(w => w.windowId === selectedId)
     readonly property var selectedWindow: selectedIndex >= 0 ? windows[selectedIndex] : null
     readonly property bool scrolling: map && map.mode === 2
+    readonly property bool verticalScrolling: scrolling && !!(map.lens && map.lens.vertical)
+    readonly property int firstVisibleWindowIndex: {
+        const index = windows.findIndex(w => !w.offscreen && !w.minimized);
+        return Math.max(0, index);
+    }
+    readonly property int visibleWindowCount: Math.max(1, windows.filter(w => !w.offscreen && !w.minimized).length)
     readonly property bool wide: width >= 540
     signal activated(string windowId)
     implicitWidth: 654
@@ -130,34 +136,36 @@ FocusScope {
                 anchors.fill: parent
                 anchors.margins: 5
                 visible: root.scrolling
-                orientation: ListView.Horizontal
+                orientation: root.verticalScrolling ? ListView.Vertical : ListView.Horizontal
                 spacing: 8
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
                 model: root.scrolling ? root.windows : []
                 ScrollBar.horizontal: ScrollBar {
-                    policy: ScrollBar.AlwaysOn
+                    policy: root.verticalScrolling ? ScrollBar.AlwaysOff : ScrollBar.AlwaysOn
                     height: 5
+                }
+                ScrollBar.vertical: ScrollBar {
+                    policy: root.verticalScrolling ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
+                    width: 5
                 }
                 delegate: WindowMapCard {
                     required property var modelData
                     required property int index
-                    width: 104
-                    height: 196
+                    width: root.verticalScrolling ? Math.max(104, strip.width - 10) : 104
+                    height: root.verticalScrolling ? 104 : 196
                     colorIndex: modelData.colorIndex >= 0 ? modelData.colorIndex : index
                     windowInfo: modelData
+                    row: root.verticalScrolling
                     selected: root.selectedId === modelData.windowId
                     onClicked: root.choose(index)
                 }
                 Rectangle {
                     parent: strip.contentItem
-                    x: {
-                        const index = root.windows.findIndex(w => !w.offscreen && !w.minimized);
-                        return Math.max(0, index) * 112 - 2;
-                    }
-                    y: -2
-                    width: Math.max(1, root.windows.filter(w => !w.offscreen && !w.minimized).length) * 112 - 4
-                    height: 204
+                    x: root.verticalScrolling ? -2 : root.firstVisibleWindowIndex * 112 - 2
+                    y: root.verticalScrolling ? root.firstVisibleWindowIndex * 112 - 2 : -2
+                    width: root.verticalScrolling ? Math.max(1, strip.width - 4) : root.visibleWindowCount * 112 - 4
+                    height: root.verticalScrolling ? root.visibleWindowCount * 112 - 4 : 204
                     visible: root.windows.length > 0
                     radius: 8
                     color: "transparent"

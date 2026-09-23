@@ -503,12 +503,20 @@ PanelWindow {
         return Qt.rect(p.x, p.y, c.width, c.height);
     }
     readonly property real _paneW: Math.min(panel._paneWidthEff, panel.width - 2 * Appearance.gap)
+    // Keep the map pane's geometry latched while its close animation is in
+    // flight. `mapPaneOpen` is cleared synchronously when the close starts,
+    // but the surface remains visible until `_paneProgress` reaches zero.
+    // Using the kept Loader state here prevents the pane from re-evaluating
+    // as a bar-anchored host pane for the final frames (which made it jump
+    // to the right before disappearing).
+    readonly property bool _mapPaneDisplayed: mapContent.showing
     // The map pane is as deep as its content; the host's pane takes the
-    // reserved depth.
-    readonly property int _paneDepthEff: panel.mapPaneOpen && mapContent.item && mapContent.item.implicitHeight > 0 ? Math.min(panel._usablePaneDepth, Math.round(mapContent.item.implicitHeight)) : panel._usablePaneDepth
-    // Right-aligned under the chip, clamped to the screen: a trailing chip
-    // gets a pane that ends where the chip ends.
-    readonly property real _paneX: panel.mapPaneOpen ? Math.round((panel.width - panel._paneW) / 2) : Math.max(Appearance.gap, Math.min(panel.width - panel._paneW - Appearance.gap, panel._anchorCenterX + Tokens.spacing_l - panel._paneW))
+    // reserved depth. Keep the map content height through close as well as
+    // open so the collapsing surface does not resize underneath it.
+    readonly property int _paneDepthEff: panel._mapPaneDisplayed && mapContent.item && mapContent.item.implicitHeight > 0 ? Math.min(panel._usablePaneDepth, Math.round(mapContent.item.implicitHeight)) : panel._usablePaneDepth
+    // Center the map pane while it is displayed (including its close
+    // animation). A host pane remains right-aligned under its chip.
+    readonly property real _paneX: panel._mapPaneDisplayed ? Math.round((panel.width - panel._paneW) / 2) : Math.max(Appearance.gap, Math.min(panel.width - panel._paneW - Appearance.gap, panel._anchorCenterX + Tokens.spacing_l - panel._paneW))
     readonly property real _paneT: Spectrum.tForX(panel._paneX + panel._paneW / 2, panel.width)
 
     // The tether: rail hue at the chip's x, dropping from the rail to the

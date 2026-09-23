@@ -122,6 +122,26 @@ TestCase {
         keyClick(Qt.Key_Home);
         compare(nav.selectedId, "w0");
     }
+    function test_verticalScrollingUsesVerticalWindowStrip() {
+        const map = populate(6);
+        map.lens = {
+            x: 0,
+            y: 0,
+            w: 1,
+            h: 0.4,
+            vertical: true
+        };
+        const nav = createTemporaryObject(navigatorComponent, testCase, {
+            map: map
+        });
+        waitForRendering(nav);
+        verify(nav.verticalScrolling);
+        const strip = findChild(nav, "windowStrip");
+        compare(strip.orientation, ListView.Vertical);
+        verify(strip.itemAtIndex(0).row);
+        compare(strip.itemAtIndex(0).height, 104);
+        verify(strip.contentHeight > strip.height);
+    }
     function test_selectionSurvivesRefreshAndRecoversFromClosedWindow() {
         const map = populate(10);
         const nav = createTemporaryObject(navigatorComponent, testCase, {
