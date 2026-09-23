@@ -18,8 +18,6 @@
 #include "SocketPopoutTransport.h"
 #include "ToastController.h"
 
-#include "daemon/rendering/surfaceshaderitem.h"
-
 #include <PhosphorShellLauncher/LauncherModel.h>
 #include <PhosphorShellPicker/RetintController.h>
 #include <PhosphorTheme/PaletteStore.h>
@@ -370,10 +368,9 @@ int main(int argc, char* argv[])
     PhosphorShellApp::ShellGestures shellGestures;
 
     // Surface packs on the chrome: the decoration tree and the pack
-    // registry behind every DecorationSlot. The chain host is the shared
-    // SurfaceDecoration.qml, whose stages are SurfaceShaderItems, registered
-    // under the same URI the daemon and the settings app use.
-    qmlRegisterType<PlasmaZones::SurfaceShaderItem>("PlasmaZones", 1, 0, "SurfaceShaderItem");
+    // registry behind every DecorationSlot. The chain host is
+    // SurfaceDecoration.qml from the org.phosphor.surface module linked into
+    // this binary, the same host the daemon and the settings app run.
     PhosphorShellApp::ShellChrome shellChrome;
 
     // The pane's window rule, seeded into the daemon's store if absent so

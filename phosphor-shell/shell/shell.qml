@@ -25,7 +25,7 @@ import Phosphor.Service.UPower
 import Phosphor.Shell
 import Phosphor.Theme
 import QtQuick
-import org.plasmazones.common as PZCommon
+import org.phosphor.surface as PhosphorSurface
 
 // Top-level composer for the dogfood shell. Phase 4.1 replaces the old
 // single TopPanel + pushed-in data sources with the production bar:
@@ -72,7 +72,7 @@ Item {
     Component {
         id: chromeDecoration
 
-        PZCommon.SurfaceDecoration {
+        PhosphorSurface.SurfaceDecoration {
             property string surfacePath: ""
             property bool focused: true
 

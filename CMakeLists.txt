@@ -372,12 +372,10 @@ include_directories("${CMAKE_BINARY_DIR}/generated")
 #                        effect, bundled data and tests
 #
 # Every tier CMakeLists is entered from here, so the shared Qt/KF6 setup
-# above applies to all of them. Order follows the dependency chain, with
-# one known inversion: phosphor-shell links plasmazones_rendering and
-# plasmazones_shared_qml from the plasmazones tier (ShellChrome draws the
-# surface decoration through them), so it is entered last. Target-based
-# linking resolves at generate time, so the order is documentation, not
-# a constraint.
+# above applies to all of them. Order follows the dependency chain:
+# phosphor, then the shell libraries and the shell, then plasmazones.
+# Target-based linking resolves at generate time, so the order is
+# documentation, not a constraint.
 add_subdirectory(phosphor)
 
 # Canonical list of engine library target names. Consumed by the
@@ -468,13 +466,10 @@ endif()
 
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(phosphor-shell-libs)
+    add_subdirectory(phosphor-shell)
 endif()
 
 add_subdirectory(plasmazones)
-
-if(BUILD_PHOSPHOR_SHELL)
-    add_subdirectory(phosphor-shell)
-endif()
 
 # Custom uninstall target that cleans up directories properly.
 # QT6_INSTALL_PLUGINS repeats phosphor-wayland's QPA install-path derivation

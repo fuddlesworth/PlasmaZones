@@ -43,6 +43,7 @@ add_subdirectory(libs/phosphor-context-resolver) # frozen-snapshot per-screen mo
 add_subdirectory(libs/phosphor-scripting)   # generic embedded Luau host (engine, sandbox, watchdog, marshalling) — vendored extern/luau
 add_subdirectory(libs/phosphor-tiles)       # auto-tiling algorithm primitives (TilingAlgorithm, AlgorithmRegistry, SplitTree)
 add_subdirectory(libs/phosphor-rendering)   # GPU shader rendering via Qt RHI
+add_subdirectory(libs/phosphor-surface-quick) # Qt Quick consumer of surface packs (SurfaceShaderItem + the org.phosphor.surface module) - depends on phosphor-rendering/surface/shaders
 add_subdirectory(libs/phosphor-layer)       # wlr-layer-shell surface lifecycle management
 add_subdirectory(libs/phosphor-shell-patterns) # UI-pattern recipes (axis 2) built on PhosphorLayer::Role
 add_subdirectory(libs/phosphor-shortcuts)   # global shortcut backends + domain-free Registry

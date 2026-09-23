@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "surfaceshaderitem.h"
+#include "PhosphorSurfaceQuick/SurfaceShaderItem.h"
 
-#include "core/platform/logging.h"
+#include <QLoggingCategory>
 
 #include <PhosphorRendering/ShaderEffect.h>
 #include <PhosphorRendering/ShaderNodeRhi.h>
@@ -20,7 +20,9 @@
 #include <memory>
 #include <optional>
 
-namespace PlasmaZones {
+namespace PhosphorSurfaceQuick {
+
+Q_LOGGING_CATEGORY(lcSurfaceQuick, "phosphorsurfacequick")
 
 // ============================================================================
 // Construction / Destruction
@@ -34,7 +36,7 @@ QStringList SurfaceShaderItem::surfaceIncludePaths()
     // user packs but not the shared include. Surface packs install to
     // `plasmazones/surface` (singular; see the install() rule in the top-level
     // CMakeLists), the third pack category beside `plasmazones/overlays` and
-    // `plasmazones/animations`. The daemon warm-bake (daemon.cpp) calls this
+    // `plasmazones/animations`. The plasmazones daemon warm-bake calls this
     // same function — see the header doc for why the two must not diverge.
     const QStringList allSurfaceDirs = QStandardPaths::locateAll(
         QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/surface"), QStandardPaths::LocateDirectory);
@@ -373,13 +375,13 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
             bool loaded = true;
             if (!vertPath.isEmpty()) {
                 if (!node->loadVertexShader(vertPath)) {
-                    qCWarning(PlasmaZones::lcOverlay) << "SurfaceShaderItem: failed to load vertex shader:" << vertPath
-                                                      << "error:" << node->shaderError();
+                    qCWarning(lcSurfaceQuick) << "SurfaceShaderItem: failed to load vertex shader:" << vertPath
+                                              << "error:" << node->shaderError();
                     loaded = false;
                 }
             } else {
-                qCWarning(PlasmaZones::lcOverlay) << "SurfaceShaderItem: no vertex shader found for" << fragPath
-                                                  << "(expected surface.vert in the pack dir or a search path)";
+                qCWarning(lcSurfaceQuick) << "SurfaceShaderItem: no vertex shader found for" << fragPath
+                                          << "(expected surface.vert in the pack dir or a search path)";
                 loaded = false;
             }
 
@@ -437,4 +439,4 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
     return node;
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorSurfaceQuick

@@ -52,7 +52,7 @@ namespace PhosphorSurfaceShaders {
  * Surface shaders support opt-in multipass: when `isMultipass` is set and
  * `bufferShaderPaths` is non-empty, the daemon runs those buffer passes
  * before the main fragment shader. Concretely that is the overlay
- * decoration host (`plasmazones/src/shared/SurfaceDecoration.qml`), whose per-stage
+ * decoration host (phosphor-surface-quick's `SurfaceDecoration.qml`), whose per-stage
  * SurfaceShaderItem inherits the whole multipass property set from
  * PhosphorRendering::ShaderEffect; `OverlayService::applyDecoration`
  * forwards the fields below into each stage. A multipass stage is

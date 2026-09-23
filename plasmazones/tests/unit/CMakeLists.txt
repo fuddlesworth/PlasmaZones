@@ -1024,7 +1024,8 @@ add_test(NAME test_zone_preview_highlight COMMAND test_zone_preview_highlight)
 # runtime hides the nested cause; this fails with the real error instead.
 # plasmazones_rendering supplies ZoneShaderItem, which the test registers under
 # "PlasmaZones 1.0" (mirroring the daemon/editor composition roots) so
-# ZoneShaderRenderer's `import PlasmaZones` resolves.
+# ZoneShaderRenderer's `import PlasmaZones` resolves. The SurfaceDecoration
+# canary moved with the host to phosphor-surface-quick's test_surfaceshaderitem.
 add_executable(test_shared_module_load ui/test_shared_module_load.cpp)
 target_link_libraries(test_shared_module_load PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick plasmazones_shared_qmlplugin plasmazones_rendering)
 add_test(NAME test_shared_module_load COMMAND test_shared_module_load)
@@ -1042,15 +1043,17 @@ add_executable(test_shader_node_teardown ui/zones/test_shader_node_teardown.cpp)
 target_link_libraries(test_shader_node_teardown PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Quick Qt6::GuiPrivate PhosphorRendering)
 add_test(NAME test_shader_node_teardown COMMAND test_shader_node_teardown)
 
-add_executable(test_surface_shader_item ui/zones/test_surface_shader_item.cpp)
-# Qt6::Qml as well as Quick: one slot drives the item's wallpaperTexture from a
-# real QML binding, which is the only shape that reproduces the silent write
-# failure a QImage-typed property had.
-target_link_libraries(test_surface_shader_item PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::GuiPrivate plasmazones_rendering)
-# P_SOURCE_DIR: one slot sweeps the two QML hosts to keep them off the binding
-# shapes that silently drop a QImage on the way to the item.
-target_compile_definitions(test_surface_shader_item PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
-add_test(NAME test_surface_shader_item COMMAND test_surface_shader_item)
+# The cross-item QML binding contract: a Binding element wipes the image a
+# shader item takes through a QVariant property, so one slot sweeps every
+# shipping .qml under plasmazones/src (P_SOURCE_DIR) for that shape. The
+# SurfaceShaderItem unit tests live with the item in phosphor-surface-quick;
+# this links its C++ library only for the item's metaobject and the wipe
+# demonstration. Qt6::Qml as well as Quick: the demonstrations run a real QML
+# binding, the only shape that reproduces the silent write failure.
+add_executable(test_shader_item_qml_bindings ui/zones/test_shader_item_qml_bindings.cpp)
+target_link_libraries(test_shader_item_qml_bindings PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::GuiPrivate plasmazones_rendering PhosphorSurfaceQuick::PhosphorSurfaceQuick)
+target_compile_definitions(test_shader_item_qml_bindings PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+add_test(NAME test_shader_item_qml_bindings COMMAND test_shader_item_qml_bindings)
 
 # Pure-data byte-layout test for the zone UBO extension. No GPU / scene graph
 # required - guards against silent C++/GLSL UBO drift after a struct refactor.
@@ -2642,7 +2645,10 @@ target_link_libraries(test_surface_decoration_orientation
         Qt6::Gui
         Qt6::Qml
         Qt6::Quick
-        plasmazones_rendering
+        # The STATIC org.phosphor.surface module and its plugin: the replica
+        # scene imports the module for its SurfaceShaderItem stages.
+        PhosphorSurfaceQuick::PhosphorSurfaceQuickQml
+        PhosphorSurfaceQuickQmlplugin
         PhosphorSurface::PhosphorSurface
         PhosphorProtocol::PhosphorProtocol
 )

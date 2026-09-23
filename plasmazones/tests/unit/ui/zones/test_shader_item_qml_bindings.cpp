@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "daemon/rendering/surfaceshaderitem.h"
-
 #include "daemon/rendering/zoneshaderitem.h"
+
+#include <PhosphorSurfaceQuick/SurfaceShaderItem.h>
 #include <PhosphorRendering/ZoneLabelTexture.h>
 
 #include <QColor>
@@ -28,7 +28,8 @@
 #include <QVector4D>
 #include <qqml.h>
 
-using namespace PlasmaZones;
+using PhosphorSurfaceQuick::SurfaceShaderItem;
+using PlasmaZones::ZoneShaderItem;
 
 namespace {
 
@@ -175,8 +176,7 @@ QStringList bindingElementSpans(const QString& src)
 QStringList guardedProperties()
 {
     QSet<QString> names;
-    for (const QMetaObject* mo :
-         {&PlasmaZones::SurfaceShaderItem::staticMetaObject, &PlasmaZones::ZoneShaderItem::staticMetaObject}) {
+    for (const QMetaObject* mo : {&SurfaceShaderItem::staticMetaObject, &ZoneShaderItem::staticMetaObject}) {
         for (int i = 0; i < mo->propertyCount(); ++i) {
             const QMetaProperty prop = mo->property(i);
             if (prop.metaType().id() != QMetaType::QVariant)
@@ -208,18 +208,17 @@ QStringList shippingQmlFiles()
 } // namespace
 
 /**
- * @brief Unit tests for SurfaceShaderItem
+ * @brief The QML shapes that deliver an image to a shader item, and the sweep
+ *        that keeps the shipping QML on them.
  *
- * SurfaceShaderItem is a QQuickItem (requires QGuiApplication). As with the
- * ZoneShaderItem tests, we exercise only the data layer — construction, the
- * surface-state property surface, inherited param application, and the shader-
- * source status transition — without a scene graph or GPU, so updatePaintNode
- * (which is where the SurfaceUniformProfile-backed node is actually created) is
- * not driven here. The profile wiring is verified structurally: createShaderNode
- * is the only surface-specific node hook and a node-creation test would need a
- * live QQuickWindow on a compositor.
+ * Both shader items (ZoneShaderItem here, SurfaceShaderItem from
+ * phosphor-surface-quick) take an image through a QVariant-typed property, and
+ * a QML Binding element hands that setter an invalid variant. The item-level
+ * unit tests live beside each item; this test owns the cross-item contract:
+ * the source sweep over every .qml under plasmazones/src, and the pinned
+ * demonstrations of the shape that wipes a good payload.
  */
-class TestSurfaceShaderItem : public QObject
+class TestShaderItemQmlBindings : public QObject
 {
     Q_OBJECT
 
@@ -230,171 +229,7 @@ private Q_SLOTS:
         // Type registration is process-global and permanent, so doing it inside
         // a slot makes every later slot's type availability depend on execution
         // order. Once, up front, instead.
-        qmlRegisterType<PlasmaZones::SurfaceShaderItem>("PlasmaZonesTest", 1, 0, "SurfaceShaderItem");
-        qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZonesTest", 1, 0, "ZoneShaderItem");
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════
-    // Construction + surface-state defaults
-    // ═══════════════════════════════════════════════════════════════════════
-
-    void testSurfaceShaderItem_constructsWithIdentityDefaults()
-    {
-        SurfaceShaderItem item;
-
-        // Defaults mirror the UboFrameState surface-only field defaults: an
-        // identity decoration (full scale, unfocused, zero geometry).
-        QVERIFY(qFuzzyCompare(item.surfaceScale(), 1.0));
-        QVERIFY(!item.surfaceFocused());
-        QCOMPARE(item.surfaceSize(), QSizeF());
-        QCOMPARE(item.surfaceFrameTopLeft(), QPointF());
-        QCOMPARE(item.surfaceFrameSize(), QSizeF());
-
-        // No shader assigned yet.
-        QCOMPARE(item.status(), SurfaceShaderItem::Status::Null);
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════
-    // Surface-state setters + change signals
-    // ═══════════════════════════════════════════════════════════════════════
-
-    void testSurfaceShaderItem_surfaceScaleSetterEmitsOnChange()
-    {
-        SurfaceShaderItem item;
-        QSignalSpy spy(&item, &SurfaceShaderItem::surfaceScaleChanged);
-
-        item.setSurfaceScale(2.0);
-        QCOMPARE(spy.count(), 1);
-        QVERIFY(qFuzzyCompare(item.surfaceScale(), 2.0));
-
-        // Re-setting the same value must not emit (emit-only-on-change rule).
-        item.setSurfaceScale(2.0);
-        QCOMPARE(spy.count(), 1);
-    }
-
-    void testSurfaceShaderItem_surfaceFocusedSetterEmitsOnChange()
-    {
-        SurfaceShaderItem item;
-        QSignalSpy spy(&item, &SurfaceShaderItem::surfaceFocusedChanged);
-
-        item.setSurfaceFocused(true);
-        QCOMPARE(spy.count(), 1);
-        QVERIFY(item.surfaceFocused());
-
-        item.setSurfaceFocused(true);
-        QCOMPARE(spy.count(), 1);
-    }
-
-    void testSurfaceShaderItem_surfaceGeometrySettersEmitOnChange()
-    {
-        SurfaceShaderItem item;
-        QSignalSpy sizeSpy(&item, &SurfaceShaderItem::surfaceSizeChanged);
-        QSignalSpy frameTlSpy(&item, &SurfaceShaderItem::surfaceFrameTopLeftChanged);
-        QSignalSpy frameSizeSpy(&item, &SurfaceShaderItem::surfaceFrameSizeChanged);
-
-        item.setSurfaceSize(QSizeF(800, 600));
-        QCOMPARE(sizeSpy.count(), 1);
-        QCOMPARE(item.surfaceSize(), QSizeF(800, 600));
-
-        item.setSurfaceFrameTopLeft(QPointF(4, 8));
-        QCOMPARE(frameTlSpy.count(), 1);
-        QCOMPARE(item.surfaceFrameTopLeft(), QPointF(4, 8));
-
-        item.setSurfaceFrameSize(QSizeF(792, 584));
-        QCOMPARE(frameSizeSpy.count(), 1);
-        QCOMPARE(item.surfaceFrameSize(), QSizeF(792, 584));
-
-        // Idempotent re-sets suppress signals.
-        item.setSurfaceSize(QSizeF(800, 600));
-        item.setSurfaceFrameTopLeft(QPointF(4, 8));
-        item.setSurfaceFrameSize(QSizeF(792, 584));
-        QCOMPARE(sizeSpy.count(), 1);
-        QCOMPARE(frameTlSpy.count(), 1);
-        QCOMPARE(frameSizeSpy.count(), 1);
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════
-    // Inherited base behaviour (shaderParams / status)
-    // ═══════════════════════════════════════════════════════════════════════
-
-    void testSurfaceShaderItem_setShaderParamsAppliesSlots()
-    {
-        // The base setShaderParams maps `customParamsN_<xyzw>` / `customColorN`
-        // (the slot form SurfaceShaderRegistry::translateSurfaceParams emits)
-        // onto the UBO — SurfaceShaderItem does not override it.
-        SurfaceShaderItem item;
-
-        QVariantMap params;
-        params.insert(QStringLiteral("customParams1_x"), 0.42f);
-        params.insert(QStringLiteral("customColor1"), QColor(Qt::blue));
-        item.setShaderParams(params);
-
-        const QVector4D p1 = item.customParams1();
-        QVERIFY(qFuzzyCompare(p1.x(), 0.42f));
-
-        constexpr float kEpsilon = 0.002f;
-        const QColor c1 = item.customColor1();
-        QVERIFY(qAbs(static_cast<float>(c1.blueF()) - 1.0f) < kEpsilon);
-        QVERIFY(qAbs(static_cast<float>(c1.redF())) < kEpsilon);
-    }
-
-    void testSurfaceShaderItem_shaderSourceTransitionsToLoading()
-    {
-        // In headless tests there is no scene graph, so updatePaintNode never
-        // runs and setShaderSource's Loading state never advances to Ready /
-        // Error / Null. Mirrors the ZoneShaderItem headless status test.
-        SurfaceShaderItem item;
-        QCOMPARE(item.status(), SurfaceShaderItem::Status::Null);
-
-        QSignalSpy statusSpy(&item, &SurfaceShaderItem::statusChanged);
-        item.setShaderSource(QUrl::fromLocalFile(QStringLiteral("/nonexistent/effect.frag")));
-        QCOMPARE(item.status(), SurfaceShaderItem::Status::Loading);
-        // Exactly one Null -> Loading transition; headless, updatePaintNode never
-        // runs so no further Ready/Error/Null change can follow to inflate this.
-        QCOMPARE(statusSpy.count(), 1);
-    }
-
-    /// A QML BINDING must actually deliver the backdrop image to the item.
-    ///
-    /// Regression guard, and it has to go through the QML engine rather than
-    /// setProperty(): the property used to be QImage-typed, and a
-    /// `Binding on wallpaperTexture { value: <var holding a QImage> }` wrote
-    /// NOTHING through it — silently, with no engine warning, while a bool
-    /// binding beside it applied. Every decoration preview in the settings app
-    /// therefore ran with uHasBackdrop = 0 and drew its no-backdrop fallback:
-    /// the blur family showed a flat gradient slab where a blurred desktop
-    /// belonged. A C++ setProperty() with an exact-typed QVariant never
-    /// reproduced it, so only a real binding pins the fix.
-    void testSurfaceShaderItem_qmlBindingDeliversTheWallpaperImage()
-    {
-        QImage backdrop(8, 4, QImage::Format_RGBA8888);
-        backdrop.fill(Qt::red);
-
-        QQmlApplicationEngine engine;
-        engine.rootContext()->setContextProperty(QStringLiteral("testBackdrop"), QVariant::fromValue(backdrop));
-
-        // A DIRECT binding, which is the only shape that works and therefore
-        // the only shape the shipping QML is allowed to use — see the sweep in
-        // the slot below.
-        QQmlComponent component(&engine);
-        component.setData(R"QML(
-import QtQuick
-import PlasmaZonesTest 1.0
-Item {
-    property alias direct: a
-    SurfaceShaderItem { id: a; wallpaperTexture: testBackdrop }
-}
-)QML",
-                          QUrl(QStringLiteral("qrc:/test_wallpaper_binding.qml")));
-        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
-        std::unique_ptr<QObject> root(component.create());
-        QVERIFY(root);
-
-        auto* item = root->property("direct").value<PlasmaZones::SurfaceShaderItem*>();
-        QVERIFY(item);
-        const QImage delivered = item->wallpaperTexture();
-        QVERIFY(!delivered.isNull());
-        QCOMPARE(delivered.size(), backdrop.size());
+        qmlRegisterType<ZoneShaderItem>("PlasmaZonesTest", 1, 0, "ZoneShaderItem");
     }
 
     /// No shipping QML may drive a guarded property through a Binding ELEMENT,
@@ -585,7 +420,7 @@ Item {
         QVERIFY(root);
 
         for (const char* which : {"fromPayload", "fromImage"}) {
-            auto* item = root->property(which).value<PlasmaZones::ZoneShaderItem*>();
+            auto* item = root->property(which).value<ZoneShaderItem*>();
             QVERIFY2(item, which);
             QVERIFY2(!item->labelsTexture().isEmpty(), which);
             QCOMPARE(item->labelsTexture().size, glyphs.size());
@@ -599,44 +434,14 @@ Item {
         QImage glyphs(4, 4, QImage::Format_ARGB32_Premultiplied);
         glyphs.fill(Qt::white);
 
-        PlasmaZones::ZoneShaderItem item;
+        ZoneShaderItem item;
         item.setProperty("labelsTexture", QVariant::fromValue(glyphs));
         QVERIFY(!item.labelsTexture().isEmpty());
 
         item.setProperty("labelsTexture", QVariant());
         QVERIFY(item.labelsTexture().isEmpty());
     }
-
-    /// The no-backdrop state is ordinary, not an error: a host with nothing
-    /// behind its surface passes null, and that must resolve to a null image
-    /// rather than warning or leaving a stale one in place.
-    void testSurfaceShaderItem_aNullValueClearsTheWallpaperImage()
-    {
-        QImage backdrop(4, 4, QImage::Format_RGBA8888);
-        backdrop.fill(Qt::blue);
-
-        PlasmaZones::SurfaceShaderItem item;
-        item.setProperty("wallpaperTexture", QVariant::fromValue(backdrop));
-        QVERIFY(!item.wallpaperTexture().isNull());
-
-        item.setProperty("wallpaperTexture", QVariant());
-        QVERIFY(item.wallpaperTexture().isNull());
-    }
-
-    void testSurfaceShaderItem_unsupportedUrlSchemeIsFullyRefused()
-    {
-        // http:// / ftp:// can't be loaded by the RHI pipeline; the base
-        // rejects them at setShaderSource() as a FULL refusal — no state
-        // changes, only a warning — so status, the property value, and the
-        // rendered output always agree (see the zone item's sibling test
-        // for the full rationale).
-        SurfaceShaderItem item;
-        item.setShaderSource(QUrl(QStringLiteral("http://example.com/effect.frag")));
-        QCOMPARE(item.status(), SurfaceShaderItem::Status::Null);
-        QVERIFY(item.errorLog().isEmpty());
-        QVERIFY(item.shaderSource().isEmpty());
-    }
 };
 
-QTEST_MAIN(TestSurfaceShaderItem)
-#include "test_surface_shader_item.moc"
+QTEST_MAIN(TestShaderItemQmlBindings)
+#include "test_shader_item_qml_bindings.moc"

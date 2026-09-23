@@ -17,7 +17,6 @@
 #include "daemon/controllers/shortcutmanager.h"
 #include "daemon/controllers/enginefactory.h"
 #include "daemon/controllers/contextresolverwiring.h"
-#include "daemon/rendering/surfaceshaderitem.h"
 #include "daemon/rendering/zoneentryscaffold.h"
 #include "daemon/rendering/zoneshadernoderhi.h"
 

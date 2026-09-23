@@ -7,11 +7,11 @@
 #include "core/interfaces/shaderregistry.h"
 #include "core/platform/logging.h"
 #include "daemon/overlayservice.h"
-#include "daemon/rendering/surfaceshaderitem.h"
 #include "daemon/rendering/zoneentryscaffold.h"
 #include "daemon/rendering/zoneshadernoderhi.h"
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>
+#include <PhosphorSurfaceQuick/SurfaceShaderItem.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
 #include <PhosphorShaders/ShaderPresetStore.h>
@@ -586,7 +586,7 @@ void Daemon::setupShaderWarmBakes()
                 // vertexShaderPath (and the registry preamble), so a pack that
                 // ships its own vert keys the same vert on both the warm bake
                 // and the live load.
-                const QStringList includePaths = SurfaceShaderItem::surfaceIncludePaths();
+                const QStringList includePaths = PhosphorSurfaceQuick::SurfaceShaderItem::surfaceIncludePaths();
                 QString vertPath = info.vertexShaderPath;
                 if (vertPath.isEmpty()) {
                     const QString besideFrag =
@@ -614,7 +614,7 @@ void Daemon::setupShaderWarmBakes()
                     return;
                 }
                 // Bake WITH the same fragment entry-point scaffold the live loader
-                // installs (surfaceshaderitem.cpp setEntryScaffold), or a
+                // installs (SurfaceShaderItem::updatePaintNode setEntryScaffold), or a
                 // `pSurface()`-only pack bakes its raw main()-less source and fails
                 // to compile, and even a traditional main() pack would key the
                 // cache differently from the scaffolded live load and miss it.
@@ -644,7 +644,8 @@ void Daemon::setupShaderWarmBakes()
                     if (!m_surfaceShaderRegistry) {
                         return;
                     }
-                    const QString includeFp = includeDirsFingerprint(SurfaceShaderItem::surfaceIncludePaths());
+                    const QString includeFp =
+                        includeDirsFingerprint(PhosphorSurfaceQuick::SurfaceShaderItem::surfaceIncludePaths());
                     const QList<PhosphorSurfaceShaders::SurfaceShaderEffect> effects =
                         m_surfaceShaderRegistry->availableEffects();
                     for (const PhosphorSurfaceShaders::SurfaceShaderEffect& info : effects) {
@@ -652,7 +653,8 @@ void Daemon::setupShaderWarmBakes()
                     }
                 });
         {
-            const QString includeFp = includeDirsFingerprint(SurfaceShaderItem::surfaceIncludePaths());
+            const QString includeFp =
+                includeDirsFingerprint(PhosphorSurfaceQuick::SurfaceShaderItem::surfaceIncludePaths());
             for (const PhosphorSurfaceShaders::SurfaceShaderEffect& info :
                  m_surfaceShaderRegistry->availableEffects()) {
                 scheduleWarmForSurfaceEffect(info, includeFp);

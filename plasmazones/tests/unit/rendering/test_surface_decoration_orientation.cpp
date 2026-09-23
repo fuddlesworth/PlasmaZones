@@ -71,7 +71,7 @@
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 
-#include "daemon/rendering/surfaceshaderitem.h"
+#include <PhosphorSurfaceQuick/SurfaceShaderItem.h>
 
 using PhosphorSurfaceShaders::SurfaceShaderRegistry;
 
@@ -139,9 +139,9 @@ private:
 // Minimal replica of SurfaceDecoration.qml's capture + stage fold: gradient
 // card -> hideSource snapshot -> stage 0 (border) -> tap -> stage 1 (shadow).
 // Kept in-source so the test is self-contained; the structural contract it
-// mirrors is documented in src/shared/SurfaceDecoration.qml.
+// mirrors is documented in phosphor-surface-quick's SurfaceDecoration.qml.
 constexpr auto kSceneQml = R"(
-import PlasmaZones 1.0
+import org.phosphor.surface
 import QtQuick
 
 Item {
@@ -466,9 +466,6 @@ int main(int argc, char** argv)
     // (Vulkan never flips), so the scene graph is pinned to GL for this test.
     qputenv("QSG_RHI_BACKEND", QByteArrayLiteral("opengl"));
     QGuiApplication app(argc, argv);
-    // Same manual registration the daemon performs in main.cpp — the type
-    // lives in plasmazones_rendering, no qt_add_qml_module target exists.
-    qmlRegisterType<PlasmaZones::SurfaceShaderItem>("PlasmaZones", 1, 0, "SurfaceShaderItem");
     // Snapshot the session bus before any window maps so the reaper can tell
     // which PlasmaZones services THIS run activates (header comment, OPT-IN
     // paragraph).

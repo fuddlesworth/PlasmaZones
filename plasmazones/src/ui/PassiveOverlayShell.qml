@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
+import org.phosphor.surface as PhosphorSurface
 import org.plasmazones.common as QFZCommon
 
 /**
@@ -388,7 +389,7 @@ Window {
         // "osd" surface pack (rounded corners + border), suppressing the card's
         // own square-cornered direct draw via the snapshot's hideSource. Inert
         // when decorationShaderSource is empty — the card then draws natively.
-        QFZCommon.SurfaceDecoration {
+        PhosphorSurface.SurfaceDecoration {
             anchors.fill: parent
             contentItem: osdLoader.item
             decorationChain: osdSlot.decorationChain
@@ -710,7 +711,7 @@ Window {
         // Captures the loaded content's PopupFrame shaderAnchor and re-renders it
         // through the resolved "popup.zoneSelector" surface pack. Inert when the
         // source is empty.
-        QFZCommon.SurfaceDecoration {
+        PhosphorSurface.SurfaceDecoration {
             anchors.fill: parent
             contentItem: zoneSelectorLoader.item
             decorationChain: zoneSelectorSlot.decorationChain

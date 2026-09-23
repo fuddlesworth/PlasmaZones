@@ -41,7 +41,7 @@ PHOSPHORSURFACE_EXPORT double paddingRequest(const SurfaceShaderEffect& effect, 
 /**
  * @brief Build the QML stage map for one surface-shader chain stage.
  *
- * The shape `plasmazones/src/shared/SurfaceDecoration.qml` consumes, one entry per resolved
+ * The shape phosphor-surface-quick's `SurfaceDecoration.qml` consumes, one entry per resolved
  * pack: `source` / `vertexSource` (file:// urls), `preamble` (the generated
  * `#define p_<id> …` block), `params` (the translated
  * `customParamsN_*` / `customColorN` slot map), `animated` (gates that

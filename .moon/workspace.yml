@@ -24,18 +24,20 @@ vcs:
 
 constraints:
   # moon refuses an application depending on an application, which is the
-  # product order this workspace is meant to enforce. phosphor-shell still
-  # links plasmazones_rendering, plasmazones_shared_qml and
-  # plasmazones_shared_qmlplugin (see phosphor-shell/moon.yml), so
-  # enforcement is off until all three move into a phosphor library.
+  # product order this workspace enforces: phosphor-shell and plasmazones are
+  # both applications and neither may list the other in dependsOn. The shell
+  # used to link three plasmazones targets for its surface decoration; those
+  # now live in phosphor/libs/phosphor-surface-quick.
   #
-  # There is a SECOND inversion that no dependsOn records, so turning this
-  # back on would not catch it: three tier-1 tests read tier-4 data at
-  # runtime (phosphor-animation and phosphor-pointer read
-  # plasmazones/data/{animations,pointer}). phosphor/moon.yml carries
-  # workspace-relative inputs for them instead, because a dependsOn in that
-  # direction would cycle. Both have to go before enforcement means anything.
-  enforceLayerRelationships: false
+  # What this does NOT police: runtime data reads that no dependsOn records.
+  # Three tier-1 tests read tier-4 data (phosphor-animation and
+  # phosphor-pointer read plasmazones/data/{animations,pointer}) and the
+  # shell tests read plasmazones/data/surface. Each project's moon.yml
+  # carries workspace-relative test inputs for them instead, because a
+  # dependsOn in that direction would cycle. Those are input edges for
+  # affected-ness, not layer edges, so enforcement stays meaningful for the
+  # link graph while they remain.
+  enforceLayerRelationships: true
 
 hasher:
   # Walk the git index rather than the filesystem. This is a SPEED choice, not

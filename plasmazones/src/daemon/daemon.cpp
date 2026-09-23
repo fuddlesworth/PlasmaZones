@@ -29,7 +29,6 @@
 #include "overlayservice.h"
 #include "controllers/unifiedlayoutcontroller.h"
 #include "controllers/shortcutmanager.h"
-#include "rendering/surfaceshaderitem.h"
 #include "rendering/zoneentryscaffold.h"
 #include "rendering/zoneshadernoderhi.h"
 #include <PhosphorIdentity/VirtualScreenId.h>

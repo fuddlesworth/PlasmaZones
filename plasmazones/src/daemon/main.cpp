@@ -9,7 +9,6 @@
 #include "core/platform/logging.h"
 #include "core/utils/translationloader.h"
 #include "phosphor_i18n.h"
-#include "rendering/surfaceshaderitem.h"
 #include "rendering/zoneshaderitem.h"
 #include "version.h"
 #include "rendering/vulkansupport.h"
@@ -318,13 +317,12 @@ int main(int argc, char* argv[])
     // shader item (the item's ctor registers the ZoneLabelTexture metatype +
     // QImage converter).
     qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
-
-    // Register SurfaceShaderItem (per-surface decoration layer) for QML.
-    // Same module URI/version as ZoneShaderItem. The on-screen host is
-    // SurfaceDecoration.qml, driven by OverlayService::applyDecoration on the
-    // OSD / popup surfaces (Stage d); the per-application-window host lives in
-    // the kwin-effect (renderSurfaceChainComposite), not in this process.
-    qmlRegisterType<PlasmaZones::SurfaceShaderItem>("PlasmaZones", 1, 0, "SurfaceShaderItem");
+    // SurfaceShaderItem (the per-surface decoration layer) needs no
+    // registration here: it ships in the org.phosphor.surface module linked
+    // into this binary, beside the SurfaceDecoration.qml host that
+    // OverlayService::applyDecoration drives on the OSD / popup surfaces. The
+    // per-application-window host lives in the kwin-effect
+    // (renderSurfaceChainComposite), not in this process.
 
     // Set up application metadata
     // applicationName is the KGlobalAccel component key — must match plasmazonesd.desktop

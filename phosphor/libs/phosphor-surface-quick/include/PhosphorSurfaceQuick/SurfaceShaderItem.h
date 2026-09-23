@@ -1,28 +1,29 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
 
 #include <PhosphorRendering/ShaderEffect.h>
 
-#include <plasmazones_rendering_export.h>
+#include <PhosphorSurfaceQuick/phosphorsurfacequick_export.h>
 #include <QPointF>
 #include <QRectF>
 #include <QSizeF>
+#include <qqmlregistration.h>
 
 QT_BEGIN_NAMESPACE
 class QSGNode;
 QT_END_NAMESPACE
 
-namespace PlasmaZones {
+namespace PhosphorSurfaceQuick {
 
 /**
  * @brief QQuickItem for rendering a per-window surface-decoration layer with a
  *        custom shader (border / rounded corners / focus tint / glow).
  *
- * The daemon-side Qt-RHI consumer for the third shader-pack category
- * (`plasmazones/surface`), sibling to ZoneShaderItem (overlay zone backgrounds)
- * and the animation transition runtime. Like ZoneShaderItem it inherits from
+ * The Qt Quick consumer for the third shader-pack category
+ * (`plasmazones/surface`), sibling to the plasmazones ZoneShaderItem (overlay
+ * zone backgrounds) and the animation transition runtime. Like ZoneShaderItem it inherits from
  * PhosphorRendering::ShaderEffect, which provides all base shader rendering:
  * Shadertoy uniforms, custom params/colors, user textures, multipass, status,
  * and the createShaderNode() / syncBasePropertiesToNode() seam.
@@ -42,20 +43,19 @@ namespace PlasmaZones {
  * The surface-state inputs below (scale / focus / geometry) map to the
  * surface-only fields of PhosphorShaders::UboFrameState that
  * SurfaceUniformProfile::fill() reads. They are the binding surface a QML
- * surface host will drive. `src/shared/SurfaceDecoration.qml` is that host and
- * drives all of them per stage; the UboFrameState defaults (scale 1.0,
+ * surface host will drive. `qml/SurfaceDecoration.qml` in this library is that
+ * host and drives all of them per stage; the UboFrameState defaults (scale 1.0,
  * unfocused, zero geometry) are the safe identity a host that binds nothing
  * gets.
  *
- * Registered manually via qmlRegisterType under the "PlasmaZones" module URI
- * (same as ZoneShaderItem), in BOTH daemon/main.cpp and settings/main.cpp, so
- * the shared SurfaceDecoration.qml host resolves in either process —
- * QML_ELEMENT here would be inert (no qt_add_qml_module target exists) and
- * misleading.
+ * Registered as `SurfaceShaderItem` in the `org.phosphor.surface` QML module
+ * (QML_NAMED_ELEMENT below), the same module that ships SurfaceDecoration.qml,
+ * so any process that links the module's plugin resolves both together.
  */
-class PLASMAZONES_RENDERING_EXPORT SurfaceShaderItem : public PhosphorRendering::ShaderEffect
+class PHOSPHORSURFACEQUICK_EXPORT SurfaceShaderItem : public PhosphorRendering::ShaderEffect
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(SurfaceShaderItem)
 
     /** Logical→device pixel scale for the decorated surface. Maps to
      * UboFrameState::surfaceScale (the shader's `uSurfaceScale`). */
@@ -88,7 +88,7 @@ public:
     /// The canonical surface-shader include-path list, highest priority first:
     /// every XDG `plasmazones/surface` dir (user first, system descending, via
     /// locateAll), each contributing its `shared` subdir then itself. Shared
-    /// by this item's constructor AND the daemon's warm-bake (daemon.cpp) so
+    /// by this item's constructor AND the plasmazones daemon's warm-bake so
     /// the bake-cache key the warm compile writes is guaranteed to be the one
     /// the first live paint looks up — the two paths cannot silently diverge.
     static QStringList surfaceIncludePaths();
@@ -198,4 +198,4 @@ private:
     void syncBackdropRect(PhosphorRendering::ShaderNodeRhi* node) const;
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorSurfaceQuick

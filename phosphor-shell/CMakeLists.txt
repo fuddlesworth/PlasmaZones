@@ -5,14 +5,10 @@
 # the bundled shell QML tree and the shell unit tests. Entered from the
 # root CMakeLists only when BUILD_PHOSPHOR_SHELL is ON.
 #
-# Known tier inversion: the binary links plasmazones_rendering,
-# plasmazones_shared_qml AND plasmazones_shared_qmlplugin (ShellChrome hosts
-# SurfaceDecoration.qml and the SurfaceShaderItem stage), and
-# plasmazones_rendering carries plasmazones_core with it. Until those three
-# move into a phosphor library, this tier depends on the plasmazones tier.
-# Moving them is necessary but not sufficient to re-enable layer enforcement:
-# see .moon/workspace.yml for the second inversion, tier-1 tests reading
-# tier-4 data.
+# This tier links nothing from the plasmazones tier. ShellChrome hosts the
+# surface decoration through phosphor-surface-quick (SurfaceShaderItem and
+# the org.phosphor.surface module), which is what lets the moon workspace
+# enforce the tier order.
 
 add_subdirectory(cli/phosphorctl)       # phosphorctl call / list / schema / subscribe
 
@@ -155,14 +151,13 @@ target_link_libraries(phosphor-shell
         # ShellChrome: the decoration tree + pack registry (PhosphorSurface), the
         # preset store it flattens through (PhosphorShaders — declared rather than
         # taken transitively, because ShellChrome.h includes ShaderPresetStore.h and
-        # holds one by unique_ptr), the SurfaceShaderItem stage
-        # (plasmazones_rendering) and the shared SurfaceDecoration.qml host
-        # (org.plasmazones.common) that draws a pack chain on the chrome.
+        # holds one by unique_ptr), and the org.phosphor.surface module: the
+        # SurfaceDecoration.qml host that draws a pack chain on the chrome and
+        # the SurfaceShaderItem stages it runs.
         PhosphorShaders::PhosphorShaders
         PhosphorSurface::PhosphorSurface
-        plasmazones_rendering
-        plasmazones_shared_qml
-        plasmazones_shared_qmlplugin
+        PhosphorSurfaceQuick::PhosphorSurfaceQuickQml
+        PhosphorSurfaceQuickQmlplugin
         # ShellMotion owns the profile registry behind SettleAnimation
         # and publishes the QML-side motion defaults.
         PhosphorAnimation::PhosphorAnimation

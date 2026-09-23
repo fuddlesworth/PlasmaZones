@@ -61,7 +61,7 @@ Shared placement policy lives in `phosphor/libs/phosphor-engine`. A verdict from
 - Only emit signals when value actually changes
 - Parent-based ownership for QObjects; `std::unique_ptr`/`QPointer` otherwise; never manual delete
 - Forward declare in headers; group includes: own header → project → KDE → Qt
-- `PLASMAZONES_EXPORT` on public API classes in `plasmazones/src/**`, where `plasmazones_rendering` and `plasmazones_shaderpreview` each carry their own. A phosphor library uses its OWN `PHOSPHOR<LIB>_EXPORT` (55 distinct macros: 37 under `phosphor/libs/`, 18 under `phosphor-shell-libs/libs/`). Writing `PLASMAZONES_EXPORT` into a phosphor lib header names an undefined macro.
+- `PLASMAZONES_EXPORT` on public API classes in `plasmazones/src/**`, where `plasmazones_rendering` and `plasmazones_shaderpreview` each carry their own. A phosphor library uses its OWN `PHOSPHOR<LIB>_EXPORT` (56 distinct macros: 38 under `phosphor/libs/`, 18 under `phosphor-shell-libs/libs/`). Writing `PLASMAZONES_EXPORT` into a phosphor lib header names an undefined macro.
 - Keep files under 1000 lines, with a 15% grace (hard ceiling 1150). Under 1000 is the target; 1000–1150 is tolerated and not a review finding on its own. Past 1150, split by concern.
 - The ceiling binds NEW files and files being substantially rewritten. Around 61 existing files are already over it (the largest are `plasmazones/kwin-effect/plasmazoneseffect/plasmazoneseffect.h`, `plasmazones/kwin-effect/tilinghandler/tiling.cpp` and `plasmazones/tests/unit/helpers/StubSettings.h`); those are grandfathered. Do not raise an existing overrun as a review finding on its own, and do not split one as a drive-by. Growing one further, or adding a new file over the ceiling, is a finding.
 - Input validation at system boundaries
@@ -257,7 +257,7 @@ How it maps onto CMake (see `.moon/tasks/cmake.yml`): every tier task runs from 
 
 Install is a whole-tree verb on the `repo` project, not a per-tier one, because CMake cannot install a subset here: none of the install rules declares a `COMPONENT`, so `cmake --install build --component <tier>` would install nothing. Per-tier install verbs need every rule tagged with a component first. Follow an install with `moon run repo:post-install` to refresh the KDE service cache, the same step `make post-install` runs.
 
-Known tier inversion: `phosphor-shell` links `plasmazones_rendering`, `plasmazones_shared_qml` and `plasmazones_shared_qmlplugin` from the plasmazones tier, so its `moon.yml` lists `plasmazones` as a dependency and `.moon/workspace.yml` turns layer enforcement off. Moving those three targets into a phosphor library is necessary but not sufficient: a second inversion, tier-1 tests reading tier-4 data under `plasmazones/data/`, has to go too before layer enforcement can be re-enabled. See `.moon/workspace.yml`.
+Layer enforcement is on (`.moon/workspace.yml`): an application tier may not depend on another application tier, so `phosphor-shell` must never link a `plasmazones_*` target. Its surface decoration comes from `phosphor/libs/phosphor-surface-quick` (SurfaceShaderItem and the `org.phosphor.surface` QML module). Runtime data reads across tiers (tier-1 and shell tests reading `plasmazones/data/`) are recorded as workspace-relative test inputs in each `moon.yml`, not as dependencies, so enforcement does not see them.
 
 - CMake with `CMAKE_AUTOMOC/AUTORCC/AUTOUIC ON`
 - `qt_add_qml_module()` — ALL QML files must be listed (missing = runtime "not a type" error)
