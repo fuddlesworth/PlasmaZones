@@ -77,6 +77,11 @@ tasks:
     inputs:
       - '@group(cmake)'
       - '@group(sources)'
+      # tests too: phosphor_tier_target() collects every buildable target in
+      # the tier, which includes its test executables, so a test-only edit
+      # really does change what this task produces. Without it,
+      # `moon run <tier>:build --affected` reports nothing to do.
+      - '@group(tests)'
     options:
       runFromWorkspaceRoot: true
       cache: false
@@ -120,6 +125,12 @@ tasks:
       - '--output-on-failure'
       - '-j'
       - '6'
+      # A ctest run that selects nothing exits 0 and prints "No tests were
+      # found!!!", so a tier whose add_subdirectory(tests) stopped being
+      # reached would report green having run nothing. Same reasoning as
+      # repo:test. test-release respells its args in full (mergeArgs:
+      # replace), so it carries its own copy.
+      - '--no-tests=error'
     deps:
       - '~:build'
     # @group(cmake) matters here as much as it does for `build`: affected-ness
@@ -153,6 +164,7 @@ tasks:
       - '--output-on-failure'
       - '-j'
       - '6'
+      - '--no-tests=error'
     deps:
       - '~:build-release'
     options:

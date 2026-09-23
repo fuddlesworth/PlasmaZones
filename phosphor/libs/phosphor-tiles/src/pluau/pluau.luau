@@ -1023,7 +1023,7 @@ local function center(start, total, size)
     return start + math.floor((total - size) / 2)
 end
 
--- Square-ish grid: cols = max(1, ceil(sqrt(count))), rows = ceil(count/cols). The max keeps count == 0 at 1 x 0 rather than 0 x nan; a negative count still gives a negative row count, which iterates zero times.
+-- Square-ish grid. max(1, ...) NOT max(..., 1): max(1, nan) is 1, max(nan, 1) is nan. Keeps count <= 0 off nan.
 local function gridShape(count)
     local cols = math.max(1, math.ceil(math.sqrt(count)))
     local rows = math.ceil(count / cols)
@@ -1033,7 +1033,7 @@ end
 -- Running start offsets for a run of `sizes` beginning at `start`, each separated
 -- by `gap`. offsets[1] = start; offsets[i + 1] = offsets[i] + sizes[i] + gap.
 -- Length equals #sizes for non-empty input; an empty `sizes` still yields
--- { start } (both consumers pass at least one size after guardArea).
+-- { start } (every consumer passes at least one size after guardArea).
 local function cumulativeOffsets(start, sizes, gap)
     local offsets = { start }
     for i = 1, #sizes - 1 do

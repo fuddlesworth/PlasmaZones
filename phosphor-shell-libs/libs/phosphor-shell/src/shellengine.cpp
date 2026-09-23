@@ -113,7 +113,7 @@ void registerQmlTypes()
         // its own output awake while visible. This stays a foundation primitive.
         // Session-wide idle monitoring (ext-idle-notify-v1) is NOT registered here:
         // it is owned by Phosphor.Service.Idle's IdleService (a multi-stage timeout
-        // policy + surface-less inhibition), registered in src/shell/main.cpp, so a
+        // policy + surface-less inhibition), registered in phosphor-shell/src/main.cpp, so a
         // single monitor arms each timeout.
         qmlRegisterType<PhosphorWayland::IdleInhibitor>("Phosphor.Shell", 1, 0, "IdleInhibitor");
         qmlRegisterSingletonType<Toplevels>("Phosphor.Shell", 1, 0, "Toplevels", &Toplevels::create);

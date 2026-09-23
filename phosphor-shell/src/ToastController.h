@@ -10,7 +10,7 @@
 namespace PhosphorShellApp {
 
 // The toast hosts' broker, installed as the `ToastRegistry` context
-// property by src/shell/main.cpp. There is one ToastHost per output, each
+// property by phosphor-shell/src/main.cpp. There is one ToastHost per output, each
 // built by PerScreenPanels in a context that cannot see shell.qml's ids,
 // so the root's `notify` IpcTarget has no direct path to them: every host
 // attaches itself here with its screen name and primary flag, and send()

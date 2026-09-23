@@ -317,7 +317,7 @@ private Q_SLOTS:
         shrink.insert(QStringLiteral("glowSize"), -60);
         negative.insert(QStringLiteral("glow"), shrink);
         QVERIFY(chrome.setTreeJson(treeJson(decorationShellPhosphorOsdPath(), {QStringLiteral("glow")}, negative)));
-        QVERIFY(chrome.outerPaddingFor(decorationShellPhosphorOsdPath()) >= 0.0);
+        QCOMPARE(chrome.outerPaddingFor(decorationShellPhosphorOsdPath()), 4.0);
     }
 
     void malformedJsonKeepsTheTree()

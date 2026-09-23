@@ -283,11 +283,11 @@ jobs:
           cat /tmp/kde-unstable.conf /etc/pacman.conf > /tmp/pacman.conf.new
           mv /tmp/pacman.conf.new /etc/pacman.conf
           # Same package set as the `build` job's "Setup (Arch)" and as
-          # `build-shell`. THREE hand-maintained copies: a dependency added to one
+          # `build-shell`. FOUR hand-maintained copies (build, build-shell, build-plasma-next, presets): a dependency added to one
           # and not the others makes this job quietly build a different
           # configuration from the one it exists to mirror — the same class of
           # false equivalence the verify step below guards against for the paint
-          # API. Change one, change all three.
+          # API. Change one, change all four.
           #
           # NOT hoisted into a composite action under .github/actions, which is
           # the obvious fix: a LOCAL action is only readable once

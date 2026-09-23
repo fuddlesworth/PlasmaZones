@@ -15,8 +15,8 @@
 
 // NOTE: `.pragma library` means one shared instance per QML engine, and every
 // top-level binding here is an export. `Region.Epsilon = 0` from any
-// importer would change the geometry for every other importer in the
-// process. The underscore prefixes on _num/_axis/_stop are the only thing
+// importer would change the geometry for every other importer in that
+// engine. The underscore prefixes on _num/_axis/_stop are the only thing
 // marking them private; nothing enforces it. Only largestEmptyRect() is
 // meant to be called from outside.
 var Epsilon = 1e-6;

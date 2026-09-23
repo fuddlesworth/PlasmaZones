@@ -39,7 +39,7 @@ libs/
   phosphor-service-*/        sni, upower, mpris, pipewire, network, bluetooth, brightness,
                              notifications, polkit, idle, clipboard, lock, session, icontheme
 
-src/shell/                   The shell process (GPL)
+phosphor-shell/src/                   The shell process (GPL)
   main.cpp                   Composition: registries, transports, context properties
   BarController              IBarWidgetFactory registry owner
   ControlCenterController    Tile registry + pane open state per screen

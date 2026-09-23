@@ -819,7 +819,7 @@ jobs:
           pkgname=plasmazones
           pkgver=${{ needs.version.outputs.version }}
           pkgrel=${{ needs.version.outputs.pkgrel }}
-          pkgdesc="Window tiling and autotiling for KDE Plasma"
+          pkgdesc="Window snapping, tiling and scrolling for KDE Plasma"
           arch=('x86_64')
           url="https://github.com/fuddlesworth/PlasmaZones"
           license=('GPL-3.0-or-later' 'LGPL-2.1-or-later')
@@ -831,6 +831,10 @@ jobs:
               'qt6-base' 'qt6-declarative' 'qt6-shadertools' 'qt6-svg'
               'kconfig' 'kconfigwidgets' 'kirigami'
               'kcmutils' 'kglobalaccel' 'qt6-wayland'
+              # kcolorscheme: the KWin effect links KF6::ColorScheme. It
+              # arrives transitively via kwin today, but packaging/arch/PKGBUILD
+              # declares it and this array says it mirrors that file.
+              'kcolorscheme'
               'kwin>=6.7.0'
           )
           makedepends=('cmake' 'extra-cmake-modules' 'qt6-tools' 'ninja')

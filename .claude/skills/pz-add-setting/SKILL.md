@@ -98,7 +98,7 @@ different header.
 
 ### 6. `plasmazones/src/config/settings/<concern>.cpp` — getter and setter
 
-Never `plasmazones/src/config/settings.cpp`. Pick the file matching the concern:
+Never `plasmazones/src/config/settings.cpp`. Pick the file matching the concern (not exhaustive):
 `setters.cpp`, `storescalars.cpp`, `shortcuts.cpp`, `scrolling.cpp`,
 `triggers.cpp`, `perscreen.cpp`, `disable.cpp`, `uienums.cpp`,
 `profiletrees.cpp`, `animationprofile.cpp`, `systemcolors.cpp`.

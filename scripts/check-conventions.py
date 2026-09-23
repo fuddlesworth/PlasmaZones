@@ -479,14 +479,20 @@ def prose_problems(s: str) -> list[str]:
     # clauses. Semicolons inside backticked code and those separating genuine
     # comma-bearing list items are legitimate, so both are excluded.
     without_code = re.sub(r"`[^`]*`", "", s)
-    for part in re.finditer(r";\s+(\w+)", without_code):
-        before = without_code[: part.start()]
-        after = without_code[part.start() + 1 :]
-        if "," in before or "," in after:
-            continue  # list separator, not a clause splice
-        if len(before.split()) >= 3 and len(after.split()) >= 3:
-            problems.append("clause-splicing semicolon; split into sentences or use \"and\"")
-            break
+    # Segment first, then look for the splice inside a segment. The comma
+    # exclusion below is about the clause pair around THIS semicolon; applied
+    # to the whole string it meant that one comma anywhere in a multi-paragraph
+    # block (an RPM %description, a Nix longDescription, any CHANGELOG entry)
+    # switched the rule off for every sentence in it.
+    for segment in re.split(r"(?<=[.!?])\s+|\n\s*\n", without_code):
+        for part in re.finditer(r";\s+(\w+)", segment):
+            before = segment[: part.start()]
+            after = segment[part.start() + 1 :]
+            if "," in before or "," in after:
+                continue  # list separator, not a clause splice
+            if len(before.split()) >= 3 and len(after.split()) >= 3:
+                problems.append("clause-splicing semicolon; split into sentences or use \"and\"")
+                return problems
     return problems
 
 
@@ -558,7 +564,11 @@ NIX_DESC = re.compile(r"^\s*description\s*=\s*\"((?:[^\"\\]|\\.)*)\"", re.M)
 # terminator and the rest of the body goes unchecked. No regex is correct
 # for that grammar, so the truncation is reported instead of passed over.
 NIX_LONG_DESC = re.compile(r"^\s*longDescription\s*=\s*''(.*?)''", re.M | re.S)
-NIX_LONG_DESC_ESCAPE = re.compile(r"^\s*longDescription\s*=\s*''(?:.*?)''(?=[$'])", re.M | re.S)
+# (?!'') rather than .*? : a lazy any-scan runs to the END OF FILE, so a
+# clean longDescription followed anywhere later by an ordinary ''${...}
+# wrapper hook fired this rule spuriously. Stopping at the FIRST '' means
+# the lookahead only ever inspects this body's own terminator.
+NIX_LONG_DESC_ESCAPE = re.compile(r"^\s*longDescription\s*=\s*''(?:(?!'').)*''(?=[$'])", re.M | re.S)
 
 # RPM's %description body runs from the directive to the next % section. The
 # PKG_DESC pattern cannot see it, so `dnf info` printed sixteen ungated lines.

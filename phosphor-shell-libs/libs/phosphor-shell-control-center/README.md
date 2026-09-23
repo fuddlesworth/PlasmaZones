@@ -26,7 +26,7 @@ and is not an error.
 The built-in tiles ship here, and they import `Phosphor.Service.*`
 modules, but the library still **links** no service: those modules are
 registered by the host process before it loads any QML (each service
-exposes a hand-rolled `registerQmlTypes()`; see `src/shell/main.cpp`), so
+exposes a hand-rolled `registerQmlTypes()`; see `phosphor-shell/src/main.cpp`), so
 they resolve at runtime. That is the same arrangement the bar's
 service-bound widgets use. A host that registers only some services gets
 working tiles for those and inert ones for the rest.

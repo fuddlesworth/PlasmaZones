@@ -843,7 +843,7 @@ set_source_files_properties(editor/qml/ColorUtils.js PROPERTIES
 # sub-target's -I list; the no-Q_OBJECT sub-targets (qmltyperegistration,
 # resource init) leave it empty or — after `--clean-first` — missing, so
 # cc1plus fires before AUTOMOC recreates it. Set here (after the core /
-# rendering / daemon targets above, which are unaffected). NOTE: directory
+# rendering / shaderpreview / daemon targets above, which are unaffected). NOTE: directory
 # COMPILE_OPTIONS apply to EVERY target created after this point in the
 # scope — the editor QML sub-targets just below, but also
 # plasmazones-shader-validate and the add_subdirectory(settings) tree

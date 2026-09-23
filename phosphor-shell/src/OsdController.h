@@ -21,7 +21,7 @@ namespace PhosphorShellApp {
 // what examples/phosphor-osd-demo keeps a private copy of. Owns a
 // Registry<IOSDFactory>, registers the four built-in OSDs at construction,
 // and exposes createOSD(kind, parent) so OSDHost can be wired as
-// `provider: OsdRegistry` (the context property src/shell/main.cpp
+// `provider: OsdRegistry` (the context property phosphor-shell/src/main.cpp
 // installs on every engine). Same shape as BarController: the OSD QML
 // stays registry-agnostic and duck-types this.
 //

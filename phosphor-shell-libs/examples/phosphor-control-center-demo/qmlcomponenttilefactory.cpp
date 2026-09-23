@@ -17,7 +17,7 @@ namespace {
 Q_LOGGING_CATEGORY(lcControlCenterDemo, "phosphorcontrolcenterdemo")
 } // namespace
 
-// NOTE: src/shell/qmlcomponenttilefactory.cpp carries a copy of this class.
+// NOTE: phosphor-shell/src/qmlcomponenttilefactory.cpp carries a copy of this class.
 // The duplication is deliberate, so the example stands alone and can be
 // lifted into another project, but the two have already drifted once.
 // A change here almost certainly belongs there too.

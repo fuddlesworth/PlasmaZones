@@ -13,7 +13,7 @@ namespace PhosphorServiceLock {
 /// per reload can safely call this from every engine setup without triggering
 /// Qt's duplicate-registration warning.
 ///
-/// Called from the consuming binary (typically `src/shell/main.cpp`) before any
+/// Called from the consuming binary (typically `phosphor-shell/src/main.cpp`) before any
 /// `QQmlEngine` loads a `.qml` file.
 PHOSPHORSERVICELOCK_EXPORT void registerQmlTypes();
 

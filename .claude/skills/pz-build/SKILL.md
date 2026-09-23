@@ -137,9 +137,10 @@ is the only Unix Makefiles one, and that generator rejects ninja's `-k 0`.
 python3 scripts/check-conventions.py
 ```
 
-Stdlib only. A whole-tree run takes about 40 seconds; a staged subset is near
-instant, which is the form pre-commit uses (`--staged`). It also runs in CI
-against the whole tree. See `--list-rules`.
+Stdlib only. A whole-tree run is around 13 seconds on an idle machine, and
+noticeably longer while a build is running, so measure it idle before
+concluding it is slow. A staged subset is near instant, which is the form
+pre-commit uses (`--staged`). CI runs it whole-tree. See `--list-rules`.
 
 ## Green does not mean it works
 

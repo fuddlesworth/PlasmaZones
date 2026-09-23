@@ -14,7 +14,7 @@ namespace PhosphorServiceUPower {
 /// safely call this from every engine setup without triggering Qt's
 /// duplicate-registration warning.
 ///
-/// Called from the consuming binary (typically `src/shell/main.cpp`
+/// Called from the consuming binary (typically `phosphor-shell/src/main.cpp`
 /// for the reference shell, but any QGuiApplication that wants to
 /// expose UPower to its QML can call this) before any `QQmlEngine`
 /// loads a `.qml` file. Keeping registration in the lib lets the

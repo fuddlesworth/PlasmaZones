@@ -47,9 +47,12 @@ tasks:
       mergeArgs: 'replace'
 
   # The checker walks every tracked file, so the input set has to be just as
-  # wide or moon serves a cached PASS for a change it never inspected. cmake/
-  # and the rest of scripts/ carry SPDX headers the spdx and license rules
-  # police, and the checker itself reads CMakePresets.json's siblings.
+  # wide or moon serves a cached PASS for a change it never inspected. The
+  # parts it actually inspects are scripts/*.py and the four tier trees plus
+  # packaging/ and .github/workflows/. cmake/ and CMakePresets.json are listed
+  # as over-broad insurance rather than because a rule reads them: no rule
+  # inspects .cmake or .json at those paths. Over-breadth costs a cache miss;
+  # under-breadth costs a missed check.
   conventions:
     command: 'python3 scripts/check-conventions.py'
     inputs:
@@ -63,6 +66,10 @@ tasks:
       - 'phosphor-shell/**/*'
       - 'plasmazones/**/*'
       - 'packaging/**/*'
+      # .github because rule_prose now takes .github/workflows/*.yml through
+      # the pkgdesc arm. This task is CACHED, so without the input moon would
+      # replay a pass for a workflow edit it never looked at.
+      - '.github/**/*'
 
   schemas:
     command: 'python3 scripts/validate-json-schemas.py'

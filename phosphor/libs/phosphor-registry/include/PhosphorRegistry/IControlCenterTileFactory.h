@@ -24,7 +24,7 @@ namespace PhosphorRegistry {
 // consuming Control Center surface has since landed, so tile factories
 // authored against this contract are driven by a real host: libs/phosphor-shell-
 // control-center's ControlCenter.qml, over the registry that
-// src/shell/ControlCenterController populates.
+// phosphor-shell/src/ControlCenterController populates.
 class PHOSPHORREGISTRY_EXPORT IControlCenterTileFactory : public IFactoryBase
 {
 public:

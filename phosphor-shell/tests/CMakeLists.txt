@@ -9,11 +9,16 @@
 
 find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Test)
 
+# Only the shell's own src. The three plasmazones entries that used to sit here
+# (src, the generated-export-header binary dir, and tests/unit for "helpers/X.h")
+# were all dead: no file under phosphor-shell/tests includes a helpers/ header,
+# and the single plasmazones include in the shell sources is in main.cpp, which
+# no test target compiles. Leaving them would keep an undeclared tier-4 header
+# path open to every future shell test, which is the reach the tier split exists
+# to make visible. If a shell test ever genuinely needs a plasmazones fixture,
+# add the path on that one target with target_include_directories and say why.
 include_directories(
     ${CMAKE_SOURCE_DIR}/phosphor-shell/src
-    ${CMAKE_SOURCE_DIR}/plasmazones/src
-    ${CMAKE_BINARY_DIR}/plasmazones/src  # generated export headers
-    ${CMAKE_SOURCE_DIR}/plasmazones/tests/unit  # shared fixtures as "helpers/X.h"
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -112,11 +117,12 @@ add_test(NAME test_shell_gestures COMMAND test_shell_gestures)
 # The chrome decoration resolver: tree JSON + the bundled packs to a stage
 # list per shell surface path.
 #
-# Gated on the theme target, unlike its siblings in this group. shellchrome.cpp
-# includes PhosphorTheme/PaletteStore.h and connects paletteChanged, and
-# phosphor-shell-libs/libs/phosphor-theme is only added under BUILD_PHOSPHOR_SHELL, so this is the
-# one file here whose dependencies are not all unconditional. Without the guard
-# the default BUILD_TESTING=ON configure fails at generate and no test builds.
+# Gated on the theme target because shellchrome.cpp includes
+# PhosphorTheme/PaletteStore.h and connects paletteChanged. NOT because the
+# guard can fire: this directory is reached only from phosphor-shell/, which
+# the root enters under BUILD_PHOSPHOR_SHELL, so every shell-tier target
+# exists here. Five sibling targets in this file are guarded the same way for
+# the same reason -- see the note at the top of the file.
 if(TARGET PhosphorTheme::PhosphorTheme)
     add_executable(test_shell_chrome
         test_shell_chrome.cpp

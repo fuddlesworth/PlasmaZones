@@ -22,9 +22,13 @@ Menu {
     // `editorController` and `editorController !== null` leave the item
     // ENABLED, and the guard fails open.
     //
-    // Declaring the type closes it, but NOT by coercing: assigning undefined
-    // to a typed object property is an error, and QML logs "Unable to assign
-    // [undefined] to QObject*" and leaves the property at its PRIOR value.
+    // Declaring the type closes it, but NOT by coercing: a typed object
+    // property simply refuses an undefined write and keeps its PRIOR value.
+    // On the BINDING path this file uses (EditorWindow passes
+    // `editorController: editorWindow._editorController`) the refusal is
+    // SILENT -- no warning is logged at all. Only a direct JS assignment
+    // surfaces it, and that throws `Error: Cannot assign [undefined] to
+    // QObject*` rather than logging it.
     // For a required property that has never held anything, that prior value
     // is null, so every spelling below evaluates false. The consequence worth
     // knowing: if this ever held a real controller and its source later went

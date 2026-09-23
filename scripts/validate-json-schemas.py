@@ -22,8 +22,9 @@ Usage:
 
 Both CI and the lefthook hook run with no FILE arguments, so every data file
 covered by the SCHEMA_MAP is validated (a schema edit re-checks all of its
-data). Passing explicit FILEs is a manual convenience: only those that fall
-under a mapped directory are validated, and unmapped files are ignored.
+data). Passing explicit FILEs is a manual convenience. A path that matches no
+mapped glob is REPORTED by name and exits 1 rather than being ignored, so a
+renamed or mistyped path cannot pass silently.
 """
 
 from __future__ import annotations

@@ -60,14 +60,26 @@ ApplicationWindow {
 
     Connections {
         function onLoadError(path, reason) {
-            // Ordered replace, not chained .arg(). QString-style .arg()
-            // substitutes the lowest marker first and then RE-SCANS the
-            // result, so a path containing a literal "%2" (legal on Linux)
-            // would swallow the reason: .arg("/tmp/%2.json").arg("bad JSON")
-            // yields "/tmp/bad JSON.json: bad JSON". QML's String.arg takes
-            // one value, so there is no single-pass form. Filling the
-            // untrusted path LAST means nothing re-scans it.
-            root.lastError = qsTr("%1: %2").replace("%2", reason).replace("%1", path);
+            // Single-pass substitution through a regex with a FUNCTION
+            // replacement. Both simpler forms are wrong here, measured:
+            //
+            //   .arg(path).arg(reason) re-scans what it just inserted, so a
+            //   path containing "%2" swallows the reason:
+            //     "/tmp/%2.json" -> "/tmp/bad JSON.json: bad JSON"
+            //
+            //   .replace("%2", reason).replace("%1", path) fixes that but
+            //   introduces a worse one, because String.replace interprets $
+            //   patterns in the REPLACEMENT:
+            //     "/tmp/$&x.json"  -> "/tmp/%1x.json: bad JSON"
+            //     "/tmp/$'x.json"  -> "/tmp/: bad JSONx.json: bad JSON"
+            //
+            // A function replacement is never scanned for $ patterns and
+            // never revisits what it wrote, so both hazards close at once.
+            // $, &, ' and ` are all legal in Linux filenames and this path is
+            // user-picked, so this is reachable, not theoretical.
+            root.lastError = qsTr("%1: %2").replace(/%([12])/g, function (m, n) {
+                return n === "1" ? path : reason;
+            });
         }
 
         function onPaletteChanged() {
@@ -118,7 +130,12 @@ ApplicationWindow {
             root.lastError = "";
         }
         onFailed: function (wp, reason) {
-            root.lastError = qsTr("matugen: %1, %2").arg(wp).arg(reason);
+            // Same single-pass form as the loadError handler above, and for
+            // the same reason: wp is the user-picked wallpaper path, and
+            // reason is matugen's raw stderr tail.
+            root.lastError = qsTr("matugen: %1, %2").replace(/%([12])/g, function (m, n) {
+                return n === "1" ? wp : reason;
+            });
         }
     }
 
@@ -371,7 +388,14 @@ ApplicationWindow {
             Layout.fillWidth: true
             Layout.preferredHeight: Tokens.spacing_xxl
             visible: root.lastError.length > 0
-            color: Theme.error_container
+            // Theme.error, not error_container: on_error is the foreground token
+            // defined for error, and pairing it with error_container renders
+            // near-invisible in two of the three bundled palettes (light gives
+            // white on #FEE2E2, sunset gives near-black on #7F1D1D at roughly
+            // 1.7:1). This is the surface that reports a broken palette, so it
+            // has to stay readable exactly when the palette is wrong. The token
+            // set has no on_error_container to pair instead.
+            color: Theme.error
             radius: Tokens.radius_s
 
             Text {

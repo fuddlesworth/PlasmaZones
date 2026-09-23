@@ -40,7 +40,7 @@ int main(int argc, char* argv[])
     // registered BEFORE any QML that imports them loads. Each is idempotent
     // and infallible by design (std::call_once around each body), which is
     // why none of these return a status. Same block, and the same
-    // reasoning, as src/shell/main.cpp.
+    // reasoning, as phosphor-shell/src/main.cpp.
     PhosphorServicePipeWire::registerQmlTypes();
     PhosphorServiceNetwork::registerQmlTypes();
     PhosphorServiceBluetooth::registerQmlTypes();
