@@ -64,6 +64,10 @@ QML_SUFFIXES = {".qml"}
 SHADER_SUFFIXES = {".frag", ".vert", ".glsl"}
 CODE_SUFFIXES = CPP_SUFFIXES | QML_SUFFIXES | SHADER_SUFFIXES | {".luau", ".py"}
 
+# Which rules this invocation is running. rule_license consults it so it only
+# defers a missing header to the spdx rule when that rule will actually run.
+_SELECTED_RULES: set[str] = set()
+
 # Trees that are vendored or generated and are not ours to police. The
 # vendored tree is phosphor/extern/ since the tier split; a bare "extern/"
 # matches nothing and would quietly start policing anything vendored there.
@@ -236,7 +240,12 @@ def rule_license(files: list[str]) -> list[Violation]:
         head = "\n".join(read(f).split("\n")[:6])
         m = re.search(r"SPDX-License-Identifier:\s*(\S+)", head)
         if not m:
-            continue  # reported by the spdx rule
+            # Normally the spdx rule reports this. Defer only when that rule is
+            # actually running, or `--rules license` on its own reports a file
+            # with no header whatsoever as clean.
+            if "spdx" not in _SELECTED_RULES:
+                out.append(Violation("license", f, 0, "no SPDX-License-Identifier"))
+            continue  # otherwise reported by the spdx rule
         got = m.group(1)
         if got != want:
             out.append(
@@ -477,9 +486,13 @@ def prose_problems(s: str) -> list[str]:
 
 
 def iter_json_prose(path: str):
+    # A parse failure is reported by the caller as a violation rather than
+    # swallowed: returning quietly made a malformed data JSON indistinguishable
+    # from one with no prose in it.
     try:
         doc = json.loads(read(path))
-    except (json.JSONDecodeError, UnicodeDecodeError):
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        yield None, str(exc)
         return
 
     def walk(node, trail):
@@ -508,8 +521,17 @@ def iter_json_prose(path: str):
     yield from walk(doc, "")
 
 
+# Forms whose FIRST argument is the user-visible string.
 TR_LITERAL = re.compile(
-    r'(?<![\w:.])(?:PhosphorI18n::tr|qsTr|i18n|i18nc|i18np|i18ncp)\s*\(\s*((?:"(?:[^"\\]|\\.)*"\s*)+)'
+    r'(?<![\w:.])(?:PhosphorI18n::tr|qsTr|i18n|i18np)\s*\(\s*((?:"(?:[^"\\]|\\.)*"\s*)+)'
+)
+# Forms whose first argument is a disambiguation CONTEXT, never shown to a
+# user. Matching them with the pattern above checked the context and left the
+# real string unread, which is most of the i18nc call sites in the tree.
+TR_CONTEXT_LITERAL = re.compile(
+    r'(?<![\w:.])(?:i18nc|i18ncp|qsTranslate)\s*\(\s*'
+    r'(?:"(?:[^"\\]|\\.)*"\s*)+,\s*'
+    r'((?:"(?:[^"\\]|\\.)*"\s*)+)'
 )
 # The 4th field of a PhosphorConfig::KeyDef is a human-readable description
 # that consumers surface in settings UIs and generated documentation, so it is
@@ -529,16 +551,20 @@ def rule_prose(files: list[str]) -> list[Violation]:
 
         if re.search(r"(^|/)data/", f) and suffix == ".json":
             for trail, s in iter_json_prose(f):
+                if trail is None:
+                    out.append(Violation("prose", f, 0, f"malformed JSON: {s}"))
+                    continue
                 for p in prose_problems(s):
                     out.append(Violation("prose", f, 0, f"{trail}: {p} -> {s[:80]!r}"))
             continue
 
         if suffix in CPP_SUFFIXES | QML_SUFFIXES:
             code = strip_c_comments(read(f))
-            for m in TR_LITERAL.finditer(code):
-                lit = "".join(re.findall(r'"((?:[^"\\]|\\.)*)"', m.group(1)))
-                for p in prose_problems(lit):
-                    out.append(Violation("prose", f, line_of(code, m.start()), f"{p} -> {lit[:80]!r}"))
+            for pattern in (TR_LITERAL, TR_CONTEXT_LITERAL):
+                for m in pattern.finditer(code):
+                    lit = "".join(re.findall(r'"((?:[^"\\]|\\.)*)"', m.group(1)))
+                    for p in prose_problems(lit):
+                        out.append(Violation("prose", f, line_of(code, m.start()), f"{p} -> {lit[:80]!r}"))
             if Path(f).name.startswith("settingsschema"):
                 for m in SCHEMA_DESCRIPTION.finditer(code):
                     lit = "".join(re.findall(r'"((?:[^"\\]|\\.)*)"', m.group(1)))
@@ -615,6 +641,9 @@ def main() -> int:
         if unknown:
             print(f"unknown rule(s): {', '.join(unknown)}", file=sys.stderr)
             return 2
+
+    global _SELECTED_RULES
+    _SELECTED_RULES = set(selected)
 
     if args.files:
         files = []
