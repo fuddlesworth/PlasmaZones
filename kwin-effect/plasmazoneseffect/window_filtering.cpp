@@ -167,8 +167,8 @@ void PlasmaZonesEffect::clearWindowZone(const QString& windowId)
 PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w) const
 {
     const QString windowId = getWindowId(w);
-    // Id-taking overload: the scroll override resolves off the window id, and
-    // this funnel already holds it.
+    // Id-taking overload: the scroll override resolves off the window id this funnel holds.
+    // IsFloating reads a tile held out for its own fullscreen as floating (the daemon's bit).
     const QString screenId = getWindowScreenId(w, windowId);
     PhosphorRules::WindowQuery query = ruleQueryFor(w, screenId, isWindowFloating(windowId), isWindowSnapped(windowId),
                                                     m_tilingHandler->isTiledWindow(windowId), zoneForWindow(windowId));
@@ -419,9 +419,10 @@ bool PlasmaZonesEffect::isStructurallyUnmanageableWindowType(KWin::EffectWindow*
     const bool fullScreenUnmanageable = !exemptFullscreen && w->isFullScreen()
         && (m_windowedFullscreenWindows.isEmpty() || w->isDeleted()
             || !m_windowedFullscreenWindows.contains(getWindowId(w)));
-    if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || fullScreenUnmanageable || w->isSkipSwitcher()) {
+    if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || fullScreenUnmanageable || w->isSkipSwitcher()
+        || windowIsBareOverrideRedirect(w)) {
         if (rejectReason) {
-            *rejectReason = QStringLiteral("special/desktop/dock/fullscreen/skipSwitcher window type");
+            *rejectReason = QStringLiteral("special/desktop/dock/fullscreen/skipSwitcher/bare override-redirect type");
         }
         return true;
     }
@@ -660,8 +661,8 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w,
     // surface plasmashell owns from any call site, present or future. Do NOT
     // "finish the feature" by admitting the shell kinds here.
     if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isSkipSwitcher()
-        || isPlasmaShellSurface(windowClass) || isOwnOverlayClass(windowClass)
-        || isXdgDesktopPortalSurface(windowClass)) {
+        || isPlasmaShellSurface(windowClass) || isOwnOverlayClass(windowClass) || isXdgDesktopPortalSurface(windowClass)
+        || windowIsBareOverrideRedirect(w)) {
         return false;
     }
 
@@ -870,8 +871,9 @@ bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w,
     // (KWin's disjunction also takes in splash, toolbar, applet popup and
     // tooltip), so those are hard-excluded here with no toggle: a border on a
     // notification popup or a volume OSD is never sensible, which splits them
-    // off from the transient family below (which IS toggleable).
-    if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isFullScreen() || w->isSkipSwitcher()) {
+    // off from the transient family below (which IS toggleable). Untyped tray proxies: see window_query.h.
+    if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isFullScreen() || w->isSkipSwitcher()
+        || windowIsBareOverrideRedirect(w)) {
         return false;
     }
 

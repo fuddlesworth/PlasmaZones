@@ -1196,6 +1196,14 @@ target_link_libraries(test_pretile_decisions PRIVATE Qt6::Test Qt6::Core)
 target_include_directories(test_pretile_decisions PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
 add_test(NAME test_pretile_decisions COMMAND test_pretile_decisions)
 
+# Pure-logic test for the minimize-float qualifiers
+# (tilinghandler/minimizefloatmarks.h) — whether a restoring window's frame
+# can still be the tile it is about to get. Same header-only reach.
+add_executable(test_minimize_float_marks ui/effect/test_minimize_float_marks.cpp)
+target_link_libraries(test_minimize_float_marks PRIVATE Qt6::Test Qt6::Core)
+target_include_directories(test_minimize_float_marks PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
+add_test(NAME test_minimize_float_marks COMMAND test_minimize_float_marks)
+
 # Pure-geometry test for per-VS wallpaper cropping (PR #333). Pins the C++
 # cover-fit math against hand-worked expected rects so it can't silently
 # drift from the GLSL wallpaperUv helper it mirrors.
@@ -1294,7 +1302,10 @@ add_test(NAME test_wta_rule_context COMMAND test_wta_rule_context)
 add_executable(test_wta_capture_guards dbus/test_wta_capture_guards.cpp
                ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
 target_include_directories(test_wta_capture_guards PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
-target_link_libraries(test_wta_capture_guards PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+# Links PhosphorScrollEngine directly for the same reason test_wta_routing does:
+# the close-during-hold case constructs a real ScrollEngine.
+target_link_libraries(test_wta_capture_guards PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                                                      PhosphorScrollEngine::PhosphorScrollEngine)
 add_test(NAME test_wta_capture_guards COMMAND test_wta_capture_guards)
 
 # WindowTrackingAdaptor windowScreenChanged tests — the stored-screen

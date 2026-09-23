@@ -66,6 +66,7 @@ void ScrollEngine::collectMembershipWork(const QString& windowId, const QString&
     if (m_dragInsertPreview && m_dragInsertPreview->windowId == windowId) {
         return;
     }
+    // A held (own-fullscreen) window is NOT exempt: see releaseMembership.
     const QList<PlacementStateKey> held = m_states.membershipsForWindow(windowId);
     PendingMembership entry;
     entry.windowId = windowId;
@@ -189,6 +190,7 @@ bool ScrollEngine::adoptIntoContext(const QString& windowId, const PlacementStat
     if (!state) {
         return false;
     }
+    m_closedFullscreenHolds.remove(windowId); // any re-entry ends the closed-hold answer
     if (state->strip().containsWindow(windowId) || state->isFloating(windowId)) {
         // The state already holds the window without a membership naming it
         // (a leftover of an earlier teardown that dropped the membership and
@@ -337,6 +339,10 @@ void ScrollEngine::releaseMembership(const QString& windowId, const PlacementSta
         }
     }
     if (wasFloatingHere && !stillFloating) {
+        // A fullscreen hold goes with the float here: the ordinary desktop
+        // move takes the effect's own arm (releaseWindowTracking drops its
+        // record), so nothing is stranded; a reconcile-only release (an
+        // activity move) orphans ANY tracked window, which predates the hold.
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
         Q_EMIT windowFloatingStateSynced(windowId, false, key.screenId);

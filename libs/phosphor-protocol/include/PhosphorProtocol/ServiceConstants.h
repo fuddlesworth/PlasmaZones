@@ -507,14 +507,12 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       signal-only addition is not treated as harmlessly additive here.
 //
 //   v9: Scrolling gains leaveNativeFullscreenRequested (s), a screen-scoped
-//       signal the daemon emits from the keyboard shortcut gate immediately
-//       BEFORE dispatching a strip verb, telling the compositor to release the
-//       OWN fullscreen of every scroll-tracked tile on that screen. Such a tile
-//       refuses every geometry commit through the effect's fullscreen bail
-//       while the engine goes on scrolling and PARKING its column, so the two
-//       owners drift apart for the whole hold. The wheel chord already did this
-//       for itself inside the effect, but the keyboard half originates in the
-//       daemon and could not.
+//       signal the daemon emits immediately BEFORE dispatching a keyboard strip
+//       verb (the wheel path does the same on its own), telling the compositor
+//       to release the OWN fullscreen of every scroll-tracked tile on that
+//       screen so the strip and a window covering it could not drift apart.
+//       Such a tile refuses every geometry commit through the effect's
+//       fullscreen bail. v10 retires it.
 //
 //       ANOTHER new REQUIRED signal, so it takes a step of its own for exactly
 //       the reason v8 did: v8 shipped in 3.4.4, and the
@@ -522,9 +520,9 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       Its failure mode is the silent kind as well. A daemon that emits it to
 //       an effect with no such slot, or an effect waiting on a daemon that
 //       never emits it, matches every other signature on the interface and
-//       errors nowhere. The strip simply goes on scrolling and parking a column
-//       whose window the compositor is refusing to move, which is the bug this
-//       signal exists to close.
+//       errors nowhere. The toggle's relayout is simply built against a window
+//       the compositor is refusing to move, which is the bug this signal
+//       exists to close.
 //
 //       A SIGNAL rather than a field on the geometry batch, which is what the
 //       gap note in the wheel path originally anticipated. The exit has to land
@@ -535,7 +533,7 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       cannot tell a user verb from an insert-driven reflow, and it dropped
 //       the fullscreen whenever an unrelated window merely opened and slid the
 //       strip.
-
+//
 //       Tiling managedScreensChanged ALSO gains a third argument in this same
 //       step, screenDesktops (a{sv}) — the screenId to virtual-desktop map the
 //       announced set was RESOLVED AGAINST. One bump, not two: both changes
@@ -557,8 +555,27 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       is indistinguishable from a fresh one, and it would install a managed
 //       set computed for one desktop while filtering windows by another. The
 //       stamp makes the announce self-describing.
-inline constexpr int ApiVersion = 9;
-inline constexpr int MinPeerApiVersion = 9;
+//
+//   v10: Scrolling gains setWindowFullscreenFloat (s s b -> b), the hold the
+//       KWin effect sends when a strip tile enters or leaves its OWN
+//       fullscreen, and LOSES leaveNativeFullscreenRequested. The effect used
+//       to float such a tile through WindowTracking.setWindowFloatingForScreen,
+//       which the daemon treats as a USER float: every F11 raised a "floated"
+//       navigation OSD and restored free geometry over the fullscreen surface.
+//       The new verb floats with the same slot memory but announces on the
+//       engine's passive channel; its boolean answers whether the engine holds,
+//       or has returned, this call's own float (a repeat hold answers true),
+//       not whether the strip changed. With the tile out of the strip for the
+//       whole hold, no strip verb finds a fullscreen tile to release, so the v9
+//       signal had nothing left to do and is removed rather than kept as dead
+//       wire. Both are REQUIRED changes with the silent
+//       failure mode the ledger keeps refusing: an old effect calling a method
+//       the daemon lacks gets a D-Bus error and leaves the tile in the strip,
+//       and an old daemon emitting a signal the effect no longer connects
+//       simply goes unheard.
+
+inline constexpr int ApiVersion = 10;
+inline constexpr int MinPeerApiVersion = 10;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

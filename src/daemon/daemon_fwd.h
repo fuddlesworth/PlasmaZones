@@ -56,6 +56,7 @@ class IdleService;
 
 namespace PhosphorRules {
 class RuleStore;
+class RuleStoreWatcher;
 }
 
 namespace PhosphorZones {

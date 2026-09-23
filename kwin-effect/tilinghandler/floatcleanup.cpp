@@ -29,6 +29,76 @@
 
 namespace PlasmaZones {
 
+namespace {
+
+/// True for a window that is fullscreen by its OWN doing the first time the
+/// scrolling announce sees it: a game that maps fullscreen, or a window an
+/// OpenFullscreen rule just flipped. Such a window is not the strip's to tile.
+/// Announcing it seated it in a column (as a same-app TAB when a sibling such
+/// as its launcher was already tiled) behind a surface KWin would not let the
+/// strip move, and the first strip verb then pulled it out of fullscreen and
+/// fought its geometry. Seen live with a Proton game beside its launcher.
+///
+/// The two cases the scrolling fullscreen exemption exists for are told apart
+/// without daemon state, so they hold at effect bring-up where the membership
+/// hash is still empty:
+///  - a WINDOWED-FULLSCREEN column is fullscreen at its COLUMN rect, which
+///    equals the output's fullscreen area only for a single column with zero
+///    outer gaps and no panel (then a first-contact windowed member reads
+///    genuine and is left alone until its next announce), and its requested
+///    bit is only ever written for a window already in the membership hash;
+///  - a strip tile that went fullscreen later (F11, a video) was announced
+///    before it did, so it is already in the notified set.
+///
+/// PRECONDITION: the caller has already established that @p w is fullscreen,
+/// requested OR committed. The "not committed" arm below reads that as
+/// "requested only" and answers true, so an ordinary window would too.
+bool genuineFullscreenAtFirstContact(KWin::EffectWindow* w, bool alreadyNotified, bool windowedFullscreenMember)
+{
+    if (alreadyNotified || windowedFullscreenMember) {
+        return false;
+    }
+    if (!w->isFullScreen()) {
+        // Requested but not yet committed, and not the effect's own request.
+        return true;
+    }
+    if (!KWin::effects) {
+        return false;
+    }
+    const QRect fsArea = KWin::effects->clientArea(KWin::FullScreenArea, w).toRect();
+    return fsArea.isValid() && w->frameGeometry().toRect() == fsArea;
+}
+
+} // namespace
+
+/// True while @p w is in its OWN fullscreen (a game, F11, a video), as opposed
+/// to the windowed-fullscreen feature, whose state is the effect's doing.
+/// @p flaggedWindowed is the batch entry's wire flag, which leads the
+/// membership hash on the adopt batch.
+///
+/// The tile batch consults this before markWindowTiled, as the RESIDUAL guard.
+/// The primary mechanism is slotWindowFullScreenChanged's enter branch, which
+/// floats a strip tile out of the strip for its own fullscreen, so no batch
+/// entry names it at all. This covers what that float-out does not take: a
+/// closed daemon gate, a batch already on the wire when the float was sent, an
+/// autotile screen. There the enter branch still clears tiled membership and
+/// the exit branch restores it, while the daemon goes on listing the window,
+/// so the very next batch would re-mark it while it is still fullscreen.
+/// Membership is what scrollManagedOutputFor resolves through, so
+/// the fullscreen surface became a strip member again. As the topmost one it
+/// was elected the tab-indicator paint anchor, and the pills were blitted right
+/// after it, over the game. Left unmarked it is an above-anchor occluder
+/// instead, and the pills land under it. Requested OR committed, as everywhere
+/// else: the committed bit lags a client round-trip.
+bool TilingHandler::isInOwnFullscreen(KWin::EffectWindow* w, const QString& windowId, bool flaggedWindowed) const
+{
+    if (!w || flaggedWindowed || m_effect->m_windowedFullscreenWindows.contains(windowId)) {
+        return false;
+    }
+    const KWin::Window* const kw = w->window();
+    return w->isFullScreen() || (kw && kw->isRequestedFullScreen());
+}
+
 bool TilingHandler::isEligibleForTilingNotify(KWin::EffectWindow* w, bool* rejectedOnlyBecauseMinimized) const
 {
     if (rejectedOnlyBecauseMinimized) {
@@ -71,7 +141,17 @@ bool TilingHandler::isEligibleForTilingNotify(KWin::EffectWindow* w, bool* rejec
     // exit signal, by which point neither bit is set.
     KWin::Window* kwFs = w->window();
     const bool fullScreen = w->isFullScreen() || (kwFs && kwFs->isRequestedFullScreen());
-    const bool fullscreenOnScrollingScreen = fullScreen && isScrollingScreen(m_effect->getWindowScreenId(w));
+    // Resolved once, and only for a fullscreen window: the common
+    // non-fullscreen window never reads it.
+    const QString fullscreenWindowId = fullScreen ? m_effect->getWindowId(w) : QString();
+    const bool windowedFullscreenMember =
+        fullScreen && m_effect->m_windowedFullscreenWindows.contains(fullscreenWindowId);
+    // First-contact genuine fullscreen is carved out of the exemption, so it
+    // takes the same reject the snapping and autotile screens give it and is
+    // re-announced by the exit-fullscreen slot. See the helper's comment.
+    const bool fullscreenOnScrollingScreen = fullScreen && isScrollingScreen(m_effect->getWindowScreenId(w))
+        && !genuineFullscreenAtFirstContact(w, m_notifiedWindows.contains(fullscreenWindowId),
+                                            windowedFullscreenMember);
     if (!m_effect->shouldHandleWindow(w, nullptr, /*exemptFullscreen=*/fullscreenOnScrollingScreen)) {
         qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (not handleable)" << m_effect->getWindowId(w);
         return false;
@@ -98,11 +178,12 @@ bool TilingHandler::isEligibleForTilingNotify(KWin::EffectWindow* w, bool* rejec
     // triggers the batch. So a SCROLLING screen exempts fullscreen windows
     // wholesale — a restarted effect re-announces a flagged window, the
     // daemon's stash claim re-flags it, and the adopt-on-batch arm restores
-    // membership. A genuinely fullscreen window announced this way is the
-    // acceptable half of the trade: the strip tiles it behind the
-    // fullscreen surface (the daemon never untiles on fullscreen anyway),
-    // the geometry apply bails on its requested state, and its exit lands
-    // in an already-consistent strip instead of a never-announced limbo.
+    // membership. That wholesale exemption covers a flagged column and a
+    // strip tile that went fullscreen after it was announced (the daemon
+    // keeps tracking it, floated out of the strip for the hold, and the
+    // geometry apply bails on its requested state). A window that is genuinely fullscreen at FIRST
+    // contact is carved back out above, because seating it in a column was
+    // not an acceptable trade after all: see genuineFullscreenAtFirstContact.
     // Snapping/autotile screens keep the reject in full.
     // The fullscreen term first so the overwhelmingly common non-fullscreen
     // window pays neither the id lookup nor the screen resolve. Reuses the
@@ -112,9 +193,8 @@ bool TilingHandler::isEligibleForTilingNotify(KWin::EffectWindow* w, bool* rejec
     // term inside the `fullScreen &&` short-circuit. Recomputing it here paid
     // getWindowScreenId (a scroll-tracking lookup) twice for every fullscreen
     // window.
-    if (fullScreen
-        && !(m_effect->m_windowedFullscreenWindows.contains(m_effect->getWindowId(w)) || fullscreenOnScrollingScreen)) {
-        qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (fullscreen)" << m_effect->getWindowId(w);
+    if (fullScreen && !(windowedFullscreenMember || fullscreenOnScrollingScreen)) {
+        qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (fullscreen)" << fullscreenWindowId;
         return false;
     }
     if (!w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
@@ -202,10 +282,12 @@ void TilingHandler::reevaluateWindowEligibility(KWin::EffectWindow* w)
     // evict itself.
     //
     // Same scrolling-fullscreen exemption as isEligibleForTilingNotify: the
-    // strip keeps tiling a window through real fullscreen, so a benign flag
-    // edge (keep-above cleared, say) on a fullscreen scrolling tile must not
-    // read shouldHandleWindow's structural fullscreen reject as an eviction
-    // verdict.
+    // strip keeps TRACKING a window through real fullscreen (floated out for
+    // the hold, its slot remembered), so a benign flag edge (keep-above
+    // cleared, say) on a fullscreen scrolling tile must not read
+    // shouldHandleWindow's structural fullscreen reject as an eviction verdict.
+    // The first-contact carve-out is unreachable behind the notified gate
+    // above; it matters at bring-up only.
     KWin::Window* kwFs = w->window();
     const bool fullScreen = w->isFullScreen() || (kwFs && kwFs->isRequestedFullScreen());
     const bool fullscreenOnScrollingScreen = fullScreen && isScrollingScreen(m_effect->getWindowScreenId(w));
@@ -394,7 +476,12 @@ void TilingHandler::applyFloatCleanup(const QString& windowId)
     // A floating window is free to move itself — stop countering.
     m_effect->m_scrollCommandedRects.remove(windowId);
     m_effect->m_scrollOfferedColumn.remove(windowId);
-    m_effect->m_navigationHandler->setWindowFloating(windowId, true);
+    // Guarded like slotWindowFloatingChanged's unfloat write: the handler is
+    // destroyed before this one during effect teardown, and the cache dies
+    // with it.
+    if (m_effect->m_navigationHandler) {
+        m_effect->m_navigationHandler->setWindowFloating(windowId, true);
+    }
     // A floating window is no longer tile-managed on any screen — clear tiled
     // tracking. clearWindowTiledAllScreens re-resolves the window's rules when the
     // tiled status flips, so a baseline border / title-bar rule scoped to tiled

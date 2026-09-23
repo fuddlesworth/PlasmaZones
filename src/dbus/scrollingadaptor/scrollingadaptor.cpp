@@ -88,16 +88,20 @@ ScrollingAdaptor::ScrollingAdaptor(PhosphorScrollEngine::ScrollEngine* engine, Q
                 Q_EMIT stripContextChanged(screenId, epoch, debugLabel);
             });
     // Strip wake-ups for anyone rendering the strip (the settings app's
-    // Monitors thumbnail today). Relayed straight through: placementChanged
+    // Monitors thumbnail and the Phosphor shell's placement map). Relayed
+    // straight through: placementChanged
     // IS the engine's change gate, and the reasons this adaptor does not add
     // a second, payload-level one are on the signal's declaration.
     //
     // Undamped, unlike the sibling relay of this same signal onto
     // Tiling.tilingChanged (init_engines.cpp), which skips the edge
     // auto-scroll's ~60 Hz tick. Deliberate rather than an oversight: that
-    // one had no in-tree subscriber to damp it, while this signal's only
-    // reader coalesces every wake-up onto a settle timer and re-reads once.
-    // The cost here is a payload-free bus message per tick, not a relayout.
+    // one had no in-tree subscriber to damp it, while both readers of this
+    // signal coalesce. The settings reader folds every wake-up onto a settle
+    // timer and re-reads once, and the shell's placement map
+    // (libs/phosphor-shell placementmap.cpp) does the same and keeps one
+    // stripModelJson read in flight at a time, so the cost per tick here is a
+    // payload-free bus message, not a relayout.
     connect(m_engine, &PhosphorEngine::PlacementEngineBase::placementChanged, this, [this](const QString& screenId) {
         // A placement change for a screen this engine no longer owns
         // describes a strip no reader can fetch: visibleStripJson
@@ -449,6 +453,18 @@ void ScrollingAdaptor::reapplyWindowGeometry(const QString& windowId)
         return;
     }
     m_engine->reapplyWindowGeometry(windowId);
+}
+
+bool ScrollingAdaptor::setWindowFullscreenFloat(const QString& windowId, const QString& screenId, bool floating)
+{
+    // clearWindowedFullscreen's wire-boundary policy: a reconciliation call
+    // reporting what the compositor has already done, so no ownership or
+    // context gate. The engine refuses an untracked window and a float it
+    // does not own.
+    if (!m_engine || windowId.isEmpty()) {
+        return false;
+    }
+    return m_engine->setWindowFullscreenFloat(windowId, floating, screenId);
 }
 
 QString ScrollingAdaptor::visibleStripJson(const QString& screenId) const

@@ -258,9 +258,8 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
                 // (the sibling prune's payload keeps the same contract).
                 releasedScreens.insert(screenId);
             });
-        // Ownership only — the per-output desktop STAYS. This screen is
-        // leaving scrolling, not disappearing, and its desktop is compositor
-        // truth this engine cannot re-derive (see releaseScreenOwnership).
+        // Ownership only — the per-output desktop STAYS: the screen is leaving
+        // scrolling, not disappearing (see releaseScreenOwnership).
         m_context.releaseScreenOwnership(screenId);
         // Even a STATELESS leaving screen (seed pushed before any window
         // arrived) must drop its per-screen bookkeeping — the state-driven
@@ -293,6 +292,7 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
         m_states.removeWindowsIf([&releasedSet](const QString& windowId, const PhosphorEngine::PlacementStateKey&) {
             return releasedSet.contains(windowId);
         });
+        announceReleasedFullscreenHolds();
         Q_EMIT windowsReleased(releasedWindows, releasedScreens);
     }
 

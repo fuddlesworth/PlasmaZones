@@ -110,6 +110,27 @@ enum class AbsolutePathPolicy {
         for (;;) {
             const QString canonical = QFileInfo(current).canonicalFilePath();
             if (!canonical.isEmpty()) {
+                // A canonical path holds no symlink in ANY component. When one
+                // does, Qt did not resolve it: up to 6.11 a self-referential
+                // CYCLE, and any path THROUGH one, came back as its own spelling,
+                // where 6.12 returns empty for it like any other unresolvable
+                // link. Refused here so both agree with the isSymLink() arm
+                // below, which is where 6.12 lands. A cycle can never be opened
+                // (ELOOP), so nothing usable is lost, and the verdict no longer
+                // depends on the Qt the library was built with. The whole chain,
+                // not just the leaf: for `loop/effect.frag` the leaf is not a
+                // link, its parent is. Bounded by the component count.
+                for (QString probe = canonical;;) {
+                    const QFileInfo probeInfo(probe);
+                    if (probeInfo.isSymLink()) {
+                        return std::nullopt;
+                    }
+                    const QString probeParent = probeInfo.absolutePath();
+                    if (probeParent.isEmpty() || probeParent == probe) {
+                        break;
+                    }
+                    probe = probeParent;
+                }
                 if (tail.isEmpty()) {
                     return canonical;
                 }
@@ -121,11 +142,11 @@ enum class AbsolutePathPolicy {
             // PRESENT but unresolvable is NOT the same as absent, and conflating
             // them is an escape of exactly the kind this climb was rewritten to
             // close. `canonicalFilePath()` returns empty for a DANGLING symlink
-            // just as it does for a missing component (a self-referential CYCLE
-            // is different: Qt canonicalises it to itself, so a contained cycle
-            // never reaches this branch and is accepted by the containment
-            // check — see acceptsASymlinkCycleBecauseItStaysContained in the
-            // tests). Without this the climb would treat a dangling link as
+            // just as it does for a missing component, and from Qt 6.12 for a
+            // self-referential CYCLE too (older Qt is caught by the symlink
+            // check on the canonical result above — see
+            // refusesASymlinkCycleOnEveryQt in the tests).
+            // Without this the climb would treat a dangling link as
             // "not there yet", prepend its name, and
             // re-append it LEXICALLY onto the canonical root — mixing the two
             // domains this function promises never to mix. A pack shipping

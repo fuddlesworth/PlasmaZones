@@ -9,23 +9,23 @@
 // minimize/unminimize pairs), and an unminimize hands it back — with a
 // deferred, revalidated commit so the stock minimize animation is not torn
 // mid-flight, plus a bounded retry for the window where the daemon has not yet
-// claimed the screen. The rest of signals.cpp is the D-Bus slot surface.
+// claimed the screen. signals.cpp keeps the daemon's D-Bus slots (enabled
+// state, per-window float echo) and KWin's per-window maximized and fullscreen
+// slots.
 
 #include "tilinghandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
-#include "handlers/navigationhandler.h"
 #include "compositor/effectlogging.h"
 #include "handlers/snaphandler.h" // cross-mode minimize-float adoption
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
-#include <PhosphorIdentity/WindowId.h>
 
 #include <effect/effect.h> // Effect::animationTime, the deferred-unfloat grace
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
-#include <window.h>
-#include <workspace.h>
 
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <QLoggingCategory>
 #include <QPointer>
 #include <QTimer>
@@ -59,12 +59,26 @@ void TilingHandler::cancelPendingUnminimizeUnfloat(const QString& windowId)
     m_pendingUnminimizeUnfloat.cancel(windowId);
 }
 
+// Clears three things despite the name, which dates from when it held only the
+// first: the debounced minimize-float commits, the deferred unminimize-unfloat
+// timers (grace and retry alike), and the fullscreen-hold records (record,
+// unanswered return and generation stamp). The minimize-float MARKERS and the
+// in-flight unfloat map are not touched here.
 void TilingHandler::clearAllPendingMinimizeFloats()
 {
     m_pendingMinimizeFloat.cancelAll();
     // The restore-side timers must not fire against a disabled engine or a
     // torn-down handler either.
     m_pendingUnminimizeUnfloat.cancelAll();
+    // The fullscreen-float records go with them, for both callers. A new daemon
+    // session never held the float, and its re-announce rejects the
+    // still-fullscreen window at first contact, so the exit takes the
+    // never-tracked arm. A disabled engine has nothing to unfloat into. Either
+    // way an exit that found the record would send an unfloat for a float the
+    // daemon does not have.
+    m_fullscreenFloatedWindows.clear();
+    m_fullscreenUnfloatInFlight.clear();
+    m_fullscreenHoldGeneration.clear();
 }
 
 bool TilingHandler::beginUnminimizeUnfloat(const QString& windowId)
@@ -139,7 +153,7 @@ bool TilingHandler::dispatchUnminimizeUnfloat(const QString& windowId, const QSt
                             }
                             m_unfloatInFlight.remove(windowId);
                             m_minimizeFloatedWindows.remove(windowId);
-                            m_untiledMinimizeFloats.remove(windowId);
+                            m_minimizeFloatMarks.remove(windowId);
                             m_unfloatRetryAttempts.remove(windowId);
                             m_effect->slotWindowFloatingChanged(windowId, false, QString());
                         });
@@ -153,7 +167,7 @@ void TilingHandler::scheduleUnminimizeUnfloatRetry(const QString& windowId)
         || m_unfloatRetryAttempts.value(windowId) >= kAutotileMaxUnfloatRetries) {
         return;
     }
-    KWin::EffectWindow* window = m_effect->findWindowById(windowId);
+    KWin::EffectWindow* window = m_effect->findWindowByIdExact(windowId);
     if (!window || window->isDeleted() || window->isMinimized()) {
         return;
     }
@@ -161,6 +175,12 @@ void TilingHandler::scheduleUnminimizeUnfloatRetry(const QString& windowId)
     ++m_unfloatRetryAttempts[windowId];
     m_pendingUnminimizeUnfloat.schedule(windowId, kAutotileUnfloatRetryDelayMs, [this, windowId, safeWindow]() {
         if (!safeWindow || safeWindow->isDeleted() || safeWindow->isMinimized()) {
+            return;
+        }
+        // Same bail as the grace lambda: a window that re-fullscreened in the
+        // gap must not be unfloated into the strip as a fullscreen column.
+        if (!m_effect->shouldHandleWindow(safeWindow.data()) || !m_effect->isTileableWindow(safeWindow.data())) {
+            qCDebug(lcEffect) << "Autotile: unfloat retry no longer handleable, skipping:" << windowId;
             return;
         }
         const QString screenId = m_effect->getWindowScreenId(safeWindow.data());
@@ -205,7 +225,7 @@ void TilingHandler::claimAlreadyMinimizedAsFloated(KWin::EffectWindow* w, const 
     // dual-held, with the in-flight completion fighting the fresh claim.
     if (isMinimizeFloated(windowId)) {
         if (enteringAutotile) {
-            m_untiledMinimizeFloats.insert(windowId);
+            m_minimizeFloatMarks.markUntiled(windowId);
         }
         // Re-assert the daemon-side float on EVERY claim pass, not only when
         // entering autotile. Each claim site in this file inserts its local
@@ -252,7 +272,7 @@ void TilingHandler::claimAlreadyMinimizedAsFloated(KWin::EffectWindow* w, const 
             qCInfo(lcEffect) << "Autotile: adopting snap-mode minimize-float at announce:" << windowId << "on"
                              << screenId;
             m_minimizeFloatedWindows.insert(windowId);
-            m_untiledMinimizeFloats.insert(windowId);
+            m_minimizeFloatMarks.markUntiled(windowId);
             applyFloatCleanup(windowId);
             if (m_effect->m_daemonGate.serviceRegistered) {
                 PhosphorProtocol::ClientHelpers::fireAndForget(
@@ -273,7 +293,7 @@ void TilingHandler::claimAlreadyMinimizedAsFloated(KWin::EffectWindow* w, const 
     if (enteringAutotile) {
         // The current rect belongs to the prior mode. Place it in autotile at
         // the visibility edge instead of after the animation grace.
-        m_untiledMinimizeFloats.insert(windowId);
+        m_minimizeFloatMarks.markUntiled(windowId);
     }
     qCInfo(lcEffect) << "Autotile: window already minimized at announce, claiming as minimize-floated:" << windowId
                      << "on" << screenId;
@@ -388,6 +408,7 @@ void TilingHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
             }
 
             m_minimizeFloatedWindows.insert(windowId);
+            m_minimizeFloatMarks.recordPeers(windowId, TilingStateHelpers::tiledOnScreen(m_border, screenId));
 
             qCInfo(lcEffect) << "Autotile: window minimized (after debounce), floating:" << windowId << "on"
                              << screenId;
@@ -437,7 +458,7 @@ void TilingHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
         const int snapBudgetUsed = snap ? snap->unfloatRetryBudgetUsed(windowId) : 0;
         if (snap && snap->removeMinimizeFloated(windowId)) {
             m_minimizeFloatedWindows.insert(windowId);
-            m_untiledMinimizeFloats.insert(windowId);
+            m_minimizeFloatMarks.markUntiled(windowId);
             // Budget survives the hop (see seedUnfloatRetryBudget).
             seedUnfloatRetryBudget(windowId, snapBudgetUsed);
             qCInfo(lcEffect) << "Autotile: adopted snap-mode minimize-float, unfloating immediately:" << windowId
@@ -462,12 +483,23 @@ void TilingHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     // its tile. Commit the unfloat immediately instead, same rationale as
     // the snap-mode adoption above: the tile decision lands while the
     // restore is still starting and the window goes straight to its tile.
-    if (m_untiledMinimizeFloats.contains(windowId)) {
-        qCInfo(lcEffect) << "Autotile: window unminimized (claimed at announce), unfloating immediately:" << windowId
-                         << "on" << screenId;
+    //
+    // A window we tiled ourselves lands here too when the layout changed
+    // while it was minimized: its frame is the tile of a layout that no
+    // longer exists, so the grace would show it at that stale rect (full
+    // area, for a sole window joined by others since) and then hop it. The
+    // same goes for one carried across screens while minimized, whose frame
+    // is a tile on the screen it left.
+    const bool layoutChanged = m_minimizeFloatMarks.isDisplaced(windowId)
+        || m_minimizeFloatMarks.peersChanged(windowId, TilingStateHelpers::tiledOnScreen(m_border, screenId));
+    if (layoutChanged || m_minimizeFloatMarks.isUntiled(windowId)) {
+        qCInfo(lcEffect) << "Autotile: window unminimized"
+                         << (layoutChanged ? "(layout changed while minimized)," : "(claimed at announce),")
+                         << "unfloating immediately:" << windowId << "on" << screenId;
         if (dispatchUnminimizeUnfloat(windowId, screenId)) {
             // Same stale-frame rationale as the adoption branch above: the
-            // rect belongs to the prior mode, so withhold paints until the
+            // rect is not the tile the window is about to get (prior mode,
+            // prior layout or prior screen), so withhold paints until the
             // tile geometry lands.
             m_effect->beginRestoreSuppression(w);
             notifyWindowAdded(w, /*knownFreeFloating=*/false);

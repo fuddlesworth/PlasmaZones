@@ -409,7 +409,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     // crossing screens mid-unfloat is still owned, and letting the cleanup
     // below drop it without re-establishing the claim strands it floating.
     const bool ownedMinimizeFloat = isMinimizeFloated(windowId);
-    const bool wasUntiledMinimizeFloat = m_untiledMinimizeFloats.contains(windowId);
+    const bool wasUntiledMinimizeFloat = m_minimizeFloatMarks.isUntiled(windowId);
     // The in-flight half of that ownership, snapshotted separately: a window
     // mid-unfloat has already been unminimized, so isMinimized() is FALSE for
     // it and the re-establish below would skip exactly the case the comment
@@ -437,8 +437,13 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         if (newIsAutotile) {
             m_minimizeFloatedWindows.insert(windowId);
             if (wasUntiledMinimizeFloat) {
-                m_untiledMinimizeFloats.insert(windowId);
+                m_minimizeFloatMarks.markUntiled(windowId);
             }
+            // The cleanup above dropped the peers record, and whatever the
+            // frame holds it is not a tile on the NEW screen: without this
+            // the unminimize edge reads "no record, unchanged" and takes the
+            // grace.
+            m_minimizeFloatMarks.markDisplaced(windowId);
             seedUnfloatRetryBudget(windowId, savedUnfloatBudget);
             if (wasUnfloatInFlight) {
                 // The in-flight request named the OLD screen, and its watcher

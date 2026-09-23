@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // FILE-SIZE EXCEPTION (sanctioned): TilingHandler is one class declaration,
-// and the implementation is already partitioned across the thirteen TUs in
+// and the implementation is already partitioned across the fourteen TUs in
 // this directory (tiling.cpp, tilinghandler.cpp, state.cpp, wiring.cpp,
 // signals.cpp, windowedfullscreen.cpp, pretilegeometry.cpp, floatcleanup.cpp,
 // minimizefloat.cpp, outputchange.cpp, screenschanged.cpp, scrolltabs.cpp,
-// wheelchord.cpp) —
+// wheelchord.cpp, fullscreenhold.cpp) —
 // every one of those TUs calls back
 // through this single declaration, which C++ requires to be whole. Most of the
 // length is the per-member invariant prose the split files depend on: the
@@ -19,6 +19,7 @@
 
 #include "compositor/deferredwindowcommits.h"
 #include "compositor/scrolltabindicatorpainter.h"
+#include "minimizefloatmarks.h"
 // ClaimScope is part of releaseAllClaims' signature; the header is pure and
 // header-only, so this costs nothing beyond the enum.
 #include "scrolldecisions.h"
@@ -101,8 +102,9 @@ public:
     /// spawn geometry and the FloatingCache is not yet populated, so the
     /// isWindowFloating() guard must be bypassed). RE-ADD callers (a window
     /// already known to the engine being re-announced — cross-screen
-    /// transfer, desktop-return catch-scan) pass `false`: the frame may be
-    /// a tiled zone rect, so the floating guard MUST run and reject it,
+    /// transfer, desktop-return catch-scan) and the fullscreen-exit announce of
+    /// a never-tracked window pass `false`: the frame may be a tiled zone rect
+    /// or still the output rect, so the floating guard MUST run and reject it,
     /// otherwise the tiled rect would be persisted as the window's
     /// free-floating geometry and clobber the daemon's real float-back.
     bool notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloating);
@@ -172,8 +174,8 @@ public:
     void cleanupAutotileTracking(const QString& windowId);
     /// Drop @p windowId from the minimize-float set and cancel EITHER
     /// deferred edge — the minimize debounce and the unminimize commit —
-    /// mirroring SnapHandler::removeMinimizeFloated, plus the untiled-marker
-    /// drop (snap has no untiled-marker counterpart). Returns true if
+    /// mirroring SnapHandler::removeMinimizeFloated, plus the qualifier-marks
+    /// drop (snap has no MinimizeFloatMarks counterpart). Returns true if
     /// the window was tracked. Callers: close cleanup, the effect's
     /// authoritative visible unfloat (slotWindowFloatingChanged, including
     /// its dual-hold repair), and the cross-mode adoption hops (snap's
@@ -182,7 +184,7 @@ public:
     {
         cancelPendingMinimizeFloat(windowId);
         cancelPendingUnminimizeUnfloat(windowId);
-        m_untiledMinimizeFloats.remove(windowId);
+        m_minimizeFloatMarks.remove(windowId);
         m_unfloatRetryAttempts.remove(windowId);
         const bool owned = m_minimizeFloatedWindows.remove(windowId);
         return m_unfloatInFlight.remove(windowId) > 0 || owned;
@@ -208,7 +210,7 @@ public:
     {
         m_minimizeFloatedWindows.insert(windowId);
         if (untiled) {
-            m_untiledMinimizeFloats.insert(windowId);
+            m_minimizeFloatMarks.markUntiled(windowId);
         }
     }
 
@@ -420,7 +422,7 @@ public:
     /// per-window authorship record: the batch's own writes never land there,
     /// because for such a toggle KWin's bit is already where the engine will
     /// put it and applyMaximizeSuppressed writes nothing. An engine-driven
-    /// write (Meta+Alt+F) does echo, and one landing inside a press's round
+    /// write (Meta+Alt+M) does echo, and one landing inside a press's round
     /// trip can cost one unrequested toggle; that residual is bounded and
     /// documented at the arm.
     bool interceptMaximizeRequest(KWin::EffectWindow* w);
@@ -1066,8 +1068,8 @@ public:
     /// for @p windowId to @p targetScreenId updates bookkeeping only. See
     /// m_expectedOutputMove.
     ///
-    /// @p sourceScreenId is the screen the daemon moved the window off. It is
-    /// authoritative and must be used whenever it is non-empty: a daemon arm
+    /// @p sourceScreenId is the screen the daemon moved the window off, and is
+    /// authoritative whenever it is non-empty: a daemon arm
     /// site that runs after the handoff has already pushed the destination's
     /// tiles, so by now m_notifiedWindowScreens names the DESTINATION.
     ///
@@ -1101,13 +1103,6 @@ public Q_SLOTS:
     /// @p epoch is compared and nothing else — never parsed, never checked
     /// against KWin's own current desktop. @p debugLabel is logged only.
     void slotStripContextChanged(const QString& screenId, const QString& epoch, const QString& debugLabel);
-
-    /// The daemon is about to dispatch a keyboard strip verb on @p screenId and
-    /// needs any natively-fullscreen tile there released first. Thin: defers
-    /// wholly to leaveNativeFullscreenTiles, which the wheel chord calls
-    /// directly. Safe on a screen this process does not manage, and on one
-    /// holding no fullscreen tile — both are a no-op inside.
-    void slotLeaveNativeFullscreenRequested(const QString& screenId);
 
     void slotScrollEffectBehaviourChanged(const QVariantMap& behaviour);
 
@@ -1288,9 +1283,9 @@ private:
      * ALL THREE COMPOSITOR CLAIMS are released here, not just monocle: the
      * windowed-fullscreen hold goes first (before the geometry work, which is
      * why it is not folded into the funnel call), and the column-maximize
-     * mirror goes through releaseAllClaims with it. A floating window is
-     * leaving the strip, so no later batch arrives carrying a cleared flag —
-     * see the StripExit row of the claim-scope table.
+     * mirror goes through releaseAllClaims with it. A floated window gets no
+     * batch entry carrying a cleared flag while it floats, the temporary
+     * own-fullscreen float included — see the StripExit row of the scope table.
      */
     void applyFloatCleanup(const QString& windowId);
 
@@ -1308,6 +1303,9 @@ private:
      * @return true if the window should be notified to the autotile daemon
      */
     bool isEligibleForTilingNotify(KWin::EffectWindow* w, bool* rejectedOnlyBecauseMinimized = nullptr) const;
+    /// True while @p w is in its OWN fullscreen (requested OR committed), never windowed
+    /// fullscreen. The enter branch's float-out is primary; the batch's read is the residual guard.
+    bool isInOwnFullscreen(KWin::EffectWindow* w, const QString& windowId, bool flaggedWindowed) const;
 
     /**
      * @brief Claim a window that was already minimized at batch-announce time
@@ -1358,10 +1356,9 @@ private:
     void cancelPendingUnminimizeUnfloat(const QString& windowId);
 
     /**
-     * @brief Cancel every pending debounced minimize→float commit.
-     *
-     * Called when autotile is disabled — in-flight timers should not
-     * commit floats against a now-disabled engine.
+     * @brief Cancel every pending minimize→float and unminimize→unfloat
+     * commit and drop the own-fullscreen float records (engine disable and
+     * bring-up): none may act against an engine that is gone.
      */
     void clearAllPendingMinimizeFloats();
 
@@ -1391,9 +1388,9 @@ private:
      * @param w The window, used to read its maximize/fullscreen restore rect.
      * @param knownFreeFloating Bypass the isWindowFloating guard when the
      *        caller knows the frame is authoritatively a free-float rect.
-     *        Use true only for a genuine window-open event. Fresh windows are
-     *        not tracked in the FloatingCache yet, so isWindowFloating()
-     *        returns false and would incorrectly reject the initial capture.
+     *        True for a genuine window-open (not in the FloatingCache yet, so
+     *        the guard would reject the initial capture) and a mode-entry
+     *        batch; false at the fullscreen-exit announce (frame still full).
      */
     void saveAndRecordPreTileGeometry(const QString& windowId, const QString& screenId, KWin::EffectWindow* w,
                                       const QRectF& frameIn, bool knownFreeFloating = false);
@@ -1599,19 +1596,15 @@ private:
     /// strip, not the one holding focus.
     QString wheelTargetScreen() const;
 
-    /// Leaves the OWN fullscreen (a client F11, a video going fullscreen — NOT
-    /// the windowed-fullscreen feature) of every scroll-tracked tile on
-    /// @p screenId. A tile in that state refuses every geometry commit through
-    /// applyWindowGeometry's fullscreen bail while the engine goes on scrolling
-    /// and PARKING its column, so the two owners drift apart for the whole hold.
-    ///
-    /// PRIVATE on purpose. It has exactly two callers, both in-class and both
-    /// USER-VERB dispatch sites: handleWheelChord, and
-    /// slotLeaveNativeFullscreenRequested carrying the daemon's keyboard
-    /// shortcut gate over Scrolling.leaveNativeFullscreenRequested. Both call it
-    /// BEFORE their verb goes out. Not callable from the batch apply — see the
-    /// site comment in wheelchord.cpp for the measurement that rules that out.
-    void leaveNativeFullscreenTiles(const QString& screenId);
+    /// Return a held tile (attempt 0 mints the generation; three attempts on error, a refusal is final).
+    void dispatchFullscreenUnfloat(const QString& windowId, const QString& screenId, int attempt,
+                                   quint64 generation = 0);
+    /// Desktop-return re-track: send the return a demoted hold could not. No decoration sweep.
+    void settleParkedFullscreenHold(KWin::EffectWindow* w, const QString& windowId, const QString& screenId);
+    /// Desktop-switch demotion of a held tile (record kept, tracking dropped, id parked). True if held.
+    bool parkFullscreenHoldForDesktopSwitch(const QString& windowId);
+    /// Drop every own-fullscreen record for @p windowId (record, unanswered return, stamp).
+    void dropFullscreenHoldRecords(const QString& windowId);
 
     /// Drop any banked sub-notch remainder. Called from every path that stops
     /// claiming axis events, so a partial notch cannot outlive the gesture
@@ -1647,7 +1640,7 @@ private:
     /// announce N-1 cannot erase the tracking announce N established, and a
     /// corpse's error arm (the entry erased by cleanupAutotileTracking) reads
     /// back 0, mismatches, and no-ops instead of re-inserting a spawn-provenance
-    /// marker for a dead window whose appId-derived id is reusable.
+    /// marker for a dead window, which would leak until the tail prune.
     QHash<QString, quint64> m_announceGen;
     struct DeferredWindowRoute
     {
@@ -1685,7 +1678,7 @@ private:
     quint64 m_activeLayoutsQueryGeneration = 0;
     /// Same per-dispatch guard for the scrolling-screens property fetch.
     quint64 m_scrollingScreensQueryGeneration = 0;
-    /// Remaining bounded-retry attempts for the three bring-up fetches.
+    /// Remaining bounded-retry attempts for the bring-up fetches (six budgets).
     /// Reset to the cap by each loadSettings run, consumed only by the
     /// failure arms' own re-dispatches.
     int m_activeLayoutsFetchRetriesLeft = 0;
@@ -1857,6 +1850,14 @@ private:
     /// lambda consuming the newer hop's map entry.
     QHash<QString, quint64> m_crossScreenRestoreGen;
     QSet<QString> m_minimizeFloatedWindows;
+    /// Strip tiles WE held out for their own fullscreen. Dropped by the exit branch, the refused-hold
+    /// reply and the echo-drop arm (signals.cpp), settleParkedFullscreenHold, dropFullscreenHoldRecords
+    /// (the cleanupAutotileTracking and mode-toggle funnels), the bring-up reset and clearAllPendingMinimizeFloats.
+    QSet<QString> m_fullscreenFloatedWindows;
+    /// Returns dispatched and not yet answered; a re-enter inside one is still floated out.
+    QSet<QString> m_fullscreenUnfloatInFlight;
+    /// Latest hold or return dispatch per window; a reply or retry with a stale stamp is superseded.
+    QHash<QString, quint64> m_fullscreenHoldGeneration;
     /// Ownership after an unfloat dispatch and before its authoritative echo.
     /// The generation rejects completions from a countermanded older request.
     /// A re-minimize countermand moves the window back to the active set.
@@ -1931,12 +1932,11 @@ private:
     /// Non-const because it evicts an expired entry as it reads.
     bool maximizeToggleInFlight(const QString& windowId);
     quint64 m_unfloatRequestGeneration = 0;
+    quint64 m_fullscreenHoldRequestGeneration = 0;
     QHash<QString, int> m_unfloatRetryAttempts;
-    /// Subset of m_minimizeFloatedWindows claimed at batch-announce time
-    /// (already minimized when the screen entered autotile). These windows
-    /// still carry geometry from the prior mode, so their unminimize commits
+    /// Qualifiers on m_minimizeFloatedWindows entries whose unminimize commits
     /// immediately instead of through the deferred animation grace.
-    QSet<QString> m_untiledMinimizeFloats;
+    MinimizeFloatMarks m_minimizeFloatMarks;
     // NOTE: title-bar (borderless) state is owned by the effect's
     // DecorationManager; this handler only tracks tiled membership for
     // border RENDERING via m_border.tiledWindowsByScreen.
@@ -2004,7 +2004,7 @@ private:
     /// channels), the untile diff, the demote and removed-screen sweeps, the
     /// no-strip-left output-change arm, the leaving-scrolling loop, the
     /// fullscreen-exit-while-floating repair and the untrack funnel
-    /// (untrackWindow, via releaseAllClaims) all call it for that reason. The
+    /// (cleanupAutotileTracking, via releaseAllClaims) all call it for that reason. The
     /// untrack funnel matters most for the cross-output transfer half: the
     /// window survives on a screen these engines do not manage, and nothing
     /// else would ever hand the bit back. The scroll-to-scroll handoff

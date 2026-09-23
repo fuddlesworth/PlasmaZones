@@ -21,10 +21,11 @@ class RuleStore;
  * @brief Opt-in cross-process auto-reload for a RuleStore.
  *
  * Watches the store's backing @c rules.json and calls
- * @ref RuleStore::load() when it changes on disk, so a separate-process
- * consumer that OWNS its store (standalone @c plasmazones-settings /
- * @c plasmazones-editor, which have no D-Bus path to the daemon driving
- * reloads) reflects another process's writes without a manual reload.
+ * @ref RuleStore::load() when it changes on disk, so a process that OWNS a
+ * store reflects another process's writes (or a hand edit of the file)
+ * without a manual reload. The daemon, the standalone
+ * @c plasmazones-settings and @c plasmazones-editor each run one over their
+ * own store.
  *
  * The hard parts are delegated to @c PhosphorFsLoader::WatchedDirectorySet:
  *   - a 50&nbsp;ms debounce that coalesces the temp-write + atomic-rename save
@@ -39,10 +40,9 @@ class RuleStore;
  * content actually differs — so a watcher event from the store's own
  * @c save() reloads to identical content and emits nothing.
  *
- * This is NOT for the daemon: the daemon is the sole writer and drives its own
- * reloads. Opt-in by construction — a consumer creates this only when it wants
- * the behaviour, so the base @ref RuleStore (and the daemon) carry no
- * watcher overhead.
+ * Opt-in by construction — a consumer creates this only when it wants the
+ * behaviour, so the base @ref RuleStore carries no watcher overhead and a
+ * test fixture that only needs the store never installs a file watch.
  *
  * GUI-thread only — inherits @c WatchedDirectorySet's thread affinity: construct
  * and call @ref start() from the thread that owns the store.

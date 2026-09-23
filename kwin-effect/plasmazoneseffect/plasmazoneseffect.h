@@ -465,8 +465,8 @@ private:
      * @brief Shared window-TYPE rejection predicate.
      *
      * Returns true when @p w is a structurally unmanageable window kind
-     * (special/desktop/dock/fullscreen/skipSwitcher, or the transient/dialog/
-     * menu/popup/tooltip family). Single source of truth behind
+     * (special/desktop/dock/fullscreen/skipSwitcher/bare override-redirect, or
+     * the transient/dialog/menu/popup/tooltip family). Single source of truth behind
      * shouldHandleWindow()'s structural clause, notifyWindowActivated()'s
      * focus-tracking filter and classifyWindowKind(), so they can never drift
      * (discussion #461 item 11).
@@ -560,7 +560,7 @@ private:
      * transient family is a real toggle (m_decorationExcludeTransientWindows):
      * with it off the effect draws borders onto dialogs / popups. Rejects the
      * always-wrong surfaces (own overlay / editor, xdg-portal, plasma-shell,
-     * special / desktop / dock / fullscreen / skipSwitcher, notification / OSD),
+     * special / desktop / dock / fullscreen / skipSwitcher / bare override-redirect, notification / OSD),
      * honours the dedicated decoration-exclusion slice (Exclude ∪
      * ExcludeDecorations via m_decorationExclusionEvaluator — blanket Exclude
      * still leaves an app undecorated, the scoped ExcludePlacement

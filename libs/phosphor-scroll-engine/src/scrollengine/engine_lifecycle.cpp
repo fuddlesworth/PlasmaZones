@@ -181,6 +181,8 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
                 m_windowTracker->placementStore().takeForReopen(engineId(), windowId, appId, currentKey.screenId)) {
             const PhosphorEngine::EngineSlot slot = record->slotFor(engineId());
             if (slot.state == PhosphorEngine::WindowPlacement::stateFloating()) {
+                // A record captured mid-hold before holds were excluded from capture
+                // re-floats once at the output rect; the next close overwrites it.
                 state->addFloating(windowId);
                 seedFloatRestoreForOpen(windowId, minWidth, minHeight);
                 // The record's SCROLL slot says floating, so this float is
@@ -618,6 +620,7 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     if (windowId.isEmpty() || !m_scrollingScreens.contains(screenId)) {
         return;
     }
+    m_closedFullscreenHolds.remove(windowId); // any re-entry ends the closed-hold answer
 
     PhosphorEngine::PlacementStateKey oldKey;
     ScrollState* oldState = stateForWindow(windowId, &oldKey);
@@ -636,6 +639,7 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         // so it survives to re-position an unrelated later open. No-op when
         // the screen carries no seed, which is the usual case here.
         consumePendingInitialOrder(screenId, windowId);
+        settleReannouncedFullscreenHold(windowId);
         return;
     }
 
@@ -741,7 +745,7 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         }
         oldState->strip().takeWindow(windowId, oldParams);
         oldState->removeFloating(windowId);
-        m_floatRestore.remove(windowId);
+        m_floatRestore.remove(windowId); // a hold too: unreachable from the effect, the reconcile drops it first
         // The mode-float marker goes with the old context too: the window
         // re-enters (usually tiled) on the new screen, and a stale marker
         // would re-float it at the next mode transition. The
@@ -1096,6 +1100,11 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
     // memory, the column rect becomes the reopen float-back geometry (the
     // float-back tile-rect poison, autotile's twin retains for the same
     // reason). pruneStaleWindows reclaims the entry independently.
+    // A close mid-hold keeps answering the hold for the same reason: that capture
+    // runs after this drop and must read the frame as a suspension, never free geometry.
+    if (m_floatRestore.value(windowId).fullscreenHold) {
+        m_closedFullscreenHolds.insert(windowId);
+    }
     m_floatRestore.remove(windowId);
     m_scrollFloatedWindows.remove(windowId);
     // The parked-edge and windowed-fullscreen apply memories die with the

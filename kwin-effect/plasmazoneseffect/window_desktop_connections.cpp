@@ -260,9 +260,9 @@ void PlasmaZonesEffect::wireDesktopChangeHandler(KWin::EffectWindow* w)
         }
         if (!destinationManaged && !stickyFallThrough) {
             // Snapping screen. There is no stack to join and snapping places
-            // nothing on its own, so an arrival floats — unless the context's
-            // layout auto-assigns, which is the one case with somewhere to put
-            // it. Offer it the same auto-fill the drop path runs (drag_end.cpp),
+            // nothing on its own, so an arrival floats — unless it was snapped
+            // where it came from and the context's layout auto-assigns, which
+            // is the one case with somewhere to put it. Offer it the same auto-fill the drop path runs (drag_end.cpp),
             // and let the daemon decide: snapToEmptyZone gates itself on
             // `layout->autoAssign() || autoAssignAllLayouts()` and answers
             // shouldSnap=false when neither is on, which is exactly the
@@ -280,7 +280,18 @@ void PlasmaZonesEffect::wireDesktopChangeHandler(KWin::EffectWindow* w)
             // gets neither, so a user-excluded window, or one that landed here
             // while belonging to another activity, would be snapped into a zone
             // of a layout that is not its context's.
-            if (shouldHandleWindow(window) && window->isOnCurrentActivity()
+            //
+            // isWindowSnapped is the third gate (discussion #1108). Only a
+            // window that held a zone where it came from is offered one here.
+            // A free window, whether the user floated it, dragged it out of its
+            // zone or never snapped it at all, arrives as it left: moving it
+            // to another desktop is not a request to place it, and the fill
+            // took a window the user had positioned by hand and put it in the
+            // first empty zone. The zone cache still holds the SOURCE
+            // desktop's answer at this point, because the daemon's membership
+            // reconcile that releases it runs off the metadata push and its
+            // windowStateChanged reply cannot have landed inside this signal.
+            if (isWindowSnapped(windowId) && shouldHandleWindow(window) && window->isOnCurrentActivity()
                 && isDaemonReady("auto-fill on desktop arrival")) {
                 tryAsyncSnapCall(PhosphorProtocol::Service::Interface::Snap, QStringLiteral("snapToEmptyZone"),
                                  // sticky=false, not isWindowSticky(): a sticky

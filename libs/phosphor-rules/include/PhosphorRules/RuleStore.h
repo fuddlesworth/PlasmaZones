@@ -17,9 +17,10 @@ namespace PhosphorRules {
  *
  * Owns an in-memory @ref RuleSet and persists it to a caller-supplied
  * file path (the daemon points it at @c ~/.config/plasmazones/rules.json,
- * schema v4). The daemon is the **sole writer** — settings / KCM mutate the
- * store over D-Bus, never the file directly — so a single file is
- * contention-free.
+ * schema v4). The daemon is the primary writer — settings / KCM normally
+ * mutate the store over D-Bus — but the file is also rewritten out of
+ * process (settings reset, config import, hand edits), which an owner picks
+ * up through @ref RuleStoreWatcher or an explicit @ref load().
  *
  * The store is the runtime counterpart of the config migration: @c migrateV3ToV4
  * writes the initial store as @c windowrules.json, then the v4→v5 conversion
