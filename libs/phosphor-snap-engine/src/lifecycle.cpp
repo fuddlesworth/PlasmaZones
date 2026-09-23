@@ -298,6 +298,19 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         deferredByMode ? SnapResult::noSnap() : calculateSnapToPlacementRule(windowId, screenId, sticky, directive);
     const int openDesktop =
         directive.targetDesktop >= 1 ? directive.targetDesktop : currentVirtualDesktopForScreen(screenId);
+    // A matched RouteToDesktop can send the window to a desktop whose context
+    // runs a TILING mode while the screen's CURRENT desktop runs snapping, so
+    // the mode short-circuit near the top — which asks the current desktop —
+    // let it through. The float terminals below pin residence to openDesktop,
+    // and writing a snap float verdict (plus a free-size restore) into a
+    // context another engine owns is the same visible/state desync that
+    // short-circuit exists to prevent. Scoped to the FLOAT terminals: a
+    // matched SnapToZone rule names its own zone and is left to the routing
+    // it asked for.
+    const bool routedIntoForeignMode = m_layoutManager && openDesktop >= 1
+        && openDesktop != currentVirtualDesktopForScreen(screenId)
+        && m_layoutManager->modeForScreen(screenId, openDesktop, currentActivity())
+            != PhosphorZones::AssignmentEntry::Mode::Snapping;
     // The lineage snapshot the size restore gates on, taken before take()
     // can re-bind a FIFO-matched sibling record under this uuid.
     const bool placedBefore = m_windowTracker && placedByPreviousLineage(m_windowTracker->placementStore(), windowId);
@@ -826,7 +839,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // non-snap-mode short-circuit further down would catch it, but it sits
     // AFTER this terminal, so without the guard the record and the
     // windowFloatingChanged broadcast were already written by the time it ran.
-    if (!deferredByMode && m_floatPredicate && m_floatPredicate(windowId, screenId)) {
+    if (!deferredByMode && !routedIntoForeignMode && m_floatPredicate && m_floatPredicate(windowId, screenId)) {
         // Residence pinned to the routed open desktop (see openDesktop), size
         // emit ahead of the float emit (see the header comment).
         stateForWindowOnScreen(windowId, screenId, openDesktop)->setFloatingOnScreen(windowId, screenId, openDesktop);
@@ -890,15 +903,18 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // short-circuit returns before the empty/last-zone chain — so this is always a
     // genuine snap-mode window with no zone match.
     //
-    // This is the one float terminal NOT carrying an explicit !deferredByMode
-    // guard. It reaches here only past the mode short-circuit above, which is
-    // always evaluated (a deferredByMode verdict implies a non-null
-    // m_layoutManager). Note the short-circuit asks the SCREEN'S CURRENT
-    // desktop while this terminal pins the float to openDesktop, which a
-    // matched RouteToDesktop makes a different one — so a window routed onto
-    // a tiling-mode desktop of a snapping-mode screen still lands here. That
-    // gap predates the size restore and is the reason to add the guard, or
-    // the openDesktop term to the short-circuit, if this is ever touched.
+    // This terminal carries no explicit !deferredByMode guard because the mode
+    // short-circuit above is always evaluated first (a deferredByMode verdict
+    // implies a non-null m_layoutManager). That short-circuit asks the SCREEN'S
+    // CURRENT desktop, so the routed case needs its own answer, which
+    // routedIntoForeignMode supplies: a window a RouteToDesktop sent onto a
+    // tiling-mode desktop is that engine's, and gets no snap float residence.
+    if (routedIntoForeignMode) {
+        qCInfo(PhosphorSnapEngine::lcSnapEngine)
+            << "resolveWindowRestore:" << windowId << "routed onto desktop" << openDesktop
+            << "which runs a tiling mode — leaving it to that engine";
+        return SnapResult::noSnap();
+    }
     stateForWindowOnScreen(windowId, screenId, openDesktop)->setFloatingOnScreen(windowId, screenId, openDesktop);
     // Floating where KWin put it, but at the size the app remembers, which
     // for an app with a snapped window is the zone's. Give it its free size,

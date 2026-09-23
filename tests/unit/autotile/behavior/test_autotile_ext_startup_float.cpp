@@ -315,11 +315,11 @@ private Q_SLOTS:
         QVERIFY2(arrivalState->containsWindow(QStringLiteral("strip|new2")),
                  "an exhausted round must make the same gate adopt");
 
-        // NOT covered here: the claim bodies also clear the verdict for the
-        // home open they re-enter (window_lifecycle.cpp, engine_reopen.cpp).
-        // Every scenario tried for it declined before reaching the defer
-        // gate, so an assertion would have passed with the clear removed.
-        // The clear is defensive and untested rather than silently assumed.
+        // NOT covered: the claim bodies also clear the verdict before the home
+        // open they re-enter. Two scenarios were built for it and neither
+        // reached the gate — the second produced no claim log line at all — so
+        // an assertion would have passed with the clear removed. The clear is
+        // defensive, and recorded as untested rather than assumed covered.
     }
 
     void testToggleWindowFloat_crossScreenFallback()

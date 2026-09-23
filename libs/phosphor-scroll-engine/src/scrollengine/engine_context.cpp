@@ -42,6 +42,9 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
             ++it;
         }
     }
+    m_crossScreenClaimsExhausted.removeIf([&aliveWindowIds](const QString& id) {
+        return !aliveWindowIds.contains(id);
+    });
     // Same treatment for the column-maximize leg, which is maintained
     // alongside it everywhere.
     for (auto it = m_lastAppliedMaximizedToEdges.begin(); it != m_lastAppliedMaximizedToEdges.end();) {

@@ -410,6 +410,64 @@ private Q_SLOTS:
         QCOMPARE(order, (QStringList{QStringLiteral("size"), QStringLiteral("float")}));
     }
 
+    // A matched RouteToDesktop can send a window onto a desktop whose context
+    // runs a TILING mode while the screen it opened on runs snapping now. The
+    // mode short-circuit asks the screen's CURRENT desktop, so it lets that
+    // window through, and the float terminals pin residence to the ROUTED
+    // desktop. Writing a snap float verdict and a size restore there would put
+    // this engine's state into a context another engine owns.
+    void testRoutedOntoTilingDesktop_writesNoFloatAndNoSize()
+    {
+        EngineOn on(m_wts, m_layoutManager, m_settings);
+        m_liveInstances.insert(QStringLiteral("first"));
+        setLiveProbe(m_wts);
+        auto* layout = activateLayout();
+        // Desktop 1 (the screen's current one) stays snapping; desktop 2 runs
+        // autotile, and the rule routes the window there.
+        PhosphorZones::AssignmentEntry autotile;
+        autotile.mode = PhosphorZones::AssignmentEntry::Autotile;
+        autotile.tilingAlgorithm = QStringLiteral("dwindle");
+        m_layoutManager->setAssignmentEntryDirect(kScreen, 2, QString(), autotile);
+        on.engine.setPlacementZonesResolver([](const QString&, const QString&) {
+            PhosphorSnapEngine::PlacementDirective directive;
+            directive.targetDesktop = 2;
+            return directive;
+        });
+        // A live snapped sibling, so a size restore WOULD have a source.
+        QVERIFY(m_wts->placementStore().record(
+            snappedRecord(QStringLiteral("app|first"), firstZoneId(layout), kScreen, QRect(0, 0, 800, 600))));
+
+        QSignalSpy floatSpy(&on.engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+        QSignalSpy sizeSpy(&on.engine, &PhosphorEngine::PlacementEngineBase::sizeRestoreRequested);
+        const PhosphorEngine::SnapResult result =
+            on.engine.resolveWindowRestore(QStringLiteral("app|routed"), kScreen, /*sticky*/ false);
+        QVERIFY(!result.shouldSnap);
+        QCOMPARE(floatSpy.count(), 0);
+        QCOMPARE(sizeSpy.count(), 0);
+        QVERIFY2(!on.engine.isFloating(QStringLiteral("app|routed")),
+                 "a window routed onto a tiling-mode desktop gets no snap float residence");
+
+        // The rule-float terminal is guarded the same way.
+        on.engine.setFloatPredicate([](const QString&, const QString&) {
+            return true;
+        });
+        (void)on.engine.resolveWindowRestore(QStringLiteral("app|routed2"), kScreen, /*sticky*/ false);
+        QCOMPARE(floatSpy.count(), 0);
+        QCOMPARE(sizeSpy.count(), 0);
+
+        // Control: routed onto a desktop that still runs SNAPPING, the same
+        // window does get the float default and the sibling's free size.
+        on.engine.setFloatPredicate({});
+        on.engine.setPlacementZonesResolver([](const QString&, const QString&) {
+            PhosphorSnapEngine::PlacementDirective directive;
+            directive.targetDesktop = 3;
+            return directive;
+        });
+        (void)on.engine.resolveWindowRestore(QStringLiteral("app|snapdesk"), kScreen, /*sticky*/ false);
+        QCOMPARE(floatSpy.count(), 1);
+        QCOMPARE(sizeSpy.count(), 1);
+    }
+
     // A window opening on a screen a tiling engine owns is that engine's:
     // even with a floating record of its own on that screen, the snap engine
     // writes no float residence and sends no size.

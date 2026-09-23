@@ -414,6 +414,9 @@ private:
     // out, and a size-only apply landing in that gap took the drag-out
     // top-left branch instead of recentring the fresh window.
     QHash<QString, int> m_openResolveInFlight;
+    /// Bumped whenever the map above is cleared wholesale (daemon loss), so a
+    /// reply dispatched before the clear cannot decrement a newer count.
+    quint64 m_openResolveEpoch = 0;
     // Pending debounced minimize→float commits. Shares the compositor's
     // spurious minimize-pair window with the shader and autotile paths.
     DeferredWindowCommits m_pendingMinimizeFloat{this};

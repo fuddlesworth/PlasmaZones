@@ -68,9 +68,8 @@ void SnapHandler::markWindowSnapped(const QString& windowId, const QString& scre
         return;
     }
     // The app's instant-restore entry was built from a record a zone restore
-    // has now bound to a live window (or a sibling's, which the async resolve
-    // still serves); left standing, the next same-app open teleported into
-    // this window's zone before the daemon refused the record.
+    // has now bound to a live window; left standing, the next same-app open
+    // teleported into this window's zone before the daemon refused the record.
     m_restoreCache.remove(::PhosphorIdentity::WindowId::extractAppId(windowId));
     // A window can only be snap-managed by one screen at a time. Strip stale
     // tiled tracking from any OTHER screen before recording the new owner
@@ -172,6 +171,7 @@ void SnapHandler::clearSnapTracking()
     // retry for a window still waiting.
     m_awaitingDesktopArrivalRestore.clear();
     m_openResolveInFlight.clear();
+    ++m_openResolveEpoch; // strand the replies still out against the old daemon
     m_border.tiledWindowsByScreen.clear();
 }
 
@@ -227,8 +227,7 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
     // On a resolve miss (daemon found no zone) release first-frame
     // suppression through the miss helper, which holds a window whose
     // size-only reposition is still in flight — unless the caller says
-    // another path will still reposition the window (autotile-screen path),
-    // in which case the suppression must hold until that geometry settles.
+    // another path will reposition it (autotile screen), where the hold stays.
     const auto releaseSuppression = [this, safeWindow, releaseSuppressionOnMiss]() {
         if (releaseSuppressionOnMiss) {
             if (safeWindow) {
@@ -243,20 +242,17 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
 
     // Single D-Bus call — daemon runs the full appRule → persisted → emptyZone → lastZone chain.
     //
-    // skipAnimation=true: teleport straight into the resolved zone. The morph
-    // tweens from the spawn position, which reads as "KDE opened the window,
-    // then we moved it" and translates any in-flight window.open shader quad.
+    // skipAnimation=true: teleport straight into the resolved zone, or the
+    // morph tweens from the spawn position and drags the open shader with it.
     //
-    // storePreSnap=false: the window is already at its zone position (daemon
-    // restart or KWin session restore), so its frame is the zone geometry, not
-    // a free one; stored as pre-tile it would become the float-back.
+    // storePreSnap=false: the window is already at its zone position, so
+    // storing that frame as pre-tile would make the zone the float-back.
     //
     // Seed the daemon's frame-geometry shadow before the resolve, open path
-    // only: the daemon translates a bare RouteToScreen from that shadow, whose
-    // only writers are the debounced motion flush and the bring-up bulk seed,
-    // so a freshly opened window has no entry and the rule silently did
-    // nothing for it (confirmed live). Fire-and-forget is safe because both
-    // calls ride one D-Bus connection, whose message order is preserved.
+    // only: the daemon translates a bare RouteToScreen from that shadow, and a
+    // freshly opened window has no entry there, so the rule silently did
+    // nothing for it (confirmed live). Fire-and-forget is safe: both calls
+    // ride one D-Bus connection, whose message order is preserved.
     if (isOpenPath) {
         const QRect openGeo = window->frameGeometry().toRect();
         if (openGeo.isValid()) {
@@ -275,6 +271,7 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
     // (applied, miss, error, window died) calls it.
     const bool firstPlacement = isOpenPath || reason == PhosphorEngine::RestoreReason::PendingSweep
         || reason == PhosphorEngine::RestoreReason::DesktopArrival;
+    const quint64 epoch = m_openResolveEpoch;
     if (firstPlacement) {
         ++m_openResolveInFlight[windowId];
     }
@@ -285,8 +282,10 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
             *snapApplied = true;
         };
     }
-    const std::function<void()> completeWithOutcome = [this, windowId, onComplete, snapApplied, firstPlacement]() {
-        if (firstPlacement && --m_openResolveInFlight[windowId] <= 0) {
+    const std::function<void()> completeWithOutcome = [this, windowId, onComplete, snapApplied, firstPlacement,
+                                                       epoch]() {
+        // Epoch-gated against a reply still out from before a daemon loss.
+        if (firstPlacement && epoch == m_openResolveEpoch && --m_openResolveInFlight[windowId] <= 0) {
             m_openResolveInFlight.remove(windowId);
         }
         if (onComplete) {
