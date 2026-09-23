@@ -164,7 +164,17 @@ endif()
 # Output: plasmazones_de.qm, plasmazones_fr.qm, etc.
 # QTranslator::load(locale, "plasmazones", "_", dir) finds these by name.
 if(Qt6LinguistTools_FOUND AND TRANSLATION_TS_FILES)
-    qt_add_lrelease(plasmazones_translations
+    # LRELEASE_TARGET, not a bare positional name. qt_add_lrelease's legacy
+    # one-target signature only engages `if(TARGET "${legacy_target}")`, and
+    # nothing here declares a plasmazones_translations target beforehand, so a
+    # positional argument was parsed, found not to be a target, reset to ""
+    # and silently discarded. The driving target then fell back to Qt's
+    # default ${PROJECT_NAME}_lrelease, i.e. PlasmaZones_lrelease, and
+    # `cmake --build build --target plasmazones_translations` failed with "no
+    # rule to make target". Naming it explicitly also lets the plasmazones
+    # tier attach to a name we own rather than to Qt's internal one.
+    qt_add_lrelease(
+        LRELEASE_TARGET plasmazones_translations
         TS_FILES ${TRANSLATION_TS_FILES}
         QM_FILES_OUTPUT_VARIABLE QM_FILES
     )

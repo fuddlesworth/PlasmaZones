@@ -20,10 +20,17 @@ Menu {
     // bool property: QML leaves the property at its default, and `enabled`
     // defaults to true. So with a `var` holding undefined, both
     // `editorController` and `editorController !== null` leave the item
-    // ENABLED, and the guard fails open. Declaring the type makes QML coerce
-    // undefined to null on assignment, at which point every spelling below
-    // evaluates false. Measured with qml6 6.11.2 on plain Item and on
-    // QQC2 MenuItem.
+    // ENABLED, and the guard fails open.
+    //
+    // Declaring the type closes it, but NOT by coercing: assigning undefined
+    // to a typed object property is an error, and QML logs "Unable to assign
+    // [undefined] to QObject*" and leaves the property at its PRIOR value.
+    // For a required property that has never held anything, that prior value
+    // is null, so every spelling below evaluates false. The consequence worth
+    // knowing: if this ever held a real controller and its source later went
+    // undefined, the property would go STALE rather than null. It cannot
+    // today, because main.cpp installs the context property before load and
+    // never replaces it. Measured with qml6 6.11.2 on Item and QQC2 MenuItem.
     required property QtObject editorController
     required property string zoneId
 

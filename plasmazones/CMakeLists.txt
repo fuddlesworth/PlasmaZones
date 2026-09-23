@@ -247,6 +247,26 @@ phosphor_tier_target(plasmazones-tier)
 # which the collector skips by TYPE UTILITY. So attach it explicitly, or
 # `moon run plasmazones:build` produces no catalogs and `moon run repo:install`
 # then fails on install(FILES ${QM_FILES}) with nothing to install.
-if(TARGET release_translations)
-    add_dependencies(plasmazones-tier release_translations)
+#
+# Attached by the name cmake/PhosphorTranslations.cmake gives it, not by Qt's
+# global `release_translations`. That global is created by qt_add_lrelease as
+# an internal convenience and its name is not part of any contract we control,
+# so keying the tier's artifact on it would silently stop working if Qt renamed
+# it or the call ever passed NO_GLOBAL_TARGET.
+#
+# The else() is a FATAL_ERROR rather than a silent skip. The previous spelling
+# keyed on Qt's internal `release_translations` inside a bare `if(TARGET ...)`,
+# and when the name was wrong the guard simply did not fire: the catalogs
+# dropped out of the tier, `moon run repo:install` was left to fail on
+# install(FILES ${QM_FILES}), and four review passes went by without anyone
+# noticing, because a full `cmake --build` had already produced the .qm on this
+# machine. A guard protecting an install rule must not fail open.
+if(TARGET plasmazones_translations)
+    add_dependencies(plasmazones-tier plasmazones_translations)
+elseif(Qt6LinguistTools_FOUND AND TRANSLATION_TS_FILES)
+    message(FATAL_ERROR
+        "plasmazones_translations target missing although lrelease ran. "
+        "cmake/PhosphorTranslations.cmake must pass LRELEASE_TARGET; without it "
+        "qt_add_lrelease names the target ${PROJECT_NAME}_lrelease and the .qm "
+        "catalogs never join plasmazones-tier.")
 endif()

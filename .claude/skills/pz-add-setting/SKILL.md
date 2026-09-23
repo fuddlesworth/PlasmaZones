@@ -35,7 +35,14 @@ static constexpr int audioSpectrumBarCountMin() { return 16; }
 static constexpr int audioSpectrumBarCountMax() { return 256; }
 ```
 
-### 2. `plasmazones/src/config/configdefaults.h` — the group and key accessors
+### 2. `plasmazones/src/config/configkeys.h` — the group and key accessors
+
+`configkeys.h`, NOT `configdefaults.h`. The `P_CONFIG_GROUP` / `P_CONFIG_KEY`
+macros are defined in configkeys.h and every accessor lives there (or in
+`configkeys_scrolling.h` for a scrolling group); configdefaults.h declares
+none of them. They are reachable as `ConfigDefaults::fooGroup()` only because
+ConfigDefaults inherits through that chain, so the CALL is always spelled
+`ConfigDefaults::` even though the DECLARATION is not in that file.
 
 Only if the group or key is new. Group names are v2 dot-paths mirroring the UI
 hierarchy (`"Snapping.Behavior.ZoneSpan"`). Key accessors are generic

@@ -403,6 +403,13 @@ jobs:
       image: archlinux:latest
     steps:
       - name: Setup (Arch)
+        # This list mirrors build-shell's, NOT the default build job's. The
+        # debug preset sets BUILD_PHOSPHOR_SHELL=ON, and three shell libraries
+        # have hard CONFIGURE-time requirements — phosphor-service-pipewire's
+        # pkg_check_modules(... REQUIRED), phosphor-service-polkit's
+        # find_package(PolkitQt6-1 REQUIRED), and phosphor-service-lock's
+        # explicit FATAL_ERROR for PAM — so a shell-OFF package list cannot
+        # configure this preset at all.
         run: |
           set -euo pipefail
           pacman -Syu --noconfirm
@@ -412,7 +419,8 @@ jobs:
             qt6-wayland wayland plasma-wayland-protocols wayland-protocols \
             kwin kconfig kconfigwidgets kcmutils kglobalaccel kcolorscheme \
             kirigami plasma-activities vulkan-headers vulkan-icd-loader glslang \
-            cava ffmpeg
+            cava ffmpeg \
+            libpipewire polkit-qt6 pam ddcutil
 
       - name: Checkout
         uses: actions/checkout@v7

@@ -187,10 +187,12 @@ void TestPluauHelpers::resizeRatio()
     )LUA";
     const QVariantMap r = run(body).toMap();
     VERIFY_KEYS(r, "grow", "shrink");
-    // 0.25, deliberately NOT 0.5. grow uses oldRatio and shrink uses
-    // (1 - oldRatio), so at exactly 0.5 the two closed forms compute the same
-    // number and swapping the functions leaves the assertions green. 0.25
-    // separates them: 0.3 against 0.1.
+    // What separates grow from shrink here is newSize != oldSize, NOT the
+    // ratio. grow = n*r/o and shrink = 1 - n*(1-r)/o are equal exactly when
+    // n*r/o + n*(1-r)/o == 1, i.e. when n == o; the ratio cancels. So 120
+    // against 100 is the load-bearing part and any ratio would do. Measured
+    // on the real prelude: at n == o they collide at 0.25, 0.5 and 0.75
+    // alike, and at 120/100 they never collide.
     QCOMPARE(r.value(QStringLiteral("grow")).toDouble(), 0.3); // 120 * 0.25 / 100
     QCOMPARE(r.value(QStringLiteral("shrink")).toDouble(), 0.1); // 1 - 120 * (1 - 0.25) / 100
 }
@@ -267,11 +269,14 @@ void TestPluauHelpers::masterStackResize()
     const QVariantMap r = run(body).toMap();
     VERIFY_KEYS(r, "vGrow", "vShrink", "hGrow", "hShrink", "singleIsNil", "badRatioIsNil", "zeroDimIsNil",
                 "wrongEdgeIsNil");
-    // The old rect is 100x80, not square, and the ratio is 0.25. Both matter.
-    // A square rect hides an axis mix-up confined to oldDim, and ratio 0.5
-    // makes the grow and shrink closed forms compute the same number. With
-    // these inputs the width axis gives 0.3/0.1 and the height axis gives
-    // 0.3125/0.0625, so swapping either the axis or the two forms fails.
+    // The old rect is 100x80, deliberately NOT square: a square one hides an
+    // axis mix-up confined to oldDim, because both axes then produce the
+    // same number. Here the width axis gives 0.3/0.1 and the height axis
+    // 0.3125/0.0625, so inverting `horizontal` fails.
+    //
+    // grow and shrink are told apart by newSize != oldSize rather than by
+    // the ratio (see resizeRatio above for the algebra), which both axes
+    // satisfy: 120 against 100, and 100 against 80.
     QCOMPARE(r.value(QStringLiteral("vGrow")).toDouble(), 0.3); // 120 * 0.25 / 100
     QCOMPARE(r.value(QStringLiteral("vShrink")).toDouble(), 0.1); // 1 - 120 * 0.75 / 100
     QCOMPARE(r.value(QStringLiteral("hGrow")).toDouble(), 0.3125); // 100 * 0.25 / 80
@@ -338,11 +343,11 @@ void TestPluauHelpers::gridShape()
             local c9, r9 = pluau.gridShape(9)
             local c0, r0 = pluau.gridShape(0)
             return { c1 = c1, r1 = r1, c4 = c4, r4 = r4, c5 = c5, r5 = r5, c9 = c9, r9 = r9,
-                     c0 = c0, r0 = r0 }
+                     c0 = c0, r0 = r0, r0IsNan = r0 ~= r0 }
         end }
     )LUA";
     const QVariantMap r = run(body).toMap();
-    VERIFY_KEYS(r, "c1", "r1", "c4", "r4", "c5", "r5", "c9", "r9", "c0", "r0");
+    VERIFY_KEYS(r, "c1", "r1", "c4", "r4", "c5", "r5", "c9", "r9", "c0", "r0", "r0IsNan");
     QCOMPARE(r.value(QStringLiteral("c1")).toInt(), 1);
     QCOMPARE(r.value(QStringLiteral("r1")).toInt(), 1);
     QCOMPARE(r.value(QStringLiteral("c4")).toInt(), 2);
@@ -357,6 +362,11 @@ void TestPluauHelpers::gridShape()
     // guard, but a user script need not.
     QCOMPARE(r.value(QStringLiteral("c0")).toInt(), 1);
     QCOMPARE(r.value(QStringLiteral("r0")).toInt(), 0);
+    // Asserted in Luau, not through QVariant: QVariant(double NaN).toInt() is
+    // 0, and the marshaller only takes its whole-number branch for finite
+    // values, so the r0 compare above would have passed against the old
+    // 0 x nan too. This is the leg that actually pins "not nan".
+    QCOMPARE(r.value(QStringLiteral("r0IsNan")).toBool(), false);
 }
 
 void TestPluauHelpers::cumulativeOffsets()

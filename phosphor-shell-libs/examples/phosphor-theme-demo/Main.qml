@@ -38,8 +38,8 @@ ApplicationWindow {
     property string wallpaperPath: ""
     // Snapshot of the palette's sorted key list. Recomputing this on
     // every paletteChanged would tear down and rebuild every Swatch
-    // delegate (the Repeater rebinds when model changes), destroying
-    // hover state and burning frames. The key set only changes when
+    // delegate (the Repeater rebinds when model changes), burning
+    // frames. The key set only changes when
     // tokens are added/removed (rare, matugen never removes tokens
     // thanks to PaletteStore's merge semantics), so a JSON-stringify
     // comparison cheaply gates the assignment.
@@ -60,7 +60,14 @@ ApplicationWindow {
 
     Connections {
         function onLoadError(path, reason) {
-            root.lastError = qsTr("%1: %2").arg(path).arg(reason);
+            // Ordered replace, not chained .arg(). QString-style .arg()
+            // substitutes the lowest marker first and then RE-SCANS the
+            // result, so a path containing a literal "%2" (legal on Linux)
+            // would swallow the reason: .arg("/tmp/%2.json").arg("bad JSON")
+            // yields "/tmp/bad JSON.json: bad JSON". QML's String.arg takes
+            // one value, so there is no single-pass form. Filling the
+            // untrusted path LAST means nothing re-scans it.
+            root.lastError = qsTr("%1: %2").replace("%2", reason).replace("%1", path);
         }
 
         function onPaletteChanged() {

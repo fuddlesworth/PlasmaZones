@@ -5,11 +5,14 @@
 # the bundled shell QML tree and the shell unit tests. Entered from the
 # root CMakeLists only when BUILD_PHOSPHOR_SHELL is ON.
 #
-# Known tier inversion: the binary links plasmazones_rendering and
-# plasmazones_shared_qml (ShellChrome hosts SurfaceDecoration.qml and the
-# SurfaceShaderItem stage), and plasmazones_rendering carries
-# plasmazones_core with it. Until those two move into a phosphor library,
-# this tier depends on the plasmazones tier.
+# Known tier inversion: the binary links plasmazones_rendering,
+# plasmazones_shared_qml AND plasmazones_shared_qmlplugin (ShellChrome hosts
+# SurfaceDecoration.qml and the SurfaceShaderItem stage), and
+# plasmazones_rendering carries plasmazones_core with it. Until those three
+# move into a phosphor library, this tier depends on the plasmazones tier.
+# Moving them is necessary but not sufficient to re-enable layer enforcement:
+# see .moon/workspace.yml for the second inversion, tier-1 tests reading
+# tier-4 data.
 
 add_subdirectory(cli/phosphorctl)       # phosphorctl call / list / schema / subscribe
 

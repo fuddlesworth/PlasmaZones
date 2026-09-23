@@ -26,11 +26,12 @@ using PhosphorShellApp::ControlCenterController;
 using PhosphorShellApp::SocketPopoutTransport;
 
 namespace {
-// Six of the eight slots open against a named output, and each was repeating
-// the same four lines to get there. The two that do not are refusesWithoutA-
-// Controller, which constructs the transport with no controller at all, and
-// refusesAnOutputWithNoName, whose whole subject is the empty-name resolver.
-// Both keep their own setup.
+// Six of the nine slots open against a named output, and each was repeating
+// the same four lines to get there. The three that do not keep their own
+// setup: refusesWithoutAController constructs the transport with no
+// controller at all, refusesAnOutputWithNoName has the empty-name resolver
+// as its whole subject, and theDefaultResolverNamesTheRequestedOutput must
+// NOT install a resolver, since the production default is what it tests.
 //
 // The bare offscreen platform gives its screen an EMPTY name (measured: length
 // 0), and an empty name is exactly what the transport treats as "closed
@@ -234,10 +235,14 @@ void TestSocketPopoutTransport::theDefaultResolverNamesTheRequestedOutput()
     SocketPopoutTransport transport(&controller);
 
     QScreen* const requested = QGuiApplication::primaryScreen();
-    QVERIFY(requested);
-    // The offscreen platform names its screen, so this is a real name rather
-    // than the empty string the refusal path keys on.
-    QVERIFY(!requested->name().isEmpty());
+    QVERIFY2(requested,
+             "no primary screen; expected the two-screen offscreen "
+             "configfile from this target's phosphor_append_test_environment "
+             "entry in tests/CMakeLists.txt");
+    // A REAL name, not the empty string the refusal path keys on. The BARE
+    // offscreen platform names its screen "", so this only holds because the
+    // CMake entry supplies the configfile.
+    QVERIFY2(!requested->name().isEmpty(), "screen has no name; the two-screen configfile did not apply");
 
     QVERIFY(!transport.openSurface(requestFor(QStringLiteral("control-center"), requested)).isEmpty());
     QCOMPARE(controller.openScreen(), requested->name());

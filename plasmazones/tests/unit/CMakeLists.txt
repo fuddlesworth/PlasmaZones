@@ -2307,16 +2307,19 @@ add_test(NAME test_layout_adaptor_scrolling_template COMMAND test_layout_adaptor
 add_executable(bench_dbus_adaptors dbus/bench_dbus_adaptors.cpp)
 target_link_libraries(bench_dbus_adaptors PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME bench_dbus_adaptors COMMAND bench_dbus_adaptors)
-# LABELS=bench lets CI skip the verbose benchmark output via
-# `ctest -LE bench` while still letting `ctest -L bench` select it
-# explicitly for the perf-regression run.
-# TIMEOUT 0 (unbounded) is set explicitly, not left to the directory sweep.
-# phosphor_apply_directory_test_isolation() only supplies its 120s default
-# when a test has no TIMEOUT of its own, and a micro-benchmark is the test
-# here most likely to exceed two minutes on a loaded machine -- at which
-# point it would FAIL rather than report numbers. The helper honours an
-# explicit 0.
-set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench" TIMEOUT 0)
+# LABELS=bench so `ctest -L bench` can select it for a perf-regression run.
+# Note that nothing currently passes `-LE bench`: CI and every
+# `moon run <tier>:test` run this benchmark like any other test.
+#
+# TIMEOUT 900, set explicitly rather than left to the directory sweep's 120s
+# default (phosphor_apply_directory_test_isolation only supplies that when a
+# test carries no TIMEOUT of its own). A benchmark is the test here most
+# likely to exceed two minutes on a loaded machine, where it would FAIL
+# rather than report numbers. NOT 0/unbounded: since nothing filters the
+# label out, an unbounded entry would let a wedged benchmark hang every CI
+# job and every local `ctest` indefinitely, which is the exact failure the
+# isolation module exists to prevent.
+set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench" TIMEOUT 900)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # compositor-common/ - Shared Library Types Tests

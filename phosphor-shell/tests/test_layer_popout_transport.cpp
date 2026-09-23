@@ -397,6 +397,14 @@ void TestLayerPopoutTransport::closeIsIdempotentForUnknownHandles()
     transport.closeSurface(QStringLiteral("never-issued"));
     transport.closeSurface(QString());
 
+    // Wait before asserting. closeSurface() on a LIVE handle does not tear
+    // anything down inline: it sets closing=true and defers teardown to
+    // onHostDismissed -> destroyEntry -> deleteLater, behind PopoutHost's
+    // 300ms close animation. Asserting immediately would therefore pass even
+    // if the miss branch HAD wrongly closed the live entry, which is exactly
+    // the regression the message below names.
+    QTest::qWait(kCloseAnimationCeilingMs);
+
     QVERIFY2(liveWindow, "closing an unknown handle tore down the live surface");
     QVERIFY2(m_dismissed.isEmpty(), "an unknown handle was reported as a dismissal");
 }

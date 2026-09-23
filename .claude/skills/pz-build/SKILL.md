@@ -20,7 +20,7 @@ because that failure mode is invisible.
 Check what a dir actually is before trusting a green result from it:
 
 ```bash
-grep -E "^(BUILD_TESTING|BUILD_PHOSPHOR_SHELL|BUILD_TOOLS|CMAKE_UNITY_BUILD):" build*/CMakeCache.txt
+grep -E "^(BUILD_TESTING|BUILD_PHOSPHOR_SHELL|BUILD_TOOLS|CMAKE_UNITY_BUILD|CMAKE_GENERATOR):" build*/CMakeCache.txt
 ```
 
 | dir | testing | shell tier | unity | use for |
@@ -37,8 +37,9 @@ shell tier IS built and its tests DO run. Every moon task configures through
 that preset. A dir configured by hand without those flags is the one that runs
 nothing, which is what the grep above is for.
 
-The dir that still needs care is the shell-OFF one: a shell-tier change has to
-be confirmed in both, because `BUILD_PHOSPHOR_SHELL` defaults OFF for anyone
+The dirs that still need care are the shell-OFF ones, `build-off` and
+`build-make` (which is tools-OFF as well): a shell-tier change has to be
+confirmed there, because `BUILD_PHOSPHOR_SHELL` defaults OFF for anyone
 configuring without a preset.
 
 ## Configure
@@ -136,8 +137,9 @@ is the only Unix Makefiles one, and that generator rejects ninja's `-k 0`.
 python3 scripts/check-conventions.py
 ```
 
-Stdlib only, runs on the whole tree in about a second, and also runs in CI and
-on pre-commit. See `--list-rules`.
+Stdlib only. A whole-tree run takes about 40 seconds; a staged subset is near
+instant, which is the form pre-commit uses (`--staged`). It also runs in CI
+against the whole tree. See `--list-rules`.
 
 ## Green does not mean it works
 

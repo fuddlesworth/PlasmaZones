@@ -64,7 +64,10 @@ class Violation:
 CPP_SUFFIXES = {".cpp", ".cc", ".cxx", ".h", ".hpp"}
 QML_SUFFIXES = {".qml"}
 SHADER_SUFFIXES = {".frag", ".vert", ".glsl"}
-CODE_SUFFIXES = CPP_SUFFIXES | QML_SUFFIXES | SHADER_SUFFIXES | {".luau", ".py"}
+# .js is here so rule_spdx and rule_license cover the 17 QML .js libraries.
+# rule_js_pragma already polices them; the licence split on that file class
+# was otherwise unenforced.
+CODE_SUFFIXES = CPP_SUFFIXES | QML_SUFFIXES | SHADER_SUFFIXES | {".luau", ".py", ".js"}
 
 # Which rules this invocation is running. rule_license consults it so it only
 # defers a missing header to the spdx rule when that rule will actually run.
@@ -550,11 +553,19 @@ PKG_DESC = re.compile(r"^\s*(?:pkgdesc|Summary|Description)\s*[=:]\s*(.+)$", re.
 # uses Nix's '' ... '' multi-line form, so it needs its own arm rather than a
 # line match.
 NIX_DESC = re.compile(r"^\s*description\s*=\s*\"((?:[^\"\\]|\\.)*)\"", re.M)
+# Nix's '' ... '' form escapes a literal '' as ''' and an interpolation as
+# ''${, so a non-greedy (.*?)'' stops at the ESCAPE rather than the
+# terminator and the rest of the body goes unchecked. No regex is correct
+# for that grammar, so the truncation is reported instead of passed over.
 NIX_LONG_DESC = re.compile(r"^\s*longDescription\s*=\s*''(.*?)''", re.M | re.S)
+NIX_LONG_DESC_ESCAPE = re.compile(r"^\s*longDescription\s*=\s*''(?:.*?)''(?=[$'])", re.M | re.S)
 
 # RPM's %description body runs from the directive to the next % section. The
 # PKG_DESC pattern cannot see it, so `dnf info` printed sixteen ungated lines.
-RPM_DESC = re.compile(r"^%description[^\n]*\n(.*?)(?=^%\w)", re.M | re.S)
+# `|\Z` so a %description that ENDS the file still matches. Without it the
+# lookahead simply fails and the whole block is skipped, which would let a
+# subpackage description appended at EOF go ungated.
+RPM_DESC = re.compile(r"^%description[^\n]*\n(.*?)(?=^%\w|\Z)", re.M | re.S)
 
 
 def rule_prose(files: list[str]) -> list[Violation]:
@@ -601,7 +612,10 @@ def rule_prose(files: list[str]) -> list[Violation]:
                     out.append(Violation("prose", f, line_of(text, m.start()), f"{p} -> {body[:80]!r}"))
             continue
 
-        if f.startswith("packaging/"):
+        # .github/workflows too: the draft PKGBUILD pkgdesc is generated in
+        # ci.yml and release.yml, pacman prints it, and this arm used to stop
+        # at the packaging/ prefix so those strings were invisible.
+        if f.startswith("packaging/") or (f.startswith(".github/workflows/") and suffix in (".yml", ".yaml")):
             body = read(f)
             stripped = strip_hash_comments(body)
             for m in PKG_DESC.finditer(stripped):
@@ -611,6 +625,10 @@ def rule_prose(files: list[str]) -> list[Violation]:
             # Read from the raw text, not the hash-stripped copy: `#` is not a
             # comment inside a Nix string or an RPM %description.
             if suffix == ".nix":
+                for m in NIX_LONG_DESC_ESCAPE.finditer(body):
+                    out.append(Violation("prose", f, line_of(body, m.start()),
+                                         "longDescription contains a Nix '' escape; this rule cannot "
+                                         "read past it, so the rest of the body is unchecked"))
                 for pat in (NIX_DESC, NIX_LONG_DESC):
                     for m in pat.finditer(body):
                         for p in prose_problems(m.group(1)):
@@ -694,7 +712,11 @@ def rule_js_pragma(files: list[str]) -> list[Violation]:
         # Anchored per line, like Qt's regex: a `.pragma library` sitting
         # inside a comment or trailing another statement is not what CMake
         # matches, so it must not satisfy this rule either.
-        head = body[:JS_PRAGMA_WINDOW]
+        # The window is measured from byte 0 of the FILE, and LIMIT_INPUT counts
+        # the BOM against it, so the usable budget shrinks by the BOM's length.
+        # Slicing body[:128] would hand back the three bytes the BOM already
+        # spent and pass a file CMake rejects.
+        head = body[: JS_PRAGMA_WINDOW - bom]
         if any(ln.strip(b"\r") == JS_PRAGMA for ln in head.split(b"\n")):
             continue
         idx = body.find(JS_PRAGMA)

@@ -77,6 +77,29 @@ Copyright: 2025 arch-disciple (niri-shader-collection)
            2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: GPL-3.0-or-later
 
+# Ports of MIT gl-transitions upstreams. The licence stays LGPL (CLAUDE.md
+# allows a permissively-licensed upstream to be relicensed that way), so this
+# stanza exists purely to CREDIT the upstream holder each of these four files
+# names in its own header. It follows the LGPL data stanza above and keeps the
+# same licence, so last-match-wins changes nothing about the resolution.
+Files: plasmazones/data/animations/desktop-crosszoom/effect.frag
+       plasmazones/data/animations/desktop-cube/effect.frag
+       plasmazones/data/animations/desktop-pixelate/effect.frag
+       plasmazones/data/animations/desktop-slide/effect.frag
+Copyright: gl-transitions contributors
+           2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+License: LGPL-2.1-or-later
+
+# Credits the Shadertoy author named in this file's own header. The file
+# additionally records an unresolved CC-BY-NC-SA vs GPL-3 question in its
+# comments; that is a question about the shader's provenance and is NOT
+# answered here. This stanza only stops the packaging metadata from claiming
+# sole authorship of work the source says is someone else's.
+Files: plasmazones/data/overlays/neon-city/buffer.frag
+Copyright: 2026 nikitamashchenko (https://www.shadertoy.com/)
+           2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+License: GPL-3.0-or-later
+
 # Vendored third-party sources, committed as tarballs and extracted at build
 # time. Not ours, and not GPL.
 Files: phosphor/extern/luau-*.tar.gz

@@ -83,8 +83,13 @@ tasks:
   # passes having checked nothing, which is why this is not a dep of
   # repo:check -- a green run here does not by itself mean the metadata
   # was validated.
+  #
+  # --no-tests=error because a ctest -R that matches nothing exits 0. ECM
+  # registers appstreamtest only when appstreamcli is found at configure
+  # time, so without it this task would run, match zero tests and report
+  # green having checked nothing at all.
   test:
-    command: 'ctest --test-dir build -R ^appstreamtest$'
+    command: 'ctest --test-dir build -R ^appstreamtest$ --no-tests=error'
     # configure, not a build. All this needs is build/CTestTestfile.cmake,
     # which the configure generates; appstreamtest reads the INSTALLED
     # metainfo via install_manifest.txt, and compiling four tiers does not

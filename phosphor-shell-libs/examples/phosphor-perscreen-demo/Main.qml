@@ -24,8 +24,10 @@ PerScreen {
             // screen's virtual-desktop origin. `Window.screen` is writable
             // (qquickwindowmodule_p.h declares it READ screen WRITE
             // setScreen), but it is typed QQuickScreenInfo* while
-            // phosphorScreen is a QScreen*, so the two do not assign and
-            // setScreen() is not reachable from here — but x/y in
+            // phosphorScreen is a QScreen*, so phosphorScreen cannot be
+            // assigned to it. Reaching it would mean matching
+            // Qt.application.screens by name, which this demo does not
+            // need — and x/y in
             // virtual-desktop coordinates put the window over the
             // right monitor on X11, and on Wayland the compositor
             // routes the surface based on its position. The delegate

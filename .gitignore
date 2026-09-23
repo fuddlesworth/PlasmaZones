@@ -215,12 +215,31 @@ $RECYCLE.BIN/
 # CTest working tree (created by ctest when run outside a build/ directory)
 Testing/
 
-# Test executables (but not test source files)
+# Test executables (but not test source files or fixtures).
+#
+# The negations have to name every extension a test input can have, because
+# `test_*` swallows the lot. Before these were added, a new
+# test_*.{luau,qml,json,txt} fixture was dropped from a commit with no error --
+# and this tree already carries Luau fixtures, QuickTest .qml cases and JSON
+# test data, so that was reachable, not theoretical.
+#
+# Built executables land in build*/bin/ these days, which the build*/ rule at
+# the top already covers, so `test_*` here is belt-and-braces for a stray
+# in-source build.
 test_*
 !test_*.cpp
 !test_*.h
-*_test
-*_tests
+!test_*.hpp
+!test_*.luau
+!test_*.qml
+!test_*.js
+!test_*.json
+!test_*.txt
+# Directory forms: `*_test` / `*_tests` match DIRECTORIES too, so a source
+# directory named integration_test/ or unit_tests/ would disappear whole.
+# Anchored to the repo root, where only a stray build artefact could sit.
+/*_test
+/*_tests
 
 # Coverage reports
 *.gcov

@@ -26,9 +26,17 @@
 //     ("Could not set initial property screen", because the
 //     underlying QWindow's screen binding is established before
 //     createObject's initialProperties phase resolves).
-//   - For Window delegates that want to open on the right monitor,
-//     bind `screen: phosphorScreen` in the delegate body — the
-//     binding is evaluated during construction in the right order.
+//   - For delegates rooted in a C++ QQuickWindow subclass (LockSurface,
+//     PanelWindow), bind `screen: phosphorScreen` in the delegate body
+//     to open on the right monitor — the binding is evaluated during
+//     construction in the right order, and `screen` there is QWindow's
+//     own QScreen* property.
+//     This does NOT work for the plain QML `Window` element: it
+//     overrides `screen` with a QQuickScreenInfo* (see
+//     qquickwindowmodule_p.h), and assigning a QScreen* to it fails at
+//     runtime with "Unable to assign QObject to QQuickScreenInfo".
+//     Position such a window by geometry instead, or match
+//     `Qt.application.screens` by name.
 //   - The delegate is destroyed when its screen leaves the model.
 //
 // Lifetime: delegates are created with a NULL QObject parent (they must

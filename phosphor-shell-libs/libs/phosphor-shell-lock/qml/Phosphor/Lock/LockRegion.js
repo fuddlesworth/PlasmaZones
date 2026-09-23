@@ -13,7 +13,7 @@
 // screen puts its clock, date and auth field. Pure geometry, no QML, so it
 // is unit-testable and reusable by any surface that wants free space.
 
-// NOTE: `.pragma library` means one shared instance per process, and every
+// NOTE: `.pragma library` means one shared instance per QML engine, and every
 // top-level binding here is an export. `Region.Epsilon = 0` from any
 // importer would change the geometry for every other importer in the
 // process. The underscore prefixes on _num/_axis/_stop are the only thing

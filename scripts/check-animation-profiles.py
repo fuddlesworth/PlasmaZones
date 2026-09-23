@@ -82,12 +82,16 @@ def curve_reference_resolves(spec: str, shipped_curves: set[str]) -> bool:
     if colon >= 0:
         typeid = spec[:colon].strip().lower()
         return typeid in BUILTIN_CURVE_TYPEIDS or typeid in shipped_curves
-    # Bare identifier: either a built-in typeId (no params) or a named
-    # curve registered by CurveLoader. Lowercased like the typeId:params
-    # branch above, which otherwise accepted "Spring:0.5,10" while
-    # rejecting a bare "Spring".
-    bare = spec.strip().lower()
-    return bare in BUILTIN_CURVE_TYPEIDS or bare in shipped_curves
+    # Bare identifier: either a built-in typeId (no params) or a named curve
+    # registered by CurveLoader. NOT lowercased, deliberately, even though the
+    # typeId:params branch above is. That asymmetry is real in the runtime and
+    # this checker has to reproduce it rather than tidy it away:
+    # CurveRegistry::parseSpec lowercases only its colon branch, the no-colon
+    # branch keeps the spec verbatim, and the lookup is a case-sensitive QHash
+    # against built-ins registered lower-case only. So "Spring:0.5,10" resolves
+    # and a bare "Spring" does not. Lowercasing here would make the checker
+    # bless a spec that falls back to OutCubic at runtime.
+    return spec in BUILTIN_CURVE_TYPEIDS or spec in shipped_curves
 
 
 def check_profile_curve_references(

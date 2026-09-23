@@ -95,16 +95,21 @@ QQuickItem* QmlComponentTileFactory::createTile(QQmlEngine* engine, QObject* par
     }
     auto* parentItem = qobject_cast<QQuickItem*>(parent);
     if (!parentItem) {
-        // Falling through to a plain QObject parent would hand back an item
-        // with no visual parent, which never renders and says nothing about
-        // why. Refuse, as the bar's widget factory does.
-        // Refused, not merely reported. Returning the item anyway left it
-        // with no visual parent, so it never appeared and the host counted
-        // it as a materialised tile. The bar factory does the same.
+        // Refused, not merely reported. Returning the item anyway left it with
+        // no visual parent, so it never appeared and the host counted it as a
+        // materialised tile.
+        //
+        // This is where the tile factory and the bar's widget factory
+        // deliberately DIVERGE: qmlcomponentbarwidgetfactory.cpp setParent()s,
+        // warns "widget will be invisible" and still returns the item, because
+        // a bar widget that fails to appear costs one slot. A control-center
+        // tile is counted by rebuild(), so an invisible one leaves a hole in
+        // the grid the surface believes it filled.
         qCWarning(lcControlCenterTiles) << "QmlComponentTileFactory: parent is not a QQuickItem for" << m_id
                                         << "— refusing rather than returning an item nothing will show";
-        delete item;
-        return nullptr;
+        // deleteLater(), not delete: this runs from a QML-invoked path and the
+        // item may be on the current call stack. Matches the sibling branch
+        // above and CLAUDE.md's never-manual-delete rule.
         item->deleteLater();
         return nullptr;
     }

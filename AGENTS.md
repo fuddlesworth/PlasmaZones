@@ -61,7 +61,7 @@ Shared placement policy lives in `phosphor/libs/phosphor-engine`. A verdict from
 - Only emit signals when value actually changes
 - Parent-based ownership for QObjects; `std::unique_ptr`/`QPointer` otherwise; never manual delete
 - Forward declare in headers; group includes: own header → project → KDE → Qt
-- `PLASMAZONES_EXPORT` on public API classes
+- `PLASMAZONES_EXPORT` on public API classes in `plasmazones/src/**`. Each phosphor library defines and uses its OWN `PHOSPHOR<LIB>_EXPORT` (37 of them); writing `PLASMAZONES_EXPORT` into a phosphor lib header names an undefined macro.
 - Keep files under 1000 lines, with a 15% grace (hard ceiling 1150). Under 1000 is the target; 1000–1150 is tolerated and not a review finding on its own. Past 1150, split by concern.
 - The ceiling binds NEW files and files being substantially rewritten. Around 61 existing files are already over it (the largest are `plasmazones/kwin-effect/plasmazoneseffect/plasmazoneseffect.h`, `plasmazones/kwin-effect/tilinghandler/tiling.cpp` and `plasmazones/tests/unit/helpers/StubSettings.h`); those are grandfathered. Do not raise an existing overrun as a review finding on its own, and do not split one as a drive-by. Growing one further, or adding a new file over the ceiling, is a finding.
 - Input validation at system boundaries
@@ -80,6 +80,10 @@ Shared placement policy lives in `phosphor/libs/phosphor-engine`. A verdict from
 - Prefer bindings over JS assignments; typed properties over `var`; `required property` for mandatory props
 - Use `Kirigami.Theme` for colors, `Kirigami.Units` for spacing — never hardcode
 - Zone IDs (QUuid), never indices — `Accessible.name` on interactive elements
+- A `PascalCase.js` library must declare `.pragma library` within the first 128
+  BYTES. `qt_add_qml_module` scans only that far, and past it Qt emits an author
+  warning claiming the file is re-evaluated per importing document. Machine-checked
+  by the `js-pragma` rule.
 
 ## Architecture
 - Service-oriented with DI via constructor (the editor's `ILayoutService`, `ZoneManager`, `SnappingService` are the reference shape)
@@ -118,7 +122,7 @@ User-facing strings MUST read like plain, human-written prose with no LLM tics. 
 Use the `pz-add-setting` skill, which carries the full worked example. Summary:
 
 1. `plasmazones/src/config/configdefaults_<area>.h` — static default accessor (plus `constexpr` Min/Max for a clamped numeric). `configdefaults.h` is split by area (`_appearance`, `_gaps`, `_limits`, `_screens`, `_scrolling`, `_scrolling_behavior`, `_scrolling_shortcuts`, `_shaders`).
-2. `plasmazones/src/config/configdefaults.h` — group and `xxxKey()` accessors, if new.
+2. `plasmazones/src/config/configkeys.h` — group and `xxxKey()` accessors, if new (`configkeys_scrolling.h` for a scrolling group). NOT `configdefaults.h`, which declares none of them; the call is still spelled `ConfigDefaults::` because ConfigDefaults inherits the chain.
 3. `plasmazones/src/config/settingsschema*.cpp` — register the `{key, default, QMetaType, description, coercion}` KeyDef in its group. **The store takes its default, type and clamping from the schema, not from the getter.** Skip this and the setting silently reads back as the type-default. The description field is user-facing prose and is held to the plain-prose rules below.
 4. `plasmazones/src/core/interfaces/isettings.h` — signal in ISettings.
 5. `plasmazones/src/config/settings.h` — Q_PROPERTY + getter + setter declarations (`override`). **No member variable.**
