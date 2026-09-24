@@ -348,10 +348,19 @@ QString padLabel(const QString& label)
 // baked stage and check each sampler and uniform block against the ONE binding
 // table (PhosphorShaders::Bindings). A contract sampler (iChannelN, uTextureN,
 // uAudioSpectrum, uWallpaper / uBackdrop, uDepthBuffer, uCursorSprite,
-// uZoneLabels) must sit at its table slot, and any other sampler must sit in
-// the consumer range. The runtime builds its SRB from the same table, so a
-// header that drifted would fail the pipeline with nothing naming the cause;
-// here it names the sampler and both numbers.
+// uZoneLabels) must sit at its table slot, and a pack may declare NO OTHER
+// sampler at all. The runtime builds its SRB from the same table, so a header
+// that drifted would fail the pipeline with nothing naming the cause; here it
+// names the sampler and both numbers.
+//
+// WHY A PACK'S OWN SAMPLER IS REFUSED OUTRIGHT rather than checked against the
+// consumer range: the consumer range is reachable only through
+// ShaderNodeRhi::setExtraBinding, whose two callers in the tree both bind the
+// overlay zone-labels texture, and `uZoneLabels` is a CONTRACT name that never
+// reaches this branch. Nothing binds 17..31, so a pack sampler placed there
+// reads nothing on the daemon; the compositor binds by name and has no entry
+// for it either. Accepting it told the author their pack was clean and left it
+// broken at runtime, which is the one outcome this lint exists to prevent.
 QStringList bindingLayoutProblems(const QShader& shader)
 {
     QStringList problems;
@@ -374,15 +383,15 @@ QStringList bindingLayoutProblems(const QShader& shader)
                                 .arg(sampler.binding)
                                 .arg(expected);
             }
-        } else if (!PhosphorShaders::Bindings::isConsumerBinding(sampler.binding)) {
+        } else {
+            // Deliberately says nothing about WHICH binding would be right,
+            // because none is. Naming a range here would send the author off to
+            // renumber a sampler that still reads nothing afterwards.
             problems << QStringLiteral(
-                            "sampler %1 declared at binding %2, which is a contract slot, not a consumer "
-                            "one (%3 or %4..%5)")
+                            "sampler %1 declared at binding %2, which nothing will bind. A pack may "
+                            "declare only the contract samplers, whatever slot it puts its own on")
                             .arg(name)
-                            .arg(sampler.binding)
-                            .arg(PhosphorShaders::Bindings::kConsumer)
-                            .arg(PhosphorShaders::Bindings::kExtraBase)
-                            .arg(PhosphorShaders::Bindings::kMaxBinding);
+                            .arg(sampler.binding);
         }
     }
     return problems;

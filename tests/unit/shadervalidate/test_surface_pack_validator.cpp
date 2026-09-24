@@ -299,6 +299,10 @@ private Q_SLOTS:
     /// (here on the iChannel1 slot) compiles fine on its own, and would then
     /// fail the daemon's pipeline with nothing naming the cause, so the
     /// validator names the sampler and the slot instead.
+    ///
+    /// The slot below covers the other half: a pack sampler is refused wherever
+    /// it sits, so this one must keep asserting on a RESERVED binding to stay a
+    /// test of the reserved-range case rather than a duplicate of that one.
     void aSamplerOnAReservedBindingIsLinted()
     {
         QTemporaryDir tmp;
@@ -332,6 +336,29 @@ private Q_SLOTS:
         QVERIFY2(
             r.report.contains(QStringLiteral("sampler uBackdrop declared at binding 20, the contract puts it at 15")),
             qPrintable(r.report));
+        QVERIFY(r.errors > 0);
+    }
+
+    /// A sampler a pack declares for ITSELF is refused wherever it sits, and the
+    /// consumer range is the case that used to pass. That range is reachable
+    /// only through ShaderNodeRhi::setExtraBinding, whose callers in the tree
+    /// bind the overlay zone-labels texture and nothing else, and the compositor
+    /// binds by name with no entry for a pack's own sampler. Accepting it told
+    /// the author the pack was clean and left the sampler reading nothing.
+    void aPackSamplerInTheConsumerRangeIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        const QJsonObject obj = surfacePack(QStringLiteral("sf-binding-consumer"), QJsonArray{});
+        // 20 sits squarely inside the consumer range, so this fixture collides
+        // with no contract slot and fails ONLY on the rule under test.
+        const QString body = QStringLiteral("layout(binding = 20) uniform sampler2D uMine;\n")
+            + QStringLiteral("vec4 pSurface(vec2 uv)\n{\n    return texture(uMine, uv);\n}\n");
+
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-binding-consumer"), obj, body);
+        QVERIFY2(r.report.contains(QStringLiteral("sampler uMine declared at binding 20, which nothing will bind")),
+                 qPrintable(r.report));
         QVERIFY(r.errors > 0);
     }
 
