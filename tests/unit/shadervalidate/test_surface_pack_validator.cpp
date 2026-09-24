@@ -362,6 +362,105 @@ private Q_SLOTS:
         QVERIFY(r.errors > 0);
     }
 
+    /// fromJson drops a second declaration of the same parameter id with only a
+    /// qCWarning, so the lint has to walk the RAW array. Over the parsed struct
+    /// this pack is indistinguishable from one that declared the id once, and it
+    /// ships with the second declaration silently gone.
+    void aDuplicateParameterIdIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        const QJsonObject obj =
+            surfacePack(QStringLiteral("sf-dup-param"),
+                        QJsonArray{surfaceParam(QStringLiteral("width"), QStringLiteral("float"), 2.0, 0.0, 8.0),
+                                   surfaceParam(QStringLiteral("width"), QStringLiteral("float"), 4.0, 0.0, 8.0)});
+        const PackResult r =
+            validateSurface(tmp, QStringLiteral("sf-dup-param"), obj, surfaceBodyReading({QStringLiteral("width")}));
+        QVERIFY2(r.report.contains(QStringLiteral("duplicate parameter id 'width'")), qPrintable(r.report));
+        QVERIFY(r.errors > 0);
+    }
+
+    /// The registry gates buffer passes on the separate "multipass" key, so a
+    /// pack that declares bufferShaders without it has every pass cleared at
+    /// load. Before this lint such a pack validated as a clean single-pass pack
+    /// and then rendered with no chain at all.
+    void bufferShadersWithoutTheMultipassKeyIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(QStringLiteral("sf-no-multipass"), QJsonArray{});
+        obj.insert(QStringLiteral("bufferShaders"), QJsonArray{QStringLiteral("builtin:kawase-down-0")});
+        // Deliberately NO "multipass": true.
+
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-no-multipass"), obj, surfaceBodyReading({}));
+        QVERIFY2(r.report.contains(QStringLiteral("\"multipass\" is not true")), qPrintable(r.report));
+        QVERIFY(r.errors > 0);
+    }
+
+    /// The builtin Kawase passes are bound to iChannel<index> BY POSITION and the
+    /// seven frags hardcode which channel they read, so the chain composes in one
+    /// order only. Every token here resolves and every file compiles, so nothing
+    /// but an order check can catch a pack that lists them wrongly.
+    void aReorderedKawaseChainIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(QStringLiteral("sf-kawase-order"), QJsonArray{});
+        obj.insert(QStringLiteral("multipass"), true);
+        // The correct seven with two DOWN levels transposed.
+        obj.insert(QStringLiteral("bufferShaders"),
+                   QJsonArray{QStringLiteral("builtin:kawase-down-1"), QStringLiteral("builtin:kawase-down-0"),
+                              QStringLiteral("builtin:kawase-down-2"), QStringLiteral("builtin:kawase-down-3"),
+                              QStringLiteral("builtin:kawase-up-0"), QStringLiteral("builtin:kawase-up-1"),
+                              QStringLiteral("builtin:kawase-up-2")});
+
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-kawase-order"), obj, surfaceBodyReading({}));
+        QVERIFY2(r.report.contains(QStringLiteral("positional")), qPrintable(r.report));
+        QVERIFY(r.errors > 0);
+    }
+
+    /// The positive control for the slot above: the chain in its declared order
+    /// must NOT trip the order lint, or the lint would fail every blur pack.
+    void theCorrectKawaseChainIsNotLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(QStringLiteral("sf-kawase-ok"), QJsonArray{});
+        obj.insert(QStringLiteral("multipass"), true);
+        obj.insert(QStringLiteral("bufferShaders"),
+                   QJsonArray{QStringLiteral("builtin:kawase-down-0"), QStringLiteral("builtin:kawase-down-1"),
+                              QStringLiteral("builtin:kawase-down-2"), QStringLiteral("builtin:kawase-down-3"),
+                              QStringLiteral("builtin:kawase-up-0"), QStringLiteral("builtin:kawase-up-1"),
+                              QStringLiteral("builtin:kawase-up-2")});
+
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-kawase-ok"), obj, surfaceBodyReading({}));
+        QVERIFY2(!r.report.contains(QStringLiteral("positional")), qPrintable(r.report));
+    }
+
+    /// A depth pack pins every pass to the single bufferScale on the daemon,
+    /// because the passes share one depth attachment. That is correct, but it
+    /// means a pack declaring both gets its whole pyramid flattened at load, and
+    /// before this lint it shipped green.
+    void bufferScalesAlongsideDepthBufferIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(QStringLiteral("sf-depth-scales"), QJsonArray{});
+        obj.insert(QStringLiteral("multipass"), true);
+        obj.insert(QStringLiteral("depthBuffer"), true);
+        obj.insert(QStringLiteral("bufferShaders"), QJsonArray{QStringLiteral("builtin:gaussian-h")});
+        obj.insert(QStringLiteral("bufferScales"), QJsonArray{0.5});
+
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-depth-scales"), obj, surfaceBodyReading({}));
+        QVERIFY2(r.report.contains(QStringLiteral("discarded at load")), qPrintable(r.report));
+        QVERIFY(r.errors > 0);
+    }
+
     /// A pack that ships its OWN vertex stage gets it baked on BOTH hosts. No
     /// bundled pack declares one, so shader_validate_surface never reaches this
     /// arm and a regression in it would surface to a third-party author before

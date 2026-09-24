@@ -223,6 +223,13 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     /// and the list is capped at `kMaxBufferPasses`. This is what lets one
     /// pack run a resolution pyramid (the builtin dual Kawase chain renders
     /// each level at its own scale).
+    ///
+    /// DISCARDED ENTIRELY on the daemon when `useDepthBuffer` is set. Every pass
+    /// shares the one depth attachment, and a render target's colour and depth
+    /// attachments must agree in size, so a depth pack pins every pass to
+    /// `bufferScale`. The compositor implements no depth buffer for surface
+    /// packs at all and always honours these, so the two hosts diverge for such
+    /// a pack by design. The validator lints the combination.
     QList<qreal> bufferScales;
 
     /// Default wrap mode for all buffer samplers. Sibling of

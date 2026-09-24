@@ -30,6 +30,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QTextStream>
@@ -213,6 +214,28 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
                 << QStringLiteral("invalid parameter id '%1' (not a GLSL identifier; skipped, no p_ define)").arg(p.id);
         }
     }
+    // Duplicate ids are linted over the RAW array rather than eff.parameters,
+    // because fromJson drops the second declaration with only a qCWarning. A
+    // pack that declares one id twice therefore lints clean against the parsed
+    // struct and ships with one of the two silently gone. The overlay and
+    // pointer arms already walk the raw array for this; packvalidatorcommon
+    // states that every arm does, so this one was the exception.
+    {
+        const QJsonArray rawParams = doc.object().value(QLatin1String("parameters")).toArray();
+        QSet<QString> seenParamIds;
+        for (const QJsonValue& v : rawParams) {
+            const QString pid = v.toObject().value(QLatin1String("id")).toString();
+            if (pid.isEmpty()) {
+                continue;
+            }
+            if (seenParamIds.contains(pid)) {
+                lints << QStringLiteral("duplicate parameter id '%1' (only the first declaration survives load)")
+                             .arg(pid);
+            } else {
+                seenParamIds.insert(pid);
+            }
+        }
+    }
     const QJsonArray declaredTextures = doc.object().value(QLatin1String("textures")).toArray();
     if (declaredTextures.size() > PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots) {
         lints << QStringLiteral("too many textures: %1 declared, cap is %2 (surplus dropped at load)")
@@ -248,11 +271,68 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
                 << QStringLiteral("texture wrap not in {clamp,repeat,mirror}: %1 (cleared to clamp at load)").arg(wrap);
         }
     }
+    // The multipass lints below are gated on the separate "multipass" key, and so
+    // is the RUNTIME: the registry clears every buffer pass of a pack that
+    // declares bufferShaders without it. Such a pack would otherwise validate
+    // here as a clean single-pass pack and then render with no chain at all,
+    // which is the loudest possible difference between what the validator says
+    // and what the user sees. The converse (multipass true, no bufferShaders)
+    // already fails closed further down.
+    const QJsonArray rawBufferShaders = doc.object().value(QLatin1String("bufferShaders")).toArray();
+    if (!rawBufferShaders.isEmpty() && !eff.isMultipass) {
+        lints << QStringLiteral(
+                     "bufferShaders declares %1 pass(es) but \"multipass\" is not true, so every one of "
+                     "them is dropped at load and the pack renders single-pass")
+                     .arg(static_cast<int>(rawBufferShaders.size()));
+    }
+
     // Multipass buffer lints — read RAW metadata, not the parsed struct: fromJson
-    // clamps bufferScale into [0.125, 1.0] and drops missing buffers, so a lint
-    // over the parsed values would hide author errors.
+    // clamps bufferScale into [kMinBufferScale, 1.0] and drops missing buffers, so
+    // a lint over the parsed values would hide author errors.
     if (eff.isMultipass) {
         const QJsonArray declaredBuffers = doc.object().value(QLatin1String("bufferShaders")).toArray();
+        // The builtin Kawase pyramid is POSITIONAL, not a set: each pass is bound
+        // to iChannel<j> by its INDEX, and the seven frags hardcode which channel
+        // they read, so the chain composes in exactly one order. Reordered or
+        // short, every individual token still resolves and every file still
+        // compiles, so nothing else here would notice; the pack simply blurs
+        // wrongly. Require the whole sequence as soon as any of it appears.
+        static const QStringList kKawaseChain = {
+            QStringLiteral("builtin:kawase-down-0"), QStringLiteral("builtin:kawase-down-1"),
+            QStringLiteral("builtin:kawase-down-2"), QStringLiteral("builtin:kawase-down-3"),
+            QStringLiteral("builtin:kawase-up-0"),   QStringLiteral("builtin:kawase-up-1"),
+            QStringLiteral("builtin:kawase-up-2")};
+        // A depth pack pins every pass to the single bufferScale on the daemon,
+        // because the passes share one depth attachment and a render target's
+        // colour and depth attachments must agree in size. That runtime
+        // behaviour is correct and documented in place; what was missing is the
+        // diagnostic, so a pack declaring both shipped green with its whole
+        // pyramid flattened at load.
+        if (doc.object().value(QLatin1String("depthBuffer")).toBool()
+            && !doc.object().value(QLatin1String("bufferScales")).toArray().isEmpty()) {
+            lints << QStringLiteral(
+                "bufferScales is declared alongside \"depthBuffer\": true, and every entry is discarded at load "
+                "(the passes share one depth attachment, so they all render at bufferScale)");
+        }
+        bool anyKawase = false;
+        for (const QJsonValue& v : declaredBuffers) {
+            if (kKawaseChain.contains(v.toString())) {
+                anyKawase = true;
+                break;
+            }
+        }
+        if (anyKawase) {
+            bool chainOk = declaredBuffers.size() >= kKawaseChain.size();
+            for (int i = 0; chainOk && i < kKawaseChain.size(); ++i) {
+                chainOk = declaredBuffers.at(i).toString() == kKawaseChain.at(i);
+            }
+            if (!chainOk) {
+                lints << QStringLiteral(
+                             "the builtin Kawase passes are positional and must appear as bufferShaders"
+                             "[0..6] in the order %1")
+                             .arg(kKawaseChain.join(QLatin1String(", ")));
+            }
+        }
         for (const QJsonValue& v : declaredBuffers) {
             const QString bufName = v.toString();
             if (bufName.isEmpty()) {
