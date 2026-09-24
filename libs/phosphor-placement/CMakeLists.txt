@@ -21,6 +21,43 @@ include(GenerateExportHeader)
 
 set(CMAKE_AUTOMOC ON)
 
+# Sibling Phosphor libraries this one links. Each lookup is GUARDED rather than
+# unconditional: in-tree the parent add_subdirectory()s the sibling before this
+# directory, so its ALIAS target already exists and the find_package is skipped.
+# A STANDALONE configure (the project() guard above says this directory supports
+# one) has no such target, and without these it failed at target_link_libraries
+# with "links to X::X but the target was not found".
+
+# the shared placement policy every engine builds on
+if(NOT TARGET PhosphorEngine::PhosphorEngine)
+    find_package(PhosphorEngine CONFIG REQUIRED)
+endif()
+
+# the window-identity types the placement API keys on
+if(NOT TARGET PhosphorIdentity::PhosphorIdentity)
+    find_package(PhosphorIdentity CONFIG REQUIRED)
+endif()
+
+# the layout-provider interface
+if(NOT TARGET PhosphorLayoutApi::PhosphorLayoutApi)
+    find_package(PhosphorLayoutApi CONFIG REQUIRED)
+endif()
+
+# the snapping engine
+if(NOT TARGET PhosphorSnapEngine::PhosphorSnapEngine)
+    find_package(PhosphorSnapEngine CONFIG REQUIRED)
+endif()
+
+# the workspace model
+if(NOT TARGET PhosphorWorkspaces::PhosphorWorkspaces)
+    find_package(PhosphorWorkspaces CONFIG REQUIRED)
+endif()
+
+# the zone and layout model
+if(NOT TARGET PhosphorZones::PhosphorZones)
+    find_package(PhosphorZones CONFIG REQUIRED)
+endif()
+
 add_library(PhosphorPlacement SHARED
     include/PhosphorPlacement/IGeometryResolver.h
     include/PhosphorPlacement/PlacementConfig.h

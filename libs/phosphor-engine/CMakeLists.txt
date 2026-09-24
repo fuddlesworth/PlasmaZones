@@ -30,6 +30,28 @@ include(GenerateExportHeader)
 
 set(CMAKE_AUTOMOC ON)
 
+# Sibling Phosphor libraries this one links. Each lookup is GUARDED rather than
+# unconditional: in-tree the parent add_subdirectory()s the sibling before this
+# directory, so its ALIAS target already exists and the find_package is skipped.
+# A STANDALONE configure (the project() guard above says this directory supports
+# one) has no such target, and without these it failed at target_link_libraries
+# with "links to X::X but the target was not found".
+
+# the geometry primitives the placement types are expressed in
+if(NOT TARGET PhosphorGeometry::PhosphorGeometry)
+    find_package(PhosphorGeometry CONFIG REQUIRED)
+endif()
+
+# the window-identity types the placement API keys on
+if(NOT TARGET PhosphorIdentity::PhosphorIdentity)
+    find_package(PhosphorIdentity CONFIG REQUIRED)
+endif()
+
+# the layout-provider interface
+if(NOT TARGET PhosphorLayoutApi::PhosphorLayoutApi)
+    find_package(PhosphorLayoutApi CONFIG REQUIRED)
+endif()
+
 add_library(PhosphorEngine SHARED
     include/PhosphorEngine/PlacementEngineBase.h
     include/PhosphorEngine/GapResolution.h

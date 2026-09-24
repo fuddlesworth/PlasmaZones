@@ -36,6 +36,18 @@ include(GenerateExportHeader)
 # stay free of it.
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml DBus)
 
+# Sibling Phosphor libraries this one links. Each lookup is GUARDED rather than
+# unconditional: in-tree the parent add_subdirectory()s the sibling before this
+# directory, so its ALIAS target already exists and the find_package is skipped.
+# A STANDALONE configure (the project() guard above says this directory supports
+# one) has no such target, and without these it failed at target_link_libraries
+# with "links to X::X but the target was not found".
+
+# the shared D-Bus service scaffolding
+if(NOT TARGET PhosphorDBus::PhosphorDBus)
+    find_package(PhosphorDBus CONFIG REQUIRED)
+endif()
+
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -17,6 +17,23 @@ include(GenerateExportHeader)
 
 set(CMAKE_AUTOMOC ON)
 
+# Sibling Phosphor libraries this one links. Each lookup is GUARDED rather than
+# unconditional: in-tree the parent add_subdirectory()s the sibling before this
+# directory, so its ALIAS target already exists and the find_package is skipped.
+# A STANDALONE configure (the project() guard above says this directory supports
+# one) has no such target, and without these it failed at target_link_libraries
+# with "links to X::X but the target was not found".
+
+# the shared placement policy every engine builds on
+if(NOT TARGET PhosphorEngine::PhosphorEngine)
+    find_package(PhosphorEngine CONFIG REQUIRED)
+endif()
+
+# the window-identity types the placement API keys on
+if(NOT TARGET PhosphorIdentity::PhosphorIdentity)
+    find_package(PhosphorIdentity CONFIG REQUIRED)
+endif()
+
 add_library(PhosphorWorkspaces SHARED
     include/PhosphorWorkspaces/VirtualDesktopManager.h
     include/PhosphorWorkspaces/ActivityManager.h

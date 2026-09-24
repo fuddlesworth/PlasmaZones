@@ -30,6 +30,18 @@ include(GenerateExportHeader)
 
 find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui)
 
+# Sibling Phosphor libraries this one links. Each lookup is GUARDED rather than
+# unconditional: in-tree the parent add_subdirectory()s the sibling before this
+# directory, so its ALIAS target already exists and the find_package is skipped.
+# A STANDALONE configure (the project() guard above says this directory supports
+# one) has no such target, and without these it failed at target_link_libraries
+# with "links to X::X but the target was not found".
+
+# the layer-shell transport the surfaces are presented through
+if(NOT TARGET PhosphorLayer::PhosphorLayer)
+    find_package(PhosphorLayer CONFIG REQUIRED)
+endif()
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # PhosphorShellPatterns Library
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -12,6 +12,11 @@ find_dependency(Qt6 6.10 COMPONENTS Core Gui)
 find_dependency(PhosphorGeometry)
 find_dependency(PhosphorLayoutApi)
 find_dependency(PhosphorProtocol)
+# PUBLIC for the reason CMakeLists.txt states at the link line: WindowPlacement.h
+# resolves virtual screen ids through VirtualScreenId::samePhysical. Omitting it
+# made find_package(PhosphorEngine) FAIL outright on an installed system, since
+# the exported targets file references PhosphorIdentity::PhosphorIdentity.
+find_dependency(PhosphorIdentity)
 
 include("${CMAKE_CURRENT_LIST_DIR}/PhosphorEngineTargets.cmake")
 

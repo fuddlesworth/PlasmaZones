@@ -13,6 +13,19 @@ cmake_minimum_required(VERSION 3.16)
 
 set(PHOSPHORRENDERING_VERSION "0.1.0")
 
+# The Qt floor this library requires AND advertises in its generated
+# PhosphorRenderingConfig.cmake. Taken from the top-level QT_MIN_VERSION when
+# built in-tree so the two can never drift, with its own value for a STANDALONE
+# build, where that variable does not exist. The fallback matters: the Config
+# template substitutes this, and an undefined variable would expand to nothing
+# and ship a config whose find_dependency(Qt6 ...) carries no version floor at
+# all.
+if(DEFINED QT_MIN_VERSION)
+    set(PHOSPHORRENDERING_QT_MIN ${QT_MIN_VERSION})
+else()
+    set(PHOSPHORRENDERING_QT_MIN "6.10.0")
+endif()
+
 if(NOT PROJECT_VERSION)
     project(PhosphorRendering VERSION ${PHOSPHORRENDERING_VERSION} LANGUAGES CXX)
     set(CMAKE_CXX_STANDARD 20)
@@ -26,12 +39,27 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui Quick Svg)
+find_package(Qt6 ${PHOSPHORRENDERING_QT_MIN} REQUIRED COMPONENTS Core Gui Quick Svg)
 if(NOT TARGET Qt6::GuiPrivate)
     find_package(Qt6GuiPrivate CONFIG REQUIRED)
 endif()
 if(NOT TARGET Qt6::ShaderToolsPrivate)
     find_package(Qt6ShaderToolsPrivate CONFIG REQUIRED)
+endif()
+
+# PhosphorShaders supplies BaseUniforms, IUniformExtension and the include
+# resolver that this library's PUBLIC header exposes, so it is linked PUBLIC
+# below and declared as a find_dependency in the generated config.
+#
+# Guarded the same way the Qt private modules above are, and for the same
+# reason. In-tree the parent add_subdirectory()s phosphor-shaders before this
+# one, so the ALIAS target already exists and the lookup is skipped. A
+# STANDALONE configure of this directory has no such target and previously
+# failed at target_link_libraries with "links to PhosphorShaders::PhosphorShaders
+# but the target was not found" — the library declared itself standalone-
+# buildable (see the project() guard above) without being so.
+if(NOT TARGET PhosphorShaders::PhosphorShaders)
+    find_package(PhosphorShaders CONFIG REQUIRED)
 endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════
