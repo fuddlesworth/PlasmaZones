@@ -27,7 +27,9 @@ float sdRoundedBox(vec2 p, vec2 b, float r) {
     return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
 }
 
-// True before a host has wired a real frame rect (uSurfaceFrameSize == 0). The
+// True before a host has wired a real frame rect. The test is "either side
+// below one device px", not "exactly zero": a sub-pixel frame is degenerate
+// for the same reason and is treated the same. The
 // SDF would otherwise collapse to "edge everywhere", so the border and glow
 // family test this and pass content through untouched. The backdrop-slab packs
 // do NOT: they fall through to a zero-extent frame, whose mask collapses to
@@ -100,15 +102,25 @@ float focusDim(float lo) {
     return mix(lo, 1.0, clamp(uSurfaceFocused, 0.0, 1.0));
 }
 
-// Border-band composite: lay a premultiplied `col` band (coverage
-// `edge * insideMask * col.a`) over `tex`, over transparency.
+// Border-band composite: lay a STRAIGHT-alpha `col` band over `tex`, over
+// transparency. The doc used to say premultiplied, and the body is what shows
+// it is not: it computes the coverage and then multiplies col.rgb by it, which
+// would double-apply the alpha on a premultiplied input.
+//
+// `edge` and `insideMask` are coverages in [0,1] and the product is clamped,
+// because above 1 the `1 - ba` term goes NEGATIVE and the composite starts
+// subtracting the content it is supposed to cover. marginComposite one helper
+// down was hardened for exactly this and says so; this one stated no domain at
+// all, and a third-party pack passing a raw unclamped mask is legal input.
 vec4 borderComposite(vec4 tex, vec4 col, float edge, float insideMask) {
-    float ba = edge * insideMask * col.a;
+    float ba = clamp(edge * insideMask * col.a, 0.0, 1.0);
     vec4 contentPx = tex * (1.0 - edge);
     return vec4(col.rgb * ba, ba) + contentPx * (1.0 - ba);
 }
 
-// Slab-over-window composite: `pane` over the (already opacity-dimmed) window.
+// WINDOW-over-slab composite: the (already opacity-dimmed) window over `pane`.
+// The name and the old doc both said pane over window; the body is
+// `window + pane * (1 - window.a)`, which is the window on top.
 vec4 slabComposite(vec4 window, vec4 pane) {
     return window + pane * (1.0 - window.a);
 }
@@ -122,7 +134,11 @@ vec4 slabComposite(vec4 window, vec4 pane) {
 // shadow texel). With ca so bounded the alpha is an exact sum and needs no
 // clamp; at strength <= 1 the maths is unchanged.
 vec4 marginComposite(vec4 base, vec3 col, float a) {
-    float ca = min(a, 1.0 - clamp(base.a, 0.0, 1.0));
+    // Bounded BELOW as well as above. min() alone let a negative coverage
+    // through, and a negative ca subtracts from both rgb and alpha, so a base
+    // that was already near zero comes out with NEGATIVE alpha and every later
+    // composite in the chain inherits it.
+    float ca = clamp(a, 0.0, 1.0 - clamp(base.a, 0.0, 1.0));
     return vec4(base.rgb + col * ca, base.a + ca);
 }
 
@@ -151,6 +167,20 @@ BorderBand standardBorderBand(vec2 p, float borderWidth, float cornerRadius, flo
     // aggressively crisp (or hand-edited) value degrades to a near-hard edge
     // rather than misrendering.
     float feather = max(aa, 1e-3);
+    // A width of ZERO is the declared minimum on eight controls across seven
+    // packs, and it has to mean NO LINE. Without this guard it does not: width
+    // collapses to 0, the edge term becomes smoothstep(-feather, +feather, d),
+    // and that paints a band about two feathers wide straddling the frame edge
+    // at up to a quarter of the colour's alpha. The user turns the border off
+    // and still sees one. Same guard, same reason, as softBorder in the overlay
+    // family's common.glsl.
+    if (borderWidth <= 0.0) {
+        BorderBand off;
+        off.fs = frameSdf(p, cornerRadius * uSurfaceScale);
+        off.insideMask = 1.0 - smoothstep(-feather, feather, off.fs.d);
+        off.edge = 0.0;
+        return off;
+    }
     // Bound the band to most of the frame's half extent, the way frameSdf
     // already bounds the radius. Inside the frame the SDF never falls below
     // that half extent, so a wider band would leave every interior fragment on
@@ -213,7 +243,13 @@ SurfaceSlab surfaceSlabOpen(vec2 uv, float cornerRadiusPx) {
 // clipped to the slab `mask`. Only packs that use exactly this constant (blur /
 // glass / rippled-glass) call it; siblings with a different fallback keep theirs.
 vec4 faintTintSlab(vec3 tint, float tintStrength, float mask) {
-    return vec4(tint, 1.0) * (0.35 * tintStrength) * mask;
+    // Clamped, because nothing bounds the inputs. The bundled packs declare
+    // tintStrength at most 1, where 0.35 * ts * mask can never exceed 1, but a
+    // third-party pack may declare any range, and above about 2.86 the alpha
+    // passes 1 and the result stops satisfying rgb <= a — the premultiplied
+    // invariant every consumer of this library relies on.
+    float a = clamp(0.35 * tintStrength * mask, 0.0, 1.0);
+    return vec4(clamp(tint, 0.0, 1.0) * a, a);
 }
 
 // Glow/shadow outer-margin falloff (the ~12 lines glow and shadow shared): the
@@ -253,7 +289,10 @@ float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float stre
     return halo;
 }
 
-// Frame-normalized [0,1] UV for a device-px fragment.
+// Frame-normalised UV for a device-px fragment. In [0,1] only for a fragment
+// INSIDE the frame rect: the padded canvas extends beyond it, so a fragment in
+// the outer margin comes back negative or past 1, which is what the margin
+// packs rely on.
 vec2 frameUv(vec2 px) {
     return (px - uSurfaceFrameTopLeft) / max(uSurfaceFrameSize, vec2(1.0));
 }
@@ -296,11 +335,23 @@ vec2 pxToUv(vec2 v) {
 #endif
 }
 
-// Normalized perimeter angle in [-0.5, 0.5) around the frame centre, aspect-
-// corrected (divided by the half-extents) so dashes / hues stay uniform
-// per-side on non-square frames.
+// Normalised perimeter angle in [-0.5, 0.5) around the frame centre,
+// aspect-corrected by dividing through the half-extents.
+//
+// That correction equalises the dash COUNT per side, not the dash SIZE, and
+// the doc used to claim the opposite. Normalising each axis independently
+// gives a wide frame the same number of dashes along its long side as its
+// short one, so they are correspondingly longer there. Uniform dashes would
+// need arc length, which this deliberately does not compute.
 float framePerimeter(vec2 p, vec2 center, vec2 halfSize) {
     vec2 rel = (p - center) / max(halfSize, vec2(1.0));
+    // atan(0, 0) is undefined in GLSL, and the exact frame centre reaches it on
+    // any frame whose centre lands on a fragment centre. Returning the start of
+    // the sweep is the only answer continuous with its neighbourhood, since
+    // every direction meets there.
+    if (dot(rel, rel) < 1e-8) {
+        return 0.0;
+    }
     return atan(rel.y, rel.x) / TAU;
 }
 
