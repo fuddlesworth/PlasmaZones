@@ -78,7 +78,13 @@ vec4 pSurface(vec2 uv) {
         float fringe = clamp(p_fringing, 0.0, 1.0) * 0.3;
         vec4 g = texture(iChannel6, rippleCoord(uv + shift));
         vec3 lit = g.rgb;
-        if (fringe > 0.001) {
+        // The shift has to be non-zero too, not just the fringe amount. At
+        // Refraction strength 0, which is the DECLARED MINIMUM rather than an
+        // exotic setting, dispPx and shift are both zero, so these two offsets
+        // collapse onto uv and re-read the texel `g` already holds. Testing the
+        // fringe alone let the default fringing of 0.25 pay for two dependent
+        // full-canvas fetches that could not change the result.
+        if (fringe > 0.001 && dot(shift, shift) > 0.0) {
             lit.r = texture(iChannel6, rippleCoord(uv + shift * (1.0 + fringe))).r;
             lit.b = texture(iChannel6, rippleCoord(uv + shift * (1.0 - fringe))).b;
         }

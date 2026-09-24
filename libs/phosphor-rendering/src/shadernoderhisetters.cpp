@@ -751,13 +751,19 @@ bool ShaderNodeRhi::loadVertexShader(const QString& path)
     const qint64 mtime = QFileInfo(path).lastModified().toMSecsSinceEpoch();
     QString err;
     QStringList includedPaths;
-    m_vertexShaderSource = loadAndExpandShaderTracked(path, &includedPaths, &err);
-    if (m_vertexShaderSource.isEmpty()) {
+    // Read into a LOCAL and commit only once it is known good, which is what
+    // loadFragmentShader below deliberately does. Assigning the member first
+    // meant a FAILED load destroyed the previously installed vertex source as a
+    // side effect of failing, so a transient read error left the node with no
+    // vertex stage at all instead of the one it was already running.
+    const QString loaded = loadAndExpandShaderTracked(path, &includedPaths, &err);
+    if (loaded.isEmpty()) {
         m_shaderError = err.startsWith(QStringLiteral("Failed to open:"))
             ? QString(QStringLiteral("Failed to open vertex shader: ") + path)
             : QString(QStringLiteral("Vertex shader include: ") + err);
         return false;
     }
+    m_vertexShaderSource = loaded;
     m_vertexPath = path;
     m_vertexMtime = mtime;
     // Fingerprint now, while the includes are the ones just read — see the
@@ -827,17 +833,15 @@ void ShaderNodeRhi::setVertexShaderSource(const QString& source)
 {
     if (m_vertexShaderSource != source) {
         m_vertexShaderSource = source;
-        if (source.isEmpty()) {
-            m_vertexPath.clear();
-            m_vertexMtime = 0;
-            m_vertexIncludeFp.clear();
-        } else {
-            // Inline source — no file backing, so no transitively-
-            // included headers to fingerprint. Clear any leftover
-            // fingerprint from a prior loadVertexShader so the cache key
-            // matches the post-source-set state.
-            m_vertexIncludeFp.clear();
-        }
+        // Cleared for INLINE source too, not only for an empty one. All three are
+        // part of the bake-cache key, so leaving the path and mtime standing from
+        // a prior loadVertexShader made the key name a real file while the node
+        // baked inline text: the node could be served another node's entry for
+        // that file, or poison it with its own inline bake. Inline source has no
+        // file backing, so it has no includes to fingerprint either.
+        m_vertexPath.clear();
+        m_vertexMtime = 0;
+        m_vertexIncludeFp.clear();
         m_shaderDirty = true;
     }
 }
@@ -846,13 +850,11 @@ void ShaderNodeRhi::setFragmentShaderSource(const QString& source)
 {
     if (m_fragmentShaderSource != source) {
         m_fragmentShaderSource = source;
-        if (source.isEmpty()) {
-            m_fragmentPath.clear();
-            m_fragmentMtime = 0;
-            m_fragmentIncludeFp.clear();
-        } else {
-            m_fragmentIncludeFp.clear();
-        }
+        // Same reason as the vertex twin above: path and mtime are cache-key
+        // material and must not survive a switch to inline source.
+        m_fragmentPath.clear();
+        m_fragmentMtime = 0;
+        m_fragmentIncludeFp.clear();
         m_shaderDirty = true;
     }
 }
