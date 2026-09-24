@@ -18,7 +18,9 @@
 // NO-BACKDROP FALLBACK: when the host bound nothing behind the surface,
 // uHasBackdrop is 0 (and backdropTexel() is transparent). The pane
 // degrades to a faint premultiplied tint slab at the same corner rounding,
-// so previews still communicate the pack's shape.
+// so previews still communicate the pack's shape. The slab carries a
+// visibility floor for that reason: tintStrength 0 means no tint, not an
+// invisible pane, so the shape still reads at the parameter's minimum.
 
 #include <surface_multipass.glsl>
 #include <surface_color.glsl>

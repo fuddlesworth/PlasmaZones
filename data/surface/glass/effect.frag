@@ -37,7 +37,8 @@
 // it the same way with no parameter involved.
 // NO-BACKDROP FALLBACK: when the host bound nothing behind the surface
 // (uHasBackdrop = 0), the pane degrades to a faint tint slab with the same
-// corner rounding.
+// corner rounding. The slab carries a visibility floor, so the shape still
+// reads at tintStrength 0, which means no tint rather than no pane.
 
 #include <surface_multipass.glsl>
 #include <surface_noise.glsl>

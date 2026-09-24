@@ -10,8 +10,17 @@
 // margin). Colour-space and noise helpers live in the opt-in modules
 // surface_color.glsl / surface_noise.glsl.
 //
-// Runtime-agnostic: every helper reads only the contract uniforms, which are
-// global in both the compositor (default-block) and daemon (UBO) branches.
+// Runtime-agnostic in its DECLARATIONS: every helper reads only contract
+// uniforms, which are global in both the compositor (default-block) and daemon
+// (UBO) branches, so every helper here COMPILES on both.
+//
+// That is not the same as behaving alike in a BUFFER PASS. The compositor hands
+// a buffer pass a subset of the contract, so a helper reading a uniform outside
+// that subset compiles and then reads whatever the default-block default is,
+// which is zero, while the same helper on the daemon reads the real value from
+// the UBO. A helper used from a buffer pass therefore needs checking against
+// what that pass is actually given; the main pass has the whole contract on
+// both runtimes and is unaffected.
 
 #ifndef PLASMAZONES_SURFACE_LIB_GLSL
 #define PLASMAZONES_SURFACE_LIB_GLSL
@@ -202,13 +211,15 @@ BorderBand standardBorderBand(vec2 p, float borderWidth, float cornerRadius) {
 }
 
 // Backdrop-slab family shared open (blur / duotone / frosted-glass / glass /
-// rain-glass / rippled-glass / mosaic): the raw window content sample, the
-// device-px fragment, the frame SDF at the pack's corner radius, and the AA
-// slab mask — the four lines every backdrop-slab pack repeats before its
-// pack-specific pane. Content dimming is a per-pack concern now: a pack that
-// wants a fadeable window sample declares its own parameter (frost/glass
-// `contentOpacity`) and multiplies `window` itself, so its knob lives in its
-// param editor instead of riding the retired SetOpacity rule feed.
+// mosaic / phosphor-glass / rain-glass / rippled-glass): the raw window
+// sample, the device-px fragment, the frame SDF at the pack's corner radius,
+// and the AA slab mask — the four lines every backdrop-slab pack repeats
+// before its pack-specific pane. Content dimming is a per-pack concern now: a
+// pack that wants a fadeable window sample declares its own `contentOpacity`
+// parameter and multiplies `window` itself, so its knob lives in its param
+// editor instead of riding the retired SetOpacity rule feed. All eight of the
+// packs above declare it, so it reads as part of the family rather than a
+// frost/glass peculiarity.
 // `cornerRadiusPx` is the pack's p_cornerRadius already scaled to device px.
 struct SurfaceSlab {
     vec4 window;
@@ -216,7 +227,7 @@ struct SurfaceSlab {
     FrameSDF fs;
     float mask;
 };
-//
+
 // The four-arg form is what the bundled slab packs call: separate top / bottom
 // radii (a pack's `roundBottomCorners` switch hands 0 for the bottom) and the
 // edge feather in device px (a pack's `edgeSoftness`). The two-arg form keeps
@@ -239,16 +250,27 @@ SurfaceSlab surfaceSlabOpen(vec2 uv, float cornerRadiusPx) {
 }
 
 // The backdrop-slab family's shared no-backdrop fallback (any host where
-// uHasBackdrop is 0): a faint premultiplied tint slab at 0.35 * tintStrength,
-// clipped to the slab `mask`. Only packs that use exactly this constant (blur /
-// glass / rippled-glass) call it; siblings with a different fallback keep theirs.
+// uHasBackdrop is 0): a faint premultiplied tint slab clipped to the slab
+// `mask`. Only packs that use exactly this profile (blur / glass /
+// rippled-glass) call it; siblings with a different fallback keep theirs.
+//
+// The alpha carries a visibility FLOOR, which is the whole point of the
+// fallback. Its callers' headers say it exists "so previews still communicate
+// the pack's shape", and at 0.35 * tintStrength that was false at the one
+// setting where it matters most: tintStrength declares a minimum of 0 on all
+// three packs, where the slab drew NOTHING and the shape was not communicated
+// at all. Even at their shipped defaults (0.15, 0.1, 0.1) it reached only 5.25%
+// and 3.5%. The floor applies ONLY to this degraded no-backdrop path; on the
+// real path tintStrength 0 still means no tint, because that is a statement
+// about the tint rather than about whether the pane is visible.
 vec4 faintTintSlab(vec3 tint, float tintStrength, float mask) {
     // Clamped, because nothing bounds the inputs. The bundled packs declare
-    // tintStrength at most 1, where 0.35 * ts * mask can never exceed 1, but a
+    // tintStrength at most 1, where 0.35 * ts can never exceed 1, but a
     // third-party pack may declare any range, and above about 2.86 the alpha
     // passes 1 and the result stops satisfying rgb <= a — the premultiplied
-    // invariant every consumer of this library relies on.
-    float a = clamp(0.35 * tintStrength * mask, 0.0, 1.0);
+    // invariant every consumer of this library relies on. The mask multiplies
+    // AFTER the floor so the slab still respects the rounded corners.
+    float a = clamp(max(0.35 * tintStrength, 0.1) * mask, 0.0, 1.0);
     return vec4(clamp(tint, 0.0, 1.0) * a, a);
 }
 
