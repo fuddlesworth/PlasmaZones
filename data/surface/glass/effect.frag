@@ -71,8 +71,11 @@ vec4 pSurface(vec2 uv) {
         float edgePx = clamp(p_edgeWidth * uSurfaceScale, 0.1, max(minHalf * 0.9, 0.1));
         float edgeFactor = 1.0 - clamp(abs(d) / edgePx, 0.0, 1.0);
         float eased = smoothstep(0.0, 1.0, edgeFactor);
-        // Edge curve: an exponent on the bevel ramp before the circular
-        // profile (Better Blur's "normal power"). 1 is the reference bevel.
+        // Edge curve: an exponent on the bevel ramp before the circular profile.
+        // Both upstreams carry the same control (Better Blur calls it "normal
+        // power", kwin-effects-glass calls it refractionNormalPow). The default
+        // of 1.0 here is this pack's own pre-existing look, not either
+        // upstream's default, which is not verifiable from this tree.
         // eased is ~1 at the rim and falls to 0 toward the interior, so an
         // exponent below 1 RAISES the ramp and carries the bend further
         // inward, and one above 1 lowers it and confines the bend to the rim.
@@ -126,7 +129,12 @@ vec4 pSurface(vec2 uv) {
             vec2 normalizedPos = pos / max(uSurfaceFrameSize, vec2(1.0));
             float cornerWeight = dot(normalizedPos, normalizedPos) * clamp(p_cornerLens, 0.0, 2.0);
             surfaceNormal += normalizedPos * concave * cornerWeight;
-            vec2 lensShift = pxToUv(-surfaceNormal * lensMagnitude);
+            // Scaled by strength like the refract term below it. Unscaled, a
+            // Refraction strength of 0 still left this whole displacement
+            // standing (about edgeWidth x bevelIntensity device px at the rim),
+            // so the control could not switch the bend off the way its
+            // description says it does.
+            vec2 lensShift = pxToUv(-surfaceNormal * lensMagnitude * strength);
 
             vec3 refractG = refract(vec3(0.0, 0.0, -1.0), glassNormal, 1.0 / ior);
             vec2 dirPx = length(refractG.xy) > 0.001 ? normalize(refractG.xy) : vec2(0.0);
@@ -154,15 +162,33 @@ vec4 pSurface(vec2 uv) {
             // ratio stays: this offset is expressed relative to the frame.
             vec2 dirUv = pxToUv(inward * strengthUv * uSurfaceFrameSize);
             vec4 g = texture(iChannel6, glassCoord(uv + dirUv));
-            lit = vec3(texture(iChannel6, glassCoord(uv + dirUv * (1.0 + fringe))).r, g.g,
-                       texture(iChannel6, glassCoord(uv + dirUv * (1.0 - fringe))).b);
+            lit = g.rgb;
+            // Gated the way the concave and Snell arms already gate theirs. Run
+            // unconditionally these cost two dependent fetches per fragment that
+            // return the texel already in `g` for two separate reasons: at
+            // fringing 0 the two offsets collapse onto dirUv, and anywhere
+            // deeper into the pane than the bevel `concave` is exactly 0, so
+            // strengthUv and dirUv are zero and all three fetches hit one texel.
+            // That second case covers most of the pane at the shipped defaults.
+            if (fringe > 0.001 && strengthUv > 0.0) {
+                lit.r = texture(iChannel6, glassCoord(uv + dirUv * (1.0 + fringe))).r;
+                lit.b = texture(iChannel6, glassCoord(uv + dirUv * (1.0 - fringe))).b;
+            }
             pane.a = g.a;
         }
 
         // Rim glow + optional edge lighting (reference glassOutline).
         float dim = focusDim(0.55);
         float rimStrength = clamp(p_rimStrength, 0.0, 1.0) * dim;
-        float rimMask = clamp(0.25 * concave, 0.0, rimStrength);
+        // The slider SCALES the rim rather than capping it. It used to be
+        // clamp(0.25 * concave, 0.0, rimStrength), which made it a ceiling: since
+        // 0.25 * concave never exceeds 0.25, any value at or above 0.25 never
+        // bound at all, so 0.25 and 1.0 rendered identically and the shipped
+        // default of 0.35 already sat in that dead range. Values below 0.25 had
+        // the opposite fault, flattening the profile into a constant band.
+        // Normalised on the default so the pack still renders as it shipped.
+        const float kRimDefaultStrength = 0.35;
+        float rimMask = 0.25 * concave * (rimStrength / kRimDefaultStrength);
         vec3 glow = mix(lit, p_rimColor.rgb, rimMask);
         if (p_edgeLighting >= 0.5) {
             glow += lit * concave;
