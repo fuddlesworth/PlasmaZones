@@ -674,6 +674,41 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             && !PhosphorSurfaceShaders::SurfaceShaderContract::isValidFilterToken(singleFilter)) {
             lints << QStringLiteral("bufferFilter value '%1' not in vocabulary (cleared at load)").arg(singleFilter);
         }
+        // DAEMON-ONLY, and the schema accepting these gave no hint of it. All four
+        // wrap/filter spellings are declared daemon-only on SurfaceShaderEffect,
+        // and the compositor bears that out: it creates every buffer target
+        // GL_LINEAR / GL_CLAMP_TO_EDGE and never reads the keys. A pack that asks
+        // for "repeat" or "nearest" therefore renders one way in the settings
+        // preview and another on a real window, which is precisely the class of
+        // divergence this validator exists to surface before a pack ships.
+        const auto lintDaemonOnlyToken = [&lints, &doc](QLatin1String key, QLatin1String honoured) {
+            QStringList offending;
+            const QJsonValue value = doc.object().value(key);
+            if (value.isString()) {
+                if (!value.toString().isEmpty() && value.toString() != honoured) {
+                    offending << value.toString();
+                }
+            } else {
+                for (const QJsonValue& v : value.toArray()) {
+                    const QString tok = v.toString();
+                    if (!tok.isEmpty() && tok != honoured) {
+                        offending << tok;
+                    }
+                }
+            }
+            if (!offending.isEmpty()) {
+                offending.removeDuplicates();
+                lints << QStringLiteral(
+                             "%1 declares %2, which the DAEMON honours and the compositor ignores: it "
+                             "creates every buffer target as '%3'. The pack will render differently in "
+                             "the settings preview and on a window")
+                             .arg(QString(key), offending.join(QLatin1String(", ")), QString(honoured));
+            }
+        };
+        lintDaemonOnlyToken(QLatin1String("bufferWrap"), QLatin1String("clamp"));
+        lintDaemonOnlyToken(QLatin1String("bufferWraps"), QLatin1String("clamp"));
+        lintDaemonOnlyToken(QLatin1String("bufferFilter"), QLatin1String("linear"));
+        lintDaemonOnlyToken(QLatin1String("bufferFilters"), QLatin1String("linear"));
         // The single-value twin of the per-entry not-a-number lint above. toDouble
         // answers its DEFAULT for a string or a bool, so `"bufferScale": "0.5"`
         // silently loads as 1.0 and the range check below sees nothing wrong.

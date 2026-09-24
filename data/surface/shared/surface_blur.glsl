@@ -65,6 +65,18 @@ vec4 surfaceGaussianBackdropH(vec2 uv) {
 // Buffer pass 1: VERTICAL half over buffer 0's result (iChannel0, same
 // bufferScale resolution). Together the two passes approximate a full 2D
 // Gaussian; the main pass samples the result as iChannel1.
+//
+// The tap reach is measured against the CANVAS, not the buffer: stepUv is
+// radiusPx / (4 * uSurfaceSize.y), so the outermost tap sits a full
+// radiusPx / uSurfaceSize.y away from uv. On a short canvas with a large
+// radius that is well outside [0,1] — blurRadius 256 on a 400 px canvas puts
+// it at 0.64 — and what happens out there is the buffer sampler's wrap mode.
+// It is CLAMP on the compositor unconditionally: the buffer targets are
+// created GL_LINEAR / GL_CLAMP_TO_EDGE and the `bufferWraps` and
+// `bufferFilters` keys are daemon-only, which the fields themselves declare.
+// So a big radius on a small surface smears the edge texel rather than
+// blurring, identically on both hosts at the default wrap. Do NOT "fix" that
+// by clamping uv here; that changes the Gaussian's edge behaviour everywhere.
 vec4 surfaceGaussianChannelV(vec2 uv) {
     float radiusPx = max(customParams[0].x * uSurfaceScale, 1.0);
     vec2 stepUv = vec2(0.0, radiusPx / (4.0 * max(uSurfaceSize.y, 1.0)));

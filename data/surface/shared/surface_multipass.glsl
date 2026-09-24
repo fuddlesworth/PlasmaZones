@@ -2,10 +2,18 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Opt-in MULTIPASS module: the iChannel buffer-pass sampler bindings for surface
-// packs that declare `"bufferShaders"` in metadata.json. `#include
-// <surface_multipass.glsl>` in a pack (or a shared helper like surface_blur.glsl)
-// that samples a buffer-pass output. Single-pass packs (the border) never
-// include it, so they declare no extra samplers.
+// packs that run buffer passes. `#include <surface_multipass.glsl>` in a pack (or
+// a shared helper like surface_blur.glsl) that samples a buffer-pass output.
+// Single-pass packs (the border) never include it, so they declare no extra
+// samplers.
+//
+// THE OPT-IN IS `"multipass": true`, NOT `"bufferShaders"`. The two are separate
+// metadata keys and only the first one gates anything: isMultipass is read from
+// `multipass` alone, and the registry's single-pass coherence block CLEARS
+// bufferShaderPaths, bufferWraps, bufferFilters, bufferFeedback, depthBuffer and
+// bufferScale whenever isMultipass is false. A pack that lists its buffer passes
+// and omits the flag therefore loads with every one of them discarded, renders
+// single-pass, and gets no diagnostic for it. Declare both.
 //
 // Each buffer pass renders into an FBO; its output is bound as iChannelN for
 // downstream passes and the main effect, the same iChannel dialect the

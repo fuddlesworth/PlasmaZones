@@ -6,14 +6,20 @@
 // <surface_audio.glsl>` in a pack that reacts to the CAVA spectrum, then guard
 // on the helpers (they return 0 when audio is off).
 //
-// The spectrum is a session-global feature, exactly as it is for zone packs:
-// the same spectrum reaches every surface item when the audio visualizer is
-// enabled, and a pack opts in purely by including this file and reading the
-// helpers. iAudioSpectrumSize (from the uniform contract) is the bar count, 0
-// when audio is disabled. Both runtimes populate it: the daemon pushes the
-// spectrum to its OSD / popup surfaces, and the KWin effect runs its own CAVA
-// provider to feed window decorations. It reads 0 (renders static) only when
-// the visualizer is off.
+// THE OPT-IN IS `"audio": true` IN metadata.json, not the include. Including
+// this file and reading the helpers is NOT enough on either runtime: the CAVA
+// process is started from a metadata scan (hasAudioReactiveDecoration walks the
+// decoration chain and tests each pack's `audio` flag), so a pack that omits the
+// flag never causes a provider to run. iAudioSpectrumSize then stays 0, the
+// helpers all return 0, and the pack renders STATIC with no diagnostic anywhere.
+//
+// Given the flag, the spectrum is a session-global feature exactly as it is for
+// zone packs: the same spectrum reaches every surface item. iAudioSpectrumSize
+// (from the uniform contract) is the bar count. Both runtimes populate it: the
+// daemon pushes the spectrum to its OSD / popup surfaces, and the KWin effect
+// runs its own CAVA provider to feed window decorations. It reads 0, and the
+// pack renders static, when the visualizer setting is off OR when no pack in the
+// chain declares the flag.
 
 #ifndef PLASMAZONES_SURFACE_AUDIO_GLSL
 #define PLASMAZONES_SURFACE_AUDIO_GLSL

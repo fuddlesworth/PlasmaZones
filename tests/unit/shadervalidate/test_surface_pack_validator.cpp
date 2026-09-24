@@ -424,6 +424,33 @@ private Q_SLOTS:
         QVERIFY(r.errors > 0);
     }
 
+    /// The four wrap/filter spellings are daemon-only: the compositor creates
+    /// every buffer target GL_LINEAR / GL_CLAMP_TO_EDGE and never reads the keys.
+    /// The schema and the vocabulary check both accept them, so a pack asking for
+    /// "repeat" or "nearest" validated clean and then rendered one way in the
+    /// settings preview and another on a real window.
+    void aDaemonOnlyBufferWrapIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(QStringLiteral("sf-wrap"), QJsonArray{});
+        obj.insert(QStringLiteral("multipass"), true);
+        obj.insert(QStringLiteral("bufferShaders"), QJsonArray{QStringLiteral("builtin:gaussian-h")});
+        obj.insert(QStringLiteral("bufferWraps"), QJsonArray{QStringLiteral("repeat")});
+        obj.insert(QStringLiteral("bufferFilter"), QStringLiteral("nearest"));
+        PackResult r = validateSurface(tmp, QStringLiteral("sf-wrap"), obj, surfaceBodyReading({}));
+        QVERIFY2(r.report.contains(QStringLiteral("bufferWraps declares repeat")), qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("bufferFilter declares nearest")), qPrintable(r.report));
+
+        // The token the compositor DOES honour draws no lint, so a pack that
+        // states the default explicitly is not nagged for it.
+        obj.insert(QStringLiteral("bufferWraps"), QJsonArray{QStringLiteral("clamp")});
+        obj.insert(QStringLiteral("bufferFilter"), QStringLiteral("linear"));
+        r = validateSurface(tmp, QStringLiteral("sf-wrap"), obj, surfaceBodyReading({}));
+        QVERIFY2(!r.report.contains(QStringLiteral("the compositor ignores")), qPrintable(r.report));
+    }
+
     /// The builtin Kawase passes are bound to iChannel<index> BY POSITION and the
     /// seven frags hardcode which channel they read, so the chain composes in one
     /// order only. Every token here resolves and every file compiles, so nothing
