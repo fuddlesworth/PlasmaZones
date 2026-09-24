@@ -32,10 +32,10 @@
             "items": { "type": "string" },
             "maxItems": 8
         },
-        "bufferScale": { "type": "number", "minimum": 0.03125, "maximum": 1.0 },
+        "bufferScale": { "type": "number", "minimum": 0.0078125, "maximum": 1.0 },
         "bufferScales": {
             "type": "array",
-            "items": { "type": "number", "minimum": 0.03125, "maximum": 1.0 },
+            "items": { "type": "number", "minimum": 0.0078125, "maximum": 1.0 },
             "maxItems": 8
         },
         "bufferFeedback": { "type": "boolean" },

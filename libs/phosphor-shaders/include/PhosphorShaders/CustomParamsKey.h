@@ -10,13 +10,26 @@
 namespace PhosphorShaders {
 
 /// Lower / upper bounds on a multipass `bufferScale` (FBO downscale
-/// factor). 1/32 means a 1/32 downscale on each axis (1/1024 area), which
-/// is the deepest level of a Kawase pyramid that starts at quarter
-/// resolution and still has texels to average; 1.0 means full-resolution
-/// FBOs. Canonical home for every clamp site (overlay metadata parse, surface
-/// `SurfaceShaderEffect::kMin/MaxBufferScale` forwarders, and the two
-/// rendering setters), so the bounds cannot drift per-runtime.
-inline constexpr double kMinBufferScale = 0.03125;
+/// factor). 1/128 means a 1/128 downscale on each axis; 1.0 means
+/// full-resolution FBOs. Canonical home for every clamp site (overlay metadata
+/// parse, surface `SurfaceShaderEffect::kMin/MaxBufferScale` forwarders, and
+/// the two rendering setters), so the bounds cannot drift per-runtime.
+///
+/// WHY THE FLOOR SITS FOUR STEPS BELOW THE DEEPEST LEVEL ANY PACK DECLARES.
+/// The deepest level of the bundled Kawase pyramids is 1/32, which is as deep
+/// as a pyramid starting at quarter resolution can go and still have texels to
+/// average. But the compositor multiplies every declared scale by the user's
+/// decoration blur-scale multiplier BEFORE clamping
+/// (PlasmaZonesEffect::clampedBufferScale), and that multiplier bottoms out at
+/// 1/4 (DecorationDefaults::BlurScaleMultiplierMin). A floor equal to the
+/// deepest declared level therefore clamped the bottom of the pyramid straight
+/// back up at any multiplier below 1. At the minimum, five of the seven levels
+/// all landed on 1/32 and the pyramid stopped halving at all, so turning the
+/// quality down stopped reducing work and started destroying the blur instead.
+/// 1/32 * 1/4 = 1/128 gives the multiplier its full range to scale the whole
+/// pyramid without collapsing it. Nothing degenerates at the floor: both hosts
+/// size targets with qMax(1, qRound(extent * scale)).
+inline constexpr double kMinBufferScale = 0.0078125;
 inline constexpr double kMaxBufferScale = 1.0;
 
 /// Maximum number of multipass buffer passes a pack may declare. Canonical

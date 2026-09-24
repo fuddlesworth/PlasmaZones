@@ -257,8 +257,10 @@ private Q_SLOTS:
         // Default should be 1.0
         QVERIFY(qFuzzyCompare(item.bufferScale(), 1.0));
 
-        // Below the contract floor (PhosphorShaders::kMinBufferScale) should clamp
-        item.setBufferScale(0.01);
+        // Below the contract floor (PhosphorShaders::kMinBufferScale) should clamp.
+        // Keep this probe well under the floor: it was 0.01, which stopped being
+        // below it when the floor dropped to 1/128 for the blur-scale multiplier.
+        item.setBufferScale(0.001);
         QVERIFY(qFuzzyCompare(item.bufferScale(), PhosphorShaders::kMinBufferScale));
 
         // Above maximum (1.0) should clamp
