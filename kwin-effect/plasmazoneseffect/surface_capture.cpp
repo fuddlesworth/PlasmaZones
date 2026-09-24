@@ -275,6 +275,44 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
         // chain change is rare and is already rebuilding everything.
         state.prefixTex.reset();
         state.prefixFbo.reset();
+
+        // THE BACKDROP WORKING SET GOES TOO when the new chain has no reader for
+        // it, and it is the LARGER of the two: a full-canvas RGBA8 like the
+        // prefix, plus its framebuffer. Releasing the prefix while leaving this
+        // resident beside it was half a fix.
+        //
+        // Nothing else frees it. Every release in the tree is inside
+        // captureWindowBackdrop, which stops being called the moment
+        // needsBackdrop goes false, so the texture for a chain that no longer
+        // wants one had no path out at all. The decoration REFRESH path keeps
+        // the surface state deliberately (keepSurfaceState=true), which is right
+        // for everything else in it and is what leaves this stranded.
+        //
+        // Not a rare case either: moving off a frost or glass pack is what snap
+        // and untile do to a window's chain.
+        //
+        // Reset the whole set, not just the texture. backdropRect, the written
+        // region and the generation list all describe the texture being dropped,
+        // and the allocation path at surface_backdrop.cpp clears exactly these
+        // alongside a fresh texture, so leaving any of them behind would hand a
+        // later capture a rect and a generation belonging to a texture that no
+        // longer exists.
+        bool chainWantsBackdrop = false;
+        for (const QString& packId : chain) {
+            if (m_surfaceShaderRegistry.effect(packId).needsBackdrop) {
+                chainWantsBackdrop = true;
+                break;
+            }
+        }
+        if (!chainWantsBackdrop) {
+            // Framebuffer before texture, as everywhere else in this file.
+            state.backdropFbo.reset();
+            state.backdropTex.reset();
+            state.backdropSize = QSize();
+            state.backdropRect = QVector4D();
+            state.backdropWritten = KWin::Region();
+            state.backdropGenerationOutputs.clear();
+        }
     }
     return true;
 }

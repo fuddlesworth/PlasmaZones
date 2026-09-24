@@ -75,6 +75,39 @@ float audioBarMono(int i) {
     return 0.5 * (audioBar(i) + audioBar(i + h));
 }
 
+// ── Fetch budget ─────────────────────────────────────────────────────────────
+// Every band helper below runs PER FRAGMENT, so its loop bound is a per-pixel
+// cost. Walking every bar made that cost scale with a SETTING: at the widest bar
+// counts the four helpers together reached several hundred texelFetch per
+// fragment, and a pack calling more than one of them paid it more than once.
+//
+// The band is sampled at a bounded number of evenly spaced taps instead. Each
+// tap is one audioBarMono, which is two fetches in stereo, so a band costs at
+// most about 2 * kAudioBandTaps fetches whatever the bar count.
+//
+// AT SMALL BAR COUNTS NOTHING CHANGES. The stride is max(n / taps, 1), so a band
+// narrower than the tap budget still walks every bar and returns the exact mean
+// it always did. The approximation appears only where the exact answer was
+// unaffordable, and a band mean over a smooth spectrum is what these helpers
+// exist to give.
+const int kAudioBandTaps = 8;
+
+// Mean of the FOLDED spectrum over [lo, hi), at no more than kAudioBandTaps
+// evenly spaced taps.
+float audioBandMean(int lo, int hi) {
+    int n = hi - lo;
+    if (n <= 0)
+        return 0.0;
+    int stride = max(n / kAudioBandTaps, 1);
+    float sum = 0.0;
+    int taps = 0;
+    for (int i = lo; i < hi; i += stride) {
+        sum += audioBarMono(i);
+        taps++;
+    }
+    return taps > 0 ? sum / float(taps) : 0.0;
+}
+
 float getBass() {
     int h = audioHalf();
     if (h <= 0)
@@ -82,43 +115,38 @@ float getBass() {
     // Fractional, like the two bands below. An absolute window made "bass" the
     // bottom half of the vector at the minimum bar count and a thirtieth of it at
     // the maximum, so a settings slider changed which frequencies the band covered.
-    int hi = max(h / 8, 1);
-    float sum = 0.0;
-    for (int i = 0; i < hi; i++)
-        sum += audioBarMono(i);
-    return sum / float(hi);
+    return audioBandMean(0, max(h / 8, 1));
 }
 
 float getMids() {
     int h = audioHalf();
     if (h <= 0)
         return 0.0;
-    int lo = h / 4;
-    int hi = h * 3 / 4;
-    float sum = 0.0;
-    for (int i = lo; i < hi; i++)
-        sum += audioBarMono(i);
-    return sum / float(max(hi - lo, 1));
+    return audioBandMean(h / 4, h * 3 / 4);
 }
 
 float getTreble() {
     int h = audioHalf();
     if (h <= 0)
         return 0.0;
-    int lo = h * 3 / 4;
-    float sum = 0.0;
-    for (int i = lo; i < h; i++)
-        sum += audioBarMono(i);
-    return sum / float(max(h - lo, 1));
+    return audioBandMean(h * 3 / 4, h);
 }
 
+// Strided over the RAW vector, not the folded one: a full mean is correct at
+// either channel layout, so there is nothing to fold. Twice a single band's tap
+// budget, since this covers the whole spectrum and each tap is a single fetch
+// rather than a folded pair.
 float getOverall() {
     if (iAudioSpectrumSize <= 0)
         return 0.0;
+    int stride = max(iAudioSpectrumSize / (kAudioBandTaps * 2), 1);
     float sum = 0.0;
-    for (int i = 0; i < iAudioSpectrumSize; i++)
+    int taps = 0;
+    for (int i = 0; i < iAudioSpectrumSize; i += stride) {
         sum += audioBar(i);
-    return sum / float(iAudioSpectrumSize);
+        taps++;
+    }
+    return taps > 0 ? sum / float(taps) : 0.0;
 }
 
 // ── Dampened band helpers ────────────────────────────────────────────────────
