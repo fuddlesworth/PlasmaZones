@@ -351,13 +351,12 @@ PHOSPHORANIMATION_EXPORT extern const QString EventClassStrip;
 /// unaffected.
 ///
 /// A tab-ONLY pack is compositor-only by `shaderEffectIsCompositorOnly`'s
-/// appearance rule, which is what lets it include `old_content.glsl`
-/// unguarded: that sampler is binding-less and the daemon's strict SPIR-V
-/// bake rejects it. The BUNDLED-pack validator gate enforces this (a hybrid
-/// declaring "appearance" beside "tab" fails the daemon-dialect bake loudly,
-/// with a hint naming the fix); a user-installed hybrid bypasses the gate and
-/// degrades to logged bake failures rather than being rejected — the same
-/// standing gap every geometry+appearance old-content pack shares.
+/// appearance rule, and the reason that matters is the RUNTIME, not the bake:
+/// the daemon never binds a tab snapshot, so a tab leg there would blend the
+/// arriving surface against nothing. `old_content.glsl` itself compiles on
+/// both ABIs — it declares `uOldWindow` under `PLASMAZONES_KWIN` and aliases
+/// it onto `uTexture3` on the other branch — so a pack including it is not
+/// kept off the daemon by a compile failure.
 PHOSPHORANIMATION_EXPORT extern const QString EventClassTab;
 
 /// Every event-class token, in the order the classes are declared above.

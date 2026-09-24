@@ -15,8 +15,9 @@ namespace {
 
 /// A minimal valid effect declaring @p classes. The (effect × path) predicate
 /// reads only `appliesTo`, so id and fragment path exist purely to satisfy
-/// isValid(); the id is carried anyway because it names the pack in a failure
-/// message.
+/// isValid(). The id is for the READER of the call site, naming which pack
+/// each case is about; no assertion prints it, because the matrix slots use
+/// plain QVERIFY.
 AnimationShaderEffect packWith(const QString& id, const QStringList& classes)
 {
     AnimationShaderEffect e;
@@ -226,6 +227,20 @@ private Q_SLOTS:
         zero.id = QStringLiteral("test");
         zero.fragmentShaderPath = QStringLiteral("effect.frag");
         QVERIFY(!zero.toJson().contains(QLatin1String("geometryGrid")));
+
+        // The CEILING, which the doc above promised and nothing asserted. This
+        // is the one pack scalar that lands on a per-frame compositor
+        // allocation as n squared, so losing the upper clamp is the expensive
+        // direction of the two.
+        obj.insert(QLatin1String("geometryGrid"), AnimationShaderEffect::kMaxGeometryGridSubdivisions + 1);
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("exceeds the cap")));
+        QCOMPARE(AnimationShaderEffect::fromJson(obj).geometryGridSubdivisions,
+                 AnimationShaderEffect::kMaxGeometryGridSubdivisions);
+
+        // Exactly at the cap is kept and warns about nothing.
+        obj.insert(QLatin1String("geometryGrid"), AnimationShaderEffect::kMaxGeometryGridSubdivisions);
+        QCOMPARE(AnimationShaderEffect::fromJson(obj).geometryGridSubdivisions,
+                 AnimationShaderEffect::kMaxGeometryGridSubdivisions);
     }
 
     /// `bufferScale` is clamped to `[kMinBufferScale, 1.0]` at parse time so a
@@ -298,37 +313,52 @@ private Q_SLOTS:
     {
         QTest::addColumn<QString>("input");
         QTest::addColumn<AnimationShaderEffect::FboExtentKind>("expectedKind");
+        // Whether the row is expected to warn. An accepted form must NOT, which
+        // is an assertion of its own: ignoreMessage fails the row if the
+        // expected message never arrives, so the malformed rows also pin that
+        // the parser actually says something.
+        QTest::addColumn<bool>("warns");
 
         const auto kAnchor = AnimationShaderEffect::FboExtentKind::Anchor;
         const auto kSurface = AnimationShaderEffect::FboExtentKind::Surface;
 
         // Accepted grammar.
-        QTest::newRow("anchor") << QStringLiteral("anchor") << kAnchor;
-        QTest::newRow("surface") << QStringLiteral("surface") << kSurface;
-        QTest::newRow("anchor-uppercase") << QStringLiteral("ANCHOR") << kAnchor;
-        QTest::newRow("surface-mixed") << QStringLiteral("Surface") << kSurface;
-        QTest::newRow("leading-ws") << QStringLiteral("  anchor") << kAnchor;
+        QTest::newRow("anchor") << QStringLiteral("anchor") << kAnchor << false;
+        QTest::newRow("surface") << QStringLiteral("surface") << kSurface << false;
+        QTest::newRow("anchor-uppercase") << QStringLiteral("ANCHOR") << kAnchor << false;
+        QTest::newRow("surface-mixed") << QStringLiteral("Surface") << kSurface << false;
+        QTest::newRow("leading-ws") << QStringLiteral("  anchor") << kAnchor << false;
 
         // Malformed / unsupported values: parser falls back to the
         // struct default (Anchor) and emits a journal warning. The
         // legacy `anchor+N` ring grammar lives in this bucket since
         // ring expansion is no longer supported on either runtime.
-        QTest::newRow("empty") << QString() << kAnchor;
-        QTest::newRow("whitespace-only") << QStringLiteral("   ") << kAnchor;
-        QTest::newRow("garbage") << QStringLiteral("foo") << kAnchor;
-        QTest::newRow("legacy-anchor+0.5") << QStringLiteral("anchor+0.5") << kAnchor;
-        QTest::newRow("legacy-anchor+50%") << QStringLiteral("anchor+50%") << kAnchor;
+        // Empty and whitespace-only return before the warning (an absent value
+        // is not a malformed one), so they do not warn.
+        QTest::newRow("empty") << QString() << kAnchor << false;
+        QTest::newRow("whitespace-only") << QStringLiteral("   ") << kAnchor << false;
+        QTest::newRow("garbage") << QStringLiteral("foo") << kAnchor << true;
+        QTest::newRow("legacy-anchor+0.5") << QStringLiteral("anchor+0.5") << kAnchor << true;
+        QTest::newRow("legacy-anchor+50%") << QStringLiteral("anchor+50%") << kAnchor << true;
     }
 
     void testFromJsonFboExtent()
     {
         QFETCH(QString, input);
         QFETCH(AnimationShaderEffect::FboExtentKind, expectedKind);
+        QFETCH(bool, warns);
 
         QJsonObject obj;
         obj.insert(QLatin1String("id"), QStringLiteral("test"));
         obj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
         obj.insert(QLatin1String("fboExtent"), input);
+        // The warning is part of the contract the doc above states, so it is
+        // ASSERTED on the malformed rows rather than left to escape into the
+        // run log. Deleting the qCWarning used to leave this test green with
+        // three stray lines beside it.
+        if (warns) {
+            QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("unrecognised fboExtent")));
+        }
         const AnimationShaderEffect e = AnimationShaderEffect::fromJson(obj);
         QCOMPARE(e.fboExtentKind, expectedKind);
     }
@@ -526,13 +556,15 @@ private Q_SLOTS:
 
     /// The (effect × path) predicate, geometry and universal halves.
     ///
-    /// This matrix is split across one slot per class rather than run as one
-    /// long slot. QVERIFY aborts the slot it fails in, so a single regression
-    /// in the geometry block used to take every later class's assertions with
-    /// it — the strip block at the end never ran at all. Split, a geometry
-    /// break reports as one failure and the other five still tell you whether
-    /// they hold. The packs are built by the shared factories above so the
-    /// split costs no duplication.
+    /// This matrix is split across five slots rather than run as one long
+    /// slot. QVERIFY aborts the slot it fails in, so a single regression in
+    /// the geometry block used to take every later class's assertions with it
+    /// — the strip block at the end never ran at all. Split, a geometry break
+    /// reports as one failure and the other FOUR still tell you whether they
+    /// hold. The appearance assertions ride inside this slot rather than
+    /// taking a sixth, so they go down with geometry; giving them their own
+    /// would make it five surviving. The packs are built by the shared
+    /// factories above so the split costs no duplication.
     void testShaderEffectAppliesToEventPath()
     {
         using PhosphorAnimationShaders::shaderEffectAppliesToEventPath;
@@ -794,10 +826,12 @@ private Q_SLOTS:
         QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("geometry")})));
         QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("move")})));
         QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("strip")})));
-        // The tab pin is load-bearing beyond symmetry: a tab-only pack being
-        // compositor-only is what lets it include old_content.glsl's
-        // binding-less uOldWindow unguarded (the daemon's strict SPIR-V bake
-        // would reject it) — see EventClassTab's contract in ProfilePaths.h.
+        // The tab pin is load-bearing beyond symmetry. NOT because the daemon
+        // could not COMPILE a tab pack: old_content.glsl declares uOldWindow
+        // under PLASMAZONES_KWIN and aliases it onto uTexture3 on the other
+        // branch, so it bakes on both ABIs. The daemon never BINDS a tab
+        // snapshot, so a tab leg there would blend against nothing. See
+        // EventClassTab's contract in ProfilePaths.h.
         QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("tab")})));
         QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("geometry"), QStringLiteral("move")})));
         // Default-constructed (invalid) effect: empty appliesTo → not

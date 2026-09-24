@@ -499,7 +499,13 @@ private Q_SLOTS:
                    QJsonObject{{QStringLiteral("Fine"), QJsonObject{{QStringLiteral("speed"), 1.5}}}});
         r = validate(tmp, QStringLiteral("raw-presets"), obj);
         QVERIFY2(!r.report.contains(QStringLiteral("is not an object")), qPrintable(r.report));
-        QVERIFY2(!r.report.contains(QStringLiteral("presets;")), qPrintable(r.report));
+        // The preset-COUNT lint, keyed on its stable words rather than on the
+        // semicolon that used to stand in for it. A negative substring
+        // assertion is only as strong as the substring: rewording the lint so
+        // it no longer carries that punctuation would have made this line
+        // vacuous rather than failing, and the slot would have gone on passing
+        // while testing nothing.
+        QVERIFY2(!r.report.contains(QStringLiteral("only the first")), qPrintable(r.report));
         QCOMPARE(r.errors, 0);
     }
 

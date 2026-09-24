@@ -17,7 +17,6 @@
 #include <PhosphorShaders/CustomParamsKey.h>
 #include <PhosphorRendering/ZoneLabelTexture.h>
 #include "config/configdefaults.h"
-#include "core/types/constants.h"
 #include "helpers/TestHelpers.h"
 
 #include <QImage>
@@ -219,7 +218,12 @@ private Q_SLOTS:
     {
         ZoneShaderItem item;
 
-        // Verify default color 1 matches ConfigDefaults::highlightFallbackColor()
+        // The default colour comes from ConfigDefaults::highlightFallbackColor(),
+        // which is the same expression the constructor passes to setCustomColor1.
+        // So this pins the WIRING and not the VALUE: a hardcoded literal default
+        // would fail it, a wrong ConfigDefaults value would not. The epsilon
+        // below is inherited from the push case and means nothing here, where
+        // both sides are one accessor read twice.
         constexpr float kEpsilon = 0.002f;
         QColor defaultColor = item.customColor1();
         QColor expectedColor = PlasmaZones::ConfigDefaults::highlightFallbackColor();
@@ -268,8 +272,9 @@ private Q_SLOTS:
     {
         ZoneShaderItem item;
 
-        // Default should be 1.0
-        QVERIFY(qFuzzyCompare(item.bufferScale(), 1.0));
+        // The default is the ceiling: a pack that declares no scale renders
+        // its buffers at full resolution.
+        QVERIFY(qFuzzyCompare(item.bufferScale(), PhosphorShaders::kMaxBufferScale));
 
         // Below the contract floor (PhosphorShaders::kMinBufferScale) should clamp.
         // Keep this probe well under the floor: it was 0.01, which stopped being
@@ -277,9 +282,10 @@ private Q_SLOTS:
         item.setBufferScale(0.001);
         QVERIFY(qFuzzyCompare(item.bufferScale(), PhosphorShaders::kMinBufferScale));
 
-        // Above maximum (1.0) should clamp
+        // Above the contract ceiling should clamp. Named, not the literal it
+        // happens to equal: the floor below already moved once.
         item.setBufferScale(5.0);
-        QVERIFY(qFuzzyCompare(item.bufferScale(), 1.0));
+        QVERIFY(qFuzzyCompare(item.bufferScale(), PhosphorShaders::kMaxBufferScale));
 
         // Normal value should pass through
         item.setBufferScale(0.5);

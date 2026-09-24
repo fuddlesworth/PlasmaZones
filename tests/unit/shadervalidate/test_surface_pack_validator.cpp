@@ -18,14 +18,13 @@
 // The bundled-pack gate (shader_validate_surface) only proves the shipped packs
 // are clean; it cannot show that a BROKEN pack is caught. These slots build
 // deliberately-broken packs in a temp dir and assert the diagnostic, with a
-// clean pack alongside so each negative has a positive that would fail if the
-// lint stopped running altogether.
+// clean pack alongside. The clean pack is what catches a lint that fires on
+// EVERYTHING; it cannot catch a lint that stopped running, which is what the
+// negative slots are for. Two lints carry their own quiet control besides; the
+// rest share the one clean pack.
 
 #include <QtTest>
 
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -362,6 +361,33 @@ private Q_SLOTS:
                      QStringLiteral("sampler uBackdrop declared at binding 20, but the contract puts it at 15")),
                  qPrintable(r.report));
         QVERIFY(r.errors > 0);
+    }
+
+    /// The POSITIVE control for the two binding lints above, which the shared
+    /// clean pack cannot provide: it declares no sampler at all, so it says
+    /// nothing about a lint that fires on every DECLARED one. This pack puts a
+    /// contract sampler at exactly its table slot and must draw neither
+    /// diagnostic.
+    ///
+    /// Without it, widening either lint to reject every sampler, or dropping
+    /// the equality that lets a correct slot through, passes the whole file.
+    void aContractSamplerAtItsSlotPassesTheBindingLint()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(QStringLiteral("sf-binding-ok"), QJsonArray{});
+        obj.insert(QStringLiteral("needsBackdrop"), true);
+        const QString body = QStringLiteral("layout(binding = 15) uniform sampler2D uBackdrop;\n")
+            + QStringLiteral("vec4 pSurface(vec2 uv)\n{\n    return texture(uBackdrop, uv);\n}\n");
+
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-binding-ok"), obj, body);
+        QVERIFY2(!r.report.contains(QStringLiteral("binding layout:")), qPrintable(r.report));
+        QVERIFY2(!r.report.contains(QStringLiteral("but the contract puts it at")), qPrintable(r.report));
+        // The error count is the guard that a fixture failure cannot satisfy
+        // the two negative assertions above: a fixture report contains neither
+        // string and returns -1.
+        QCOMPARE(r.errors, 0);
     }
 
     /// A sampler a pack declares for ITSELF is refused wherever it sits, and the
