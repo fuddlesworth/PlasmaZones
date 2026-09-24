@@ -88,7 +88,10 @@ vec4 pSurface(vec2 uv) {
     float mask = slab.mask;
 
     // Glass space: device px scaled so dropletScale 1.0 gives ~90 px cells.
-    float cellPx = 90.0 * clamp(p_dropletScale, 0.25, 4.0) * max(uSurfaceScale, 0.001);
+    // Clamped to the DECLARED range (0.5 .. 2.0), same reasoning as glass's
+    // edgeCurve: a wider clamp of its own only ever admits a hand-edited
+    // profile value the settings UI can neither produce nor undo.
+    float cellPx = 90.0 * clamp(p_dropletScale, 0.5, 2.0) * max(uSurfaceScale, 0.001);
     vec2 st = (px - uSurfaceFrameTopLeft) / cellPx;
     float t = iTime * max(p_rainSpeed, 0.0);
 

@@ -84,7 +84,12 @@ vec4 pSurface(vec2 uv) {
         // eased is ~1 at the rim and falls to 0 toward the interior, so an
         // exponent below 1 RAISES the ramp and carries the bend further
         // inward, and one above 1 lowers it and confines the bend to the rim.
-        eased = pow(eased, clamp(p_edgeCurve, 0.05, 8.0));
+        // Clamped to the range metadata.json DECLARES (0.25 .. 4.0), not to a
+        // wider band of its own. The declared range is the contract: the
+        // settings UI cannot produce anything outside it, so a wider clamp only
+        // ever admits a hand-edited profile value, rendering a bevel the author
+        // never sanctioned and the UI cannot reproduce or undo.
+        eased = pow(eased, clamp(p_edgeCurve, 0.25, 4.0));
         float concave = 1.0 - sqrt(max(1.0 - eased * eased, 0.0));
 
         float strength = clamp(p_refractionStrength, 0.0, 2.0);
@@ -134,7 +139,17 @@ vec4 pSurface(vec2 uv) {
             vec2 surfaceNormal = gradLen > 0.001 ? grad / gradLen : vec2(1.0, 0.0);
             vec2 normalizedPos = pos / max(uSurfaceFrameSize, vec2(1.0));
             float cornerWeight = dot(normalizedPos, normalizedPos) * clamp(p_cornerLens, 0.0, 2.0);
-            surfaceNormal += normalizedPos * concave * cornerWeight;
+            // DIRECTION in px space, MAGNITUDE from normalised space. The pull
+            // used to add normalizedPos itself, which is normalised per axis, so
+            // it always pointed at 45 degrees whatever the pane's aspect: on a
+            // 1600x900 pane the real top-right corner is 29 degrees up-right and
+            // the pull was still at 45, and on 1600x400 the corner is 14 degrees.
+            // The weight is right where it is (it peaks at the corners in
+            // normalised space), so only the direction is replaced, and it is
+            // scaled by length(normalizedPos) to keep the term's magnitude
+            // exactly what it was.
+            vec2 cornerDir = length(pos) > 0.001 ? normalize(pos) : vec2(0.0);
+            surfaceNormal += cornerDir * length(normalizedPos) * concave * cornerWeight;
             // Scaled by strength like the refract term below it. Unscaled, a
             // Refraction strength of 0 still left this whole displacement
             // standing (about edgeWidth x bevelIntensity device px at the rim),
@@ -186,6 +201,31 @@ vec4 pSurface(vec2 uv) {
             pane.a = g.a;
         }
 
+        // ── Straight alpha from here to the re-premultiply at the end ────
+        //
+        // Everything below combines `lit` with STRAIGHT quantities: the rim
+        // mixes toward p_rimColor.rgb, the glint mixes toward vec3(1.0), edge
+        // lighting scales the sample outright, and the tint mixes toward
+        // `tint`. The capture is PREMULTIPLIED, so doing any of that against a
+        // premultiplied value produced rgb > a wherever the pane was not
+        // opaque, which is the invariant every composite downstream relies on.
+        // Edge lighting was the worst of them (`glow += lit * concave` doubles
+        // the sample at the rim), the grain was simply added afterwards with no
+        // bound at all, and surfaceColorAdjust clamps to 1.0 rather than to
+        // alpha so it could not rescue any of it.
+        //
+        // Un-premultiply ONCE here, run the reference's pass order on straight
+        // colour where it belongs, and re-premultiply ONCE at the end. Where
+        // the pane is opaque, which is the whole interior of a window over a
+        // captured backdrop, this is exactly what the code did before.
+        //
+        // NOT surfaceBackdropGrade, deliberately: that helper runs brightness,
+        // contrast, saturation and vibrancy in one call, and glass needs its
+        // OKLab saturation BETWEEN the contrast and the vibrancy to keep the
+        // reference's order. Folding onto the helper would move that step.
+        float paneAlpha = max(pane.a, 0.0001);
+        lit = pane.a > 0.0001 ? lit / paneAlpha : vec3(0.0);
+
         // Rim glow + optional edge lighting (reference glassOutline).
         float dim = focusDim(0.55);
         float rimStrength = clamp(p_rimStrength, 0.0, 1.0) * dim;
@@ -218,6 +258,13 @@ vec4 pSurface(vec2 uv) {
             float edgeMask = 1.0 - smoothstep(-2.0 * bandPx, 0.0, d);
             float borderInner = 1.0 - smoothstep(-3.0 * bandPx, -1.0 * bandPx, d);
             float edgeProfile = pow(max(edgeMask - borderInner, 0.0), 0.9);
+            // Bail where the profile is provably zero, which is most of the
+            // pane. edgeMask saturates to 1 at d <= -2 band-px and borderInner
+            // at d <= -3, so edgeProfile is EXACTLY 0 everywhere deeper than
+            // three band-px inside the edge. On a 1600x900 pane that band is
+            // about 15,000 of 1,440,000 fragments, and the four smoothsteps and
+            // two mixes below were all being multiplied by that zero.
+            if (edgeProfile > 0.0) {
             // Two DIAGONAL position weights, not a shadow and a highlight: both
             // mix toward white, one peaking at the top-left of the pane and one
             // at the bottom-right. The names said otherwise and nothing here
@@ -237,6 +284,7 @@ vec4 pSurface(vec2 uv) {
             float glintScale = rimStrength / kRimDefaultStrength;
             glow = mix(glow, vec3(1.0), clamp(edgeProfile * glintTopLeft * glintScale, 0.0, 1.0));
             glow = mix(glow, vec3(1.0), clamp(edgeProfile * glintBottomRight * glintScale, 0.0, 1.0));
+            }
         }
         // Unconditionally: `concave < 1.0 ? glow : lit` was inert in the taken
         // arm and destructive in the other. concave reaches 1.0 only where
@@ -248,7 +296,8 @@ vec4 pSurface(vec2 uv) {
         // Luminance-adaptive tint (reference adjustedTintStrength), then
         // OKLab saturation, then grain — the reference's pass order.
         float tintAdj = tintStrength * clamp(abs(luma601(lit) - luma601(tint)), 0.0, 1.0);
-        lit = mix(lit, tint * pane.a, tintAdj);
+        // `tint`, not `tint * pane.a`: both sides of the mix are straight now.
+        lit = mix(lit, tint, tintAdj);
         // Brightness and contrast ahead of the reference's saturation step,
         // then vibrancy after it, both on the premultiplied value the
         // reference saturates (the backdrop under a window is effectively
@@ -258,7 +307,11 @@ vec4 pSurface(vec2 uv) {
         lit = surfaceVibrancy(lit, p_vibrancy, p_vibrancyDarkness);
         lit += (hashSin(px) - 0.5) * 2.0 * clamp(p_noiseStrength, 0.0, 0.2);
 
-        pane = vec4(lit, pane.a) * mask;
+        // Re-premultiply once, clamped in straight space first so the result
+        // satisfies rgb <= a by construction rather than by hoping the terms
+        // above stayed in range. hashSin here rather than hash13 is deliberate
+        // and surface_noise.glsl says why.
+        pane = vec4(clamp(lit, 0.0, 1.0) * pane.a, pane.a) * mask;
     } else {
         pane = faintTintSlab(tint, tintStrength, mask);
     }
