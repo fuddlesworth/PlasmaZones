@@ -75,13 +75,16 @@ vec4 pSurface(vec2 uv) {
 
     vec4 pane;
     if (uHasBackdrop >= 0.5) {
-        vec4 blurred = surfaceBackdropGrade(texture(iChannel6, uv), p_brightness, p_contrast, p_saturation,
-                                            p_vibrancy, p_vibrancyDarkness);
+        vec4 raw = texture(iChannel6, uv);
+        vec4 blurred = surfaceBackdropGrade(raw, p_brightness, p_contrast, p_saturation, p_vibrancy,
+                                            p_vibrancyDarkness);
 
-        // Un-premultiplied backdrop luminance drives the excitation.
-        float lumN = blurred.a > 0.001
-            ? luma601(blurred.rgb / blurred.a)
-            : 0.0;
+        // Un-premultiplied backdrop luminance drives the excitation, taken from
+        // the RAW sample rather than the graded one. The grade exists to tune
+        // how the pane LOOKS; reading the excitation off it made Brightness and
+        // Contrast double as glow controls, so turning the pane down turned the
+        // phosphor response down with it.
+        float lumN = raw.a > 0.001 ? luma601(raw.rgb / raw.a) : 0.0;
 
         // ── Phosphor excitation: bright backdrop charges the glass. The
         // response breathes slowly (persistence), and the sweep both boosts

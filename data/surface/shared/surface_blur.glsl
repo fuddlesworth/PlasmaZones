@@ -17,9 +17,16 @@
 // compile paths have to agree on that, not one: bakeBufferShaders on the daemon,
 // the compositor's own buffer compile, and validateSurfacePack in the offline
 // validator. Each skips the preamble deliberately, and a pack that referenced a
-// p_<id> from a buffer pass would fail on every path it ships on. `blurRadius` is the first scalar parameter of every blur-family
-// pack, so it lives in customParams[0].x (declaration-order auto-slotting; see
-// buildParamPreamble). Offsets step in canvas UV: the logical-px radius is
+// p_<id> from a buffer pass would fail on every path it ships on.
+//
+// NOTHING ENFORCES THE SLOT, which is the part a pack author has to carry. The
+// builtin passes read the radius as customParams[0].x, and slots are assigned
+// by DECLARATION ORDER (see buildParamPreamble), so the convention is that
+// `blurRadius` is the FIRST scalar parameter a blur-family pack declares.
+// Reorder the parameters array and the chain silently blurs by whatever the
+// new first scalar is; no validator lint and no test covers it, and this file
+// is the only place the convention is written down outside the authoring
+// skill. Offsets step in canvas UV: the logical-px radius is
 // scaled to device px by uSurfaceScale, normalized by the canvas extent
 // (uSurfaceSize), and spread over the kernel's 4-tap reach.
 

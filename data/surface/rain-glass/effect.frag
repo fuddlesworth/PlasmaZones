@@ -109,10 +109,21 @@ vec4 pSurface(vec2 uv) {
     // Two falling layers at offset scales/speeds plus one static bead layer;
     // rainAmount thins the field by culling whole cells on a hash.
     float amount = clamp(p_rainAmount, 0.0, 1.0);
-    vec3 layer1 = dropLayer(st, t);
-    vec3 layer2 = dropLayer(st * 1.6 + 4.3, t * 1.35);
-    layer1 *= step(1.0 - amount, hash13(floor(st / kRainCellDim) + 2.7));
-    layer2 *= step(1.0 - amount, hash13(floor((st * 1.6 + 4.3) / kRainCellDim) + 8.1));
+    // CULL FIRST, then evaluate. The cull hash is paid either way, and
+    // dropLayer is the expensive body here (a hash23, two sin, two length,
+    // three smoothstep and a fract/floor/step chain). Running it and then
+    // multiplying by zero threw away about 30% of that work at the shipped
+    // rainAmount of 0.7. Coherence is good rather than perfect, since a cell is
+    // 90 x 225 device px at the default, so a warp usually agrees.
+    vec2 st2 = st * 1.6 + 4.3;
+    vec3 layer1 = vec3(0.0);
+    vec3 layer2 = vec3(0.0);
+    if (step(1.0 - amount, hash13(floor(st / kRainCellDim) + 2.7)) > 0.0) {
+        layer1 = dropLayer(st, t);
+    }
+    if (step(1.0 - amount, hash13(floor(st2 / kRainCellDim) + 8.1)) > 0.0) {
+        layer2 = dropLayer(st2, t * 1.35);
+    }
 
     // Static micro-beads: tiny fixed droplets that never move, filling the
     // pane so dry stretches still read as wet glass.
@@ -144,7 +155,10 @@ vec4 pSurface(vec2 uv) {
                                         p_vibrancy, p_vibrancyDarkness);
         // Top-light: a small highlight on each droplet's upper edge (the
         // offset points down toward the centre there, so +y in px space).
-        float hi = wet * clamp(offsetPx.y / max(cellPx, 1.0) * 8.0, 0.0, 1.0) * 0.3;
+        // Focus-dimmed to the family's shared 0.55 floor, like every other lit
+        // pack: this highlight and rippled-glass's glint were the two that
+        // ignored focus while the glass pack beside them dimmed.
+        float hi = wet * clamp(offsetPx.y / max(cellPx, 1.0) * 8.0, 0.0, 1.0) * 0.3 * focusDim(0.55);
         // Driver-stable grain over the fog, weighted by its alpha so the
         // cleared off-capture margin stays clear.
         float grain = (hash13(px) - 0.5) * 2.0 * clamp(p_noiseStrength, 0.0, 0.2);

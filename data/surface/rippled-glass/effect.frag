@@ -78,9 +78,17 @@ vec4 pSurface(vec2 uv) {
                          rippleHeight(q + vec2(0.0, e), t) - rippleHeight(q - vec2(0.0, e), t))
             / (2.0 * e);
 
-        // Gradient refraction: displace the backdrop sample down-slope by up
-        // to p_refractionStrength logical px, split R/B for the fringing.
-        vec2 dispPx = grad * clamp(p_refractionStrength, 0.0, 40.0) * uSurfaceScale;
+        // Gradient refraction: displace the backdrop sample UP-slope (the
+        // gradient points uphill) by at most p_refractionStrength logical px,
+        // split R/B for the fringing.
+        //
+        // The direction is clamped to unit length first. The raw gradient can
+        // exceed 1, so multiplying it by the slider let the displacement reach
+        // roughly twice the number the slider shows, and the control stopped
+        // being the pixel ceiling its description promises. Below 1 the
+        // gradient still scales the effect, so a gentle slope still bends less
+        // than a steep one.
+        vec2 dispPx = grad / max(length(grad), 1.0) * clamp(p_refractionStrength, 0.0, 40.0) * uSurfaceScale;
         vec2 shift = pxToUv(dispPx);
         float fringe = clamp(p_fringing, 0.0, 1.0) * 0.3;
         vec4 g = texture(iChannel6, rippleCoord(uv + shift));
@@ -106,7 +114,12 @@ vec4 pSurface(vec2 uv) {
         if (slope > 0.0001) {
             // px space is top-down, so up-left is negative in BOTH components.
             float facing = clamp(dot(grad / slope, vec2(-0.6, -0.8)), 0.0, 1.0);
-            float glint = pow(facing * min(slope, 1.0), 2.0) * clamp(p_highlightStrength, 0.0, 1.0);
+            // Focus cue, like every other lit pack in the family: an
+            // unfocused pane's own light dims to the shared 0.55 floor. This
+            // glint and rain-glass's top-light were the two that ignored it,
+            // so an unfocused rippled pane kept a fully lit ripple crest while
+            // the glass pack beside it dimmed.
+            float glint = pow(facing * min(slope, 1.0), 2.0) * clamp(p_highlightStrength, 0.0, 1.0) * focusDim(0.55);
             lit += glint * g.a;
         }
 

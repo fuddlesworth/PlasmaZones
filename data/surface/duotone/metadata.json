@@ -64,7 +64,7 @@
             "default": 1.0,
             "min": 0.25,
             "max": 4.0,
-            "description": "How sharply brightness splits between the two colours, where 1.0 is a linear blend",
+            "description": "How sharply brightness splits between the two colours, where 1.0 is a linear blend. This is a gamma exponent and not the Contrast the other Blur packs carry: raising it pushes the pane toward the shadow colour rather than widening the range",
             "group": "Colours"
         },
         {

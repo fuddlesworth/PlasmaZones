@@ -104,7 +104,7 @@
             "default": 0.1,
             "min": 0.0,
             "max": 1.0,
-            "description": "How much of the tint colour is mixed over the glass",
+            "description": "How much of the tint colour is mixed over the glass. The mix is gated by how far the backdrop's brightness sits from the tint's, so a tint close to what is behind the pane stays faint at every setting and the default white tint barely shows over a bright scene",
             "group": "Tint"
         },
         {

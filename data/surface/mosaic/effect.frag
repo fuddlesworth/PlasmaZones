@@ -35,7 +35,14 @@ vec4 pSurface(vec2 uv) {
     if (uHasBackdrop >= 0.5) {
         // Quantise the fragment to its cell centre in device px (anchored to
         // the frame corner so the grid doesn't crawl when the window moves a
-        // sub-cell amount), then sample the raw backdrop there.
+        // sub-cell amount), then POINT-SAMPLE the raw backdrop there.
+        //
+        // One texel per cell, not an average of the cell. The grid stays put
+        // relative to the window, which is what the anchoring buys, but the
+        // scene point each cell reads sweeps across the backdrop as the window
+        // moves, so cell colours jump texel to texel during a drag. Averaging
+        // would need a mip or a blur chain and this pack is single-pass by
+        // design, which is also what makes it the cheapest pack in the family.
         float cell = max(p_cellSize, 2.0) * max(uSurfaceScale, 0.001);
         vec2 local = px - uSurfaceFrameTopLeft;
         vec2 snapped = (floor(local / cell) + 0.5) * cell;

@@ -149,8 +149,8 @@
             "name": "Round bottom corners",
             "type": "bool",
             "default": true,
-            "description": "Round the bottom corners as well as the top. Turn off to round only the top two",
-            "group": "Shape"
+            "group": "Shape",
+            "description": "Round the bottom corners as well as the top. Turn off to round only the top two"
         },
         {
             "id": "edgeSoftness",
@@ -159,8 +159,8 @@
             "default": 1.0,
             "min": 0.1,
             "max": 3.0,
-            "description": "Anti-alias feather of the pane edge, in device pixels, so it does not grow with display scaling. Lower is crisper",
-            "group": "Shape"
+            "group": "Shape",
+            "description": "Anti-alias feather of the pane edge, in device pixels, so it does not grow with display scaling. Lower is crisper"
         },
         {
             "id": "brightness",
@@ -169,8 +169,8 @@
             "default": 1.0,
             "min": 0.0,
             "max": 2.0,
-            "description": "Gain on the blurred scene. 1.0 leaves it as captured",
-            "group": "Colour"
+            "group": "Colour",
+            "description": "Gain on the blurred scene. 1.0 leaves it as captured"
         },
         {
             "id": "contrast",
@@ -179,8 +179,8 @@
             "default": 1.0,
             "min": 0.0,
             "max": 2.0,
-            "description": "Contrast of the blurred scene around mid grey. 1.0 leaves it as captured",
-            "group": "Colour"
+            "group": "Colour",
+            "description": "Contrast of the blurred scene around mid grey. 1.0 leaves it as captured"
         },
         {
             "id": "saturation",
@@ -189,8 +189,8 @@
             "default": 1.0,
             "min": 0.0,
             "max": 2.0,
-            "description": "Colour saturation of the blurred scene. 0 is greyscale and 1.0 leaves it as captured",
-            "group": "Colour"
+            "group": "Colour",
+            "description": "Colour saturation of the blurred scene. 0 is greyscale and 1.0 leaves it as captured"
         },
         {
             "id": "vibrancy",
@@ -199,8 +199,8 @@
             "default": 0.0,
             "min": 0.0,
             "max": 1.0,
-            "description": "Boosts saturation where a colour is already saturated and bright, so muted scenes stay muted. 0 turns it off, and Vibrancy darkness widens it to darker colours",
-            "group": "Colour"
+            "group": "Colour",
+            "description": "Boosts saturation where a colour is already saturated and bright, so muted scenes stay muted. 0 turns it off, and Vibrancy darkness widens it to darker colours"
         },
         {
             "id": "vibrancyDarkness",
@@ -209,8 +209,8 @@
             "default": 0.0,
             "min": 0.0,
             "max": 1.0,
-            "description": "How far the vibrancy boost reaches into darker colours. Does nothing while Vibrancy is 0, which is where it starts",
-            "group": "Colour"
+            "group": "Colour",
+            "description": "How far the vibrancy boost reaches into darker colours. Does nothing while Vibrancy is 0, which is where it starts"
         }
     ]
 }
