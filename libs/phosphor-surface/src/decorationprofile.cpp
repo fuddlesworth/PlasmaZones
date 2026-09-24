@@ -90,8 +90,10 @@ DecorationProfile DecorationProfile::fromJson(const QJsonObject& obj)
             QVariantMap params;
             const QJsonObject paramsObj = v.toObject();
             for (auto it = paramsObj.constBegin(); it != paramsObj.constEnd(); ++it) {
-                // A JSON null is NOT "leave this at its default". It converts to an
-                // INVALID QVariant, every numeric consumer reads that as 0, and
+                // A JSON null is NOT "leave this at its default". In Qt 6 it converts
+                // to a QMetaType::Nullptr variant, which is VALID (isValid() is true,
+                // so a validity check does not catch it); every numeric consumer reads
+                // it as 0, and
                 // clampToBounds skips it as non-numeric — so it survives the flatten
                 // and PINS the parameter to zero, overriding the pack's declared
                 // default. Dropping the key is what actually means "say nothing about
@@ -102,7 +104,19 @@ DecorationProfile DecorationProfile::fromJson(const QJsonObject& obj)
                 }
                 params.insert(it.key(), it.value().toVariant());
             }
-            p.parameters = std::move(params);
+            // ENGAGE only when the author said something. This field is
+            // optional, and nullopt ("inherit") is a different statement from
+            // an engaged empty map ("no parameters for ANY pack"), which wipes
+            // whatever the layer below supplied. Assigning unconditionally
+            // conflated the two: `{"parameters": {"blur": null}}` means "say
+            // nothing about blur", but every key was dropped by the null skip
+            // above and the empty result then engaged and wiped the lot. Same
+            // guard the disabledPacks block below already applies, for the same
+            // reason: a genuinely empty object IS an author statement and still
+            // engages.
+            if (paramsObj.isEmpty() || !params.isEmpty()) {
+                p.parameters = std::move(params);
+            }
         }
     }
 
@@ -142,7 +156,13 @@ DecorationProfile DecorationProfile::fromJson(const QJsonObject& obj)
                     continue;
                 presets.insert(it.key(), it.value().toString());
             }
-            p.presetIds = std::move(presets);
+            // Same engagement guard as parameters above: an object whose every
+            // value was non-string left an empty map that then engaged and
+            // stated "no presets for any pack", wiping inherited ones, when the
+            // author had written something malformed rather than nothing.
+            if (presetsObj.isEmpty() || !presets.isEmpty()) {
+                p.presetIds = std::move(presets);
+            }
         }
     }
 
@@ -166,8 +186,9 @@ bool DecorationProfile::operator==(const DecorationProfile& other) const
     // presetIds rides the raw compare with chain and disabledPacks rather than the
     // normalisation `parameters` gets below, and that asymmetry is deliberate: both
     // writers of this field put a QString in it (fromJson keeps only `isString` values,
-    // setChainPreset inserts a QString), so there is no numeric category for a round
-    // trip to change. A new writer that stores anything else here has to revisit this.
+    // setChainPreset inserts a QString, and withPresetsResolved in this file inserts a
+    // default-constructed QString), so there is no numeric category for a round trip to
+    // change. A new writer that stores anything else here has to revisit this.
     if (chain != other.chain || disabledPacks != other.disabledPacks || presetIds != other.presetIds) {
         return false;
     }
@@ -175,13 +196,20 @@ bool DecorationProfile::operator==(const DecorationProfile& other) const
     // OverlayShaderProfile and ShaderPreset all apply. This type used to compare
     // `parameters` as raw QVariants while its three siblings JSON-normalised, which
     // is a drift rather than a decision: the settings setter on this tree compares a
-    // map BUILT in C++ against one read back from disk, so a value whose type
-    // changed CATEGORY on the way through (a bool stored as 1, a number stored as
-    // "1") failed the no-op gate and re-emitted.
+    // map BUILT in C++ against one read back from disk, so a value whose type changed
+    // on the way through failed the no-op gate and re-emitted. The change QJsonValue
+    // actually makes is WIDTH, not category: it is strictly typed and performs no
+    // implicit conversion, so an int and a double both arrive back as Double while a
+    // bool stays Bool and a string stays String. (Earlier text here gave "a bool
+    // stored as 1" and "a number stored as \"1\"" as the examples; the normalisation
+    // produces neither, and quoting them made it look like a coercion pass.)
     //
-    // Raw compare first and normalise only on a miss, for the reason written out in
-    // the animation twin: QVariantMap equality cannot report a false EQUAL, only a
-    // false unequal, and the normalisation is what costs.
+    // Raw compare first and normalise only on a miss, because the normalisation is
+    // what costs. The animation twin words the safety as "QVariantMap equality cannot
+    // report a false EQUAL"; Qt documents one exception, since QVariant::operator==
+    // converts a QString to a matching numeric type before comparing. That direction
+    // cannot hurt here: it would make the raw compare succeed where the JSON one also
+    // succeeds, because both sides round-trip to the same Double.
     if (parameters.has_value() != other.parameters.has_value()) {
         return false;
     }

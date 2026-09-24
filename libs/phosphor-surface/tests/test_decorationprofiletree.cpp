@@ -222,6 +222,55 @@ private Q_SLOTS:
         QVERIFY(restored.directOverride(QStringLiteral("window.tiled")).chain->isEmpty());
     }
 
+    /// An optional field that is ENGAGED but empty is a real statement ("no
+    /// parameters for any pack") and wipes whatever the layer below supplied.
+    /// A malformed object whose every entry the parser drops must therefore
+    /// leave the field ABSENT, not engaged-and-empty. disabledPacks already
+    /// guarded this; parameters and presetIds assigned unconditionally.
+    void fromJson_all_entries_dropped_leaves_the_field_absent()
+    {
+        // Every value dropped: the null skip empties parameters, the
+        // non-string skip empties presetIds.
+        QJsonObject obj;
+        obj.insert(QStringLiteral("chain"), QJsonArray{QStringLiteral("border")});
+        QJsonObject params;
+        params.insert(QStringLiteral("blur"), QJsonValue());
+        obj.insert(QStringLiteral("parameters"), params);
+        QJsonObject presets;
+        presets.insert(QStringLiteral("blur"), 42);
+        obj.insert(QStringLiteral("presetIds"), presets);
+
+        const DecorationProfile dropped = DecorationProfile::fromJson(obj);
+        QVERIFY2(!dropped.parameters.has_value(),
+                 "a parameters object whose every entry was dropped must stay absent, not engage empty");
+        QVERIFY2(!dropped.presetIds.has_value(),
+                 "a presetIds object whose every entry was dropped must stay absent, not engage empty");
+
+        // A GENUINELY empty object is an author statement and still engages,
+        // matching the disabledPacks rule for an empty array.
+        QJsonObject explicitEmpty;
+        explicitEmpty.insert(QStringLiteral("chain"), QJsonArray{QStringLiteral("border")});
+        explicitEmpty.insert(QStringLiteral("parameters"), QJsonObject{});
+        explicitEmpty.insert(QStringLiteral("presetIds"), QJsonObject{});
+        const DecorationProfile engaged = DecorationProfile::fromJson(explicitEmpty);
+        QVERIFY(engaged.parameters.has_value());
+        QVERIFY(engaged.parameters->isEmpty());
+        QVERIFY(engaged.presetIds.has_value());
+        QVERIFY(engaged.presetIds->isEmpty());
+
+        // A surviving sibling still engages, with only the bad entry gone.
+        QJsonObject mixed;
+        mixed.insert(QStringLiteral("chain"), QJsonArray{QStringLiteral("border")});
+        QJsonObject mixedParams;
+        mixedParams.insert(QStringLiteral("blur"), QJsonValue());
+        mixedParams.insert(QStringLiteral("glow"), QJsonObject{{QStringLiteral("size"), 4}});
+        mixed.insert(QStringLiteral("parameters"), mixedParams);
+        const DecorationProfile kept = DecorationProfile::fromJson(mixed);
+        QVERIFY(kept.parameters.has_value());
+        QCOMPARE(kept.parameters->size(), 1);
+        QVERIFY(kept.parameters->contains(QStringLiteral("glow")));
+    }
+
     void disabledPacks_roundTrip_filter_and_inheritance()
     {
         // Round-trip: an engaged disabled set survives JSON; an absent field
