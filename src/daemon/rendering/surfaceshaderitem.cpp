@@ -22,6 +22,46 @@
 
 namespace PlasmaZones {
 
+namespace {
+
+/// @p base with the `shared/` dir that sits BESIDE THE PACK DIR prepended.
+///
+/// The static list alone is not parity with the compositor, though the
+/// compositor's comment says it is. That list walks the XDG `plasmazones/surface`
+/// roots and appends each root's `shared/`, which covers a pack INSTALLED under
+/// one of those roots and nothing else. The compositor instead derives the dir
+/// from the pack's own fragment path and puts it FIRST, ahead of every registry
+/// root, which is also what the validator probes first.
+///
+/// Two things that costs, both real. A pack outside the XDG roots (a development
+/// tree, a vendored pack set) has its sibling helpers unreachable here while they
+/// resolve fine on the compositor and in the validator, so it compiles in two
+/// places and fails in the third. And where a pack's own root is not the
+/// highest-priority one, the daemon takes another root's copy of a shared header
+/// while the compositor takes the pack's, which is the body-from-one-tree,
+/// contract-from-another split the compositor comment already describes.
+///
+/// Prepended to @p base rather than replacing it, so a caller that set its own
+/// include paths keeps them.
+QStringList withPackSiblingShared(const QString& fragmentShaderPath, const QStringList& base)
+{
+    if (fragmentShaderPath.isEmpty()) {
+        return base;
+    }
+    const QString packDir = QFileInfo(fragmentShaderPath).absolutePath();
+    const QString siblingShared = QFileInfo(packDir).absolutePath() + QStringLiteral("/shared");
+    if (!QDir(siblingShared).exists() || base.contains(siblingShared)) {
+        return base;
+    }
+    QStringList paths;
+    paths.reserve(base.size() + 1);
+    paths.append(siblingShared);
+    paths.append(base);
+    return paths;
+}
+
+} // namespace
+
 // ============================================================================
 // Construction / Destruction
 // ============================================================================
@@ -328,6 +368,11 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
             // has no entry scaffold and relies on a shared surface.vert for its
             // main(); the FRAGMENT stage does get one (setEntryScaffold below,
             // so a pack may ship only `vec4 pSurface(vec2 uv)`).
+            // Resolved ONCE and used for both the surface.vert lookup below and
+            // the node's own include paths, so the vertex stage and the fragment
+            // stage cannot disagree about which tree a shared header came from.
+            const QStringList effectiveIncludePaths = withPackSiblingShared(fragPath, shaderIncludePaths());
+
             QString vertPath;
             if (vertexShaderUrl().isValid() && !vertexShaderUrl().isEmpty()) {
                 vertPath = vertexShaderUrl().toLocalFile();
@@ -344,7 +389,7 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
                 if (QFile::exists(vertLocal)) {
                     vertPath = vertLocal;
                 } else {
-                    for (const QString& incDir : shaderIncludePaths()) {
+                    for (const QString& incDir : effectiveIncludePaths) {
                         const QString candidate = incDir + QStringLiteral("/surface.vert");
                         if (QFile::exists(candidate)) {
                             vertPath = candidate;
@@ -354,7 +399,7 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
                 }
             }
 
-            node->setShaderIncludePaths(shaderIncludePaths());
+            node->setShaderIncludePaths(effectiveIncludePaths);
             // Entry-point scaffold: a pack may define `vec4 pSurface(vec2 uv)`
             // and omit main(); loadFragmentShader assembles the generated main()
             // + prologue before include expansion, identical to the kwin-effect

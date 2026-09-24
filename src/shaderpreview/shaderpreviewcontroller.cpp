@@ -6,6 +6,7 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 
+#include "config/configdefaults.h" // borderRadiusMax, so the preview clamps where the daemon clamps
 #include "daemon/rendering/zonelabeltexturebuilder.h"
 
 #include <PhosphorAudio/CavaSpectrumProvider.h>
@@ -182,11 +183,22 @@ QVariantList ShaderPreviewController::zonesForShaderPreview(int width, int heigh
         if (!useCustom || !borderColor.isValid())
             borderColor = ::PhosphorZones::ZoneDefaults::BorderColor;
 
-        // Border dimensions
-        const qreal borderRadius = useCustom
-            ? zone.value(::PhosphorZones::ZoneJsonKeys::BorderRadius, ::PhosphorZones::ZoneDefaults::BorderRadius)
-                  .toReal()
-            : static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderRadius);
+        // Border dimensions.
+        //
+        // BOUNDED THE WAY THE DAEMON BOUNDS IT (overlay_data.cpp), and it was not
+        // before. A per-zone radius comes from a layout file that is never
+        // rewritten on load, so a hand-edited or legacy-wide value arrives here
+        // unclamped, and the preview drew rounder corners than the live overlay
+        // ever will. The in-shader clamp in zoneSdf keeps that a fidelity gap
+        // rather than a fault, which is exactly why it went unnoticed: the
+        // preview is the one place a user compares the two.
+        const qreal borderRadius =
+            qBound<qreal>(0,
+                          useCustom ? zone.value(::PhosphorZones::ZoneJsonKeys::BorderRadius,
+                                                 ::PhosphorZones::ZoneDefaults::BorderRadius)
+                                          .toReal()
+                                    : static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderRadius),
+                          ConfigDefaults::borderRadiusMax());
         const qreal borderWidth = useCustom
             ? zone.value(::PhosphorZones::ZoneJsonKeys::BorderWidth, ::PhosphorZones::ZoneDefaults::BorderWidth)
                   .toReal()

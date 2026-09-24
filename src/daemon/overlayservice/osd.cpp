@@ -530,6 +530,23 @@ void OverlayService::reapplyVisiblePopupDecorations()
         if (m_cheatsheetVisible) {
             applyDecoration(state.cheatsheetSlot(), QStringLiteral("popup.cheatsheet"));
         }
+        // THE OSD IS A DECORATED SURFACE TOO and had no arm here, so a pack
+        // installed, removed or enabled while one was on screen re-resolved
+        // every popup except it. Every OSD show path already calls
+        // applyDecoration(osdSlot, "osd"), so this is the same call the show
+        // paths make, on the same path string.
+        //
+        // Keyed on the ITEM's own visibility rather than a service flag, because
+        // the OSD has no flag: the show paths call setVisible(true) on the slot
+        // directly and the dismiss timer hides it, so the item is the authority.
+        // The four above have flags because their visibility is service state.
+        //
+        // The window in which this matters is short, since an OSD is transient,
+        // and an in-place pack EDIT re-resolves to an identical chain anyway.
+        // It bites on an install, an uninstall or an enable change.
+        if (QQuickItem* const osd = state.osdSlot(); osd && osd->isVisible()) {
+            applyDecoration(osd, QStringLiteral("osd"));
+        }
     }
 }
 

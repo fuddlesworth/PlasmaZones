@@ -870,6 +870,104 @@ private Q_SLOTS:
         const QVariantMap out = registry.translateSurfaceParams(QStringLiteral("anchored"), friendly);
         QVERIFY(!out.contains(QStringLiteral("uTexture1")));
     }
+
+    void parseEffect_resolves_every_builtin_kawase_token()
+    {
+        // The gaussian pair had a slot and the SEVEN Kawase tokens had none,
+        // although they are the chain every blur-family pack now ships. The
+        // whitelist is a fixed table, so a token missing from it resolves to
+        // nothing and fails the pack closed to single-pass with no compile
+        // error anywhere. Naming all seven is what makes a one-entry typo or
+        // omission fail here rather than in a user's session.
+        //
+        // The ORDER is asserted too, because these passes are positional: each
+        // reads the level above it by channel index, so a chain that resolves
+        // the right seven files in the wrong order blurs wrongly while looking
+        // entirely well-formed.
+        const QStringList kTokens = {QStringLiteral("builtin:kawase-down-0"), QStringLiteral("builtin:kawase-down-1"),
+                                     QStringLiteral("builtin:kawase-down-2"), QStringLiteral("builtin:kawase-down-3"),
+                                     QStringLiteral("builtin:kawase-up-0"),   QStringLiteral("builtin:kawase-up-1"),
+                                     QStringLiteral("builtin:kawase-up-2")};
+        const QStringList kFiles = {QStringLiteral("kawase_down_0.frag"), QStringLiteral("kawase_down_1.frag"),
+                                    QStringLiteral("kawase_down_2.frag"), QStringLiteral("kawase_down_3.frag"),
+                                    QStringLiteral("kawase_up_0.frag"),   QStringLiteral("kawase_up_1.frag"),
+                                    QStringLiteral("kawase_up_2.frag")};
+
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        for (const QString& f : kFiles) {
+            QVERIFY(writeFile(tmp.path() + QStringLiteral("/shared/") + f, QByteArrayLiteral("// stub\n")));
+        }
+
+        QJsonObject meta;
+        meta.insert(QLatin1String("id"), QStringLiteral("kawase-chain"));
+        meta.insert(QLatin1String("name"), QStringLiteral("Kawase Chain"));
+        meta.insert(QLatin1String("description"), QStringLiteral("Declares the full dual Kawase pyramid."));
+        meta.insert(QLatin1String("category"), QStringLiteral("Decoration"));
+        meta.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        meta.insert(QLatin1String("multipass"), true);
+        QJsonArray buffers;
+        for (const QString& t : kTokens) {
+            buffers.append(t);
+        }
+        meta.insert(QLatin1String("bufferShaders"), buffers);
+        QVERIFY(writePack(tmp.path(), QStringLiteral("kawase-chain"), meta, {QStringLiteral("effect.frag")}));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+
+        const SurfaceShaderEffect e = registry.effect(QStringLiteral("kawase-chain"));
+        QVERIFY(e.isValid());
+        QVERIFY(e.isMultipass);
+        QCOMPARE(e.bufferShaderPaths.size(), kFiles.size());
+        for (qsizetype i = 0; i < kFiles.size(); ++i) {
+            QCOMPARE(QFileInfo(e.bufferShaderPaths.at(i)).fileName(), kFiles.at(i));
+            // Served by the SIBLING probe, not by an installed copy under
+            // /usr/share. Same reason the gaussian slot above asserts it: without
+            // this the case passes on any machine with the package installed
+            // even if the probe regressed.
+            QVERIFY2(QFileInfo(e.bufferShaderPaths.at(i))
+                         .canonicalFilePath()
+                         .startsWith(QFileInfo(tmp.path()).canonicalFilePath()),
+                     qPrintable(e.bufferShaderPaths.at(i)));
+        }
+    }
+
+    void parseEffect_carries_per_pass_bufferScales_through_a_multipass_scan()
+    {
+        // bufferScales is the per-pass resolution list the pyramid needs, and
+        // nothing asserted it survives a scan at all. It has to arrive in ORDER
+        // and it has to arrive COMPLETE: the entries are positional, so a list
+        // that lost one silently re-points every later pass at a neighbour's
+        // resolution, which renders as a blur of the wrong width rather than as
+        // any kind of error.
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writeFile(tmp.path() + QStringLiteral("/shared/kawase_down_0.frag"), QByteArrayLiteral("// stub\n")));
+        QVERIFY(writeFile(tmp.path() + QStringLiteral("/shared/kawase_up_2.frag"), QByteArrayLiteral("// stub\n")));
+
+        QJsonObject meta;
+        meta.insert(QLatin1String("id"), QStringLiteral("scaled-chain"));
+        meta.insert(QLatin1String("name"), QStringLiteral("Scaled Chain"));
+        meta.insert(QLatin1String("description"), QStringLiteral("Declares per-pass buffer scales."));
+        meta.insert(QLatin1String("category"), QStringLiteral("Decoration"));
+        meta.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        meta.insert(QLatin1String("multipass"), true);
+        meta.insert(QLatin1String("bufferShaders"),
+                    QJsonArray{QStringLiteral("builtin:kawase-down-0"), QStringLiteral("builtin:kawase-up-2")});
+        meta.insert(QLatin1String("bufferScales"), QJsonArray{0.25, 0.0625});
+        QVERIFY(writePack(tmp.path(), QStringLiteral("scaled-chain"), meta, {QStringLiteral("effect.frag")}));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+
+        const SurfaceShaderEffect e = registry.effect(QStringLiteral("scaled-chain"));
+        QVERIFY(e.isValid());
+        QVERIFY(e.isMultipass);
+        QCOMPARE(e.bufferScales.size(), 2);
+        QCOMPARE(e.bufferScales.at(0), 0.25);
+        QCOMPARE(e.bufferScales.at(1), 0.0625);
+    }
 };
 
 QTEST_MAIN(TestSurfaceShaderRegistry)
