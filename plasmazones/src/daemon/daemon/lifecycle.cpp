@@ -735,6 +735,7 @@ void Daemon::stop()
         wts->setEngineFloatLister({});
         wts->setAutotileModePredicate({});
         wts->setEngineTiledPredicate({});
+        wts->setTilingHeldScreenResolver({});
         wts->setModeEngineIdResolver({});
         // Deliberately NOT cleared here: setSnapStateResolver and setSnapEngine
         // store only QPointer(snapEngine), which self-nulls on destruction.

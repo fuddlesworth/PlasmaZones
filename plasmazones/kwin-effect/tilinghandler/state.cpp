@@ -797,6 +797,12 @@ void TilingHandler::clearCenteringTargetsForTeardown()
     m_centeredWaylandZones.clear();
 }
 
+void TilingHandler::dropCenteringTarget(const QString& windowId)
+{
+    m_tileTargetZones.remove(windowId);
+    m_centeredWaylandZones.remove(windowId);
+}
+
 void TilingHandler::clearActiveLayoutsForTeardown()
 {
     ++m_activeLayoutsGeneration;

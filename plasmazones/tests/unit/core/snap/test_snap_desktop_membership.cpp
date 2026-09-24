@@ -46,6 +46,7 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 namespace {
 const QString kScreen = QStringLiteral("DP-1");
+const QString kScreen2 = QStringLiteral("DP-2");
 const QString kWindow = QStringLiteral("app|11111111-2222-3333-4444-555555555555");
 const QString kOther = QStringLiteral("app|66666666-7777-8888-9999-000000000000");
 
@@ -677,6 +678,64 @@ private Q_SLOTS:
         m_engine->reconcileDesktopMemberships(kScreen, spanOf(sticky()));
         QVERIFY2(resnapSpy.count() > 0, "back in snapping mode the switch re-applies the desktop's zone");
         m_engine->setLiveModeResolver({});
+    }
+
+    // Discussion #1124: a snap committed on ANOTHER screen, as a keyboard move
+    // across outputs makes, added a membership there beside the one on the
+    // screen the window left. The old screen's stayed primary, so every read
+    // answered with the zone the window had left, and the membership pass took
+    // the pair for a multi-desktop window and re-applied that zone on each
+    // screen, throwing the window back across monitors. The window moves with
+    // the commit, and neither screen's pass re-applies anything.
+    void aSnapOnAnotherScreenMovesTheWindowThere()
+    {
+        snapOn(1, kWindow, m_zoneIds[2]);
+        m_engine->setCurrentDesktopForScreen(kScreen2, 1);
+        m_service->assignWindowToZone(kWindow, m_zoneIds[0], kScreen2, 1);
+
+        QVERIFY(m_engine->heldKeyForWindow(kWindow).has_value());
+        QCOMPARE(m_engine->heldKeyForWindow(kWindow)->screenId, kScreen2);
+        QCOMPARE(m_service->screenForWindow(kWindow), kScreen2);
+        QCOMPARE(m_service->zoneForWindow(kWindow), m_zoneIds[0]);
+        // Nothing is left behind on the screen it left.
+        QVERIFY(zonesOn(1, kWindow).isEmpty());
+
+        QSignalSpy resnapSpy(m_engine, &SnapEngine::resnapToNewLayoutRequested);
+        QVERIFY(m_engine->reconcileDesktopMemberships(kScreen, spanOf(on({1}))).isEmpty());
+        QVERIFY(m_engine->reconcileDesktopMemberships(kScreen2, spanOf(on({1}))).isEmpty());
+        QCOMPARE(resnapSpy.count(), 0);
+    }
+
+    // Discussion #1124, mixed modes: a window snapped on a screen that then
+    // went to tiling keeps its zone there as memory for the return to
+    // snapping. Moved to another output while tiled, it is held there by the
+    // tiling engine and the snap engine never hears of it, so the return
+    // resnap replayed the old zone and dragged it back across monitors. The
+    // buffer refuses a window a tiling engine holds on ANOTHER screen and the
+    // snap engine forgets it. A window held on the screen being resnapped is
+    // the ordinary return and stays in.
+    void aResnapSkipsAWindowATilingEngineHoldsOnAnotherScreen()
+    {
+        snapOn(1, kWindow, m_zoneIds[0]);
+        snapOn(1, kOther, m_zoneIds[1]);
+        m_service->setTilingHeldScreenResolver([](const QString& windowId) {
+            if (windowId == kWindow) {
+                return kScreen2; // moved to the other output while tiled
+            }
+            return windowId == kOther ? kScreen : QString(); // still held here
+        });
+
+        m_service->populateResnapBufferForAllScreens({}, {kScreen});
+        QStringList buffered;
+        for (const PhosphorEngine::ResnapEntry& entry : m_service->takeResnapBuffer()) {
+            buffered.append(entry.windowId);
+        }
+        QVERIFY2(!buffered.contains(kWindow), "a window tiled on another screen must not be resnapped here");
+        QVERIFY2(buffered.contains(kOther), "a window held on the resnapped screen is the ordinary return");
+        QVERIFY(!m_engine->heldKeyForWindow(kWindow).has_value());
+        QVERIFY(zonesOn(1, kWindow).isEmpty());
+        QCOMPARE(zonesOn(1, kOther), QStringList{m_zoneIds[1]});
+        m_service->setTilingHeldScreenResolver({});
     }
 
     // A handoff to a tiling engine releases the CONTEXT it took the window

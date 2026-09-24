@@ -3337,7 +3337,29 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     // and with a tolerance, because moveResizeGeometry holds the requested
     // fractional rect while the frame is snapped to pixels.
     if (KWin::Window* kwPending = w->window()) {
-        const QSizeF commanded = QRectF(kwPending->moveResizeGeometry()).size();
+        const QRectF commandedRect = kwPending->moveResizeGeometry();
+        // The entry describes the tile apply that recorded it, and only for
+        // as long as that apply is the window's latest command. Every command
+        // the effect itself issues drops it (applyWindowGeometry calls
+        // dropCenteringTarget), which covers a snap zone apply landing before
+        // the tiling release (discussion #1124). This is the backstop for a
+        // mover outside the effect, a user or KWin script move, that takes
+        // the window out of its tile: centring the frame that move produced
+        // into the dead tile rect would drag the window back, possibly onto
+        // an output it has left. The commanded origin is the witness: a tile
+        // apply and every refusing or oversized commit keep it at the zone
+        // origin, so an origin outside the zone means another command owns
+        // the window now. The centred stamp goes too, or the redundant-apply
+        // skip in slotWindowsTileRequested would honour it if the window is
+        // tiled into the same zone again.
+        if (!QRectF(targetZone).adjusted(-1.0, -1.0, 1.0, 1.0).contains(commandedRect.topLeft())) {
+            qCDebug(lcEffect) << "Autotile centering: target superseded for" << windowId
+                              << "commanded=" << commandedRect << "target=" << targetZone << "- dropping";
+            m_tileTargetZones.erase(it);
+            m_centeredWaylandZones.remove(windowId);
+            return;
+        }
+        const QSizeF commanded = commandedRect.size();
         if (qAbs(commanded.width() - actual.width()) > 1.0 || qAbs(commanded.height() - actual.height()) > 1.0) {
             qCDebug(lcEffect) << "Autotile centering: configure in flight for" << windowId << "commanded=" << commanded
                               << "actual=" << actual.size() << "- waiting";

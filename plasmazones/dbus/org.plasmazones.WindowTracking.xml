@@ -427,6 +427,15 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Screen where window is located."/>
             </arg>
         </method>
+        <method name="activeWindowScreenChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Notify daemon that the focused window moved to another screen without a new activation, whether a user, KWin or daemon move did it. Window shortcuts act on the focused window's screen, which windowActivated otherwise sets, so a key pressed after such a move acted on the screen the window had left. Updates only that record, and only when windowId is the focused window."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen the window is now on."/>
+            </arg>
+        </method>
         <method name="setFrameGeometry">
             <annotation name="org.gtk.GDBus.DocString" value="Push current frame geometry for a window into the daemon's shadow. Called by the compositor plugin on windowFrameGeometryChanged (debounced). Enables daemon-local shortcut handlers (e.g. float toggle) to read fresh geometry without a cross-process round-trip."/>
             <arg name="windowId" type="s" direction="in">

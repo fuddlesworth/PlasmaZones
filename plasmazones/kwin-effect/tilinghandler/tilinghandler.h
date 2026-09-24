@@ -996,6 +996,13 @@ public:
     /// the behaviour does not depend on a daemon coming back.
     void clearCenteringTargetsForTeardown();
 
+    /// Drop @p windowId's centring target and centred stamp. Called by the
+    /// effect's geometry apply for every command it issues: whatever it puts
+    /// the window at supersedes the tile the centring pass was waiting to
+    /// centre it in. The tile batch records its own target after its apply,
+    /// so a tile command keeps the entry it needs.
+    void dropCenteringTarget(const QString& windowId);
+
     /// The set this discriminator actually answers over.
     ///
     /// Because the answer is an INTERSECTION, it can change when EITHER input

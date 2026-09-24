@@ -206,18 +206,16 @@ void PlasmaZonesEffect::wireDesktopChangeHandler(KWin::EffectWindow* w)
         // Draining here restores it at the moment it arrives, which is what the
         // park was for, and spends the entry so nothing fires later.
         //
-        // Scoped to THIS window, and returning when it fires, because the arms
-        // below place the arriving window themselves (snapToEmptyZone on a
-        // snapping screen, the tiling adopt on a managed one). Running both
-        // would put two independent placement answers for one window on the wire
-        // at once, with the winner decided by D-Bus reply order.
+        // Scoped to THIS window, and returning when it fires, because the arm
+        // below places the arriving window itself (the tiling adopt on a
+        // managed screen). Running both would put two independent placement
+        // answers for one window on the wire at once, with the winner decided
+        // by D-Bus reply order.
         //
-        // The sticky fall-through skips the snapToEmptyZone offer below — its
-        // window never moved, so pulling it into a zone it was never in would
-        // be a placement nobody asked for — but it takes this scrub like any
-        // other arrival on an unmanaged destination. The daemon has released it
-        // from the desktop key it was adopted under, so the effect's tiling
-        // bookkeeping has to go too.
+        // The sticky fall-through takes this scrub like any other arrival on
+        // an unmanaged destination. The daemon has released it from the
+        // desktop key it was adopted under, so the effect's tiling bookkeeping
+        // has to go too.
         const bool destinationManaged = m_tilingHandler->isManagedScreen(screenId);
         if (!destinationManaged) {
             // The desktop in view runs no tiling, but the desktop the window
@@ -258,48 +256,23 @@ void PlasmaZonesEffect::wireDesktopChangeHandler(KWin::EffectWindow* w)
         if (m_snapHandler && m_snapHandler->drainDesktopArrivalFor(windowId, window)) {
             return;
         }
-        if (!destinationManaged && !stickyFallThrough) {
-            // Snapping screen. There is no stack to join and snapping places
-            // nothing on its own, so an arrival floats — unless it was snapped
-            // where it came from and the context's layout auto-assigns, which
-            // is the one case with somewhere to put it. Offer it the same auto-fill the drop path runs (drag_end.cpp),
-            // and let the daemon decide: snapToEmptyZone gates itself on
-            // `layout->autoAssign() || autoAssignAllLayouts()` and answers
-            // shouldSnap=false when neither is on, which is exactly the
-            // nothing-to-do case. It resolves the empty zone against the
-            // screen's CURRENT desktop, so the arrival is measured against the
-            // context it landed in, not the one it left.
-            //
-            // shouldHandleWindow / isOnCurrentActivity are this arm's OWN
-            // gates, not belt-and-braces: neither the daemon's snapToEmptyZone
-            // slot nor the engine's calculateSnapToEmptyZone re-checks either
-            // (the engine documents that it deliberately does not even skip
-            // floating windows — its callers gate it). The drop path gets both
-            // for free, because an excluded window never reaches drag handling
-            // at all and a drop happens on the activity in view; an arrival
-            // gets neither, so a user-excluded window, or one that landed here
-            // while belonging to another activity, would be snapped into a zone
-            // of a layout that is not its context's.
-            //
-            // isWindowSnapped is the third gate (discussion #1108). Only a
-            // window that held a zone where it came from is offered one here.
-            // A free window, whether the user floated it, dragged it out of its
-            // zone or never snapped it at all, arrives as it left: moving it
-            // to another desktop is not a request to place it, and the fill
-            // took a window the user had positioned by hand and put it in the
-            // first empty zone. The zone cache still holds the SOURCE
-            // desktop's answer at this point, because the daemon's membership
-            // reconcile that releases it runs off the metadata push and its
-            // windowStateChanged reply cannot have landed inside this signal.
-            if (isWindowSnapped(windowId) && shouldHandleWindow(window) && window->isOnCurrentActivity()
-                && isDaemonReady("auto-fill on desktop arrival")) {
-                tryAsyncSnapCall(PhosphorProtocol::Service::Interface::Snap, QStringLiteral("snapToEmptyZone"),
-                                 // sticky=false, not isWindowSticky(): a sticky
-                                 // window returned above, so it is the only
-                                 // value that can reach here.
-                                 {windowId, screenId, false}, window, windowId,
-                                 /*storePreSnap=*/true, /*fallback=*/nullptr);
-            }
+        // Snapping destination: the effect places nothing here. A window that
+        // held a zone where it came from is carried by the daemon's desktop
+        // membership pass into the matching zone of the destination desktop's
+        // layout, pinned to that desktop (SnapEngine::applyMembershipWork,
+        // #1121), and a free window arrives as it left (discussion #1108).
+        // This arm used to offer such a window snapToEmptyZone as well. That
+        // ran BEFORE the membership pass had heard of the move, so it measured
+        // occupancy against, and committed into, the desktop the window was
+        // leaving: with auto-assign on it took a zone the window's own old
+        // placement "occupied", and the carry then followed that overwritten
+        // zone. Two placement policies for one arrival, decided by message
+        // order; the carry is the one that knows the window's new desktop.
+        //
+        // The sticky fall-through lands here too. Its effect-side cleanup
+        // already ran above the drain, and the adopt below is for managed
+        // destinations only (notifyWindowAdded gates on the same managed set).
+        if (!destinationManaged) {
             return;
         }
         // Already in this desktop's stack: the signal reported a desktop SET
@@ -312,18 +285,6 @@ void PlasmaZonesEffect::wireDesktopChangeHandler(KWin::EffectWindow* w)
         // ran an arm for it, so its id is exactly as tracked as before — this
         // guard would send it away with nothing done. The set-grew case the
         // guard is written for is already excluded by the discriminator above.
-        //
-        // Past this point everything is the MANAGED arm. The sticky
-        // fall-through is the one case that reaches here on an UNMANAGED
-        // destination — it skipped the snapToEmptyZone offer above rather than
-        // returning at it — and the adopt below is not for it: notifyWindowAdded
-        // gates on the same managed set and would decline, leaving the release
-        // that precedes it as a scrub with no re-add. Its effect-side cleanup
-        // already ran above the drain, on the branch every unmanaged arrival
-        // takes, so there is nothing left to do here.
-        if (!destinationManaged) {
-            return;
-        }
         if (!stickyFallThrough && m_tilingHandler->isTrackedWindow(windowId)) {
             return;
         }

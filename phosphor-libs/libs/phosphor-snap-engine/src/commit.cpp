@@ -3,6 +3,8 @@
 
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
+#include <PhosphorSnapEngine/INavigationStateProvider.h>
+#include <PhosphorEngine/IWindowRegistry.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "snapenginelogging.h"
@@ -140,6 +142,29 @@ void SnapEngine::commitMultiZoneSnap(const QString& windowId, const QStringList&
         return;
     }
     commitSnapImpl(windowId, zoneIds, screenId, intent, virtualDesktop);
+}
+
+void SnapEngine::recordFreeFrameBeforeUserSnap(const QString& windowId, const QString& screenId)
+{
+    if (!m_windowTracker || !m_navState || windowId.isEmpty() || screenId.isEmpty()) {
+        return;
+    }
+    // Floating is snap's own bit: a free window on a snapping screen is
+    // tracked floating from open, and a window in a zone is not, so this is
+    // exactly "the frame is a free position".
+    if (!isFloating(windowId)) {
+        return;
+    }
+    if (m_windowRegistry && m_windowRegistry->fillsOutputState(windowId).value_or(false)) {
+        return;
+    }
+    const QRect frame = m_navState->frameGeometry(windowId);
+    if (!frame.isValid() || !m_windowTracker->geometryBelongsToScreen(frame, screenId)) {
+        return;
+    }
+    // Overwrite, like toggleFocusedFloat: the live frame is the most recent
+    // free position, the one a float-back should return to.
+    m_windowTracker->recordFreeGeometry(windowId, screenId, frame, /*overwrite=*/true);
 }
 
 void SnapEngine::uncommitSnap(const QString& windowId)

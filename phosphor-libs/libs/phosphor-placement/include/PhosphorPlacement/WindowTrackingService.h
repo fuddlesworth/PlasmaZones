@@ -237,6 +237,26 @@ public:
     bool isWindowEngineTiled(const QString& windowId) const;
 
     /**
+     * @brief Resolver: the screen a tiling-family engine (autotile / scrolling)
+     * genuinely holds @p windowId on, tiled or engine-floating, in that
+     * screen's current context (IPlacementEngine::heldScreenForWindow); empty
+     * when neither engine holds it.
+     *
+     * Injected by the daemon (same LGPL-boundary pattern as
+     * EngineTiledPredicate). The resnap buffer asks it: a snapped window whose
+     * screen goes to tiling keeps its zone there as memory for the return to
+     * snapping, and a tiled move to another output never reaches the snap
+     * engine, so without this the return replayed the zone of a screen the
+     * window had left and dragged it back across monitors.
+     */
+    using TilingHeldScreenResolver = std::function<QString(const QString& windowId)>;
+    void setTilingHeldScreenResolver(TilingHeldScreenResolver resolver);
+
+    /// The screen a tiling-family engine holds @p windowId on (see the resolver);
+    /// empty when neither holds it or the resolver is unwired (snap-only tests).
+    QString tilingHeldScreenForWindow(const QString& windowId) const;
+
+    /**
      * @brief Resolver: which engine id owns @p windowId's mode on @p screenId?
      *
      * Injected by the daemon (engine-/settings-agnostic LGPL boundary), same
@@ -1252,6 +1272,7 @@ private:
     QPointer<PhosphorEngine::PlacementEngineBase> m_snapEngine;
     AutotileModePredicate m_autotileModePredicate{};
     EngineTiledPredicate m_engineTiledPredicate{};
+    TilingHeldScreenResolver m_tilingHeldScreenResolver{};
     ModeEngineIdResolver m_modeEngineIdResolver{};
 
     // Floating windows: full windowId at runtime, appId for session-restored entries

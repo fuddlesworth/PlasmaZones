@@ -827,6 +827,18 @@ public:
 
     void uncommitSnap(const QString& windowId);
 
+    /// Record a floating window's live frame as its float-back on @p screenId,
+    /// ahead of a user snap the DAEMON drives (the move, span, snap-to-zone and
+    /// push keys, the D-Bus moveWindowToZone). Those commit before the effect's
+    /// pre-snap capture arrives, and recordFreeGeometry refuses a capture for a
+    /// window that already occupies a zone, so the window was left with no
+    /// float-back. The capture toggleFocusedFloat already takes, for the same
+    /// reason. No-op for a window in a zone (its frame is the zone rect), a
+    /// maximized or fullscreen one (its frame is the output), and a frame that
+    /// does not lie on @p screenId. Not for handoffs: a window arriving from a
+    /// tiling engine is sitting on its tile rect.
+    void recordFreeFrameBeforeUserSnap(const QString& windowId, const QString& screenId);
+
     /// Unconfined (user-toggle) form. Also the ABI-stable signature the
     /// installed library exported before the confinement parameter existed.
     PhosphorEngine::UnfloatResult resolveUnfloatGeometry(const QString& windowId, const QString& fallbackScreen) const;

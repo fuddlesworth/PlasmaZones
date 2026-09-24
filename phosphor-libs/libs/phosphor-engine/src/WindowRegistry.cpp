@@ -145,6 +145,22 @@ std::optional<bool> WindowRegistry::minimizedState(const QString& windowId) cons
     return it->isMinimized;
 }
 
+std::optional<bool> WindowRegistry::fillsOutputState(const QString& windowId) const
+{
+    const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
+    const auto it = m_records.constFind(instanceId);
+    if (it == m_records.constEnd()) {
+        return std::nullopt;
+    }
+    if (it->isMaximized.value_or(false) || it->isFullscreen.value_or(false)) {
+        return true;
+    }
+    if (it->isMaximized.has_value() || it->isFullscreen.has_value()) {
+        return false;
+    }
+    return std::nullopt;
+}
+
 std::optional<WindowDesktopContext> WindowRegistry::desktopContext(const QString& windowId) const
 {
     const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
