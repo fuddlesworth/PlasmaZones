@@ -1,62 +1,68 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
-
 #include <QObject>
 #include <QString>
-
+#include <QVariantList>
 namespace PhosphorLayer {
 class IScreenProvider;
 }
-
 namespace PhosphorShellApp {
-
-// The picker strip's open state, published to QML as the PickerRegistry
-// context property. There is one strip per output (a PerScreenPanels
-// delegate, built in a context where shell.qml's ids do not resolve), so
-// which one is open has to live somewhere every delegate can read. The
-// `picker` IpcTarget drives show / toggle / hide; an empty screen name
-// means the focused output, else the primary.
-//
-// `targetCount` is the fan-out figure the strip prints: how many shell
-// surfaces take the palette on Apply, from the surfaces shell.qml mounts
-// per output and the ones it shares across them.
+// Appearance's navigation and modal state survive a QML geometry reload.
+// Both appearance and the existing picker IPC commands open this workspace.
 class PickerController : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QString openScreen READ openScreen NOTIFY openScreenChanged)
-    Q_PROPERTY(int targetCount READ targetCount NOTIFY openScreenChanged)
-
+    Q_PROPERTY(QVariantList screens READ screens NOTIFY screensChanged)
+    Q_PROPERTY(QString page MEMBER m_page NOTIFY pageChanged)
+    Q_PROPERTY(QString chosenWidget MEMBER m_chosenWidget NOTIFY chosenWidgetChanged)
+    Q_PROPERTY(QString selectedScreen MEMBER m_selectedScreen NOTIFY selectedScreenChanged)
+    Q_PROPERTY(bool linked MEMBER m_linked NOTIFY linkedChanged)
+    Q_PROPERTY(bool desktopPreview MEMBER m_desktopPreview NOTIFY desktopPreviewChanged)
+    Q_PROPERTY(bool closePending READ closePending NOTIFY closePendingChanged)
+    Q_PROPERTY(QVariantMap scrollPositions MEMBER m_scrollPositions NOTIFY scrollPositionsChanged)
 public:
     explicit PickerController(PhosphorLayer::IScreenProvider* screens, QObject* parent = nullptr);
     ~PickerController() override;
-
-    [[nodiscard]] QString openScreen() const;
-    [[nodiscard]] int targetCount() const;
-
-    Q_INVOKABLE void show(const QString& screenName = QString());
-    Q_INVOKABLE void toggle(const QString& screenName = QString());
+    QString openScreen() const
+    {
+        return m_openScreen;
+    }
+    QVariantList screens() const;
+    bool closePending() const
+    {
+        return m_closePending;
+    }
+    Q_INVOKABLE bool show(const QString& screenName = QString());
+    Q_INVOKABLE bool toggle(const QString& screenName = QString());
     Q_INVOKABLE void hide();
-
-    // What the shell mounts, and therefore how many surfaces a palette
-    // change repaints. This feeds a user-visible figure ("N targets" on the
-    // picker strip), so it has to match the host: per output the wallpaper,
-    // the bar, the OSD overlay, the toast overlay, the picker strip, the
-    // polkit dim and the lock surface; shared, the power menu, the control
-    // centre, the launcher, the polkit prompt, the dashboard and the
-    // cheatsheet.
-    static constexpr int kSurfacesPerScreen = 7;
-    static constexpr int kSharedSurfaces = 6;
-
+    Q_INVOKABLE void discard();
+    Q_INVOKABLE bool apply(bool close = false);
+    Q_INVOKABLE void keepEditing();
 Q_SIGNALS:
+    void openingFailed(const QString& error);
     void openScreenChanged();
+    void screensChanged();
+    void pageChanged();
+    void chosenWidgetChanged();
+    void selectedScreenChanged();
+    void linkedChanged();
+    void desktopPreviewChanged();
+    void closePendingChanged();
+    void scrollPositionsChanged();
 
 private:
-    [[nodiscard]] QString resolveScreen(const QString& screenName) const;
+    QString resolveScreen(const QString& screenName) const;
     void setOpenScreen(const QString& screenName);
-
     PhosphorLayer::IScreenProvider* m_screens;
     QString m_openScreen;
+    QString m_page = QStringLiteral("wallpaper");
+    QString m_chosenWidget = QStringLiteral("workspaces");
+    QString m_selectedScreen;
+    bool m_linked = false;
+    bool m_desktopPreview = false;
+    bool m_closePending = false;
+    QVariantMap m_scrollPositions;
 };
-
-} // namespace PhosphorShellApp
+}

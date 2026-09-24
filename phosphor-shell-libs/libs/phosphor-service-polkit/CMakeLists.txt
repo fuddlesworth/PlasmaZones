@@ -17,7 +17,6 @@ if(NOT PROJECT_VERSION)
     set(CMAKE_CXX_STANDARD 20)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
     set(CMAKE_CXX_EXTENSIONS OFF)
-    set(CMAKE_AUTOMOC ON)
 endif()
 
 include(GenerateExportHeader)
@@ -34,6 +33,9 @@ include(GenerateExportHeader)
 # dependency. The polkit-qt6 GUI action-button widgets (PolkitQt6-1::Gui) are a
 # Phase 3/4 UI concern and are NOT linked.
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml)
+if(CMAKE_PROJECT_NAME STREQUAL "PhosphorServicePolkit")
+    qt_standard_project_setup()
+endif()
 find_package(PolkitQt6-1 REQUIRED)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -53,9 +55,10 @@ set(phosphorservicepolkit_SRCS
     src/qmlregistration.cpp
     src/polkitagent.cpp
     src/authrequest.cpp
+    src/authenticationsession_p.h
 )
 
-add_library(PhosphorServicePolkit SHARED
+qt_add_library(PhosphorServicePolkit SHARED
     ${phosphorservicepolkit_public_HDRS}
     ${phosphorservicepolkit_SRCS}
 )

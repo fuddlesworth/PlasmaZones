@@ -53,6 +53,8 @@ public:
         using namespace PlacementMapIface;
         PhosphorProtocol::registerWireTypes();
         auto bus = QDBusConnection::sessionBus();
+        bus.connect(Name, ObjectPath, Iface::Screen, QStringLiteral("screenGeometryChanged"), this,
+                    SLOT(onScreenGeometryChanged(QString)));
         bus.connect(Name, ObjectPath, Iface::LayoutRegistry, QStringLiteral("screenLayoutChanged"), this,
                     SLOT(onScreenLayoutChanged(QString)));
         bus.connect(Name, ObjectPath, Iface::LayoutRegistry, QStringLiteral("activeLayoutForScreenChanged"), this,
@@ -61,6 +63,8 @@ public:
                     SLOT(onAssignmentsApplied(QStringList)));
         bus.connect(Name, ObjectPath, Iface::LayoutRegistry, QStringLiteral("currentActivityChanged"), this,
                     SLOT(onCurrentActivityChanged(QString)));
+        bus.connect(Name, ObjectPath, Iface::Settings, QStringLiteral("settingsChanged"), this,
+                    SLOT(onSettingsChanged()));
         bus.connect(Name, ObjectPath, Iface::WindowTracking, QStringLiteral("windowStateChanged"), this,
                     SLOT(onWindowStateChanged(QString, PhosphorProtocol::WindowStateEntry)));
         // Phase-3 surfaces: an older daemon never emits them, which is harmless.
@@ -93,6 +97,7 @@ public:
 
 Q_SIGNALS:
     void layoutChanged(const QString& screenId);
+    void geometryChanged(const QString& screenId);
     void currentActivityChanged(const QString& activityId);
     void windowStateChanged(const PhosphorProtocol::WindowStateEntry& entry);
     void windowMetadataChanged(const QString& windowId, const QString& appId, const QString& title);
@@ -104,6 +109,15 @@ Q_SIGNALS:
     void stripChanged(const QString& screenId);
 
 private Q_SLOTS:
+    void onSettingsChanged()
+    {
+        // Master switches can change capabilities without changing assignments.
+        Q_EMIT layoutChanged(QString());
+    }
+    void onScreenGeometryChanged(const QString& screenId)
+    {
+        Q_EMIT geometryChanged(screenId);
+    }
     void onScreenLayoutChanged(const QString& screenId)
     {
         Q_EMIT layoutChanged(screenId);

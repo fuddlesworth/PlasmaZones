@@ -5,9 +5,9 @@
 # One-command phosphor-shell harness: a nested kwin_wayland session with
 # the BUILD-TREE shell running inside it, drivable over the shell's own
 # IPC socket and screenshot-able for eyes-free (AI) test loops. No
-# install, no logout, and nothing touches the live session — the power
-# menu's logind actions act on the NESTED session's scope, so clicking
-# Suspend in here does not suspend the machine you are sitting at.
+# install or logout. Configuration and shell IPC are isolated. Hardware
+# services and logind power actions still reach the host: use service
+# fixtures when testing actions such as suspend, reboot or shutdown.
 #
 # Usage:
 #   scripts/nested-shell/run-shell.sh [output-count] [width height] [scale]
@@ -34,14 +34,21 @@
 #   scripts/nested-shell/capture.sh Virtual-1 out.png # look at it
 #   scripts/nested-shell/shell.sh                     # restart after a rebuild
 #
-# Screenshot note, and why the nested-kwin caveat does NOT apply here:
-# ScreenShot2 bypasses the PlasmaZones EFFECT chain, which is why the
-# sibling harness treats captures as geometry-only evidence. The shell is
-# an ordinary layer-shell CLIENT, composited on the normal path, so its
-# bars, popouts and toasts DO appear in captures — screenshots are real
-# rendering evidence for this harness.
+# capture.sh uses ScreenShot2 CaptureScreen, which includes compositor
+# effects on KWin 6.7 as well as the shell's bars, popouts and toasts.
+# Use the sibling dump-windows.sh for committed geometry because captured
+# pixels can include effect transforms.
 #
 # Environment knobs (all inherited by the sibling scripts through env.sh):
+#   PZ_NESTED_SESSION                 — one name for a whole extra session,
+#                                       setting both the directory and the
+#                                       wayland socket so two can run at
+#                                       once without colliding. Every
+#                                       sibling script reads it too:
+#                                         PZ_NESTED_SESSION=ai run-shell.sh 1
+#                                         PZ_NESTED_SESSION=ai ctl.sh list
+#                                       PZ_NESTED_DIR / PZ_NESTED_SOCKET
+#                                       still win where they are set.
 #   PZ_NESTED_DIR / PZ_NESTED_SOCKET  — per-worktree isolation, as for
 #                                       nested-kwin (defaults pz-nested/
 #                                       pznested).
@@ -51,9 +58,9 @@
 #                                       of seeding an editable copy.
 set -eu
 
-REPO="$(cd "$(dirname "$0")/../.." && pwd)"
+REPO="$(cd "$(dirname "$0")/../../.." && pwd)"
 RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/pz-nested-$(id -u)}"
-NEST="${PZ_NESTED_DIR:-$RUNTIME_DIR/pz-nested}"
+NEST="${PZ_NESTED_DIR:-$RUNTIME_DIR/pz-nested${PZ_NESTED_SESSION:+-$PZ_NESTED_SESSION}}"
 BUILD="${PZ_NESTED_BUILD:-build}"
 
 if [ ! -x "$REPO/$BUILD/bin/phosphor-shell" ]; then
@@ -125,8 +132,8 @@ fi
 if [ -z "${PZ_SHELL_NO_SEED:-}" ]; then
     SHELL_CFG="$NEST/home/config/phosphor-shell"
     mkdir -p "$SHELL_CFG"
-    cp -r "$REPO/examples/phosphor-shell/." "$SHELL_CFG/"
+    cp -r "$REPO/phosphor-shell/shell/." "$SHELL_CFG/"
     echo "seeded editable shell: $SHELL_CFG/shell.qml"
 fi
 
-exec "$REPO/scripts/nested-shell/shell.sh"
+exec "$REPO/phosphor-shell/scripts/nested-shell/shell.sh"

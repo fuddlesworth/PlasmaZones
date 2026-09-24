@@ -86,6 +86,8 @@ set(phosphorshell_public_HDRS
     include/PhosphorShell/WallpaperService.h
     include/PhosphorShell/SystemClock.h
     include/PhosphorShell/SystemUsage.h
+    include/PhosphorShell/SystemStats.h
+    include/PhosphorShell/SystemStatsReader.h
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -95,6 +97,8 @@ set(phosphorshell_public_HDRS
 set(phosphorshell_SRCS
     src/shellloader.cpp
     src/shellengine.cpp
+    src/qmlregistration.cpp
+    src/shellengine_watcher.cpp
     src/panelwindow.cpp
     src/perscreenpanels.cpp
     src/popupwindow.cpp
@@ -112,10 +116,16 @@ set(phosphorshell_SRCS
     src/placementmap.cpp
     src/placementmap_actions.cpp
     src/placementmap_desktop.cpp
+    src/placementmap_fetch.cpp
+    src/placementmap_navigation.cpp
     src/placementmapparser.cpp
     src/wallpaperservice.cpp
     src/systemclock.cpp
     src/systemusage.cpp
+    src/systemstats.cpp
+    src/systemstatsreader.cpp
+    src/systemstatsgpu.cpp
+    src/systemstatsgpu_p.h
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

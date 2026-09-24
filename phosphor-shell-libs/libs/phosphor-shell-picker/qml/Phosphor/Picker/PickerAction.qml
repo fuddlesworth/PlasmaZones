@@ -39,7 +39,7 @@ Item {
         anchors.left: parent.left
         anchors.top: parent.top
         text: action.text
-        color: action.primary ? Spectrum.active : (action.hovered ? Theme.on_surface : Theme.on_surface_variant)
+        color: action.primary ? Spectrum.active : (action.hovered ? Appearance.text : Appearance.muted)
         font.family: Tokens.font_family_ui
         font.pixelSize: Tokens.font_size_body_l
         font.weight: action.primary ? Tokens.font_weight_demibold : Tokens.font_weight_medium

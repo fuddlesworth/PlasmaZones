@@ -77,6 +77,15 @@ inline constexpr QLatin1String MotionProfileTree("motionProfileTree");
 inline constexpr QLatin1String AnimationShaderSearchPaths("animationShaderSearchPaths");
 inline constexpr QLatin1String DecorationProfileTree("decorationProfileTree");
 inline constexpr QLatin1String OverlayShaderTree("overlayShaderTree");
+/// The global window gaps (the Gaps group). Written by the Phosphor shell's
+/// desktop style and read by the editor.
+inline constexpr QLatin1String InnerGap("innerGap");
+inline constexpr QLatin1String OuterGap("outerGap");
+inline constexpr QLatin1String UsePerSideOuterGap("usePerSideOuterGap");
+inline constexpr QLatin1String OuterGapTop("outerGapTop");
+inline constexpr QLatin1String OuterGapBottom("outerGapBottom");
+inline constexpr QLatin1String OuterGapLeft("outerGapLeft");
+inline constexpr QLatin1String OuterGapRight("outerGapRight");
 }
 
 /// Keys for the extended-window-property QVariantMap (the trailing a{sv} argument

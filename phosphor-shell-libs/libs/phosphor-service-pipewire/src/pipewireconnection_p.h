@@ -199,6 +199,7 @@ public:
         Private* owner = nullptr;
         quint32 id = 0;
         QString mediaClass;
+        QString serial;
         pw_proxy* proxy = nullptr;
         spa_hook nodeListener{};
         // The spa_hook is intrusively linked through the entry's
@@ -227,6 +228,7 @@ public:
     /// nodes are torn down automatically when the connection dies.
     /// Touched only on the GUI thread.
     QHash<quint32, PwNode*> guiNodes;
+    QHash<quint32, QString> guiTargets;
 
     // Snapshot of state for GUI-thread getters. The atomics carry the
     // cross-thread truth: loop-thread callbacks (onCoreInfo,
@@ -331,6 +333,18 @@ public:
     static int dispatchDefaultWrite(struct spa_loop* loop, bool async, uint32_t seq, const void* data, size_t size,
                                     void* user_data);
     void doDefaultWrite(const DefaultWriteRequest& req);
+
+    struct RouteWriteRequest
+    {
+        Private* owner = nullptr;
+        quint32 streamId = 0;
+        QString streamSerial;
+        QString targetName;
+        QString targetSerial;
+    };
+    static int dispatchRouteWrite(struct spa_loop*, bool, uint32_t, const void*, size_t, void*);
+    void doRouteWrite(const RouteWriteRequest& request);
+    void reportOperationFailure(const QString& message);
 
     /// Submit a heap-allocated loop request via pw_loop_invoke.
     /// Centralises the running/loop guard, the rc < 0 check, the

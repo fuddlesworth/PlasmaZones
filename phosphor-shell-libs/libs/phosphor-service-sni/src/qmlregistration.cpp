@@ -7,6 +7,7 @@
 #include <PhosphorServiceSni/StatusNotifierHost.h>
 #include <PhosphorServiceSni/StatusNotifierItem.h>
 #include <PhosphorServiceSni/StatusNotifierItemModel.h>
+#include <PhosphorServiceSni/TrayItems.h>
 
 #include <QQmlEngine>
 
@@ -37,6 +38,7 @@ void registerQmlTypes()
         qmlRegisterType<StatusNotifierItemModel>(kModule, kModuleVersionMajor, kModuleVersionMinor,
                                                  "StatusNotifierItemModel");
         qmlRegisterType<DBusMenuModel>(kModule, kModuleVersionMajor, kModuleVersionMinor, "DBusMenuModel");
+        qmlRegisterType<TrayItems>(kModule, kModuleVersionMajor, kModuleVersionMinor, "TrayItems");
 
         // Pointer-receivable type: exposed as a Q_PROPERTY value from
         // the host / model, never directly constructed in QML, but the

@@ -27,6 +27,7 @@ struct SurfaceThemeColors
     QColor inactive; ///< Unfocused accent (useSystemAccent inactive border).
     QColor background; ///< Theme window background (useThemeNeutral lerp base, useThemeTint halo).
     QColor foreground; ///< Theme window foreground (useThemeNeutral lerp target).
+    QColor windowAccent = {}; ///< Optional per-window identity colour (useWindowAccent); invalid without an identity.
 };
 
 /**
@@ -36,9 +37,13 @@ struct SurfaceThemeColors
  * - Border pack: `useThemeNeutral` (with `frameContrast`) fills active/inactive
  *   with a neutral frame-contrast colour (background lerped toward foreground);
  *   otherwise `useSystemAccent` fills them with the system accent / inactive.
- *   Neutral wins over accent when both are engaged.
+ *   Neutral wins over system accent when both are engaged. `useWindowAccent`
+ *   takes precedence when the host supplies a valid window identity colour,
+ *   replacing active/inactive RGB while preserving each colour's alpha.
  * - Glow / shadow pack: `useThemeTint` replaces the halo colour with the theme
  *   background, preserving the pack's own colour alpha (its intensity knob).
+ *   For glow, `useWindowAccent` takes precedence over the theme tint when a
+ *   window identity colour is available, also preserving the colour alpha.
  *
  * Only params the pack actually declares (via @p effect.parameters) are touched,
  * so a pack without a given flag is left untouched and a flag left at its

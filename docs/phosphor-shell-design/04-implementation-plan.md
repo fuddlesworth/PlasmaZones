@@ -3,6 +3,158 @@
 
 # 04: Implementation Record
 
+## Shortcut reference (mockups-v3)
+
+Native port: `dae0e6635`.
+
+The approved reference now runs as a bounded native sheet with the mode sidebar,
+field guides, search, grouped keycaps, expandable families and action details,
+assigned-only filtering, and explicit service/loading/empty states. Layout,
+palette, material, surface effects and live text scaling follow Appearance.
+Tab stays inside the modal; focused rows scroll into view; Escape clears a
+search before closing. Browsing another mode never changes window placement.
+
+`ShortcutReferenceModel` organizes effective daemon bindings, preserves every
+alternative, compresses only uniform families, and searches key aliases without
+combining keys from separate alternatives. `ShortcutCatalog` handles retries,
+owner replacement and stale replies. Layout support comes from the live engine
+capability, including updates when settings change. Externally managed shell
+actions remain explicitly unassigned.
+
+The daemon's registered `toggle_cheatsheet` routes to the shell's
+`cheatsheet.toggleForScreen` IPC action. Requests retain their target output and
+serialize rapid toggles. An absent or older shell keeps the daemon overlay as
+fallback; an ambiguous reply never opens a second overlay. The shell's normal
+show/toggle/hide IPC commands use the same reference.
+
+Validation: shell-ON and shell-OFF non-unity builds pass without warnings.
+Ten focused CTest targets cover the model, catalog, IPC bridge, capabilities,
+screen targeting, QML interactions and shell composition. Native nested-KWin
+captures cover all three modes, custom chords, Phosphor/Paper/Ember and a
+640×480 viewport with 115% text. The real registered daemon action opens and
+closes the native reference, and stopping the shell restores the old overlay.
+The reusable `scripts/nested-shell/shortcuts-preview.sh` fixture uses private
+session/system buses and config paths for repeatable rendering checks.
+
+## Quick settings details (mockups-v3)
+
+The approved Wi-Fi, Bluetooth and Output/Input/Apps studies now run as native
+410 px detail pages inside quick settings. Back returns to the compact controls;
+close dismisses the popup. The shared header/footer stay in place while long
+content scrolls, including when keyboard focus moves below the visible area.
+All surfaces follow the shell palette, density and typography settings.
+
+Wi-Fi (`6e73b1f2d`) adds connected details, scanning, saved networks, inline
+passwords, auto-connect, cancellation, captive portal links and service errors.
+Bluetooth (`dfeefbcd6`) adds paired/nearby devices, battery reports, confirmation
+codes, PIN/passkey entry, cancellation and forget confirmation. The pairing
+agent is shared across shell hosts and handles service restarts.
+
+Audio adds device selection, volume/mute, per-app output routing, test playback
+and an on-demand live microphone meter. Captured samples are reduced to a level
+in memory; the test stops on leaving Input, changing devices, muting, dismissal
+or its 30-second deadline. Following the default output clears an app's specific
+route. Device metadata survives playback-state updates, and unplugged devices
+produce visible feedback. Unavailable services still open their detail pages.
+
+Validation: the full build and 544 CTest targets pass (543 executed, the existing
+decoration-orientation test skipped). Isolated D-Bus tests cover Wi-Fi and
+Bluetooth operations. A private PipeWire server with policy-only WirePlumber
+checks real stream links, default-device changes, volume/mute echoes, synthetic
+microphone samples, playback completion and unplugging without host hardware.
+Native KWin checks cover all three palettes, app routing/volume/mute, microphone
+start/stop, keyboard tab navigation and a 960×600 logical desktop. Physical
+Wi-Fi association and Bluetooth hardware pairing remain hardware-dependent.
+
+## Notification migration (mockups-v3)
+
+The approved notification study now drives the native surfaces. The retained
+controller preserves app identity, pictures, actions, per-entry unread state,
+and bounded history. Clearing individual entries, app groups or the inbox can
+be undone without reviving actions belonging to a closed notification. D-Bus
+replacements update the existing card; expiry keeps its saved content. Scripted
+`notify.send` calls use the same ingestion path.
+
+The shared rich card appears in the grouped 444 px inbox and the 396 px arrival
+stack below the status area. Long messages expand, pictures preserve aspect
+ratio, and supported applications receive private inline replies. Reading or
+typing pauses expiry. The inbox includes urgent entries, All/Unread filters,
+mark-as-read, DND, clear/undo and empty states. Appearance controls app/time
+grouping and preview privacy across both surfaces. Opening the center, DND and
+session locking suppress arrival popups. The default bar includes the inbox.
+
+Data/service phase: `fc2c9bda0`. Native surface phase: `e826322e8`. Native KWin
+checks cover grouped history and real D-Bus pictures, expansion and reply input;
+unit coverage includes retention, replacement, unread bounds, undo with newer
+arrivals, action validation, expiry pause, rich rendering and preview privacy.
+
+Final integration adds Wayland activation tokens ahead of app actions, rounded
+attachment images, compositor blur on arrival surfaces, and `notify.toggle` /
+`notify.hide` shortcuts. The reusable nested fixture at
+`scripts/nested-shell/notification-fixture.py` supports rich messages, replacement,
+expiry, bursts, actions and reply observation on the private session bus.
+
+Validation: the build succeeds and all 541 CTest targets pass (540 executed, the
+existing decoration-orientation target skipped). Native captures cover Phosphor,
+Paper, Ember with its bottom bar, and Stage. Native input verifies inline replies
+reach their originating client while a second observer receives no reply text;
+activation emits its token before the action; expanded messages pause expiry and
+opening the center resumes it; a 60-arrival burst retains 50 entries; mark-all-read
+updates the unread filter; and Undo keeps the notification received after Clear.
+
+## Mockup fidelity correction (mockups-v3)
+
+The first six-phase implementation did not reproduce the approved mockups.
+The correction below uses the HTML studies at 1440×900 as the visual reference
+and checks the rendered shell in an isolated KWin session.
+
+| Phase | Commit | Result |
+|---|---|---|
+| A. Desktop and bar | `7ec9926ae` | Floating bar geometry, shared palette, wallpaper, rail, material and default widget ordering. |
+| B. Quick settings | `0c3b8e7fd` | Navigator panel and Stage shelf, continuous connection rows, sliders, service-backed controls and CAVA media visualization. |
+| C. Workspace navigation | `009f06964` | Distinct Navigator and Stage layouts, complete native window catalogue, bounded scrolling, window actions and safe popup teardown during reload. |
+| D. Date and time | `3ee723de9` | Calendar typography and layout, local timezone, real dates, optional agenda provider, keyboard navigation and rounded compositor blur. |
+| E. Launcher | `a5c63d5f6` | Navigator result list and Stage pinned-app shelf, native window search, activation and saved pins. |
+| F. Appearance and feedback | `88252edf9` | Appearance controls, preserved popup position and scroll state through reload, compact OSD and toast styling. |
+| G. Native desktop windows | `1071fc53c` | KDecoration3 titlebars, shared stable window colors, palette and radius updates, real placement gaps and reversible desktop styling. |
+| H. Final visual and interaction checks | `a1e91f9b8` | Readable Stage titlebars over live content, rounded preview silhouettes, immediate popup keyboard input and focus restoration on dismissal. |
+| I. Workspace transitions | This commit | Native snapshots populate inactive cards, cards rebind after desktop switches, and Stage aligns scrolling previews with native frames. The compositor clips content to the preview and waits for an existing desktop transition before opening it. |
+
+### Validation
+
+`cmake --build build --parallel 8` succeeds. The completed tree passes
+`ctest --test-dir build --output-on-failure --parallel 8`: 540 test targets,
+539 passed and the existing `test_surface_decoration_orientation` skipped.
+
+Native checks include both presentations and all three presets, the 800×600
+control center and calendar, Stage selection versus activation, and twenty
+real scrolling windows. Home/End and Enter reach the first and last windows
+without a pointer click. Esc returns focus to the app, and clicking another
+window dismisses Navigator. The bar miniature remains bounded as the strip
+grows. Repeated overview replacement and appearance reloads leave the shell
+and compositor running.
+
+The native window decoration is built with the shell under
+`org.kde.kdecoration3`. Appearance's “Match desktop windows” option applies
+the frame and spacing together. A journal preserves the prior settings;
+disabling the option or a clean shutdown restores only values still owned
+by the shell. Per-window colors are shared with the bar and workspace maps.
+Stage keeps the wallpaper in place and fits each complete app view below
+its full-size titlebar without changing the real window's desktop geometry.
+
+Third-party app content and live service data naturally differ from the
+illustrative mockup data. Calendar appointments require an agenda provider.
+Media visualization was checked with a controlled MPRIS player and a real
+CAVA process. No host power action was invoked. The nested compositor does
+not verify physical connectivity, backlight or audio changes, session
+locking, seat-owned authentication, or physical gestures; their service and
+UI contracts retain automated coverage.
+
+## Historical spectrum implementation (mockups-v2)
+
+The following record describes the preceding design. Its visual rules are
+superseded by `05-visual-identity.md` and `mockups-v3/`.
+
 How the spectrum identity (`05-visual-identity.md`, `identity/A1` to `A4`)
 was applied to the shell, phase by phase, with what each phase proved live
 and what it could not. The library and service groundwork that preceded it
@@ -76,6 +228,61 @@ The connected-corner geometry (`BarCanvas`, `ConnectedShape`,
 and the bar-canvas demo are gone, with the v1 mockups. These documents were
 rewritten for the shell that exists.
 
+### v3 lock screen (September 2026)
+
+- `2617e2aff`: replace the placement-map outlines and region finder with the
+  approved abstract panes, clock and unlock card. Add persistent lock layout,
+  media privacy and notification-count preferences.
+- `eb02114a0`: connect the shared PAM controller, authenticated account name,
+  compositor Caps Lock and keyboard layout, battery, notification count, MPRIS
+  and session actions. Preserve the lock-before-sleep and release handshakes
+  and the `shell.phosphor.lock` surface-pack slot.
+- Native verification: both compositions and all three presets at 1440×900,
+  plus an 800×600 output, optional media, keyboard navigation, confirmation,
+  masked input, retry, busy and release states. The short layout keeps the
+  whole unlock card visible and scrolls optional content into view on focus.
+
+`scripts/nested-shell/lock-preview.sh run` uses production components with
+fixture auth/media/power services on an existing nested session. Its config
+and IPC socket are separate from the ordinary shell. Use the same script
+with `call preview.result --arg name=error`, `success` or `idle` to drive the
+outcome. Success hides the preview windows after the exit; idle shows them
+again. The actual session-lock protocol is unavailable in virtual KWin, so
+PAM and compositor-lock lifecycle validation comes from the service tests.
+
+The final build passed. The full suite ran 541 cases: 540 passed and the
+existing surface-decoration orientation test was skipped. Real nested
+keyboard events confirmed Caps Lock, typing, submit, retry focus, and the
+power confirmation flow without invoking host session actions.
+
+### v3 wallpaper and Appearance (September 2026)
+
+- `aeb511915`: transactional appearance previews, per-display wallpapers and
+  placement, complete wallpaper-derived palettes, shared fonts and sizing.
+- `5ac16341d`: port the approved Wallpaper, Style, Bar and Presets workspace.
+  Retain the real wallpaper provider, widget registry, privacy preferences,
+  motion settings and existing surface shader engine. Add durable image import,
+  validated saved looks and scoped preset previews. The native and QML settings
+  accessors share one process-owned store through engine reloads.
+- Live checks use isolated nested sessions. Wallpaper selection updates only the
+  chosen output; colors update both bars and the native frame before Apply.
+  Dragging Date & time between bar regions and changing the bar edge retain the
+  draft. Save, the unsaved-close dialog, Discard, and Glass/Motes rendering were
+  exercised with native input and captures.
+- Smaller outputs use an icon sidebar and stacked inspectors. An 800×600 native
+  capture and Tab navigation verified the responsive layout and focus scrolling.
+  Shader slots in quick settings and the launcher keep effects on their surface
+  backgrounds without fading the controls.
+- File choosers stay inside the overlay; image import and preset export/import
+  were exercised through their real dialogs. Imported images keep their original
+  names in the gallery. Checks with detailed, dark 4K wallpapers led to chromatic
+  color selection, stronger Glass opacity and a readable preview caption.
+  Neutral artwork retains a neutral palette.
+- The integrated build passed. The suite ran 542 tests: 541 passed and the
+  existing surface-decoration orientation test was skipped. Coverage includes
+  locked decoration previews, atomic persistence, invalid images and presets,
+  scoped settings, shader selection and QML engine reloads.
+
 ## What each phase proved live
 
 | Verified in the nested harness | Not verifiable there |
@@ -86,7 +293,7 @@ rewritten for the shell that exists.
 | Packs on the bar band, the OSD band, the toast card, the launcher, the picker strip | |
 | The gestures capability from the rebuilt effect | |
 
-## What is next
+## Historical follow-ups
 
 See `02-gap-analysis.md`. The first three items there (compositor-drawn
 chrome packs, touchpad gesture progress, bundled faces) are the ones that
@@ -99,5 +306,5 @@ extend the identity; the surface gaps are ordinary feature work.
   binary, a stale effect binary).
 - When a scripted edit lands, check `git status` before building. One batch
   of effect edits was accepted by the tooling and never reached the tree.
-- The mockups in `mockups-v2/` are the reference. If the lived design
+- For that historical implementation, `mockups-v2/` was the reference. If the lived design
   deviates, update them or note the deviation in their README.

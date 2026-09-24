@@ -120,6 +120,11 @@ QImage WallpaperService::image() const
 
 QString WallpaperService::path() const
 {
+    if (!m_appearance.isEmpty()) {
+        const auto entry =
+            m_appearance.value(m_appearance.contains(QString()) ? QString() : m_appearance.firstKey()).toMap();
+        return entry.value(QStringLiteral("path")).toString();
+    }
     const QString shared = m_configured.value(QString());
     if (!shared.isEmpty() || m_configured.isEmpty()) {
         return shared;
@@ -139,7 +144,8 @@ bool WallpaperService::isAvailable() const
 
 QString WallpaperService::configuredPath(const QString& screenName) const
 {
-    return resolve(m_configured, screenName);
+    const auto entry = m_appearance.value(screenName, m_appearance.value(QString())).toMap();
+    return entry.isEmpty() ? resolve(m_configured, screenName) : entry.value(QStringLiteral("path")).toString();
 }
 
 QString WallpaperService::previewPath(const QString& screenName) const
@@ -151,6 +157,34 @@ QString WallpaperService::effectivePath(const QString& screenName) const
 {
     const QString preview = previewPath(screenName);
     return preview.isEmpty() ? configuredPath(screenName) : preview;
+}
+
+QVariantMap WallpaperService::appearanceSeed() const
+{
+    QVariantMap result;
+    for (auto it = m_configured.cbegin(); it != m_configured.cend(); ++it)
+        result[it.key()] =
+            QVariantMap{{QStringLiteral("path"), it.value()}, {QStringLiteral("fit"), QStringLiteral("fill")}};
+    return result;
+}
+void WallpaperService::setAppearance(const QVariantMap& wallpapers)
+{
+    if (wallpapers == m_appearance)
+        return;
+    const auto previous = path();
+    m_appearance = wallpapers;
+    if (previous != path()) {
+        Q_EMIT pathChanged();
+        scheduleLoad(path());
+    }
+    Q_EMIT effectivePathChanged(QString());
+}
+QString WallpaperService::effectiveFit(const QString& screenName) const
+{
+    return m_appearance.value(screenName, m_appearance.value(QString()))
+        .toMap()
+        .value(QStringLiteral("fit"), QStringLiteral("fill"))
+        .toString();
 }
 
 bool WallpaperService::setPath(const QString& path, const QString& screenName)

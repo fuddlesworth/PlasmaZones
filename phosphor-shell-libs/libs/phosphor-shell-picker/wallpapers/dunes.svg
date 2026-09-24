@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
+<svg xmlns="http://www.w3.org/2000/svg" width="2880" height="1800" viewBox="0 0 1000 625"><defs><linearGradient id="bg" x2="100%" y2="100%"><stop stop-color="#5a3c39"/><stop offset="1" stop-color="#e4b98c"/></linearGradient><linearGradient id="hill" x2="100%" y2="100%"><stop stop-color="#dbad78"/><stop offset="1" stop-color="#513736"/></linearGradient><linearGradient id="front" x2="100%" y2="100%"><stop stop-color="#c4976b"/><stop offset="1" stop-color="#775746"/></linearGradient></defs><path fill="url(#bg)" d="M0 0h1000v625H0z"/><path d="M-200 505Q180 270 510 183T950 222L1150 900H-200Z" fill="url(#hill)" stroke="#ffffff" stroke-opacity=".17"/><path d="M370 610Q265 170 700 373T1350 910H370Z" fill="url(#front)" stroke="#ffffff" stroke-opacity=".17"/><path d="M-250 705Q35 480 340 472T750 830H-250Z" fill="#493a34"/></svg>

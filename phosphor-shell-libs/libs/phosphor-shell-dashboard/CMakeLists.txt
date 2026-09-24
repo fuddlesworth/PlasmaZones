@@ -7,10 +7,8 @@
 #   Dashboard   every desktop's placement map at once (PlacementMap
 #               .forScreenDesktop per cell), plus the calendar and media
 #               cells in the same grammar; the shell's one scale transition.
-#   Cheatsheet  the keybind sheet drawn ON the placement map: chord labels
-#               on the rects they act on (ChordLayout.js), the non-spatial
-#               chords in a right-edge column, over FullMap (the screen's
-#               cells at 1:1).
+#   Cheatsheet  searchable shortcut reference with mode guides, grouped
+#               keycaps, alternatives, and shared shell appearance.
 #   ShortcutCatalog  the C++ reader behind the sheet: org.plasmazones
 #               .Control.getShortcutsJson plus its shortcutsChanged relay.
 #
@@ -38,7 +36,7 @@ endif()
 # Qt6::QuickShapes target that Phosphor.Widgets links (its PhosphorRipple
 # Shape) without a configure warning. Same reason the lock, power, launcher
 # and control-center modules find it.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes DBus)
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes QuickControls2 DBus)
 
 # The surfaces import Phosphor.Theme (tokens) and Phosphor.Widgets (the
 # miniature and the text atoms). In-tree builds always have the sibling
@@ -66,11 +64,20 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 set(_phosphor_dashboard_qml_files
+    qml/Phosphor/Dashboard/StageOverview.qml
+    qml/Phosphor/Dashboard/StageBackdrop.qml
+    qml/Phosphor/Dashboard/StageWindowFrame.qml
     qml/Phosphor/Dashboard/Dashboard.qml
     qml/Phosphor/Dashboard/DesktopCell.qml
     qml/Phosphor/Dashboard/CalendarCell.qml
     qml/Phosphor/Dashboard/MediaCell.qml
     qml/Phosphor/Dashboard/Cheatsheet.qml
+    qml/Phosphor/Dashboard/ShortcutText.qml
+    qml/Phosphor/Dashboard/ShortcutKeys.qml
+    qml/Phosphor/Dashboard/ShortcutEntry.qml
+    qml/Phosphor/Dashboard/ShortcutGroup.qml
+    qml/Phosphor/Dashboard/ShortcutGuide.qml
+    qml/Phosphor/Dashboard/ShortcutSidebar.qml
     qml/Phosphor/Dashboard/FullMap.qml
     qml/Phosphor/Dashboard/ChordPill.qml
 )
@@ -104,10 +111,15 @@ qt_add_qml_module(PhosphorShellDashboardQml
         Phosphor.Theme
         Phosphor.Widgets
         QtQuick.Layouts
+        QtQuick.Controls.Basic
     SOURCES
         src/phosphorshelldashboard_qml_plugin.cpp
         src/shortcutcatalog.h
         src/shortcutcatalog.cpp
+        src/shortcutreferencemodel.h
+        src/shortcutreferencemodel.cpp
+        src/desktopstage.h
+        src/desktopstage.cpp
     QML_FILES ${_phosphor_dashboard_qml_files} ${_phosphor_dashboard_js_files}
     OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/Phosphor/Dashboard
 )
@@ -115,6 +127,7 @@ qt_add_qml_module(PhosphorShellDashboardQml
 add_library(PhosphorShellDashboard::PhosphorShellDashboardQml ALIAS PhosphorShellDashboardQml)
 
 target_compile_features(PhosphorShellDashboardQml PUBLIC cxx_std_20)
+target_include_directories(PhosphorShellDashboardQml PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 target_include_directories(PhosphorShellDashboardQml
     PRIVATE
@@ -131,6 +144,7 @@ target_link_libraries(PhosphorShellDashboardQml
         Qt6::Gui
         Qt6::Qml
         Qt6::Quick
+        Qt6::QuickControls2
     PRIVATE
         Qt6::DBus
         PhosphorProtocol::PhosphorProtocol

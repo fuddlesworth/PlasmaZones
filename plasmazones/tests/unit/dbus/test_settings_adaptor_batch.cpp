@@ -104,8 +104,7 @@ private Q_SLOTS:
 
     // ─────────────────────────────────────────────────────────────────────
     // Happy path: a representative batch of scalar keys is all returned. (The
-    // shared gap keys are no longer on this generic map — their global default
-    // is rule-backed — so this uses other registered scalars.)
+    // global gaps have their own round-trip test below.)
     // ─────────────────────────────────────────────────────────────────────
     void testGetSettings_scalarKeys_allReturned()
     {
@@ -273,6 +272,33 @@ private Q_SLOTS:
         const bool ok = m_adaptor->setSetting(QStringLiteral("dragActivationTriggers"),
                                               QDBusVariant(QVariant::fromValue(triggers)));
         QVERIFY(ok);
+    }
+
+    // The global gaps are writable over the generic map: the Phosphor shell's
+    // desktop style reads them with getSettings, writes them with one
+    // setSettings batch, and restores the originals the same way. A key that
+    // lost its setter would fail the batch and leave the shell unable to
+    // apply or undo its spacing.
+    void testSetSettings_globalGaps_roundTrip()
+    {
+        const QVariantMap gaps{
+            {QStringLiteral("innerGap"), 12},
+            {QStringLiteral("outerGap"), 5},
+            {QStringLiteral("usePerSideOuterGap"), true},
+            {QStringLiteral("outerGapTop"), 30},
+            {QStringLiteral("outerGapBottom"), 31},
+            {QStringLiteral("outerGapLeft"), 32},
+            {QStringLiteral("outerGapRight"), 33},
+        };
+        QVERIFY(m_adaptor->setSettings(gaps));
+        QCOMPARE(m_settings->innerGap(), 12);
+        QCOMPARE(m_settings->outerGap(), 5);
+        QVERIFY(m_settings->usePerSideOuterGap());
+        QCOMPARE(m_settings->outerGapTop(), 30);
+        QCOMPARE(m_settings->outerGapBottom(), 31);
+        QCOMPARE(m_settings->outerGapLeft(), 32);
+        QCOMPARE(m_settings->outerGapRight(), 33);
+        QCOMPARE(m_adaptor->getSettings(gaps.keys()), gaps);
     }
 
     // ─────────────────────────────────────────────────────────────────────

@@ -36,6 +36,7 @@ PanelWindow {
     // `effectivePathChanged(screenName)` signal, where "" means every
     // screen. Null draws the ground alone.
     property var service: null
+    property Component fallbackWallpaper: null
     // Through PanelWindow.screen, which reads null once the output dies,
     // rather than a snapshot of the row.
     readonly property string screenName: surface.screen ? surface.screen.name : ""
@@ -54,6 +55,7 @@ PanelWindow {
     inputRegion: []
 
     function sync(): void {
+        imageFit = service && typeof service.effectiveFit === "function" ? service.effectiveFit(screenName) : "fill";
         priv.show(surface.service ? String(surface.service.effectivePath(surface.screenName)) : "");
     }
 
@@ -69,6 +71,9 @@ PanelWindow {
                 surface.sync();
         }
     }
+
+    property string imageFit: "fill"
+    readonly property int placement: imageFit === "fit" ? Image.PreserveAspectFit : imageFit === "stretch" ? Image.Stretch : imageFit === "center" ? Image.Pad : Image.PreserveAspectCrop
 
     QtObject {
         id: priv
@@ -149,14 +154,20 @@ PanelWindow {
 
     Rectangle {
         anchors.fill: parent
-        color: Theme.background
+        color: Appearance.recess
+    }
+
+    Loader {
+        anchors.fill: parent
+        active: priv.frontPath === ""
+        sourceComponent: surface.fallbackWallpaper
     }
 
     Image {
         id: slotA
 
         anchors.fill: parent
-        fillMode: Image.PreserveAspectCrop
+        fillMode: surface.placement
         asynchronous: true
         cache: true
         smooth: true
@@ -179,7 +190,7 @@ PanelWindow {
         id: slotB
 
         anchors.fill: parent
-        fillMode: Image.PreserveAspectCrop
+        fillMode: surface.placement
         asynchronous: true
         cache: true
         smooth: true

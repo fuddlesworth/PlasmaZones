@@ -1761,17 +1761,12 @@ public:
     PhosphorAnimationShaders::ShaderProfileTree shaderProfileTree() const override;
     void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree) override;
 
-    /// The committed-baseline shader tree. Reads the ShaderProfileTree key from
-    /// the same committed baseline `isKeyModified()` uses, and applies the
-    /// identical supported-path prune as `shaderProfileTree()` so a
-    /// per-surface Discard/dirty check compares live-vs-committed on equal
-    /// footing. See `committedDecorationProfileTree()` for the sibling rationale.
+    /// Reads the isKeyModified() baseline with shaderProfileTree()'s supported-path
+    /// prune, so per-surface Discard/dirty checks compare equivalent views.
     PhosphorAnimationShaders::ShaderProfileTree committedShaderProfileTree() const override;
 
-    /// String facade for the shaderProfileTreeJson Q_PROPERTY. Routes
-    /// through the existing tree accessors so persistence is identical;
-    /// the Q_PROPERTY entry is purely so the meta-object dirty-tracking
-    /// loop in SettingsController catches it.
+    /// JSON facade for Q_PROPERTY dirty tracking; shares the typed accessors'
+    /// persistence path.
     QString shaderProfileTreeJson() const;
     void setShaderProfileTreeJson(const QString& json);
 
@@ -1786,23 +1781,18 @@ public:
     QString motionProfileTreeJson() const override;
     void setMotionProfileTreeJson(const QString& json) override;
 
-    // Per-surface decoration tree (DecorationProfile: shader-pack chain + its
-    // per-pack parameters), persisted under the Decorations group. Typed accessors
-    // mirror shaderProfileTree; the JSON-string facade backs the Q_PROPERTY
-    // above.
+    // Per-surface pack chains and parameters. The Decorations group stores user
+    // edits; runtime seeds are read-side defaults. JSON backs Q_PROPERTY tracking.
+    PhosphorSurfaceShaders::DecorationProfileTree decorationSeedTree() const override;
+    void setDecorationSeedTree(const PhosphorSurfaceShaders::DecorationProfileTree& seeds);
     PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree() const override;
     void setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& tree) override;
     QString decorationProfileTreeJson() const override;
     void setDecorationProfileTreeJson(const QString& json) override;
 
-    /// The committed-baseline decoration tree — the last-persisted value that
-    /// per-page Discard reverts to and the per-surface decoration dirty check
-    /// compares against. Reads the DecorationProfileTree key from the same
-    /// committed baseline `isKeyModified()` uses, with the identical
-    /// empty→ConfigDefaults fallback as `decorationProfileTree()`, so a
-    /// subtree-scoped Discard sees baseline-vs-current on equal footing. Not on
-    /// ISettings: the committed baseline is a Settings-internal dirty-tracking
-    /// concept, and only SettingsController's per-page kebab consumes it.
+    /// Reads the isKeyModified() baseline with decorationProfileTree()'s runtime
+    /// seeds, so Discard and dirty checks compare equivalent views. Kept off
+    /// ISettings: only SettingsController needs this internal committed snapshot.
     PhosphorSurfaceShaders::DecorationProfileTree committedDecorationProfileTree() const;
 
     // Zone-overlay shader tree (OverlayShaderTree: global baseline +
@@ -2243,6 +2233,12 @@ public:
         return m_announcingPaletteChange;
     }
 
+    /// True only during runtime-default NOTIFY fan-out; this is not a user edit.
+    bool isAnnouncingDecorationSeedChange() const
+    {
+        return m_announcingDecorationSeedChange;
+    }
+
 Q_SIGNALS:
     /// NOTIFYs for the four raw theme-fallback colour strings. Distinct from
     /// the resolved QColor twins' ISettings signals so a palette change
@@ -2513,6 +2509,9 @@ private:
     // switch never touches it: the palette-following zone colours store the
     // empty sentinel and resolve in their getters, so nothing is written.
     QHash<QString, QVariantMap> m_baseline;
+
+    PhosphorSurfaceShaders::DecorationProfileTree m_decorationSeeds = ConfigDefaults::decorationProfileTree();
+    bool m_announcingDecorationSeedChange = false;
 
     // Raised (RAII, via QScopedValueRollback) around eventFilter()'s
     // palette-change NOTIFY fan-out; surfaced through

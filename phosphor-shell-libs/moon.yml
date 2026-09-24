@@ -13,3 +13,13 @@ dependsOn:
 project:
   name: 'Phosphor shell libraries'
   description: 'Theme, popout and IPC foundation, the Phosphor.* QML surfaces and the per-domain system service libraries behind the shell.'
+
+tasks:
+  # The bar's tray test drives phosphor-shell's nested-shell tray fixture, and
+  # affectedness does not propagate from a dependent tier back to this one, so
+  # editing the fixture would otherwise leave the test that runs it unrun
+  # under `moon run :test --affected`. Same shape as phosphor-shell/moon.yml's
+  # input on plasmazones/data/surface.
+  test:
+    inputs:
+      - '/phosphor-shell/scripts/nested-shell/tray-fixture.py'

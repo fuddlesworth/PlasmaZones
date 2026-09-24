@@ -35,15 +35,10 @@ QtObject {
     readonly property int radius_xl: 24
     readonly property int radius_xxl: 32
     readonly property int radius_full: 9999
-    // Shell chrome radii (docs/phosphor-shell-design/05-visual-identity.md
-    // R3). Chrome uses ONLY these four: edge for OSD cards, fields and
-    // outlined chips; tile for engine-placed panes; container for floating
-    // cards; mini for placement-map miniature cells. radius_l / radius_xl /
-    // radius_xxl / radius_full above are settings-page tokens and are
-    // forbidden on shell chrome (no pills, nothing above 10 px).
-    readonly property int radius_edge: 6
-    readonly property int radius_tile: 8
-    readonly property int radius_container: 10
+    // Shell chrome follows the persisted appearance independently of settings pages.
+    readonly property int radius_edge: Math.min(10, Appearance.radius)
+    readonly property int radius_tile: Math.max(4, Appearance.radius - 5)
+    readonly property int radius_container: Appearance.radius
     readonly property int radius_mini: 3
     // ─── Elevation (per tier) ────────────────────────────────────────────
     // Settings pages only. Shell chrome carries no drop shadow (R2): depth
@@ -100,20 +95,20 @@ QtObject {
     // families so a missing face degrades to a named fallback rather than
     // whatever fontconfig substitutes; `font_family` above stays the
     // settings-page face.
-    readonly property string font_family_ui: FontFaces.ui
-    readonly property string font_family_mono: FontFaces.mono
-    readonly property int font_size_display_l: 32
-    readonly property int font_size_display_m: 24
-    readonly property int font_size_display_s: 20
-    readonly property int font_size_title_l: 18
-    readonly property int font_size_title_m: 16
-    readonly property int font_size_title_s: 14
-    readonly property int font_size_body_l: 14
-    readonly property int font_size_body_m: 13
-    readonly property int font_size_body_s: 12
-    readonly property int font_size_label_l: 13
-    readonly property int font_size_label_m: 12
-    readonly property int font_size_label_s: 11
+    readonly property string font_family_ui: AppearanceStore.values.uiFont || FontFaces.ui
+    readonly property string font_family_mono: AppearanceStore.values.monoFont || FontFaces.mono
+    readonly property int font_size_display_l: Math.round(32 * AppearanceStore.values.textScale / 100)
+    readonly property int font_size_display_m: Math.round(24 * AppearanceStore.values.textScale / 100)
+    readonly property int font_size_display_s: Math.round(20 * AppearanceStore.values.textScale / 100)
+    readonly property int font_size_title_l: Math.round(18 * AppearanceStore.values.textScale / 100)
+    readonly property int font_size_title_m: Math.round(16 * AppearanceStore.values.textScale / 100)
+    readonly property int font_size_title_s: Math.round(14 * AppearanceStore.values.textScale / 100)
+    readonly property int font_size_body_l: Math.round(14 * AppearanceStore.values.textScale / 100)
+    readonly property int font_size_body_m: Math.round(13 * AppearanceStore.values.textScale / 100)
+    readonly property int font_size_body_s: Math.round(12 * AppearanceStore.values.textScale / 100)
+    readonly property int font_size_label_l: Math.round(13 * AppearanceStore.values.textScale / 100)
+    readonly property int font_size_label_m: Math.round(12 * AppearanceStore.values.textScale / 100)
+    readonly property int font_size_label_s: Math.round(11 * AppearanceStore.values.textScale / 100)
     readonly property int font_weight_regular: Font.Normal
     readonly property int font_weight_medium: Font.Medium
     readonly property int font_weight_demibold: Font.DemiBold
@@ -126,7 +121,7 @@ QtObject {
     // A coloured hairline on a bright field needs more ink (A1 §2.5).
     readonly property real stroke_resting_light: 0.55
     readonly property real stroke_active: 1.0
-    readonly property int bar_thickness: 28
+    readonly property int bar_thickness: Appearance.barHeight + 2 * Appearance.barOffset
     readonly property int rail_thickness: 2
 
     // ─── Shell surface dimensions ────────────────────────────────────────

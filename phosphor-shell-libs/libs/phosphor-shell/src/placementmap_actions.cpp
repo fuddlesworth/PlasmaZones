@@ -116,6 +116,24 @@ void PlacementMapScreen::activate(const QString& id)
     }
 }
 
+void PlacementMapScreen::activateNavigationWindow(const QString& windowId)
+{
+    if (!m_map->isAvailable()) {
+        return;
+    }
+    for (const Cell& cell : std::as_const(m_resolvedWindows)) {
+        if (cell.windowId == windowId) {
+            if (isPinned()) {
+                switchDesktop(m_pinnedDesktop);
+            }
+            // Activating the exact window also selects inactive tabs and
+            // lets the scrolling engine bring an offscreen column into view.
+            activateWindow(windowId);
+            return;
+        }
+    }
+}
+
 void PlacementMapScreen::activateWindow(const QString& windowId)
 {
     // Without the verb (older daemon) a click on an occupied cell does
@@ -311,6 +329,38 @@ void PlacementMapScreen::moveToDesktop(const QString& id, int index)
         });
 }
 
+void PlacementMapScreen::moveNavigationWindowToDesktop(const QString& windowId, int index)
+{
+    if (windowId.isEmpty() || index < 0 || index >= m_desktopCount || !m_map->isAvailable()
+        || !m_map->m_caps.moveWindowToDesktop) {
+        return;
+    }
+    for (const Cell& cell : std::as_const(m_resolvedWindows)) {
+        if (cell.windowId == windowId) {
+            call<void>(
+                Iface::WindowTracking, QStringLiteral("moveWindowToDesktop"), {windowId, index + 1}, [] { },
+                [this](const QDBusError& error) {
+                    latchUnknownMethod(m_map->m_caps.moveWindowToDesktop, error);
+                });
+            return;
+        }
+    }
+}
+
+void PlacementMapScreen::placeNavigationWindowInZone(const QString& windowId, const QString& zoneId)
+{
+    const Cell* zone = cellById(zoneId);
+    if (m_mode != Snapping || !zone || windowId.isEmpty() || !m_map->isAvailable()) {
+        return;
+    }
+    for (const Cell& cell : std::as_const(m_resolvedWindows)) {
+        if (cell.windowId == windowId) {
+            m_map->m_bus->call(Iface::Snap, QStringLiteral("moveWindowToZone"), {windowId, zoneId});
+            return;
+        }
+    }
+}
+
 // ─── Drop proxy ───────────────────────────────────────────────────────
 
 void PlacementMapScreen::registerDropProxy(const QRect& miniatureScreenRect, const QVariantList& cellScreenRects)
@@ -494,6 +544,18 @@ void PlacementMapScreen::fetchScrollingMenu()
             menu.append(verb(VerbToggleMaximizeColumn));
             setMenu(menu);
         });
+}
+
+void PlacementMapScreen::setPlacementMode(int mode)
+{
+    const int desktop = wireDesktop();
+    if (!m_map->isAvailable() || m_screenId.isEmpty() || desktop <= 0 || mode < Snapping || mode > Scrolling
+        || mode == m_mode) {
+        return;
+    }
+    m_map->m_bus->call(Iface::LayoutRegistry, QStringLiteral("setAssignmentEntry"),
+                       {m_screenId, desktop, m_map->currentActivity(), mode, m_state.layoutId, m_state.algorithmId});
+    m_map->m_bus->call(Iface::LayoutRegistry, QStringLiteral("applyAssignmentChanges"), {});
 }
 
 void PlacementMapScreen::applyMenuChoice(const QString& kind, const QString& id)

@@ -147,9 +147,9 @@ bool PlasmaZonesEffect::isActive() const
     // must not keep the effect in the chain.
     //
     // `!m_windowDecorations.isEmpty()` is the SAME persistent case as opacity
-    // rules: a per-window border is rendered passively in drawWindow by
-    // re-blitting the redirected window through the border shader on every
-    // composite (the KDE-Rounded-Corners / LightlyShaders model). Those
+    // rules: a per-window decoration is rendered passively in drawWindow by
+    // re-blitting the redirected window through its retained surface chain on
+    // every composite. Those
     // effects keep isActive() true whenever they manage a window; without
     // this clause an idle bordered window (no drag/animation/transition)
     // drops the effect from the chain, drawWindow is never called, and the
@@ -207,8 +207,8 @@ bool PlasmaZonesEffect::isActive() const
     // effect in the chain (the spring settling mid-fade dropped it, jumping
     // the corpse by the frozen offset). O(1); entries are bounded by corpse
     // lifetime (sole erase at windowDeleted).
-    return m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty()
-        || !m_windowDecorations.isEmpty() || m_desktopTransition.isRunning()
+    return m_shellOverview->active() || m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations()
+        || !m_shaderManager.empty() || !m_windowDecorations.isEmpty() || m_desktopTransition.isRunning()
         || m_stripViewAnimator->hasActiveAnimations() || m_stripTransition.isRunning()
         || m_stripTransition.holdsCursorHide() || m_scrollTabPainter->hasAnyIndicators()
         || !m_scrollCorpseFreeze.isEmpty()

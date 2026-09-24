@@ -1,0 +1,719 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+'use strict';
+
+const $ = selector => document.querySelector(selector);
+const $$ = selector => [...document.querySelectorAll(selector)];
+const icon = name => `<svg class="icon" aria-hidden="true"><use href="#${name}"/></svg>`;
+const defaults = {...PhosphorStats.defaults,...PhosphorTray.defaults,palette:'spectrum',material:'glass',edge:'top',density:'comfortable',radius:18,gap:16,glow:true,media:true,motion:true,visualizer:'ribbon',lockLayout:'split',lockMedia:false,lockNotifications:true,notificationGrouping:'app',notificationPreviews:true};
+const presets = {
+  phosphor:{...defaults},
+  paper:{...defaults,palette:'wallpaper',material:'light',radius:24,gap:22,glow:false},
+  ember:{...defaults,palette:'ember',material:'solid',density:'compact',radius:8,gap:10,edge:'bottom',glow:false,media:false}
+};
+let settings = {...defaults};
+try {
+  const saved = JSON.parse(localStorage.getItem('phosphor-design-settings') || 'null');
+  if (saved) for (const key of Object.keys(defaults)) {
+    if(key.startsWith('tray')) { settings[key]=PhosphorTray.preferences(saved)[key]; continue; }
+    const choices = {statsStyle:['traces','meters','numbers'],statsMemoryUnit:['percent','used'],statsInterval:[1,2,5],palette:['spectrum','wallpaper','ember'],material:['glass','solid','light'],edge:['top','bottom'],density:['comfortable','compact'],visualizer:['ribbon','bars','halo','off'],lockLayout:['split','centered'],notificationGrouping:['app','time']};
+    if (choices[key]?.includes(saved[key])) settings[key] = saved[key];
+    else if (typeof defaults[key] === 'boolean' && typeof saved[key] === 'boolean') settings[key] = saved[key];
+    else if (key === 'radius' && Number.isFinite(saved[key])) settings[key] = Math.min(30,Math.max(4,saved[key]));
+    else if (key === 'gap' && Number.isFinite(saved[key])) settings[key] = Math.min(30,Math.max(6,saved[key]));
+  }
+} catch { /* Storage is optional when opening a local file. */ }
+
+try {Object.assign(settings,PhosphorStats.preferences(settings));}
+catch {Object.assign(settings,PhosphorStats.defaults);}
+
+const windows = [
+  {id:'editor',app:'Kate',title:'Shell.qml',type:'editor',icon:'terminal',workspace:0},
+  {id:'browser',app:'Firefox',title:'Phosphor · Surface library',type:'browser',icon:'globe',workspace:0},
+  {id:'terminal',app:'Konsole',title:'shell-design',type:'terminal',icon:'terminal',workspace:0},
+  {id:'build',app:'Konsole',title:'Build output',type:'terminal',icon:'terminal',workspace:1},
+  {id:'docs',app:'Firefox',title:'Qt Quick documentation',type:'browser',icon:'globe',workspace:1},
+  {id:'music',app:'Music',title:'Tycho · Dive',type:'music',icon:'music',workspace:2},
+  {id:'files',app:'Dolphin',title:'Music collection',type:'files',icon:'folder',workspace:2},
+  {id:'listen-browser',app:'Firefox',title:'Phosphor · Surface library',type:'browser',icon:'globe',workspace:2},
+  {id:'listen-terminal',app:'Konsole',title:'shell-design',type:'terminal',icon:'terminal',workspace:2}
+];
+const workspaces = ['Develop','Build','Listen'];
+const state = {study:'navigator',view:'overview',workspace:0,focused:'editor',mode:'tiling',modes:['tiling','tiling','scrolling'],offset:0,snapSlots:{},detail:null,
+  wifi:true,bluetooth:true,dnd:false,night:false,playing:true,volume:64,brightness:78,network:'Home network',device:'Headphones',query:'',filter:'all',resultIndex:0,powerIndex:0,powerArmed:''};
+// Match the fixed date/time in the design scene. Agenda entries are sample data.
+const previewToday = new Date(2026,8,12,12);
+const calendar = {year:2026,month:8,selected:new Date(2026,8,12,12)};
+const dateKey = date => `${date.getFullYear()}-${date.getMonth()+1}-${date.getDate()}`;
+const sampleEvents = {
+  '2026-9-12':[['11:00','Shell design review','45 min · Design','var(--c2)'],['15:30','Focus time','1 hour · Personal','var(--c3)']],
+  '2026-9-14':[['09:30','Weekly planning','30 min · Personal','var(--c2)']],
+  '2026-9-17':[['14:00','Prototype review','1 hour · Design','var(--c3)']],
+  '2026-9-21':[['10:00','Plan the next iteration','30 min · Design','var(--c2)']]
+};
+let toastTimer, osdTimer, powerTimer, lastResults = [], returnFocus = null;
+const desktop = $('#desktop');
+const notificationCenter = PhosphorNotifications.create({root:$('#notifications'),icon,getSettings:()=>settings,
+  getQuiet:()=>state.dnd,setQuiet:value=>{state.dnd=value;},onChanged:updateNotificationBell,onDismiss:()=>setView('desktop')});
+const lockscreen = PhosphorLock.create({root:$('#lockscreen'),icon,getSettings:()=>settings,isPlaying:()=>state.playing,
+  togglePlayback:()=>{state.playing=!state.playing;},syncVisualizer,onUnlocked:()=>setView('desktop'),
+  onPhaseChanged:phase=>desktop.classList.toggle('lock-releasing',phase==='success')});
+const appearance = PhosphorAppearance.create({root:$('#appearance'),desktop,icon,getSettings:()=>settings,
+  setSettings:(value,persist=false,redraw=true)=>{settings={...value};applySettings(persist,redraw);},presets,
+  onClose:()=>setView('desktop'),notify});
+const quickSettings = PhosphorQuickSettings.create({root:$('#controls'),review:$('#quick-preview-controls'),icon,shared:state,
+  onRedraw:renderControls,onSummary:refreshBar});
+const systemStats = PhosphorStats.create({root:$('#stats'),review:$('#stats-preview-controls'),desktop,icon,getSettings:()=>settings,
+  patchSettings:patch=>{settings={...settings,...patch};$('#preset').value='custom';applySettings(true,false);},onDismiss:()=>setView('desktop')});
+const systemTray = PhosphorTray.create({root:$('#tray'),review:$('#tray-preview-controls'),desktop,icon,getSettings:()=>settings,
+  patchSettings:patch=>{settings={...settings,...patch};$('#preset').value='custom';applySettings(true,false);},
+  onShow:()=>setView('tray'),onDismiss:()=>setView('desktop'),onBarChanged:refreshBar,notify});
+const authentication = PhosphorAuth.create({root:$('#authentication'),review:$('#auth-preview-controls'),desktop,icon,getSettings:()=>settings,
+  onDismiss:reason=>{setView('desktop');notify(reason==='success'?'Authentication complete.':'Authentication cancelled.');}});
+const shortcuts = PhosphorShortcuts.create({root:$('#shortcuts'),review:$('#shortcuts-preview-controls'),icon,
+  getContext:()=>({mode:state.mode,workspace:workspaces[state.workspace]}),
+  onContextMode:mode=>{state.mode=mode;state.modes[state.workspace]=mode;renderBar();renderWindows();},onDismiss:()=>setView('desktop')});
+const currentWindows = () => windows.filter(w => w.workspace === state.workspace);
+const selectedWindow = () => windows.find(w => w.id === state.focused);
+const hue = index => ['var(--c1)','var(--c3)','var(--c4)','var(--c2)'][index % 4];
+const escapeHTML = text => String(text).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function geometry(list = currentWindows(), mode = state.mode) {
+  const n = list.length;
+  return list.map((w,i) => {
+    if (mode === 'scrolling') return {x:i*.51,y:0,w:.5,h:1};
+    if (mode === 'snapping') {
+      const slot = state.snapSlots[w.id] ?? i;
+      return {x:(slot%2)*.5,y:Math.floor(slot/2)*.5,w:.5,h:.5};
+    }
+    if (n === 1) return {x:0,y:0,w:1,h:1};
+    if (n === 2) return {x:i*.5,y:0,w:.5,h:1};
+    if (i === 0) return {x:0,y:0,w:.58,h:1};
+    return {x:.58,y:(i-1)/(n-1),w:.42,h:1/(n-1)};
+  });
+}
+
+function mappedGeometry(list = currentWindows(), mode = state.mode) {
+  const rects = geometry(list, mode);
+  const extent = mode === 'scrolling' ? Math.max(1,list.length*.51-.01) : 1;
+  return rects.map(r => ({...r,x:r.x/extent,w:r.w/extent}));
+}
+
+function rectStyle(r, gap = 4) {
+  return `left:calc(${r.x*100}% + ${gap/2}px);top:calc(${r.y*100}% + ${gap/2}px);width:calc(${r.w*100}% - ${gap}px);height:calc(${r.h*100}% - ${gap}px)`;
+}
+
+function normalizeFocus() {
+  const list = currentWindows();
+  if (!list.some(w => w.id === state.focused)) state.focused = list[0]?.id || null;
+  if (state.mode === 'scrolling') {
+    const index = Math.max(0,list.findIndex(w => w.id === state.focused));
+    state.offset = Math.max(0,Math.min(index*.51-.25,list.length*.51-1.01));
+  } else state.offset = 0;
+}
+
+function renderBar() {
+  const list = currentWindows(), rects = mappedGeometry();
+  const scrolling=state.mode==='scrolling',full=geometry();
+  const before=scrolling?full.filter(r=>r.x+r.w<=state.offset+.001).length:0;
+  const after=scrolling?full.filter(r=>r.x>=state.offset+1-.001).length:0;
+  const mini=list.map((w,i)=>{
+    const r=scrolling?{...full[i],x:full[i].x-state.offset}:rects[i];
+    if(scrolling&&(r.x+r.w<=0||r.x>=1))return '';
+    return `<span class="${w.id===state.focused?'focused':''}" style="${rectStyle(r,3)};--hue:${hue(i)}"></span>`;
+  }).join('');
+  $('#bar').innerHTML = `
+    <button class="brand" data-view="launcher" aria-label="Open launcher"><span class="phosphor-mark" aria-hidden="true"></span></button>
+    <span class="bar-separator"></span><span class="bar-app">${escapeHTML(selectedWindow()?.app || 'Desktop')} &nbsp; / &nbsp; ${escapeHTML(selectedWindow()?.title || 'Empty workspace')}</span>
+    ${settings.media ? `<button class="bar-media" data-view="controls" aria-label="Open media controls">${icon('music')} A Walk ${settings.visualizer!=='off'?'<canvas class="bar-spectrum" data-visualizer="mini" width="80" height="32" aria-hidden="true"></canvas>':''}</button>` : ''}
+    <div class="bar-center">
+      <button class="map-trigger" data-view="overview" aria-label="Open window navigation" aria-expanded="${state.view==='overview'}">
+        ${scrolling?`<span class="map-overflow ${before?'':'empty'}" aria-label="${before} windows before viewport">${before?`+${before}`:'·'}</span>`:''}
+        <span class="bar-map">${mini}</span>
+        ${scrolling?`<span class="map-overflow ${after?'':'empty'}" aria-label="${after} windows after viewport">${after?`+${after}`:'·'}</span>`:''}
+        <span class="map-caption"><b>${workspaces[state.workspace]}</b><br>${state.mode[0].toUpperCase()+state.mode.slice(1)} <span aria-hidden="true">⌄</span></span>
+      </button>
+      <div class="bar-workspaces">${workspaces.map((name,i)=>`<button data-workspace="${i}" aria-label="Switch to ${name}" aria-pressed="${i===state.workspace}">0${i+1}</button>`).join('')}</div>
+    </div>
+    <div class="bar-right">${systemTray.barMarkup()}${systemStats.barMarkup()}
+    <button class="bar-notifications" data-view="notifications" data-unread="${notificationCenter.unread()>0}" aria-label="Notifications, ${notificationCenter.unread()} unread" aria-expanded="${state.view==='notifications'&&notificationCenter.inboxOpen()}" aria-controls="notifications">${icon('bell')}</button>
+    <button class="status-cluster" data-view="controls" aria-label="Open quick settings" aria-expanded="${state.view==='controls'}">${icon('wifi')}${icon('volume')}</button>
+    <button class="clock" data-view="datetime" aria-label="Open date and time" aria-expanded="${state.view==='datetime'}" aria-controls="datetime"><span class="clock-date">Sat 12</span><span class="clock-time">10:24</span></button>
+    <button class="settings-trigger" data-view="appearance" aria-label="Open Appearance">◈</button>
+    <button class="bar-power" data-view="power" aria-label="Open session menu" aria-expanded="${state.view==='power'}">${icon('power')}</button></div>`;
+  syncVisualizer();
+}
+
+function refreshBar() {
+  renderBar();
+  appearance.render(state.view==='appearance');
+  systemTray.render(state.view==='tray');
+}
+
+function windowContent(w) {
+  if (w.type === 'editor') return `<div class="editor-body"><aside class="file-tree"><b>PHOSPHOR SHELL</b>⌄ &nbsp; qml<br>&nbsp; ⌄ &nbsp; components<br>&nbsp; &nbsp; &nbsp; Bar.qml<br>&nbsp; &nbsp; &nbsp; Surface.qml<br><div class="selected">&nbsp; &nbsp; &nbsp; Shell.qml</div>&nbsp; &nbsp; &nbsp; WorkspaceMap.qml<br><br>› &nbsp; services<br>› &nbsp; themes<br>› &nbsp; shaders</aside><div class="code-pane"><div class="code-tab"><span>Shell.qml</span><span style="color:var(--muted)">main ●</span></div><pre><span class="keyword">import</span> QtQuick
+<span class="keyword">import</span> Phosphor.Shell
+<span class="keyword">import</span> Phosphor.Theme
+
+<span class="string">Shell</span> {
+    id: desktop
+
+    <span class="string">Bar</span> {
+        placement: <span class="value">Top</span>
+        workspaceMap: <span class="value">true</span>
+        surface: Theme.glass
+    }
+
+    <span class="string">WindowPlacement</span> {
+        mode: <span class="value">Tiling</span>
+        gap: Theme.spacing
+    }
+}</pre></div></div><div class="code-status"><span>⑂ shell-design &nbsp; ✓ No issues</span><span>QML &nbsp; UTF-8 &nbsp; 4 spaces</span></div>`;
+  if (w.type === 'browser') return `<div class="browser-content"><div class="browser-url">⌕ &nbsp; ${w.id==='docs'?'doc.qt.io / qtquick':'phosphor / surfaces'}</div><small>PHOSPHOR / MATERIAL STUDIES</small><h2>Light defines<br>the edges.</h2><p>A shared color field connects the shell to the windows it manages. Depth gives each surface its place.</p><div class="sample-rail"></div><div class="sample-cards"><div>01 &nbsp; Glass</div><div>02 &nbsp; Ground</div><div>03 &nbsp; Light</div></div></div>`;
+  if (w.type === 'terminal') return `<div class="terminal-content"><span class="prompt">❯</span> cmake --build build<br><span class="success">[128/128]</span> Linking phosphor-shell<br><br><span class="prompt">❯</span> ctest --test-dir build<br><span class="success">✓</span> shell geometry<br><span class="success">✓</span> workspace model<br><span class="success">✓</span> surface lifecycle<br><br><span class="success">100% tests passed.</span><br><span style="opacity:.6">Illustrative terminal content</span><br><br><span class="prompt">❯</span> <span style="color:var(--text)">▏</span></div>`;
+  if (w.type === 'music') return `<div class="browser-content"><div class="album" style="width:100px;height:110px;margin-bottom:25px"></div><small>TYCHO / DIVE</small><h2>A Walk</h2><p>2:34 &nbsp; ━━━━━━━━━ &nbsp; 5:16</p><div class="sample-rail"></div><p>1. A Walk<br>2. Hours<br>3. Daydream<br>4. Dive</p></div>`;
+  return `<div class="browser-content"><small>MUSIC COLLECTION</small><h2>Albums</h2><div class="sample-cards"><div>Dive</div><div>Awake</div><div>Epoch</div></div><p>3 folders · Local collection</p></div>`;
+}
+
+function renderWindows() {
+  const list = currentWindows(), rects = geometry();
+  $('#windows').style.overflow = state.mode==='scrolling'?'hidden':'visible';
+  $('#windows').innerHTML = list.length ? list.map((w,i)=>{
+    const r = {...rects[i],x:rects[i].x-state.offset};
+    return `<article class="app-window ${w.id===state.focused?'focused':''}" style="${rectStyle(r,settings.gap)};--hue:${hue(i)}" data-select="${w.id}" tabindex="0" aria-label="Select ${escapeHTML(w.app+': '+w.title)}" role="button" aria-pressed="${w.id===state.focused}">
+    <div class="window-title">${icon(w.icon)} ${escapeHTML(w.app)} <span style="opacity:.4">/</span> ${escapeHTML(w.title)} <span class="window-buttons">− ◇ ×</span></div>
+    ${windowContent(w)}<span class="window-focus-label">${w.id===state.focused?'Selected · Enter to open':'Click to select'}</span></article>`;
+  }).join('') : `<div class="material" style="position:absolute;left:25%;top:35%;width:50%;padding:40px;text-align:center"><h2 style="font-weight:500">An empty workspace</h2><p class="sub">Launch an app or move a window here.</p><button class="text-button" data-view="launcher">Open launcher →</button></div>`;
+}
+
+function modeControl() {
+  return `<label class="mode-select">Placement <select data-mode aria-label="Placement mode">${['tiling','scrolling','snapping'].map(mode=>`<option value="${mode}" ${state.mode===mode?'selected':''}>${mode[0].toUpperCase()+mode.slice(1)}</option>`).join('')}</select></label>`;
+}
+
+function largeMap() {
+  const list = currentWindows(), rects = mappedGeometry();
+  if(state.mode==='scrolling') {
+    const extent=Math.max(1,list.length*.51-.01)*220;
+    return `<div class="scroll-map" tabindex="0" aria-label="All ${list.length} scrolling windows; scroll horizontally to browse"><div class="scroll-map-inner" style="width:${extent}px">${list.map((w,i)=>`<button class="map-cell" data-focus="${w.id}" aria-pressed="${w.id===state.focused}" style="left:${i*.51*220+3}px;--hue:${hue(i)}" aria-label="Focus window ${i+1} of ${list.length}: ${escapeHTML(w.app+': '+w.title)}">${icon(w.icon)}<span>WINDOW ${String(i+1).padStart(2,'0')}</span><b>${escapeHTML(w.app)}</b><span>${escapeHTML(w.title)}</span></button>`).join('')}<div class="strip-lens" style="left:${state.offset*220}px;width:220px" aria-hidden="true"></div></div></div>`;
+  }
+  const occupied = new Set(list.map((w,i)=>state.snapSlots[w.id] ?? i));
+  const empty = state.mode==='snapping' ? [0,1,2,3].filter(i=>!occupied.has(i)).map(i=>`<button class="map-cell" data-zone="${i}" style="${rectStyle({x:(i%2)*.5,y:Math.floor(i/2)*.5,w:.5,h:.5},9)};--hue:var(--c2);background:transparent;border-style:dashed" aria-label="Move selected window to empty zone ${i+1}"><span>＋ Empty zone ${i+1}</span></button>`).join('') : '';
+  const extent = Math.max(1,list.length*.51-.01);
+  const lens = state.mode==='scrolling' ? `<div style="position:absolute;pointer-events:none;left:${state.offset/extent*100}%;width:${100/extent}%;top:0;bottom:0;border:2px solid var(--text);border-radius:8px;opacity:.65" aria-hidden="true"></div>` : '';
+  return `<div class="large-map" aria-label="Current window placement">${list.map((w,i)=>`<button class="map-cell" data-focus="${w.id}" aria-pressed="${w.id===state.focused}" style="${rectStyle(rects[i],9)};--hue:${hue(i)}" aria-label="Focus ${escapeHTML(w.app+': '+w.title)}">${icon(w.icon)}<b>${escapeHTML(w.app)}</b><span>${escapeHTML(w.title)}</span></button>`).join('')}${empty}${lens}</div>`;
+}
+
+function renderOverview() {
+  const el = $('#overview');
+  el.className = state.view==='overview' ? (state.study==='navigator'?'material':'') : 'hidden';
+  if (state.study === 'navigator') {
+    el.innerHTML = `<div class="pane-heading"><div><small>Workspace 0${state.workspace+1} / ${workspaces[state.workspace]}</small><h2>Your windows, within reach.</h2></div>${modeControl()}<button class="close" data-dismiss aria-label="Close navigator">×</button></div>
+    <div class="navigator-layout">${largeMap()}<div class="navigator-list">${currentWindows().map((w,i)=>`<button class="window-row" data-focus="${w.id}" aria-pressed="${w.id===state.focused}" style="--hue:${hue(i)}">${icon(w.icon)}<span><b>${escapeHTML(w.app)}</b><span class="sub">${escapeHTML(w.title)}</span></span></button>`).join('')}</div></div>
+    ${state.mode==='scrolling'?`<div class="strip-navigation"><button data-strip-step="-1" ${currentWindows()[0]?.id===state.focused?'disabled':''}>← Previous</button><span>Window ${currentWindows().findIndex(w=>w.id===state.focused)+1} of ${currentWindows().length} · Drag scrollbar to browse</span><button data-strip-step="1" ${currentWindows().at(-1)?.id===state.focused?'disabled':''}>Next →</button></div>`:''}
+    <div class="desktop-switcher">${workspaces.map((name,i)=>`<button class="desktop-choice" data-workspace="${i}" aria-pressed="${i===state.workspace}"><span>0${i+1} &nbsp; ${name}</span><span>${windows.filter(w=>w.workspace===i).length}</span></button>`).join('')}</div>
+    <div class="pane-footer"><span><kbd>←</kbd> <kbd>→</kbd> Select &nbsp; <kbd>Enter</kbd> Focus &nbsp; <kbd>Esc</kbd> Close</span><span>${state.mode==='snapping'?'Empty zone → move selected window':'Click a window to focus it'}</span></div>`;
+  } else {
+    el.innerHTML = `<div class="stage-title"><div><span class="eyebrow">WORKSPACE 0${state.workspace+1} / ${state.mode.toUpperCase()}</span><h2>${workspaces[state.workspace]}</h2></div><span class="sub">Click to select · Enter or double-click to open</span></div>
+    <nav class="stage-desktops" aria-label="Workspace thumbnails">${workspaces.map((name,index)=>{
+      const list=windows.filter(w=>w.workspace===index),rects=mappedGeometry(list,state.modes[index]);
+      return `<button class="stage-desktop" data-workspace="${index}" aria-pressed="${index===state.workspace}"><div class="thumb">${list.map((w,i)=>`<i style="${rectStyle(rects[i],5)};--hue:${hue(i)}"></i>`).join('')}</div><span class="desktop-name"><span>0${index+1} &nbsp; ${name}</span><span>${list.length}</span></span></button>`;
+    }).join('')}</nav>
+    <aside class="stage-inspector material"><div class="eyebrow">THIS WORKSPACE</div><h3>Shape the space</h3>${modeControl()}<span class="sub">${{tiling:'A main window with a supporting stack.',scrolling:'Columns continue beyond the viewport. Select a window to bring it into view.',snapping:'Four targets for deliberate placement.'}[state.mode]}</span><div class="inspector-rule"></div><div class="inspector-kicker">SELECTED WINDOW</div><b style="font-size:12px;font-weight:500">${escapeHTML(selectedWindow()?.app || 'No window')}</b><span class="sub" style="font-size:10px;margin-top:6px">${escapeHTML(selectedWindow()?.title || '')}</span><div class="inspector-rule"></div><div class="inspector-kicker">MOVE TO WORKSPACE</div><div class="move-buttons">${workspaces.map((name,i)=>`<button data-move="${i}" ${i===state.workspace || !state.focused?'disabled':''} aria-label="Move selected window to ${name}">0${i+1}</button>`).join('')}</div>${state.mode==='snapping'?`<div class="inspector-rule"></div><div class="inspector-kicker">PLACE IN ZONE</div><div class="move-buttons">${[0,1,2,3].map(i=>`<button data-zone="${i}" aria-label="Place selected window in zone ${i+1}">${i+1}</button>`).join('')}</div>`:''}</aside>
+    <div class="stage-bottom"><span><kbd>←</kbd> <kbd>→</kbd> Select window &nbsp; <kbd>Enter</kbd> Open &nbsp; <kbd>Esc</kbd> Return</span><button class="text-button" data-dismiss>Return to desktop ↗</button></div>`;
+  }
+  const index=currentWindows().findIndex(w=>w.id===state.focused);
+  const strip=$('#overview .scroll-map');
+  if(strip)strip.scrollLeft=Math.max(0,(index*.51+.25)*220-strip.clientWidth/2);
+  const row=$('#overview .window-row[aria-pressed=true]');
+  if(row)row.parentElement.scrollTop=Math.max(0,row.offsetTop-row.parentElement.offsetTop-75);
+}
+
+function connectionRow(key,title,subtitle,symbol) {
+  return `<div class="connection"><button class="connection-toggle" data-toggle="${key}" aria-pressed="${state[key]}" aria-label="Toggle ${title}">${icon(symbol)}<span><b>${title}</b><span class="sub">${state[key]?escapeHTML(subtitle):'Off'}</span></span></button><button class="connection-details" data-detail="${key}" aria-label="${key==='wifi'?'Choose Wi-Fi network':'Manage Bluetooth devices'}">›</button></div>`;
+}
+
+function slider(key,label,symbol) {
+  return `<div class="slider-block"><label><span class="slider-label"><span>${icon(symbol)} ${label}</span><output id="${key}-output">${key==='volume'&&state.volumeMuted?'Muted · ':''}${state[key]}%</output></span><input type="range" data-level="${key}" aria-label="${label}" min="0" max="100" value="${state[key]}" style="--value:${state[key]}%"></label></div>`;
+}
+
+function syncVisualizer() {
+  window.PhosphorVisualizer.sync({playing:state.playing,motion:settings.motion,style:settings.visualizer,glow:settings.glow});
+}
+
+function mediaCard() {
+  const styles=[['ribbon','Ribbon'],['bars','Bars'],['halo','Halo'],['off','Off']];
+  return `<div class="media-card visual-media"><div class="media-top"><div class="album"></div><div class="track"><b>A Walk</b><span class="sub">Tycho · Dive</span></div><button class="play" data-play aria-label="${state.playing?'Pause':'Play'} music" aria-pressed="${state.playing}">${state.playing?'Ⅱ':'▶'}</button></div>
+    ${settings.visualizer!=='off'?`<canvas class="media-visualizer" data-visualizer="main" width="640" height="180" role="img" aria-label="${settings.visualizer} visualizer with simulated audio"></canvas>`:''}
+    <div class="visualizer-footer"><span>${settings.visualizer==='off'?'2:34 / 5:16':state.playing?'Preview signal':'Paused'}</span><select data-viz-style aria-label="Media visualizer style">${styles.map(([id,name])=>`<option value="${id}" ${settings.visualizer===id?'selected':''}>${name}</option>`).join('')}</select></div></div>`;
+}
+
+function renderControls() {
+  const el = $('#controls');
+  el.className = state.view==='controls'?'material':'hidden';
+  if (quickSettings.render(state.view==='controls',state.detail)) {syncVisualizer();return;}
+  const heading = `<div class="controls-heading"><h2>Quick settings</h2><span class="battery-summary">${icon('battery')} 82% <span style="opacity:.6">· 6h left</span></span><button class="close" data-dismiss aria-label="Close quick settings">×</button></div>`;
+  const connections = connectionRow('wifi','Wi-Fi',state.network,'wifi')+connectionRow('bluetooth','Bluetooth',quickSettings.bluetoothSummary(),'bluetooth');
+  const pair = `<div class="quick-pair"><button data-toggle="dnd" aria-pressed="${state.dnd}">${icon('moon')} Focus ${state.dnd?'on':'off'}</button><button data-toggle="night" aria-pressed="${state.night}">${icon('sun')} Night light ${state.night?'on':'off'}</button></div>`;
+  const levels = slider('volume','Volume','volume')+`<button class="device-button" data-detail="audio">${escapeHTML(state.device)} <span>Sound controls ›</span></button>`+slider('brightness','Brightness','sun');
+  el.innerHTML = `${heading}${connections}${pair}${levels}${mediaCard()}<div class="pane-footer"><span>Balanced power</span><button class="text-button" data-view="appearance">Appearance ↗</button></div>`;
+  syncVisualizer();
+}
+
+function getResults() {
+  const q = state.query.toLowerCase();
+  const open = windows.map(w=>({label:w.title,sub:`${w.app} · ${workspaces[w.workspace]}`,icon:w.icon,kind:'windows',id:w.id}));
+  const apps = [{label:'Firefox',sub:'Web browser',icon:'globe'},{label:'Kate',sub:'Text editor',icon:'terminal'},{label:'Dolphin',sub:'File manager',icon:'folder'},{label:'Konsole',sub:'Terminal',icon:'terminal'}].map(a=>({...a,kind:'apps',id:a.label}));
+  const actions = [{label:'Customize shell',sub:'Colors, material, geometry',icon:'sun',kind:'actions',id:'customize'},{label:'Keyboard shortcuts',sub:'Search keys, actions, and placement modes',icon:'keyboard',kind:'actions',id:'shortcuts'},{label:'Toggle do not disturb',sub:'Silence interruptions',icon:'moon',kind:'actions',id:'dnd'}];
+  return [...open,...apps,...actions].filter(r=>(state.filter==='all'||r.kind===state.filter)&&`${r.label} ${r.sub}`.toLowerCase().includes(q)).slice(0,7);
+}
+
+function resultRows(results) {
+  return results.map((r,i)=>`<button class="search-result ${i===state.resultIndex?'selected':''}" data-result="${i}" aria-label="${escapeHTML(r.label+', '+r.sub)}">${icon(r.icon)}<span><b>${escapeHTML(r.label)}</b><span class="sub">${escapeHTML(r.sub)}</span></span>${i===state.resultIndex?'<kbd>↵</kbd>':''}</button>`).join('') || '<div class="search-empty">No matches. Try an app name or window title.</div>';
+}
+
+function renderResults() {
+  lastResults = getResults();
+  state.resultIndex = Math.min(state.resultIndex,Math.max(0,lastResults.length-1));
+  const results = $('#results');
+  if (!results) return;
+  if (state.study==='stage' && !state.query && state.filter==='all') {
+    const recent = windows.filter(w=>w.workspace===state.workspace);
+    lastResults = recent.map(w=>({label:w.title,sub:w.app,icon:w.icon,kind:'windows',id:w.id}));
+    results.innerHTML = `<div class="launch-columns"><div><h3>PINNED APPLICATIONS</h3><div class="app-grid">${[['Firefox','globe'],['Kate','terminal'],['Dolphin','folder'],['Konsole','terminal']].map(([name,symbol])=>`<button class="app-tile" data-app="${name}">${icon(symbol)}${name}</button>`).join('')}</div></div><div class="launcher-recent"><h3>ON THIS WORKSPACE</h3>${resultRows(lastResults)}</div></div>`;
+  } else results.innerHTML = resultRows(lastResults);
+}
+
+function renderLauncher() {
+  $('#launcher').className = state.view==='launcher'?'material':'hidden';
+  $('#launcher').innerHTML = `<div class="search-field">${icon('search')}<input id="launcher-search" aria-label="Search apps, windows, and actions" placeholder="${state.study==='stage'?'Search your desktop…':'Apps, windows, actions…'}" value="${escapeHTML(state.query)}" autocomplete="off"><kbd>Esc</kbd></div>
+  <nav class="search-tabs" aria-label="Search provider">${[['all','All'],['windows','Windows'],['apps','Apps'],['actions','Actions']].map(([id,title])=>`<button data-filter="${id}" aria-pressed="${state.filter===id}">${title}</button>`).join('')}</nav><div id="results"></div><div class="pane-footer"><span><kbd>↑</kbd> <kbd>↓</kbd> Select &nbsp; <kbd>Enter</kbd> Open</span><span>Search by title or application</span></div>`;
+  renderResults();
+}
+
+function renderNotes() {
+  if(state.view==='shortcuts') {
+    $('#study-kicker').textContent='J / KEYBOARD SHORTCUTS';
+    $('#study-title').textContent='A little less remembering.';
+    $('#study-description').textContent='A field guide for each placement mode and a searchable reference beside it. Directional and numbered families fold into readable keycaps. Open a row for every binding and its explanation. Color, material, corners, and density follow your shell.';
+    $('#ux-description').textContent='Start in the current workspace’s mode, browse without changing your layout, and search actions or key names. Assigned only hides unbound actions. Try custom bindings, alternatives, an unavailable catalog, and large text above. Meta means Super. The preview never runs the displayed shortcuts.';
+    return;
+  }
+  if(state.view==='authentication') {
+    $('#study-kicker').textContent='I / AUTHENTICATION';
+    $('#study-title').textContent='Know what you’re allowing.';
+    $('#study-description').textContent='A focused card carries the Phosphor mark and spectrum edge. The requesting app, action, and account stay readable while the desktop recedes. Policy details expand only when needed.';
+    $('#ux-description').textContent='Type immediately and press Enter to authenticate. Incorrect responses clear the field and keep focus ready for retry. Cancel and Escape remain available while checking. Try account selection, verification codes, long requests, and an unavailable service above.';
+    return;
+  }
+  if(state.view==='tray') {
+    $('#study-kicker').textContent='H / SYSTEM TRAY';
+    $('#study-title').textContent='A little space for what stays running.';
+    $('#study-description').textContent='A restrained icon group opens into a compact app drawer. The shell’s glass, spectrum edge and inset selection give background apps a shared home. App menus sit beside the drawer or directly below their bar icon.';
+    $('#ux-description').textContent='Click an icon to open its app or its primary menu. Right-click, use its menu button, or press Shift+F10 for actions. Arrow keys navigate menus; Escape goes back. Arrange tray controls icon tint, order, visibility and a bounded number of bar icons.';
+    return;
+  }
+  if(state.view==='stats') {
+    $('#study-kicker').textContent='G / SYSTEM STATS';
+    $('#study-title').textContent='A pulse on your desktop.';
+    $('#study-description').textContent='A quiet readout in the bar opens into CPU, graphics, memory, network, and storage. Small traces carry the shell’s color field through a compact overview. Each resource opens a focused detail view.';
+    $('#ux-description').textContent='Compare everyday work, compiling, and gaming above. Missing sensors, an offline network, and low disk space have explicit states. Pause to inspect a reading. Customize the bar’s metrics, style, units, and refresh rate with the sliders button.';
+    return;
+  }
+  if(state.view==='appearance') {
+    $('#study-kicker').textContent='E / WALLPAPER & APPEARANCE';
+    $('#study-title').textContent='A space that feels like yours.';
+    $('#study-description').textContent='Wallpapers, color, material and bar composition in one place. Large previews and a real desktop view make each choice easy to judge. The pane motif carries through the gallery and live samples.';
+    $('#ux-description').textContent='Preview without committing. Apply or revert changes, choose wallpapers per display, and save a preset with only the parts you want to share. Imported images and presets stay in this browser prototype.';
+    return;
+  }
+  if(state.view==='notifications') {
+    $('#study-kicker').textContent='D / NOTIFICATION CENTER';
+    $('#study-title').textContent='A place for what arrives.';
+    $('#study-description').textContent='A bounded inbox beside the bell. App colors and stacked cards bring the shell’s pane identity into notifications. Important items lead the list, while repeated messages fold into their app group.';
+    $('#ux-description').textContent='Filter unread items, expand a group, reply inline, or clear with Undo. Do not disturb keeps new arrivals in history. Try the busy inbox and empty state above; organization and previews are in Customize.';
+    return;
+  }
+  if(state.view==='power') {
+    $('#study-kicker').textContent='D / SESSION ACTIONS';
+    $('#study-title').textContent='A clear way to step away.';
+    $('#study-description').textContent='The power button stays visible at the end of the bar. Its session menu retains the existing actions and opens toward the button. Lock leads into the new lock-screen study.';
+    $('#ux-description').textContent='Lock is selected first. Arrow keys choose an action; Enter or its letter key activates it. Log out, restart and shut down need a second activation within three seconds. Escape returns to the desktop. All system actions here are simulated.';
+    return;
+  }
+  if(state.view==='lockscreen') {
+    $('#study-kicker').textContent='C / LOCK SCREEN';
+    $('#study-title').textContent='Your space, held for you.';
+    $('#study-description').textContent='A generous clock and a focused unlock card share the shell’s spectrum. Abstract pane shapes carry the identity without showing window titles or desktop content. The same lock screen serves Navigator and Stage.';
+    $('#ux-description').textContent='Type immediately, Enter to unlock, Escape to clear. Review Caps Lock, an incorrect password, and the waiting state above. Media is optional; notifications show a count with their content hidden.';
+    return;
+  }
+  if(state.view==='controls') {
+    $('#study-kicker').textContent='F / QUICK SETTINGS DETAILS';
+    $('#study-title').textContent='Connected, on your terms.';
+    $('#study-description').textContent='Wi-Fi, Bluetooth, and audio share one compact popup beside the status area. Connection status leads; passwords, pairing, and device controls appear where you need them.';
+    $('#ux-description').textContent='Try the 23 examples above, including failures and empty states. Back returns to quick settings; Escape cancels an inline task first. Audio separates outputs, microphones, and per-app routing.';
+    return;
+  }
+  const stage = state.study==='stage';
+  $('#study-kicker').textContent = stage?'B / SPATIAL OVERVIEW':'A / ANCHORED NAVIGATOR';
+  $('#study-title').textContent = stage?'Work with the space.':'Stay in context.';
+  $('#study-description').textContent = stage?'The actual desktop contracts into an overview. Workspaces sit beside it; placement and moving windows live in an inspector. Quick settings stay compact beside the status area.':'The branch’s map becomes a readable, anchored navigator. It exposes window titles, workspace switching, and placement mode without covering the entire desktop.';
+  $('#ux-description').textContent = stage?'Click to select, Enter to return, or move the selection to another workspace. The large overview favors spatial editing; it deliberately takes you out of the working view.':'One click on a mapped window focuses it and dismisses the navigator. Settings stay beside their trigger. Separate toggles and chevrons distinguish changing a state from choosing a device.';
+}
+
+function positionCalendar() {
+  const clock=$('.clock'),panel=$('#datetime');
+  if(!clock||!panel)return;
+  const shellRect=desktop.getBoundingClientRect(),rect=clock.getBoundingClientRect();
+  const scale=shellRect.width/1440;
+  const center=(rect.left+rect.width/2-shellRect.left)/scale;
+  desktop.style.setProperty('--calendar-left',`${Math.max(18,Math.min(1440-410-18,center-205))}px`);
+}
+
+function renderDateTime() {
+  const panel=$('#datetime');panel.className=state.view==='datetime'?'material':'hidden';
+  const first=new Date(calendar.year,calendar.month,1,12);
+  const start=new Date(calendar.year,calendar.month,1-(first.getDay()+6)%7,12);
+  const cells=Array.from({length:42},(_,i)=>new Date(start.getFullYear(),start.getMonth(),start.getDate()+i,12));
+  const events=sampleEvents[dateKey(calendar.selected)] || [];
+  panel.innerHTML=`<div class="datetime-top"><div><span class="eyebrow">SATURDAY, SEPTEMBER 12</span><div class="datetime-time">10<span>:</span>24</div></div><button class="close" data-dismiss aria-label="Close date and time">×</button></div>
+    <div class="datetime-zone"><span>Chicago · CDT</span><span>UTC −05:00</span></div>
+    <div class="month-toolbar"><h3 aria-live="polite">${first.toLocaleDateString('en-US',{month:'long',year:'numeric'})}</h3><div class="month-actions"><button data-month="-1" aria-label="Previous month">‹</button><button class="today-button" data-today>Today</button><button data-month="1" aria-label="Next month">›</button></div></div>
+    <div class="calendar-weekdays" aria-hidden="true">${['M','T','W','T','F','S','S'].map(d=>`<span>${d}</span>`).join('')}</div>
+    <div class="calendar-grid" role="group" aria-label="Choose a date">${cells.map(date=>{
+      const key=dateKey(date),selected=key===dateKey(calendar.selected),today=key===dateKey(previewToday),count=sampleEvents[key]?.length||0;
+      return `<button class="calendar-day ${date.getMonth()!==calendar.month?'outside-month':''} ${today?'is-today':''} ${count?'has-events':''}" data-date="${date.getTime()}" aria-label="${date.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}${count?`, ${count} sample events`:''}" aria-pressed="${selected}" ${today?'aria-current="date"':''} tabindex="${selected?0:-1}">${date.getDate()}</button>`;
+    }).join('')}</div>
+    <div class="calendar-agenda" aria-live="polite"><div class="agenda-heading"><h4>${calendar.selected.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})}</h4><span>Sample agenda</span></div>
+    ${events.length?events.map(([time,title,detail,color])=>`<div class="agenda-event"><time>${time}</time><div style="--event-color:${color}"><b>${title}</b><span class="sub">${detail}</span></div></div>`).join(''):'<div class="agenda-empty">Nothing scheduled for this day.</div>'}</div>
+    <div class="calendar-footer"><span>Arrow keys to browse · Esc to close</span><span>Preview date</span></div>`;
+  positionCalendar();
+}
+
+function selectDate(date, focus=true) {
+  calendar.selected=date;calendar.year=date.getFullYear();calendar.month=date.getMonth();
+  renderDateTime();
+  if(focus)$('#datetime [aria-pressed=true]')?.focus({preventScroll:true});
+}
+
+function shiftMonth(delta, focus=false) {
+  const month=new Date(calendar.year,calendar.month+delta,1,12);
+  const last=new Date(month.getFullYear(),month.getMonth()+1,0,12).getDate();
+  selectDate(new Date(month.getFullYear(),month.getMonth(),Math.min(calendar.selected.getDate(),last),12),focus);
+  if(!focus)$(`#datetime [data-month="${delta}"]`)?.focus({preventScroll:true});
+}
+
+const sessionActions = [
+  {id:'lock',label:'Lock',key:'l',color:'var(--c1)'},
+  {id:'suspend',label:'Suspend',key:'s',color:'var(--c2)'},
+  {id:'hibernate',label:'Hibernate',key:'h',color:'var(--c2)'},
+  {id:'logout',label:'Log out',key:'o',color:'var(--c3)',confirm:true},
+  {id:'restart',label:'Restart',key:'r',color:'var(--c3)',confirm:true},
+  {id:'shutdown',label:'Shut down',key:'p',color:'var(--c4)',confirm:true}
+];
+
+function renderPower(focus=false) {
+  const panel=$('#session');panel.className=state.view==='power'?'session-overlay':'hidden';
+  if(state.view!=='power'){panel.replaceChildren();return;}
+  panel.innerHTML=`<div class="session-shade" data-dismiss></div><div class="session-menu material">${sessionActions.map((action,i)=>`<button data-session="${action.id}" style="--action-color:${action.color}" class="${state.powerIndex===i?'selected':''} ${state.powerArmed===action.id?'armed':''}" tabindex="${state.powerIndex===i?0:-1}"><span>${action.label}</span>${state.powerArmed===action.id?'<small>Enter again</small>':`<kbd>${action.key.toUpperCase()}</kbd>`}</button>`).join('')}</div>`;
+  if(focus)panel.querySelector('.selected')?.focus({preventScroll:true});
+}
+
+function runSession(id) {
+  const action=sessionActions.find(action=>action.id===id);if(!action)return;
+  state.powerIndex=sessionActions.indexOf(action);
+  if(action.confirm&&state.powerArmed!==id) {
+    clearTimeout(powerTimer);state.powerArmed=id;renderPower(true);
+    powerTimer=setTimeout(()=>{state.powerArmed='';if(state.view==='power')renderPower(true);},3000);
+    return;
+  }
+  if(id==='lock')setView('lockscreen');
+  else {setView('desktop');notify(`${action.label} selected in the prototype`);}
+}
+
+function render() {
+  normalizeFocus();
+  desktop.classList.toggle('navigator',state.study==='navigator');
+  desktop.classList.toggle('stage',state.study==='stage');
+  desktop.classList.toggle('overview-open',state.view==='overview');
+  desktop.classList.toggle('locked',state.view==='lockscreen');
+  for(const element of desktop.querySelectorAll(':scope > :is(#bar,#windows,#overview,#controls,#stats,#tray,#launcher,#datetime,#notifications,#notification-arrival,#osd,#toast)')) element.inert=['lockscreen','power','appearance','authentication','shortcuts'].includes(state.view);
+  $('#stage-shade').classList.toggle('hidden',!(state.study==='stage'&&state.view==='overview'));
+  renderBar();renderWindows();renderOverview();renderControls();renderLauncher();renderDateTime();renderPower();renderNotes();
+  notificationCenter.render(state.view==='notifications');
+  updateNotificationBell();
+  lockscreen.render(state.view==='lockscreen');
+  appearance.render(state.view==='appearance');
+  systemStats.render(state.view==='stats');
+  systemTray.render(state.view==='tray');
+  authentication.render(state.view==='authentication');
+  shortcuts.render(state.view==='shortcuts');
+  // Canvas gradients cache their colors; resample after the wallpaper palette.
+  syncVisualizer();
+  $$('[data-study]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.study===state.study));
+  $$('.view-switch [data-view]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.view===state.view));
+  history.replaceState(null,'',`#${state.study}/${state.view}${state.view==='controls'&&state.detail?'/'+state.detail:''}`);
+}
+
+function applySettings(persist=true,redraw=true) {
+  if(persist)appearance.syncSettings(settings);
+  for (const [key,value] of Object.entries(settings)) {
+    if (key==='radius'||key==='gap') desktop.style.setProperty(`--${key}`,`${value}px`);
+    else desktop.dataset[key] = String(value);
+    const control = $(`[data-setting="${key}"]`);
+    if (control) {
+      if (control.type==='checkbox') control.checked=value;
+      else control.value=value;
+      if (control.type==='range') control.style.setProperty('--value',`${100*(value-Number(control.min))/(Number(control.max)-Number(control.min))}%`);
+    }
+  }
+  $('#radius-value').textContent=`${settings.radius} px`;
+  $('#gap-value').textContent=`${settings.gap} px`;
+  try { if(persist) localStorage.setItem('phosphor-design-settings',JSON.stringify(settings)); } catch { /* Optional persistence. */ }
+  if(redraw)render();
+}
+
+function setView(view) {
+  if(state.view==='appearance' && view!=='appearance' && appearance.guardExit(()=>setView(view)))return;
+  const previousView=state.view;
+  if(previousView==='controls')quickSettings.deactivate();
+  clearTimeout(powerTimer);state.powerArmed='';state.powerIndex=0;
+  if (view!=='desktop') returnFocus=document.activeElement;
+  state.view=view;state.detail=null;
+  if(view==='notifications')notificationCenter.showInbox();
+  if(['lockscreen','authentication','shortcuts'].includes(view)) {clearTimeout(toastTimer);clearTimeout(osdTimer);$('#toast').classList.add('hidden');$('#osd').classList.add('hidden');}
+  render();
+  if (view==='launcher') $('#launcher-search').focus();
+  if (view==='datetime') $('#datetime [aria-pressed=true]')?.focus({preventScroll:true});
+  if (view==='power') $('#session .selected')?.focus({preventScroll:true});
+  if (view==='notifications') notificationCenter.focus();
+  if (view==='appearance') appearance.focus();
+  if (view==='stats') systemStats.focus();
+  if (view==='tray') systemTray.focus();
+  if (view==='authentication') authentication.focus();
+  if (view==='shortcuts') shortcuts.focus();
+  if (view==='controls') $('#controls [data-toggle="wifi"]')?.focus({preventScroll:true});
+  if (view==='desktop') {
+    if (previousView==='notifications') $('.bar-notifications').focus();
+    else if (previousView==='datetime') $('.clock').focus();
+    else if (previousView==='power') $('.bar-power').focus();
+    else if (previousView==='appearance') ($('.settings-trigger')||$('.status-cluster'))?.focus();
+    else if (previousView==='tray') systemTray.restoreFocus();
+    else if (previousView==='stats') ($('.bar-stats')||$('.view-switch [data-view="stats"]'))?.focus();
+    else if (previousView==='controls') $('.status-cluster')?.focus();
+    else if (previousView==='shortcuts') $('.view-switch [data-view="shortcuts"]')?.focus();
+    else if (returnFocus?.isConnected) returnFocus.focus();
+    else $('.map-trigger')?.focus();
+  }
+}
+
+function updateNotificationBell() {
+  const bell=$('.bar-notifications');
+  if(!bell)return;
+  bell.dataset.unread=String(notificationCenter.unread()>0);
+  bell.setAttribute('aria-label',`Notifications, ${notificationCenter.unread()} unread`);
+  bell.setAttribute('aria-expanded',notificationCenter.inboxOpen());
+}
+
+function notify(message) {
+  clearTimeout(toastTimer);$('#toast').textContent=message;$('#toast').classList.remove('hidden');
+  toastTimer=setTimeout(()=>$('#toast').classList.add('hidden'),2300);
+}
+
+function customize(open=true) {
+  $('#customizer').classList.toggle('hidden',!open);
+  $('#customize-toggle').setAttribute('aria-expanded',open);
+  if(!open&&state.view==='authentication')authentication.focus();
+  if(!open&&state.view==='shortcuts')shortcuts.focus();
+}
+
+function focusWindow(id, dismiss=true) {
+  const w=windows.find(w=>w.id===id);if(!w)return;
+  const workspaceChanged=state.workspace!==w.workspace;
+  state.focused=id;state.workspace=w.workspace;
+  state.mode=state.modes[state.workspace];
+  if(dismiss)setView('desktop');
+  else if(workspaceChanged)render();
+  else {
+    // Preserve the clicked element so double-click and keyboard focus survive selection.
+    normalizeFocus();
+    const rects=geometry();
+    $$('.app-window').forEach((el,i)=>{
+      const focused=el.dataset.select===id;
+      el.classList.toggle('focused',focused);el.setAttribute('aria-pressed',focused);
+      const r={...rects[i],x:rects[i].x-state.offset};
+      el.style.cssText=`${rectStyle(r,settings.gap)};--hue:${hue(i)}`;
+      el.querySelector('.window-focus-label').textContent=focused?'Selected · Enter to open':'Click to select';
+    });
+    refreshBar();renderOverview();
+  }
+}
+
+function launchApp(name) {
+  const existing=windows.find(w=>w.app===name);
+  if(existing) focusWindow(existing.id);
+  else notify(`${name} selected in the mock`);
+}
+
+function runResult(index) {
+  const r=lastResults[index];if(!r)return;
+  if(r.kind==='windows')focusWindow(r.id);
+  else if(r.kind==='apps')launchApp(r.id);
+  else if(r.id==='customize')setView('appearance');
+  else if(r.id==='shortcuts')setView('shortcuts');
+  else {state.dnd=!state.dnd;setView('desktop');notify(`Do not disturb ${state.dnd?'on':'off'}`);}
+}
+
+function placeInZone(zone) {
+  if(!state.focused)return;
+  const list=currentWindows();
+  const previous=state.snapSlots[state.focused] ?? list.findIndex(w=>w.id===state.focused);
+  const occupant=list.find((w,i)=>(state.snapSlots[w.id] ?? i)===zone);
+  if(occupant)state.snapSlots[occupant.id]=previous;
+  state.snapSlots[state.focused]=zone;
+  render();
+}
+
+document.addEventListener('click',e=>{
+  const b=e.target.closest('button');
+  if (b) {
+    if(b.dataset.stripStep){const list=currentWindows(),i=list.findIndex(w=>w.id===state.focused);focusWindow(list[Math.max(0,Math.min(list.length-1,i+Number(b.dataset.stripStep)))].id,false);}
+    if(b.dataset.month)shiftMonth(Number(b.dataset.month));
+    if(b.hasAttribute('data-today'))selectDate(new Date(previewToday));
+    if(b.dataset.date)selectDate(new Date(Number(b.dataset.date)));
+    if(b.dataset.study){state.study=b.dataset.study;render();}
+    if(b.dataset.view)setView(b.closest('#bar')&&state.view===b.dataset.view&&(b.dataset.view!=='notifications'||notificationCenter.inboxOpen())?'desktop':b.dataset.view);
+    if(b.hasAttribute('data-dismiss'))setView('desktop');
+    if(b.hasAttribute('data-customize'))customize();
+    if(b.dataset.workspace!==undefined){state.workspace=Number(b.dataset.workspace);state.mode=state.modes[state.workspace];render();}
+    if(b.dataset.focus)focusWindow(b.dataset.focus);
+    if(b.dataset.zone!==undefined)placeInZone(Number(b.dataset.zone));
+    if(b.dataset.move!==undefined){
+      const w=selectedWindow();if(w){const target=Number(b.dataset.move);w.workspace=target;state.snapSlots={};render();notify(`${w.app} moved to ${workspaces[target]}`);}
+    }
+    if(b.dataset.toggle){if(['wifi','bluetooth'].includes(b.dataset.toggle))quickSettings.toggleRadio(b.dataset.toggle);else{state[b.dataset.toggle]=!state[b.dataset.toggle];renderControls();}}
+    if(b.dataset.detail)quickSettings.open(b.dataset.detail==='back'?null:b.dataset.detail);
+    if(b.hasAttribute('data-play')){state.playing=!state.playing;renderControls();refreshBar();}
+    if(b.dataset.filter){state.filter=b.dataset.filter;state.resultIndex=0;renderLauncher();$('#launcher-search').focus();}
+    if(b.dataset.result!==undefined)runResult(Number(b.dataset.result));
+    if(b.dataset.app)launchApp(b.dataset.app);
+    if(b.dataset.session)runSession(b.dataset.session);
+    return;
+  }
+  const win=e.target.closest('[data-select]');
+  if(win){focusWindow(win.dataset.select,state.view!=='overview');return;}
+  if(e.target.matches('.session-shade')){setView('desktop');return;}
+  if(e.target.closest('#desktop')&&!e.target.closest('#overview,#controls,#stats,#tray,#launcher,#datetime,#notifications,#notification-arrival,#session,#bar'))setView('desktop');
+});
+
+document.addEventListener('dblclick',e=>{
+  const win=e.target.closest('[data-select]');
+  if(win&&state.view==='overview')focusWindow(win.dataset.select);
+});
+
+document.addEventListener('change',e=>{
+  if(e.target.id==='scroll-count') {
+    for(let i=windows.length-1;i>=0;i--)if(windows[i].stress)windows.splice(i,1);
+    const count=Number(e.target.value),base=windows.filter(w=>w.workspace===2);
+    for(let i=base.length;i<count;i++) {
+      const source=base[(i-base.length)%base.length];
+      windows.push({...source,id:`stress-${i+1}`,title:`${source.title} · ${i+1}`,workspace:2,stress:true});
+    }
+    state.workspace=2;state.focused=base[0]?.id;state.mode='scrolling';state.modes[2]='scrolling';state.snapSlots={};
+    setView('overview');
+  }
+  if(e.target.matches('[data-viz-style]')){settings.visualizer=e.target.value;$('#preset').value='custom';applySettings();}
+  if(e.target.matches('[data-mode]')){state.mode=e.target.value;state.modes[state.workspace]=state.mode;for(const w of currentWindows())delete state.snapSlots[w.id];render();}
+  if(e.target.matches('[data-setting]')){
+    const key=e.target.dataset.setting;
+    settings[key]=e.target.type==='checkbox'?e.target.checked:e.target.type==='range'?Number(e.target.value):e.target.value;
+    $('#preset').value='custom';applySettings();
+  }
+});
+
+document.addEventListener('input',e=>{
+  if(e.target.id==='launcher-search'){state.query=e.target.value;state.resultIndex=0;renderResults();}
+  if(e.target.matches('[data-level]')){
+    const key=e.target.dataset.level;state[key]=Number(e.target.value);
+    e.target.style.setProperty('--value',`${state[key]}%`);$(`#${key}-output`).textContent=`${key==='volume'&&state.volumeMuted?'Muted · ':''}${state[key]}%`;
+    if(key==='volume'){
+      clearTimeout(osdTimer);const osd=$('#osd'),win=$('.app-window.focused');
+      const container=$('#windows');
+      if(win){osd.style.left=`${container.offsetLeft+win.offsetLeft}px`;osd.style.top=`${container.offsetTop+win.offsetTop+win.offsetHeight-5}px`;osd.style.bottom='auto';osd.style.width=`${win.offsetWidth*state.volume/100}px`;}
+      osd.innerHTML=`<span>Volume ${state.volume}%</span>`;osd.classList.remove('hidden');
+      osdTimer=setTimeout(()=>osd.classList.add('hidden'),1000);
+    }
+  }
+  if(e.target.matches('[data-setting][type=range]')){
+    settings[e.target.dataset.setting]=Number(e.target.value);$('#preset').value='custom';applySettings();
+  }
+});
+
+document.addEventListener('keydown',e=>{
+  if(appearance.handleKey(e))return;
+  if(lockscreen.handleKey(e))return;
+  if(authentication.handleKey(e))return;
+  if(shortcuts.handleKey(e))return;
+  if(quickSettings.handleKey(e))return;
+  if(systemStats.handleKey(e))return;
+  if(systemTray.handleKey(e))return;
+  if(e.key==='Escape'){setView('desktop');return;}
+  if(state.view==='power'&&!e.target.closest('.review-toolbar,.review-header,#customizer')&&!e.ctrlKey&&!e.metaKey&&!e.altKey) {
+    if(['ArrowUp','ArrowDown','Tab'].includes(e.key)) {
+      e.preventDefault();clearTimeout(powerTimer);state.powerArmed='';
+      state.powerIndex=(state.powerIndex+(e.key==='ArrowUp'||(e.key==='Tab'&&e.shiftKey)?sessionActions.length-1:1))%sessionActions.length;
+      renderPower(true);
+    } else if(e.key==='Enter'||e.key===' ') {e.preventDefault();if(!e.repeat)runSession(sessionActions[state.powerIndex].id);}
+    else {const action=sessionActions.find(action=>action.key===e.key.toLowerCase());if(action){e.preventDefault();if(!e.repeat)runSession(action.id);}}
+    return;
+  }
+  if(e.target.matches('[data-date]')) {
+    const deltas={ArrowLeft:-1,ArrowRight:1,ArrowUp:-7,ArrowDown:7};
+    if(e.key in deltas){e.preventDefault();const date=new Date(calendar.selected);date.setDate(date.getDate()+deltas[e.key]);selectDate(date);return;}
+    if(e.key==='PageUp'||e.key==='PageDown'){e.preventDefault();shiftMonth(e.key==='PageUp'?-1:1,true);return;}
+    if(e.key==='Home'||e.key==='End'){e.preventDefault();const date=new Date(calendar.selected),day=(date.getDay()+6)%7;date.setDate(date.getDate()+(e.key==='Home'?-day:6-day));selectDate(date);return;}
+  }
+  if(e.target.closest('#customizer') || e.target.tagName==='SELECT' || e.target.type==='range')return;
+  if(state.view==='launcher'&&['ArrowUp','ArrowDown','Enter'].includes(e.key)){
+    e.preventDefault();
+    if(e.key==='Enter')runResult(state.resultIndex);
+    else {state.resultIndex=Math.max(0,Math.min(lastResults.length-1,state.resultIndex+(e.key==='ArrowDown'?1:-1)));renderResults();}
+  } else if(state.view==='overview'&&['ArrowLeft','ArrowRight','Enter'].includes(e.key)){
+    if(e.key==='Enter'&&e.target.closest('#overview button'))return;
+    e.preventDefault();const list=currentWindows();
+    if(e.key==='Enter')setView('desktop');
+    else if(list.length){const index=list.findIndex(w=>w.id===state.focused);state.focused=list[(index+(e.key==='ArrowRight'?1:list.length-1))%list.length].id;render();}
+  } else if(e.target.matches('[data-select]')&&['Enter',' '].includes(e.key)){
+    e.preventDefault();focusWindow(e.target.dataset.select,false);
+  }
+});
+
+$('#customize-toggle').onclick=()=>customize($('#customizer').classList.contains('hidden'));
+$('#close-customizer').onclick=()=>customize(false);
+$('#preset').onchange=e=>{if(presets[e.target.value]){settings={...presets[e.target.value]};applySettings();}};
+$('#reset').onclick=()=>{settings={...defaults};$('#preset').value='phosphor';applySettings();};
+$('#export').onclick=()=>{
+  const file=new Blob([JSON.stringify({name:'Phosphor custom study',version:1,settings},null,2)+'\n'],{type:'application/json'});
+  const url=URL.createObjectURL(file),link=document.createElement('a');link.href=url;link.download='phosphor-study-preset.json';link.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);notify('Preset exported');
+};
+let previewWidth=0;
+new ResizeObserver(([entry])=>{
+  if(entry.contentRect.width===previewWidth)return;
+  previewWidth=entry.contentRect.width;
+  requestAnimationFrame(()=>{const scale=previewWidth/1440;desktop.style.transform=`scale(${scale})`;$('.frame').style.height=`${900*scale+2}px`;});
+}).observe($('.frame'));
+const [study,view,detail]=location.hash.slice(1).split('/');
+if(['navigator','stage'].includes(study))state.study=study;
+if(['desktop','overview','controls','launcher','datetime','notifications','lockscreen','power','appearance','stats','tray','authentication','shortcuts'].includes(view))state.view=view;
+$('#preset').value=Object.entries(presets).find(([,preset])=>JSON.stringify(preset)===JSON.stringify(settings))?.[0] || 'custom';
+applySettings();
+if(state.view==='controls'&&['wifi','bluetooth','audio'].includes(detail))quickSettings.open(detail);
+if(state.view==='power')$('#session .selected')?.focus({preventScroll:true});
+
+if(state.view==='appearance')appearance.focus();
+
+if(state.view==='stats'&&['cpu','gpu','memory','network','storage','customize'].includes(detail))systemStats.open(detail);
+
+if(state.view==='tray'&&detail==='settings')systemTray.openSettings();
+if(state.view==='tray'&&detail==='menu')systemTray.openMenu('steam','bar');

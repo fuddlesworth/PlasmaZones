@@ -947,6 +947,20 @@ const SurfaceConfig& Surface::config() const noexcept
     return m_impl->m_config;
 }
 
+void Surface::setKeyboardInteractivity(KeyboardInteractivity keyboard)
+{
+    if (keyboard != KeyboardInteractivity::None && keyboard != KeyboardInteractivity::OnDemand
+        && keyboard != KeyboardInteractivity::Exclusive)
+        return;
+    if (m_impl->m_config.effectiveKeyboard() == keyboard)
+        return;
+    m_impl->m_config.keyboardOverride = keyboard;
+    if (m_impl->m_handle)
+        m_impl->m_handle->setKeyboardInteractivity(keyboard);
+    if (m_impl->m_window)
+        m_impl->m_window->requestUpdate();
+}
+
 QQuickWindow* Surface::window() const noexcept
 {
     return m_impl->m_window.data();

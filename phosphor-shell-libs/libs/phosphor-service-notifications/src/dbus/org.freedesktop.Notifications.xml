@@ -2,12 +2,8 @@
 <!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 <!--
   org.freedesktop.Notifications, the Desktop Notifications Specification 1.3
-  server interface. We OWN this name on the session bus and answer it; this XML
-  drives qt6_add_dbus_adaptor to generate the adaptor that forwards to
-  PhosphorServiceNotifications::NotificationServer. All four methods reply
-  synchronously, so no delayed-reply machinery is needed (cf. the direct
-  ExportAllSlots agent in phosphor-service-bluetooth, which exists only because
-  its callbacks defer their reply).
+  server interface, including KDE inline replies. NotificationsAdaptor implements
+  it and retains the transport sender so reply text can be delivered privately.
 -->
 <node>
   <interface name="org.freedesktop.Notifications">
@@ -50,6 +46,11 @@
     <signal name="ActionInvoked">
       <arg type="u" name="id"/>
       <arg type="s" name="action_key"/>
+    </signal>
+
+    <signal name="NotificationReplied">
+      <arg type="u" name="id"/>
+      <arg type="s" name="text"/>
     </signal>
 
     <signal name="ActivationToken">

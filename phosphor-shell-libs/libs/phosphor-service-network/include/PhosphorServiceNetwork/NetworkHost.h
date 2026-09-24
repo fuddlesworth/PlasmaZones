@@ -33,6 +33,9 @@ class PHOSPHORSERVICENETWORK_EXPORT NetworkHost : public QObject
     Q_PROPERTY(Connectivity connectivity READ connectivity NOTIFY connectivityChanged)
     Q_PROPERTY(QString primaryConnectionType READ primaryConnectionType NOTIFY primaryConnectionTypeChanged)
     Q_PROPERTY(int deviceCount READ deviceCount NOTIFY deviceCountChanged)
+    Q_PROPERTY(bool available READ available NOTIFY availableChanged)
+    Q_PROPERTY(bool wirelessHardwareEnabled READ wirelessHardwareEnabled NOTIFY wirelessHardwareEnabledChanged)
+    Q_PROPERTY(QString connectivityCheckUri READ connectivityCheckUri NOTIFY connectivityCheckUriChanged)
 
 public:
     // Mirrors org.freedesktop.NetworkManager `Connectivity` (NMConnectivityState).
@@ -50,6 +53,11 @@ public:
     ~NetworkHost() override;
 
     [[nodiscard]] bool networkingEnabled() const;
+    [[nodiscard]] bool available() const;
+    [[nodiscard]] bool wirelessHardwareEnabled() const;
+    [[nodiscard]] QString connectivityCheckUri() const;
+    Q_INVOKABLE void refresh();
+    Q_INVOKABLE void disconnectDevice(PhosphorServiceNetwork::NetworkDevice* device);
     [[nodiscard]] bool wirelessEnabled() const;
     /// Toggle the global Wi-Fi radio (NetworkManager `WirelessEnabled`).
     /// Issues an async Properties.Set; the cached value updates when the
@@ -79,11 +87,14 @@ public:
 
     /// Create and activate a new Wi-Fi connection for an access point (NM
     /// AddAndActivateConnection). An empty `passphrase` builds an open
-    /// profile; a non-empty one builds a WPA-PSK profile. Fire-and-forget.
+    /// profile; a non-empty one builds a WPA-PSK/SAE profile. Passing an existing
+    /// matching profile updates its credentials without creating a duplicate.
+    /// Request errors are delivered through operationFinished.
     /// No-op if either argument is null or the bus is unavailable.
     Q_INVOKABLE void connectToAccessPoint(PhosphorServiceNetwork::NetworkDevice* device,
                                           PhosphorServiceNetwork::AccessPoint* accessPoint,
-                                          const QString& passphrase = {});
+                                          const QString& passphrase = {}, bool autoConnect = true,
+                                          PhosphorServiceNetwork::NetworkConnection* existing = nullptr);
 
 Q_SIGNALS:
     void networkingEnabledChanged();
@@ -93,6 +104,12 @@ Q_SIGNALS:
     void deviceAdded(PhosphorServiceNetwork::NetworkDevice* device);
     void deviceRemoved(PhosphorServiceNetwork::NetworkDevice* device);
     void deviceCountChanged();
+    void availableChanged();
+    void wirelessHardwareEnabledChanged();
+    void connectivityCheckUriChanged();
+    // Completion of the D-Bus request, not successful association. Device
+    // state remains the authority for connection success and authentication.
+    void operationFinished(const QString& operation, const QString& path, const QString& errorName);
 
 private Q_SLOTS:
     void _q_onPropertiesChanged(const QString& iface, const QVariantMap& changed, const QStringList& invalidated);

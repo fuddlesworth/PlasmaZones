@@ -41,6 +41,9 @@ class PHOSPHORSHELL_EXPORT SystemClock : public QObject
     Q_PROPERTY(int minutes READ minutes NOTIFY timeChanged)
     Q_PROPERTY(int seconds READ seconds NOTIFY timeChanged)
     Q_PROPERTY(QDate date READ date NOTIFY dateChanged)
+    Q_PROPERTY(QString timeZoneName READ timeZoneName NOTIFY timeZoneChanged)
+    Q_PROPERTY(QString timeZoneAbbreviation READ timeZoneAbbreviation NOTIFY timeZoneChanged)
+    Q_PROPERTY(int utcOffsetMinutes READ utcOffsetMinutes NOTIFY timeZoneChanged)
 
 public:
     enum Precision {
@@ -63,12 +66,25 @@ public:
     [[nodiscard]] int minutes() const;
     [[nodiscard]] int seconds() const;
     [[nodiscard]] QDate date() const;
+    [[nodiscard]] QString timeZoneName() const
+    {
+        return m_timeZoneName;
+    }
+    [[nodiscard]] QString timeZoneAbbreviation() const
+    {
+        return m_timeZoneAbbreviation;
+    }
+    [[nodiscard]] int utcOffsetMinutes() const
+    {
+        return m_utcOffsetMinutes;
+    }
 
 Q_SIGNALS:
     void enabledChanged();
     void precisionChanged();
     void timeChanged();
     void dateChanged();
+    void timeZoneChanged();
 
 private:
     void update();
@@ -82,6 +98,9 @@ private:
     int m_minutes = -1;
     int m_seconds = -1;
     QDate m_date;
+    QString m_timeZoneName;
+    QString m_timeZoneAbbreviation;
+    int m_utcOffsetMinutes = 0;
 };
 
 } // namespace PhosphorShell

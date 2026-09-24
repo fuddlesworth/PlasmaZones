@@ -66,9 +66,13 @@ private Q_SLOTS:
     void controllerInitiatedCloseSuppressesTheCallback();
     void closeIsIdempotentForUnknownHandles();
     void drainEmptiesWithoutInvokingTheCallback();
+    void drainReleasesQmlHostsBeforeEngineTeardown();
     void aFailedSurfaceRoutesToTheCallback();
     void barAnchorsPlaceTheHostBelowTheReservedBand();
     void barAnchorWithoutAProviderHangsFromTheScreenEdge();
+    void bottomBarReservationReachesTheHost();
+    void fullScreenContentFillsTheOutput();
+    void shelfRespectsTheBottomBar();
     void screenCenterAndCustomAnchorsMapToTheirPlacements();
     void reopeningWhileClosingRetiresTheDrainingSurface();
 
@@ -228,6 +232,72 @@ void TestLayerPopoutTransport::barAnchorsPlaceTheHostBelowTheReservedBand()
     transport.drain();
 }
 
+void TestLayerPopoutTransport::shelfRespectsTheBottomBar()
+{
+    LayerPopoutTransport transport(m_factory.get(), m_screens.get());
+    transport.setEngine(m_engine.get());
+    transport.setReservedMarginsProvider([](QScreen*) {
+        return QMargins(0, 0, 0, 66);
+    });
+    auto request = makeRequest();
+    request.anchor = PhosphorPopout::Anchor::BottomCenter;
+    QVERIFY(!transport.openSurface(request).isEmpty());
+    auto* host = lastHost();
+    QVERIFY(host);
+    host->setSize(QSizeF(800, 600));
+    QCOMPARE(host->property("placement").toString(), QStringLiteral("bottomCenter"));
+    auto* content = host->property("contentItem").value<QQuickItem*>();
+    QVERIFY(content);
+    QTRY_VERIFY(content->parentItem()->y() > 400);
+    QVERIFY(content->parentItem()->y() + content->height() <= 600 - 66);
+    transport.drain();
+}
+
+void TestLayerPopoutTransport::fullScreenContentFillsTheOutput()
+{
+    m_content->setData(
+        "import QtQuick\nItem { property bool fullScreen: true; implicitWidth: 800; implicitHeight: 600 }",
+        QUrl(QStringLiteral("qrc:/popout_test_content.qml")));
+    QVERIFY(m_content->isReady());
+    LayerPopoutTransport transport(m_factory.get(), m_screens.get());
+    transport.setEngine(m_engine.get());
+    QVERIFY(!transport.openSurface(makeRequest()).isEmpty());
+    QQuickItem* host = lastHost();
+    QVERIFY(host);
+    host->setSize(QSizeF(800, 600));
+    auto* content = host->property("contentItem").value<QQuickItem*>();
+    QVERIFY(content);
+    QTRY_COMPARE(content->size(), QSizeF(800, 600));
+    QCOMPARE(content->parentItem()->position(), QPointF(0, 0));
+    transport.drain();
+}
+
+void TestLayerPopoutTransport::bottomBarReservationReachesTheHost()
+{
+    m_content->setData("import QtQuick\nItem { implicitWidth: 320; implicitHeight: 700 }",
+                       QUrl(QStringLiteral("qrc:/popout_test_content.qml")));
+    QVERIFY(m_content->isReady());
+    LayerPopoutTransport transport(m_factory.get(), m_screens.get());
+    transport.setEngine(m_engine.get());
+    transport.setReservedMarginsProvider([](QScreen*) {
+        return QMargins(0, 0, 0, 66);
+    });
+    PopoutRequest request = makeRequest();
+    request.anchor = PhosphorPopout::Anchor::BarRight;
+    QVERIFY(!transport.openSurface(request).isEmpty());
+    QTRY_VERIFY(m_wire->m_attachCount >= 1);
+    QQuickItem* host = lastHost();
+    QVERIFY(host);
+    QCOMPARE(host->property("reservedTop").toInt(), 0);
+    QCOMPARE(host->property("reservedBottom").toInt(), 66);
+    host->setHeight(400);
+    auto* content = host->property("contentItem").value<QQuickItem*>();
+    QVERIFY(content);
+    QTRY_VERIFY(content->height() > 0 && content->height() <= host->height() - 66 - 12);
+    QVERIFY(content->height() < content->implicitHeight());
+    transport.drain();
+}
+
 void TestLayerPopoutTransport::barAnchorWithoutAProviderHangsFromTheScreenEdge()
 {
     LayerPopoutTransport transport(m_factory.get(), m_screens.get());
@@ -318,12 +388,18 @@ void TestLayerPopoutTransport::controllerInitiatedCloseSuppressesTheCallback()
     // have passed this case.
     QPointer<QQuickWindow> window = m_wire->m_lastWindow;
     QVERIFY(window);
+    QCOMPARE(m_wire->m_lastArgs.keyboard, PhosphorLayer::KeyboardInteractivity::Exclusive);
+    // The mock records initial policy in attach args; live transports apply
+    // it when attaching. Seed that state before checking the close update.
+    m_wire->m_lastHandle->m_keyboard = m_wire->m_lastArgs.keyboard;
 
     // A controller-initiated close marks the entry `closing`, so the host's
     // eventual `dismissed` must tear the entry down WITHOUT reporting back —
     // the controller already knows. The host's dismissEmitter guarantees the
     // emission after its close duration; give it a generous window.
     transport.closeSurface(handle);
+    QCOMPARE(m_wire->m_lastHandle->m_keyboard, PhosphorLayer::KeyboardInteractivity::None);
+    QVERIFY(window->flags().testFlag(Qt::WindowTransparentForInput));
     QTest::qWait(kCloseAnimationCeilingMs);
     QVERIFY2(m_dismissed.isEmpty(), "controller-initiated close was reported back as a dismissal");
     QVERIFY2(window.isNull(), "the close really tore the surface down");
@@ -436,6 +512,25 @@ void TestLayerPopoutTransport::drainEmptiesWithoutInvokingTheCallback()
     // A drained transport still opens fresh surfaces.
     QVERIFY(!transport.openSurface(makeRequest()).isEmpty());
     transport.drain();
+}
+
+void TestLayerPopoutTransport::drainReleasesQmlHostsBeforeEngineTeardown()
+{
+    LayerPopoutTransport transport(m_factory.get(), m_screens.get());
+    transport.setEngine(m_engine.get());
+    for (bool closing : {false, true}) {
+        const QString handle = transport.openSurface(makeRequest());
+        QVERIFY(!handle.isEmpty());
+        QTRY_VERIFY(lastHost());
+        QPointer<QQuickWindow> window = lastHost()->window();
+        QVERIFY(window);
+        if (closing)
+            transport.closeSurface(handle);
+        transport.drain();
+        // ShellEngine performs one flush, with no intervening event-loop turn.
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        QVERIFY2(window.isNull(), "QML popout must die before its engine's singletons");
+    }
 }
 
 void TestLayerPopoutTransport::aFailedSurfaceRoutesToTheCallback()

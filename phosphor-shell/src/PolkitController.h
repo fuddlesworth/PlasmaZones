@@ -12,6 +12,7 @@
 #include <PhosphorServicePolkit/PolkitAgent.h>
 
 #include <QObject>
+#include <QPointer>
 #include <QRect>
 #include <QScreen>
 #include <QString>
@@ -44,7 +45,14 @@ class PolkitController : public QObject
     Q_PROPERTY(PhosphorServicePolkit::AuthRequest* activeRequest READ activeRequest NOTIFY activeRequestChanged)
     Q_PROPERTY(qint64 requesterPid READ requesterPid NOTIFY activeRequestChanged)
     Q_PROPERTY(QString requesterName READ requesterName NOTIFY activeRequestChanged)
+    Q_PROPERTY(QString requesterProgram READ requesterProgram NOTIFY activeRequestChanged)
+    Q_PROPERTY(QString requesterResource READ requesterResource NOTIFY activeRequestChanged)
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
+    Q_PROPERTY(QString info READ info NOTIFY infoChanged)
+    Q_PROPERTY(QString phase READ phase NOTIFY stateChanged)
+    Q_PROPERTY(bool inputReady READ inputReady NOTIFY stateChanged)
+    Q_PROPERTY(bool busy READ busy NOTIFY stateChanged)
+    Q_PROPERTY(bool canRetry READ canRetry NOTIFY stateChanged)
     Q_PROPERTY(QString promptScreen READ promptScreen NOTIFY placementChanged)
     Q_PROPERTY(QRect anchorRect READ anchorRect NOTIFY placementChanged)
 
@@ -60,12 +68,22 @@ public:
     [[nodiscard]] PhosphorServicePolkit::AuthRequest* activeRequest() const;
     [[nodiscard]] qint64 requesterPid() const;
     [[nodiscard]] QString requesterName() const;
+    [[nodiscard]] QString requesterProgram() const;
+    [[nodiscard]] QString requesterResource() const;
     [[nodiscard]] QString lastError() const;
+    [[nodiscard]] QString info() const;
+    [[nodiscard]] QString phase() const;
+    [[nodiscard]] bool inputReady() const;
+    [[nodiscard]] bool busy() const;
+    [[nodiscard]] bool canRetry() const;
     [[nodiscard]] QString promptScreen() const;
     [[nodiscard]] QRect anchorRect() const;
 
     /// Answer the active PAM prompt. Clears `lastError`.
     Q_INVOKABLE void respond(const QString& response);
+    Q_INVOKABLE void selectIdentity(int index);
+    Q_INVOKABLE void retry();
+    Q_INVOKABLE void clearError();
     /// Decline the active request.
     Q_INVOKABLE void cancel();
 
@@ -94,14 +112,20 @@ Q_SIGNALS:
     void registeredChanged();
     void activeRequestChanged();
     void lastErrorChanged();
+    void infoChanged();
+    void stateChanged();
+    void promptRequested(const QString& prompt, bool echo);
     void placementChanged();
 
 private:
     void setLastError(const QString& error);
+    void setInfo(const QString& info);
 
     PhosphorServicePolkit::PolkitAgent m_agent;
     PhosphorLayer::IScreenProvider* m_screens;
     QString m_lastError;
+    QString m_info;
+    QPointer<PhosphorServicePolkit::AuthRequest> m_currentRequest;
     QString m_promptScreen;
     QRect m_anchorRect;
 };

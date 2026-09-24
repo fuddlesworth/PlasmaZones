@@ -79,7 +79,7 @@ FocusScope {
     MatugenRunner {
         id: matugen
 
-        mode: Theme.isDark ? "dark" : "light"
+        mode: Appearance.light ? "light" : "dark"
     }
 
     RetintController {
@@ -228,15 +228,14 @@ FocusScope {
 
     // Navy glass at 0.72 with the 1 px cyan top edge: the picker's
     // material, no radius, no inset (it is the screen edge).
-    Rectangle {
+    ShellSurface {
         id: ground
 
         // The pack's capture item.
         property bool shaderAnchor: true
 
         anchors.fill: parent
-        color: Theme.surface
-        opacity: 0.72
+        railT: 0.2
     }
     DecorationSlot {
         id: decorationSlot
@@ -246,6 +245,7 @@ FocusScope {
         contentItem: ground
         surfacePath: "shell.phosphor.picker"
         focused: picker.open
+        layeredStages: true
     }
 
     Rectangle {
@@ -273,7 +273,7 @@ FocusScope {
 
             Text {
                 text: qsTr("Wallpaper").toUpperCase()
-                color: Theme.on_surface_variant
+                color: Appearance.muted
                 font.family: Tokens.font_family_ui
                 font.pixelSize: Tokens.font_size_label_s
                 font.letterSpacing: Tokens.font_size_label_s * 0.08
@@ -334,7 +334,7 @@ FocusScope {
             Layout.preferredWidth: 1
             Layout.preferredHeight: 68
             Layout.alignment: Qt.AlignBottom
-            color: Theme.outline_variant
+            color: Appearance.outline
             opacity: Tokens.stroke_resting
         }
 
@@ -346,7 +346,7 @@ FocusScope {
 
             Text {
                 text: qsTr("Theme").toUpperCase()
-                color: Theme.on_surface_variant
+                color: Appearance.muted
                 font.family: Tokens.font_family_ui
                 font.pixelSize: Tokens.font_size_label_s
                 font.letterSpacing: Tokens.font_size_label_s * 0.08
@@ -396,7 +396,7 @@ FocusScope {
             Layout.preferredWidth: 1
             Layout.preferredHeight: 68
             Layout.alignment: Qt.AlignBottom
-            color: Theme.outline_variant
+            color: Appearance.outline
             opacity: Tokens.stroke_resting
         }
 
@@ -419,7 +419,7 @@ FocusScope {
 
             TabularText {
                 text: retint.busy ? qsTr("%n target(s) · retinting", "", picker.targetCount) : qsTr("%n target(s) · Esc returns", "", picker.targetCount)
-                color: Theme.on_surface_variant
+                color: Appearance.muted
                 font.pixelSize: Tokens.font_size_label_m
             }
         }

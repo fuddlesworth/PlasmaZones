@@ -29,6 +29,8 @@ endfunction()
 # Smoke test: model role names + enum wire-constant pins + lifecycle on an
 # idle host (no NetworkManager on the bus, no devices to enumerate). CI
 # runners have no NetworkManager, so this is what we can verify
-# deterministically; live D-Bus coverage requires a fake
-# org.freedesktop.NetworkManager fixture and is its own follow-up.
+# deterministically. The operations test below uses an isolated fake daemon
+# for profile writes, asynchronous failures, and cancellation races.
 _phosphorservicenetwork_test(test_phosphorservicenetwork_smoke test_smoke.cpp)
+
+_phosphorservicenetwork_test(test_phosphorservicenetwork_operations test_network_operations.cpp)

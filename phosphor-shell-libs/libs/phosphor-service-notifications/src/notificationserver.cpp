@@ -5,7 +5,9 @@
 
 #include <PhosphorServiceNotifications/Notification.h>
 
-#include "notificationsadaptor.h"
+#include "NotificationsAdaptor.h"
+#include <QDBusMessage>
+#include <QSet>
 
 #include <PhosphorServiceIconTheme/IconThemeResolver.h>
 
@@ -118,6 +120,9 @@ public:
     // torn down with their notification. Absent when a notification never
     // expires (expire_timeout 0, or -1 on a Critical).
     QHash<uint, QTimer*> timers;
+    QHash<uint, int> remaining;
+    QSet<uint> paused;
+    QHash<uint, QString> senders;
 
     int defaultExpireMs = kDefaultExpireMs;
 
@@ -258,8 +263,10 @@ QList<Notification*> NotificationServer::notifications() const
 
 uint NotificationServer::Notify(const QString& appName, uint replacesId, const QString& appIcon, const QString& summary,
                                 const QString& body, const QStringList& actions, const QVariantMap& hints,
-                                int expireTimeout)
+                                int expireTimeout, const QString& sender)
 {
+    if (!sender.isEmpty() && replacesId && d->senders.value(replacesId) != sender)
+        replacesId = 0;
     const bool reuse = replacesId != 0 && d->live.contains(replacesId);
     const uint id = reuse ? replacesId : d->allocateId();
 
@@ -303,6 +310,7 @@ uint NotificationServer::Notify(const QString& appName, uint replacesId, const Q
     // (Re)arm the expiry timer from the freshly-applied expire_timeout + urgency.
     // On a replace this restarts the countdown, matching the spec intent that a
     // replacing Notify fully re-specifies the notification.
+    d->senders.insert(notification->id(), sender);
     armExpiry(notification);
     return id;
 }
@@ -324,6 +332,12 @@ void NotificationServer::invokeAction(uint id, const QString& actionKey, const Q
     Notification* notification = d->live.value(id);
     if (!notification)
         return;
+    const auto actions = notification->actions();
+    bool advertised = false;
+    for (int i = 0; i + 1 < actions.size(); i += 2)
+        advertised |= actions[i] == actionKey;
+    if (!advertised || actionKey == QLatin1String("inline-reply"))
+        return;
 
     // XDG activation token (if any) goes out first so the target app can raise
     // its window as the action fires.
@@ -337,9 +351,56 @@ void NotificationServer::invokeAction(uint id, const QString& actionKey, const Q
         closeInternal(id, kReasonDismissed);
 }
 
+bool NotificationServer::reply(uint id, const QString& text)
+{
+    Notification* n = d->live.value(id);
+    if (!n || text.trimmed().isEmpty())
+        return false;
+    const auto actions = n->actions();
+    bool advertised = false;
+    for (int i = 0; i + 1 < actions.size(); i += 2)
+        advertised |= actions[i] == QLatin1String("inline-reply");
+    if (!advertised)
+        return false;
+    // Never broadcast a user's message to unrelated session clients. An empty
+    // sender is allowed only on the injected two-party transport used in tests.
+    const QString sender = d->senders.value(id);
+    if (sender.isEmpty() && d->connection.interface())
+        return false;
+    auto message =
+        QDBusMessage::createTargetedSignal(sender, objectPath(), serviceName(), QStringLiteral("NotificationReplied"));
+    message.setArguments({id, text});
+    if (!d->connection.send(message))
+        return false;
+    Q_EMIT replySent(id, text);
+    if (!n->resident())
+        closeInternal(id, kReasonDismissed);
+    return true;
+}
+void NotificationServer::setExpiryPaused(uint id, bool paused)
+{
+    if (!d->live.contains(id) || d->paused.contains(id) == paused)
+        return;
+    auto* timer = d->timers.value(id);
+    if (paused) {
+        d->paused.insert(id);
+        if (timer && timer->isActive()) {
+            d->remaining.insert(id, qMax(1, timer->remainingTime()));
+            timer->stop();
+        }
+    } else {
+        d->paused.remove(id);
+        if (timer && d->remaining.contains(id))
+            timer->start(d->remaining.take(id));
+    }
+}
+
 void NotificationServer::closeInternal(uint id, uint reason)
 {
     Notification* notification = d->live.take(id);
+    d->remaining.remove(id);
+    d->paused.remove(id);
+    d->senders.remove(id);
     if (!notification)
         return;
     if (QTimer* timer = d->timers.take(id)) {
@@ -365,6 +426,7 @@ void NotificationServer::armExpiry(Notification* notification)
     // expire_timeout 0 (or a -1 Critical resolving to 0) means "never": tear down
     // any timer carried over from a previous Notify on this id.
     if (effective <= 0) {
+        d->remaining.remove(id);
         if (timer) {
             d->timers.remove(id);
             timer->stop();
@@ -381,7 +443,11 @@ void NotificationServer::armExpiry(Notification* notification)
         });
         d->timers.insert(id, timer);
     }
-    timer->start(effective);
+    if (d->paused.contains(id)) {
+        timer->stop();
+        d->remaining.insert(id, effective);
+    } else
+        timer->start(effective);
 }
 
 int NotificationServer::defaultExpireTimeout() const
@@ -403,8 +469,8 @@ QStringList NotificationServer::GetCapabilities()
     // now backed: the server retains live notifications (NotificationModel
     // exposes them) until they are closed, rather than discarding on display.
     // "body-markup" stays out until a renderer exists (Phase 4.3).
-    return {QStringLiteral("body"), QStringLiteral("actions"), QStringLiteral("icon-static"),
-            QStringLiteral("persistence")};
+    return {QStringLiteral("body"),        QStringLiteral("actions"),     QStringLiteral("icon-static"),
+            QStringLiteral("persistence"), QStringLiteral("body-images"), QStringLiteral("inline-reply")};
 }
 
 QString NotificationServer::GetServerInformation(QString& vendor, QString& version, QString& specVersion)

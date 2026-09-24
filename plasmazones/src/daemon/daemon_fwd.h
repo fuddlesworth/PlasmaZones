@@ -81,6 +81,7 @@ class Settings;
 class OverlayService;
 
 class ShortcutManager;
+class ShellCheatsheetBridge;
 class LayoutAdaptor;
 class SettingsAdaptor;
 class ShaderAdaptor;

@@ -39,3 +39,18 @@ add_test(
 phosphor_apply_test_isolation(test_phosphor_shell_dashboard)
 set_property(TEST test_phosphor_shell_dashboard APPEND PROPERTY LABELS "phosphorshelldashboard")
 phosphor_append_test_environment(test_phosphor_shell_dashboard "QT_QPA_PLATFORM=offscreen")
+
+add_executable(test_desktopstage test_desktopstage.cpp ../src/desktopstage.cpp)
+target_link_libraries(test_desktopstage PRIVATE Qt6::Test Qt6::Qml Qt6::DBus)
+add_test(NAME test_desktopstage COMMAND test_desktopstage)
+phosphor_apply_test_isolation(test_desktopstage)
+
+qt_add_executable(test_shortcutreferencemodel test_shortcutreferencemodel.cpp ../src/shortcutreferencemodel.cpp)
+target_link_libraries(test_shortcutreferencemodel PRIVATE Qt6::Test Qt6::Gui Qt6::Qml)
+add_test(NAME test_shortcutreferencemodel COMMAND test_shortcutreferencemodel)
+phosphor_apply_test_isolation(test_shortcutreferencemodel)
+
+qt_add_executable(test_shortcutcatalog test_shortcutcatalog.cpp ../src/shortcutcatalog.cpp)
+target_link_libraries(test_shortcutcatalog PRIVATE Qt6::Test Qt6::Qml Qt6::DBus PhosphorProtocol::PhosphorProtocol)
+add_test(NAME test_shortcutcatalog COMMAND test_shortcutcatalog)
+phosphor_apply_test_isolation(test_shortcutcatalog)

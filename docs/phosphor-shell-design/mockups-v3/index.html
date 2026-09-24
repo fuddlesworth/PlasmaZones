@@ -1,0 +1,179 @@
+<!doctype html>
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phosphor / Identity, interaction, expression</title>
+<link rel="stylesheet" href="studies.css">
+<link rel="stylesheet" href="lockscreen.css">
+<link rel="stylesheet" href="notifications.css">
+<link rel="stylesheet" href="appearance.css">
+<link rel="stylesheet" href="quick-settings.css">
+<link rel="stylesheet" href="system-stats.css">
+<link rel="stylesheet" href="system-tray.css">
+<link rel="stylesheet" href="authentication.css">
+<link rel="stylesheet" href="shortcuts.css">
+</head>
+<body>
+<header class="review-header">
+  <div><span class="eyebrow">PHOSPHOR / REDESIGN STUDIES</span><h1>One identity. Two ways to work.</h1></div>
+  <nav class="study-switch" aria-label="Interaction study">
+    <button data-study="navigator" aria-pressed="true"><b>A</b> Navigator <small>Stay in context</small></button>
+    <button data-study="stage" aria-pressed="false"><b>B</b> Stage <small>Work with the space</small></button>
+  </nav>
+</header>
+<div class="review-toolbar">
+  <nav aria-label="Preview state" class="view-switch">
+    <button data-view="desktop">Desktop</button><button data-view="overview">Window navigation</button><button data-view="shortcuts">Shortcuts</button>
+    <button data-view="controls">Quick settings</button><button data-view="stats">System stats</button><button data-view="tray">System tray</button><button data-view="notifications">Notifications</button><button data-view="datetime">Date & time</button><button data-view="launcher">Launcher</button><button data-view="lockscreen">Lock screen</button><button data-view="authentication">Authentication</button><button data-view="power">Power</button><button data-view="appearance">Appearance</button>
+  </nav>
+  <label class="stress-control">Scrolling demo <select id="scroll-count" aria-label="Scrolling demo window count"><option value="4">4 windows</option><option value="10">10 windows</option><option value="20">20 windows</option></select></label>
+  <button id="customize-toggle" aria-expanded="false">◈ &nbsp; Preview controls</button>
+</div>
+<div id="lock-preview-controls" class="lock-preview-controls hidden" aria-label="Lock screen prototype controls">
+  <span>PREVIEW STATE</span>
+  <nav aria-label="Authentication state"><button data-lock-state="ready" aria-pressed="true">Ready</button><button data-lock-state="typing" aria-pressed="false">Typing</button><button data-lock-state="error" aria-pressed="false">Incorrect password</button><button data-lock-state="checking" aria-pressed="false">Unlocking</button></nav>
+  <button data-lock-caps aria-pressed="false">Caps Lock</button>
+  <p>Use <code>demo</code> to preview unlocking. Use a made-up password here.</p>
+  <span id="lock-preview-feedback" role="status"></span>
+</div>
+<div id="notification-preview-controls" class="notification-preview-controls hidden" aria-label="Notification prototype controls">
+  <span>PREVIEW INBOX</span>
+  <nav aria-label="Notification scenario"><button data-notification-scenario="everyday" aria-pressed="true">Everyday</button><button data-notification-scenario="busy" aria-pressed="false">Busy · 30 notifications</button><button data-notification-scenario="empty" aria-pressed="false">Empty</button></nav>
+  <button data-notification-inbox aria-pressed="true">Open center</button>
+  <label>Arrival <select id="notification-arrival-type" aria-label="New arrival content"><option value="text">App icon + message</option><option value="picture">With picture</option><option value="long">Long message</option><option value="rich" selected>Picture + long message</option></select></label>
+  <button data-notification-arrive>＋ New arrival</button>
+  <p>Simulated notifications. Arrival previews stay open until dismissed.</p>
+</div>
+<div id="quick-preview-controls" class="quick-preview-controls hidden" aria-label="Quick settings prototype controls"></div>
+<div id="stats-preview-controls" class="stats-preview-controls hidden" aria-label="System stats prototype controls"></div>
+<div id="tray-preview-controls" class="tray-preview-controls hidden" aria-label="System tray prototype controls"></div>
+<div id="auth-preview-controls" class="auth-preview-controls hidden" aria-label="Authentication prototype controls"></div>
+<div id="shortcuts-preview-controls" class="shortcuts-preview-controls hidden" aria-label="Shortcut prototype controls"></div>
+<div class="review-layout">
+<main class="frame" aria-label="Interactive desktop mock">
+<div id="desktop" class="desktop navigator">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="wifi" viewBox="0 0 24 24"><path d="M3 8a15 15 0 0 1 18 0M6 12a10 10 0 0 1 12 0M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="20" r=".8"/></symbol>
+<symbol id="bluetooth" viewBox="0 0 24 24"><path d="m7 7 10 10-5 4V3l5 4L7 17"/></symbol>
+<symbol id="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></symbol>
+<symbol id="volume" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4zM17 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></symbol>
+<symbol id="battery" viewBox="0 0 24 24"><rect x="2" y="6" width="18" height="12" rx="3"/><path d="M23 10v4M6 9v6m4-6v6m4-6v6"/></symbol>
+<symbol id="moon" viewBox="0 0 24 24"><path d="M20 15A9 9 0 0 1 9 4a9 9 0 1 0 11 11Z"/></symbol>
+<symbol id="power" viewBox="0 0 24 24"><path d="M12 2v10M6 5a9 9 0 1 0 12 0"/></symbol>
+<symbol id="search" viewBox="0 0 24 24"><circle cx="10" cy="10" r="7"/><path d="m15 15 6 6"/></symbol>
+<symbol id="grid" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="18" rx="2"/><rect x="14" y="3" width="7" height="8" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></symbol>
+<symbol id="folder" viewBox="0 0 24 24"><path d="M3 6h7l2 3h9v11H3zM3 6V4h7l2 2h8v3"/></symbol>
+<symbol id="terminal" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="18" rx="4"/><path d="m6 8 4 4-4 4m8 0h4"/></symbol>
+<symbol id="globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></symbol>
+<symbol id="music" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13M9 8l11-2"/><ellipse cx="6" cy="18" rx="3" ry="3"/><ellipse cx="17" cy="16" rx="3" ry="3"/></symbol>
+<symbol id="lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/></symbol>
+<symbol id="arrow-right" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol>
+<symbol id="keyboard" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M6 9h1m4 0h1m4 0h1M6 12h1m4 0h1m4 0h1M7 15h10"/></symbol>
+<symbol id="bell" viewBox="0 0 24 24"><path d="M5 10a7 7 0 0 1 14 0v5l2 3H3l2-3Zm5 11h4"/></symbol>
+<symbol id="caps" viewBox="0 0 24 24"><path d="m12 3 8 9h-5v5H9v-5H4Zm-3 18h6"/></symbol>
+<symbol id="check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+<symbol id="previous" viewBox="0 0 24 24"><path d="M5 5v14m14-14L7 12l12 7Z"/></symbol>
+<symbol id="next" viewBox="0 0 24 24"><path d="M19 5v14M5 5l12 7L5 19Z"/></symbol>
+<symbol id="message" viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-8l-6 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z M7 9h10M7 13h6"/></symbol>
+<symbol id="shield" viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6ZM12 8v5m0 3v.1"/></symbol>
+<symbol id="close-icon" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+<symbol id="chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+<symbol id="trash" viewBox="0 0 24 24"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></symbol>
+<symbol id="check-all" viewBox="0 0 24 24"><path d="m2 12 4 4L16 6m-5 9 2 2L23 7"/></symbol>
+<symbol id="arrow-left" viewBox="0 0 24 24"><path d="M20 12H4m6-6-6 6 6 6"/></symbol>
+<symbol id="refresh" viewBox="0 0 24 24"><path d="M20 10a8 8 0 1 0-1 8M20 3v7h-7"/></symbol>
+<symbol id="headphones" viewBox="0 0 24 24"><path d="M4 14v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="12" width="5" height="9" rx="2"/><rect x="16" y="12" width="5" height="9" rx="2"/></symbol>
+<symbol id="speaker" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="3"/><circle cx="12" cy="15" r="4"/><circle cx="12" cy="7" r="1"/></symbol>
+<symbol id="microphone" viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="13" rx="4"/><path d="M5 11v2a7 7 0 0 0 14 0v-2M12 20v3m-4 0h8"/></symbol>
+<symbol id="mouse" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="6"/><path d="M12 3v6"/></symbol>
+<symbol id="eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+<symbol id="picture" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m3 17 5-5 4 4 4-6 5 7"/></symbol>
+<symbol id="cpu" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="3"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2v3m6-3v3M9 19v3m6-3v3M2 9h3m-3 6h3M19 9h3m-3 6h3"/></symbol>
+<symbol id="gpu" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="11" cy="12" r="3.5"/><path d="M1 4v16m6-2v3h10v-3m1-9h3m-3 6h3M9 10l4 4m0-4-4 4"/></symbol>
+<symbol id="memory" viewBox="0 0 24 24"><path d="M2 6h20v11H2zM5 17v3m4-3v3m6-3v3m4-3v3M6 9v5m4-5v5m4-5v5m4-5v5"/></symbol>
+<symbol id="network" viewBox="0 0 24 24"><path d="M7 3v17m-4-4 4 4 4-4M17 21V4m-4 4 4-4 4 4"/></symbol>
+<symbol id="storage" viewBox="0 0 24 24"><path d="m6 3-4 11v6h20v-6L18 3Z M2 14h20m-5 3h2m-6 0h1"/></symbol>
+<symbol id="tune" viewBox="0 0 24 24"><path d="M3 6h5m4 0h9M3 18h9m4 0h5"/><circle cx="10" cy="6" r="2"/><circle cx="14" cy="18" r="2"/><path d="M3 12h11m4 0h3"/><circle cx="16" cy="12" r="2"/></symbol>
+<symbol id="pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+<symbol id="tray-icon" viewBox="0 0 24 24"><path d="M3 14h5l2 3h4l2-3h5v7H3zM5 10V4h14v6M9 7h6"/></symbol>
+<symbol id="cloud" viewBox="0 0 24 24"><path d="M6 18a5 5 0 1 1 .5-10A6 6 0 0 1 18 9a4.5 4.5 0 1 1 0 9Z"/><path d="m8 13 3 3 5-5"/></symbol>
+<symbol id="gamepad" viewBox="0 0 24 24"><path d="M7 7h10c3 0 4 6 4 9s-2 4-4 1l-2-2H9l-2 2c-2 3-4 2-4-1s1-9 4-9Z M6 10v4m-2-2h4m8-1h.1m3 2h.1"/></symbol>
+<symbol id="phone" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M10 5h4m-3 14h2"/></symbol>
+<symbol id="record" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></symbol>
+<symbol id="key" viewBox="0 0 24 24"><circle cx="8" cy="8" r="5"/><path d="m12 12 9 9m-5-5 3-3m-1 5 3-3"/></symbol>
+<symbol id="download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></symbol>
+<symbol id="more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+<symbol id="pin" viewBox="0 0 24 24"><path d="m8 3 9 2-2 6 3 4-6-1-4 4-2-2 4-4-1-6ZM8 16l-5 5"/></symbol>
+</defs></svg>
+  <div class="wallpaper" aria-hidden="true"><div class="orb"></div><div class="landscape"></div><div class="contour"></div></div>
+  <div class="desktop-watermark">PHOSPHOR<span>your windows, in place</span></div>
+  <header id="bar" class="bar material"></header>
+  <div id="windows" class="windows"></div>
+  <div class="stage-shade hidden" id="stage-shade"></div>
+  <section id="overview" class="hidden" aria-label="Window navigation"></section>
+  <section id="controls" class="hidden" aria-label="Quick settings"></section>
+  <section id="tray" class="hidden" aria-label="System tray"></section>
+  <section id="stats" class="hidden" aria-label="System stats" role="dialog"></section>
+  <section id="launcher" class="hidden" aria-label="Launcher"></section>
+  <section id="datetime" class="hidden" aria-label="Date and time"></section>
+  <section id="notifications" class="hidden" aria-label="Notification center" role="dialog"></section>
+  <section id="notification-arrival" class="hidden" aria-label="New notification"></section>
+  <section id="appearance" class="hidden" aria-label="Appearance"></section>
+  <section id="session" class="hidden" aria-label="Session actions" role="dialog" aria-modal="true"></section>
+  <div id="osd" class="osd hidden" role="status"></div>
+  <div id="toast" class="toast material hidden" role="status"></div>
+  <section id="lockscreen" class="lockscreen hidden" aria-label="Locked session"></section>
+  <section id="authentication" class="authentication-overlay hidden" aria-label="Authentication request"></section>
+  <section id="shortcuts" class="shortcuts-overlay hidden" aria-label="Keyboard shortcuts"></section>
+</div>
+</main>
+<aside id="customizer" class="customizer hidden" aria-label="Shell customization">
+  <div class="customizer-heading"><div><span class="eyebrow">MAKE IT YOURS</span><h2>Same Phosphor.<br>Your expression.</h2></div><button id="close-customizer" aria-label="Close customization">×</button></div>
+  <p>Changes apply to both studies. Your choices stay when you switch between them.</p>
+  <label>Starting point<select id="preset"><option value="custom">Custom</option><option value="phosphor" selected>Phosphor / deep glass</option><option value="paper">Paper / bright & quiet</option><option value="ember">Ember / warm & compact</option></select></label>
+  <label>Color field<select data-setting="palette"><option value="spectrum">Phosphor spectrum</option><option value="wallpaper">Colors from wallpaper</option><option value="ember">Ember / honey to rust</option></select></label>
+  <label>Surface material<select data-setting="material"><option value="glass">Tinted glass</option><option value="solid">Opaque</option><option value="light">Light ceramic</option></select></label>
+  <label>Bar placement<select data-setting="edge"><option value="top">Top</option><option value="bottom">Bottom</option></select></label>
+  <label>Density<select data-setting="density"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>
+  <label>Corner radius <output id="radius-value">18 px</output><input data-setting="radius" type="range" min="4" max="30" value="18"></label>
+  <label>Window gap <output id="gap-value">16 px</output><input data-setting="gap" type="range" min="6" max="30" value="16"></label>
+  <label class="check"><input data-setting="glow" type="checkbox" checked> Edge glow</label>
+  <label class="check"><input data-setting="media" type="checkbox" checked> Media widget in bar</label>
+  <label>Media visualizer<select data-setting="visualizer"><option value="ribbon">Ribbon</option><option value="bars">Bars</option><option value="halo">Halo</option><option value="off">Off</option></select></label>
+  <label class="check"><input data-setting="motion" type="checkbox" checked> Motion</label>
+  <fieldset class="lock-customization"><legend>Lock screen</legend>
+    <label>Composition<select data-setting="lockLayout"><option value="split">Clock beside unlock card</option><option value="centered">Centered</option></select></label>
+    <label class="check"><input data-setting="lockMedia" type="checkbox"> Show media while locked</label>
+    <label class="check"><input data-setting="lockNotifications" type="checkbox" checked> Show notification count</label>
+  </fieldset>
+  <fieldset class="notification-customization"><legend>Notification center</legend>
+    <label>Organization<select data-setting="notificationGrouping"><option value="app">Group by application</option><option value="time">Chronological list</option></select></label>
+    <label class="check"><input data-setting="notificationPreviews" type="checkbox" checked> Show notification previews</label>
+  </fieldset>
+  <div class="customizer-actions"><button id="export">Export preset ↓</button><button id="reset">Reset</button></div>
+  <div class="customizer-note">The signature is the relationship between map, windows, and color field. The default palette is a starting point; the geometry and focus cues still work in every preset.</div>
+</aside>
+</div>
+<section class="review-notes">
+  <div><span class="eyebrow" id="study-kicker"></span><h2 id="study-title"></h2><p id="study-description"></p></div>
+  <div><span class="eyebrow">01 / VISUAL IDENTITY</span><p>One spectrum across the rail, placement map, and window edges. White marks focus. Tinted fills, inset controls, and selective glow add depth around that structure.</p></div>
+  <div><span class="eyebrow">02 / GOOD UX</span><p id="ux-description"></p></div>
+  <div><span class="eyebrow">03 / RICEABILITY</span><p>Change material, color field, density, corners, gaps, bar edge, media, and motion. Presets are editable starting points. Export captures your choices.</p></div>
+</section>
+<footer class="review-footer">Browser interaction studies with simulated windows and devices. Mode changes, window focus, workspace switching, and customization are functional in the mock. No system settings are changed.</footer>
+<script src="visualizer.js"></script>
+<script src="lockscreen.js"></script>
+<script src="notifications.js"></script>
+<script src="appearance.js"></script>
+<script src="quick-settings.js"></script>
+<script src="system-stats.js"></script>
+<script src="system-tray.js"></script>
+<script src="authentication.js"></script>
+<script src="shortcut-catalog.js"></script>
+<script src="shortcuts.js"></script>
+<script src="studies.js"></script>
+</body>
+</html>

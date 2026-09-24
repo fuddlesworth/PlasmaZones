@@ -2,9 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // Phosphor.Bar.Slot, one left/center/right bar region.
 //
-// A horizontal run of bare chips on the band: no chip backgrounds, no
-// pills (05 §8). Groups are separated by a 1 × 12 px hairline at 25 %
-// white. The slot is registry-agnostic: it is handed a list of groups and
+// Groups share the floating band and are separated by a subtle hairline. The slot is registry-agnostic: it is handed a list of groups and
 // a `registry` exposing createWidgetFor(id, parent) -> Item (the shell's
 // BarController). Each widget is parented under its cell, so the cell's
 // destruction cascades through the QObject parent chain; the slot never
@@ -39,6 +37,36 @@ RowLayout {
     // placement map). Handed down explicitly: the Window attached
     // property is not a reliable route to the PanelWindow's screen.
     property string screenName: ""
+    property real maximumWidth: 10000
+
+    // Budget adaptive widgets from their neighbours, without feeding their
+    // own width back into the size binding.
+    function roomFor(id: string): real {
+        void mountedCount;
+        let used = 0, populated = 0;
+        for (let g = 0; g < groups.length; ++g) {
+            const ids = typeof groups[g] === "string" ? [groups[g]] : groups[g];
+            let count = 0;
+            for (const widgetId of ids) {
+                const widget = cellFor(widgetId)?.widget;
+                if (widgetId === id) {
+                    ++count;
+                    continue;
+                }
+                if (widget && widget.implicitWidth > 0) {
+                    used += widget.implicitWidth;
+                    ++count;
+                }
+            }
+            if (count) {
+                used += Math.max(0, count - 1) * Tokens.spacing_s;
+                if (g > 0)
+                    used += 1 + Tokens.spacing_m;
+                ++populated;
+            }
+        }
+        return Math.max(0, maximumWidth - used - Math.max(0, populated - 1) * Tokens.spacing_m);
+    }
 
     // The cell under the pointer, or null.
     property Item hoveredCell: null
@@ -103,7 +131,7 @@ RowLayout {
                 anchors.verticalCenter: parent.verticalCenter
                 width: 1
                 height: 12
-                color: Theme.on_surface
+                color: Appearance.text
                 opacity: 0.25
             }
 
@@ -188,6 +216,8 @@ RowLayout {
                                     cell.widget.railT = Qt.binding(() => cell.railT);
                                 if (cell.widget.screenName !== undefined)
                                     cell.widget.screenName = Qt.binding(() => root.screenName);
+                                if (cell.widget.maximumWidth !== undefined)
+                                    cell.widget.maximumWidth = Qt.binding(() => root.roomFor(cell.modelData));
                             }
                             const cells = root._cells;
                             cells[cell.modelData] = cell;

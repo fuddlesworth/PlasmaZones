@@ -62,6 +62,9 @@ Item {
     property real cellRadius: Tokens.radius_mini
     property bool showLens: true
     property bool interactive: false
+    // Separate cards share the window palette with the expanded navigator.
+    // Composers can retain the continuous, matched-edge map with false.
+    property bool separatedCells: true
     // Draw the app glyph (or the title's first letter) in each occupied
     // cell. Only at expanded height (A2 §1.3).
     property bool labels: false
@@ -86,6 +89,7 @@ Item {
     // content: a bare `model.lens` test leaves a zero-width rect whose
     // 1 px border still paints a stray line down the left edge.
     readonly property var _lens: model && model.lens && Number(model.lens.w) > 0 ? model.lens : null
+    readonly property bool vertical: _scrolling && !!(_lens && _lens.vertical)
     // Live cell count, for hosts and tests. Retiring cells are excluded.
     readonly property int liveCount: cellModel.count - _retiring.length
     // Ids currently releasing, kept out of `liveCount` and re-adopted if
@@ -147,6 +151,7 @@ Item {
             "cw": Number(c.w) || 0,
             "ch": Number(c.h) || 0,
             "t": Number(c.t) || 0,
+            "colorIndex": c.colorIndex >= 0 ? c.colorIndex : -1,
             "occupied": !!c.occupied,
             "focused": !!c.focused,
             "urgent": !!c.urgent,
@@ -373,10 +378,11 @@ Item {
     // Work-area outline.
     Rectangle {
         anchors.fill: parent
+        visible: !root.separatedCells
         radius: root.cellRadius
         color: "transparent"
         border.width: 1
-        border.color: Qt.rgba(Theme.on_surface.r, Theme.on_surface.g, Theme.on_surface.b, 0.14)
+        border.color: Qt.rgba(Appearance.text.r, Appearance.text.g, Appearance.text.b, 0.14)
     }
 
     // Right-click off any cell.
@@ -400,6 +406,7 @@ Item {
             required property real cy
             required property real cw
             required property real ch
+            required property int colorIndex
             required property real t
             required property bool occupied
             required property bool focused
@@ -409,7 +416,7 @@ Item {
             required property string title
             required property bool retiring
 
-            readonly property color _hue: Spectrum.at(t)
+            readonly property color _hue: root.separatedCells ? Appearance.windowColor(colorIndex >= 0 ? colorIndex : index) : Spectrum.at(t)
             readonly property bool _hovered: hover.hovered && root.interactive && !retiring
             readonly property bool _pressed: tap.pressed || drag.active
             readonly property bool _dropTarget: root.dropTargetId === cellId
@@ -417,15 +424,15 @@ Item {
             // Urgent pulse, 0.4 → 1.0 at 1.2 s; steady under reduced motion.
             property real _pulse: 1
 
-            x: cx * root.width
-            y: cy * root.height
-            width: cw * root.width
-            height: ch * root.height
-            radius: root.cellRadius
-            color: occupied ? Qt.rgba(_lit.r, _lit.g, _lit.b, _pressed || focused ? 0.55 : 0.40) : "transparent"
+            x: cx * root.width + (root.separatedCells ? 1.5 : 0)
+            y: cy * root.height + (root.separatedCells ? 1.5 : 0)
+            width: Math.max(1, cw * root.width - (root.separatedCells ? 3 : 0))
+            height: Math.max(1, ch * root.height - (root.separatedCells ? 3 : 0))
+            radius: root.separatedCells ? Math.min(2, Appearance.radius) : root.cellRadius
+            color: occupied ? Qt.alpha(_lit, root.separatedCells ? 0.2 : _pressed || focused ? 0.55 : 0.40) : "transparent"
             // The resting hue edge is the edge layer's; the fill carries
             // only the white signals and the hover lift.
-            border.width: _dropTarget || urgent || focused || _hovered ? 1 : 0
+            border.width: root.separatedCells || _dropTarget || urgent || focused || _hovered ? 1 : 0
             border.color: _dropTarget ? Spectrum.focus : urgent ? Qt.rgba(1, 1, 1, _pulse) : focused ? Qt.rgba(1, 1, 1, 0.9) : _lit
             transformOrigin: Item.Center
 
@@ -459,6 +466,7 @@ Item {
 
             // Focus: a 2 px white core line along the top edge.
             Rectangle {
+                visible: !root.separatedCells || root.height > 90
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
@@ -485,7 +493,7 @@ Item {
                 height: 12
                 visible: root.labels && cell.occupied && valid && source !== "" && cell.width >= 16 && cell.height >= 16
                 source: cell.appId
-                color: Theme.on_surface
+                color: Appearance.text
             }
             TabularText {
                 anchors.centerIn: parent
@@ -607,6 +615,7 @@ Item {
         model: edgeModel
         delegate: Rectangle {
             id: edge
+            visible: !root.separatedCells
 
             required property int index
             required property string key
@@ -686,11 +695,12 @@ Item {
 
     // Scrolling: the viewport lens, white at 70 %.
     Rectangle {
+        objectName: "viewport-lens"
         visible: root.showLens && root._scrolling && root._lens !== null
         x: root._lens ? (Number(root._lens.x) || 0) * root.width : 0
         width: root._lens ? (Number(root._lens.w) || 0) * root.width : 0
-        y: 0
-        height: root.height
+        y: root._lens ? (Number(root._lens.y) || 0) * root.height : 0
+        height: root._lens ? Number(root._lens.h ?? 1) * root.height : root.height
         radius: root.cellRadius
         color: "transparent"
         border.width: 1
@@ -711,27 +721,26 @@ Item {
         }
     }
 
-    // Gutter columns for the strip's off-screen columns, packed at the
-    // ends in their structure-axis hues.
+    // Bounded overflow markers. The bar caption reports the full count.
     Repeater {
-        model: root._scrolling ? root._overflowLeft : 0
+        model: root._scrolling ? Math.min(3, root._overflowLeft) : 0
         delegate: Rectangle {
             required property int index
-            x: 1 + index * 2
-            y: 1
-            width: 1
-            height: root.height - 2
+            x: root.vertical ? 1 : 1 + index * 2
+            y: root.vertical ? 1 + index * 2 : 1
+            width: root.vertical ? root.width - 2 : 1
+            height: root.vertical ? 1 : root.height - 2
             color: Spectrum.at(root._gutterT(index, -1))
         }
     }
     Repeater {
-        model: root._scrolling ? root._overflowRight : 0
+        model: root._scrolling ? Math.min(3, root._overflowRight) : 0
         delegate: Rectangle {
             required property int index
-            x: root.width - 2 - (root._overflowRight - 1 - index) * 2
-            y: 1
-            width: 1
-            height: root.height - 2
+            x: root.vertical ? 1 : root.width - 2 - (Math.min(3, root._overflowRight) - 1 - index) * 2
+            y: root.vertical ? root.height - 2 - (Math.min(3, root._overflowRight) - 1 - index) * 2 : 1
+            width: root.vertical ? root.width - 2 : 1
+            height: root.vertical ? 1 : root.height - 2
             color: Spectrum.at(root._gutterT(index, 1))
         }
     }

@@ -40,6 +40,7 @@ public:
     [[nodiscard]] int rowCount(const QModelIndex& parent = {}) const override;
     [[nodiscard]] QVariant data(const QModelIndex& index, int role) const override;
     [[nodiscard]] QHash<int, QByteArray> roleNames() const override;
+    Q_INVOKABLE PhosphorServiceNetwork::NetworkConnection* connectionAt(int index) const;
 
 Q_SIGNALS:
     void countChanged();
@@ -49,6 +50,8 @@ private Q_SLOTS:
     void _q_onConnectionRemoved(const QDBusObjectPath& path);
 
 private:
+    void refresh();
+    quint64 m_generation = 0;
     void addConnection(const QString& path);
     void removeConnection(const QString& path);
     void connectConnection(NetworkConnection* connection);

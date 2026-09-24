@@ -34,6 +34,7 @@ namespace PhosphorServiceLock {
 class PHOSPHORSERVICELOCK_EXPORT LockService : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(QString userName READ userName CONSTANT)
     Q_PROPERTY(bool supported READ isSupported CONSTANT)
     Q_PROPERTY(State state READ state NOTIFY stateChanged)
     Q_PROPERTY(bool locked READ isLocked NOTIFY stateChanged)
@@ -51,6 +52,9 @@ public:
 
     explicit LockService(QObject* parent = nullptr);
     ~LockService() override;
+
+    /// The same local account that PAM authenticates, resolved from the process uid.
+    [[nodiscard]] QString userName() const;
 
     /// Whether the compositor advertises the `ext-session-lock-v1` protocol this
     /// service builds on. When false the service constructs but cannot lock.

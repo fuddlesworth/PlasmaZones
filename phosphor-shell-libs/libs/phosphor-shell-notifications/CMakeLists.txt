@@ -1,15 +1,11 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# PhosphorShellNotifications, the Phosphor.Notifications toast framework.
+# PhosphorShellNotifications, the Phosphor.Notifications center and arrival surfaces.
 #
-# A pure-QML module: ToastHost (the top-right toast stack manager, owning
-# the queue, per-toast lifecycle, and add/remove/reflow transitions) plus
-# the Toast card (image + rich text + hover-to-pause auto-dismiss).
-# Themed through phosphor-theme (tokens, Motion, StateLayer) and the
-# phosphor-shell-widgets atoms (SpectrumStroke, SettleAnimation, DecorationSlot).
-#
-# Phase 3.4 deliverable per docs/phosphor-shell-design/04-implementation-plan.md.
+# A pure-QML module sharing rich cards between grouped history and bounded
+# arrival stacks. It accepts an injected backend; service ownership belongs to
+# the shell. Geometry, palette and privacy follow the shared appearance store.
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -26,7 +22,7 @@ endif()
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes)
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes QuickControls2)
 
 # Toast imports Phosphor.Theme (tokens) and Phosphor.Widgets
 # (the atoms). The import scanner needs them visible at build time,
@@ -38,14 +34,6 @@ endif()
 if(NOT TARGET PhosphorShellWidgets::PhosphorShellWidgetsQml)
     find_package(PhosphorShellWidgets CONFIG QUIET)
 endif()
-# ToastHost imports Phosphor.Shell for the PlacementMap singleton (the
-# concerned window's rect, A3 §3). The module's own registrar only carries
-# PerScreen; the singleton is registered by ShellEngine at runtime, and
-# ToastHost probes for it, so a host without it (demo, test) still loads.
-if(NOT TARGET PhosphorShell::PhosphorShellQml)
-    find_package(PhosphorShell CONFIG QUIET)
-endif()
-
 if(COMMAND qt_policy)
     qt_policy(SET QTP0001 NEW)
 endif()
@@ -57,6 +45,9 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 set(_phosphor_notifications_qml_files
+    qml/Phosphor/Notifications/NotificationLabel.qml
+    qml/Phosphor/Notifications/NotificationCard.qml
+    qml/Phosphor/Notifications/NotificationCenter.qml
     qml/Phosphor/Notifications/Toast.qml
     qml/Phosphor/Notifications/ToastHost.qml
 )
@@ -82,11 +73,7 @@ qt_add_qml_module(PhosphorShellNotificationsQml
         Phosphor.Widgets
         QtQuick.Shapes
         QtQuick.Layouts
-    # DEPENDENCIES rather than IMPORTS: Phosphor.Shell's runtime types are
-    # registered imperatively and the qmldir only lists PerScreen, so the
-    # scanner just needs the module named, not its names injected.
-    DEPENDENCIES
-        Phosphor.Shell
+        QtQuick.Controls
     SOURCES
         src/phosphorshellnotifications_qml_plugin.cpp
     QML_FILES ${_phosphor_notifications_qml_files}
@@ -104,6 +91,7 @@ target_link_libraries(PhosphorShellNotificationsQml
         Qt6::Qml
         Qt6::Quick
         Qt6::QuickShapes
+        Qt6::QuickControls2
 )
 
 if(TARGET PhosphorShellWidgets::PhosphorShellWidgetsQml)
@@ -118,15 +106,6 @@ endif()
 if(TARGET PhosphorThemeQmlplugin)
     target_link_libraries(PhosphorShellNotificationsQml PUBLIC PhosphorThemeQmlplugin)
 endif()
-# The Phosphor.Shell module + registrar, so `import Phosphor.Shell` in
-# ToastHost resolves in every host, singleton or not.
-if(TARGET PhosphorShell::PhosphorShellQml)
-    target_link_libraries(PhosphorShellNotificationsQml PUBLIC PhosphorShell::PhosphorShellQml)
-endif()
-if(TARGET PhosphorShellQmlplugin)
-    target_link_libraries(PhosphorShellNotificationsQml PUBLIC PhosphorShellQmlplugin)
-endif()
-
 # No install rules: STATIC, in-tree-only QML module (like the sibling
 # phosphor-shell-* QML modules). Linked directly by the shell and the
 # toast demo; a standalone installed deployment lands with the shell

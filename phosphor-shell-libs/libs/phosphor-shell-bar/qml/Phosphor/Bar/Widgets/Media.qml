@@ -4,18 +4,30 @@
 //
 // Self-contained: owns an MprisHost and follows the first player (MPRIS
 // exposes no "active player", so player 0 is used). Shows a play/pause
-// glyph and the artist + title; clicking toggles playback. Collapses to
-// zero width when no player is present or it has no track metadata.
+// glyph and the artist + title; left-clicking toggles playback and
+// RIGHT-clicking opens MediaPanel, which lists every player with its own
+// transport. Collapses to zero width when no player is present or it has no
+// track metadata.
+//
+// Play/pause keeps the left button because it is the thing a person wants
+// from a now-playing chip nine times out of ten, and it is the one bar
+// widget whose primary action is worth more than opening a panel.
 
 import QtQuick
 import org.kde.kirigami as Kirigami
 import Phosphor.Theme
+import Phosphor.Widgets
 import Phosphor.Service.Mpris
 
 BarWidget {
     id: root
 
-    readonly property int maxTitleWidth: 200
+    /// Relayed by BarController as BarRegistry.widgetActivated("media").
+    /// See Network.qml for why this is declared per widget rather than on
+    /// BarWidget.
+    signal activated
+
+    readonly property int maxTitleWidth: 135
 
     MprisHost {
         id: host
@@ -62,7 +74,7 @@ BarWidget {
             root.player.togglePlaying();
     }
 
-    available: root.player !== null && (root.trackTitle.length > 0 || root.trackArtist.length > 0)
+    available: Appearance.media && root.player !== null && (root.trackTitle.length > 0 || root.trackArtist.length > 0)
     contentWidth: row.implicitWidth
     contentHeight: row.implicitHeight
 
@@ -81,12 +93,12 @@ BarWidget {
         opacity: root._controllable ? 1 : StateLayer.disabled_content
         spacing: Tokens.spacing_xs
 
-        Kirigami.Icon {
-            width: 16
-            height: 16
-            source: root.isPlaying ? "media-playback-pause" : "media-playback-start"
+        ShellIcon {
+            width: 14
+            height: 14
+            source: "audio-x-generic"
             isMask: true
-            color: Theme.on_surface
+            color: Appearance.muted
             anchors.verticalCenter: parent.verticalCenter
         }
 
@@ -96,25 +108,35 @@ BarWidget {
             // assistive tech reads the composed name and then re-reads
             // this fragment.
             Accessible.ignored: true
-            text: root._label
-            color: Theme.on_surface
-            font.pixelSize: Tokens.font_size_label_l
-            font.family: Tokens.font_family
+            text: root.trackTitle
+            color: Appearance.muted
+            font.pixelSize: Math.round((10) * Appearance.textScale)
+            font.family: Tokens.font_family_ui
             elide: Text.ElideRight
             // Setting width below the natural implicitWidth triggers the
             // elide; implicitWidth is intrinsic so there is no binding loop.
             width: Math.min(implicitWidth, root.maxTitleWidth)
             anchors.verticalCenter: parent.verticalCenter
         }
+        SpectrumVisualizer {
+            width: 32
+            height: 18
+            anchors.verticalCenter: parent.verticalCenter
+            style: "bars"
+            visible: Appearance.visualizer !== "off"
+            playing: root.isPlaying
+        }
     }
 
     MouseArea {
         anchors.fill: parent
-        acceptedButtons: Qt.LeftButton
-        cursorShape: Qt.PointingHandCursor
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
         // A player that cannot be controlled should not offer a
-        // pointing-hand cursor and a no-op click.
-        enabled: root._controllable
+        // pointing-hand cursor for a no-op left click. The area itself stays
+        // ENABLED regardless, because the right button opens the panel and
+        // an uncontrollable player is exactly when someone wants to look at
+        // the list and pick a different one.
+        cursorShape: root._controllable ? Qt.PointingHandCursor : Qt.ArrowCursor
 
         // The track readout is on the root Indicator; this area is the
         // actionable control, so it announces AND performs the toggle.
@@ -126,7 +148,23 @@ BarWidget {
         Accessible.role: Accessible.Button
         Accessible.name: root.isPlaying ? qsTr("Pause") : qsTr("Play")
         Accessible.onPressAction: root._toggle()
+        // NO Accessible.onShowMenuAction for the panel, however much the
+        // pointer's secondary button suggests one. QQuickAccessibleAttached
+        // declares no such signal, and assigning it is not a warning: the
+        // whole FILE fails to compile, the factory returns null, and the
+        // media chip never mounts at all. It shipped that way and went
+        // unnoticed because the chip is hidden without a player anyway, so
+        // "no chip" looked exactly like "nothing playing".
+        //
+        // The panel keeps its pointer route (right-click, below). Reaching
+        // it from assistive tech needs a real second action; the attached
+        // property's vocabulary is fixed and does not have one to spare.
 
-        onClicked: root._toggle()
+        onClicked: mouse => {
+            if (mouse.button === Qt.RightButton)
+                root.activated();
+            else
+                root.activated();
+        }
     }
 }

@@ -56,26 +56,8 @@ endif()
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# DBus adaptor (XML → generated adaptor that forwards to NotificationServer)
-# ═══════════════════════════════════════════════════════════════════════════════
-#
-# We EXPOSE org.freedesktop.Notifications (qt6_add_dbus_adaptor): apps call us
-# through it. The generated NotificationsAdaptor forwards each method to the
-# matching public slot on NotificationServer and auto-relays its spec signals
-# (NotificationClosed / ActionInvoked) to the bus.
-
-set(phosphorservicenotifications_DBUS_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/src/dbus)
-
-qt6_add_dbus_adaptor(phosphorservicenotifications_DBUS_GENERATED
-    ${phosphorservicenotifications_DBUS_ROOT}/org.freedesktop.Notifications.xml
-    PhosphorServiceNotifications/NotificationServer.h
-    PhosphorServiceNotifications::NotificationServer
-    notificationsadaptor
-    NotificationsAdaptor
-)
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Library
+# Library. The adaptor records the transport sender for targeted inline replies.
+# The XML under src/dbus documents the public interface.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 set(phosphorservicenotifications_public_HDRS
@@ -89,6 +71,7 @@ set(phosphorservicenotifications_public_HDRS
 set(phosphorservicenotifications_SRCS
     src/qmlregistration.cpp
     src/notificationserver.cpp
+    src/NotificationsAdaptor.h
     src/notification.cpp
     src/notificationmodel.cpp
 )
@@ -96,7 +79,6 @@ set(phosphorservicenotifications_SRCS
 add_library(PhosphorServiceNotifications SHARED
     ${phosphorservicenotifications_public_HDRS}
     ${phosphorservicenotifications_SRCS}
-    ${phosphorservicenotifications_DBUS_GENERATED}
 )
 
 add_library(PhosphorServiceNotifications::PhosphorServiceNotifications ALIAS PhosphorServiceNotifications)

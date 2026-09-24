@@ -656,6 +656,12 @@ Item {
                 // draw by the next stage's hideSource capture instead; only
                 // the last stage actually reaches the screen.
                 visible: root.decorationActive
+                // SurfaceShaderItem is a custom render node, so ancestor
+                // opacity is not part of its own QQuickItem::opacity(). Feed
+                // the content host's transition opacity into every stage;
+                // the generated surface entry point applies it to the final
+                // premultiplied color.
+                opacity: root.contentItem ? root.contentItem.opacity : 1.0
                 // Shifted back by the SAME outerPad the capture inset above, so
                 // the anchor content lands exactly over the anchor again while
                 // the padded band surrounds it evenly. The two offsets are one

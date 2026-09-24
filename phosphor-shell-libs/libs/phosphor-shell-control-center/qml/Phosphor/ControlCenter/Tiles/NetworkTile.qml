@@ -42,6 +42,9 @@ Tile {
         return root._online && root._wireless ? "network-wireless" : "network-wireless-disconnected";
     }
     label: qsTr("Wi-Fi")
+    // Drills into the bar's network panel, the same surface the network
+    // chip opens, instead of a second view of the same service.
+    detailPanelId: "network"
     sublabel: {
         if (!host.wirelessEnabled)
             return qsTr("Off");

@@ -127,7 +127,7 @@ FocusScope {
     Rectangle {
         anchors.fill: parent
         radius: Tokens.radius_tile
-        color: Theme.surface_container
+        color: Appearance.surface
         // An outlined edge, matching the tiles the panel slides over. Without
         // it the panel is the same colour as the surface behind it and has no
         // edge at all, so a drill-in reads as the tiles vanishing rather than
@@ -188,7 +188,7 @@ FocusScope {
                         width: 16
                         height: 16
                         source: "go-previous-symbolic"
-                        color: Theme.on_surface
+                        color: Appearance.text
                     }
 
                     PhosphorRipple {
@@ -196,7 +196,7 @@ FocusScope {
 
                         anchors.fill: parent
                         radius: width / 2
-                        rippleColor: Theme.on_surface
+                        rippleColor: Appearance.text
                         focused: backButton.activeFocus
                         onTapped: root.dismissed()
                     }
@@ -204,7 +204,7 @@ FocusScope {
 
                 Text {
                     text: root.title
-                    color: Theme.on_surface
+                    color: Appearance.text
                     font.family: Tokens.font_family
                     font.pixelSize: Tokens.font_size_title_s
                     font.weight: Tokens.font_weight_medium

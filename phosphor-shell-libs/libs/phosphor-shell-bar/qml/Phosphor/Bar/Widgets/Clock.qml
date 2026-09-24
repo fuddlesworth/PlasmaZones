@@ -1,82 +1,57 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// Phosphor.Bar.Clock, the time bar widget.
-//
-// Self-contained: owns a SystemClock (minute precision). HH:MM in the
-// mono face with tabular figures, so the chip never reflows; the minute
-// digit's change is marked by the 2 px spectrum underline tick (05 R7).
-// Hover reveals the locale-formatted date to the right.
-
 import QtQuick
+import QtQuick.Controls.Basic
 import Phosphor.Theme
 import Phosphor.Shell
-import Phosphor.Widgets
 
-BarWidget {
+AbstractButton {
     id: root
-
-    // Rail-axis hue of this chip, bound by the slot that mounts it.
-    property real railT: 0.5
-
+    signal activated
+    property real railT: 0.8
+    property bool expanded: false
     SystemClock {
         id: clock
-
         precision: SystemClock.Minutes
     }
-
-    readonly property string _time: clock.hours < 0 ? "" : String(clock.hours).padStart(2, "0") + ":" + String(clock.minutes).padStart(2, "0")
-    readonly property string _date: Qt.formatDate(clock.date, Qt.locale().dateFormat(Locale.ShortFormat))
-
-    contentWidth: row.implicitWidth
-    contentHeight: row.implicitHeight
-
-    Accessible.role: Accessible.StaticText
-    Accessible.name: root._time + " " + root._date
-
-    HoverHandler {
-        id: hover
-    }
-
-    Row {
-        id: row
-
-        spacing: Tokens.spacing_s
-
-        TabularText {
-            id: timeLabel
-
-            Accessible.ignored: true
-            text: root._time
-            font.pixelSize: Tokens.font_size_title_s
-            font.weight: Tokens.font_weight_medium
-            tickOnChange: true
-            t: root.railT
+    readonly property string timeText: String(clock.hours).padStart(2, "0") + ":" + String(clock.minutes).padStart(2, "0")
+    implicitWidth: labels.implicitWidth + 16
+    leftPadding: 8
+    rightPadding: 8
+    implicitHeight: 32
+    Accessible.name: qsTr("Show calendar") + " " + dateLabel.text + " " + timeText
+    onClicked: activated()
+    background: Rectangle {
+        radius: 8
+        border.width: root.visualFocus ? 1 : 0
+        border.color: Appearance.text
+        color: root.expanded ? Appearance.card : root.hovered ? Qt.alpha(Appearance.text, 0.05) : "transparent"
+        Rectangle {
+            anchors.bottom: parent.bottom
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width - 8
+            height: 2
+            color: Appearance.stops[2]
+            visible: root.expanded
         }
-
+    }
+    contentItem: Row {
+        id: labels
+        spacing: 7
         Text {
-            Accessible.ignored: true
-            text: root._date
-            color: Theme.on_surface_variant
-            font.pixelSize: Tokens.font_size_body_s
+            id: dateLabel
+            text: Qt.formatDate(clock.date, "ddd d")
+            color: Appearance.muted
             font.family: Tokens.font_family_ui
-            anchors.verticalCenter: timeLabel.verticalCenter
-            visible: opacity > 0
-            opacity: hover.hovered ? 1 : 0
-            width: hover.hovered ? implicitWidth : 0
-            clip: true
-
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: hover.hovered ? Motion.duration_enter_content : Motion.duration_release
-                    easing: hover.hovered ? Motion.reveal : Motion.release
-                }
-            }
-            Behavior on width {
-                NumberAnimation {
-                    duration: hover.hovered ? Motion.duration_enter_content : Motion.duration_release
-                    easing: hover.hovered ? Motion.reveal : Motion.release
-                }
-            }
+            font.pixelSize: Math.round((11) * Appearance.textScale)
+            anchors.verticalCenter: parent.verticalCenter
+        }
+        Text {
+            text: root.timeText
+            color: Appearance.text
+            font.family: Tokens.font_family_mono
+            font.pixelSize: Math.round((11) * Appearance.textScale)
+            anchors.verticalCenter: parent.verticalCenter
         }
     }
 }

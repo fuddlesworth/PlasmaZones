@@ -31,12 +31,14 @@ class LockService::Private
 {
 public:
     explicit Private(QString username)
-        : machine(&sessionLock, &authenticator, std::move(username))
+        : userName(std::move(username))
+        , machine(&sessionLock, &authenticator, userName)
     {
     }
 
     // Declaration order matters: the state machine borrows the two backends, so
     // they must be constructed before (and destroyed after) it.
+    const QString userName;
     WaylandSessionLock sessionLock;
     PamAuthenticator authenticator;
     LockStateMachine machine;
@@ -53,6 +55,11 @@ LockService::LockService(QObject* parent)
 }
 
 LockService::~LockService() = default;
+
+QString LockService::userName() const
+{
+    return d->userName;
+}
 
 bool LockService::isSupported() const
 {

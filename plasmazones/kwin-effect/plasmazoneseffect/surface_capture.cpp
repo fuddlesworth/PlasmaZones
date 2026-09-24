@@ -642,14 +642,9 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
     plan.foldCursor = chainReadsCursor
         ? foldCursorFor(w, state.canvasGeo, decorationMayAnimate(w), m_shaderManager.m_cachedCursorGlobal)
         : kCursorOutside;
-    // Shell surfaces count as FOCUSED: a panel is a dock and never becomes
-    // KWin's active window, so the raw test pinned uSurfaceFocused at 0 for
-    // its whole life and a focus-mixing pack (border's active/inactive
-    // colours) only ever showed its inactive appearance there. A panel has no
-    // unfocused state to represent — it is always "in use" while visible —
-    // and an applet popup is effectively focused for its whole open lifetime,
-    // so both kinds pin the flag high. Mirrored in pushBorderUniforms.
-    const bool focusedNow = deco.isShellSurface || (KWin::effects && w == KWin::effects->activeWindow());
+    // The cache key and shader must agree on focus: shell surfaces stay lit,
+    // and Phosphor's last application keeps its identity while a popup is open.
+    const bool focusedNow = decorationFocused(windowId, w, deco);
     if (!chainReadsFocus) {
         // Terminate a STRANDED ramp. advanceFocusFade is this map's only
         // advancer, and it is unreachable for a chain with no compiled

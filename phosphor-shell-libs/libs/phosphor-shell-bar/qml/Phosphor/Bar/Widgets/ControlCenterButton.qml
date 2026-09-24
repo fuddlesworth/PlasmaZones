@@ -1,56 +1,62 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// Phosphor.Bar.ControlCenterButton, opens the control center.
-//
-// A single 8 px dot in the rail's hue at its x, at 70 % (A2 §5). Its
-// `activated` signal is relayed through BarRegistry.widgetActivated and
-// handled by the shell composer, which hangs the control center pane
-// from this bar under this chip.
-
 import QtQuick
-import Phosphor.Theme
+import QtQuick.Controls
+import org.kde.kirigami as Kirigami
 import Phosphor.Widgets
+import Phosphor.Theme
+import Phosphor.Service.Network
+import Phosphor.Service.UPower
+import Phosphor.Service.PipeWire
 
-Item {
+AbstractButton {
     id: root
-
-    property real railT: 0.93
-    property string label: qsTr("Control center")
-
     signal activated
-
-    implicitWidth: 20
-    implicitHeight: 20
-
-    Accessible.role: Accessible.Button
-    Accessible.name: root.label
-    Accessible.onPressAction: root.activated()
-
-    HoverHandler {
-        id: hover
-
-        cursorShape: Qt.PointingHandCursor
+    property real railT: 0.93
+    NetworkHost {
+        id: network
     }
-    TapHandler {
-        id: tap
-
-        onTapped: root.activated()
+    UPowerHost {
+        id: battery
     }
-
-    Rectangle {
-        anchors.centerIn: parent
-        width: 8
-        height: 8
-        radius: 4
-        color: Spectrum.at(root.railT)
-        opacity: hover.hovered ? 1 : 0.7
-        scale: tap.pressed ? 0.9 : 1
-
-        Behavior on opacity {
-            NumberAnimation {
-                duration: hover.hovered ? Motion.duration_enter : Motion.duration_release
-                easing: hover.hovered ? Motion.enter : Motion.release
-            }
+    readonly property var device: battery.displayDevice
+    readonly property bool hasBattery: device && device.isPresent
+    implicitWidth: symbols.implicitWidth + 24
+    leftPadding: 12
+    rightPadding: 12
+    implicitHeight: 34
+    Accessible.name: qsTr("Open quick settings")
+    onClicked: activated()
+    background: Rectangle {
+        radius: 8
+        color: Appearance.card
+    }
+    contentItem: Row {
+        id: symbols
+        spacing: 12
+        ShellIcon {
+            width: 15
+            height: 15
+            anchors.verticalCenter: parent.verticalCenter
+            source: network.wirelessEnabled ? "network-wireless" : "network-wireless-offline"
+            isMask: true
+            color: Appearance.text
+        }
+        ShellIcon {
+            width: 15
+            height: 15
+            anchors.verticalCenter: parent.verticalCenter
+            source: PipeWireHost.defaultSink && PipeWireHost.defaultSink.muted ? "audio-volume-muted" : "audio-volume-high"
+            isMask: true
+            color: Appearance.text
+        }
+        Text {
+            visible: root.hasBattery
+            text: root.hasBattery ? Math.round(root.device.percentage) + "%" : ""
+            color: Appearance.text
+            font.family: Tokens.font_family_ui
+            font.pixelSize: Math.round((11) * Appearance.textScale)
+            anchors.verticalCenter: parent.verticalCenter
         }
     }
 }

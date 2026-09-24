@@ -22,10 +22,9 @@ class PaletteStore;
 
 namespace PhosphorShellApp {
 
-// Surface packs on the shell's chrome (A1 §2.4, "one engine, one
-// material"): every chrome surface is a decoration host exactly like a
-// window frame, and the pack a focused window wears runs on the bar, the
-// popouts, the OSD bands, the toasts, the picker and the lock clock.
+// Every shell surface is a decoration host: the bar, popouts, OSD bands,
+// toasts, picker and lock screen resolve their own path in the same tree
+// used for window decorations.
 //
 // A layer-shell client cannot be decorated by the compositor around a
 // sub-rect of its surface (the bar's band is a strip of a taller surface,
@@ -38,9 +37,9 @@ namespace PhosphorShellApp {
 //
 // This object resolves a surface path (`shell.phosphor.bar`, ...) to the
 // stage list that host consumes. The tree comes from the daemon's Settings
-// interface (already seeded with the shell's defaults, so a fresh install
-// is decorated) and follows settingsChanged; the packs come from the
-// registry over the same search paths the daemon scans; the theme colours
+// interface (appearance defaults beneath explicit user overrides) and
+// follows settingsChanged. Packs come from the registry over the same
+// search paths the daemon scans; the theme colours
 // a pack may ask for come from the shell's own palette. `revision` bumps
 // whenever any of those move, so a QML binding that reads it re-resolves.
 //
@@ -66,6 +65,7 @@ public:
     /// PaletteStore singleton), so the host sets it from its engine hook;
     /// null falls back to the spectrum's built-in navy tokens.
     void setPalette(PhosphorTheme::PaletteStore* palette);
+    void setAppearance(const QVariantMap& settings);
 
     [[nodiscard]] int revision() const;
     [[nodiscard]] QObject* decorationComponent() const;
@@ -126,6 +126,7 @@ private:
     /// readers are const and the cache is a memo, not state a caller can observe.
     mutable QHash<QString, PhosphorSurfaceShaders::DecorationProfile> m_resolvedCache;
     PhosphorSurfaceShaders::DecorationProfileTree m_tree;
+    QVariantMap m_appearance;
     QPointer<PhosphorTheme::PaletteStore> m_palette;
     QPointer<QObject> m_decorationComponent;
     int m_revision = 0;

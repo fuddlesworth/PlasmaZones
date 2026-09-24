@@ -33,6 +33,11 @@ Item {
     property Item contentItem: null
     property string surfacePath: ""
     property bool focused: true
+    // SurfaceShaderItem renders through a custom scene-graph node. Hosts that
+    // animate this slot's parent (for example PopoutHost's close scale/fade)
+    // need the surface stages composited into textures first so the parent
+    // transform and opacity are applied to the finished decoration.
+    property bool layeredStages: false
 
     // A chain is engaged on this surface: the instantiated host reports
     // `decorationActive` (SurfaceDecoration's contract), and a host
@@ -67,6 +72,13 @@ Item {
         property: "focused"
         value: slot.focused
         when: loader.item !== null && loader.item.focused !== undefined
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+    Binding {
+        target: loader.item
+        property: "layeredStages"
+        value: slot.layeredStages
+        when: loader.item !== null && loader.item.layeredStages !== undefined
         restoreMode: Binding.RestoreBindingOrValue
     }
 }

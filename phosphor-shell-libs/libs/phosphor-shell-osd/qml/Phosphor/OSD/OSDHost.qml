@@ -59,6 +59,7 @@ Item {
     // Inset from the screen edges: the engines' outer gap, so a band sits
     // where a window's edge would.
     property real edgeMargin: Tokens.spacing_s
+    property real bottomInset: edgeMargin
     // Room the bar takes at the top, so a top-edge band sits under it.
     property real topInset: Tokens.bar_thickness
     readonly property alias currentKind: priv.currentKind
@@ -230,7 +231,7 @@ Item {
                 item.width = Qt.binding(() => priv.hasAnchor ? priv.anchorW : frame.width - 2 * root.edgeMargin);
                 item.height = 40;
                 item.x = Qt.binding(() => priv.hasAnchor ? priv.anchorX : root.edgeMargin);
-                item.y = Qt.binding(() => priv.hasAnchor ? priv.anchorY + priv.anchorH - item.height : frame.height - item.height - root.edgeMargin);
+                item.y = Qt.binding(() => priv.hasAnchor ? priv.anchorY + priv.anchorH - item.height : frame.height - item.height - root.bottomInset);
             }
         }
 

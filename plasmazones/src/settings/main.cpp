@@ -6,6 +6,9 @@
 #include "core/platform/singleinstanceservice.h"
 #include "core/utils/translationloader.h"
 #include "config/configmigration.h"
+#ifdef PHOSPHOR_BUILD_SHELL
+#include "common/shelldecorationseeds.h"
+#endif
 #include "settings/controller/settingscontroller.h"
 #include "settingslaunchcontroller.h"
 #include "version.h"
@@ -209,6 +212,9 @@ int main(int argc, char* argv[])
     });
 
     PlasmaZones::SettingsController controller;
+#ifdef PHOSPHOR_BUILD_SHELL
+    PlasmaZones::installShellDecorationSeeds(*controller.settings());
+#endif
 
     // The launch controller owns the D-Bus single-instance lifecycle. Holds a
     // non-owning pointer to `controller`, which must outlive it (guaranteed by

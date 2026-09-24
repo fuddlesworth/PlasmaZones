@@ -7,9 +7,10 @@ Usage: capture-output.py <OutputName> <out.png>   (source env.sh first)
 
 Dependencies: python-dbus (dbus-python) and Pillow.
 
-CAVEAT: this render BYPASSES the effect chain, so it shows raw committed
-geometry, never effect-side suppression. Use it to verify geometry, not
-rendering."""
+CaptureScreen includes compositor effects on KWin 6.7 (verified with a
+shader-only border). CaptureWindow uses a different, direct item-rendering
+path. Keep using dump-windows.sh for committed geometry; screenshot pixels
+can include effect transforms."""
 import os
 import sys
 

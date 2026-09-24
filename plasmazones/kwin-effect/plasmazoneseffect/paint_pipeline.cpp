@@ -57,35 +57,17 @@ using ShaderInternal::shaderClockNowMs;
 
 bool PlasmaZonesEffect::blocksDirectScanout() const
 {
-    // Crop mode only: with scrollingCropStraddlers on, partial edge columns
-    // keep their TRUE rects and the per-output cull in paintWindow is what
-    // crops the overhang off the neighbouring monitor. That cull exists only
-    // in the GL composite path — a surface presented directly on a hardware
-    // plane bypasses the effect chain, which is exactly how the overhang
-    // leaked when cropping was the default. Forcing composition while any
-    // scrolling screen exists is the price of crop mode; the default clamp
-    // mode costs nothing here because its clip is the committed geometry
-    // itself.
-    // Known enable-order gap, deliberately unfixed: the engine flips to true
-    // rects synchronously on the settings change while this cached flag
-    // arrives over an async D-Bus read. The exposure is NOT bounded by the
-    // retile debounce — applyLayout also runs synchronously from window
-    // lifecycle and float events, so any open/close/float landing inside the
-    // reply latency (one getSetting queued behind loadCachedSettings' whole
-    // burst) commits overhang with scanout still permitted. Closing it needs
-    // an effect-side ack the settings path does not have; crop is off by
-    // default and the flip is an explicit user action, so the window is
-    // accepted rather than engineered away.
-    // Either the daemon has resolved at least one screen to cropping (the
-    // per-context SetScrollCropStraddlers rule folded with the setting), or
-    // the map has not arrived yet and the global setting says crop. The
-    // fallback is SEEDED-GATED, not a plain OR: an empty resolved map is
-    // ambiguous on its own — "no screen crops" and "no reply yet" look
-    // identical — and while the fallback applied to both, a rule resolving
-    // every screen to false could never hand direct scanout back while the
-    // global setting stayed on. Gating on the seeded flag keeps the bring-up
-    // window no worse than the old global-flag test while making the resolved
-    // map authoritative the moment it exists.
+    if (m_shellOverview->active())
+        return true;
+    // Crop mode needs the composite path: direct scanout would bypass the
+    // per-output cull and expose a column's overhang on the next monitor.
+    // Clamp mode commits the clipped geometry and needs no scanout block.
+    // The resolved per-context crop map is authoritative once seeded. Before
+    // its first reply, use the cached global setting; an empty seeded map
+    // means no output crops, even when the global setting is still enabled.
+    // Enable-order caveat: the engine can commit true rects synchronously
+    // before this async cache updates, including during a lifecycle retile.
+    // An effect-side acknowledgement would be needed to close that interval.
     if (m_tilingHandler->hasScrollingScreens()
         && (m_tilingHandler->anyScreenCropsStraddlers()
             || (!m_tilingHandler->scrollEffectBehaviourSeeded() && m_cachedScrollCropStraddlers))) {
@@ -149,6 +131,8 @@ KWin::RenderDevice* PlasmaZonesEffect::currentPassRenderDevice() const
 
 void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
 {
+    if (m_shellOverview->onOutput(data.screen))
+        data.mask |= PAINT_SCREEN_WITH_TRANSFORMED_WINDOWS;
     // KWin 6.7 no longer passes a presentTime; sample the steady clock
     // ourselves. CompositorClock's epoch is steady_clock by contract, so a
     // current-time sample is the correct (and only available) source — KWin's
@@ -543,6 +527,11 @@ KWinCompat::PaintResult PlasmaZonesEffect::paintScreen(const KWin::RenderTarget&
 bool PlasmaZonesEffect::paintScreenImpl(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                                         int mask, const KWin::Region& deviceRegion, KWin::LogicalOutput* screen)
 {
+    if (m_shellOverview->onOutput(screen)) {
+        // The overview owns this output's frame, so only the scene walk runs.
+        // Its outcome is still latched for postPaintScreen.
+        return notePaintOk(KWinCompat::paintScreenChecked(renderTarget, viewport, mask, deviceRegion, screen));
+    }
     // GL-current point reached on every pass the effect takes part in,
     // including the transition-owned ones below: textures retired by a strip
     // that went away are deleted here. The clear sites drain too (under a
@@ -1291,6 +1280,11 @@ void PlasmaZonesEffect::postPaintScreen()
 
 void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data)
 {
+    if (m_shellOverview->appliesTo(w)) {
+        data.setTransformed();
+        KWin::effects->prePaintWindow(view, w, data);
+        return;
+    }
     // Derived ONCE. This runs per window, per output, per frame, and the three
     // branches below (padded transform, SetOpacity, chain translucency) each used to
     // re-derive the id and re-look-up the same decoration entry.
@@ -1534,6 +1528,9 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
                                         KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
                                         KWin::WindowPaintData& data)
 {
+    if (m_shellOverview->appliesTo(w)) {
+        return notePaintOk(m_shellOverview->paint(renderTarget, viewport, w, mask, deviceRegion, data));
+    }
     // Scrolling-strip boundary clip. A strip column legitimately straddles
     // its screen's edge (centering the active column pushes both neighbours
     // across it). In default clamp mode the engine clamps BOTH edges

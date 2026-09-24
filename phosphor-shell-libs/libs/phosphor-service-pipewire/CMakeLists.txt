@@ -65,6 +65,7 @@ set(phosphorservicepipewire_public_HDRS
     include/PhosphorServicePipeWire/QmlRegistration.h
     include/PhosphorServicePipeWire/PipeWireConnection.h
     include/PhosphorServicePipeWire/PipeWireHost.h
+    include/PhosphorServicePipeWire/PwAudioProbe.h
     include/PhosphorServicePipeWire/PwNode.h
     include/PhosphorServicePipeWire/PwNodeModel.h
 )
@@ -76,6 +77,7 @@ set(phosphorservicepipewire_SRCS
     src/pipewireconnection_registry.cpp
     src/pipewireconnection_writes.cpp
     src/pipewirehost.cpp
+    src/pwaudioprobe.cpp
     src/pwnode.cpp
     src/pwnodemodel.cpp
 )

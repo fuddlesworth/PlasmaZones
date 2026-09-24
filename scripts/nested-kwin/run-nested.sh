@@ -68,10 +68,10 @@
 #     script shadows the service file so activation starts the build-tree
 #     daemon in-session instead; daemon.sh still evicts whoever holds the
 #     name, so the run has one daemon with a known pid and log.
-#   - Screenshots are NOT evidence of effect behaviour: ScreenShot2's
-#     CaptureScreen bypasses the effect chain entirely, and workspace
-#     captures run it with no output pass. Only committed geometry
-#     (dump-windows.sh) and journal diagnostics are trustworthy.
+#   - CaptureScreen includes effects on KWin 6.7; CaptureWindow uses a
+#     direct item-rendering path. capture-output.py uses CaptureScreen.
+#     Use dump-windows.sh for committed geometry because screenshot pixels
+#     can include effect transforms.
 set -eu
 OUTPUTS="${1:-2}"
 case "$OUTPUTS" in
@@ -125,7 +125,45 @@ REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 # unwritable while env.sh reports success from /tmp.
 RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/pz-nested-$(id -u)}"
 mkdir -p "$RUNTIME_DIR"
-NEST="${PZ_NESTED_DIR:-$RUNTIME_DIR/pz-nested}"
+NEST="${PZ_NESTED_DIR:-$RUNTIME_DIR/pz-nested${PZ_NESTED_SESSION:+-$PZ_NESTED_SESSION}}"
+
+# PZ_NESTED_DIR is used below in cleanup and in generated service files. Do
+# all validation and canonicalization before deriving HOME_N or touching any
+# state. Lexical depth alone accepts /tmp/.., and a symlinked ancestor can
+# make an apparently deep path resolve to a dangerous root.
+case "$NEST" in
+    /*) ;;
+    *)
+        echo "refusing: PZ_NESTED_DIR must be an absolute path, got '$NEST'" >&2
+        exit 1
+        ;;
+esac
+case "$NEST" in
+    *[!A-Za-z0-9._/-]*)
+        echo "refusing: PZ_NESTED_DIR must match [A-Za-z0-9._/-]+ (no whitespace or shell metacharacters), got '$NEST'" >&2
+        exit 1
+        ;;
+esac
+NEST=$(realpath -m -- "$NEST") || {
+    echo "refusing: could not canonicalize PZ_NESTED_DIR '$NEST'" >&2
+    exit 1
+}
+case "$NEST" in
+    *[!A-Za-z0-9._/-]*)
+        echo "refusing: canonical PZ_NESTED_DIR contains unsupported characters: '$NEST'" >&2
+        exit 1
+        ;;
+    /|/home|/root|/usr|/var|/tmp)
+        echo "refusing: PZ_NESTED_DIR resolves to an unsafe scratch root '$NEST'" >&2
+        exit 1
+        ;;
+    /*/*) ;;
+    *)
+        echo "refusing: PZ_NESTED_DIR must resolve at least two components below '/', got '$NEST'" >&2
+        exit 1
+        ;;
+esac
+
 BUILD="${PZ_NESTED_BUILD:-build}"
 HOME_N="$NEST/home"
 
@@ -142,7 +180,7 @@ HOME_N="$NEST/home"
 # a distinct PZ_NESTED_DIR — the state dir holds the env.sh every follow-up
 # script sources, so sharing one across two sessions points them both at
 # whichever started last.
-PZ_NESTED_SOCKET="${PZ_NESTED_SOCKET:-pznested}"
+PZ_NESTED_SOCKET="${PZ_NESTED_SOCKET:-pznested${PZ_NESTED_SESSION:+-$PZ_NESTED_SESSION}}"
 # Validated like the numeric arguments above, and for a sharper reason: this
 # one is interpolated into the `sh -c` command text and into env.sh below, so a
 # name carrying a space, a quote or a shell metacharacter either breaks every
@@ -195,32 +233,6 @@ if [ -f "$NEST/env.sh" ] && [ -z "${PZ_NESTED_FORCE:-}" ]; then
     fi
 fi
 
-# PZ_NESTED_DIR is interpolated straight into the rm -rf and the chmod below.
-# An operator typo of / or $HOME would take out /home or open the home
-# directory up, so require something that looks like a scratch dir: absolute,
-# and at least two components deep. Unset is safe already — it falls through
-# to the default above.
-#
-# The character class matters as much as the depth. This path is also written
-# unquoted into the generated D-Bus service file's Exec= line, which is parsed
-# as a command line and cannot express a path containing whitespace, and it is
-# interpolated into two heredocs where a quote or a dollar sign would either
-# break the shim or run as shell. A scratch directory has no business carrying
-# any of that.
-case "$NEST" in
-    /*/*) ;;
-    *)
-        echo "refusing: PZ_NESTED_DIR must be an absolute path at least two components deep, got '$NEST'" >&2
-        exit 1
-        ;;
-esac
-case "$NEST" in
-    *[!A-Za-z0-9._/-]*)
-        echo "refusing: PZ_NESTED_DIR must match [A-Za-z0-9._/-]+ (no whitespace or shell metacharacters), got '$NEST'" >&2
-        exit 1
-        ;;
-esac
-
 # PZ_NESTED_KEEP_STATE keeps the previous run's XDG homes. Any non-empty
 # value, like every other toggle in this script (FORCE, XWAYLAND, VISIBLE):
 # a probe that sets it to "yes" and has its state wiped reads exactly like a
@@ -270,6 +282,14 @@ else
     rm -f "$NEST/daemon.log" "$NEST/daemon.log.prev"
 fi
 mkdir -p "$HOME_N/config" "$HOME_N/data" "$HOME_N/cache" "$HOME_N/state"
+# Seed the repository's data packs into the isolated user data home. Without
+# this, the branch binaries still run but registry-backed packs fall through
+# to /usr/share; newly added packs (for example surface/top-rail) then appear
+# as missing in Settings and the nested run is testing the installed data.
+if [ -d "$REPO/plasmazones/data" ]; then
+    mkdir -p "$HOME_N/data/plasmazones"
+    cp -a "$REPO/plasmazones/data/." "$HOME_N/data/plasmazones/"
+fi
 # env.sh carries the session bus address; keep the tree private even when
 # PZ_NESTED_DIR points somewhere world-traversable.
 chmod 700 "$NEST"
@@ -294,6 +314,12 @@ export XDG_DATA_HOME="$HOME_N/data"
 export XDG_CACHE_HOME="$HOME_N/cache"
 export XDG_STATE_HOME="$HOME_N/state"
 export QT_QPA_PLATFORM=wayland
+# Put the worktree's executable directory first. The daemon launches the
+# settings app and editor by name (and D-Bus activation inherits this
+# environment), so leaving PATH untouched makes those actions silently start
+# the installed system binaries while the shell/effect themselves use the
+# build tree. Keep the host PATH after it for non-PlasmaZones helpers.
+export PATH="$REPO/$BUILD/bin:${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}"
 # build/bin carries the KWin effect (kwin/effects/plugins/...);
 # build/plugins carries the layer-shell QPA integration
 # (wayland-shell-integration/phosphorwayland-qpa.so). Without the second
@@ -412,6 +438,7 @@ exec dbus-run-session -- sh -c "
     echo \"export XDG_STATE_HOME='$XDG_STATE_HOME'\"
     echo \"export XDG_DATA_DIRS='$XDG_DATA_DIRS'\"
     echo \"export QT_QPA_PLATFORM=wayland\"
+    echo \"export PATH='$PATH'\"
     echo \"export QT_PLUGIN_PATH='$QT_PLUGIN_PATH'\"
     echo \"export KWIN_SCREENSHOT_NO_PERMISSION_CHECKS=1\"
     echo \"export QT_LOGGING_RULES='$QT_LOGGING_RULES'\"

@@ -1,223 +1,164 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// Phosphor.Launcher.Launcher, the viewfinder launcher surface.
-//
-// A query column on the left and a live placement-map miniature of the
-// current screen on the right (A3 §1). The query field has no box: its
-// top edge is a 1 px spectrum line that draws out from the caret on
-// focus. Providers are a tracked label with their prefix characters,
-// not a pill row; Tab still cycles them. Results are rows with a 2 px
-// blue selection line on the left edge that slides between them, and
-// when the active provider is Windows the results are drawn ON their
-// cells in the miniature, coloured on the state axis by score, with the
-// selected one edged white.
-//
-// Like the other surfaces it renders into whatever it is parented to and
-// owns no window. All the data comes from `results`, a LauncherModel the
-// host builds from its provider registry.
-//
-// Keyboard, all from the search field so focus never has to leave it:
-//   Up / Down      move the selection
-//   Return         primary action on the selection
-//   Alt+Return     alternate action, when the row offers one
-//   Tab / Shift+Tab cycle the provider filter
-//   Escape         dismissed()
-//
-// Windows results are matched to cells by the daemon window id the model
-// exposes. The Apps "next placement" rect uses the focused cell, which is
-// where a launch lands under every current engine.
-
 pragma ComponentBehavior: Bound
-
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 import Phosphor.Theme
 import Phosphor.Widgets
 
 FocusScope {
     id: root
-
     required property var results
-
+    property var map: null
+    property var catalog: null
+    property Component decoration: null
+    property bool wide: false
+    readonly property bool stageHome: wide && catalog !== null && field.text.length === 0 && results.providerFilter === ""
+    readonly property real panelPadding: wide ? 26 : 20
+    readonly property int popoutTopInset: 145
+    readonly property alias queryText: field.text
+    property int selectedApp: -1
+    readonly property var workspaceWindows: map ? map.windows : []
     signal activated
     signal dismissed
-
     LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft
     LayoutMirroring.childrenInherit: true
-
-    implicitWidth: Math.min(880, Screen.width - 2 * Tokens.spacing_xl)
-    implicitHeight: Math.min(500, Screen.height - 2 * Tokens.spacing_xl)
-
-    readonly property int _rowHeight: 44
-    readonly property int _sectionHeight: 24
-
-    readonly property alias queryText: field.text
-
-    // This screen's placement map (a PlacementMapScreen), for the
-    // viewfinder. Injected by the host, which knows the output the
-    // launcher opened on; null draws an empty viewfinder.
-    property var map: null
-
-    // Rail-axis hue of the card's stroke: the card is centred.
-    readonly property real t: 0.5
-
-    // The surface pack on the card (A1 §2.4, `shell.phosphor.popout`),
-    // set by the composition root. With a chain engaged the card's own
-    // stroke steps aside for the pack's.
-    property Component decoration: null
-
+    implicitWidth: Math.min(wide ? 1100 : 620, Screen.width - 44)
+    implicitHeight: Math.min(Screen.height - 80, wide ? 420 : 183 + Math.min(7, Math.max(1, list.count)) * 59)
     Binding {
         target: root.results
         property: "active"
         value: root.visible
         restoreMode: Binding.RestoreNone
     }
-
     function reset(): void {
         field.text = "";
-        root.results.query = "";
-        root.results.providerFilter = "";
+        results.query = "";
+        results.providerFilter = "";
         list.currentIndex = 0;
+        recent.currentIndex = 0;
+        selectedApp = -1;
         field.forceActiveFocus();
     }
-
     function activateCurrent(alternate: bool): void {
+        if (stageHome) {
+            if (selectedApp >= 0) {
+                const app = catalog.pinnedApplications[selectedApp];
+                if (app && catalog.launchPinned(app.id))
+                    root.activated();
+            } else if (recent.currentIndex >= 0 && recent.currentIndex < workspaceWindows.length) {
+                map.activateNavigationWindow(workspaceWindows[recent.currentIndex].windowId);
+                root.activated();
+            }
+            return;
+        }
         if (list.currentIndex < 0 || list.currentIndex >= list.count)
             return;
         const row = list.currentIndex;
-        const repeatable = alternate && root.results.alternateIsRepeatable(row);
-        if (!root.results.activate(row, alternate))
-            return;
-        if (repeatable)
-            return;
-        root.activated();
+        const repeatable = alternate && results.alternateIsRepeatable(row);
+        if (results.activate(row, alternate) && !repeatable)
+            root.activated();
     }
-
-    // The provider the list is filtered to, or null for all.
-    readonly property var _provider: {
-        const id = root.results.providerFilter;
-        const ps = root.results.providers;
-        for (let i = 0; i < ps.length; ++i) {
-            if (ps[i].id === id)
-                return ps[i];
+    function moveSelection(delta: int): void {
+        if (stageHome) {
+            selectedApp = -1;
+            recent.currentIndex = Math.max(0, Math.min(recent.count - 1, recent.currentIndex + delta));
+        } else
+            list.currentIndex = Math.max(0, Math.min(list.count - 1, list.currentIndex + delta));
+    }
+    function filter(id: string): void {
+        results.providerFilter = id;
+        list.currentIndex = 0;
+        selectedApp = -1;
+        field.forceActiveFocus();
+    }
+    function cycleFilter(delta: int): void {
+        if (!catalog) {
+            results.cycleProviderFilter(delta);
+            return;
         }
-        return null;
+        const filters = ["", "windows", "apps", "actions"];
+        filter(filters[(filters.indexOf(results.providerFilter) + delta + filters.length) % filters.length]);
     }
-
-    // Card: container ground, stroke, no shadow.
-    Rectangle {
+    ShellSurface {
         id: ground
-
-        // The pack's capture item: the ground alone, so the content above
-        // stays crisp and interactive.
         property bool shaderAnchor: true
-
         anchors.fill: parent
-        radius: Tokens.radius_container
-        color: Theme.surface_container
-        opacity: 0.92
     }
     DecorationSlot {
-        id: decorationSlot
-
         anchors.fill: parent
         component: root.decoration
         contentItem: ground
         surfacePath: "shell.phosphor.popout"
         focused: root.activeFocus
+        layeredStages: true
     }
-    SpectrumStroke {
+    ColumnLayout {
         anchors.fill: parent
-        radius: Tokens.radius_container
-        t: root.t
-        active: true
-        visible: !decorationSlot.active
-    }
-
-    RowLayout {
-        anchors.fill: parent
-        anchors.margins: Tokens.spacing_l
-        spacing: Tokens.spacing_l
-
-        // ─── Query column ────────────────────────────────────────────────
-        ColumnLayout {
-            id: queryColumn
-
-            readonly property real _w: Math.round((root.width - 3 * Tokens.spacing_l) * 0.38)
-            Layout.preferredWidth: _w
-            Layout.minimumWidth: _w
-            Layout.maximumWidth: _w
-            Layout.fillWidth: false
-            Layout.fillHeight: true
-            spacing: Tokens.spacing_m
-
-            // The field: no box; its top edge is the spectrum line that
-            // draws out from the caret on focus.
-            Item {
-                Layout.fillWidth: true
-                implicitHeight: field.implicitHeight + Tokens.spacing_s
-
-                SpectrumUnderline {
-                    id: fieldEdge
-
-                    anchors.left: parent.left
-                    anchors.top: parent.top
-                    height: 1
-                    length: parent.width
-                    value: field.activeFocus ? 1 : 0.25
-                    t: root.t
-                    opacity: field.activeFocus ? 1 : 0.5
+        anchors.margins: root.panelPadding + 1
+        spacing: 0
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: root.wide ? 66 : 55
+            radius: Appearance.radius * 0.6
+            color: Appearance.recess
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: root.wide ? 17 : 15
+                spacing: 13
+                ShellIcon {
+                    source: "system-search"
+                    implicitWidth: 19
+                    implicitHeight: 19
+                    color: Appearance.text
                 }
-
-                Text {
-                    id: prefix
-
-                    anchors.left: parent.left
-                    anchors.verticalCenter: field.verticalCenter
-                    text: root._provider && root._provider.prefix !== undefined ? root._provider.prefix : ""
-                    visible: text.length > 0
-                    color: Theme.on_surface_variant
-                    font.family: Tokens.font_family_mono
-                    font.pixelSize: Tokens.font_size_title_l
-                }
-
                 TextInput {
                     id: field
-
-                    anchors.left: prefix.visible ? prefix.right : parent.left
-                    anchors.leftMargin: prefix.visible ? Tokens.spacing_s : 0
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    anchors.topMargin: Tokens.spacing_s
-                    color: Theme.on_surface
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    verticalAlignment: TextInput.AlignVCenter
+                    color: Appearance.text
                     font.family: Tokens.font_family_ui
-                    font.pixelSize: Tokens.font_size_title_l
+                    font.pixelSize: Math.round((root.wide ? 22 : 17) * Appearance.textScale)
                     focus: true
                     selectByMouse: true
-                    Accessible.name: qsTr("Search")
-
+                    clip: true
+                    Accessible.name: qsTr("Search apps, windows and actions")
                     Text {
                         anchors.fill: parent
-                        visible: field.text.length === 0
-                        text: qsTr("Search apps, windows and commands")
-                        color: Theme.on_surface_variant
-                        opacity: 0.6
+                        verticalAlignment: Text.AlignVCenter
+                        visible: !field.text.length
+                        text: root.wide ? qsTr("Search your desktop…") : qsTr("Apps, windows, actions…")
+                        color: Appearance.muted
                         font: field.font
                         elide: Text.ElideRight
                     }
-
                     onTextChanged: {
                         root.results.query = text;
                         list.currentIndex = 0;
                     }
-
                     Keys.onUpPressed: event => {
-                        list.currentIndex = Math.max(0, list.currentIndex - 1);
+                        root.moveSelection(-1);
                         event.accepted = true;
                     }
                     Keys.onDownPressed: event => {
-                        list.currentIndex = Math.min(list.count - 1, list.currentIndex + 1);
+                        root.moveSelection(1);
                         event.accepted = true;
+                    }
+                    Keys.onLeftPressed: event => {
+                        if (root.stageHome && root.catalog.pinnedApplications.length) {
+                            root.selectedApp = root.selectedApp < 0 ? root.catalog.pinnedApplications.length - 1 : Math.max(0, root.selectedApp - 1);
+                            event.accepted = true;
+                        } else
+                            event.accepted = false;
+                    }
+                    Keys.onRightPressed: event => {
+                        if (root.stageHome && root.selectedApp >= 0) {
+                            root.selectedApp = root.selectedApp + 1 < root.catalog.pinnedApplications.length ? root.selectedApp + 1 : -1;
+                            event.accepted = true;
+                        } else
+                            event.accepted = false;
                     }
                     Keys.onReturnPressed: event => {
                         root.activateCurrent((event.modifiers & Qt.AltModifier) !== 0);
@@ -228,13 +169,11 @@ FocusScope {
                         event.accepted = true;
                     }
                     Keys.onTabPressed: event => {
-                        root.results.cycleProviderFilter(1);
-                        list.currentIndex = 0;
+                        root.cycleFilter(1);
                         event.accepted = true;
                     }
                     Keys.onBacktabPressed: event => {
-                        root.results.cycleProviderFilter(-1);
-                        list.currentIndex = 0;
+                        root.cycleFilter(-1);
                         event.accepted = true;
                     }
                     Keys.onEscapePressed: event => {
@@ -242,299 +181,311 @@ FocusScope {
                         event.accepted = true;
                     }
                 }
-            }
-
-            // Provider labels: a tracked eyebrow, "All" then one per
-            // provider with rows. Text with an underline, never a pill.
-            Row {
-                id: pills
-
-                objectName: "providerPills"
-
-                Layout.fillWidth: true
-                spacing: Tokens.spacing_m
-                visible: list.count > 0 || root.results.providerFilter !== ""
-
-                ProviderLabel {
-                    text: qsTr("All")
-                    selected: root.results.providerFilter === ""
-                    onClicked: {
-                        root.results.providerFilter = "";
-                        list.currentIndex = 0;
-                        field.forceActiveFocus();
-                    }
+                Keycap {
+                    text: qsTr("Esc")
                 }
-
-                Repeater {
-                    model: root.results.providers
-
-                    ProviderLabel {
-                        id: pill
-
-                        required property var modelData
-
-                        visible: pill.modelData.count > 0 || pill.selected
-                        text: qsTr("%1 %2", "provider filter: provider name, then its result count").arg(pill.modelData.name).arg(Number(pill.modelData.count).toLocaleString(Qt.locale()))
-                        selected: root.results.providerFilter === pill.modelData.id
-                        onClicked: {
-                            root.results.providerFilter = pill.modelData.id;
-                            list.currentIndex = 0;
-                            field.forceActiveFocus();
+            }
+        }
+        Flow {
+            id: pills
+            objectName: "providerPills"
+            Layout.fillWidth: true
+            Layout.topMargin: 17
+            Layout.bottomMargin: 12
+            spacing: 8
+            ProviderLabel {
+                text: qsTr("All")
+                selected: root.results.providerFilter === ""
+                onClicked: root.filter("")
+            }
+            Repeater {
+                model: root.catalog ? [
+                    {
+                        id: "windows",
+                        name: qsTr("Windows")
+                    },
+                    {
+                        id: "apps",
+                        name: qsTr("Apps")
+                    },
+                    {
+                        id: "actions",
+                        name: qsTr("Actions")
+                    }
+                ] : root.results.providers
+                ProviderLabel {
+                    required property var modelData
+                    text: modelData.name
+                    selected: root.results.providerFilter === modelData.id
+                    onClicked: root.filter(modelData.id)
+                }
+            }
+        }
+        RowLayout {
+            id: homeColumns
+            visible: root.stageHome
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.topMargin: 24
+            spacing: 32
+            ColumnLayout {
+                Layout.fillWidth: false
+                Layout.minimumWidth: 0
+                Layout.preferredWidth: (homeColumns.width - 32) * 0.6
+                Layout.alignment: Qt.AlignTop
+                spacing: 16
+                Eyebrow {
+                    text: qsTr("PINNED APPLICATIONS")
+                }
+                Flickable {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.preferredHeight: 120
+                    clip: true
+                    contentWidth: width
+                    contentHeight: appGrid.implicitHeight
+                    boundsBehavior: Flickable.StopAtBounds
+                    ScrollBar.vertical: ScrollBar {}
+                    GridLayout {
+                        id: appGrid
+                        width: parent.width
+                        columns: width < 360 ? 2 : 4
+                        columnSpacing: 10
+                        rowSpacing: 10
+                        Repeater {
+                            model: root.catalog ? root.catalog.pinnedApplications : []
+                            AbstractButton {
+                                id: appTile
+                                required property var modelData
+                                required property int index
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 1
+                                implicitHeight: 100
+                                Accessible.name: modelData.name
+                                background: Rectangle {
+                                    color: Appearance.card
+                                    radius: Appearance.radius * 0.7
+                                    border.width: 1
+                                    border.color: root.selectedApp === appTile.index || appTile.hovered ? Appearance.text : Appearance.outline
+                                }
+                                contentItem: ColumnLayout {
+                                    spacing: 12
+                                    Item {
+                                        Layout.fillHeight: true
+                                    }
+                                    ShellIcon {
+                                        Layout.alignment: Qt.AlignHCenter
+                                        source: iconMapper.appIcon(appTile.modelData.iconName)
+                                        implicitWidth: 26
+                                        implicitHeight: 26
+                                        color: Appearance.accent
+                                    }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        Layout.leftMargin: 8
+                                        Layout.rightMargin: 8
+                                        horizontalAlignment: Text.AlignHCenter
+                                        text: appTile.modelData.name
+                                        color: Appearance.text
+                                        font.family: Tokens.font_family_ui
+                                        font.pixelSize: Math.round((11) * Appearance.textScale)
+                                        elide: Text.ElideRight
+                                    }
+                                    Item {
+                                        Layout.fillHeight: true
+                                    }
+                                }
+                                onClicked: {
+                                    if (root.catalog.launchPinned(modelData.id))
+                                        root.activated();
+                                }
+                                TapHandler {
+                                    acceptedButtons: Qt.RightButton
+                                    onTapped: unpinMenu.popup()
+                                }
+                                Menu {
+                                    id: unpinMenu
+                                    MenuItem {
+                                        text: qsTr("Unpin from launcher")
+                                        onTriggered: root.catalog.togglePinned(appTile.modelData.id)
+                                    }
+                                }
+                            }
                         }
                     }
-                }
-            }
-
-            ListView {
-                id: list
-
-                objectName: "resultList"
-
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                clip: true
-                model: root.results
-                currentIndex: 0
-                keyNavigationEnabled: false
-                highlightFollowsCurrentItem: true
-                highlightMoveDuration: 110
-                highlightResizeDuration: 0
-                boundsBehavior: Flickable.StopAtBounds
-
-                // The selection: a 2 px blue line on the left edge, the
-                // only translating element.
-                highlight: Item {
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.top: parent.top
-                        anchors.bottom: parent.bottom
-                        anchors.topMargin: Tokens.spacing_s
-                        anchors.bottomMargin: Tokens.spacing_s
-                        width: 2
-                        color: Spectrum.active
-                    }
-                }
-
-                section.property: "providerName"
-                section.criteria: ViewSection.FullString
-                section.delegate: Item {
-                    id: sectionHeader
-
-                    required property string section
-
-                    width: ListView.view.width
-                    height: root._sectionHeight
-
                     Text {
-                        anchors.left: parent.left
-                        anchors.leftMargin: Tokens.spacing_m
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: sectionHeader.section
-                        textFormat: Text.PlainText
-                        color: Theme.on_surface_variant
-                        font.family: Tokens.font_family_ui
-                        font.pixelSize: Tokens.font_size_label_s
-                        font.weight: Tokens.font_weight_medium
-                        font.capitalization: Font.AllUppercase
-                        font.letterSpacing: 1
+                        visible: root.catalog && root.catalog.pinnedApplications.length === 0
+                        width: parent.width
+                        text: qsTr("Right-click an application in search to pin it here.")
+                        wrapMode: Text.WordWrap
+                        color: Appearance.muted
+                        font.pixelSize: Math.round((11) * Appearance.textScale)
                     }
-                }
-
-                delegate: LauncherResultRow {
-                    id: row
-
-                    width: ListView.view.width
-                    current: ListView.isCurrentItem
-                    onClicked: {
-                        list.currentIndex = row.index;
-                        root.activateCurrent(false);
-                    }
-                }
-
-                onCountChanged: {
-                    if (currentIndex < 0 || currentIndex >= count)
-                        currentIndex = 0;
                 }
             }
-
+            Rectangle {
+                Layout.fillHeight: true
+                implicitWidth: 1
+                color: Appearance.outline
+            }
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.preferredWidth: 1
+                Layout.leftMargin: -6
+                spacing: 16
+                Eyebrow {
+                    text: qsTr("ON THIS WORKSPACE")
+                }
+                ListView {
+                    id: recent
+                    objectName: "workspaceResults"
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    model: root.workspaceWindows
+                    clip: true
+                    currentIndex: 0
+                    boundsBehavior: Flickable.StopAtBounds
+                    ScrollBar.vertical: ScrollBar {}
+                    delegate: LauncherResultRow {
+                        required property var modelData
+                        width: ListView.view.width
+                        compact: true
+                        current: ListView.isCurrentItem && root.selectedApp < 0
+                        title: modelData.title || modelData.appId
+                        subtitle: {
+                            const name = (modelData.appId || "").split(".").pop();
+                            return name.charAt(0).toUpperCase() + name.slice(1);
+                        }
+                        iconName: modelData.appId
+                        primaryActionLabel: qsTr("Open")
+                        alternateActionLabel: ""
+                        hasAlternateAction: false
+                        onClicked: {
+                            recent.currentIndex = index;
+                            root.selectedApp = -1;
+                            root.activateCurrent(false);
+                        }
+                    }
+                    Text {
+                        visible: recent.count === 0
+                        width: parent.width
+                        text: qsTr("No open windows")
+                        color: Appearance.muted
+                        font.pixelSize: Math.round((11) * Appearance.textScale)
+                    }
+                }
+            }
+        }
+        ListView {
+            id: list
+            objectName: "resultList"
+            visible: !root.stageHome
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            model: root.results
+            currentIndex: 0
+            clip: true
+            spacing: 0
+            keyNavigationEnabled: false
+            boundsBehavior: Flickable.StopAtBounds
+            highlightFollowsCurrentItem: true
+            ScrollBar.vertical: ScrollBar {}
+            delegate: LauncherResultRow {
+                id: resultRow
+                required providerId
+                required resultId
+                width: ListView.view.width
+                current: ListView.isCurrentItem
+                compact: root.wide
+                catalog: root.catalog
+                onClicked: {
+                    list.currentIndex = resultRow.index;
+                    root.activateCurrent(false);
+                }
+            }
+            onCountChanged: if (currentIndex < 0 || currentIndex >= count)
+                currentIndex = 0
             Text {
-                Layout.fillWidth: true
                 visible: list.count === 0
-                text: root.results.query.length > 0 ? qsTr("No results for %1").arg(root.results.query) : qsTr("Type to search")
+                anchors.centerIn: parent
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                text: root.results.query.length ? qsTr("No results for %1").arg(root.results.query) : qsTr("Type to search")
                 textFormat: Text.PlainText
-                color: Theme.on_surface_variant
-                font.family: Tokens.font_family_ui
-                font.pixelSize: Tokens.font_size_body_s
-                elide: Text.ElideRight
-            }
-
-            TabularText {
-                Layout.fillWidth: true
-                readonly property LauncherResultRow currentRow: list.currentItem as LauncherResultRow
-                text: qsTr("↑↓ navigate · ↵ %1 · Alt+↵ alternate · Tab cycles providers · Esc closes").arg(currentRow ? currentRow.primaryActionLabel : qsTr("open"))
-                textFormat: Text.PlainText
-                color: Theme.on_surface_variant
-                font.pixelSize: Tokens.font_size_label_s
+                color: Appearance.muted
+                font.pixelSize: Math.round((12) * Appearance.textScale)
                 elide: Text.ElideRight
             }
         }
-
-        // ─── Viewfinder ──────────────────────────────────────────────────
-        Item {
+        RowLayout {
             Layout.fillWidth: true
-            Layout.fillHeight: true
-
-            PlacementMiniature {
-                id: mini
-
-                anchors.centerIn: parent
-                width: Math.min(parent.width, parent.height * aspect)
-                height: width / aspect
-                model: root.map
-                cellRadius: Tokens.radius_mini
-                interactive: true
-                onCellClicked: id => {
-                    if (root.map)
-                        root.map.activate(id);
-                }
+            Layout.topMargin: 13
+            spacing: 3
+            Keycap {
+                text: "↑"
             }
-
-            // Windows results drawn on their cells: a state-axis fill by
-            // score, white edge on the selected one. The model's
-            // `resultId` for the Windows provider is the toplevel id, and
-            // the map's cell id is the daemon window id. They agree only
-            // where the daemon exposes both for one window, so a result
-            // whose id the map does not carry simply draws no overlay.
-            Repeater {
-                model: root.results.providerFilter === "windows" ? root.results : null
-
-                delegate: Item {
-                    id: overlay
-
-                    required property int index
-                    required property string resultId
-                    required property real score
-
-                    readonly property var cell: {
-                        if (!root.map)
-                            return null;
-                        const cells = root.map.cells;
-                        for (let i = 0; i < cells.length; ++i) {
-                            if (cells[i].id === overlay.resultId)
-                                return cells[i];
-                        }
-                        return null;
-                    }
-                    visible: cell !== null
-                    x: mini.x + (cell ? cell.x * mini.width : 0)
-                    y: mini.y + (cell ? cell.y * mini.height : 0)
-                    width: cell ? cell.w * mini.width : 0
-                    height: cell ? cell.h * mini.height : 0
-
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: Tokens.radius_mini
-                        color: Spectrum.at(Math.max(0, Math.min(1, overlay.score)))
-                        opacity: 0.35
-                        border.width: 1
-                        border.color: list.currentIndex === overlay.index ? Spectrum.focus : color
-                    }
-                }
+            Keycap {
+                text: "↓"
             }
-
-            // Apps: where the launch will land. The focused cell is the
-            // answer under every current engine — snapping places into
-            // the focused zone, tiling splits it, scrolling inserts
-            // beside it.
-            Rectangle {
-                readonly property var cell: {
-                    if (!root.map || root.results.providerFilter !== "apps")
-                        return null;
-                    const cells = root.map.cells;
-                    for (let i = 0; i < cells.length; ++i) {
-                        if (cells[i].focused)
-                            return cells[i];
-                    }
-                    return null;
-                }
-                visible: cell !== null
-                x: mini.x + (cell ? cell.x * mini.width : 0)
-                y: mini.y + (cell ? cell.y * mini.height : 0)
-                width: cell ? cell.w * mini.width : 0
-                height: cell ? cell.h * mini.height : 0
-                radius: Tokens.radius_mini
-                color: "transparent"
-                border.width: 1
-                border.color: Spectrum.active
-                opacity: 0.9
-
-                Text {
-                    anchors.centerIn: parent
-                    text: qsTr("next")
-                    color: Theme.on_surface_variant
-                    font.family: Tokens.font_family_mono
-                    font.pixelSize: Tokens.font_size_label_s
-                }
+            Text {
+                text: qsTr("Select")
+                color: Appearance.muted
+                font.pixelSize: Math.round((10) * Appearance.textScale)
             }
-
-            TabularText {
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.top: mini.bottom
-                anchors.topMargin: Tokens.spacing_s
-                visible: root.map !== null
-                readonly property var _nouns: [qsTr("%n zone(s)", "", root.map ? root.map.cells.length : 0), qsTr("%n tile(s)", "", root.map ? root.map.cells.length : 0), qsTr("%n column(s)", "", root.map ? root.map.cells.length : 0)]
-                // Bounded on BOTH sides: the arrays have exactly three entries,
-                // one per placement mode, and an out-of-range mode would put a
-                // literal "undefined · undefined" on screen rather than fall
-                // back to the no-engine label.
-                text: root.map && root.map.mode >= 0 && root.map.mode < 3 ? [qsTr("Snapping"), qsTr("Tiling"), qsTr("Scrolling")][root.map.mode] + " · " + _nouns[root.map.mode] : qsTr("No placement engine")
-                color: Theme.on_surface_variant
-                font.pixelSize: Tokens.font_size_label_s
+            Keycap {
+                Layout.leftMargin: 5
+                text: qsTr("Enter")
+            }
+            Text {
+                text: qsTr("Open")
+                color: Appearance.muted
+                font.pixelSize: Math.round((10) * Appearance.textScale)
+            }
+            Item {
+                Layout.fillWidth: true
+            }
+            Text {
+                text: qsTr("Search by title or application")
+                color: Appearance.muted
+                font.pixelSize: Math.round((10) * Appearance.textScale)
+                elide: Text.ElideRight
             }
         }
     }
-
-    component ProviderLabel: Item {
-        id: pl
-
-        property string text: ""
+    LauncherResultRow {
+        id: iconMapper
+        visible: false
+        index: -1
+        title: ""
+        subtitle: ""
+        iconName: ""
+        primaryActionLabel: ""
+        alternateActionLabel: ""
+        hasAlternateAction: false
+    }
+    component ProviderLabel: ShellButton {
         property bool selected: false
-
-        signal clicked
-
-        width: label.implicitWidth
-        height: label.implicitHeight + 4
-
-        Accessible.role: Accessible.Button
-        Accessible.name: pl.text
-        Accessible.onPressAction: pl.clicked()
-
-        Text {
+        implicitHeight: 28
+        implicitWidth: label.implicitWidth + 22
+        highlighted: selected
+        background: Rectangle {
+            radius: 7
+            color: parent.highlighted || parent.hovered ? Appearance.card : "transparent"
+        }
+        contentItem: Text {
             id: label
-
-            text: pl.text
-            color: pl.selected ? Theme.on_surface : Theme.on_surface_variant
+            text: parent.text
+            color: parent.highlighted ? Appearance.text : Appearance.muted
             font.family: Tokens.font_family_ui
-            font.pixelSize: Tokens.font_size_label_m
-            font.weight: Tokens.font_weight_medium
-            font.capitalization: Font.AllUppercase
-            font.letterSpacing: 1
+            font.pixelSize: Math.round((10) * Appearance.textScale)
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
         }
-        SpectrumUnderline {
-            anchors.left: parent.left
-            anchors.bottom: parent.bottom
-            length: label.implicitWidth
-            color: Spectrum.active
-            t: 0.33
-            opacity: pl.selected ? 1 : (plHover.hovered ? 0.5 : 0)
-        }
-        HoverHandler {
-            id: plHover
-
-            cursorShape: Qt.PointingHandCursor
-        }
-        TapHandler {
-            onTapped: pl.clicked()
-        }
+    }
+    component Eyebrow: Text {
+        color: Appearance.muted
+        font.family: Tokens.font_family_ui
+        font.pixelSize: Math.round((10) * Appearance.textScale)
+        font.letterSpacing: 1
     }
 }

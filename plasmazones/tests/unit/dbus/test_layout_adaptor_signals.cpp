@@ -41,6 +41,8 @@
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/TilingParams.h>
 #include <PhosphorLayoutApi/LayoutId.h>
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/IPhysicalScreenSource.h>
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -51,6 +53,20 @@ using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 namespace {
+class ReferenceScreens final : public PhosphorScreens::IPhysicalScreenSource
+{
+public:
+    QVector<PhosphorScreens::PhysicalScreen> screens() const override
+    {
+        return {{QStringLiteral("DP-1"), QStringLiteral("DP-1"), QRect(0, 0, 1440, 900)},
+                {QStringLiteral("DP-2"), QStringLiteral("DP-2"), QRect(1440, 0, 1440, 900)}};
+    }
+    PhosphorScreens::PhysicalScreen primaryScreen() const override
+    {
+        return screens().first();
+    }
+};
+
 // Minimal stub algorithm producing two side-by-side zones. Lets the
 // autotile getLayout() path run end-to-end without depending on the Luau
 // engine (whose geometry is independently covered by test_luau_parity); this
@@ -103,6 +119,31 @@ private Q_SLOTS:
         m_layoutManager = nullptr;
         m_adaptor = nullptr;
         m_guard.reset();
+    }
+
+    void testScreenStatesCarryLiveLayoutCapabilities()
+    {
+        ReferenceScreens provider;
+        PhosphorScreens::ScreenManager screens({.physicalScreenSource = &provider, .useGeometrySensors = false});
+        screens.start();
+        QCOMPARE(screens.effectiveScreenIds().size(), 2);
+        QObject owner;
+        LayoutAdaptor adaptor(m_layoutManager, nullptr, &screens, &owner);
+        bool supportsLayouts = false;
+        QStringList queriedScreens;
+        adaptor.setLayoutsAvailableResolver([&](const QString& screenId) {
+            queriedScreens.append(screenId);
+            return supportsLayouts;
+        });
+        auto rows = QJsonDocument::fromJson(adaptor.getScreenStates().toUtf8()).array();
+        QVERIFY(!rows.isEmpty());
+        QCOMPARE(rows.size(), queriedScreens.size());
+        for (const auto& row : rows)
+            QCOMPARE(row.toObject().value(QStringLiteral("layoutsAvailable")), QJsonValue(false));
+        supportsLayouts = true;
+        rows = QJsonDocument::fromJson(adaptor.getScreenStates().toUtf8()).array();
+        for (const auto& row : rows)
+            QCOMPARE(row.toObject().value(QStringLiteral("layoutsAvailable")), QJsonValue(true));
     }
 
     // ─────────────────────────────────────────────────────────────────

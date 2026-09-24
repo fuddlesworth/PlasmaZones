@@ -73,3 +73,7 @@ _phosphorservicepipewire_test(test_phosphorservicepipewire_smoke test_smoke.cpp)
 # claim holds only with this pin). Developers wanting the full write path run
 # the binary directly with PHOSPHOR_PW_TESTS_ALLOW_WRITE unset or =1.
 phosphor_append_test_environment(test_phosphorservicepipewire_smoke "PHOSPHOR_PW_TESTS_ALLOW_WRITE=0")
+
+# Real routing, device writes and audio samples on an isolated virtual server.
+_phosphorservicepipewire_test(test_phosphorservicepipewire_details test_audio_details.cpp)
+set_tests_properties(test_phosphorservicepipewire_details PROPERTIES TIMEOUT 60)

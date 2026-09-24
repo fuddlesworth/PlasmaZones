@@ -32,7 +32,7 @@ OSDCard {
                 width: 13
                 height: 13
                 radius: width / 2
-                color: Theme.on_surface
+                color: Appearance.text
             }
             // Eight rays around the disc.
             Repeater {
@@ -50,7 +50,7 @@ OSDCard {
                         width: 2.5
                         height: 5
                         radius: 1.25
-                        color: Theme.on_surface
+                        color: Appearance.text
                     }
                 }
             }

@@ -28,6 +28,7 @@
 
 #include <PhosphorServiceSni/StatusNotifierItem.h>
 #include <PhosphorServiceSni/StatusNotifierItemModel.h>
+#include <PhosphorServiceSni/TrayItems.h>
 #include <PhosphorServiceSni/StatusNotifierHost.h>
 #include <PhosphorServiceSni/DBusMenuModel.h>
 #include <PhosphorServiceSni/QmlRegistration.h>
