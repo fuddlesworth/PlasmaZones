@@ -33,14 +33,15 @@
 // through (`vTexCoord = texCoord`); the kwin path receives texCoord
 // from KWin's Y-up offscreen FBO and flips it
 // (`vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y)`). `gl_Position`
-// also differs: the kwin path multiplies `position` by
-// `modelViewProjectionMatrix`, the daemon emits clip-space directly.
+// also differs only in WHICH matrix: the kwin path multiplies `position` by
+// `modelViewProjectionMatrix`, the daemon by `qt_Matrix`. Neither emits
+// clip-space directly.
 // See `kKwinDefaultVertexSource` in
 // `kwin-effect/plasmazoneseffect/shader_textures.cpp` and
 // `kDefaultVertexShaderSource` in
 // `libs/phosphor-rendering/src/shadereffect.cpp`. The desktop-switch pass
-// is a THIRD source of the same invariant: `kDesktopQuadVertexSource`
-// (`kwin-effect/transitions/desktoptransitionshader.cpp`) passes texCoord
+// is a THIRD source of the same invariant: `TransitionPass::kOutputQuadVertexSource`
+// (`kwin-effect/transitions/transitionpasspure.h`) passes texCoord
 // through unflipped and gets Y-down from the blend quad's own vertex
 // texcoords instead.
 //
@@ -98,8 +99,10 @@ uniform vec4 customColors[16];
 // `iChannelResolution[4]` from the UBO branch is intentionally absent
 // here: the kwin-effect never calls `setUniform` for it (single-pass, no
 // buffer FBOs), and no animation shader references it. Adding a
-// default-block declaration would compile but read garbage at runtime —
-// better to surface the gap as a compile error if a future shader
+// default-block declaration would compile and silently read ZERO at runtime
+// (GL zero-initialises default-block uniforms, as this file says at the top
+// and pointer_uniforms.glsl repeats) — better to surface the gap as a
+// compile error if a future shader
 // reaches for it on the kwin path. (The UBO branch keeps the field for
 // std140 layout parity with `PhosphorShaders::BaseUniforms`; see
 // static_asserts in `<PhosphorShaders/BaseUniforms.h>`.)
@@ -122,9 +125,11 @@ uniform float iTimeHi;
 // 1 when the runtime is driving this leg in the "reverse" direction
 // (window.close / going-to-minimized / unmaximize on the kwin path,
 // hide leg on the daemon path); 0 for the forward direction. Symmetric
-// shaders ignore this — the runtime ALSO flips iTime so they auto-mirror.
-// Asymmetric shaders (matrix's directional rain + open-vs-close window
-// reveal) branch on it. See UBO branch below for the full contract.
+// shaders ignore this — the runtime ALSO flips iTime so they auto-mirror,
+// which is why NO bundled pack branches on it today: every mention in
+// data/animations is a comment recording that no branch was needed. It is
+// here for an asymmetric pack that cannot auto-mirror. See UBO branch below
+// for the full contract.
 uniform int iIsReversed;
 // .xy = surface origin in logical-screen pixels; .zw = (screenW, screenH).
 // Vertex / fragment shaders that need to know where the surface sits on
@@ -165,7 +170,9 @@ uniform vec2 iAnchorPosInFbo;
 // the animation instead of snapping in only after it ends. The
 // kwin-effect pushes 1.0 for windows with no matching rule, so the
 // multiply is a no-op in the common case. Daemon-only animations have no
-// window-rule opacity, so the UBO branch omits this field entirely.
+// window-rule opacity, so the UBO branch supplies it as a `#define` of 1.0
+// rather than a block member: a pack that reads it still compiles on both
+// branches, which is the parity promise this header makes.
 uniform float iWindowOpacity;
 
 // Card's UV sub-rect within `uTexture0`, as (x, y, width, height) in
@@ -185,8 +192,9 @@ uniform float iWindowOpacity;
 // `cached->iAnchorRectInTextureLoc` setUniform site writes the value
 // computed by `ShaderInternal::computeTextureSubRect(anchorGeo,
 // expandedGeo)` for surface-extent legs; anchor-extent legs carry the
-// (0, 0, 1, 1) identity. Daemon:
-// `SurfaceAnimator::syncShaderGeometryNow` pushes it through
+// (0, 0, 1, 1) identity. Daemon: the free function
+// `syncShaderGeometryNow` (surfaceanimator_p.h, not a SurfaceAnimator
+// member) pushes it through
 // `AnimationUniformExtension`. Both stamp the value before
 // the first painted frame, so a fragment never sees the GL default
 // `vec4(0)` — `surfaceColor` would otherwise sample the corner texel
@@ -266,7 +274,7 @@ uniform vec4 iLayerRectInTexture;
 // element stride of 16 bytes in std140 (rule 4: rounded up to vec4
 // alignment). That makes `int _pad0[2]` 32 bytes — NOT 8 — which would
 // shove the next field 24 bytes past where the C `BaseUniforms` upload
-// places it. Sibling daemon `data/overlays/common.glsl` solves this by
+// places it. Sibling daemon `data/overlays/shared/common.glsl` solves this by
 // declaring no explicit padding and relying on std140's natural
 // vec4-alignment of the next array to bridge the gap. Match that
 // pattern here: after `int iFlipBufferY` (4 bytes at offset 580,
@@ -274,7 +282,9 @@ uniform vec4 iLayerRectInTexture;
 // auto-aligned to offset 592 by std140 (rule 4 → 16-byte boundary),
 // implicitly filling the same 8 bytes the C struct's
 // `_pad_after_audioSpectrum[2]` covers. Likewise `iSurfaceScreenPos`
-// below is auto-aligned to a 16-byte boundary (rule 2: vec2 at 672),
+// below is auto-aligned to a 16-byte boundary (rule 3, the vec4 rule — the
+// field IS a vec4, and std140's rule 2 is the 8-byte vec2 case, which would
+// not have moved 664 to 672),
 // bridging the 8 bytes C's `_pad_after_iIsReversed[2]` owns after
 // `iIsReversed` at 660 and landing the base block at 672 bytes. The
 // iSurfaceScreenPos .. iMoveMesh tail then extends the AnimationUniforms
@@ -390,7 +400,7 @@ layout(std140, binding = 0) uniform AnimationUniforms {
                                  //              content snapshot into
                                  //              uOldWindow (uTexture3); the
                                  //              kwin branch declares its
-                                 //              default-block twin below.
+                                 //              default-block twin ABOVE.
     vec4 iIconRect;              // offset 816 — minimize target (x/y/w/h in
                                  //              iSurfaceScreenPos space);
                                  //              all-zero = no icon target.
@@ -400,7 +410,7 @@ layout(std140, binding = 0) uniform AnimationUniforms {
     vec2 iMoveTrail[16];         // offset 832 (256 bytes; std140 pads each
                                  //              vec2 element to 16). Same
                                  //              contract as the kwin twin
-                                 //              below: offsets of past
+                                 //              ABOVE: offsets of past
                                  //              origins vs the current one,
                                  //              newest first, ~15 ms apart.
     vec2 iMoveMesh[16];          // offset 1088 (256 bytes) — wobble lattice
@@ -642,7 +652,7 @@ vec2 legTranslation(vec4 fromRect, vec4 toRect) {
 // clean uniform morph on a stretch and keep their full look on a real slide.
 //
 // Unlike legDirection this has no pixel deadband, so a sub-pixel rigid
-// residue still reads as travel and can return a large share off motion
+// residue still reads as travel and can return a large share of motion
 // smaller than legDirection accepts as an axis. Such a leg does not normally
 // play at all.
 float legTravelShare(vec4 fromRect, vec4 toRect) {
