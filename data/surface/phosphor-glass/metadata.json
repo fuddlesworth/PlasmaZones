@@ -105,7 +105,7 @@
             "default": 0.08,
             "min": 0.0,
             "max": 0.5,
-            "description": "How fast the recharge sweep travels the pane",
+            "description": "How fast the recharge sweep travels the pane. At 0 the sweep and the phosphor's slow breathing both stop, so the glass sits still",
             "group": "Glow"
         },
         {

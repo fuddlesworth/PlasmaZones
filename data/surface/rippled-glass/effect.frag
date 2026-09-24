@@ -74,9 +74,30 @@ vec4 pSurface(vec2 uv) {
         vec2 q = (px - uSurfaceFrameTopLeft) / sizePx;
         float t = iTime * max(p_rippleSpeed, 0.0);
 
-        // Central-difference gradient of the height field. The epsilon is a
-        // fixed fraction of a ripple so the slope estimate stays smooth at
-        // any ripple size.
+        // Central-difference gradient of the height field.
+        //
+        // THE EPSILON IS A LOW-PASS, and the reason written here before ("a
+        // fixed fraction of a ripple so the slope estimate stays smooth at any
+        // ripple size") was not the real one. Smoothness is not at stake:
+        // vnoise uses the quintic interpolant and is C2, so a far smaller
+        // epsilon is exactly as smooth.
+        //
+        // What e = 0.35 actually does is transfer a component of frequency f at
+        // sinc(0.7f). The dominant swell (f = 1) comes through at +0.368, but
+        // the detail octave (vnoise(q * 2.7)) comes through at -0.057, so it is
+        // attenuated 6.4x AND sign-inverted: the finer ripples bend the
+        // backdrop the WRONG WAY, faintly. Neither consumer sees them, since
+        // rippleHeight's value itself is never used and the refraction and the
+        // glint both read only this gradient.
+        //
+        // The cost of that is four rippleHeight calls, each two vnoise, each
+        // four hash13, so 32 hash13 per fragment over the whole canvas with
+        // half of it buying the inverted term.
+        //
+        // LEFT AS IS DELIBERATELY. Shrinking e or dropping the octave changes
+        // both the look and the cost, and this pack has not been rendered
+        // against the change. The comment is corrected so the next reader does
+        // not take the old justification as a reason to keep the value.
         const float e = 0.35;
         vec2 grad = vec2(rippleHeight(q + vec2(e, 0.0), t) - rippleHeight(q - vec2(e, 0.0), t),
                          rippleHeight(q + vec2(0.0, e), t) - rippleHeight(q - vec2(0.0, e), t))
@@ -115,6 +136,7 @@ vec4 pSurface(vec2 uv) {
         // how steep the ripple is, so flat glass stays clean. Premultiplied add, weighted by the backdrop alpha so
         // the glint never brightens the cleared off-capture margin.
         float slope = length(grad);
+        float glint = 0.0;
         if (slope > 0.0001) {
             // px space is top-down, so up-left is negative in BOTH components.
             float facing = clamp(dot(grad / slope, vec2(-0.6, -0.8)), 0.0, 1.0);
@@ -123,15 +145,31 @@ vec4 pSurface(vec2 uv) {
             // glint and rain-glass's top-light were the two that ignored it,
             // so an unfocused rippled pane kept a fully lit ripple crest while
             // the glass pack beside it dimmed.
-            float glint = pow(facing * min(slope, 1.0), 2.0) * clamp(p_highlightStrength, 0.0, 1.0) * focusDim(0.55);
-            lit += glint * g.a;
+            glint = pow(facing * min(slope, 1.0), 2.0) * clamp(p_highlightStrength, 0.0, 1.0) * focusDim(0.55);
         }
 
-        // Colour grade on the refracted, glinted sample, then the tint, then
-        // a driver-stable grain (the blur pack's pass order).
+        // Colour grade on the refracted sample, THEN the glint, then the tint,
+        // then a driver-stable grain (the blur pack's pass order for the last
+        // three).
+        //
+        // The glint used to be added before the grade, which is the wrong side:
+        // the grade's job is to tune how the CAPTURED BACKDROP looks, and
+        // running it over the pack's own specular made Brightness, Contrast and
+        // Saturation double as highlight controls. rain-glass already adds its
+        // top-light to the graded sample, and phosphor-glass reads its
+        // excitation off the raw sample for the same reason. At the shipped
+        // defaults the grade is a true identity (oklabSaturate early-returns at
+        // 1.0 and the other two knobs are identity at 1), so this reorder
+        // changes nothing until a user actually tunes the grade, which is the
+        // case it is fixing.
+        //
+        // It stops HERE rather than going after the tint, where rain-glass puts
+        // its highlight, because the tint's default strength is non-zero and
+        // crossing it would change the shipped look.
         lit = surfaceBackdropGrade(vec4(lit, g.a), p_brightness, p_contrast, p_saturation, p_vibrancy,
                                    p_vibrancyDarkness)
                   .rgb;
+        lit += glint * g.a;
         lit = mix(lit, tint * g.a, tintStrength);
         lit += (hash13(px) - 0.5) * 2.0 * clamp(p_noiseStrength, 0.0, 0.2) * g.a;
         pane = vec4(clamp(lit, 0.0, max(g.a, 0.0001)), g.a) * mask;

@@ -229,17 +229,28 @@ float surfaceKawaseOffset(int depth) {
     return max(kwinOffset * 0.5 - 0.5, 0.0);
 }
 
-// DOWN tap over @p src (the level above, twice this pass's resolution): the
-// centre weighted 4 plus the four diagonals at (offset + 0.5) source texels,
-// over 8. Premultiplied in, premultiplied out.
+// The DOWN kernel itself, over texels the caller has already fetched: the
+// centre weighted 4 plus the four diagonals, over 8.
+//
+// Split out because the two DOWN passes below cannot share a fetch. One reads a
+// sampler2D and one reads the backdrop through backdropTexel(), and GLSL has no
+// function pointers, so what they CAN share is the part that has to stay
+// identical between them. A weight that drifted in one and not the other would
+// show up as a blur that changes character at the first level and nowhere else,
+// which is a hard thing to see and a harder one to attribute.
+//
+// The summation order matches what both callers had when they were written out
+// by hand, so the result is bit-identical rather than merely equivalent.
+vec4 surfaceKawaseDownCombine(vec4 centre, vec4 d0, vec4 d1, vec4 d2, vec4 d3) {
+    return (centre * 4.0 + d0 + d1 + d2 + d3) / 8.0;
+}
+
+// DOWN tap over @p src (the level above, twice this pass's resolution), at
+// (offset + 0.5) source texels. Premultiplied in, premultiplied out.
 vec4 surfaceKawaseDown(sampler2D src, vec2 uv, float offset) {
     vec2 d = (offset + 0.5) / vec2(textureSize(src, 0));
-    vec4 sum = texture(src, uv) * 4.0;
-    sum += texture(src, uv - d);
-    sum += texture(src, uv + d);
-    sum += texture(src, uv + vec2(d.x, -d.y));
-    sum += texture(src, uv - vec2(d.x, -d.y));
-    return sum / 8.0;
+    return surfaceKawaseDownCombine(texture(src, uv), texture(src, uv - d), texture(src, uv + d),
+                                    texture(src, uv + vec2(d.x, -d.y)), texture(src, uv - vec2(d.x, -d.y)));
 }
 
 // The first DOWN pass reads the backdrop capture through backdropTexel(),
@@ -251,12 +262,8 @@ vec4 surfaceKawaseDown(sampler2D src, vec2 uv, float offset) {
 // why this spacing cannot come from textureSize().
 vec4 surfaceKawaseDownBackdrop(vec2 uv, float offset) {
     vec2 d = (offset + 0.5) * kSurfaceKawaseBaseTexel * 0.5 / max(uSurfaceSize, vec2(1.0));
-    vec4 sum = backdropTexel(uv) * 4.0;
-    sum += backdropTexel(uv - d);
-    sum += backdropTexel(uv + d);
-    sum += backdropTexel(uv + vec2(d.x, -d.y));
-    sum += backdropTexel(uv - vec2(d.x, -d.y));
-    return sum / 8.0;
+    return surfaceKawaseDownCombine(backdropTexel(uv), backdropTexel(uv - d), backdropTexel(uv + d),
+                                    backdropTexel(uv + vec2(d.x, -d.y)), backdropTexel(uv - vec2(d.x, -d.y)));
 }
 
 // UP tap over @p src (the level below, half this pass's resolution): the

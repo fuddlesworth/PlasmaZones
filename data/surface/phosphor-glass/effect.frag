@@ -63,8 +63,18 @@ vec4 pSurface(vec2 uv) {
     // ── Recharge sweep: a soft diagonal band drifting across the pane on a
     // slow clock. It boosts the phosphor response as it passes, so the glass
     // visibly re-energises rather than sitting at a steady glow. ──
-    float sweepPhase = fract(diag * 0.7 - iTime * max(p_sweepSpeed, 0.0)) - 0.5;
-    float sweep = exp(-sweepPhase * sweepPhase / 0.008);
+    // sweepSpeed is the whole recharge clock, gating the band AND the
+    // persistence breathing at :99, so that its declared minimum of 0 stills
+    // the pack. Dropping the iTime term alone does not: sweepPhase becomes a
+    // function of position, exp() peaks at diag = 0.714, and the pane keeps a
+    // permanently bright diagonal band that only Glow strength 0 could remove,
+    // which also removes the effect the pack exists for. Gating rather than
+    // scaling the clock leaves the look at every non-zero speed untouched. The
+    // 1e-4 edge is step()'s, since step(0.0, 0.0) answers 1.
+    float sweepSpeed = max(p_sweepSpeed, 0.0);
+    float recharging = step(1e-4, sweepSpeed);
+    float sweepPhase = fract(diag * 0.7 - iTime * sweepSpeed) - 0.5;
+    float sweep = exp(-sweepPhase * sweepPhase / 0.008) * recharging;
 
     // Gradient hue flows gently through the pane.
     vec3 glowCol = fluxGradient(pingPong(fuv.x * 0.55 + fuv.y * 0.30 + iTime * max(p_flowSpeed, 0.0)));
@@ -96,7 +106,13 @@ vec4 pSurface(vec2 uv) {
         // 1e-4 floor keeps the curve's shape everywhere else identical.
         float exciteLo = clamp(p_exciteThreshold, 0.0, 1.0);
         float excite = pow(smoothstep(exciteLo, max(exciteLo + 1e-4, 1.0), lumN), 1.5);
-        float persist = 0.75 + 0.25 * sin(iTime * 1.3 + lumN * 6.0 + diag * 4.0);
+        // Gated by the same recharge clock, because this term took raw iTime
+        // and no setting reached it: flowSpeed 0 stops the hue flow and
+        // sweepSpeed 0 stopped the band, and this 1.3 rad/s oscillation ran on
+        // through both, leaving this the one pack in the family with no still
+        // state. 0.75 is the mean of the breathing, so stilling it lands on the
+        // value the pane already averages rather than on a new brightness.
+        float persist = 0.75 + 0.25 * recharging * sin(iTime * 1.3 + lumN * 6.0 + diag * 4.0);
         float response = excite * persist * (1.0 + sweep * 0.8) + sweep * 0.06;
 
         // Base pane: the blurred scene sunk toward the navy brand surface.
