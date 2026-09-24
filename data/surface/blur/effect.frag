@@ -11,9 +11,11 @@
 // fully hidden and this pass is a passthrough.
 //
 // The blurred scene runs through brightness / contrast / saturation
-// (surfaceColorAdjust) and a driver-stable grain before the tint, the same
-// controls a stock blur-behind effect exposes, so this pack stands on its own
-// as "the blur" without leaning on the glass family's lens.
+// (surfaceColorAdjust), then vibrancy, then the tint, and the grain goes on
+// LAST so it dithers the tinted result rather than being crushed by the
+// contrast step. These are the same controls a stock blur-behind effect
+// exposes, so this pack stands on its own as "the blur" without leaning on the
+// glass family's lens.
 //
 // NO-BACKDROP FALLBACK: when the host bound nothing behind the surface,
 // uHasBackdrop is 0 (and backdropTexel() is transparent). The pane

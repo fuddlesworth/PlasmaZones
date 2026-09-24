@@ -3,7 +3,7 @@
 //
 // Mosaic pack: the backdrop pixelated into coarse cells instead of
 // blurred — privacy glass. SINGLE PASS: unlike the rest of the Blur
-// family this pack needs no Gaussian buffers, it samples the RAW
+// family this pack needs no Kawase buffers at all. It samples the RAW
 // backdrop once per fragment at the cell centre via backdropTexel()
 // (which keeps a cell centre that lands outside the surface's own slice
 // in range on either runtime: the compositor clamps into the captured

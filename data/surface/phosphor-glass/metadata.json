@@ -33,7 +33,7 @@
             "name": "Blur radius",
             "type": "int",
             "default": 24,
-            "min": 4,
+            "min": 2,
             "max": 256,
             "description": "Strength of the backdrop blur (px)",
             "group": "Blur"

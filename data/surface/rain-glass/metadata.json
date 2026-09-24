@@ -65,7 +65,7 @@
             "default": 1.0,
             "min": 0.5,
             "max": 2.0,
-            "description": "Overall size of the droplets, larger values mean bigger drops",
+            "description": "Overall size of the droplets. Larger values mean bigger drops",
             "group": "Rain"
         },
         {
@@ -95,7 +95,7 @@
             "default": 40.0,
             "min": 5.0,
             "max": 100.0,
-            "description": "How strongly droplets bend the scene behind them (px)",
+            "description": "How strongly droplets bend the scene behind them. It scales the droplet's own geometric offset, so 40 is that offset unchanged and 80 is twice it",
             "group": "Refraction"
         },
         {
@@ -181,7 +181,7 @@
             "name": "Mirror at the edge",
             "type": "bool",
             "default": false,
-            "description": "Where the bend reaches past the pane's edge, fold the backdrop back inside instead of stretching the edge pixel",
+            "description": "Where the bend reaches past the pane's edge, fold the backdrop back inside. Left off, the bend keeps reading the captured scene beside the pane, which can make the edges look see-through",
             "group": "Refraction"
         }
     ]

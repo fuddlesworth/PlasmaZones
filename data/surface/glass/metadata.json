@@ -151,7 +151,7 @@
             "min": 0.0,
             "max": 2.0,
             "description": "Saturation of the glass in the OKLab colour space, where 1.0 leaves it unchanged",
-            "group": "Tint"
+            "group": "Colour"
         },
         {
             "id": "noiseStrength",
@@ -161,7 +161,7 @@
             "min": 0.0,
             "max": 0.2,
             "description": "Fine grain that masks banding in the blurred glass",
-            "group": "Tint"
+            "group": "Colour"
         },
         {
             "id": "tintColor",
@@ -260,7 +260,7 @@
             "name": "Mirror at the edge",
             "type": "bool",
             "default": false,
-            "description": "Where the bend reaches past the pane's edge, fold the backdrop back inside instead of stretching the edge pixel",
+            "description": "Where the bend reaches past the pane's edge, fold the backdrop back inside. Left off, the bend keeps reading the captured scene beside the pane, which can make the edges look see-through",
             "group": "Refraction"
         }
     ]

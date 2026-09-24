@@ -4,10 +4,15 @@
 // Frosted-glass pack, main pass: the phosphor-shell frosted panel shader
 // (examples/phosphor-shell/shaders/frosted_glass.frag) ported onto a REAL
 // blurred backdrop. The original faked frosting with a translucent tint
-// slab; here the slab is the Gaussian-blurred scene behind the surface
+// slab; here the slab is the dual-Kawase-blurred scene behind the surface
 // (iChannel6), and the original's layers ride on top unchanged: the
 // multi-octave crystalline Voronoi grain (slow-drifting on iTime), the
 // tint, the multiplicative vignette, and the rounded-corner SDF clip.
+//
+// SHARED BACKDROP STAGES, in order: the blurred sample runs through
+// surfaceBackdropGrade (brightness, contrast, OKLab saturation, vibrancy)
+// before the gradient tint, and the Voronoi grain and vignette ride on top
+// as the original did.
 //
 // NO-BACKDROP FALLBACK: when the host bound nothing behind the surface
 // (uHasBackdrop = 0), the pack renders the ORIGINAL pseudo look instead,

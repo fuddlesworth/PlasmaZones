@@ -3,7 +3,7 @@
 //
 // Phosphor glass surface shader — the Phosphor set's blur pane, and the one
 // pack that takes the project name literally: the glass behaves like a
-// phosphor screen. The scene behind the surface is Gaussian-blurred and sunk
+// phosphor screen. The scene behind the surface is blurred by the dual Kawase chain and sunk
 // toward the deep navy brand surface, and wherever the backdrop is BRIGHT the
 // glass is excited into an afterglow in the brand accent gradient (cyan
 // #22D3EE → blue #3B82F6 → purple #A855F7 → rose #F43F5E) — light behind the
@@ -12,6 +12,11 @@
 // pane, briefly lifting even dim regions. Luminance-reactive, unlike every
 // other blur pack: move a bright window behind this glass and the glow
 // follows it.
+//
+// SHARED BACKDROP STAGES, in order: the blurred sample runs through
+// surfaceBackdropGrade (brightness, contrast, OKLab saturation, vibrancy)
+// before the phosphor response is computed from it, and a driver-stable
+// grain goes on last so it dithers the finished pane.
 //
 // NO-BACKDROP FALLBACK: when the host bound nothing behind the surface
 // (uHasBackdrop = 0), the pack renders a translucent navy slab with the

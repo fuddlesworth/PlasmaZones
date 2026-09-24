@@ -11,6 +11,14 @@
 // hash-derived from iTime, so there is no per-frame state. Same slab
 // composite as the blur family.
 //
+// SHARED BACKDROP STAGES, in order: each droplet's refracted sample runs
+// through surfaceBackdropGrade (brightness, contrast, OKLab saturation,
+// vibrancy), then the top-light highlight, and a driver-stable grain goes on
+// last, weighted by the sample's alpha so the cleared off-capture margin
+// stays clear. The Edge mirror switch decides what a refraction reaching past
+// the pane reads: folded back inside when on, the captured scene beside the
+// pane when off.
+//
 // Retired handlesOpacity contract: uSurfaceOpacity is a constant 1.0 now
 // (SetOpacity is layer-backed and custom chains own their alpha). The pack's
 // own contentOpacity parameter fades the window content so the rain shows on

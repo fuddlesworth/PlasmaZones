@@ -114,7 +114,7 @@
             "type": "float",
             "default": 0.0,
             "min": 0.0,
-            "max": 360.0,
+            "max": 359.0,
             "group": "Gradient",
             "description": "Starting direction of the gradient in degrees. It holds as a fixed direction only when Gradient speed is 0, since any other speed keeps turning it"
         },

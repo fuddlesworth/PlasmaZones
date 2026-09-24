@@ -12,6 +12,12 @@
 // 0.3). The field drifts on iTime at p_rippleSpeed; 0 freezes it, giving the
 // static bathroom-window look.
 //
+// SHARED BACKDROP STAGES, in order: the displaced sample runs through
+// surfaceBackdropGrade (brightness, contrast, OKLab saturation, vibrancy),
+// then the tint, and a driver-stable grain goes on last. The Edge mirror
+// switch decides what a displacement reaching past the pane reads: folded
+// back inside when on, the captured scene beside the pane when off.
+//
 // Retired handlesOpacity contract: uSurfaceOpacity is a constant 1.0 now
 // (SetOpacity is layer-backed and custom chains own their alpha). The pack's
 // own contentOpacity parameter fades the window content so the rippled

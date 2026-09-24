@@ -32,7 +32,7 @@
             "type": "float",
             "default": 45.0,
             "min": 0.0,
-            "max": 360.0,
+            "max": 359.0,
             "description": "Direction of the gradient across the frame (degrees)"
         },
         {
