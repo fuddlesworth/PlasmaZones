@@ -284,7 +284,7 @@ void ShaderNodeRhi::setAppField1(int value)
 
 bool ShaderNodeRhi::setExtraBinding(int binding, QRhiTexture* texture, QRhiSampler* sampler)
 {
-    // The allowed range (binding 1 plus 13..kMaxConsumerBinding) is defined
+    // The allowed range (binding 1 plus 17..kMaxConsumerBinding) is defined
     // as a public helper in ShaderNodeRhi.h (isConsumerBinding) so consumers
     // can query the policy without duplicating the range table.
     if (!isConsumerBinding(binding)) {

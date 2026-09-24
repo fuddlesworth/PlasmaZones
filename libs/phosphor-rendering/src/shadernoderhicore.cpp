@@ -429,7 +429,7 @@ void ShaderNodeRhi::prepare()
             m_ubo.reset();
             return;
         }
-        // Audio spectrum texture (binding 6): 1x1 dummy when disabled
+        // Audio spectrum texture (binding 10): 1x1 dummy when disabled
         m_audioSpectrumTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
         if (!m_audioSpectrumTexture->create()) {
             m_shaderError = QStringLiteral("Failed to create audio spectrum texture");
@@ -448,7 +448,7 @@ void ShaderNodeRhi::prepare()
             m_audioSpectrumSampler.reset();
             return;
         }
-        // User texture slots (bindings 7-10): 1x1 dummy textures
+        // User texture slots (bindings 11-14): 1x1 dummy textures
         bool userTexturesOk = true;
         for (int i = 0; i < kMaxUserTextures; ++i) {
             m_userTextures[i].reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
@@ -477,7 +477,7 @@ void ShaderNodeRhi::prepare()
             }
             return;
         }
-        // Desktop wallpaper texture (binding 11): 1x1 dummy
+        // Desktop wallpaper texture (binding 15): 1x1 dummy
         m_wallpaperTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
         if (!m_wallpaperTexture->create()) {
             m_shaderError = QStringLiteral("Failed to create wallpaper texture");

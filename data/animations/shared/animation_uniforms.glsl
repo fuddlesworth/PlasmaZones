@@ -431,7 +431,7 @@ layout(std140, binding = 0) uniform AnimationUniforms {
 
 layout(binding = 11) uniform sampler2D uTexture0;
 // User-declared textures — see AnimationShaderEffect::TextureSlot or
-// the runtime `uTexture<N>` parameter override. Bindings 8..10 match
+// the runtime `uTexture<N>` parameter override. Bindings 12..14 match
 // the overlay shader convention (data/overlays/shared/textures.glsl)
 // so animation and overlay shaders speak the same sampler-name and
 // binding-point dialect.

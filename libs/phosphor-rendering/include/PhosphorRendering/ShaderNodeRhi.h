@@ -509,7 +509,7 @@ private:
     void appendAudioBinding(QVector<QRhiShaderResourceBinding>& bindings) const;
     /// UBO at binding 0 + consumer-managed extra bindings (e.g. binding 1).
     void appendUboAndExtraBindings(QVector<QRhiShaderResourceBinding>& bindings) const;
-    /// Bindings 6 (audio), 7-10 (user textures), 11 (wallpaper), 12 (depth) —
+    /// Bindings 10 (audio), 11-14 (user textures), 15 (wallpaper), 16 (depth) —
     /// shared trailer between buffer-pass and image-pass SRBs. @p depthAccess
     /// is the one thing the two differ on; see DepthAccess.
     void appendCommonTrailerBindings(QVector<QRhiShaderResourceBinding>& bindings, DepthAccess depthAccess) const;
@@ -659,7 +659,7 @@ private:
     std::unique_ptr<QRhiShaderResourceBindings> m_srbB; // image pass SRB with binding 2 = texture B
     bool m_bufferFeedbackCleared = false;
 
-    // Multi-buffer mode (2-4 passes): per-pass resources
+    // Multi-buffer mode (2-8 passes): per-pass resources
     std::array<std::unique_ptr<QRhiTexture>, kMaxBufferPasses> m_multiBufferTextures = {};
     std::array<std::unique_ptr<QRhiTextureRenderTarget>, kMaxBufferPasses> m_multiBufferRenderTargets = {};
     std::array<std::unique_ptr<QRhiRenderPassDescriptor>, kMaxBufferPasses> m_multiBufferRenderPassDescriptors = {};

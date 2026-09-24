@@ -587,7 +587,7 @@ void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
         node->setWallpaperTexture(m_wallpaperTexture);
     }
 
-    // ── User textures (uTexture0..3 / SRB bindings 7..10) ────────────
+    // ── User textures (uTexture0..3 / SRB bindings 11..14) ────────────
     // Pushed here rather than in updatePaintNode so subclasses that
     // override updatePaintNode and delegate to syncBasePropertiesToNode
     // inherit texture sync without owning their own user-texture state
@@ -681,7 +681,7 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
     // ── Sync base properties (time, params, colors, audio, multipass, depth, wallpaper, user textures) ──
     syncBasePropertiesToNode(node);
 
-    // ── Sync source texture provider (slot 0 / binding 7 override) ───
+    // ── Sync source texture provider (slot 0 / binding 11 override) ───
     // Pushed every paint pass so a setSourceItem(...) call after the
     // node already exists picks up immediately, and so a torn-down
     // source (QPointer auto-nulls) clears the binding instead of

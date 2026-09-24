@@ -410,6 +410,13 @@ void ShaderEffect::setBufferShaderPaths(const QStringList& paths)
     if (m_bufferShaderPaths == paths) {
         return;
     }
+    // Truncated to the pass budget in the node sync, with nothing said there
+    // because that runs per frame. Warn once at the setter instead, for the same
+    // reason setBufferScales does.
+    if (paths.size() > kMaxBufferPasses) {
+        qCWarning(lcShaderNode) << "setBufferShaderPaths: dropping" << (paths.size() - kMaxBufferPasses) << "of"
+                                << paths.size() << "passes past the" << kMaxBufferPasses << "pass budget";
+    }
     m_bufferShaderPaths = paths;
     const QString newPath = paths.isEmpty() ? QString() : paths.constFirst();
     const bool singularChanged = (m_bufferShaderPath != newPath);
@@ -449,6 +456,14 @@ void ShaderEffect::setBufferScales(const QVariantList& scales)
 {
     // Clamp and cap here so the stored list is what the node will use, and a
     // QML binding that re-pushes the same values compares equal below.
+    //
+    // The cap is silent to the shader, which simply runs fewer passes than the
+    // pack asked for, so say it once here rather than leaving an author to work
+    // out why their deepest levels never render.
+    if (scales.size() > kMaxBufferPasses) {
+        qCWarning(lcShaderNode) << "setBufferScales: dropping" << (scales.size() - kMaxBufferPasses) << "of"
+                                << scales.size() << "entries past the" << kMaxBufferPasses << "pass budget";
+    }
     QVariantList clamped;
     for (int i = 0; i < scales.size() && i < kMaxBufferPasses; ++i) {
         clamped.append(

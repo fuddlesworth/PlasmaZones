@@ -158,7 +158,7 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
     const int pendingAudioBars = (audioDeviceMax > 0) ? qMin(rawAudioBars, audioDeviceMax) : rawAudioBars;
     state.audioSpectrumSize = qMin(boundAudioWidth, pendingAudioBars);
 
-    // User texture resolutions (bindings 7-10) — resolved node-side.
+    // User texture resolutions (bindings 11-14) — resolved node-side.
     for (int i = 0; i < kMaxUserTextures; ++i) {
         if (m_userTextures[i] && !m_userTextureImages[i].isNull()) {
             state.textureResolution[i][0] = static_cast<float>(m_userTextureImages[i].width());
@@ -451,7 +451,7 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         }
     }
 
-    // User texture upload (bindings 7-10)
+    // User texture upload (bindings 11-14)
     for (int i = 0; i < kMaxUserTextures; ++i) {
         if (m_userTextures[i] && !m_userTextureSamplers[i]) {
             const QRhiSampler::AddressMode addr = wrapModeToRhiAddress(m_userTextureWraps[i]);
@@ -537,7 +537,7 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         }
     }
 
-    // Source-texture-provider plumbing for slot 0 / binding 7. When a
+    // Source-texture-provider plumbing for slot 0 / binding 11. When a
     // provider is set we own a dedicated sampler (separate from the
     // user-texture-0 sampler so callers that mix the two paths don't
     // step on each other) and detect QRhiTexture identity changes —
@@ -613,7 +613,7 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         }
     }
 
-    // Desktop wallpaper texture upload (binding 11)
+    // Desktop wallpaper texture upload (binding 15)
     if (m_wallpaperDirty && m_wallpaperTexture && m_wallpaperSampler) {
         const QImage& img = m_wallpaperImage;
         const QSize targetSize = (!img.isNull() && img.width() > 0 && img.height() > 0) ? img.size() : QSize(1, 1);

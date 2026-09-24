@@ -133,7 +133,7 @@ inline constexpr const char* kUCursorSprite = "uCursorSprite";
 
 /// `sampler2D uTexture1..3` — user-declared image textures (metadata
 /// `textures`). Slot N of the metadata list feeds `uTexture<N+1>` (bindings
-/// 8-10 on the UBO runtime) and `iTextureResolution[N].xy` carries its size.
+/// 12-14 on the UBO runtime) and `iTextureResolution[N].xy` carries its size.
 /// An undeclared slot is unbound and reads texture unit 0 on the compositor
 /// (see `kUCursorSprite`).
 inline constexpr const char* kUTexture1 = "uTexture1";
