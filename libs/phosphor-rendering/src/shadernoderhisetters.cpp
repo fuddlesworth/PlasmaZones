@@ -664,6 +664,13 @@ void ShaderNodeRhi::resetBufferTargets()
         m_multiBufferPipelines[i].reset();
         m_multiBufferSrbs[i].reset();
     }
+    // Every channel this node publishes through iChannelResolution has just been
+    // destroyed, and that value is resolved from the live textures during the UBO
+    // upload, which is gated on m_uniformsDirty. The rebuild in ensureBufferTarget
+    // re-arms these too, but arming them here as well keeps the invariant local to
+    // the teardown rather than resting on the rebuild being reached.
+    m_uniformsDirty = true;
+    m_sceneDataDirty = true;
 }
 
 void ShaderNodeRhi::setBufferWrap(const QString& wrap)

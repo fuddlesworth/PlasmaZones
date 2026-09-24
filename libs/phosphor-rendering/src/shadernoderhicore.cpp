@@ -764,6 +764,20 @@ void ShaderNodeRhi::prepare()
                 cb->draw(4);
                 cb->endPass();
 
+                // A pass declared "mipmap" samples through a mip chain, and the
+                // chain only exists if something fills it. The sampler's mip
+                // filter alone selected between levels that were never written.
+                // Guarded on the texture actually having been allocated with the
+                // flags, since ensureBufferTarget falls back to a single level
+                // when a backend refuses a mipmapped target for this format.
+                if (m_bufferFilters[static_cast<size_t>(i)] == QLatin1String("mipmap")
+                    && m_multiBufferTextures[i]->flags().testFlag(QRhiTexture::UsedWithGenerateMips)) {
+                    if (QRhiResourceUpdateBatch* mips = rhi->nextResourceUpdateBatch()) {
+                        mips->generateMips(m_multiBufferTextures[i].get());
+                        cb->resourceUpdate(mips);
+                    }
+                }
+
                 if (i + 1 < n && m_ubo) {
                     // Inter-pass write→read barrier only: re-uploading 4 bytes at
                     // offset 0 (the first float of qt_Matrix) forces the backend to
@@ -813,6 +827,17 @@ void ShaderNodeRhi::prepare()
             cb->setVertexInput(0, 1, &vbufBinding);
             cb->draw(4);
             cb->endPass();
+
+            // The single-pass twin of the mip generation in the multi-buffer
+            // loop above. The texture written this frame is the ping-pong slot,
+            // not always slot A, so mip the one that was actually drawn into.
+            if (m_bufferFilters[0] == QLatin1String("mipmap") && writtenTexture
+                && writtenTexture->flags().testFlag(QRhiTexture::UsedWithGenerateMips)) {
+                if (QRhiResourceUpdateBatch* mips = rhi->nextResourceUpdateBatch()) {
+                    mips->generateMips(writtenTexture);
+                    cb->resourceUpdate(mips);
+                }
+            }
         }
 
         // Resource flush after buffer passes (Vulkan barrier hint). Doubles as

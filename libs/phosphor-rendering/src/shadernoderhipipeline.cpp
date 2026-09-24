@@ -77,6 +77,11 @@ bool ShaderNodeRhi::ensureBufferTarget()
         const qreal s = m_bufferScales[static_cast<size_t>(i)];
         return QSize(qMax(1, qRound(m_width * s)), qMax(1, qRound(m_height * s)));
     };
+    // Whether pass @p i asked for mip sampling. Drives the texture flags so the
+    // chain actually exists, and the generateMips call after the pass renders.
+    const auto wantsMips = [this](int i) {
+        return m_bufferFilters[static_cast<size_t>(i)] == QLatin1String("mipmap");
+    };
     // Create or resize depth texture before render targets that reference it
     if (m_useDepthBuffer && (!m_depthTexture || m_depthTexture->pixelSize() != bufferSize)) {
         m_depthTexture.reset(rhi->newTexture(QRhiTexture::R32F, bufferSize, 1, QRhiTexture::RenderTarget));
@@ -142,10 +147,27 @@ bool ShaderNodeRhi::ensureBufferTarget()
     // buffer can legitimately store HDR radiance, signed data, or a feedback
     // accumulator whose decay quantises to a standstill at 8 bits.
     const QRhiTexture::Format bufferFormat = m_halfFloatBuffers ? QRhiTexture::RGBA16F : QRhiTexture::RGBA8;
-    auto createTextureAndRT = [rhi, bufferFormat,
-                               this](std::unique_ptr<QRhiTexture>& tex, std::unique_ptr<QRhiTextureRenderTarget>& rt,
-                                     std::unique_ptr<QRhiRenderPassDescriptor>& rpd, const QSize& size) -> bool {
-        tex.reset(rhi->newTexture(bufferFormat, size, 1, QRhiTexture::RenderTarget | QRhiTexture::UsedWithLoadStore));
+    // A pass whose filter is "mipmap" needs a texture that HAS a mip chain and
+    // may have one generated into it. Without these two flags the token did
+    // nothing at all: ensureBufferSampler set the sampler's mip filter, nothing
+    // allocated the levels, and nothing generated them, so a pack asking for
+    // mipmap sampled level 0 exactly as "linear" does.
+    auto createTextureAndRT = [rhi, bufferFormat, this](std::unique_ptr<QRhiTexture>& tex,
+                                                        std::unique_ptr<QRhiTextureRenderTarget>& rt,
+                                                        std::unique_ptr<QRhiRenderPassDescriptor>& rpd,
+                                                        const QSize& size, bool wantMips) -> bool {
+        const QRhiTexture::Flags baseFlags = QRhiTexture::RenderTarget | QRhiTexture::UsedWithLoadStore;
+        const QRhiTexture::Flags mipFlags = QRhiTexture::MipMapped | QRhiTexture::UsedWithGenerateMips;
+        tex.reset(rhi->newTexture(bufferFormat, size, 1, wantMips ? (baseFlags | mipFlags) : baseFlags));
+        // A backend that will not give us a mipmapped render target for this
+        // format must not take the whole pack down with it, because the pack
+        // worked (as plain linear) before mipmap meant anything. Retry once
+        // without the mip flags and say so.
+        if (wantMips && !tex->create()) {
+            qCWarning(lcShaderNode) << "Buffer texture with mipmaps unavailable at" << size
+                                    << "— falling back to a single level, 'mipmap' will sample as 'linear'";
+            tex.reset(rhi->newTexture(bufferFormat, size, 1, baseFlags));
+        }
         // Every failure exit clears what it allocated. Callers gate the retry
         // on "does the object exist and is it the right pixelSize?", and
         // pixelSize() answers from the requested size even after a failed
@@ -184,6 +206,18 @@ bool ShaderNodeRhi::ensureBufferTarget()
             resetAllBindingsAndPipelines();
             return false;
         }
+        // A new or resized target changes iChannelResolution, which is resolved
+        // node-side from the LIVE textures during the UBO upload and is gated on
+        // m_uniformsDirty. Without re-arming here, a pass that resized carried on
+        // publishing the previous channel size to the shader.
+        //
+        // requestAnotherFrame() as well, not just the flags: this runs inside
+        // prepare() on the render thread, where setting a dirty flag schedules
+        // nothing by itself, so a pack with no per-frame input would sit on the
+        // stale value until something unrelated happened to repaint it.
+        m_uniformsDirty = true;
+        m_sceneDataDirty = true;
+        requestAnotherFrame();
         return true;
     };
 
@@ -202,7 +236,7 @@ bool ShaderNodeRhi::ensureBufferTarget()
                                  << "bufferScale=" << m_bufferScale << "passes=" << n;
             for (int i = 0; i < n; ++i) {
                 if (!createTextureAndRT(m_multiBufferTextures[i], m_multiBufferRenderTargets[i],
-                                        m_multiBufferRenderPassDescriptors[i], passSize(i))) {
+                                        m_multiBufferRenderPassDescriptors[i], passSize(i), wantsMips(i))) {
                     qCWarning(lcShaderNode) << "Failed to create multi-buffer texture" << i;
                     return false;
                 }
@@ -223,8 +257,17 @@ bool ShaderNodeRhi::ensureBufferTarget()
         return true;
     }
 
+    // A pack with exactly ONE buffer pass lands here rather than in the
+    // multi-buffer branch, and it is still entitled to its per-pass scale: the
+    // compositor honours bufferScales[0] for a single-pass pack
+    // (chainBufferScale in surface_capture.cpp), so sizing from m_bufferScale
+    // alone here made the same pack render at two different resolutions
+    // depending on which host drew it. The feedback twin shares the size
+    // because the two ping-pong.
+    const QSize singleSize = passSize(0);
     if (!m_bufferTexture) {
-        if (!createTextureAndRT(m_bufferTexture, m_bufferRenderTarget, m_bufferRenderPassDescriptor, bufferSize)) {
+        if (!createTextureAndRT(m_bufferTexture, m_bufferRenderTarget, m_bufferRenderPassDescriptor, singleSize,
+                                wantsMips(0))) {
             qCWarning(lcShaderNode) << "Failed to create buffer texture";
             return false;
         }
@@ -232,8 +275,8 @@ bool ShaderNodeRhi::ensureBufferTarget()
             return false;
         }
         if (m_bufferFeedback
-            && !createTextureAndRT(m_bufferTextureB, m_bufferRenderTargetB, m_bufferRenderPassDescriptorB,
-                                   bufferSize)) {
+            && !createTextureAndRT(m_bufferTextureB, m_bufferRenderTargetB, m_bufferRenderPassDescriptorB, singleSize,
+                                   wantsMips(0))) {
             qCWarning(lcShaderNode) << "Failed to create buffer texture B (ping-pong)";
             return false;
         }
@@ -241,14 +284,15 @@ bool ShaderNodeRhi::ensureBufferTarget()
         m_srbB.reset();
         return true;
     }
-    if (m_bufferTexture->pixelSize() != bufferSize) {
-        if (!createTextureAndRT(m_bufferTexture, m_bufferRenderTarget, m_bufferRenderPassDescriptor, bufferSize)) {
+    if (m_bufferTexture->pixelSize() != singleSize) {
+        if (!createTextureAndRT(m_bufferTexture, m_bufferRenderTarget, m_bufferRenderPassDescriptor, singleSize,
+                                wantsMips(0))) {
             qCWarning(lcShaderNode) << "Failed to resize buffer texture";
             return false;
         }
         if (m_bufferFeedback
-            && !createTextureAndRT(m_bufferTextureB, m_bufferRenderTargetB, m_bufferRenderPassDescriptorB,
-                                   bufferSize)) {
+            && !createTextureAndRT(m_bufferTextureB, m_bufferRenderTargetB, m_bufferRenderPassDescriptorB, singleSize,
+                                   wantsMips(0))) {
             qCWarning(lcShaderNode) << "Failed to resize buffer texture B";
             return false;
         }
@@ -259,7 +303,8 @@ bool ShaderNodeRhi::ensureBufferTarget()
         m_srbB.reset();
         m_bufferFeedbackCleared = false; // New textures need clearing
     } else if (m_bufferFeedback && !m_bufferTextureB) {
-        if (!createTextureAndRT(m_bufferTextureB, m_bufferRenderTargetB, m_bufferRenderPassDescriptorB, bufferSize)) {
+        if (!createTextureAndRT(m_bufferTextureB, m_bufferRenderTargetB, m_bufferRenderPassDescriptorB, singleSize,
+                                wantsMips(0))) {
             qCWarning(lcShaderNode) << "Failed to create buffer texture B (ping-pong)";
             return false;
         }
