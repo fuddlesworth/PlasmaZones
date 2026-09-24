@@ -25,6 +25,8 @@
 #include <QLoggingCategory>
 #include <QStringList>
 
+#include <algorithm>
+
 #include <memory>
 
 // The assembly part of StripTransitionManager: how a strip pack's source
@@ -90,7 +92,17 @@ StripTransitionManager::CompiledStripShader* StripTransitionManager::compiledSha
     }
 
     QStringList animIncludePaths;
-    for (const QString& sp : mgr.shaderRegistry().searchPaths()) {
+    // HIGHEST priority FIRST. The registry registers its roots lowest-priority
+    // first (system, then the user dir) and hands the list back in that order,
+    // so walking it verbatim resolved every shared header from the SYSTEM
+    // prefix even for a pack the user directory had won: the pack's body came
+    // from one tree and its contract headers from another. Since the contract
+    // headers carry the sampler BINDING table, a split pair is a binding
+    // mismatch rather than cosmetic drift. Reverse a local copy, exactly as the
+    // surface compile path does.
+    QStringList animSearchPaths = mgr.shaderRegistry().searchPaths();
+    std::reverse(animSearchPaths.begin(), animSearchPaths.end());
+    for (const QString& sp : animSearchPaths) {
         const QString sharedDir = sp + QStringLiteral("/shared");
         if (QDir(sharedDir).exists()) {
             animIncludePaths.append(sharedDir);

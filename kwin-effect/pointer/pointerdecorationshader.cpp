@@ -113,7 +113,16 @@ static_assert(std::tuple_size_v<decltype(ShaderInternal::kCustomColorsElementNam
 QStringList includePathsFrom(const PPS::PointerShaderRegistry& registry)
 {
     QStringList includePaths;
-    const QStringList searchPaths = registry.searchPaths();
+    // HIGHEST priority FIRST. The registry registers its roots lowest-priority
+    // first (system, then the user dir) and hands the list back in that order,
+    // so walking it verbatim resolved every shared header from the SYSTEM
+    // prefix even for a pack the user directory had won: the pack's body came
+    // from one tree and its contract headers from another. Since the contract
+    // headers carry the sampler BINDING table, a split pair is a binding
+    // mismatch rather than cosmetic drift. Reverse a local copy, exactly as the
+    // surface compile path does.
+    QStringList searchPaths = registry.searchPaths();
+    std::reverse(searchPaths.begin(), searchPaths.end());
     includePaths.reserve(searchPaths.size() * 2);
     for (const QString& sp : searchPaths) {
         const QString sharedDir = sp + QStringLiteral("/shared");

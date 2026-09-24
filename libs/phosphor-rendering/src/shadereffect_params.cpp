@@ -312,13 +312,19 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
         const bool pathChanged = hasTexKey && (m_userTexturePaths[i] != incomingPath);
         const bool needsReload = pathChanged || (svgSizeChanged && !m_userTexturePaths[i].isEmpty());
 
-        if (pathChanged) {
-            m_userTexturePaths[i] = incomingPath;
-            anyMutation = true;
-        }
-
         if (needsReload) {
-            const QString path = m_userTexturePaths[i];
+            // COMMIT THE PATH ONLY ON SUCCESS. It used to be written here, before
+            // the load below, and the failure arm only warns — so a slot whose
+            // file was missing kept the failed path, and the next identical push
+            // saw pathChanged false, needsReload false and never retried. With
+            // the identical-params early return at the top of this function that
+            // is permanent: the slot reads as resolved for the rest of the
+            // session while holding no image, so a slot that never had one stays
+            // on the 1x1 transparent fallback for good and a transient hiccup
+            // becomes a permanent loss rather than the temporary one the
+            // keep-prior-image branch below is written for. Same shape as
+            // loadVertexShader, which loads into a local and commits after.
+            const QString path = pathChanged ? incomingPath : m_userTexturePaths[i];
             // Drop the preceding `QFile::exists()` check: it's a TOCTOU
             // race against the load below (file can vanish between the
             // two calls), so it cannot serve as a true gate. The
@@ -337,13 +343,20 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
             // file doesn't drop a previously-valid texture mid-session;
             // log a warning so the author notices.
             if (path.isEmpty() || !loaded.isNull()) {
+                if (pathChanged) {
+                    m_userTexturePaths[i] = path;
+                    anyMutation = true;
+                }
                 if (m_userTextureImages[i].cacheKey() != loaded.cacheKey()) {
                     m_userTextureImages[i] = loaded;
                     anyMutation = true;
                 }
             } else {
+                // m_userTexturePaths[i] deliberately NOT advanced: leaving the
+                // prior value is what lets an identical re-push come back through
+                // pathChanged and try again once the file is readable.
                 qCWarning(lcShaderNode) << "ShaderEffect: failed to load user texture slot" << i << "from" << path
-                                        << "— keeping previously-loaded image";
+                                        << "— keeping the previously-loaded image, and the slot will retry";
             }
         }
 
