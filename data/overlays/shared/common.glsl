@@ -180,11 +180,12 @@ float sdRoundedBox(vec2 p, vec2 b, float r) {
 //     as a decoration corner set to the same number.
 //   * CLAMP. The radius is clamped to half the smaller side. sdRoundedBox()
 //     with r greater than a half-extent inverts the inset box and collapses
-//     the zone to a sliver rather than rounding it. The settings UI caps the
-//     radius at 50 logical px, so reaching this needs a zone under 100 logical
-//     px on its smaller side, or a per-zone borderRadius from layout JSON,
-//     which is unbounded. frameSdf() has always clamped; the inline copies
-//     never did.
+//     the zone to a sliver rather than rounding it. Reaching this needs a
+//     SMALL ZONE, not a large radius: the daemon bounds every radius it
+//     publishes against borderRadiusMax, including a per-zone one hand-edited
+//     into layout JSON, so the ceiling is the settings cap and a zone under
+//     twice it on its smaller side is what trips the clamp. frameSdf() has
+//     always clamped; the inline copies never did.
 //   * NO FLOOR. The inline copies each applied their own `max(params.x, N)`
 //     with N of 4, 6, or 8 depending on the pack, so a configured radius of 0
 //     still rounded, by a different amount per pack. The configured value is
@@ -262,6 +263,12 @@ float zoneStrokeWidth(float deviceWidth) {
 // The band around the zone edge that an edge-anchored EFFECT should occupy,
 // given the pack's border width.
 //
+// THE TWO ARGUMENTS ARE IN DIFFERENT UNITS, which the signature cannot show.
+// @p deviceWidth is consumed raw and must ALREADY be device px (what
+// zoneBorderWidth() returns). @p minLogical is LOGICAL px and goes through
+// zoneLen() here. Passing a logical width as the first argument makes the band
+// scale-dependent in the wrong direction on every display above 1x.
+//
 // Packs gate treble sparks, edge glints and similar on a multiple of the border
 // width. That was safe while the width had a hard 2-logical-px floor, but a
 // user-configured width of 0 collapses the band to nothing and takes the effect
@@ -338,10 +345,14 @@ vec3 zoneTint(vec3 base, vec4 fillColor, float weight) {
     return mix(base, base * 0.85 + zoneFillHue(fillColor) * 0.15, weight);
 }
 
-// 2D rotation matrix. mat2 is column-major, so p * rot(a) rotates by +a,
-// while rot(a) * p applies the transpose (rotation by -a). The *drift fbm
-// keeps its historical matrix-first rot(a) * uv form; the pass-shader flow
-// warps (e.g. nexus-cascade) use the p * rot(a) form.
+// 2D rotation matrix. mat2 is column-major, so p * rot(a) rotates by +a while
+// rot(a) * p applies the transpose, rotating by -a. The two forms turn in
+// OPPOSITE directions, so copying one and writing the other silently reverses
+// the motion.
+//
+// EVERY bundled pack uses the vector-first p * rot(a) form: the *drift fbm
+// warps and the pass-shader flow warps alike. Write that one unless you mean
+// the reverse.
 mat2 rot(float a) {
     float c = cos(a), s = sin(a);
     return mat2(c, -s, s, c);

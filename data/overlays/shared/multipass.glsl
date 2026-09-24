@@ -39,10 +39,14 @@ vec2 channelSize(int channelIndex) {
 }
 
 // Returns UV for sampling iChannel[channelIndex] at the given fragCoord.
-// fragCoord uses Y=0-at-top convention (matching iResolution / Shadertoy style).
+// fragCoord is Y=0-AT-TOP here, which is NOT Shadertoy's convention (that one
+// is bottom-origin); it matches the rest of this contract, where every pixel
+// space is top-down.
 //
-// Y is always flipped: both OpenGL (Y-up FBO) and Vulkan (negative-height viewport)
-// store buffer data requiring a Y-flip when sampling. iFlipBufferY is always 1.
+// Y is always flipped below: both OpenGL (Y-up FBO) and Vulkan (negative-height
+// viewport) store buffer data that needs a flip when sampled. The flip is
+// HARDCODED here rather than read from iFlipBufferY. That uniform is always 1
+// and no GLSL in the tree reads it, so it is not the authority for this line.
 //
 // IMPORTANT: Always use channelUv() for ALL iChannel sampling — never sample
 // iChannel textures with raw vTexCoord or manual UV, as this bypasses the Y correction.

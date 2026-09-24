@@ -5,7 +5,16 @@
 // Include from effect.frag with:
 //   #include <textures.glsl>
 //
-// Requires common.glsl (for iTextureResolution UBO field).
+// Requires common.glsl (for the iTextureResolution UBO field).
+//
+// HOW A TEXTURE GETS INTO A SLOT: declare an `image`-typed parameter in the
+// pack's metadata.json. The registry resolves its path (relative to the pack
+// dir, traversal-checked) and binds it to the slot its declaration order
+// earns, so uTexture0 is the FIRST image parameter and so on. A slot no
+// parameter claims is bound to a 1x1 transparent dummy rather than left
+// unbound, so sampling it is defined and reads transparent black.
+// iTextureResolution[N].xy carries the bound image's pixel size, or (1,1) for
+// an unclaimed slot.
 
 #ifndef PLASMAZONES_TEXTURES_GLSL
 #define PLASMAZONES_TEXTURES_GLSL

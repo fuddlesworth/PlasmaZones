@@ -24,7 +24,7 @@
 //   soft_edge_width = 0.15 →  softEdge param (also exposed)
 //   niri_tex               →  uTexture0      (live FBO of the
 //                                             shaderAnchor item, SRB
-//                                             binding 7)
+//                                             binding 11)
 //   niri_geo_to_tex        →  identity       (vTexCoord is already in
 //                                             tex space)
 //   size_geo               →  iAnchorSize    (visible card; used for the

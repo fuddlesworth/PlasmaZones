@@ -33,6 +33,10 @@
 // pack declares as parameters are LOGICAL px; multiply by pointerScale()
 // (uPointerState.z) to reach device px.
 //
+// pointerPixel(), pointerScale(), pointerFilteredSpeed() and pointerReach(),
+// named throughout this header, are declared in pointer_lib.glsl, NOT here.
+// This file declares the uniforms; that one wraps them.
+//
 // OUTPUT: packs return PREMULTIPLIED rgba composited source-over the scene
 // (`glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA)` on both runtimes). Return
 // transparent black wherever nothing is painted, and fade to exactly zero
@@ -46,9 +50,10 @@
 // ── Compositor branch — classic default-block uniforms ──────────────────────
 
 // Seconds since this burst of pointer activity began: restarts at 0 for each
-// burst and never wraps on the compositor. (The preview wraps it at 1024 s
-// like every family; the base iTimeHi counterpart is not used by pointer
-// packs on either runtime.)
+// burst and never wraps on the compositor. (The preview wraps it at 1024 s,
+// like the OVERLAY and SURFACE families; the animation family's iTime is leg
+// progress in [0,1] and never wraps at all. The base iTimeHi counterpart is
+// not used by pointer packs on either runtime.)
 uniform float iTime;
 
 // The rest of the preview branch's BaseUniforms members, declared here too so

@@ -630,7 +630,17 @@ float legProgress() {
 
 // ─── Geometry-leg helpers ──────────────────────────────────────────────
 // A geometry morph (window.movement.*) hands the vertex stage the leg's
-// endpoints as `iFromRect` / `iToRect`. Packs need two things from them:
+// endpoints as `iFromRect` / `iToRect`.
+//
+// THE KWIN BRANCH DOES NOT DECLARE THEM and this header does not either: both
+// rects are UBO-branch members of the transition tail, and the compositor
+// pushes them to any shader that DECLARES them. So a pack reading either rect
+// on the kwin path must declare them itself, inside its own
+// `#ifdef PLASMAZONES_KWIN`, which is what all six packs that use them do.
+// The helpers below take the rects as arguments for that reason rather than
+// reading them.
+//
+// Packs need two things from these rects:
 // which way the window actually went, and how much of the leg was motion
 // at all.
 //

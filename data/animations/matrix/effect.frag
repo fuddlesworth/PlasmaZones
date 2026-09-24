@@ -94,13 +94,13 @@ float getText(vec2 fragCoord) {
 //   .x = rain trail intensity (0..1, fades exponentially behind head)
 //   .y = window content visibility (0 = obscured, 1 = revealed)
 //
-// `legProgress` is the absolute forward leg progress (0 at leg start,
+// `legT` is the absolute forward leg progress (0 at leg start,
 // 1 at leg end) regardless of direction — the harness already un-flipped
 // iTime via legProgress() before calling. `windowFadingIn` is the leg
 // direction (true = open/in, false = close/out), which selects the
 // windowAlpha trajectory. distToDrop > 0 means the drop head has passed
 // this fragment; < 0 means it hasn't reached yet.
-vec2 getRain(vec2 fragCoord, float legProgress, bool windowFadingIn) {
+vec2 getRain(vec2 fragCoord, float legT, bool windowFadingIn) {
     // Floor letterSize for parity with getText — `mod(column, 0)` is
     // undefined / NaN in GLSL; defence in depth against a metadata
     // bypass that pushes letterSize to zero.
@@ -128,9 +128,9 @@ vec2 getRain(vec2 fragCoord, float legProgress, bool windowFadingIn) {
     float delay = fract(sin(column + 17.0) * 78.233) * r;
     float speed = fract(cos(column) * 12.989) * (r * 0.3) + 1.5;
 
-    // BMW's `uProgress` matches our `legProgress` exactly: 0 at start,
+    // BMW's `uProgress` matches our `legT` exactly: 0 at start,
     // 1 at end, in BOTH directions.
-    float distToDrop  = (legProgress * 2.0 - delay) * speed - fragCoord.y;
+    float distToDrop  = (legT * 2.0 - delay) * speed - fragCoord.y;
 
     float rainAlpha   = distToDrop >= 0.0 ? exp(-distToDrop / TRAIL_LENGTH) : 0.0;
 

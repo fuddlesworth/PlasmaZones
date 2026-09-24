@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Pixelate transition — operates on the rendered surface (sampled
-// through uTexture0 at user-texture binding 7). Block size is driven
+// through uTexture0 at user-texture binding 11). Block size is driven
 // by `iTime` (per-leg progress driven by SurfaceAnimator's shaderTime
 // AnimatedValue): SurfaceAnimator runs iTime 0→1 on show and 1→0 on
 // hide. With `blockPx = (1 - iTime) * maxBlockSize` the surface
@@ -17,7 +17,7 @@
 // `ShaderEffect::setSourceItem` — the anchor's `layer.enabled` is
 // flipped to true so `QQuickItem::textureProvider()` returns a
 // per-frame FBO that the shader samples through `uTexture0` (SRB
-// binding 7). Re-rendered every frame the consumer dirties, so the
+// binding 11). Re-rendered every frame the consumer dirties, so the
 // shader always sees the current rendered pixels rather than a
 // frozen snapshot. When no explicit `shaderAnchor` is found the leg
 // falls back to user-texture-0 (transparent fallback) and the

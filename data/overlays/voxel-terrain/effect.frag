@@ -4,7 +4,7 @@
 // Voxel Terrain — Image Pass (compositing, zones, borders, labels, DOF)
 //
 // Reads the full-screen 3D scene from iChannel0 (buffer pass) and the
-// depth buffer from uDepthBuffer (binding 12). Composites per-zone with
+// depth buffer from uDepthBuffer (binding 16). Composites per-zone with
 // borders, labels, inner edge glow, outer glow, depth-of-field, and vignette.
 //
 // The harness supplies #version, <common.glsl> (zone UBO + ZoneCtx + helpers),
