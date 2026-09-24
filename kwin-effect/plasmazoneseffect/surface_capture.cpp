@@ -93,7 +93,8 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
     // null deref inside the compositor — the same reasoning the prefixTex
     // guard in surfacelayers.cpp spells out.
     if (state.compositeSize != textureSize || std::abs(state.captureScaleKey - captureScale) > kScaleEpsilon
-        || !state.compositeTex[0] || !state.compositeTex[1] || !state.captureTex) {
+        || !state.compositeTex[0] || !state.compositeTex[1] || !state.captureTex || !state.compositeFbo[0]
+        || !state.compositeFbo[1] || !state.captureFbo) {
         bool allocFailed = false;
         for (size_t i = 0; i < state.compositeTex.size(); ++i) {
             auto& t = state.compositeTex[i];
@@ -748,7 +749,13 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
     // eager allocation was a full-canvas RGBA8 held for nothing. Release it again if
     // the chain changes to a shape that no longer needs it.
     if (usePrefix) {
-        if (!state.prefixTex && !allocSurfaceTarget(state.prefixTex, state.prefixFbo, state.compositeSize)) {
+        // Test BOTH handles. Gating on the texture alone would let a tex-without-fbo state
+        // skip the realloc and hand the fold a null prefixFbo, which surfacelayers.cpp
+        // dereferences on the writesPrefix path. Guarding it at the fold's prefixValid check
+        // instead would be worse: clearing that flag is what ENABLES the write path, so an
+        // fbo term there routes INTO the deref rather than away from it.
+        if ((!state.prefixTex || !state.prefixFbo)
+            && !allocSurfaceTarget(state.prefixTex, state.prefixFbo, state.compositeSize)) {
             // Out of VRAM for the optional cache: fold the chain the long way rather
             // than failing the whole paint.
             usePrefix = false;
