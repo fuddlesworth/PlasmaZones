@@ -201,19 +201,25 @@ SurfaceShaderEffect SurfaceShaderEffect::fromJson(const QJsonObject& obj)
     // appends unconditionally for exactly this reason.
     const QJsonArray bufArr = obj.value(QLatin1String("bufferShaders")).toArray();
     for (const QJsonValue& v : bufArr) {
-        const QString name = v.toString();
         // Capped at the boundary: each pass costs a canvas-sized texture and a
         // fullscreen draw per decorated window per frame, and anything past
         // kMaxBufferPasses is structurally unreadable (the fold binds
-        // iChannel0..kMaxBufferPasses-1). Drop the surplus loudly rather than
+        // iChannel0..kMaxBufferPasses-1). Drop the surplus rather than
         // allocating VRAM nothing can ever sample.
         if (e.bufferShaderPaths.size() >= kMaxBufferPasses) {
-            qCWarning(lcSurfaceShader) << "SurfaceShaderEffect::fromJson: effect" << e.id << "declares more than"
-                                       << kMaxBufferPasses << "buffer passes; ignoring" << name
-                                       << "— the fold binds that many iChannels, so later passes are unreadable";
-            continue;
+            break;
         }
-        e.bufferShaderPaths.append(name);
+        e.bufferShaderPaths.append(v.toString());
+    }
+    // ONE warning naming the count, not one per surplus entry. The three
+    // sibling caps below (bufferScales, bufferWraps, bufferFilters) all warn
+    // once after their loop, and a hand-edited pack declaring twenty buffers
+    // used to emit twelve identical lines from this one.
+    if (bufArr.size() > kMaxBufferPasses) {
+        qCWarning(lcSurfaceShader) << "SurfaceShaderEffect::fromJson: effect" << e.id << "declares" << bufArr.size()
+                                   << "buffer passes; dropping the last" << (bufArr.size() - kMaxBufferPasses)
+                                   << "past the" << kMaxBufferPasses
+                                   << "budget — the fold binds that many iChannels, so later passes are unreadable";
     }
     e.bufferFeedback = obj.value(QLatin1String("bufferFeedback")).toBool(false);
     // Type-check before converting. QJsonValue::toDouble(fallback) returns the

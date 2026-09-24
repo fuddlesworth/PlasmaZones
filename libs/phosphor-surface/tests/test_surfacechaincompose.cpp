@@ -90,6 +90,23 @@ private Q_SLOTS:
         QCOMPARE(paddingRequest(e, overrides), 12.0);
     }
 
+    /// The case the two above do not cover between them: paddingParam names an
+    /// UNDECLARED parameter AND an override carries that name. The declaration
+    /// check has to run first, or a stored override for a parameter the pack
+    /// does not have is honoured as a canvas request.
+    ///
+    /// Reachable rather than theoretical. resolveParams copies per-surface
+    /// deltas verbatim and clampToBounds skips ids with no declared bound, so
+    /// an undeclared id survives the flatten and arrives here.
+    void paddingRequest_ignores_an_override_under_an_undeclared_paddingParam()
+    {
+        SurfaceShaderEffect e = basePack();
+        e.paddingParam = QStringLiteral("nosuchparam");
+        e.parameters.append(floatParam(QStringLiteral("glowSize"), 12.0));
+        const QVariantMap overrides{{QStringLiteral("nosuchparam"), 240.0}};
+        QCOMPARE(paddingRequest(e, overrides), 0.0);
+    }
+
     // ── composeStageMap ──────────────────────────────────────────────
 
     void composeStageMap_emits_the_host_contract_keys()

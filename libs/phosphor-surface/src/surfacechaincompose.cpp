@@ -10,6 +10,7 @@
 #include <QUrl>
 #include <QVariant>
 
+#include <algorithm>
 #include <cmath>
 
 namespace PhosphorSurfaceShaders {
@@ -40,6 +41,22 @@ double paddingRequest(const SurfaceShaderEffect& effect, const QVariantMap& frie
     if (effect.paddingParam.isEmpty()) {
         return 0.0;
     }
+    // The pack must DECLARE the parameter first. This check used to run after
+    // the override lookup, so a stored per-surface override keyed on a
+    // paddingParam name the pack never declared was returned as padding. That
+    // is reachable rather than theoretical: resolveParams copies deltas
+    // verbatim and clampToBounds skips ids with no declared bound, so an
+    // undeclared id survives the flatten and arrives here.
+    const auto declared = std::find_if(effect.parameters.cbegin(), effect.parameters.cend(), [&](const auto& param) {
+        return param.id == effect.paddingParam;
+    });
+    if (declared == effect.parameters.cend()) {
+        // paddingParam names a parameter the pack does not declare: no room
+        // asked for. Callers clamp anyway, so a bad name degrades to the
+        // margin-less 1:1 geometry rather than to an unbounded canvas.
+        return 0.0;
+    }
+
     double value = 0.0;
     // Per-surface override wins over the declared default, but only when it is
     // actually a number: an unusable override falls through to the default
@@ -48,15 +65,7 @@ double paddingRequest(const SurfaceShaderEffect& effect, const QVariantMap& frie
     if (override != friendlyParams.constEnd() && usablePadding(*override, &value)) {
         return value;
     }
-    for (const auto& param : effect.parameters) {
-        if (param.id == effect.paddingParam) {
-            return usablePadding(param.defaultValue, &value) ? value : 0.0;
-        }
-    }
-    // paddingParam names a parameter the pack does not declare: no room asked
-    // for. Callers clamp anyway, so a bad name degrades to the margin-less
-    // 1:1 geometry rather than to an unbounded canvas.
-    return 0.0;
+    return usablePadding(declared->defaultValue, &value) ? value : 0.0;
 }
 
 QVariantMap composeStageMap(const SurfaceShaderEffect& effect, const QVariantMap& resolvedParams)

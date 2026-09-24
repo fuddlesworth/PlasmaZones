@@ -9,8 +9,16 @@
 
 #include <QJsonArray>
 #include <QJsonValue>
+#include <QLoggingCategory>
 
 namespace PhosphorSurfaceShaders {
+
+namespace {
+// A malformed profile is a config-file problem the user can fix, so it warns
+// rather than failing the load. Local to this translation unit; the registry's
+// own category covers pack scanning.
+Q_LOGGING_CATEGORY(lcDecorationProfile, "phosphorsurface.decorationprofile")
+} // namespace
 
 DecorationProfile DecorationProfile::withDefaults() const
 {
@@ -86,20 +94,50 @@ DecorationProfile DecorationProfile::fromJson(const QJsonObject& obj)
 
     if (obj.contains(QLatin1String(JsonFieldParameters))) {
         const QJsonValue v = obj.value(QLatin1String(JsonFieldParameters));
+        if (!v.isObject() && !v.isUndefined()) {
+            // Present but not an object. toObject() answers an empty one, so
+            // this used to load as "no parameters for ANY pack", which the
+            // engage guard below then applied — a wrong-typed field silently
+            // wiping the layer beneath it.
+            qCWarning(lcDecorationProfile)
+                << "DecorationProfile: \"" << QLatin1String(JsonFieldParameters)
+                << "\" must be an object of packId -> parameters; ignoring a value of type" << v.type();
+        }
         if (v.isObject()) {
             QVariantMap params;
             const QJsonObject paramsObj = v.toObject();
             for (auto it = paramsObj.constBegin(); it != paramsObj.constEnd(); ++it) {
-                // A JSON null is NOT "leave this at its default". In Qt 6 it converts
-                // to a QMetaType::Nullptr variant, which is VALID (isValid() is true,
-                // so a validity check does not catch it); every numeric consumer reads
-                // it as 0, and
-                // clampToBounds skips it as non-numeric — so it survives the flatten
-                // and PINS the parameter to zero, overriding the pack's declared
-                // default. Dropping the key is what actually means "say nothing about
-                // this one". `parsePackPresets` drops nulls for exactly this reason;
-                // these two parsers were the remaining door.
+                // THIS MAP IS PACK-KEYED: packId -> { paramId -> value }, unlike
+                // the animation twin this block was adapted from, whose
+                // parameters is a flat paramId -> value map. So a null HERE is a
+                // whole pack entry, and the null that pins a parameter to zero
+                // is one level DOWN. Both are dropped, for the same reason and
+                // with different reach.
+                //
+                // A JSON null is NOT "leave this at its default". In Qt 6 it
+                // converts to a QMetaType::Nullptr variant, which is VALID
+                // (isValid() is true, so a validity check does not catch it);
+                // every numeric consumer reads it as 0, clampToBounds skips it
+                // as non-numeric, and translateSurfaceParams prefers ANY
+                // present entry over the declared default — so it survives the
+                // flatten and PINS the parameter to zero. Dropping the key is
+                // what actually means "say nothing about this one".
+                // `parsePackPresets` drops nulls for exactly this reason.
                 if (it.value().isNull()) {
+                    continue;
+                }
+                if (it.value().isObject()) {
+                    // Drop the nulls inside the per-pack object too. Dropping
+                    // only the outer level left {"blur": {"radius": null}}
+                    // reaching the uniform as 0.
+                    QVariantMap packParams;
+                    const QJsonObject packObj = it.value().toObject();
+                    for (auto pit = packObj.constBegin(); pit != packObj.constEnd(); ++pit) {
+                        if (!pit.value().isNull()) {
+                            packParams.insert(pit.key(), pit.value().toVariant());
+                        }
+                    }
+                    params.insert(it.key(), packParams);
                     continue;
                 }
                 params.insert(it.key(), it.value().toVariant());

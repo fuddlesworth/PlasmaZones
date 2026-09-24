@@ -10,6 +10,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
+#include <QRegularExpression>
 #include <QtTest/QtTest>
 
 using namespace PhosphorSurfaceShaders;
@@ -269,6 +270,58 @@ private Q_SLOTS:
         QVERIFY(kept.parameters.has_value());
         QCOMPARE(kept.parameters->size(), 1);
         QVERIFY(kept.parameters->contains(QStringLiteral("glow")));
+    }
+
+    /// The null drop above operates on the OUTER map, which is pack-keyed
+    /// (packId -> { paramId -> value }), so it only ever dropped whole PACK
+    /// entries. A null one level down is the one that does the damage the
+    /// rationale describes: it survives the flatten as a Nullptr variant that
+    /// clampToBounds skips as non-numeric, and translateSurfaceParams prefers
+    /// any present entry over the declared default, so the uniform reads 0.
+    void fromJson_drops_a_null_inside_the_per_pack_parameter_object()
+    {
+        QJsonObject obj;
+        obj.insert(QStringLiteral("chain"), QJsonArray{QStringLiteral("blur")});
+        QJsonObject params;
+        params.insert(QStringLiteral("blur"),
+                      QJsonObject{{QStringLiteral("radius"), QJsonValue()}, {QStringLiteral("tint"), 0.5}});
+        obj.insert(QStringLiteral("parameters"), params);
+
+        const DecorationProfile p = DecorationProfile::fromJson(obj);
+        QVERIFY(p.parameters.has_value());
+        const QVariantMap blur = p.parameters->value(QStringLiteral("blur")).toMap();
+        QVERIFY2(!blur.contains(QStringLiteral("radius")),
+                 "a null parameter value must be dropped, not carried through as a Nullptr that reads as 0");
+        QCOMPARE(blur.value(QStringLiteral("tint")).toDouble(), 0.5);
+
+        // A pack object whose every entry is null still ENGAGES, empty. That
+        // is the pack-level statement "say nothing about any of this pack's
+        // parameters", and it is distinct from the outer null, which says
+        // nothing about the pack at all.
+        QJsonObject allNull;
+        allNull.insert(QStringLiteral("chain"), QJsonArray{QStringLiteral("blur")});
+        allNull.insert(QStringLiteral("parameters"),
+                       QJsonObject{{QStringLiteral("blur"), QJsonObject{{QStringLiteral("radius"), QJsonValue()}}}});
+        const DecorationProfile emptied = DecorationProfile::fromJson(allNull);
+        QVERIFY(emptied.parameters.has_value());
+        QVERIFY(emptied.parameters->contains(QStringLiteral("blur")));
+        QVERIFY(emptied.parameters->value(QStringLiteral("blur")).toMap().isEmpty());
+    }
+
+    /// A present-but-wrong-typed parameters field used to load as an engaged
+    /// EMPTY map, because toObject() answers one, and an engaged empty map is
+    /// the statement "no parameters for any pack" that wipes the layer beneath.
+    /// It must be ignored instead, and say so.
+    void fromJson_ignores_a_non_object_parameters_field()
+    {
+        QJsonObject obj;
+        obj.insert(QStringLiteral("chain"), QJsonArray{QStringLiteral("blur")});
+        obj.insert(QStringLiteral("parameters"), QStringLiteral("not an object"));
+
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("must be an object")));
+        const DecorationProfile p = DecorationProfile::fromJson(obj);
+        QVERIFY2(!p.parameters.has_value(),
+                 "a wrong-typed parameters field must leave the field absent, not engage an empty map");
     }
 
     void disabledPacks_roundTrip_filter_and_inheritance()

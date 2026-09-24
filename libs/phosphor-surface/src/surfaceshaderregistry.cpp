@@ -305,6 +305,17 @@ std::optional<SurfaceShaderEffect> parseEffect(const QString& effectDir, const Q
         // so it still holds RAW RELATIVE names. Left set, they survive toJson /
         // operator== and feed the file watcher + content signature CWD-relative
         // (bogus) paths. Clearing it is the whole point of this coherence block.
+        //
+        // SAY SO when there was something to clear. Dropping a declared chain
+        // silently is how a pack ships a fully transparent "blur" with no
+        // diagnostic at any level: the author declared seven buffer shaders,
+        // forgot `multipass: true`, and nothing told them. The fail-closed
+        // branch above warns for its own case, so this covers the other one.
+        if (!e.bufferShaderPaths.isEmpty()) {
+            qCWarning(lcRegistry) << "Surface effect" << e.id << "declares" << e.bufferShaderPaths.size()
+                                  << "buffer shader(s) but not \"multipass\": true, so every one of them is "
+                                     "dropped and the pack renders single-pass";
+        }
         e.bufferShaderPaths.clear();
         e.bufferWraps.clear();
         // bufferScales belongs with its two sibling override arrays and was the
@@ -320,6 +331,13 @@ std::optional<SurfaceShaderEffect> parseEffect(const QString& effectDir, const Q
         e.bufferFeedback = false;
         e.useDepthBuffer = false;
         e.bufferScale = 1.0;
+        // halfFloatBuffers belongs in the same reset for the same reason as the
+        // rest: it is a buffer-only field, it survives toJson and it
+        // participates in operator==, so a single-pass pack that declared it
+        // compared unequal to an identical one that never did. Reset to its
+        // DECLARED DEFAULT, which is true here and not false like the flags
+        // above it — this block resets to defaults, not to zero.
+        e.halfFloatBuffers = true;
     }
 
     return e;
