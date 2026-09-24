@@ -944,6 +944,39 @@ void WindowTrackingAdaptor::cursorScreenChanged(const QString& screenId)
     qCDebug(lcDbusWindow) << "Cursor screen changed to" << resolvedId;
 }
 
+QString WindowTrackingAdaptor::resolveFocusedWindowScreen(const QString& windowId, const QString& screenId) const
+{
+    if (screenId.isEmpty() || PhosphorIdentity::VirtualScreenId::isVirtual(screenId) || !m_service) {
+        return screenId;
+    }
+    const QString trackedScreen = m_service->screenForWindow(windowId);
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(trackedScreen)
+        && PhosphorIdentity::VirtualScreenId::extractPhysicalId(trackedScreen)
+            == PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId)) {
+        return trackedScreen;
+    }
+    return screenId;
+}
+
+void WindowTrackingAdaptor::activeWindowScreenChanged(const QString& windowId, const QString& screenId)
+{
+    if (windowId.isEmpty() || screenId.isEmpty()) {
+        return;
+    }
+    // Only the focused window's record: a report for any other window (the
+    // focus moved on before this one arrived) must not repoint the shortcuts.
+    if (shadowWindowId(windowId) != m_lastActiveWindowId) {
+        return;
+    }
+    const QString resolvedScreen = resolveFocusedWindowScreen(windowId, screenId);
+    if (resolvedScreen == m_lastActiveScreenId) {
+        return;
+    }
+    qCDebug(lcDbusWindow) << "activeWindowScreenChanged:" << windowId << "from" << m_lastActiveScreenId << "to"
+                          << resolvedScreen;
+    m_lastActiveScreenId = resolvedScreen;
+}
+
 void WindowTrackingAdaptor::screenDesktopChanged(const QString& screenId, int desktop)
 {
     if (screenId.isEmpty() || desktop < 1 || !m_virtualDesktopManager) {
@@ -1025,16 +1058,8 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
     // The primary source is now cursorScreenChanged (from KWin effect's mouseChanged).
     // Prefer the daemon-tracked screen assignment (set at snap time) over what the
     // effect reports, since the effect may send a physical ID before VS configs load.
-    QString resolvedScreen = screenId;
-    if (!screenId.isEmpty()) {
-        if (!PhosphorIdentity::VirtualScreenId::isVirtual(screenId) && m_service) {
-            const QString trackedScreen = m_service->screenForWindow(windowId);
-            if (PhosphorIdentity::VirtualScreenId::isVirtual(trackedScreen)
-                && PhosphorIdentity::VirtualScreenId::extractPhysicalId(trackedScreen)
-                    == PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId)) {
-                resolvedScreen = trackedScreen;
-            }
-        }
+    const QString resolvedScreen = resolveFocusedWindowScreen(windowId, screenId);
+    if (!resolvedScreen.isEmpty()) {
         m_lastActiveScreenId = resolvedScreen;
     }
 

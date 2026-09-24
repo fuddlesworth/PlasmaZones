@@ -111,6 +111,23 @@ SnapState* SnapEngine::stateForWindowOnScreen(const QString& windowId, const QSt
         // is for. Resolving through the primary instead wrote a RouteToDesktop
         // commit, a cross-desktop move and a background-desktop restore into
         // the VIEWED desktop's store, where the next switch released it.
+        //
+        // A pinned write naming a screen OTHER than the one the window is
+        // tracked on is the window changing screens: a keyboard move across
+        // outputs, or a drop or zone-number snap on the other monitor.
+        // commitSnapImpl always pins (it falls back to the screen's current
+        // desktop), so every such commit lands here. A window is on exactly
+        // one screen, so it is re-homed first, the way handoffReceive does,
+        // carrying its per-window state and releasing what it held on the
+        // screen it left. Adding the pinned key beside the old one instead
+        // left the window a member of both screens with the primary still on
+        // the old one: every read answered with the zone it had left, and the
+        // membership pass took the pair for a multi-desktop window and
+        // re-applied the old zone, throwing the window back across monitors
+        // (discussion #1124).
+        if (const auto primary = m_states.windowKey(canonical); primary && primary->screenId != screenId) {
+            migrateWindowToScreen(windowId, screenId);
+        }
         const PhosphorEngine::PlacementStateKey pinned{screenId, desktop, currentActivity()};
         owner = ensureStateForKey(pinned);
         if (owner) {

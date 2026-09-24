@@ -477,6 +477,18 @@ public Q_SLOTS:
     void cursorScreenChanged(const QString& screenId);
 
     /**
+     * The focused window changed output without a new activation: a user or
+     * KWin move, or a daemon apply. Shortcuts act on the focused window's
+     * screen, which is otherwise refreshed only by windowActivated, so a key
+     * pressed after such a move acted on the output the window had left.
+     * Updates only that record, with none of an activation's side effects,
+     * and only for the window that is focused.
+     * @param windowId Window identifier
+     * @param screenId Screen the window is now on
+     */
+    void activeWindowScreenChanged(const QString& windowId, const QString& screenId);
+
+    /**
      * Record a screen's current virtual desktop (Plasma 6.7 per-output virtual
      * desktops). Called by the KWin effect on KWin::EffectsHandler::desktopChanged.
      * Forwarded to VirtualDesktopManager::updateScreenDesktop — KWin's own D-Bus
@@ -1625,6 +1637,11 @@ public:
     int currentDesktopForScreen(const QString& screenId) const;
 
 private:
+    /// The screen the focused-window record should hold for @p windowId reported
+    /// on @p screenId: the effect can send a physical id before the virtual-screen
+    /// definitions load, so a tracked virtual screen of the same monitor wins.
+    QString resolveFocusedWindowScreen(const QString& windowId, const QString& screenId) const;
+
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods - Private
     // ═══════════════════════════════════════════════════════════════════════════════

@@ -916,6 +916,21 @@ void Daemon::initEnginesAndWiring()
                 return (autotilePtr && autotilePtr->isWindowTiled(windowId))
                     || (scrollPtr && scrollPtr->isWindowTiled(windowId));
             });
+
+        // Held-screen resolver (membership-grade, tiled OR engine-floating):
+        // where a tiling-family engine holds the window now. The resnap
+        // buffer uses it to refuse a snap assignment on a screen the window
+        // left while tiled, which the snap engine never hears about.
+        m_windowTrackingAdaptor->service()->setTilingHeldScreenResolver(
+            [autotilePtr = QPointer(autotileEngine),
+             scrollPtr = QPointer(scrollEngine)](const QString& windowId) -> QString {
+                if (autotilePtr) {
+                    if (QString screen = autotilePtr->heldScreenForWindow(windowId); !screen.isEmpty()) {
+                        return screen;
+                    }
+                }
+                return scrollPtr ? scrollPtr->heldScreenForWindow(windowId) : QString();
+            });
     }
 
     // Wire SnapEngine's back-reference to the window tracking adaptor.

@@ -106,6 +106,11 @@ void SnapAdaptor::recordSnapIntent(const QString& windowId, bool wasUserInitiate
 
 void SnapAdaptor::moveWindowToZone(const QString& windowId, const QString& zoneId)
 {
+    moveWindowToZoneOnScreen(windowId, zoneId, QString());
+}
+
+void SnapAdaptor::moveWindowToZoneOnScreen(const QString& windowId, const QString& zoneId, const QString& screenHint)
+{
     if (!validateWindowId(windowId, QStringLiteral("moveWindowToZone"))) {
         return;
     }
@@ -119,8 +124,10 @@ void SnapAdaptor::moveWindowToZone(const QString& windowId, const QString& zoneI
         return;
     }
 
-    // Resolve screen for the target zone
-    QString screenId = resolveScreenForSnap(QString(), zoneId);
+    // The caller's screen when it named one, else the screen the zone is on.
+    // Detection from the zone id alone cannot tell two screens apart when they
+    // run the same layout, so a caller that knows the screen must pass it.
+    QString screenId = resolveScreenForSnap(screenHint, zoneId);
 
     // Get zone geometry
     QRect geo = m_adaptor->service()->zoneGeometry(zoneId, screenId);
@@ -128,6 +135,12 @@ void SnapAdaptor::moveWindowToZone(const QString& windowId, const QString& zoneI
         qCWarning(lcDbusWindow) << "moveWindowToZone: invalid geometry for zone:" << zoneId;
         return;
     }
+
+    // The float-back of a free window, recorded before the commit that would
+    // make the effect's own pre-snap capture refused (see the helper). Filed
+    // under the screen the window is on, which a cross-screen snap is leaving.
+    const QString windowScreen = m_engine->screenForTrackedWindow(windowId);
+    m_engine->recordFreeFrameBeforeUserSnap(windowId, windowScreen.isEmpty() ? screenId : windowScreen);
 
     // Perform snap bookkeeping via SnapEngine
     m_engine->commitSnap(windowId, zoneId, screenId);

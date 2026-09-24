@@ -133,6 +133,21 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             if (!safeW || safeW->isDeleted()) {
                 return;
             }
+            // The daemon acts on the focused window's screen for every window
+            // shortcut, and otherwise learns it only from an activation. A
+            // focused window moved to another output without being activated
+            // again (a KWin or user move, or a daemon apply) left the daemon
+            // naming the output it had left, so the next snap-to-zone key put
+            // it back there. Reported ahead of the apply gate below on purpose:
+            // a move the daemon drives is still a move of the focused window,
+            // and getWindowScreenId answers from the engine for a strip tile,
+            // so a parked column crossing outputs does not flip the record.
+            if (KWin::effects && safeW == KWin::effects->activeWindow() && m_daemonGate.serviceRegistered) {
+                PhosphorProtocol::ClientHelpers::fireAndForget(
+                    this, PhosphorProtocol::Service::Interface::WindowTracking,
+                    QStringLiteral("activeWindowScreenChanged"), {getWindowId(safeW), getWindowScreenId(safeW)},
+                    QStringLiteral("activeWindowScreenChanged"));
+            }
             // Daemon-driven geometry applies must not be mistaken for user
             // moves (symmetric with the frameGeometryChanged VS-crossing
             // handler below). This matters for the scrolling engine: parked

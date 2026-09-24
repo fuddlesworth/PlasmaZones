@@ -82,6 +82,18 @@ public:
         return std::nullopt;
     }
 
+    /// Whether @p windowId is maximized or fullscreen as last reported: engaged
+    /// true when either state is on, engaged false when a state is known and
+    /// neither is on, nullopt when neither was delivered or the window is
+    /// unknown. Such a window's frame is the output, not a free position, and
+    /// only the compositor knows its restore rect. Default reports unknown,
+    /// like minimizedState.
+    virtual std::optional<bool> fillsOutputState(const QString& windowId) const
+    {
+        Q_UNUSED(windowId)
+        return std::nullopt;
+    }
+
     /// The desktop set and activity last reported for @p windowId (bare
     /// instance id or composite `appId|instanceId`), or nullopt when the
     /// window is unknown. Default reports unknown, like minimizedState, so a

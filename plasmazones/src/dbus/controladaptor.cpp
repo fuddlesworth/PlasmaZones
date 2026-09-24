@@ -57,8 +57,12 @@ void ControlAdaptor::snapWindowToZone(const QString& windowId, int zoneNumber, c
         return;
     }
 
+    // Normalised the way toggleAutotileForScreen does it: a connector name
+    // resolves to the screen id the layouts and the snap store are keyed by.
+    const QString resolvedScreenId = PhosphorScreens::ScreenIdentity::idForName(screenId);
+
     // Resolve zone from screen's current layout
-    PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+    PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(resolvedScreenId);
     if (!layout) {
         qCWarning(lcDbusWindow) << "snapWindowToZone: no layout for screen" << screenId;
         return;
@@ -70,9 +74,12 @@ void ControlAdaptor::snapWindowToZone(const QString& windowId, int zoneNumber, c
         return;
     }
 
-    // Delegate to SnapAdaptor's moveWindowToZone convenience method
+    // Snapped on the screen the zone was resolved on. Handing over the zone id
+    // alone let the snap re-detect the screen from the zone, and with one layout
+    // on two screens that answered with the first of them, so the window landed
+    // on a screen the caller did not name. An empty screen keeps that detection.
     if (m_snapAdaptor) {
-        m_snapAdaptor->moveWindowToZone(windowId, zone->id().toString());
+        m_snapAdaptor->moveWindowToZoneOnScreen(windowId, zone->id().toString(), resolvedScreenId);
     }
 }
 

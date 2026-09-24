@@ -864,6 +864,16 @@ bool WindowTrackingService::isWindowEngineTiled(const QString& windowId) const
     return m_engineTiledPredicate && m_engineTiledPredicate(windowId);
 }
 
+void WindowTrackingService::setTilingHeldScreenResolver(TilingHeldScreenResolver resolver)
+{
+    m_tilingHeldScreenResolver = std::move(resolver);
+}
+
+QString WindowTrackingService::tilingHeldScreenForWindow(const QString& windowId) const
+{
+    return m_tilingHeldScreenResolver ? m_tilingHeldScreenResolver(windowId) : QString();
+}
+
 void WindowTrackingService::setModeEngineIdResolver(ModeEngineIdResolver resolver)
 {
     m_modeEngineIdResolver = std::move(resolver);
