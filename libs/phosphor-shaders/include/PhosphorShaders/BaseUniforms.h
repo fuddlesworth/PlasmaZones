@@ -64,7 +64,12 @@ struct alignas(16) BaseUniforms
     // Custom colors (16 color slots)
     float customColors[16][4]; // vec4[16]: 256 bytes at offset 256
 
-    // Multi-pass: iChannelResolution[i] = buffer texture size
+    // Multi-pass: iChannelResolution[i] = buffer texture size.
+    // The FIRST FOUR channels only, deliberately. The channel budget is eight
+    // (Bindings::kChannelCount) but widening this array would move every
+    // offset below it and break the 672-byte base layout the shared GLSL
+    // headers pin. A pass reading iChannel4..7 sizes it with textureSize(),
+    // which is what the builtin Kawase passes do.
     float iChannelResolution[4][4]; // vec4[4]: 64 bytes at offset 512
 
     // Audio spectrum
@@ -72,14 +77,13 @@ struct alignas(16) BaseUniforms
     int iFlipBufferY; // offset 580 — always 1 for Y-flip
     // The two pad ints at offsets 584 and 588 are explicitly written as zero
     // by the C-side upload path (see BaseUniformProfile::fill in
-    // baseuniformprofile.cpp) — readers should not assume the bytes are skipped
-    // on the wire. On the
-    // GLSL side they are absorbed by std140's vec4 alignment of the following
-    // `iTextureResolution` (vec4[4]) member, which forces the next field onto
-    // a 16-byte boundary at offset 592. Removing the pad would shift the
-    // GLSL view of `iTextureResolution` and break the
-    // `data/animations/shared/animation_uniforms.glsl` byte-for-byte
-    // contract pinned by the static_asserts below.
+    // baseuniformprofile.cpp) — readers should not assume the bytes are
+    // skipped on the wire. On the GLSL side they are absorbed by std140's
+    // vec4 alignment of the following `iTextureResolution` (vec4[4]) member,
+    // which forces the next field onto a 16-byte boundary at offset 592.
+    // Removing the pad would shift the GLSL view of `iTextureResolution` and
+    // break the `data/animations/shared/animation_uniforms.glsl`
+    // byte-for-byte contract pinned by the static_asserts below.
     int _pad_after_audioSpectrum[2]; // offset 584
 
     // User texture resolutions (bindings 11-14)
@@ -165,7 +169,16 @@ static_assert(offsetof(BaseUniforms, iIsReversed) == 660,
 /// UBO region offsets and sizes for partial updates (reduces GPU bandwidth).
 namespace UboRegions {
 
-// Transform and opacity from Qt scene graph (mat4 + float)
+// Transform and opacity from Qt scene graph (mat4 + float).
+//
+// REFERENCE ONLY. Nothing uploads this region: dirtyRegions() below emits
+// K_TIME_BLOCK, K_TIME_HI, K_SCENE_HEADER and K_APP_FIELDS and never this one,
+// so the base UBO's matrix and opacity bytes reach the GPU through
+// fullUploadRegions() alone, on the first upload and on any retarget that
+// forces another. Kept as public constants because this is an exported header
+// and an out-of-tree consumer may describe the region, not because the library
+// uses them. (SurfaceUniformProfile DOES push a matrix region of its own,
+// which is probably why this header used to read as though the base did too.)
 constexpr size_t K_MATRIX_OPACITY_OFFSET = 0;
 constexpr size_t K_MATRIX_OPACITY_SIZE = offsetof(BaseUniforms, iTime); // 68 bytes
 
@@ -195,17 +208,21 @@ constexpr size_t K_APP_FIELDS_SIZE = sizeof(int) * 2;
 // silently failed to propagate to the GPU after the first full upload —
 // asymmetric direction-aware shaders read stale values forever.
 //
-// WARNING: a new field added BEFORE iResolution (offset < 80) must
-// extend K_MATRIX_OPACITY or land in its own region; this scene-header
-// range only covers offsets [80, sizeof(BaseUniforms)).
+// WARNING: this range covers offsets [80, sizeof(BaseUniforms)) and nothing
+// below. A new field added BEFORE iResolution (offset < 80) therefore needs
+// its own region AND a dirty flag emitting it from dirtyRegions(). Widening
+// K_MATRIX_OPACITY would not be enough on its own, because nothing uploads
+// that region; it would reach the GPU only on a full upload, which is the
+// same silent-staleness shape as the iIsReversed gap above.
 constexpr size_t K_SCENE_HEADER_OFFSET = offsetof(BaseUniforms, iResolution);
 constexpr size_t K_SCENE_HEADER_SIZE = sizeof(BaseUniforms) - K_SCENE_HEADER_OFFSET;
 
 // iTimeHi block: a granular 4-byte upload region for the time-wrap-only
-// path (m_timeHiDirty fires every ~30 s when iTime crosses the wrap
-// boundary). Subsumed by K_SCENE_HEADER, so when m_sceneDataDirty also
-// fires for the same frame the upload site below skips this granular
-// write to avoid the duplicate 4-byte transfer.
+// path. m_timeHiDirty fires when iTime crosses the wrap boundary, which is
+// every kShaderTimeWrap seconds, so roughly every 17 minutes rather than
+// often. Subsumed by K_SCENE_HEADER, so when m_sceneDataDirty also fires for
+// the same frame BaseUniformProfile::dirtyRegions skips this granular write
+// to avoid the duplicate 4-byte transfer.
 constexpr size_t K_TIME_HI_OFFSET = offsetof(BaseUniforms, iTimeHi);
 constexpr size_t K_TIME_HI_SIZE = sizeof(float);
 
@@ -216,12 +233,13 @@ constexpr size_t K_TIME_HI_SIZE = sizeof(float);
 // region. Pin via the actual LAST field's offset+size so a developer
 // who manually narrows K_SCENE_HEADER_SIZE (e.g. `= offsetof(iTimeHi) -
 // K_SCENE_HEADER_OFFSET`, which is exactly the original regression)
-// fails to build. The earlier formulation
-// `K_SCENE_HEADER_OFFSET + K_SCENE_HEADER_SIZE == sizeof(BaseUniforms)`
-// was tautological because K_SCENE_HEADER_SIZE is itself defined as
-// `sizeof(BaseUniforms) - K_SCENE_HEADER_OFFSET` — the assert reduced
-// to `sizeof == sizeof` and could not catch the regression it claimed
-// to defend.
+// fails to build. The other formulation,
+// `K_SCENE_HEADER_OFFSET + K_SCENE_HEADER_SIZE == sizeof(BaseUniforms)`,
+// is an identity only while K_SCENE_HEADER_SIZE is defined as
+// `sizeof(BaseUniforms) - K_SCENE_HEADER_OFFSET`. Under the narrowing it is
+// meant to defend against it stops being one and fires, so it is kept below
+// as a companion rather than removed. The trailing-field form is the primary
+// because it stays meaningful whatever K_SCENE_HEADER_SIZE is written as.
 static_assert(offsetof(BaseUniforms, _pad_after_iIsReversed) + sizeof(BaseUniforms::_pad_after_iIsReversed)
                   <= K_SCENE_HEADER_OFFSET + K_SCENE_HEADER_SIZE,
               "K_SCENE_HEADER must cover the trailing _pad_after_iIsReversed bytes — "
@@ -236,9 +254,9 @@ static_assert(K_TIME_HI_OFFSET >= K_SCENE_HEADER_OFFSET
               "K_TIME_HI must be subsumed by K_SCENE_HEADER so a scene-data upload "
               "covers iTimeHi too without needing the m_timeHiDirty granular path");
 // Verify K_APP_FIELDS is fully nested inside K_SCENE_HEADER for the
-// same reason: the upload site uses an `else if` to skip the granular
-// app-fields write when scene-data is also dirty (the broader upload
-// already covers it). Pinning the nesting at compile time makes a
+// same reason: BaseUniformProfile::dirtyRegions uses an `else if` to skip
+// the granular app-fields write when scene-data is also dirty (the broader
+// upload already covers it). Pinning the nesting at compile time makes a
 // future field-shuffle that breaks containment a build failure rather
 // than a silent missed-upload regression.
 static_assert(K_APP_FIELDS_OFFSET >= K_SCENE_HEADER_OFFSET
@@ -246,7 +264,11 @@ static_assert(K_APP_FIELDS_OFFSET >= K_SCENE_HEADER_OFFSET
               "K_APP_FIELDS must be subsumed by K_SCENE_HEADER so the scene-data upload "
               "covers appField0/appField1 too without needing the m_appFieldsDirty granular path");
 
-// Total base size (for extension offset calculation)
+// Total base size. REFERENCE ONLY, like K_MATRIX_OPACITY above: the extension
+// offset an extended profile actually uses comes from
+// BaseUniformProfile::baseSize(), which is what ShaderNodeRhi reads. This is
+// the public mirror of the same number for an out-of-tree consumer laying out
+// its own tail.
 constexpr size_t K_BASE_SIZE = sizeof(BaseUniforms);
 
 } // namespace UboRegions

@@ -75,7 +75,9 @@ inline constexpr int kMaxBinding = 31;
 /// How many channel sizes the uniform block carries (`iChannelResolution[4]`).
 inline constexpr int kChannelResolutionSlots = 4;
 
-static_assert(kChannelCount == 8, "the shared GLSL headers declare iChannel0..7; grow them with this");
+static_assert(kChannelCount == 8,
+              "the overlay and surface shared GLSL headers declare iChannel0..7; grow them with this "
+              "(pointer declares 0..3 for its own smaller cap, and animation declares none)");
 static_assert(kAudioSpectrum == 10 && kUserTextureBase == 11 && kWallpaper == 15 && kDepth == 16,
               "the shared GLSL headers pin these literal bindings; update every family with this table");
 static_assert(kExtraBase <= kMaxBinding, "the reserved range must leave consumer slots");
