@@ -456,8 +456,14 @@ void applyEffectStaticConfig(PhosphorRendering::ShaderEffect* shaderItem,
     // bake-cache key agrees across paths.
     shaderItem->setEntryScaffold(PhosphorAnimationShaders::AnimationShaderRegistry::animationEntryPrologue(),
                                  PhosphorAnimationShaders::AnimationShaderRegistry::animationEntryCandidates());
+    // Set on BOTH arms. The item is reused across attaches, so without the
+    // else a pack that drops its vertexShader on a hot-reload keeps rendering
+    // through the previous pack's .vert — the empty url is what falls the item
+    // back to the library's own fullscreen-quad stage.
     if (!effect.vertexShaderPath.isEmpty()) {
         shaderItem->setVertexShaderUrl(QUrl::fromLocalFile(effect.vertexShaderPath));
+    } else {
+        shaderItem->setVertexShaderUrl(QUrl());
     }
     if (effect.isMultipass && !effect.bufferShaderPaths.isEmpty()) {
         shaderItem->setBufferShaderPaths(effect.bufferShaderPaths);

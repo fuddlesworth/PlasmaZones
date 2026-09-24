@@ -21,8 +21,9 @@ namespace PhosphorSurfaceShaders {
 ///      sourced from `data/overlays/*/`. Long-lived ambient effects with
 ///      access to the rich `BaseUniforms` UBO (`iMouse`, `iDate`,
 ///      `customColors[16]`, audio-spectrum / wallpaper / multipass
-///      textures, etc.). Daemon-only (RHI/multipass infrastructure has
-///      no compositor-side equivalent).
+///      textures, etc.). Daemon-only, because the overlay family has no
+///      compositor consumer at all — not because multipass is daemon-only,
+///      which it stopped being when the compositor grew the surface fold.
 ///
 ///   3. **Surface shaders** — `SurfaceShaderRegistry` (this contract),
 ///      sourced from `data/surface/*/`. Persistent per-window surface

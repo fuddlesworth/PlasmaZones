@@ -342,6 +342,19 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
     // struct is internally coherent regardless of which branch produced the
     // single-pass state. (Mirrors SurfaceShaderRegistry::parseEffect.)
     if (!e.isMultipass) {
+        // The PATHS first, which this block claimed to mirror and did not. A
+        // pack that declared bufferShaders without "multipass": true never
+        // entered the resolve-to-absolute branch above, so it still holds RAW
+        // RELATIVE names; left set they reach effectWatchPaths, the content
+        // signature and operator== as CWD-relative nonsense. Warn before
+        // clearing, since dropping a declared chain silently is how a pack
+        // ships doing nothing with no diagnostic at any level.
+        if (!e.bufferShaderPaths.isEmpty()) {
+            qCWarning(lcRegistry) << "Animation effect" << e.id << "declares" << e.bufferShaderPaths.size()
+                                  << "buffer shader(s) but not \"multipass\": true, so every one of them is "
+                                     "dropped and the pack renders single-pass";
+        }
+        e.bufferShaderPaths.clear();
         e.bufferWraps.clear();
         e.bufferFilters.clear();
         // The SINGULAR pair is the all-buffers default and is equally

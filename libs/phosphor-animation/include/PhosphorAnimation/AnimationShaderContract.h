@@ -21,8 +21,9 @@ namespace PhosphorAnimationShaders {
 ///      sourced from `data/overlays/*/`. Long-lived ambient effects with
 ///      access to the rich `BaseUniforms` UBO (`iMouse`, `iDate`,
 ///      `customColors[16]`, audio-spectrum / wallpaper / multipass
-///      textures, etc.). Daemon-only (RHI/multipass infrastructure has
-///      no compositor-side equivalent).
+///      textures, etc.). Daemon-only, because the overlay family has no
+///      compositor consumer at all — not because multipass is daemon-only,
+///      which it stopped being when the compositor grew the surface fold.
 ///
 /// This header documents the contract for the **first** category. It
 /// applies identically across both runtime execution sites:
@@ -131,6 +132,11 @@ namespace PhosphorAnimationShaders {
 ///   • `iTextureResolution[]` — pixel sizes of the bound user textures.
 ///     Daemon: node-resolved live. Kwin: pushed by paintWindow's
 ///     per-effect texture loop.
+///
+/// Two buffer knobs the SURFACE family has are absent here, deliberately.
+/// There is no per-pass `bufferScales` list (one `bufferScale` covers the
+/// whole chain) and no `halfFloatBuffers` switch (animation buffers are
+/// pinned RGBA16F). Both are surface-only.
 ///
 /// @par Audio spectrum (opt-in module, both runtimes)
 /// `iAudioSpectrumSize` + the `uAudioSpectrum` sampler are an opt-in
@@ -417,8 +423,12 @@ inline constexpr const char* kIIconRect = "iIconRect";
 /// shader cross-fades this (alpha `1 - iTime`) against the live new
 /// content in `uTexture0` (alpha `iTime`), each mapped at native aspect,
 /// so an aspect-ratio-changing resize doesn't stretch the content. Bound
-/// to a dedicated texture unit on the kwin path; a transparent 1×1
-/// fallback is bound when no snapshot was captured. The sampler is NOT
+/// to a dedicated texture unit on the kwin path. When NO snapshot was
+/// captured the unit is NOT given a transparent fallback: it is aliased onto
+/// unit 0, the RAW undecorated window, so an ungated cross-fade from old
+/// content blanks every decoration pack. Gate on `iHasOldWindow`, which is
+/// what the shipped old_content.glsl helper does and what its sibling doc
+/// below says. The sampler is NOT
 /// declared by the canonical header — only the `iHasOldWindow` gate int
 /// is; packs that sample old content opt in via
 /// `data/animations/shared/old_content.glsl`, which declares the sampler
@@ -575,8 +585,9 @@ inline constexpr const char* kUAudioSpectrum = "uAudioSpectrum";
 /// the daemon path); `(-1, -1)` when the cursor is outside the shader's
 /// surface. `.zw` on the kwin path carry the same cursor position
 /// normalised to the frame size ([0, 1] inside the window, negative
-/// when the off-surface sentinel applies) — phosphor-vortex reads them;
-/// the daemon overlay contract reserves `.zw` for click state.
+/// when the off-surface sentinel applies) — phosphor-vortex reads them. The
+/// DAEMON writes the same thing: normalised cursor coordinates, not click
+/// state.
 ///
 /// ONE EXCEPTION, the held-move leg (`move` class, kwin path): no
 /// sentinel is ever applied, and the position is clamped into the frame
@@ -720,7 +731,7 @@ inline bool isValidWrapToken(const QString& wrap)
 {
     // Thin forwarder onto the cross-library canonical predicate in
     // <PhosphorShaders/CustomParamsKey.h> (already included above), so all
-    // three shader families share one wrap vocabulary rather than each
+    // FOUR shader families share one wrap vocabulary rather than each
     // hand-rolling its own token list that can drift.
     return PhosphorShaders::isValidWrapToken(wrap);
 }

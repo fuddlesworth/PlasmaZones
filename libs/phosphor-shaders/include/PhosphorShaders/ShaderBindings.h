@@ -82,6 +82,16 @@ static_assert(kAudioSpectrum == 10 && kUserTextureBase == 11 && kWallpaper == 15
               "the shared GLSL headers pin these literal bindings; update every family with this table");
 static_assert(kExtraBase <= kMaxBinding, "the reserved range must leave consumer slots");
 static_assert(kChannelResolutionSlots <= kChannelCount, "the UBO cannot describe channels that do not exist");
+// BOTH ENDS of the table, which the literal pins above leave open. Each of
+// these is a single-token edit away from compiling clean and breaking
+// something silently.
+static_assert(kUniformBlock == 0,
+              "the uniform block is binding 0 in every shared GLSL header and in the validator's own check");
+static_assert(kConsumer == 1 && kConsumer != kChannelBase,
+              "the consumer gap slot is binding 1; colliding it with kChannelBase would make a channel binding "
+              "claimable through setExtraBinding");
+static_assert(kChannelBase > kConsumer, "the channel run must start above the consumer gap slot");
+static_assert(kExtraBase > kDepth, "the consumer range must start strictly above the last library-managed binding");
 
 /// The binding a canonical contract sampler must declare, or -1 when @p name
 /// is not a contract sampler (a consumer-declared one, which the validator
