@@ -608,7 +608,10 @@ bool PlasmaZonesEffect::drawWindowImpl(const KWin::RenderTarget& renderTarget, c
             // uniform persists; the texture stays bound until the post-draw cleanup.
             KWin::GLShader* const present = surfacePresentShader();
             const auto stateIt = m_surfaceMultipass.find(wid);
-            if (present && stateIt != m_surfaceMultipass.end()
+            // compositeWritten gates this as well as the pointer: the texture is
+            // allocated before the first fold runs, so a pointer test alone binds
+            // undefined contents whenever that fold has not happened or has bailed.
+            if (present && stateIt != m_surfaceMultipass.end() && stateIt->second.compositeWritten
                 && stateIt->second.compositeTex[stateIt->second.finalSlot]) {
                 const int unit = kSurfaceChannelBaseUnit;
                 KWin::ShaderBinder binder(present);
@@ -669,7 +672,13 @@ bool PlasmaZonesEffect::drawWindowImpl(const KWin::RenderTarget& renderTarget, c
         // no-transition arm and this one requires a live transition, so the two
         // are mutually exclusive.
         const auto reIt = m_surfaceMultipass.find(m_idCaches.windowIdCache.value(w));
-        if (reIt != m_surfaceMultipass.end()) {
+        if (reIt != m_surfaceMultipass.end() && reIt->second.compositeWritten) {
+            // This runs later in the same frame whatever the fold returned, and the
+            // transition arm reaches the fold's capture-failure bail too, so without
+            // compositeWritten the transition path would rebind an unwritten
+            // composite even once the present bind above started refusing it. The
+            // existing else path already copes with no composite: reboundLayerUnit
+            // simply stays false.
             if (KWin::GLTexture* const comp = reIt->second.compositeTex[reIt->second.finalSlot].get()) {
                 constexpr int kSurfaceLayerUnitDraw = ShaderInternal::kSurfaceLayerUnit;
                 glActiveTexture(GL_TEXTURE0 + kSurfaceLayerUnitDraw);

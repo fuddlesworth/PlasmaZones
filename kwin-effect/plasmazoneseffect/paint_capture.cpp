@@ -287,8 +287,12 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
             // map and no longer needs a term in it.
             const QRectF newFrame = src->frameGeometry();
             const QRectF oldFrame = transition.fromGeometry;
-            if (comp && mp.canvasGeo.isValid() && !mp.canvasGeo.isEmpty() && oldFrame.width() > 0.0
-                && oldFrame.height() > 0.0 && newFrame.width() > 0.0 && newFrame.height() > 0.0) {
+            // canvasGeo is stamped BEFORE the fold's capture bail, so it asserts "a
+            // composite covers this rect" on a state that may hold no composite at
+            // all. compositeWritten is the term that actually says one exists.
+            if (comp && mp.compositeWritten && mp.canvasGeo.isValid() && !mp.canvasGeo.isEmpty()
+                && oldFrame.width() > 0.0 && oldFrame.height() > 0.0 && newFrame.width() > 0.0
+                && newFrame.height() > 0.0) {
                 // T maps snapshot-space logical points into composite space:
                 // T(p) = oldFrame.topLeft + (p - newFrame.topLeft) ⊙ s
                 const qreal sx = oldFrame.width() / newFrame.width();
@@ -503,7 +507,9 @@ void PlasmaZonesEffect::seedTabSwapSnapshot(ShaderTransition& transition, KWin::
     }
     const SurfaceMultipassState& mp = mpIt->second;
     KWin::GLTexture* const comp = mp.compositeTex[mp.finalSlot].get();
-    if (!comp || !mp.canvasGeo.isValid() || mp.canvasGeo.isEmpty()) {
+    // compositeWritten for the reason the sibling above gives: canvasGeo is stamped
+    // ahead of the fold's capture bail, so it cannot stand in for "a fold happened".
+    if (!comp || !mp.compositeWritten || !mp.canvasGeo.isValid() || mp.canvasGeo.isEmpty()) {
         armFallback();
         return;
     }

@@ -477,6 +477,22 @@ struct SurfaceMultipassState
     /// at the old scale.
     qreal captureScaleKey = 0.0;
     int finalSlot = 0; ///< which compositeTex slot holds the final fold
+    /// Whether `compositeTex[finalSlot]` has EVER been written by a completed fold.
+    ///
+    /// Deliberately distinct from `compositeValid`, which asks whether the last fold
+    /// is still REUSABLE. This asks whether there is any fold at all. The composites
+    /// are allocated with GLTexture::allocate() and never cleared, so a freshly built
+    /// pair holds undefined contents, and a reader that binds compositeTex[finalSlot]
+    /// presents exactly those: garbage on a driver that leaves fresh allocations
+    /// alone, an invisible window on one that zeroes them. Two states reach a reader
+    /// that way, a state folding for the FIRST time whose capture fails, and any
+    /// frame where the pair was reallocated and the capture then failed, since
+    /// finalSlot survives a realloc.
+    ///
+    /// Set beside `finalSlot` at the end of a successful fold, cleared wherever the
+    /// pair is reallocated (beside `captureValid` / `compositeValid`), and false by
+    /// construction on a new state.
+    bool compositeWritten = false;
     /// The logical rect the composite canvas covers (expanded geometry
     /// inflated by the chain's outer padding, captured when the fold ran).
     /// The layer-rect remap and the padded quads read THIS instead of

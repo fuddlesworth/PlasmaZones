@@ -135,6 +135,11 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
             state.captureValid = false;
             state.prefixValid = false;
             state.compositeValid = false;
+            // The pair was just rebuilt, so whatever fold wrote the old one is gone,
+            // but finalSlot keeps its value across the realloc and would still name a
+            // slot. Without this, a realloc followed by a failed capture presents the
+            // new, never-written texture.
+            state.compositeWritten = false;
             state.prefixChainEnd = -1;
             state.captureFbo.reset();
             state.prefixTex.reset();
@@ -533,9 +538,10 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
 
         // UNPAINTED — nothing stopped it, it simply was not drawn: minimized, on another
         // desktop, fully occluded. Nobody tells us that happened, so it is inferred from
-        // the gap since the last fold. lastFoldMs is stamped on BOTH terminal paths of the
-        // fold, including the cached-composite early return, so a window that IS being
-        // painted but is serving from cache never looks unpainted here.
+        // the gap since the last fold. lastFoldMs is stamped on EVERY terminal path of the
+        // fold — the full fold, the cached-composite early return, and the capture-failure
+        // bail — so a window that IS being painted never looks unpainted here, whether it
+        // is serving from cache or failing to capture.
         if (state.lastFoldMs >= 0 && nowMs - state.lastFoldMs > kNotPaintedGapMs) {
             notAnimatingMs = std::max(notAnimatingMs, nowMs - state.lastFoldMs);
         }

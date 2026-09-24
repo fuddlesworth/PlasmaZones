@@ -100,7 +100,10 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChain(ShaderTransition& transit
         const auto sIt = m_surfaceMultipass.find(getWindowId(w));
         if (sIt != m_surfaceMultipass.end()) {
             KWin::GLTexture* const frozen = sIt->second.compositeTex[sIt->second.finalSlot].get();
-            if (frozen) {
+            // compositeWritten, not just a non-null texture: a window closed before it
+            // ever folded successfully has an allocated pair holding undefined
+            // contents, and freezing THAT is the flash this branch exists to avoid.
+            if (frozen && sIt->second.compositeWritten) {
                 return frozen;
             }
         }
@@ -222,7 +225,8 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         const auto sIt = m_surfaceMultipass.find(windowId);
         if (sIt != m_surfaceMultipass.end()) {
             KWin::GLTexture* const frozen = sIt->second.compositeTex[sIt->second.finalSlot].get();
-            if (frozen) {
+            // See the twin above: an allocated pair is not a folded one.
+            if (frozen && sIt->second.compositeWritten) {
                 return frozen;
             }
         }
@@ -451,6 +455,44 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // every fold, and an early return that skipped it would strand the window on the
     // wrong shader.
     if (!captureOk) {
+        // If this state has NEVER folded, there is no composite to fall back on, and
+        // the present shader re-asserted just above still points uFinal at
+        // compositeTex[finalSlot] — allocated, never written, undefined contents. The
+        // window would show garbage, or vanish on a driver that zeroes fresh
+        // allocations. Two states reach here that way: a first fold whose capture
+        // fails, and any frame where the pair was reallocated (finalSlot survives a
+        // realloc) and the capture then failed.
+        //
+        // Hand the window back to KWin, exactly as the VRAM-failure branch above does
+        // and for the same reason: undecorated and visible beats invisible.
+        // removeWindowDecoration is the single owner of teardown, so this also clears
+        // shaderApplied, which makes apply()'s padded-quad rewrite fall false BY
+        // CONSTRUCTION rather than needing a second suppression flag beside it. The
+        // entry is erased, so the next frame has no decoration and no second bail
+        // rather than re-entering this one every frame, and the decoration returns on
+        // the next updateWindowDecoration.
+        //
+        // Not during a transition, for the reason that branch gives: it owns the
+        // shader slot and would be torn out mid-animation, and it re-captures every
+        // frame so it gets its own chance next one.
+        //
+        // A state that HAS folded keeps its decoration. Its composite is stale but
+        // real, which reads as a frozen decoration, and that is the right answer to a
+        // transient capture failure.
+        // Stamp the fold clock even though nothing folded. This is the fold's THIRD
+        // terminal path, and the unpainted-gap sensor in planSurfaceFold carries no
+        // latch of its own — its latch IS the caller advancing lastFoldMs. Left
+        // unstamped, the same gap is re-added every frame, one frame longer each time,
+        // so timeOffsetMs grows without bound and the pack's own clock runs backwards
+        // for good, with no recovery because timeOffsetMs only ever increases. The
+        // other two terminal paths stamp it, pinned to the frame clock for the reason
+        // they give, so two windows in one frame cannot disagree about the time.
+        const qint64 pinnedBailMs = m_shaderManager.currentFrameClockMs();
+        state.lastFoldMs = pinnedBailMs >= 0 ? pinnedBailMs : ShaderInternal::shaderClockNowMs();
+        if (!state.compositeWritten && !captureRestoreShader) {
+            const auto selfRepaint = selfRepaintScope();
+            removeWindowDecoration(windowId, w);
+        }
         return nullptr;
     }
 
@@ -927,6 +969,9 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     }
 
     state.finalSlot = lastDst;
+    // The one place a composite becomes real. Everything that binds
+    // compositeTex[finalSlot] gates on this, so an unwritten pair is never presented.
+    state.compositeWritten = true;
     // The composite just folded is reusable verbatim only when nothing in the chain
     // varies PER FRAME (iTime, audio, backdrop). Focus, opacity and the cursor are baked
     // in as keys instead, so record what this fold used — the next one refuses the
