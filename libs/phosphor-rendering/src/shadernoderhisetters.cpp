@@ -303,7 +303,6 @@ bool ShaderNodeRhi::setExtraBinding(int binding, QRhiTexture* texture, QRhiSampl
         return true;
     }
     m_extraBindings[binding] = ExtraBinding{texture, sampler};
-    m_extraBindingsDirty = true;
     resetAllBindingsAndPipelines();
     return true;
 }
@@ -315,7 +314,6 @@ bool ShaderNodeRhi::removeExtraBinding(int binding)
         return false;
     }
     m_extraBindings.erase(it);
-    m_extraBindingsDirty = true;
     resetAllBindingsAndPipelines();
     return true;
 }
@@ -530,7 +528,6 @@ void ShaderNodeRhi::setBufferShaderPaths(const QStringList& paths)
     m_multiBufferShaderDirty = true;
     m_multiBufferShaderRetries = 0;
     for (int i = 0; i < kMaxBufferPasses; ++i) {
-        m_multiBufferFragmentShaderSources[i].clear();
         m_multiBufferFragmentShaders[i] = QShader();
     }
     // Single-buffer mode is loaded lazily inside bakeBufferShaders() during

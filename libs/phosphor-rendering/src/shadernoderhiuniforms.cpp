@@ -780,7 +780,6 @@ void ShaderNodeRhi::bakeBufferShaders()
         m_multiBufferShaderDirty = false;
         m_multiBufferShadersReady = false;
         for (int i = 0; i < kMaxBufferPasses; ++i) {
-            m_multiBufferFragmentShaderSources[i].clear();
             m_multiBufferFragmentShaders[i] = QShader();
         }
         bool allOk = true;
@@ -795,7 +794,6 @@ void ShaderNodeRhi::bakeBufferShaders()
                 allOk = false;
                 break;
             }
-            m_multiBufferFragmentShaderSources[i] = src;
             // Buffer-pass shaders are compiled directly via ShaderCompiler::compile
             // and do NOT participate in the filename bake cache (which is keyed
             // off the main vertex+fragment pair). Tracking per-pass mtimes
