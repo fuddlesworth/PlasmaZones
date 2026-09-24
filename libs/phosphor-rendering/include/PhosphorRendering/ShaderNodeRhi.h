@@ -14,10 +14,8 @@
 
 #include <QColor>
 #include <QImage>
-#include <QMatrix4x4>
 #include <QPointF>
 #include <QPointer>
-#include <QSizeF>
 #include <QQuickItem>
 #include <QSGRenderNode>
 #include <QSGTextureProvider>

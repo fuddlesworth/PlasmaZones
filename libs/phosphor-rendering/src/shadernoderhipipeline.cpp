@@ -3,8 +3,6 @@
 
 #include "internal.h"
 
-#include <QQuickWindow>
-
 namespace PhosphorRendering {
 
 // ============================================================================

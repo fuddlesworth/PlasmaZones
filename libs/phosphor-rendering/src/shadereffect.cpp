@@ -6,13 +6,11 @@
 
 #include "internal.h"
 
-#include <PhosphorShaders/CustomParamsKey.h>
 #include <PhosphorShaders/IUniformExtension.h>
 
 #include <QImageReader>
 #include <QMutexLocker>
 #include <QPainter>
-#include <QPointer>
 #include <QQuickWindow>
 #include <QRunnable>
 #include <QThread>
