@@ -187,12 +187,19 @@ void PlasmaZonesEffect::refreshSurfaceShadowMargins(KWin::EffectWindow* window)
     // A shadow wider or taller than the window it surrounds is not a
     // shadow. The measured stale sample would have cached a 1374 px bottom
     // margin on a 678 px window; the real margins are 65/53/65/77 against
-    // frames from 628 to 2052 px, three orders of magnitude clear of this
-    // bound. Reject the update and keep the last good margins.
+    // frames from 628 to 2052 px, so roughly one order of magnitude clear of
+    // this bound at the tightest, not the three this used to claim. Reject the
+    // update and keep the last good margins.
     if (margins.left() > frame.width() || margins.right() > frame.width() || margins.top() > frame.height()
         || margins.bottom() > frame.height()) {
-        qCWarning(lcEffect) << "Refusing implausible shadow margins" << margins << "for" << window->windowClass()
-                            << "frame" << frame << "expanded" << expanded;
+        // DEBUG, not warning. A window genuinely smaller than its own shadow is a
+        // real and recurring shape (a small tooltip or a compact popup under a
+        // heavy shadow theme), and this fires on EVERY expanded-geometry event
+        // for such a window, so at warning level a perfectly healthy session
+        // fills the journal. The rejection itself is the correct handling and is
+        // unchanged; only its volume was wrong.
+        qCDebug(lcEffect) << "Refusing implausible shadow margins" << margins << "for" << window->windowClass()
+                          << "frame" << frame << "expanded" << expanded;
         return;
     }
     m_surfaceShadowMargins.insert(window, margins);
@@ -258,7 +265,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // main passes below) and the offscreen draws must not be clipped to a
     // scissor box the scene walk left enabled — a scissored clear would leave
     // stale/undefined texels in the composite. The guard restores scissor on
-    // exit (matching the captureWindowBackdrop and paint_pipeline siblings).
+    // exit (matching the captureWindowBackdrop and paint_capture.cpp siblings).
     glDisable(GL_SCISSOR_TEST);
     namespace SC = PhosphorSurfaceShaders::SurfaceShaderContract;
 
@@ -680,7 +687,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                     pass.shader->setUniform(pass.uHasBackdropLoc, backdropAvailable ? 1.0f : 0.0f);
                 }
                 for (size_t j = 0; j < i && j < static_cast<size_t>(ShaderInternal::kSurfaceChannelCount); ++j) {
-                    glActiveTexture(GL_TEXTURE1 + static_cast<int>(j));
+                    glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceFoldChannelBaseUnit + static_cast<int>(j));
                     bufs[j]->bind();
                     if (pass.iChannelLoc[j] >= 0) {
                         pass.shader->setUniform(pass.iChannelLoc[j], 1 + static_cast<int>(j));
@@ -706,7 +713,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                     // Park the destination unit BEFORE the call: the first-ever call
                     // creates the texture, and GLTexture::upload binds it on the ACTIVE
                     // unit, which is TEXTURE0 here.
-                    glActiveTexture(GL_TEXTURE1 + static_cast<int>(j));
+                    glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceFoldChannelBaseUnit + static_cast<int>(j));
                     KWin::GLTexture* const fallback = transparentFallbackTexture();
                     if (!fallback) {
                         glActiveTexture(GL_TEXTURE0);
@@ -755,7 +762,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             // but has no buffer for, and leaving those bound would leak this pass's state
             // into the next one.
             for (size_t j = 0; j < static_cast<size_t>(ShaderInternal::kSurfaceChannelCount); ++j) {
-                glActiveTexture(GL_TEXTURE1 + static_cast<int>(j));
+                glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceFoldChannelBaseUnit + static_cast<int>(j));
                 glBindTexture(GL_TEXTURE_2D, 0);
             }
             if (passHasBackdrop || passBackdropUnitBound) {
@@ -806,11 +813,11 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             // passes, the surplus textures are unwritten and must not be sampled.
             const int n = qMin(static_cast<int>(passCount), ShaderInternal::kSurfaceChannelCount);
             for (int i = 0; i < n; ++i) {
-                glActiveTexture(GL_TEXTURE1 + i);
+                glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceFoldChannelBaseUnit + i);
                 bufs[i]->bind();
                 mainChannelsBound = i + 1;
                 if (pk->iChannelLoc[i] >= 0) {
-                    pk->shader->setUniform(pk->iChannelLoc[i], 1 + i);
+                    pk->shader->setUniform(pk->iChannelLoc[i], ShaderInternal::kSurfaceFoldChannelBaseUnit + i);
                 }
                 if (i < ShaderInternal::kSurfaceChannelResolutionSlots && pk->iChannelResolutionLoc[i] >= 0) {
                     const QVector4D res(static_cast<float>(bufs[i]->width()), static_cast<float>(bufs[i]->height()),
@@ -839,7 +846,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 // user-texture fallback below: the first-ever call creates the
                 // texture, and GLTexture::upload binds it on the CURRENTLY ACTIVE
                 // unit — which is TEXTURE0 here, holding the running composite.
-                glActiveTexture(GL_TEXTURE1 + i);
+                glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceFoldChannelBaseUnit + i);
                 KWin::GLTexture* const fallback = transparentFallbackTexture();
                 if (!fallback) {
                     glActiveTexture(GL_TEXTURE0);
@@ -847,7 +854,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 }
                 fallback->bind();
                 mainChannelsBound = i + 1;
-                pk->shader->setUniform(pk->iChannelLoc[i], 1 + i);
+                pk->shader->setUniform(pk->iChannelLoc[i], ShaderInternal::kSurfaceFoldChannelBaseUnit + i);
                 if (i < ShaderInternal::kSurfaceChannelResolutionSlots && pk->iChannelResolutionLoc[i] >= 0) {
                     pk->shader->setUniform(pk->iChannelResolutionLoc[i],
                                            QVector4D(static_cast<float>(fallback->width()),
@@ -935,7 +942,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             drawFullscreenQuad();
         }
         for (int i = 0; i < mainChannelsBound; ++i) {
-            glActiveTexture(GL_TEXTURE1 + i);
+            glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceFoldChannelBaseUnit + i);
             glBindTexture(GL_TEXTURE_2D, 0);
         }
         if (mainHasBackdrop || mainBackdropUnitBound) {
