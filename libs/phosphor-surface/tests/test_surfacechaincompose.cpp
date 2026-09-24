@@ -113,7 +113,10 @@ private Q_SLOTS:
     {
         const SurfaceShaderEffect e = basePack();
         const QVariantMap stage = composeStageMap(e, {});
-        // The keys SurfaceDecoration.qml reads off every stage.
+        // The keys composeStageMap emits for EVERY stage, multipass or not.
+        // Not the whole set SurfaceDecoration.qml reads: it reads sixteen off
+        // stage.stageData, and the other ten are the buffer keys emitted only
+        // under multipass, which the two cases below pin.
         QVERIFY(stage.contains(QStringLiteral("source")));
         QVERIFY(stage.contains(QStringLiteral("vertexSource")));
         QVERIFY(stage.contains(QStringLiteral("preamble")));
@@ -149,10 +152,13 @@ private Q_SLOTS:
         const SurfaceShaderEffect e = basePack();
         const QVariantMap stage = composeStageMap(e, {});
         QCOMPARE(stage.value(QStringLiteral("multipass")).toBool(), false);
-        QVERIFY(!stage.contains(QStringLiteral("bufferShaderPaths")));
-        QVERIFY(!stage.contains(QStringLiteral("bufferScale")));
-        QVERIFY(!stage.contains(QStringLiteral("bufferFeedback")));
-        QVERIFY(!stage.contains(QStringLiteral("useDepthBuffer")));
+        // All TEN keys composeStageMap inserts under stageMultipass, not the
+        // four this used to check. A key left unpinned here is a key that can
+        // start leaking into a single-pass stage without failing anything.
+        for (const char* key : {"bufferShaderPaths", "bufferFeedback", "bufferScale", "bufferScales", "bufferWrap",
+                                "bufferWraps", "bufferFilter", "bufferFilters", "useDepthBuffer", "halfFloatBuffers"}) {
+            QVERIFY2(!stage.contains(QLatin1String(key)), key);
+        }
     }
 
     void composeStageMap_forwards_the_whole_buffer_set_for_a_multipass_pack()

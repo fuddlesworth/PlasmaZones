@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <PhosphorShaders/ShaderBindings.h>
+
 #include <cstddef>
 
 namespace PhosphorSurfaceShaders {
@@ -67,6 +69,14 @@ struct alignas(16) SurfaceUniforms
     float customColors[16][4]; // vec4[16]: 256 bytes at offset 240
 
     // Multipass: iChannelResolution[i] = buffer-pass output texture size (.xy).
+    //
+    // The FIRST FOUR channels only, while the pass budget is eight. Widening
+    // this would move every offset below it and break the 672-byte layout the
+    // GLSL branch pins, so a pass reading iChannel4..7 sizes it with
+    // textureSize() instead. The static_assert below ties the count to
+    // Bindings::kChannelResolutionSlots, which the offset asserts cannot: they
+    // catch a resize of THIS member and not the reverse drift, the constant
+    // being bumped while this mirror and surface_uniforms.glsl stay at four.
     float iChannelResolution[4][4]; // vec4[4]: 64 bytes at offset 496
 
     // Audio spectrum bar count (0 when audio is disabled). This UBO is the
@@ -140,5 +150,15 @@ static_assert(offsetof(SurfaceUniforms, iTextureResolution) == 592,
               "SurfaceUniforms::iTextureResolution must remain at std140 offset 592");
 static_assert(offsetof(SurfaceUniforms, uBackdropRect) == 656,
               "SurfaceUniforms::uBackdropRect must remain at std140 offset 656");
+
+// The offset asserts above catch a resize of iChannelResolution. This catches
+// the drift in the other direction: the shared constant being raised while this
+// mirror and data/surface/shared/surface_uniforms.glsl stay at four, which is
+// the direction the channel work moves in. Raising the constant means moving
+// every offset below this member, so it has to be a deliberate edit here.
+static_assert(sizeof(SurfaceUniforms::iChannelResolution) / sizeof(SurfaceUniforms::iChannelResolution[0])
+                  == static_cast<std::size_t>(PhosphorShaders::Bindings::kChannelResolutionSlots),
+              "SurfaceUniforms::iChannelResolution must carry Bindings::kChannelResolutionSlots elements; "
+              "growing the constant means relaying this struct and the GLSL branch it mirrors");
 
 } // namespace PhosphorSurfaceShaders

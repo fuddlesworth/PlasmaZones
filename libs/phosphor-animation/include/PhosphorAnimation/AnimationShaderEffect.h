@@ -215,8 +215,9 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
 
     /// Lower / upper bounds on `bufferScale` (multipass FBO downscale
     /// factor) — forwarders onto the cross-library canonical constants in
-    /// <PhosphorShaders/CustomParamsKey.h> (see there for the 0.125 cost-floor
-    /// rationale), matching how SurfaceShaderEffect forwards. Kept as names on
+    /// <PhosphorShaders/CustomParamsKey.h> (see there for why the floor sits
+    /// several steps below the deepest level any pack declares), matching how
+    /// SurfaceShaderEffect forwards. Kept as names on
     /// this class because `fromJson`'s clamp and the round-trip stability
     /// comment in `toJson` reference them.
     static constexpr qreal kMinBufferScale = PhosphorShaders::kMinBufferScale;

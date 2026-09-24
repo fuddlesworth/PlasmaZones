@@ -31,8 +31,11 @@ namespace PhosphorSurfaceShaders {
 ///      similar window-chrome effects. Unlike an animation shader these
 ///      do not run on a 0..1 timeline — they re-render every frame for
 ///      as long as the window is mapped and are parameterised by the
-///      window's frame geometry, outer radius, border thickness, and the
-///      host-resolved (focus-applied) border colour.
+///      window's frame geometry plus the pack's OWN declared parameters.
+///      Border width, corner radius and the active / inactive colours are
+///      pack parameters, not a host-defined decoration appearance: the
+///      pack mixes its two colours on the contract's uSurfaceFocused
+///      itself. See the appearance section below.
 ///
 /// This header documents the contract for the **third** category. Like
 /// the animation contract it is a **dual-runtime** contract — the same
@@ -99,10 +102,12 @@ namespace PhosphorSurfaceShaders {
 /// and scales `p_borderWidth`/`p_cornerRadius` by `uSurfaceScale`).
 namespace SurfaceShaderContract {
 
-/// `sampler2D uTexture0` — the live captured surface. Compositor path:
-/// KWin's `OffscreenEffect`-managed window snapshot (the EXPANDED window
-/// geometry — frame + decoration + shadow). Daemon path: the live FBO
-/// of the surface-layer anchor. Per-frame-dynamic: re-bound every paint
+/// `sampler2D uTexture0` — the live captured surface, and on the compositor
+/// it is NOT the same texture for every pack in a chain. The fold makes its
+/// own capture over the padded canvas and binds that to the FIRST pack; each
+/// pack after it reads the RUNNING COMPOSITE, so a later pack sees the
+/// earlier packs' output rather than the bare window. Daemon path: the live
+/// FBO of the surface-layer anchor. Per-frame-dynamic: re-bound every paint
 /// because the captured content changes continuously. The
 /// `uSurfaceFrameTopLeft` / `uSurfaceFrameSize` pair locates the
 /// content/frame rect within this texture.
@@ -185,7 +190,7 @@ inline constexpr const char* kITime = "iTime";
 /// `qt_Opacity`, not this, so a pack has no reason to sample it.
 inline constexpr const char* kUSurfaceOpacity = "uSurfaceOpacity";
 
-/// `sampler2D uBackdrop` — COMPOSITOR-ONLY. The scene BEHIND the window,
+/// `sampler2D uBackdrop` — BOTH RUNTIMES, with different content. The scene BEHIND the window,
 /// captured over the same (padded) canvas as `uTexture0` each frame for
 /// packs that declare `"needsBackdrop": true` (frost / glass). Texel-aligned
 /// with the composite canvas, so a pack samples both with the same uv (via
@@ -348,9 +353,9 @@ inline bool isValidFilterToken(const QString& filter)
 /// inside this contract namespace and consumers don't need to import the
 /// phosphor-shaders header directly. See
 /// `<PhosphorShaders/CustomParamsKey.h>` for the format, the rationale,
-/// and the full list of consumers. This (vec, comp) form is part of the
-/// public contract surface for parity with the canonical two-overload
-/// helper; in-tree call sites currently use only the flat-slot form below.
+/// and the full list of consumers. Both forms are live in-tree: the
+/// compositor's resolveSurfaceParamValues calls this (vec, comp) form, while
+/// translateSurfaceParams and the tests use the flat-slot form below.
 inline QString slotKey(int vec, char comp)
 {
     return PhosphorShaders::CustomParams::slotKey(vec, comp);

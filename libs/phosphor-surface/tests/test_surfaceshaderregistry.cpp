@@ -555,6 +555,16 @@ private Q_SLOTS:
         for (const QString& p : e.bufferShaderPaths) {
             QVERIFY2(QFileInfo(p).isAbsolute(), "builtin buffer paths must resolve to absolute files");
             QVERIFY(QFile::exists(p));
+            // The assertion this test is NAMED for. Without it the case cannot
+            // fail for its stated reason: if the sibling probe regressed, the
+            // QStandardPaths fallback would find the INSTALLED copy under
+            // /usr/share on any machine with the package on it and every
+            // assertion above would still pass. That is the dev-passes /
+            // CI-fails asymmetry, in the direction that hides a regression.
+            QVERIFY2(QFileInfo(p).canonicalFilePath().startsWith(QFileInfo(tmp.path()).canonicalFilePath()),
+                     qPrintable(QStringLiteral("resolved outside the temporary pack tree (%1), so the sibling probe "
+                                               "did not serve it: %2")
+                                    .arg(tmp.path(), p)));
         }
     }
 

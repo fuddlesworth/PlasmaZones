@@ -96,7 +96,9 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     /// Semantic version of this effect pack.
     QString version;
 
-    /// Category for settings-UI grouping (e.g. "Border", "Corners", "Tint").
+    /// Category for settings-UI grouping. The bundled packs use "Blur",
+    /// "Borders", "Ambience" and "Focus"; the field is free-form, so a
+    /// third-party pack may introduce its own.
     QString category;
 
     /// Path to the fragment shader (relative to the effect dir). The same
@@ -285,8 +287,8 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
 
     /// Lower / upper bounds on `bufferScale` (multipass FBO downscale
     /// factor) — forwarders onto the cross-library canonical constants in
-    /// `<PhosphorShaders/CustomParamsKey.h>` (see there for the 0.125
-    /// cost-floor rationale). Kept as names on this class because
+    /// `<PhosphorShaders/CustomParamsKey.h>` (see there for why the floor
+    /// sits several steps below the deepest level any pack declares). Kept as names on this class because
     /// `fromJson`'s clamp + the round-trip stability comment in `toJson`
     /// reference them.
     static constexpr qreal kMinBufferScale = PhosphorShaders::kMinBufferScale;

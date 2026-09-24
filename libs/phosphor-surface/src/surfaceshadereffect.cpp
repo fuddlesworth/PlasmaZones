@@ -17,8 +17,8 @@ namespace {
 Q_LOGGING_CATEGORY(lcSurfaceShader, "phosphorsurfaceshaders.effect")
 } // namespace
 
-// Serializes the IN-MEMORY effect for two consumers: fromJson round-trips (the
-// registry test suite) and embedding inside a DecorationProfileTree. It is NOT
+// Serializes the IN-MEMORY effect for fromJson round-trips, which today means
+// the registry test suite and nothing else. It is NOT
 // a pack-metadata authoring format. fragmentShaderPath/vertexShaderPath here are
 // the POST-LOAD resolved forms (absolute, produced by resolveWithinDirectory),
 // so feeding this object back through the pack loader would hit its
@@ -105,8 +105,9 @@ QJsonObject SurfaceShaderEffect::toJson() const
     }
     if (useDepthBuffer)
         obj.insert(QLatin1String("depthBuffer"), true);
-    // Only written when a pack opted out, matching the round-trip shape of
-    // every other default-true flag here.
+    // Only written when a pack opted out. This is the ONE default-true flag
+    // on the struct, so it is also the one field whose omission from the JSON
+    // means "true" rather than "false"; every other flag above writes on true.
     if (!halfFloatBuffers)
         obj.insert(QLatin1String("halfFloatBuffers"), false);
 
@@ -222,13 +223,14 @@ SurfaceShaderEffect SurfaceShaderEffect::fromJson(const QJsonObject& obj)
                                    << "budget — the fold binds that many iChannels, so later passes are unreadable";
     }
     e.bufferFeedback = obj.value(QLatin1String("bufferFeedback")).toBool(false);
-    // Type-check before converting. QJsonValue::toDouble(fallback) returns the
-    // fallback only for a MISSING value; a present value of the wrong type
-    // answers 0.0, which the clamp below then turns into kMinBufferScale
-    // rather than the 1.0 default — so a quoted "0.5" in a hand-edited
-    // metadata.json would silently give the pack an eighth-resolution buffer
-    // chain. The clamp stays regardless: it is also what keeps a declared 0 or
-    // a negative out of the FBO sizing.
+    // Type-check before converting, to WARN rather than to change the value.
+    // QJsonValue::toDouble(fallback) returns the fallback whenever type() is
+    // not Double, so a quoted "0.5" in a hand-edited metadata.json already
+    // lands on the 1.0 default here and the pack simply renders at full
+    // resolution. What it does NOT do is tell the author their value was
+    // ignored, which is the whole job of this branch. The clamp below stays
+    // regardless: it is what keeps a declared 0 or a negative out of the FBO
+    // sizing.
     const QJsonValue bufferScaleValue = obj.value(QLatin1String("bufferScale"));
     if (bufferScaleValue.isUndefined() || bufferScaleValue.isDouble()) {
         e.bufferScale = qBound(kMinBufferScale, bufferScaleValue.toDouble(1.0), kMaxBufferScale);
