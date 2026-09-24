@@ -254,8 +254,50 @@ QString glslangValidatorPath()
     return path;
 }
 
+namespace {
+
+/// Replace the source-string ID a glslang diagnostic leads with by the name of
+/// the file it stands for.
+///
+/// glslang attributes a diagnostic to the source string the resolver's
+/// `#line <n> <i>` directives put it in: `ERROR: 3:12:` for an error inside the
+/// third included file, and an EMPTY id for the top-level source. @p sourcePaths
+/// is the resolver's legend, element i being the path of source string i.
+///
+/// BOTH reporters needed this and neither had it, which is why it is shared
+/// rather than written into one of them. The legend has been documented on
+/// expandIncludes since the resolver was written and had no production consumer
+/// at all, so every error a pack hit inside a shared header reached its author
+/// as a bare number. The author's natural reading of `3:12` is line 3 of their
+/// own file, the one place it cannot mean.
+///
+/// Leaves the line untouched when the legend does not cover the id, which is the
+/// behaviour every caller had before.
+QString nameDiagnosticSource(const QString& line, const QString& label, const QStringList& sourcePaths)
+{
+    static const QRegularExpression sourceIdRe(QStringLiteral("^(ERROR|WARNING): (\\d*):"));
+    const QRegularExpressionMatch match = sourceIdRe.match(line);
+    if (!match.hasMatch()) {
+        return line;
+    }
+    const QString id = match.captured(2);
+    // An empty id is source 0, the top-level stage, which @p label names. It is
+    // how glslang spells it, and "0" is accepted too rather than assumed absent.
+    const int index = id.isEmpty() ? 0 : id.toInt();
+    const QString named =
+        (index == 0) ? label : (index < sourcePaths.size() ? QFileInfo(sourcePaths.at(index)).fileName() : QString());
+    if (named.isEmpty()) {
+        return line;
+    }
+    QString shown = line;
+    shown.replace(match.capturedStart(2), match.capturedLength(2), named);
+    return shown;
+}
+
+} // namespace
+
 int reportCompositorCompile(QTextStream& out, const QString& label, const QString& stage, const QString& source,
-                            const QString& toolPath)
+                            const QString& toolPath, const QStringList& sourcePaths)
 {
     // glslang reads the stage from the file extension unless -S says otherwise;
     // -S is passed below, so the temp file name only has to be unique. A
@@ -331,7 +373,7 @@ int reportCompositorCompile(QTextStream& out, const QString& label, const QStrin
         if (trimmed.startsWith(QLatin1String("SPIR-V is not generated"))) {
             continue;
         }
-        out << "    " << trimmed << "\n";
+        out << "    " << nameDiagnosticSource(trimmed, label, sourcePaths) << "\n";
     }
     return 1;
 }
@@ -473,15 +515,24 @@ int reportCompile(QTextStream& out, const QString& label, const ShaderCompiler::
         return 1;
     }
     out << "  " << padLabel(label) << "ERROR\n";
+    // NO SOURCE-STRING LEGEND ON THIS ARM, and that is measured rather than an
+    // oversight. Putting a deliberate error at surface_lib.glsl:388 and running
+    // both arms: the compositor arm, which drives glslang directly, reported
+    // `1:388`, so its id is real and reportCompositorCompile resolves it to a
+    // filename. QShaderBaker reported `:388` for the same error, so it HONOURS
+    // the `#line` line number (388 is that header's own line, not a line in the
+    // flattened blob) and DROPS the source string. There is no id to resolve
+    // here, so passing the legend in would be plumbing that cannot fire.
+    //
+    // The consequence is that the substitution below names the top-level stage
+    // for an error that is really in a header: `effect.frag:388`, right line and
+    // wrong file, stated with no hedge. It is not fixable from the diagnostic,
+    // because the per-file line alone does not identify the file. The label is
+    // still named because it is correct for every error that really is in this
+    // stage, which is the ordinary case.
     const QStringList diagLines = result.error.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
     for (const QString& line : diagLines) {
-        // glslang names the root source (file id 0, via the T1.3 #line directives)
-        // with an empty filename — `ERROR: :58:`. Substitute the stage label so the
-        // author sees `effect.frag:58`. Include errors keep their numeric file id.
-        QString shown = line.trimmed();
-        shown.replace(QStringLiteral("ERROR: :"), QStringLiteral("ERROR: ") + label + QStringLiteral(":"));
-        shown.replace(QStringLiteral("WARNING: :"), QStringLiteral("WARNING: ") + label + QStringLiteral(":"));
-        out << "    " << shown << "\n";
+        out << "    " << nameDiagnosticSource(line.trimmed(), label, {}) << "\n";
     }
     appendDidYouMean(out, result.error, declared);
     return 1;

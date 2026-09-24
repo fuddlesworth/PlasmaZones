@@ -97,8 +97,9 @@ int bakeCompositorStage(QTextStream& out, const SurfaceShaderEffect& eff, const 
                                               SurfaceShaderRegistry::surfaceEntryCandidates())
         : raw;
     QString err;
+    QStringList sourcePaths;
     QString src = PhosphorShaders::ShaderIncludeResolver::expandIncludes(assembled, QFileInfo(path).absolutePath(),
-                                                                         includePaths, &err);
+                                                                         includePaths, &err, nullptr, &sourcePaths);
     if (src.isEmpty()) {
         out << "  " << padLabel(label) << "ERROR (compositor)\n    include expansion failed the way the compositor "
             << "expands it: " << err
@@ -115,7 +116,7 @@ int bakeCompositorStage(QTextStream& out, const SurfaceShaderEffect& eff, const 
     // LAST, so the define block lands above the preamble, which is what
     // injectKwinDefineAfterVersion produces at runtime.
     src = PhosphorShaders::spliceAfterVersion(src, PhosphorShaders::kwinDefineBlock());
-    return reportCompositorCompile(out, label, stage, src, tool);
+    return reportCompositorCompile(out, label, stage, src, tool, sourcePaths);
 }
 
 } // namespace
@@ -219,9 +220,21 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     }
     const QString fragLabel = QFileInfo(eff.fragmentShaderPath).fileName();
 
-    out << name << "  (" << eff.parameters.size() << " param" << (eff.parameters.size() == 1 ? "" : "s") << ", "
-        << eff.textures.size() << " texture" << (eff.textures.size() == 1 ? "" : "s") << ", "
-        << (eff.isMultipass ? "multipass" : "single-pass") << ")\n";
+    // RAW counts, not the parsed sizes. fromJson silently drops what it cannot
+    // use (a malformed entry, anything past a cap), so the parsed size is what
+    // SURVIVED rather than what the author WROTE, while every lint below counts
+    // the raw array. The header therefore used to contradict the lint three
+    // lines under it: "3 textures" followed by "too many textures: 5 declared".
+    // The author's own file says 5, so 5 is the number the header owes them.
+    //
+    // A non-array value counts 0, which is honest: toArray() gives an empty
+    // array and there is nothing the author declared AS a parameter list. The
+    // separate type lint is what reports the wrong shape.
+    const qsizetype rawParamCount = doc.object().value(QLatin1String("parameters")).toArray().size();
+    const qsizetype rawTextureCount = doc.object().value(QLatin1String("textures")).toArray().size();
+    out << name << "  (" << rawParamCount << " param" << (rawParamCount == 1 ? "" : "s") << ", " << rawTextureCount
+        << " texture" << (rawTextureCount == 1 ? "" : "s") << ", " << (eff.isMultipass ? "multipass" : "single-pass")
+        << ")\n";
 
     int errors = 0;
 
@@ -229,6 +242,14 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     static const QStringList kSurfaceParamTypes = {QStringLiteral("float"), QStringLiteral("int"),
                                                    QStringLiteral("bool"), QStringLiteral("color")};
     QStringList lints;
+    // Same blind spot as `textures` below, and quieter, because a pack with no
+    // parameters is legitimate: a `parameters` of the wrong shape loads as zero
+    // parameters, every per-parameter lint iterates nothing, and the pack passes
+    // with its entire control set discarded.
+    const QJsonValue parametersValue = doc.object().value(QLatin1String("parameters"));
+    if (!parametersValue.isUndefined() && !parametersValue.isNull() && !parametersValue.isArray()) {
+        lints << QStringLiteral("`parameters` is not an array (every parameter is ignored at load)");
+    }
     for (const SurfaceShaderEffect::ParameterInfo& p : eff.parameters) {
         if (!kSurfaceParamTypes.contains(p.type)) {
             lints << QStringLiteral("unknown param type '%1' for '%2' (surface params are float/int/bool/color)")
@@ -346,13 +367,31 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             }
         }
     }
-    const QJsonArray declaredTextures = doc.object().value(QLatin1String("textures")).toArray();
+    // A `textures` that is not an array at all used to lint completely clean:
+    // toArray() answers empty for a string, a number or an object, the loop
+    // below never runs, and the pack passed with its texture list silently
+    // ignored. Say so rather than validating a list the author did not write.
+    const QJsonValue texturesValue = doc.object().value(QLatin1String("textures"));
+    if (!texturesValue.isUndefined() && !texturesValue.isNull() && !texturesValue.isArray()) {
+        lints << QStringLiteral("`textures` is not an array (the whole list is ignored at load)");
+    }
+    const QJsonArray declaredTextures = texturesValue.toArray();
     if (declaredTextures.size() > PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots) {
         lints << QStringLiteral("too many textures: %1 declared, cap is %2 (surplus dropped at load)")
                      .arg(static_cast<int>(declaredTextures.size()))
                      .arg(PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots);
     }
     for (const QJsonValue& v : declaredTextures) {
+        // A non-object entry (a bare path string, the natural mistake) reported
+        // as "empty `path`", which describes an object that has the key and left
+        // it blank. The author wrote no object at all, so they went looking for
+        // a key that is not in their file.
+        if (!v.isObject()) {
+            lints << QStringLiteral(
+                "texture entry is not an object (dropped at load, which also shifts every later "
+                "texture down one sampler slot). An entry is `{\"path\": \"...\"}`, not a bare path");
+            continue;
+        }
         const QString texPath = v.toObject().value(QLatin1String("path")).toString();
         if (texPath.isEmpty()) {
             lints << QStringLiteral(
@@ -546,6 +585,15 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             }
         }
         for (const QJsonValue& v : declaredBuffers) {
+            // A non-string entry reported as "empty", which says the author wrote
+            // "" when they wrote an object or a number. It costs the same thing,
+            // so the consequence below is repeated rather than softened.
+            if (!v.isString()) {
+                lints << QStringLiteral(
+                    "bufferShaders entry is not a string (kept in place as empty, but it fails the "
+                    "scan-time existence check and drops the WHOLE pack to single-pass)");
+                continue;
+            }
             const QString bufName = v.toString();
             if (bufName.isEmpty()) {
                 // fromJson appends an empty entry IN PLACE rather than skipping

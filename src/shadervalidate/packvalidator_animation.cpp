@@ -166,8 +166,9 @@ static int bakeCompositorStage(QTextStream& out, const QString& raw, const QStri
                                               AnimationShaderRegistry::animationEntryCandidates())
         : raw;
     QString err;
+    QStringList sourcePaths;
     QString src = PhosphorShaders::ShaderIncludeResolver::expandIncludes(assembled, QFileInfo(path).absolutePath(),
-                                                                         includePaths, &err);
+                                                                         includePaths, &err, nullptr, &sourcePaths);
     if (!err.isEmpty() || src.isEmpty()) {
         // Tagged like the compile outcome: the preview arm resolves includes
         // differently, so the report has to say which arm failed to expand.
@@ -179,7 +180,7 @@ static int bakeCompositorStage(QTextStream& out, const QString& raw, const QStri
         src = PhosphorShaders::spliceAfterVersion(src, finalizeColorStub());
     }
     src = PhosphorShaders::spliceAfterVersion(src, PhosphorShaders::kwinDefineBlock());
-    return reportCompositorCompile(out, label, stage, src, tool);
+    return reportCompositorCompile(out, label, stage, src, tool, sourcePaths);
 }
 
 // The Qt-RHI preview arm of one stage: the same scaffold, the preview's include

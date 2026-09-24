@@ -315,8 +315,9 @@ int bakeCompositorStage(QTextStream& out, const PointerShaderEffect& eff, const 
                                               PointerShaderRegistry::pointerEntryCandidates())
         : raw;
     QString err;
+    QStringList sourcePaths;
     QString src = PhosphorShaders::ShaderIncludeResolver::expandIncludes(assembled, QFileInfo(path).absolutePath(),
-                                                                         includePaths, &err);
+                                                                         includePaths, &err, nullptr, &sourcePaths);
     if (src.isEmpty()) {
         // The resolver returns empty for any failure — a missing file, an
         // unreadable one, a malformed directive, a cycle. Naming the
@@ -334,7 +335,7 @@ int bakeCompositorStage(QTextStream& out, const PointerShaderEffect& eff, const 
         src = PhosphorShaders::spliceAfterVersion(src, PointerShaderRegistry::paramPreamble(eff));
     }
     src = PhosphorShaders::spliceAfterVersion(src, PhosphorShaders::kwinDefineBlock());
-    return reportCompositorCompile(out, label, stage, src, tool);
+    return reportCompositorCompile(out, label, stage, src, tool, sourcePaths);
 }
 
 } // namespace

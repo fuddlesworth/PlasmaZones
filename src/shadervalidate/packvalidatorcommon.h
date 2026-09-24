@@ -120,6 +120,11 @@ QString poolName(const QString& type);
 // table (bindingLayoutProblems) and fails when a sampler or uniform block sits
 // at the wrong binding. Returns 1 on failure, 0 on success. Shared by all the
 // validators.
+//
+// Takes NO source-string legend, unlike reportCompositorCompile. QShaderBaker
+// drops the `#line` source string and reports every error against the top-level
+// source, so there is no id here to resolve. Measured rather than assumed; the
+// definition says how, and what it costs.
 int reportCompile(QTextStream& out, const QString& label, const PhosphorRendering::ShaderCompiler::Result& result,
                   const QStringList& declared);
 
@@ -233,8 +238,13 @@ QString glslangValidatorPath();
 /// Compile @p source as @p stage through `glslangValidator` at @p toolPath and
 /// print OK/ERROR under @p label. @p stage is the glslang `-S` token ("frag" /
 /// "vert"). Returns 1 on failure, 0 on success.
+///
+/// @p sourcePaths is the include resolver's source-string legend. This is the
+/// arm where it matters: glslang run directly preserves the `#line` source id,
+/// so an error inside a shared header reads `surface_lib.glsl:112` instead of a
+/// bare `1`. Pass the list the same expansion filled.
 int reportCompositorCompile(QTextStream& out, const QString& label, const QString& stage, const QString& source,
-                            const QString& toolPath);
+                            const QString& toolPath, const QStringList& sourcePaths = {});
 
 // Compile one ZONE stage through the exact runtime assembly and print OK/ERROR.
 // Returns 1 on failure, 0 on success.
