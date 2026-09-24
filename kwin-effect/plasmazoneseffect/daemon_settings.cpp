@@ -27,6 +27,7 @@
 
 #include <algorithm>
 #include <utility>
+#include <opengl/glshader.h>
 
 namespace PlasmaZones {
 

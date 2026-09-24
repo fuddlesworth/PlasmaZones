@@ -16,6 +16,7 @@
 #include <QLoggingCategory>
 
 #include <effect/effecthandler.h>
+#include <opengl/glshader.h>
 
 namespace PlasmaZones {
 

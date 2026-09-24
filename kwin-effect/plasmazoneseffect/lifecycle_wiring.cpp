@@ -41,6 +41,7 @@
 #include "handlers/snaphandler.h"
 #include "compositor/stripviewanimator.h"
 #include "compositor/windowanimator.h"
+#include <opengl/glshader.h>
 
 namespace PlasmaZones {
 

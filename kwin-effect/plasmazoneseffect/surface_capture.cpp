@@ -14,7 +14,7 @@
 //   captureWindowSurface  — the raw window capture, which is the single most
 //                           expensive step of the whole fold (it re-enters KWin's
 //                           draw chain) and the reason the capture cache exists.
-//   updateShellContentRect— shell surfaces only: bound the capture's VISIBLE body.
+//   updateShellContentRect — shell surfaces only: bound the capture's VISIBLE body.
 //   chainBackdropScale    — how densely the backdrop must be captured for a
 //                           chain, or not at all.
 
@@ -31,14 +31,12 @@
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <opengl/glframebuffer.h>
-#include <opengl/glshader.h>
 #include <opengl/gltexture.h>
 #include <scene/item.h>
 #include <scene/windowitem.h>
 
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 
-#include <QByteArray>
 #include <QLoggingCategory>
 #include <QPoint>
 #include <QRectF>
@@ -99,10 +97,13 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
         for (size_t i = 0; i < state.compositeTex.size(); ++i) {
             auto& t = state.compositeTex[i];
             // Drop the FRAMEBUFFER first. Reassigning the texture destroys the old one while
-            // its framebuffer still wraps it — legal in GL (the attachment auto-detaches),
-            // but it is the reverse of the order every sibling path uses (allocSurfaceTarget,
-            // the backdrop realloc), and an object destroyed out from under its own wrapper
-            // is not a habit worth keeping.
+            // its framebuffer still wraps it — legal in GL, since the attachment
+            // auto-detaches, but an object destroyed out from under its own wrapper is not a
+            // habit worth keeping.
+            // This is NOT what the sibling paths do, and the comment used to claim it was:
+            // allocSurfaceTarget (surface_fold.h:183) assigns the texture first and rebuilds
+            // the framebuffer after. Ordering it this way here is a local improvement on
+            // them rather than consistency with them.
             state.compositeFbo[i].reset();
             t = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
             if (!t) {
@@ -127,9 +128,9 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
         // The static-prefix target is NOT allocated here. It is only ever written
         // when a chain has a cacheable run followed by a per-frame pack, which the
         // most common chains do not — the default ["border"] has no per-frame pack at
-        // all — so allocating it eagerly meant a full-canvas RGBA8 (a fifth of the
-        // decoration's whole VRAM budget, ~8 MB on a 4K window) that was never
-        // written and never read. It is allocated lazily below, once the fold knows
+        // all — so allocating it eagerly meant a full-canvas RGBA8 (about 33 MB on a
+        // 4K window; 8 MB is the 1080p figure this comment used to quote) that was
+        // never written and never read. It is allocated lazily below, once the fold knows
         // the chain actually needs it.
         if (!allocFailed) {
             state.captureValid = false;
@@ -152,8 +153,19 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
             // Drop the half-allocated state. Erase AFTER the loop has ended so
             // we never destroy the container mid-iteration (state is a reference
             // into the map being erased).
-            qCWarning(lcEffect) << "Surface target allocation failed for" << windowId << "at" << textureSize
-                                << "— dropping this window's decoration (out of VRAM?)";
+            // Latched. The state is ERASED on this path, so a per-window flag cannot
+            // survive to suppress the repeat: the next frame builds a fresh state and
+            // fails again. While VRAM stays short that is one line per window per
+            // frame, which is exactly when the journal is least useful. A
+            // function-local static is the smallest thing that outlives the state,
+            // and it matches the one-shot `explained` latch the pack validator uses.
+            static bool allocFailureWarned = false;
+            if (!allocFailureWarned) {
+                allocFailureWarned = true;
+                qCWarning(lcEffect) << "Surface target allocation failed for" << windowId << "at" << textureSize
+                                    << "— dropping this window's decoration (out of VRAM?). This is "
+                                       "reported once per session.";
+            }
             m_surfaceMultipass.erase(windowId);
             return false;
         }
@@ -215,6 +227,12 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
                 // Keep bufs/fbos strictly in lockstep — the fold indexes both by i.
                 auto bfbo = std::make_unique<KWin::GLFramebuffer>(bt.get());
                 if (!bfbo->valid()) {
+                    // Same degrade as the texture branch above, and it deserves the
+                    // same line: the pack silently renders single-pass otherwise, with
+                    // no trace of which pack or which pass gave up.
+                    qCWarning(lcEffect) << "Surface pack" << chain.at(k) << "buffer pass" << i
+                                        << "framebuffer invalid at" << bufferSize << "— pack renders single-pass for"
+                                        << windowId;
                     bufs.clear();
                     fbos.clear();
                     break;
@@ -225,7 +243,10 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
             // Debug-level, once per (re)allocation: the pass count and sizes a
             // pyramid pack actually got, which is the per-pass scale plumbing's
             // one observable on a live session.
-            if (!bufs.empty()) {
+            // Gated on the category, not just on having buffers: the list below is
+            // built eagerly, so without this it allocates a QStringList and a
+            // QString per pass on every (re)allocation for a message nobody reads.
+            if (!bufs.empty() && lcEffect().isDebugEnabled()) {
                 QStringList sizes;
                 for (const auto& b : bufs) {
                     sizes << QStringLiteral("%1x%2").arg(b->width()).arg(b->height());
@@ -243,7 +264,8 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
         // The prefix TEXTURE goes too (the size-change branch above releases it as well;
         // that branch clears chainKey, so this one always follows it). The new
         // chain may not want one at all (["border","glow"] → ["border"]), and holding a
-        // full-canvas RGBA8 nothing will ever write again is ~8 MB per 4K window. The fold
+        // full-canvas RGBA8 nothing will ever write again is about 33 MB per 4K window (8 MB
+        // is the 1080p figure). The fold
         // deliberately does NOT release it when usePrefix merely goes false, because that
         // flips with the animation gate and would realloc on every focus change — but a
         // chain change is rare and is already rebuilding everything.
@@ -303,6 +325,18 @@ bool PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMulti
     resetCapture.dismiss();
     m_capturingSnapshot = false;
     if (!drawn) {
+        // Say so. This path was silent END TO END: the draw failed here with no
+        // line, the fold's bail returned nullptr with no line, and the paint
+        // pipeline drew nothing with no line, so a window whose decoration had
+        // quietly stopped composing left no trace at all. Latched per window and
+        // cleared on the next success below, so a persistent failure costs one
+        // line rather than one per frame.
+        if (!state.captureFailWarned) {
+            state.captureFailWarned = true;
+            qCWarning(lcEffect) << "Window capture failed for" << getWindowId(w)
+                                << "— its decoration is not composing this frame; retrying on a later "
+                                   "frame (reported once until the next successful capture)";
+        }
         // The draw failed (KWin 6.8 reports it). captureValid is exactly the
         // flag that says the texture may be reused, so leaving it false is the
         // whole fix: the fold retakes the capture on a later frame instead of
@@ -311,6 +345,9 @@ bool PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMulti
         return false;
     }
     state.captureValid = true;
+    // Re-arm the failure report: the next failure after a good capture is new
+    // information rather than a repeat.
+    state.captureFailWarned = false;
     state.captureInComposite = !intoCaptureTex;
     // The frame-relative offset the shell content scan must measure against
     // (see the field doc): the viewport above maps logicalGeometry onto the

@@ -324,6 +324,12 @@ struct SurfaceMultipassState
     /// iTime packs every frame over a capture taken once. A window that damages
     /// every frame (video, terminal) re-captures every frame exactly as before.
     std::unique_ptr<KWin::GLTexture> captureTex;
+    /// One warning per window per failure RUN for a failed window capture.
+    /// Cleared on the next capture that succeeds, so a later failure is reported
+    /// again rather than swallowed for the window's lifetime. Per-window rather
+    /// than per-effect on purpose: a global latch would let the first window to
+    /// fail silence every other one.
+    bool captureFailWarned = false;
     std::unique_ptr<KWin::GLFramebuffer> captureFbo;
     bool captureValid = false;
 
