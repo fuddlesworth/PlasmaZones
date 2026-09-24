@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 
@@ -245,6 +246,45 @@ private Q_SLOTS:
         obj.insert(QLatin1String("bufferScale"), 0.001);
         const AnimationShaderEffect undershoot = AnimationShaderEffect::fromJson(obj);
         QCOMPARE(undershoot.bufferScale, AnimationShaderEffect::kMinBufferScale);
+    }
+
+    /// The pass-count cap, which the scale clamp above does not cover. It moved
+    /// from four to eight when the shared budget did, and nothing pinned it on
+    /// this family, so a cap that stopped tracking the contract constant would
+    /// have shipped silently.
+    ///
+    /// One past the budget rather than an arbitrary surplus: an off-by-one cap
+    /// is the plausible regression, and a large array would pass a broken one.
+    void testFromJsonCapsBufferShadersAtThePassBudget()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("id"), QStringLiteral("test"));
+        obj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        QJsonArray buffers;
+        for (int i = 0; i < PhosphorAnimationShaders::AnimationShaderContract::kMaxBufferPasses + 1; ++i) {
+            buffers.append(QStringLiteral("pass%1.frag").arg(i));
+        }
+        obj.insert(QLatin1String("bufferShaders"), buffers);
+
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("surplus passes dropped")));
+        const AnimationShaderEffect over = AnimationShaderEffect::fromJson(obj);
+        QCOMPARE(over.bufferShaderPaths.size(), PhosphorAnimationShaders::AnimationShaderContract::kMaxBufferPasses);
+        // Dropped from the END, so the kept entries are the first N in
+        // declaration order. Buffer passes are positional, so dropping from the
+        // front would reorder the chain rather than shorten it.
+        QCOMPARE(over.bufferShaderPaths.first(), QStringLiteral("pass0.frag"));
+        QCOMPARE(
+            over.bufferShaderPaths.last(),
+            QStringLiteral("pass%1.frag").arg(PhosphorAnimationShaders::AnimationShaderContract::kMaxBufferPasses - 1));
+
+        // Exactly at the budget is accepted whole and warns about nothing.
+        QJsonArray exact;
+        for (int i = 0; i < PhosphorAnimationShaders::AnimationShaderContract::kMaxBufferPasses; ++i) {
+            exact.append(QStringLiteral("pass%1.frag").arg(i));
+        }
+        obj.insert(QLatin1String("bufferShaders"), exact);
+        QCOMPARE(AnimationShaderEffect::fromJson(obj).bufferShaderPaths.size(),
+                 PhosphorAnimationShaders::AnimationShaderContract::kMaxBufferPasses);
     }
 
     /// `fboExtent` grammar parser coverage. Accepts exactly two forms

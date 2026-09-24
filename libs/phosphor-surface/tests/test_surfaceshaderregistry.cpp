@@ -12,6 +12,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QtTest/QtTest>
@@ -446,6 +447,45 @@ private Q_SLOTS:
         }
         obj.insert(QLatin1String("bufferScales"), surplus);
         QCOMPARE(SurfaceShaderEffect::fromJson(obj).bufferScales.size(), SurfaceShaderEffect::kMaxBufferPasses);
+    }
+
+    /// The PATHS cap, which the per-pass scale case above does not cover. The
+    /// two arrays are capped by separate code and the scales one was the only
+    /// side with a test, so the cap that decides how many passes actually RUN
+    /// was unpinned.
+    ///
+    /// One past the budget rather than an arbitrary surplus: a cap that is off
+    /// by one is the plausible regression, and a ten-entry array would pass a
+    /// broken cap of nine.
+    void fromJson_caps_bufferShaders_at_the_pass_budget()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("id"), QStringLiteral("s"));
+        obj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        obj.insert(QLatin1String("multipass"), true);
+        QJsonArray buffers;
+        for (int i = 0; i < SurfaceShaderEffect::kMaxBufferPasses + 1; ++i) {
+            buffers.append(QStringLiteral("pass%1.frag").arg(i));
+        }
+        obj.insert(QLatin1String("bufferShaders"), buffers);
+
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("declares .* buffer passes")));
+        const SurfaceShaderEffect e = SurfaceShaderEffect::fromJson(obj);
+        QCOMPARE(e.bufferShaderPaths.size(), SurfaceShaderEffect::kMaxBufferPasses);
+        // The surplus is dropped from the END, so the kept entries are the
+        // first N in declaration order. That matters: the builtin chain is
+        // positional, so dropping from the front would reorder it.
+        QCOMPARE(e.bufferShaderPaths.first(), QStringLiteral("pass0.frag"));
+        QCOMPARE(e.bufferShaderPaths.last(),
+                 QStringLiteral("pass%1.frag").arg(SurfaceShaderEffect::kMaxBufferPasses - 1));
+
+        // Exactly at the budget is accepted whole and warns about nothing.
+        QJsonArray exact;
+        for (int i = 0; i < SurfaceShaderEffect::kMaxBufferPasses; ++i) {
+            exact.append(QStringLiteral("pass%1.frag").arg(i));
+        }
+        obj.insert(QLatin1String("bufferShaders"), exact);
+        QCOMPARE(SurfaceShaderEffect::fromJson(obj).bufferShaderPaths.size(), SurfaceShaderEffect::kMaxBufferPasses);
     }
 
     // ── parseEffect scan + builtin-buffer helpers ────────────────────────
