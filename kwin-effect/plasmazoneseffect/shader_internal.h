@@ -35,7 +35,7 @@ namespace PlasmaZones::ShaderInternal {
 /// inherits whatever state the fold's last inner draw left (a disabled
 /// GL_BLEND renders the animation shader's premultiplied output as OPAQUE
 /// BLACK across the whole quad — the close-animation black-flash class).
-/// Header-inline so both consuming TUs share one definition under the Unity
+/// Header-inline so every consuming TU shares one definition under the Unity
 /// build.
 class ScopedGlState
 {
@@ -94,9 +94,9 @@ private:
 /// Splice `#define PLASMAZONES_KWIN` (plus the ARB explicit-location
 /// extension enables) after the shader's `#version` directive, selecting the
 /// classic-GL default-block branch of the shared uniform headers that
-/// KWin::GLShader requires. Shared by the animation compile path
-/// (shader_transitions.cpp, where it is defined) and the surface-pack compile
-/// path (surface_compile.cpp); it has external linkage here rather than an
+/// KWin::GLShader requires. Called from every family's compile path (nine
+/// files today, animation through pointer) and defined in
+/// shader_transitions.cpp; it has external linkage here rather than an
 /// anonymous-namespace copy per TU because the kwin-effect builds as a Unity
 /// (jumbo) target, where duplicate anonymous-namespace definitions collide.
 /// Full behavioural notes (BOM strip, comment-aware #version scan, missing
@@ -117,9 +117,10 @@ const QString& kwinFinalizeColorBlock();
 /// Load a user-texture file into a QImage in `Format_RGBA8888` for GL upload:
 /// PNG/JPG/etc. decode via `QImage`, `.svg` / `.svgz` rasterise via
 /// `QSvgRenderer` at @p svgMaxDim max-axis. Returns a null QImage on any
-/// failure. Shared by the async pre-warm and the synchronous cold-install
-/// fallback (both in shader_textures.cpp) and the animation compile path's
-/// caller (shader_transitions.cpp); external linkage rather than an
+/// failure. Three callers: the async pre-warm in shader_textures.cpp, the
+/// animation compile path's synchronous cold-install fallback in
+/// shader_transitions.cpp, and the surface pack compile in surface_compile.cpp.
+/// External linkage rather than an
 /// anonymous-namespace copy per TU because the kwin-effect builds as a Unity
 /// (jumbo) target. Defined in shader_textures.cpp.
 QImage loadUserTextureImage(const QString& path, int svgMaxDim = 1024);
@@ -270,11 +271,13 @@ inline int resolveTransitionLifetimeMs(int nominalMs, const PhosphorAnimation::C
 /// Every other curve is clamped to [0, 1], where an out-of-range value is a bug
 /// rather than the intent.
 ///
-/// Both progress sources must route through this: `easeProgress` (the time-driven
-/// branch) and `paintWindow`'s animator-driven branch. They are two call sites of
-/// one policy, and when the policy lived in two places only one of them got
-/// updated — the animator branch kept clamping, which flattened the bounce for
-/// exactly the `window.movement.*` events whose geometry visibly bounces.
+/// EVERY progress source must route through this, and there are now seven call
+/// sites across four consumers: `easeProgress` here, `paintWindow`'s
+/// animator-driven branch, the held-move release and re-grab ramps, and the
+/// desktop transition manager. It is one policy in one place because when it
+/// lived in two only one of them got updated — the animator branch kept
+/// clamping, which flattened the bounce for exactly the `window.movement.*`
+/// events whose geometry visibly bounces.
 inline qreal clampProgressForCurve(qreal value, const PhosphorAnimation::Curve* curve)
 {
     return (curve && curve->overshoots()) ? PhosphorAnimation::boundCurveProgress(value) : qBound(0.0, value, 1.0);
@@ -365,14 +368,22 @@ static_assert(PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColor
 static_assert(PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots == 3,
               "User-texture name arrays must grow to match kMaxUserTextureSlots");
 
-/// The surface composite fold's texture-unit map, in the same order as the
-/// daemon's descriptor-binding table (PhosphorShaders/ShaderBindings.h) so the
-/// two hosts read alike: unit 0 is uTexture0, then one unit per iChannel
-/// (kSurfaceChannelCount of them), then the backdrop, the audio spectrum and
-/// the user textures.
+/// The surface composite fold's texture-unit map: unit 0 is uTexture0, then one
+/// unit per iChannel (kSurfaceChannelCount of them), then the backdrop, the
+/// audio spectrum and the user textures.
+///
+/// It tracks the daemon's descriptor-binding table
+/// (PhosphorShaders/ShaderBindings.h) for the channels and the user textures,
+/// and DIVERGES on the backdrop: the fold puts it immediately after the
+/// channels and before audio, while the binding table puts it after the user
+/// textures. The fold is free to, because these are texture UNITS it assigns
+/// itself rather than SRB bindings a shader declares, but the two orders are
+/// not interchangeable and a reader comparing them needs to know which is
+/// which.
 inline constexpr int kSurfaceChannelCount = PhosphorShaders::kMaxBufferPasses;
-inline constexpr int kSurfaceFoldChannelBaseUnit =
-    1; ///< unit of iChannel0 inside the fold (the present slot is kSurfaceChannelBaseUnit below)
+/// Unit of iChannel0 inside the fold. The PRESENT slot is kSurfaceChannelBaseUnit
+/// below, which is a different number for a different phase.
+inline constexpr int kSurfaceFoldChannelBaseUnit = 1;
 /// How many iChannelResolution[N] elements the contract declares: the UBO on
 /// the daemon carries four, so the compositor pushes four and a pass reading a
 /// later channel sizes it with textureSize().
@@ -403,9 +414,21 @@ static_assert(kSurfaceAudioUnit > kSurfaceBackdropUnit,
 inline constexpr int kSurfaceUserTextureBaseUnit = kSurfaceAudioUnit + 1;
 static_assert(kSurfaceUserTextureBaseUnit > kSurfaceAudioUnit,
               "surface user textures must sit above the audio unit — the fold binds both in the same pass");
+// The one assert in this block that can actually fail. Its neighbours each
+// compare a constant with the one it was DEFINED as plus one, so they hold by
+// construction and pin nothing; they are kept because they document intent, but
+// they should not be read as coverage. This one relates the map to a limit
+// outside it: the fold's highest unit has to stay inside the per-stage texture
+// image units GL guarantees, which is 16. At kMaxBufferPasses 8 the map ends at
+// 13, so a bump of the channel count or the user-texture budget is what would
+// trip it — which is exactly the change that would otherwise fail at draw time
+// on a conservative driver, silently, as an unbound sampler reading unit 0.
+static_assert(kSurfaceUserTextureBaseUnit + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots
+                  <= 16,
+              "the surface fold's texture-unit map must fit in the 16 per-stage units GL guarantees");
 
 /// Surface decoration texture units shared by the animation-layer paths in
-/// paint_pipeline.cpp and the present rebind in decoration_render.cpp. All are
+/// paint_shader_window.cpp and the present rebind in decoration_render.cpp. All are
 /// offset from kMaxUserTextureSlots (N, = 3 today) so the animation
 /// user-texture slots 0..N-1 never collide with them:
 ///   kOldSnapshotUnit        (N+1) — the morph cross-fade's old-window snapshot
@@ -430,8 +453,9 @@ static_assert(kOldSnapshotUnit < kSurfaceLayerUnit && kSurfaceLayerUnit < kSurfa
 // slot may share a unit with the fold's channels (disjoint phases, see
 // kSurfaceAudioUnit) but never with audio, which the animation draw binds in
 // the same phase as the present rebind.
-static_assert(kSurfaceLayerUnit != kSurfaceAudioUnit && kSurfaceChannelBaseUnit != kSurfaceAudioUnit,
-              "neither the surface layer unit nor the present slot may collide with the audio unit — "
+static_assert(kOldSnapshotUnit != kSurfaceAudioUnit && kSurfaceLayerUnit != kSurfaceAudioUnit
+                  && kSurfaceChannelBaseUnit != kSurfaceAudioUnit,
+              "none of the old-snapshot, surface layer or present units may collide with the audio unit — "
               "a kMaxUserTextureSlots bump needs the audio/present unit map revisited");
 
 } // namespace PlasmaZones::ShaderInternal
