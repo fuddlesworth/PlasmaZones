@@ -1,0 +1,185 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+    "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+SPDX-FileCopyrightText: 2026 fuddlesworth
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+<node>
+    <!-- Settings Interface -->
+    <interface name="org.plasmazones.Settings">
+        <annotation name="org.gtk.GDBus.DocString" value="Configuration: load/save/reset, get/set by key, and Zone Selector-specific settings."/>
+        <method name="reloadSettings">
+            <annotation name="org.gtk.GDBus.DocString" value="Reload settings from disk."/>
+        </method>
+        <method name="saveSettings">
+            <annotation name="org.gtk.GDBus.DocString" value="Save current settings to disk."/>
+        </method>
+        <method name="resetToDefaults">
+            <annotation name="org.gtk.GDBus.DocString" value="Reset all settings to their defaults."/>
+        </method>
+        <method name="getAllSettings">
+            <annotation name="org.gtk.GDBus.DocString" value="Return all settings as a JSON object."/>
+            <arg name="settingsJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="All settings as JSON."/>
+            </arg>
+        </method>
+        <method name="getSetting">
+            <annotation name="org.gtk.GDBus.DocString" value="Get a single setting value by key (variant type). An unknown or empty key answers with an org.freedesktop.DBus.Error.InvalidArgs error rather than a value, so a caller that fetches a key the daemon does not know keeps its own default instead of silently reading an empty one."/>
+            <arg name="key" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Setting key name."/>
+            </arg>
+            <arg name="value" type="v" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Setting value (variant)."/>
+            </arg>
+        </method>
+        <method name="getSettings">
+            <annotation name="org.gtk.GDBus.DocString" value="Batch-get multiple settings in one call. Unknown keys are omitted from the result map."/>
+            <arg name="keys" type="as" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="List of setting key names to fetch."/>
+            </arg>
+            <arg name="values" type="a{sv}" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Map of key → value for every key that was found."/>
+            </arg>
+        </method>
+        <method name="setSetting">
+            <annotation name="org.gtk.GDBus.DocString" value="Set a single setting by key. Returns true if the setting now holds the supplied value — a same-value write is a no-op but still returns true (the value-equality guard suppresses the redundant write without reporting failure). One carve-out: the resolving color keys (the zone colors and the window border/tint colors) accept the empty string or the legacy accent token to put the color back on the color scheme; the write succeeds, but reading the key back returns the RESOLVED concrete color, never the sentinel — read the matching *Raw key for the stored follow-or-pinned state. The normalizing token-enum keys (renderingBackend, audioChannelMode, audioInputMethod) accept any case and surrounding whitespace their option set recognizes and store the canonical lowercase spelling; the window scope keys require their exact lowercase token. Range-clamped numeric keys are a second carve-out: an out-of-range value is clamped by the config schema on write and the call still returns true, so reading the key back may return the clamped bound rather than the supplied value."/>
+            <arg name="key" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Setting key name."/>
+            </arg>
+            <arg name="value" type="v" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="New value (variant)."/>
+            </arg>
+            <arg name="success" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if the setting now holds the supplied value (including same-value no-op writes)."/>
+            </arg>
+        </method>
+        <method name="setSettings">
+            <annotation name="org.gtk.GDBus.DocString" value="Batch-set multiple settings in one call. Applies every key via the setter registry and saves once. Unknown keys are logged but do not abort the batch."/>
+            <arg name="settings" type="a{sv}" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Map of setting key to value."/>
+            </arg>
+            <arg name="success" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if every key was known to the registry and every key that has a setter applied successfully. Read-only keys (motionProfileTree, animationShaderSearchPaths) are skipped without failing the batch. This is false when a key is unknown OR when a setter rejects its value (an out-of-range enum, an invalid blob)."/>
+            </arg>
+        </method>
+        <method name="getSettingKeys">
+            <annotation name="org.gtk.GDBus.DocString" value="Return the list of all setting key names."/>
+            <arg name="keys" type="as" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="All setting key names."/>
+            </arg>
+        </method>
+        <signal name="settingsChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when any setting is modified."/>
+        </signal>
+        <signal name="motionProfileTreeChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon to KWin effect: the per-event motion-profile tree changed. Since schema v8 that tree is the Animations/MotionProfileTree config key, so this fires on a write to it rather than on a file rescan. Kept separate from settingsChanged so the Settings app's value-change detection is not reset by its own timing writes. The KWin effect re-fetches motionProfileTree on this signal."/>
+        </signal>
+        <signal name="sessionIdleChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon to KWin effect: the session went idle (no input for the configured timeout) or became active again. The effect pauses decoration-chain animation while idle, which is what lets the GPU leave its top performance state — the per-frame work being cheap does not, since what costs is that there is work every frame at all. The daemon owns this because idleness is a Wayland CLIENT concern (ext-idle-notify-v1) and the effect lives inside the compositor, which serves that protocol rather than consuming it."/>
+            <arg name="idle" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True when the session has been idle for the configured timeout."/>
+            </arg>
+        </signal>
+
+        <!-- The dedicated zone-selector getters/setters/signals were removed:
+             zone-selector settings ride the generic getSetting/setSetting keys
+             and the per-screen 'zoneSelector' category APIs below. -->
+        <method name="getSettingSchema">
+            <annotation name="org.gtk.GDBus.DocString" value="Get metadata for a single setting key. Returns JSON with key and type fields."/>
+            <arg name="key" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Setting key name."/>
+            </arg>
+            <arg name="schemaJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON: {key, type}. Type is bool, int, double, string, color, themeColor, stringlist, or map. A themeColor key stores a theme-fallback string: empty means the value follows the system color scheme, anything else is a pinned color."/>
+            </arg>
+        </method>
+        <method name="getAllSettingSchemas">
+            <annotation name="org.gtk.GDBus.DocString" value="Get metadata for all settings. Returns JSON object mapping keys to type info (type is one of bool, int, double, string, color, themeColor, stringlist, map; themeColor marks a theme-fallback string whose empty value follows the system color scheme)."/>
+            <arg name="schemasJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON object: {key: {type}, ...}."/>
+            </arg>
+        </method>
+
+        <!-- Per-screen settings. Categories: 'autotile' | 'scrolling' | 'snapping' | 'zoneSelector' | 'scrollingZoneSelector'. -->
+        <method name="getPerScreenSettings">
+            <annotation name="org.gtk.GDBus.DocString" value="Get all per-screen settings for a screen and category."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Virtual or physical screen identifier."/>
+            </arg>
+            <arg name="category" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="'autotile' | 'scrolling' | 'snapping' | 'zoneSelector' | 'scrollingZoneSelector'."/>
+            </arg>
+            <arg name="values" type="a{sv}" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Map of per-screen setting key to value."/>
+            </arg>
+        </method>
+        <method name="setPerScreenSetting">
+            <annotation name="org.gtk.GDBus.DocString" value="Set a single per-screen setting and schedule a debounced save. Rejections are LOUD, not silent: an implausible screen id or setting key, an unknown category, the read-only 'snapping' category, or a missing settings backend answers with an org.freedesktop.DBus.Error.InvalidArgs error reply rather than a no-op."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Virtual or physical screen identifier."/>
+            </arg>
+            <arg name="category" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="'autotile' | 'scrolling' | 'snapping' | 'zoneSelector' | 'scrollingZoneSelector'. 'snapping' is READ-ONLY (a projection of the config per-monitor gaps): the two void methods reject a write to it with an InvalidArgs error reply, and the batch setter skips it returning false."/>
+            </arg>
+            <arg name="key" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Per-screen setting key name."/>
+            </arg>
+            <arg name="value" type="v" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="New value (variant)."/>
+            </arg>
+        </method>
+        <method name="clearPerScreenSettings">
+            <annotation name="org.gtk.GDBus.DocString" value="Clear all per-screen overrides for a screen and category, reverting to global defaults. Rejections are LOUD, like setPerScreenSetting's: an implausible screen id, an unknown category, the read-only 'snapping' category, or a missing settings backend answers with an org.freedesktop.DBus.Error.InvalidArgs error reply rather than a no-op."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Virtual or physical screen identifier."/>
+            </arg>
+            <arg name="category" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="'autotile' | 'scrolling' | 'snapping' | 'zoneSelector' | 'scrollingZoneSelector'. 'snapping' is READ-ONLY (a projection of the config per-monitor gaps): the two void methods reject a write to it with an InvalidArgs error reply, and the batch setter skips it returning false."/>
+            </arg>
+        </method>
+
+        <!-- Batch-set multiple per-screen keys in one round-trip. Mirrors the
+             global setSettings pattern. No in-tree client calls it: it exists
+             for external D-Bus clients (the KCM per-monitor flush it was added
+             for never materialised, and the KCM writes config in-process). -->
+        <method name="setPerScreenSettings">
+            <annotation name="org.gtk.GDBus.DocString" value="Batch-set multiple per-screen keys in one D-Bus call. Applies every entry to the named category and schedules a single debounced save."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Virtual or physical screen identifier."/>
+            </arg>
+            <arg name="category" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="'autotile' | 'scrolling' | 'snapping' | 'zoneSelector' | 'scrollingZoneSelector'. 'snapping' is READ-ONLY (a projection of the config per-monitor gaps): the two void methods reject a write to it with an InvalidArgs error reply, and the batch setter skips it returning false."/>
+            </arg>
+            <arg name="values" type="a{sv}" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Map of per-screen setting key -> value."/>
+            </arg>
+            <arg name="success" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if the category was recognized and writable and the batch ran (the dispatch runs against ISettings); false if the category was unknown or is the read-only 'snapping' projection. Individual per-key failures are logged by the underlying Settings implementation but cannot be surfaced here since the setter methods return void."/>
+            </arg>
+        </method>
+
+        <!-- Async window picker flow. Callers kick off a fetch via
+             requestRunningWindows and bind to runningWindowsAvailable
+             for the reply. No blocking variant exists; the earlier
+             blocking getRunningWindows path was removed in Phase 6 of
+             refactor/dbus-performance. -->
+        <method name="requestRunningWindows">
+            <annotation name="org.gtk.GDBus.DocString" value="Asynchronously request the running-windows list. The daemon emits runningWindowsRequested to the KWin effect; the reply is delivered via the runningWindowsAvailable signal."/>
+        </method>
+        <method name="provideRunningWindows">
+            <annotation name="org.gtk.GDBus.DocString" value="KWin effect to daemon callback: deliver the enumerated running-windows list in response to requestRunningWindows. The daemon re-broadcasts it via runningWindowsAvailable."/>
+            <arg name="json" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array: [{windowClass, appName, caption}, ...]."/>
+            </arg>
+        </method>
+        <signal name="runningWindowsRequested">
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon to KWin effect: please enumerate running windows. Emitted by requestRunningWindows; the effect answers via provideRunningWindows."/>
+        </signal>
+        <signal name="runningWindowsAvailable">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a fresh running-windows list has arrived from the KWin effect."/>
+            <arg name="json" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array: [{windowClass, appName, caption}, ...]."/>
+            </arg>
+        </signal>
+    </interface>
+</node>

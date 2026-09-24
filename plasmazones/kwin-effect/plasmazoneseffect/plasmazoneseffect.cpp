@@ -1,0 +1,343 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "plasmazoneseffect.h"
+
+#include "input_filter.h"
+
+#include "handlers/dragtracker.h"
+#include "handlers/snaphandler.h"
+#include "compositor/scrolltabindicatorpainter.h"
+#include "compositor/stripviewanimator.h"
+#include "compositor/windowanimator.h"
+#include "tilinghandler/tilinghandler.h"
+#include "compositor/effectlogging.h"
+
+#include <effect/effect.h>
+#include <input_event.h>
+
+#include <QEvent>
+#include <QKeyEvent>
+#include <QLoggingCategory>
+#include <QTimer>
+
+namespace PlasmaZones {
+
+// `lcEffect` is the canonical logging category for this plugin. The storage is
+// emitted here; every other translation unit in the effect declares it through
+// compositor/effectlogging.h so they can log under the same name without each
+// TU emitting its own definition.
+Q_LOGGING_CATEGORY(lcEffect, "plasmazones.effect", QtInfoMsg)
+
+// Opt-in window-classification diagnostics. Defaults to QtWarningMsg so the
+// per-window property dump (logWindowDiagnostics) is silent unless explicitly
+// enabled with QT_LOGGING_RULES="plasmazones.effect.diag.debug=true" — keeps
+// the journal clean by default while still letting users reproduce Steam/CEF
+// mis-classification on request.
+Q_LOGGING_CATEGORY(lcEffectDiag, "plasmazones.effect.diag", QtWarningMsg)
+
+// Opt-in scrolling-strip diagnostics, for the daemon/compositor identity seam
+// (docs/strip-identity-seam-plan.md). Defaults to QtWarningMsg; enable with
+// QT_LOGGING_RULES="plasmazones.effect.strip.debug=true".
+//
+// Four KINDS of site report under it, and they are meant to be read together
+// on one timeline: the desktop switch, the arrival (or non-arrival) of a tile
+// batch, the strip-context announcement (whether an epoch changed and whether
+// it retired anything), and the per-window inputs scrollParkedOffscreen
+// actually resolved. Counted as emit statements rather than kinds there are
+// more, because the per-window site reports a hit and a miss separately and
+// the context site reports a first epoch and a retire separately; stated as
+// kinds so that adding an emit to an existing kind does not falsify this.
+//
+// Those kinds are what separate the plan's candidate A (no batch is emitted at
+// all, so nothing repairs the view) from B (the animator's offset belongs to
+// the previous strip) and C (the m_scrollVisualDelta entry is missing).
+// Candidate A is read as the batch line NOT appearing after a desktop-switch
+// line, which is why its absence carries meaning and the two must be read as a
+// pair.
+//
+// The per-window site runs inside the paint pass for every strip window on
+// every frame, so it is change-gated as well as category-gated — see
+// m_stripDiagLast. Without that it is a ~60 Hz firehose that perturbs the
+// timing it is trying to measure.
+Q_LOGGING_CATEGORY(lcStripDiag, "plasmazones.effect.strip", QtWarningMsg)
+
+bool PlasmaZonesEffect::supported()
+{
+    // OpenGL compositing is a hard requirement, not a preference: every render
+    // path in this effect is GL (GLShader / GLFramebuffer / GLTexture, the
+    // decoration composite fold, the transition shaders, the desktop blend).
+    // Under QPainter compositing KWin hands effects an image-backed RenderTarget
+    // whose framebuffer() is null, so the first thing that reaches for it —
+    // RenderTarget::texture(), which dereferences it — would crash. Mirrors the
+    // guard KWin's own GL-only effects (blur, screen transform) carry.
+    //
+    // The daemon additionally requires Wayland with layer-shell support.
+    return KWin::effects && KWin::effects->isOpenGLCompositing();
+}
+
+bool PlasmaZonesEffect::enabledByDefault()
+{
+    return true;
+}
+
+void PlasmaZonesEffect::reconfigure(ReconfigureFlags flags)
+{
+    Q_UNUSED(flags)
+    // Called when KWin wants effects to reload or when daemon notifies of settings change
+    qCDebug(lcEffect) << "reconfigure() called";
+    // A KWin effects reconfigure (any Desktop Effects KCM apply) reconciles
+    // the loaded-effects list against kwinrc, which RE-LOADS every suppressed
+    // stock effect (windowaperture / eyeonscreen / magiclamp / squash /
+    // maximize) — the suppression never writes kwinrc, so this is the one
+    // path that undoes the unload without any of the other sync triggers
+    // (tree load, registry commit, animations toggle) firing. Re-assert on the
+    // NEXT event-loop turn only, never synchronously: this reconfigure runs
+    // from inside EffectsHandler's dispatch over its loaded-effects container,
+    // and a synchronous unloadEffect/loadEffect here would mutate that
+    // container mid-iteration. The sync is idempotent, so a reconfigure storm
+    // just coalesces to cheap no-ops. `this` as context cancels the callback if
+    // we unload first.
+    //
+    // Whether the deferred pass lands after the KCM's own re-load of the
+    // stock effects is NOT guaranteed here — it depends on
+    // EffectsHandler's internal ordering between queueing those loads and
+    // driving our reconfigure(). Lose the race and the sync sees them still
+    // unloaded, no-ops, and they come back live alongside an assigned pack.
+    // That is self-correcting rather than sticky: any later trigger (a
+    // pack change, the animations toggle, the next reconfigure) re-asserts,
+    // and the cost until then is that a peek capture can bake in their
+    // transform, or a minimize/maximize double-animates alongside our
+    // shader. Re-asserting from the showingDesktopChanged handler would
+    // close it, but that handler runs inside KWin's own emission over its
+    // effects list, which is the one place an unload must not happen.
+    QTimer::singleShot(0, this, [this]() {
+        syncStockEffectSuppression();
+    });
+}
+
+bool PlasmaZonesEffect::isActive() const
+{
+    // Critical: include `!m_shaderManager.empty()` here. KWin calls
+    // isActive() before each paint cycle and EXCLUDES the effect from
+    // the chain when it returns false — meaning prePaintScreen and
+    // paintWindow are never called, so a shader transition installed
+    // via beginShaderTransition would never get a frame to advance on.
+    //
+    // Without this clause, the only paths that wake the chain are
+    // (a) interactive drag (`m_dragTracker->isDragging()`) and
+    // (b) zone-snap reflow animations (`m_windowAnimator`), plus
+    // (c) the full-screen desktop legs below.
+    // window.move works through (a) because the drag holds isActive()
+    // true; every other lifecycle event (focus/open/close/minimize/
+    // maximize/resize) installs a shader transition only — without this
+    // clause those events would resolve cleanly, redirect the window,
+    // and then sit unrendered until the timer-driven teardown fired.
+    //
+    // `hasOpacityRules()` is deliberately NOT an activation clause.
+    // SetOpacity is layer-backed: a persistent per-window dim exists only
+    // as the opacity-tint layer's folded pack param, and any window
+    // carrying that layer sits in m_windowDecorations — the clause below
+    // already holds the effect active for it. The only per-frame rule
+    // consumer left is prePaintWindow's frame-opacity cache, which feeds
+    // the shader-transition draw's bare-uTexture0 fallback; a transition
+    // in flight holds isActive() true via `!m_shaderManager.empty()`. A
+    // SetOpacity rule with no layered window and no transition has no
+    // paint-path consumer at all (the rule is inert by design), so it
+    // must not keep the effect in the chain.
+    //
+    // `!m_windowDecorations.isEmpty()` is the SAME persistent case as opacity
+    // rules: a per-window decoration is rendered passively in drawWindow by
+    // re-blitting the redirected window through its retained surface chain on
+    // every composite. Those
+    // effects keep isActive() true whenever they manage a window; without
+    // this clause an idle bordered window (no drag/animation/transition)
+    // drops the effect from the chain, drawWindow is never called, and the
+    // border only appears while some OTHER trigger (an animation) holds the
+    // effect active. Gating on a non-empty border set keeps the effect
+    // consulted for as long as any window has a border, so the border
+    // survives idle. O(1) — a QHash emptiness check, safe in this per-frame
+    // hot path.
+    //
+    // `m_desktopTransition.isRunning()` is the same shape as the shader-manager
+    // clause, for the screen-level legs. A desktop switch or a show-desktop
+    // peek installs from a signal handler (desktopChanged /
+    // showingDesktopChanged): no drag is held, the window animator has no entry
+    // for it, and the blend is not a redirected window — so no other clause
+    // here can be true for one. Drop this and paintScreen is never called,
+    // DesktopTransitionManager::paintOutput never gets a frame, and the blend
+    // sits unrendered until its own wall-clock reap. Also O(1) (an
+    // unordered_map emptiness check).
+    // `m_stripViewAnimator->hasActiveAnimations()` is the clause the strip
+    // VIEW SPRING itself needs, and it must be here regardless of the shader
+    // pass. A pure-residual scroll batch on a default config can leave the
+    // spring as the ONLY live animation: every carried column's per-window
+    // leg is PolicyRejected (the residual origin is below the snap
+    // threshold), no shader transition installs, and with no strip pack
+    // assigned m_stripTransition holds no entry either. Without this clause
+    // that scroll drops the effect from the chain entirely — prePaintScreen
+    // never runs, so the spring neither advances nor settles and the view
+    // offset is never applied. O(monitor count).
+    //
+    // `m_stripTransition.isRunning()` covers the strip SHADER PASS, which is
+    // a strict subset of the spring clause while a leg is live but survives
+    // it during the pass's settle fade (the fade outlives the spring by
+    // design — see StripTransitionManager::paintOutput). Keep both: the
+    // spring clause is not a substitute for the fade tail, and the pass
+    // clause is not a substitute for the pack-less spring.
+    // `m_stripTransition.holdsCursorHide()` outlives the pass clause by one
+    // frame on purpose: the strip pass hides KWin's cursor while it paints
+    // and, on the settle path, releases it only from our paint hooks (the
+    // off-paint kill paths release it themselves), so the effect must stay
+    // in the chain until that release has run. Without it, a settle fade that
+    // closes between two frames dropped the effect with the cursor still
+    // hidden, and nothing ever showed it again (see the accessor's doc).
+    // The compositor-drawn tab pills exist only while this effect is in the
+    // paint chain: they are blitted from paintWindow (at the anchor slot) or
+    // paintScreen (the post-walk fallback), so on an
+    // otherwise idle default-config desktop (no drag, no decorations, no
+    // transition) this clause is what keeps KWin calling us. Without it the
+    // next damage in the pill band recomposited without the blit and erased
+    // the pills.
+    // `!m_scrollCorpseFreeze.isEmpty()` keeps the corpse-displacement paint
+    // arms running for a closing window riding a FOREIGN close animation
+    // (ours declined: animations off, or the window excluded) — the freeze's
+    // contract is "with or without our close shader", and without this clause
+    // that promise held only while some other clause coincidentally kept the
+    // effect in the chain (the spring settling mid-fade dropped it, jumping
+    // the corpse by the frozen offset). O(1); entries are bounded by corpse
+    // lifetime (sole erase at windowDeleted).
+    return m_shellOverview->active() || m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations()
+        || !m_shaderManager.empty() || !m_windowDecorations.isEmpty() || m_desktopTransition.isRunning()
+        || m_stripViewAnimator->hasActiveAnimations() || m_stripTransition.isRunning()
+        || m_stripTransition.holdsCursorHide() || m_scrollTabPainter->hasAnyIndicators()
+        || !m_scrollCorpseFreeze.isEmpty()
+        // The POINTER pass, same two clauses and the same reasoning as the
+        // strip pass's pair. `isLive()` is what puts the effect in the chain
+        // while a pointer trail is alive: nothing else here is true for a
+        // pointer that merely moved, so without it paintScreen is never
+        // called and the repaints the pass schedules would paint nothing.
+        // `holdsCursorHide()` outlives it by one frame for a `layer: above`
+        // pack, so the frame that shows the cursor again still runs. Both are
+        // O(1) and short-circuit on the pass's cached engaged verdict, so a
+        // disabled or empty chain costs one bool read per paint cycle.
+        || m_pointerPass.isLive() || m_pointerPass.holdsCursorHide();
+}
+
+void PlasmaZonesEffect::pointerMotion(KWin::PointerMotionEvent* event)
+{
+    // Only ever reached under the pill interception (see the header). Hover
+    // tracking decides whether the pointer is still over a pill and releases
+    // the interception when it is not, which is what hands the pointer back
+    // to the window underneath without a dead zone.
+    if (event && m_tilingHandler->scrollTabInterceptionHeld()) {
+        // Self-heal for a lost release: filters ordered before Effects (lock
+        // screen, drag-and-drop, tab box, global shortcuts) can swallow the
+        // release of a press we latched on, and the latch alone would then
+        // hold the interception (and the hand cursor) until the next click.
+        // The motion event carries the live button state, so a motion with
+        // the left button up is proof the release happened.
+        if (!(event->buttons & Qt::LeftButton)) {
+            m_tilingHandler->noteScrollTabRelease(event->position);
+        }
+        m_tilingHandler->updateScrollTabHover(event->position);
+    }
+}
+
+void PlasmaZonesEffect::pointerButton(KWin::PointerButtonEvent* event)
+{
+    if (!event || !m_tilingHandler->scrollTabInterceptionHeld()) {
+        return;
+    }
+    if (event->button != Qt::LeftButton) {
+        return; // consumed by the interception; nothing to route (see the header)
+    }
+    if (event->state == KWin::PointerButtonState::Pressed) {
+        // Hold the interception through the press regardless of where the
+        // pointer goes next: the release must land here too, or the window
+        // underneath receives a release for a press it never saw.
+        m_tilingHandler->noteScrollTabPress();
+        m_tilingHandler->activateScrollTabAt(event->position);
+        return;
+    }
+    if (event->state == KWin::PointerButtonState::Released) {
+        m_tilingHandler->noteScrollTabRelease(event->position);
+    }
+}
+
+void PlasmaZonesEffect::pointerAxis(KWin::PointerAxisEvent* event)
+{
+    // Only ever reached under the pill interception (see the header), which
+    // is exactly the case ScrollOverhangInputFilter::pointerAxis cannot see:
+    // that filter is ordered below the Effects filter, so an event the
+    // interception claims never reaches it. Route the chord here so wheeling
+    // over a tab pill still moves the strip.
+    //
+    // Both axis gestures must be routed here, in the same order the filter
+    // uses them. The interception is held for exactly as long as the pointer
+    // sits over a pill, so this is the ONLY path an unmodified wheel over a
+    // pill can take; routing the chord alone would leave the tab wheel
+    // reachable only in the residual cases where no interception is held
+    // (a pill appearing under a stationary cursor, a live drag, teardown).
+    if (!event || !m_tilingHandler->scrollTabInterceptionHeld()) {
+        return;
+    }
+    // Under the interception the client sees NO tick at all, claimed or not,
+    // so the ScrollFactor stream ends here unconditionally rather than once
+    // per claiming branch. Doing it per branch would leave a fractional v120
+    // remainder from an unclaimed tick (a Ctrl+wheel over a pill, say) to be
+    // applied to the next tick the client does see.
+    if (m_overhangInputFilter) {
+        m_overhangInputFilter->resetScrollFactorStream();
+    }
+    if (m_tilingHandler->handleWheelChord(event->delta, event->deltaV120, event->orientation, event->modifiers,
+                                          event->buttons)) {
+        return;
+    }
+    // Tab indicators next, and AFTER the chords, matching the filter: a chord
+    // is an explicit modifier gesture over the strip and must keep working
+    // wherever the cursor sits, including over a pill. What reaches here is
+    // an unmodified wheel, so an application's own Ctrl+wheel is never
+    // swallowed either.
+    m_tilingHandler->handleTabWheel(event->position, event->delta, event->deltaV120, event->orientation,
+                                    event->modifiers, event->buttons);
+}
+
+void PlasmaZonesEffect::grabbedKeyboardEvent(QKeyEvent* e)
+{
+    if (e->type() == QEvent::KeyPress && e->key() == Qt::Key_Escape && m_dragTracker->isDragging()) {
+        // The keyboard grab ensures this runs before KWin's MoveResizeFilter,
+        // so Escape never reaches the interactive move handler. In every case
+        // the DRAG CONTINUES as a plain window move; only the placement
+        // machinery is dismissed.
+        //
+        // One call serves both kinds of drag, because cancelSnap already does
+        // the right thing for each. On a SNAP drag it hides the overlay and
+        // sets snapCancelled. On an ENGINE drag (which now grabs under
+        // always-on re-insert) it cancels the drag-insert preview, clears the
+        // drop indicator, stops the edge-scroll timer, and drops the reorder
+        // and toggle latches — that last part is what stops the very next tick
+        // re-arming the preview Escape just cancelled.
+        qCInfo(lcEffect) << "Drag escape: placement dismissed, drag continues";
+        m_snapHandler->callCancelSnap();
+    }
+    // All other keys are silently consumed by the grab. Modifier state is
+    // unaffected because KWin's ModifiersChangedSpy runs BEFORE input
+    // filters (processSpies precedes processFilters in processKey), so a
+    // grabbed drag still receives keyboardModifiersChanged-driven
+    // mouseChanged events with live xkb state.
+}
+
+} // namespace PlasmaZones
+
+// KWin Effect Factory - creates the plugin
+
+namespace KWin {
+
+KWIN_EFFECT_FACTORY_SUPPORTED(PlasmaZones::PlasmaZonesEffect, "metadata.json",
+                              return PlasmaZones::PlasmaZonesEffect::supported();)
+
+} // namespace KWin
+
+// MOC include - REQUIRED for the Q_OBJECT in KWIN_EFFECT_FACTORY_SUPPORTED
+#include "plasmazoneseffect.moc"

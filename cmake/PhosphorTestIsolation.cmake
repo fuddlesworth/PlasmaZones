@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
 # One place to apply the two isolations nearly every PlasmaZones test needs
-# (the shader_validate entries in src/CMakeLists.txt apply the XDG half by
+# (the shader_validate entries in plasmazones/src/CMakeLists.txt apply the XDG half by
 # hand because they share one command target; see the comment there).
 #
 # LGPL-2.1-or-later, matching `PhosphorLibTesting.cmake`: every consumer is an
@@ -31,13 +31,13 @@
 
 find_program(_phosphor_dbus_run_session dbus-run-session)
 
-# Beside this module rather than under `tests/unit`, so an LGPL library test tree
+# Beside this module rather than under `plasmazones/tests/unit`, so an LGPL library test tree
 # does not reach into the GPL app test tree for it. (The conf file is LGPL for the
 # same reason.)
 #
 # This does NOT make the module reachable from a standalone library configure.
 # Every caller includes it as `${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake`,
-# which in a standalone configure of e.g. libs/phosphor-fsloader resolves inside
+# which in a standalone configure of e.g. phosphor-libs/libs/phosphor-fsloader resolves inside
 # that library, where there is no `cmake/` directory — so the `include()` errors
 # out before this path is consulted. A standalone build that wants the isolation
 # has to guard its own include.
@@ -129,4 +129,28 @@ endfunction()
 # the first time round.
 function(phosphor_append_test_environment _test_name)
     set_property(TEST ${_test_name} APPEND PROPERTY ENVIRONMENT ${ARGN})
+endfunction()
+
+# Apply the isolation and the offscreen platform to EVERY test registered in the
+# calling directory so far.
+#
+# This sweep existed as a verbatim copy in plasmazones/tests/unit and again in
+# phosphor-shell/tests. Two copies of the part that must not drift is exactly
+# what the plasmazones comment warned about, and they had already begun to
+# diverge, so it lives here once instead.
+#
+# Call it LAST in a tests CMakeLists: it reads the directory's TESTS property,
+# so a test registered after the call is not covered.
+function(phosphor_apply_directory_test_isolation)
+    get_property(_pdti_tests DIRECTORY . PROPERTY TESTS)
+    foreach(_pdti_test IN LISTS _pdti_tests)
+        # These directories register with NAME == target; the guard keeps a
+        # future non-target entry from breaking the configure.
+        if(TARGET ${_pdti_test})
+            phosphor_apply_test_isolation(${_pdti_test})
+            # APPEND, never PROPERTIES ENVIRONMENT: a plain set would replace
+            # the sandbox the helper just installed.
+            phosphor_append_test_environment(${_pdti_test} "QT_QPA_PLATFORM=offscreen")
+        endif()
+    endforeach()
 endfunction()

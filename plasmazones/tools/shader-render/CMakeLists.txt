@@ -1,0 +1,160 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# plasmazones-shader-render — headless offscreen renderer for the
+# bundled shader catalog.  Used by the documentation site
+# (phosphor-works.github.io/plasmazones/shaders/) and anyone who
+# needs reproducible shader previews without a display, compositor,
+# or screen-capture tool.
+
+find_package(Qt6 ${QT_MIN_VERSION} CONFIG REQUIRED COMPONENTS
+    Core
+    Gui
+    Qml
+    Quick
+)
+
+# QRhi lives in QtGui's "rhi/" tree which is still a partially-private
+# header set in Qt 6.11 (public API, versioned include path only exposed
+# via GuiPrivate). We need it to drive the offscreen QQuickRenderControl
+# path — no public alternative.
+#
+# Fedora ships `Qt6::GuiPrivate` / `Qt6::QuickPrivate` as targets defined
+# inside Qt6GuiConfig / Qt6QuickConfig rather than as standalone
+# Qt6GuiPrivateConfig.cmake files; the COMPONENTS dispatch then fails
+# even though the targets already exist. Mirror the guarded pattern from
+# the project's top-level CMakeLists.txt so the tool builds on both
+# Arch/openSUSE-style and Fedora-style Qt6 layouts.
+if(NOT TARGET Qt6::GuiPrivate)
+    find_package(Qt6GuiPrivate ${QT_MIN_VERSION} CONFIG REQUIRED)
+endif()
+if(NOT TARGET Qt6::QuickPrivate)
+    find_package(Qt6QuickPrivate ${QT_MIN_VERSION} CONFIG REQUIRED)
+endif()
+
+set(shader_render_SRCS
+    main.cpp
+    renderer.h
+    renderer.cpp
+    layoutloader.h
+    layoutloader.cpp
+    metadataloader.h
+    metadataloader.cpp
+    audiomock.h
+    audiomock.cpp
+    encoder.h
+    encoder.cpp
+    colorutil.h
+    pointerdriver.h
+    pointerdriver.cpp
+)
+
+add_executable(plasmazones-shader-render ${shader_render_SRCS})
+
+target_link_libraries(plasmazones-shader-render PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::GuiPrivate
+    Qt6::Qml
+    Qt6::Quick
+    Qt6::QuickPrivate
+    PhosphorRendering::PhosphorRendering
+    PhosphorShaders::PhosphorShaders
+    PhosphorWayland::PhosphorWayland
+    PhosphorAudio::PhosphorAudio
+    # PointerHistory / PointerUniformExtension, so a pointer pack is driven by
+    # the same sampler and the same uniform tail the compositor and the settings
+    # preview use, rather than by a second synthetic implementation here.
+    PhosphorPointer::PhosphorPointer
+    # The daemon's zone entry scaffold (zoneEntryPrologue / zoneEntryCandidates)
+    # lives here. The tool installs the same scaffold so its shader assembly
+    # matches the runtime byte-for-byte (see renderer.cpp).
+    plasmazones_rendering
+)
+
+# Needed for the daemon's zoneentryscaffold.h, so a pack defining
+# pZone/pImage is assembled here exactly as the daemon assembles it.
+# ZoneUniformExtension no longer needs this path; it comes from the
+# linked PhosphorRendering target.
+target_include_directories(plasmazones-shader-render PRIVATE
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/daemon/rendering
+)
+
+target_compile_features(plasmazones-shader-render PRIVATE cxx_std_20)
+
+# Don't install by default — this is a developer tool, not a
+# user-facing binary.  Enable explicitly if a packager wants it.
+#
+# GNUInstallDirs BEFORE the option(), not inside the if() below: the help
+# string interpolates CMAKE_INSTALL_BINDIR, and included afterwards the
+# variable was still empty at that point, so `cmake -LH` showed
+# "Install plasmazones-shader-render to ".
+include(GNUInstallDirs)
+option(INSTALL_SHADER_RENDER_TOOL
+    "Install plasmazones-shader-render to ${CMAKE_INSTALL_BINDIR}" OFF)
+if(INSTALL_SHADER_RENDER_TOOL)
+    install(TARGETS plasmazones-shader-render
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
+
+# ─────────────────────────────────────────────────────────────────
+# Tests for the loaders. Pure data parsers — no GPU, no scene graph
+# — so they run anywhere ctest does. Compiled only when tools are
+# enabled to keep the bare default build small.
+# ─────────────────────────────────────────────────────────────────
+if(BUILD_TESTING)
+    find_package(Qt6 ${QT_MIN_VERSION} CONFIG REQUIRED COMPONENTS Test)
+
+    add_executable(test_shader_render_layoutloader
+        tests/test_layoutloader.cpp
+        layoutloader.cpp
+        layoutloader.h)
+    set_target_properties(test_shader_render_layoutloader PROPERTIES AUTOMOC ON)
+    target_link_libraries(test_shader_render_layoutloader PRIVATE
+        Qt6::Test Qt6::Core Qt6::Gui)
+    target_compile_features(test_shader_render_layoutloader PRIVATE cxx_std_20)
+    # WORKING_DIRECTORY pinned to the source tree so tests that read
+    # sample JSON / fixtures via relative paths don't depend on where
+    # ctest is invoked.
+    add_test(
+        NAME test_shader_render_layoutloader
+        COMMAND test_shader_render_layoutloader
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+
+    add_executable(test_shader_render_metadataloader
+        tests/test_metadataloader.cpp
+        metadataloader.cpp
+        metadataloader.h)
+    set_target_properties(test_shader_render_metadataloader PROPERTIES AUTOMOC ON)
+    # PhosphorShaders: metadataloader.cpp delegates parameter slot
+    # resolution to the registry's own parsePackMetadata so its lane
+    # numbering can't drift from the p_<id> preamble (T1.1).
+    target_link_libraries(test_shader_render_metadataloader PRIVATE
+        Qt6::Test Qt6::Core Qt6::Gui PhosphorShaders::PhosphorShaders)
+    target_compile_features(test_shader_render_metadataloader PRIVATE cxx_std_20)
+    add_test(
+        NAME test_shader_render_metadataloader
+        COMMAND test_shader_render_metadataloader
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+
+    # These two targets live outside tests/unit, so they need the isolation
+    # applied explicitly. This used to be a hand-copied duplicate of the block in
+    # tests/unit, which is precisely how it rotted: it kept an absolute path to
+    # `tests/unit/test-session-bus.conf` behind a `FATAL_ERROR` after the config
+    # moved to `cmake/`, so configuring with -DBUILD_TOOLS=ON failed outright. It
+    # also used the raw `set_tests_properties(... PROPERTIES ENVIRONMENT ...)` SET
+    # form and gave BOTH targets one shared XDG home. The helper owns all three
+    # concerns, so there is nothing left here to drift.
+    include(${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake)
+    foreach(_pz_sr_test test_shader_render_layoutloader test_shader_render_metadataloader)
+        phosphor_apply_test_isolation(${_pz_sr_test})
+        # APPEND, never a bare SET — a SET here would drop the XDG sandbox the
+        # call above just installed.
+        phosphor_append_test_environment(${_pz_sr_test} "QT_QPA_PLATFORM=offscreen")
+        # Give them a label so `ctest -L shaderrender` selects the pair, like
+        # the other library test groups.
+        set_tests_properties(${_pz_sr_test} PROPERTIES LABELS "shaderrender")
+    endforeach()
+endif()

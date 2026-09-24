@@ -1,0 +1,136 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#pragma once
+
+#include "plasmazones_export.h"
+#include <PhosphorSnapEngine/IZoneAdjacencyResolver.h>
+#include <PhosphorProtocol/ZoneMarshalling.h>
+#include <QObject>
+#include <QDBusAbstractAdaptor>
+#include <QString>
+
+namespace PhosphorScreens {
+class ScreenManager;
+}
+
+namespace PhosphorZones {
+class IZoneDetector;
+class Layout;
+class LayoutRegistry;
+}
+
+namespace PlasmaZones {
+
+class ISettings;
+
+/**
+ * @brief D-Bus adaptor for zone detection operations
+ *
+ * Provides D-Bus interface: org.plasmazones.ZoneDetection
+ *  PhosphorZones::Zone detection queries
+ *
+ * Uses interface types for loose coupling
+ */
+class PLASMAZONES_EXPORT ZoneDetectionAdaptor : public QDBusAbstractAdaptor,
+                                                public PhosphorSnapEngine::IZoneAdjacencyResolver
+{
+    Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.ZoneDetection")
+
+public:
+    explicit ZoneDetectionAdaptor(PhosphorZones::IZoneDetector* detector, PhosphorZones::LayoutRegistry* layoutManager,
+                                  PhosphorScreens::ScreenManager* screenManager, ISettings* settings,
+                                  QObject* parent = nullptr);
+    ~ZoneDetectionAdaptor() override = default;
+
+public Q_SLOTS:
+    // PhosphorZones::Zone detection for cursor position
+    QString detectZoneAtPosition(int x, int y);
+    QStringList detectMultiZoneAtPosition(int x, int y);
+    PhosphorProtocol::ZoneGeometryRect getZoneGeometry(const QString& zoneId);
+    PhosphorProtocol::ZoneGeometryRect getZoneGeometryForScreen(const QString& zoneId, const QString& screenId);
+    QStringList getZonesForScreen(const QString& screenId);
+
+    // PhosphorZones::Zone navigation - get adjacent zone in a direction
+    // direction: "left", "right", "up", "down"
+    Q_INVOKABLE QString getAdjacentZone(const QString& currentZoneId, const QString& direction,
+                                        const QString& screenId = QString()) const override;
+
+    /**
+     * @brief Get the first (edge) zone in a given direction
+     *
+     * Used when a window is not yet snapped and user presses a navigation key.
+     * Returns the zone at the edge of the layout in the specified direction:
+     *   - left: leftmost zone (smallest x)
+     *   - right: rightmost zone (largest x + width)
+     *   - up: topmost zone (smallest y)
+     *   - down: bottommost zone (largest y + height)
+     *
+     * @param direction Direction string ("left", "right", "up", "down")
+     * @return PhosphorZones::Zone ID of the edge zone, or empty string if no zones available
+     */
+    Q_INVOKABLE QString getFirstZoneInDirection(const QString& direction,
+                                                const QString& screenId = QString()) const override;
+
+    // Get zone info by zone number (1-indexed), optionally for a specific screen
+    QString getZoneByNumber(int zoneNumber, const QString& screenId = QString());
+
+    // Get all zone geometries, optionally for a specific screen
+    PhosphorProtocol::NamedZoneGeometryList getAllZoneGeometries(const QString& screenId = QString());
+
+    /**
+     * @brief Get current keyboard modifier state
+     *
+     * Returns Qt::KeyboardModifiers as an integer bitmask.
+     * This queries the actual keyboard state, not cached values.
+     *
+     * Bitmask values:
+     *   0x02000000 = Shift
+     *   0x04000000 = Control
+     *   0x08000000 = Alt
+     *   0x10000000 = Meta
+     *
+     * @return Modifier bitmask (0 if no modifiers pressed)
+     */
+    int getKeyboardModifiers();
+
+    /**
+     * @brief Detect zone at position and return modifier state
+     *
+     * Combined call that returns both zone ID and current keyboard modifiers.
+     * More efficient than two separate D-Bus calls.
+     *
+     * @param x Screen X coordinate
+     * @param y Screen Y coordinate
+     * @return String in format "zoneId;modifiers" (e.g., "uuid-here;33554432" for Shift)
+     *         Empty string if no zone found, modifiers still appended after semicolon
+     */
+    QString detectZoneWithModifiers(int x, int y);
+
+Q_SIGNALS:
+    void zoneDetected(const QString& zoneId, const PhosphorProtocol::ZoneGeometryRect& geometry);
+
+private:
+    /// Release-build pair of the ctor Q_ASSERTs. Nearly every slot on this
+    /// adaptor is reachable from the session bus, so a wiring bug has to degrade to a
+    /// warning rather than a crash an external caller can trigger. Mirrors
+    /// AutotileAdaptor::ensureRegistry and OverlayAdaptor's per-method guards,
+    /// which this class was the only adaptor in the family to lack.
+    bool ensureDeps(const char* methodName) const;
+
+    /// Suppress-aware layout resolve (#724 family): returns nullptr when the
+    /// screen's context has no active zone layout because the default
+    /// assignment is suppressed, instead of resolveLayoutForScreen's
+    /// global-default fallback. Keeps this D-Bus surface consistent with the
+    /// drag pipeline and the overlay layer — external clients otherwise see
+    /// zones on a screen the daemon itself treats as zoneless.
+    PhosphorZones::Layout* resolveActiveLayoutForScreen(const QString& screenId) const;
+
+    PhosphorZones::IZoneDetector* m_zoneDetector; // Interface type (DIP)
+    PhosphorZones::LayoutRegistry* m_layoutManager; // Interface type (DIP)
+    PhosphorScreens::ScreenManager* m_screenManager; // For VS-aware geometry / id resolution
+    ISettings* m_settings; // For zonePadding setting
+};
+
+} // namespace PlasmaZones

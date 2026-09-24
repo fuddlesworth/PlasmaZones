@@ -4,13 +4,13 @@
 # A3 — Phosphor shell: non-bar surfaces
 
 Behaviour, layout and choreography for every non-bar surface. Written against what
-the tree ships today in `libs/phosphor-shell-{launcher,control-center,notifications,osd,power}`
+the tree ships today in `phosphor-shell-libs/libs/phosphor-shell-{launcher,control-center,notifications,osd,power}`
 and the v1 mockups (removed in phase 6), which were DMS / Noctalia parity
 clones. Everything below is designed *away* from those.
 
 ## Visual anchor
 
-The look is the one the `data/surface` and `data/overlays` packs already share:
+The look is the one the `plasmazones/data/surface` and `plasmazones/data/overlays` packs already share:
 dark navy glass with a coloured spectrum running through it. `phosphor-glass`
 (navy over blur with a brand-gradient response), `phosphor-motes` (drifting
 sparks in the spectrum colours), `phosphor-flux`, `prismata` and
@@ -867,11 +867,12 @@ surface above follows.
 ## Surface-pack hooks
 
 Which pack draws what, by default, on which surface. Surface packs live in
-`data/surface`; the spectrum overlays named here live in `data/overlays` and
-are reused as shell grounds through the same compositor path. Today only
-`border-audio` and `frosted-glass` declare `osd` / `popup` support in their
-metadata. The table states the intended default assignments so the metadata
-can be extended to match.
+`plasmazones/data/surface`; the spectrum overlays named here live in `plasmazones/data/overlays` and
+are reused as shell grounds through the same compositor path. No surface pack declares `osd` / `popup` support today, and none can: the
+surface-metadata schema is `additionalProperties: false` and has no such
+field. `border-audio` mentions OSDs and popups only in its description prose.
+The table states the intended default assignments, so the schema and the
+metadata can be extended to match.
 
 | Pack | Surface(s) | Role by default |
 |---|---|---|
@@ -880,11 +881,11 @@ can be extended to match.
 | `phosphor-flux` (overlay) | drop-target preview during any drag (toast, launcher, dashboard) | Flowing spectrum on the 6 px preview outline while a drag is live. |
 | `prismata` (overlay) | picker live retint transition | The gradient crossing the screen as the palette lands. |
 | `border-phosphor` (surface) | control center, notification center (as tiles) | Their window border, so they match the user's windows when the user has not picked another border pack. |
-| `border-audio` (surface) | OSD value bands, media OSD, lockscreen media band | The band moves with the bass when the visualizer is on; static otherwise. Already declares OSD and popup support. |
+| `border-audio` (surface) | OSD value bands, media OSD, lockscreen media band | The band moves with the bass when the visualizer is on; static otherwise. |
 | `border-pulse` (surface) | power menu selected row line, polkit band | A slow pulse on things awaiting a decision. |
 | `focus-fade` (surface) | dashboard non-current cells, cheatsheet dimmed desktop, power-menu dimmed desktop | The dim of unfocused content. |
 | `phosphor-motes` (surface) | dashboard ground, lockscreen empty regions | Motes drift between cells and between the lockscreen outlines. |
 | `fireflies` (surface) | none by default | Opt-in alternative to `phosphor-motes` on the lockscreen. |
 | `rain-glass` (surface) | none by default | Opt-in for the launcher and lockscreen ground; too busy behind text to be a default. |
-| `frosted-glass` (surface) | fallback ground when `phosphor-glass` is disabled | Declares popup support already. |
+| `frosted-glass` (surface) | fallback ground when `phosphor-glass` is disabled | |
 | `glow`, `blur`, `shadow`, `opacity-tint`, `duotone`, `mosaic`, `rippled-glass`, `border`, `border-double`, `border-gradient`, `border-rgb`, `border-sweep`, `border-circuit`, `border-marching` | user-selectable on the two tile surfaces | Never a default. `shadow` is specifically off on every shell surface; the spectrum lines are the only chrome. |

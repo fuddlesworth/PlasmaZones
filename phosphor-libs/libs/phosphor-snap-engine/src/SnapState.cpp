@@ -1,0 +1,751 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include <PhosphorSnapEngine/SnapState.h>
+
+namespace PhosphorSnapEngine {
+
+SnapState::SnapState(const QString& screenId, QObject* parent)
+    : QObject(parent)
+    , m_screenId(screenId)
+{
+}
+
+SnapState::~SnapState() = default;
+
+// ── Window-id canonicalization ──────────────────────────────────────────────
+//
+// The KWin effect freezes a window's composite id `appId|instanceId` at first
+// observation, but that freeze is per effect process. If the effect restarts
+// while a window's WM_CLASS mutated during downtime (Electron/CEF apps rename
+// their class after mapping), the restarted effect re-derives a DIFFERENT
+// composite (`appId'|instanceId`) for the same window, while the daemon's snap
+// stores still hold the old `appId|instanceId`. Canonicalizing every store key
+// through the shared registry (instanceId → first-seen composite) re-unifies the
+// two: the stable instanceId never changes, so both composites resolve to the
+// first-seen one. Mirrors AutotileEngine, which already does this for tiling
+// state (issue #628).
+//
+// SnapState only ever LOOKS UP (never seeds): the daemon seeds the canonical
+// mapping once per window in WindowTrackingAdaptor::setWindowMetadata (the
+// universal window-open choke point), so by the time any snap accessor runs the
+// window already has a canonical entry. Looking up (rather than seeding) here is
+// also what keeps the appId-alias writes safe — the pre-float session-restore
+// fallback passes a BARE appId (no instance id) to addPreFloat*/clearPreFloatZone,
+// and a no-seed lookup returns it verbatim instead of polluting the registry's
+// instance map with an appId-keyed entry that would never be released.
+
+QString SnapState::canonicalizeForLookup(const QString& rawWindowId) const
+{
+    if (m_windowRegistry) {
+        return m_windowRegistry->canonicalizeForLookup(rawWindowId);
+    }
+    return rawWindowId;
+}
+
+// ── IPlacementState ─────────────────────────────────────────────────────────
+
+QString SnapState::screenId() const
+{
+    return m_screenId;
+}
+
+int SnapState::windowCount() const
+{
+    return allManagedWindowIds().size();
+}
+
+QStringList SnapState::managedWindows() const
+{
+    QSet<QString> all = allManagedWindowIds();
+    QStringList list(all.begin(), all.end());
+    list.sort();
+    return list;
+}
+
+bool SnapState::containsWindow(const QString& rawWindowId) const
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    return m_windowZoneAssignments.contains(windowId) || m_floatingWindows.contains(windowId);
+}
+
+bool SnapState::isFloating(const QString& rawWindowId) const
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    return m_floatingWindows.contains(windowId);
+}
+
+QStringList SnapState::floatingWindows() const
+{
+    QStringList list(m_floatingWindows.begin(), m_floatingWindows.end());
+    list.sort();
+    return list;
+}
+
+QString SnapState::placementIdForWindow(const QString& rawWindowId) const
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    if (m_floatingWindows.contains(windowId)) {
+        return {};
+    }
+    const auto it = m_windowZoneAssignments.constFind(windowId);
+    if (it == m_windowZoneAssignments.constEnd() || it->isEmpty()) {
+        return {};
+    }
+    return it->first();
+}
+
+// ── Zone Assignment CRUD ────────────────────────────────────────────────────
+
+void SnapState::assignWindowToZone(const QString& rawWindowId, const QString& zoneId, const QString& screenId,
+                                   int virtualDesktop)
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    if (zoneId.isEmpty()) {
+        unassignWindow(windowId);
+        return;
+    }
+    assignWindowToZones(windowId, {zoneId}, screenId, virtualDesktop);
+}
+
+void SnapState::assignWindowToZones(const QString& rawWindowId, const QStringList& zoneIds, const QString& screenId,
+                                    int virtualDesktop)
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    if (windowId.isEmpty()) {
+        return;
+    }
+    if (zoneIds.isEmpty()) {
+        unassignWindow(windowId);
+        return;
+    }
+    QStringList validZoneIds;
+    validZoneIds.reserve(zoneIds.size());
+    for (const auto& id : zoneIds) {
+        if (!id.isEmpty()) {
+            validZoneIds.append(id);
+        }
+    }
+    if (validZoneIds.isEmpty()) {
+        return;
+    }
+
+    QStringList previousZones = m_windowZoneAssignments.value(windowId);
+    bool zoneChanged = (previousZones != validZoneIds);
+    bool screenChanged = (m_windowScreenAssignments.value(windowId) != screenId);
+    bool desktopChanged = (m_windowDesktopAssignments.value(windowId, -1) != virtualDesktop);
+    bool wasFloating = m_floatingWindows.remove(windowId);
+
+    m_windowZoneAssignments[windowId] = validZoneIds;
+    m_windowScreenAssignments[windowId] = screenId;
+    m_windowDesktopAssignments[windowId] = virtualDesktop;
+
+    if (zoneChanged) {
+        Q_EMIT windowAssigned(windowId, validZoneIds.first());
+    }
+    if (wasFloating) {
+        // Snapping clears the float bit — a layer change, so a float-side
+        // focus memory naming this window is now stale (same rule as
+        // setFloating's arms).
+        if (m_lastFloatingFocus == windowId) {
+            m_lastFloatingFocus.clear();
+        }
+        // The dedicated signal must fire like setFloating/setFloatingOnScreen
+        // do, or an exported-API subscriber tracking float state via
+        // floatingChanged misses every snap-clears-float transition.
+        Q_EMIT floatingChanged(windowId, false);
+    }
+    if (zoneChanged || screenChanged || desktopChanged || wasFloating) {
+        Q_EMIT stateChanged();
+    }
+}
+
+SnapState::UnassignResult SnapState::unassignWindow(const QString& rawWindowId)
+{
+    return clearZoneAssignment(canonicalizeForLookup(rawWindowId), /*preserveScreenAndDesktop=*/false);
+}
+
+bool SnapState::clearScreenAndDesktop(const QString& rawWindowId)
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    // Both removals run unconditionally, in their own statements. Folding
+    // them into one `a.remove(...) || b.remove(...)` would let short-circuit
+    // evaluation skip the desktop removal whenever the screen one succeeded,
+    // silently leaking the desktop entry.
+    const bool screenRemoved = m_windowScreenAssignments.remove(windowId) > 0;
+    const bool desktopRemoved = m_windowDesktopAssignments.remove(windowId) > 0;
+    return screenRemoved || desktopRemoved;
+}
+
+SnapState::UnassignResult SnapState::clearZoneAssignment(const QString& rawWindowId, bool preserveScreenAndDesktop)
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    UnassignResult result;
+    QStringList previousZones = m_windowZoneAssignments.value(windowId);
+    if (!m_windowZoneAssignments.remove(windowId)) {
+        return result;
+    }
+    result.wasAssigned = true;
+    // Unsnapping is a layer departure: a snapped-side focus memory naming
+    // this window is now stale (the eligibility filter would reject it
+    // anyway, but the header promises the memories clear on layer changes).
+    if (m_lastSnappedFocus == windowId) {
+        m_lastSnappedFocus.clear();
+    }
+    if (!preserveScreenAndDesktop) {
+        m_windowScreenAssignments.remove(windowId);
+        m_windowDesktopAssignments.remove(windowId);
+    }
+    if (!m_lastUsedZoneId.isEmpty() && previousZones.contains(m_lastUsedZoneId)) {
+        m_lastUsedZoneId.clear();
+        m_lastUsedScreenId.clear();
+        m_lastUsedZoneClass.clear();
+        m_lastUsedDesktop = 0;
+        result.lastUsedZoneCleared = true;
+    }
+    Q_EMIT windowUnassigned(windowId);
+    Q_EMIT stateChanged();
+    return result;
+}
+
+QString SnapState::screenForWindow(const QString& rawWindowId) const
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    return m_windowScreenAssignments.value(windowId);
+}
+
+void SnapState::recordResidence(const QString& rawWindowId, const QString& screenId, int virtualDesktop)
+{
+    if (rawWindowId.isEmpty() || screenId.isEmpty()) {
+        return;
+    }
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    bool changed = false;
+    if (m_windowScreenAssignments.value(windowId) != screenId) {
+        m_windowScreenAssignments[windowId] = screenId;
+        changed = true;
+    }
+    if (m_windowDesktopAssignments.value(windowId, -1) != virtualDesktop) {
+        m_windowDesktopAssignments[windowId] = virtualDesktop;
+        changed = true;
+    }
+    if (changed) {
+        Q_EMIT stateChanged();
+    }
+}
+
+int SnapState::desktopForWindow(const QString& rawWindowId) const
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    return m_windowDesktopAssignments.value(windowId, 0);
+}
+
+bool SnapState::reassignDesktop(const QString& rawWindowId, int virtualDesktop)
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    // Only re-stamp a window that is actually assigned (has a zone); the
+    // desktop attribute alone is meaningless without a snap slot.
+    if (!m_windowZoneAssignments.contains(windowId)) {
+        return false;
+    }
+    if (m_windowDesktopAssignments.value(windowId, 0) == virtualDesktop) {
+        return false;
+    }
+    m_windowDesktopAssignments[windowId] = virtualDesktop;
+    Q_EMIT stateChanged();
+    return true;
+}
+
+QStringList SnapState::windowsOnScreenAndDesktop(const QString& screenId, int virtualDesktop) const
+{
+    QStringList result;
+    for (auto it = m_windowDesktopAssignments.constBegin(); it != m_windowDesktopAssignments.constEnd(); ++it) {
+        if (it.value() != virtualDesktop) {
+            continue;
+        }
+        if (m_windowScreenAssignments.value(it.key()) != screenId) {
+            continue;
+        }
+        result.append(it.key());
+    }
+    result.sort();
+    return result;
+}
+
+QString SnapState::zoneForWindow(const QString& rawWindowId) const
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    const auto it = m_windowZoneAssignments.constFind(windowId);
+    if (it == m_windowZoneAssignments.constEnd() || it->isEmpty()) {
+        return {};
+    }
+    return it->first();
+}
+
+QStringList SnapState::zonesForWindow(const QString& rawWindowId) const
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    return m_windowZoneAssignments.value(windowId);
+}
+
+QStringList SnapState::windowsInZone(const QString& zoneId) const
+{
+    QStringList result;
+    for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
+        if (it->contains(zoneId)) {
+            result.append(it.key());
+        }
+    }
+    return result;
+}
+
+QStringList SnapState::snappedWindows() const
+{
+    QStringList result;
+    result.reserve(m_windowZoneAssignments.size());
+    for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
+        result.append(it.key());
+    }
+    return result;
+}
+
+bool SnapState::isWindowSnapped(const QString& rawWindowId) const
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    return m_windowZoneAssignments.contains(windowId);
+}
+
+void SnapState::noteFocused(const QString& rawWindowId)
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    if (windowId.isEmpty()) {
+        return;
+    }
+    if (m_floatingWindows.contains(windowId)) {
+        m_lastFloatingFocus = windowId;
+    } else if (m_windowZoneAssignments.contains(windowId)) {
+        m_lastSnappedFocus = windowId;
+    }
+    // Residence-only windows touch neither memory: they are on no layer the
+    // switch verb can target.
+}
+
+// ── Floating State ──────────────────────────────────────────────────────────
+
+void SnapState::setFloating(const QString& rawWindowId, bool floating)
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    bool changed = false;
+    if (floating) {
+        if (!m_floatingWindows.contains(windowId)) {
+            m_floatingWindows.insert(windowId);
+            changed = true;
+        }
+    } else {
+        changed = m_floatingWindows.remove(windowId);
+    }
+    if (changed) {
+        // The window changed layers: a focus memory naming it on the OLD
+        // side is now stale.
+        if (floating && m_lastSnappedFocus == windowId) {
+            m_lastSnappedFocus.clear();
+        }
+        if (!floating && m_lastFloatingFocus == windowId) {
+            m_lastFloatingFocus.clear();
+        }
+        Q_EMIT floatingChanged(windowId, floating);
+        Q_EMIT stateChanged();
+    }
+}
+
+void SnapState::setFloatingOnScreen(const QString& rawWindowId, const QString& screenId, int virtualDesktop)
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    if (windowId.isEmpty() || screenId.isEmpty()) {
+        return;
+    }
+    bool changed = false;
+    if (!m_floatingWindows.contains(windowId)) {
+        m_floatingWindows.insert(windowId);
+        if (m_lastSnappedFocus == windowId) {
+            m_lastSnappedFocus.clear();
+        }
+        changed = true;
+    }
+    if (m_windowScreenAssignments.value(windowId) != screenId) {
+        m_windowScreenAssignments[windowId] = screenId;
+        changed = true;
+    }
+    if (m_windowDesktopAssignments.value(windowId, -1) != virtualDesktop) {
+        m_windowDesktopAssignments[windowId] = virtualDesktop;
+        changed = true;
+    }
+    if (changed) {
+        Q_EMIT floatingChanged(windowId, true);
+        Q_EMIT stateChanged();
+    }
+}
+
+SnapState::UnassignResult SnapState::unsnapForFloat(const QString& rawWindowId)
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    const auto zones = zonesForWindow(windowId);
+    if (!zones.isEmpty()) {
+        m_preFloatZoneAssignments[windowId] = zones;
+        const QString screen = screenForWindow(windowId);
+        if (!screen.isEmpty()) {
+            m_preFloatScreenAssignments[windowId] = screen;
+        }
+    }
+
+    // Float-from-snap clears the zone assignment but PRESERVES the screen
+    // (and desktop) assignment. The window is still on that screen — it's
+    // just floating instead of snapped to a zone. Erasing the screen
+    // assignment leaves the daemon's "what screen does this window live on"
+    // lookups (e.g. lastActiveScreenName) with no answer for a window that
+    // unambiguously lives on a known screen, and routing then falls through
+    // to a stale cached value — for the float toggle, that misroutes the
+    // unfloat to whichever engine the cache points at (e.g. autotile on the
+    // source VS) instead of the snap engine that owns this screen.
+    return clearZoneAssignment(windowId, /*preserveScreenAndDesktop=*/true);
+}
+
+QString SnapState::preFloatScreen(const QString& rawWindowId) const
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    return m_preFloatScreenAssignments.value(windowId);
+}
+
+QString SnapState::preFloatZone(const QString& rawWindowId) const
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    const auto zones = m_preFloatZoneAssignments.value(windowId);
+    return zones.isEmpty() ? QString() : zones.first();
+}
+
+QStringList SnapState::preFloatZones(const QString& rawWindowId) const
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    return m_preFloatZoneAssignments.value(windowId);
+}
+
+bool SnapState::clearPreFloatZone(const QString& rawWindowId)
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    // Emit only when an entry actually went away, matching this class's uniform
+    // mutate-then-signal contract (the add-side and the other removers all do this;
+    // clearPreFloatZone was the lone exception). stateChanged has no persistence
+    // consumer today: pre-float state is persisted through the WindowPlacement record
+    // that SnapEngine::capturePlacement reads from preFloatZones(), so this emit is
+    // for contract consistency, not to drive a save.
+    const int removed = m_preFloatZoneAssignments.remove(windowId) + m_preFloatScreenAssignments.remove(windowId);
+    if (removed > 0) {
+        Q_EMIT stateChanged();
+    }
+    return removed > 0;
+}
+
+void SnapState::addPreFloatZone(const QString& rawWindowId, const QStringList& zoneIds)
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    if (m_preFloatZoneAssignments.value(windowId) == zoneIds) {
+        return;
+    }
+    m_preFloatZoneAssignments[windowId] = zoneIds;
+    Q_EMIT stateChanged();
+}
+
+void SnapState::addPreFloatScreen(const QString& rawWindowId, const QString& screenId)
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    if (m_preFloatScreenAssignments.value(windowId) == screenId) {
+        return;
+    }
+    m_preFloatScreenAssignments[windowId] = screenId;
+    Q_EMIT stateChanged();
+}
+
+// ── Window Lifecycle ────────────────────────────────────────────────────────
+
+bool SnapState::removeWindowData(const QString& rawWindowId)
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    bool removed = false;
+    removed |= m_windowZoneAssignments.remove(windowId);
+    removed |= m_windowScreenAssignments.remove(windowId);
+    removed |= m_windowDesktopAssignments.remove(windowId);
+    removed |= m_floatingWindows.remove(windowId);
+    removed |= m_preFloatZoneAssignments.remove(windowId);
+    removed |= m_preFloatScreenAssignments.remove(windowId);
+    removed |= m_autoSnappedWindows.remove(windowId);
+    if (m_lastSnappedFocus == windowId) {
+        m_lastSnappedFocus.clear();
+    }
+    if (m_lastFloatingFocus == windowId) {
+        m_lastFloatingFocus.clear();
+    }
+    return removed;
+}
+
+void SnapState::windowClosed(const QString& rawWindowId)
+{
+    if (removeWindowData(canonicalizeForLookup(rawWindowId))) {
+        Q_EMIT stateChanged();
+    }
+}
+
+void SnapState::migrateWindowTo(SnapState* target, const QString& rawWindowId, const QString& newScreenId)
+{
+    if (!target || target == this) {
+        return;
+    }
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    bool moved = false;
+
+    if (const auto it = m_windowZoneAssignments.constFind(windowId); it != m_windowZoneAssignments.constEnd()) {
+        // A zone the target ALREADY assigns is the window's own placement
+        // there (a window present on several desktops holds one per store)
+        // and outranks the source's, which names a zone of another context's
+        // layout. The source entry is dropped either way: the window is
+        // leaving this store.
+        if (!target->m_windowZoneAssignments.contains(windowId)) {
+            target->m_windowZoneAssignments[windowId] = it.value();
+        }
+        m_windowZoneAssignments.remove(windowId);
+        moved = true;
+    }
+    // Live screen: rewrite to the destination monitor so target->screenForWindow
+    // reflects where the window now lives. An empty newScreenId falls back to the
+    // target store's own screen so the value is never blanked mid-migration.
+    if (m_windowScreenAssignments.remove(windowId) > 0) {
+        target->m_windowScreenAssignments[windowId] = newScreenId.isEmpty() ? target->m_screenId : newScreenId;
+        moved = true;
+    }
+    if (const auto it = m_windowDesktopAssignments.constFind(windowId); it != m_windowDesktopAssignments.constEnd()) {
+        target->m_windowDesktopAssignments[windowId] = it.value();
+        m_windowDesktopAssignments.remove(windowId);
+        moved = true;
+    }
+    if (m_floatingWindows.remove(windowId)) {
+        target->m_floatingWindows.insert(windowId);
+        moved = true;
+    }
+    // Pre-float zone/screen carry over UNCHANGED (they name the source monitor's
+    // home zone — behaviour A).
+    if (const auto it = m_preFloatZoneAssignments.constFind(windowId); it != m_preFloatZoneAssignments.constEnd()) {
+        target->m_preFloatZoneAssignments[windowId] = it.value();
+        m_preFloatZoneAssignments.remove(windowId);
+        moved = true;
+    }
+    if (const auto it = m_preFloatScreenAssignments.constFind(windowId); it != m_preFloatScreenAssignments.constEnd()) {
+        target->m_preFloatScreenAssignments[windowId] = it.value();
+        m_preFloatScreenAssignments.remove(windowId);
+        moved = true;
+    }
+    if (m_autoSnappedWindows.remove(windowId)) {
+        target->m_autoSnappedWindows.insert(windowId);
+        moved = true;
+    }
+    // Focus memories stay behind and clear rather than migrate: the target
+    // store's memories re-arm on the next focus report there, and seeding
+    // them would claim a focus that context never saw.
+    if (m_lastSnappedFocus == windowId) {
+        m_lastSnappedFocus.clear();
+    }
+    if (m_lastFloatingFocus == windowId) {
+        m_lastFloatingFocus.clear();
+    }
+
+    if (moved) {
+        Q_EMIT stateChanged();
+        Q_EMIT target->stateChanged();
+    }
+}
+
+bool SnapState::isEmpty() const
+{
+    return m_windowZoneAssignments.isEmpty() && m_windowScreenAssignments.isEmpty()
+        && m_windowDesktopAssignments.isEmpty() && m_floatingWindows.isEmpty() && m_preFloatZoneAssignments.isEmpty()
+        && m_preFloatScreenAssignments.isEmpty() && m_lastUsedZoneId.isEmpty() && m_lastUsedScreenId.isEmpty()
+        && m_lastUsedZoneClass.isEmpty() && m_lastUsedDesktop == 0
+        && m_userSnappedClasses.isEmpty()
+        // The two focus-memory terms are defence in depth: every public
+        // path that empties the layer sets also clears the matching
+        // memory, so a memories-only store is unreachable today — but
+        // clear()'s early return keys off this predicate, and a future
+        // write path must not let it skip a live memory.
+        && m_autoSnappedWindows.isEmpty() && m_lastSnappedFocus.isEmpty() && m_lastFloatingFocus.isEmpty();
+}
+
+void SnapState::clear()
+{
+    if (isEmpty()) {
+        return;
+    }
+    m_windowZoneAssignments.clear();
+    m_windowScreenAssignments.clear();
+    m_windowDesktopAssignments.clear();
+    m_floatingWindows.clear();
+    m_preFloatZoneAssignments.clear();
+    m_preFloatScreenAssignments.clear();
+    m_lastUsedZoneId.clear();
+    m_lastUsedScreenId.clear();
+    m_lastUsedZoneClass.clear();
+    m_lastUsedDesktop = 0;
+    m_lastUsedSeq = 0;
+    m_userSnappedClasses.clear();
+    m_autoSnappedWindows.clear();
+    m_lastSnappedFocus.clear();
+    m_lastFloatingFocus.clear();
+    Q_EMIT stateChanged();
+}
+
+// ── Last-Used Zone Tracking ─────────────────────────────────────────────────
+
+namespace {
+// Process-wide monotonic source for the per-store last-used recency stamp. Each
+// non-empty last-used write pulls the next value, so the facade can order stores
+// by "most recently updated" to pick the single representative it persists.
+quint64 nextLastUsedSeq()
+{
+    static quint64 counter = 0;
+    return ++counter;
+}
+} // namespace
+
+void SnapState::updateLastUsedZone(const QString& zoneId, const QString& screenId, const QString& windowClass,
+                                   int virtualDesktop)
+{
+    if (m_lastUsedZoneId == zoneId && m_lastUsedScreenId == screenId && m_lastUsedZoneClass == windowClass
+        && m_lastUsedDesktop == virtualDesktop) {
+        return;
+    }
+    m_lastUsedZoneId = zoneId;
+    m_lastUsedScreenId = screenId;
+    m_lastUsedZoneClass = windowClass;
+    m_lastUsedDesktop = virtualDesktop;
+    if (!zoneId.isEmpty()) {
+        m_lastUsedSeq = nextLastUsedSeq();
+    }
+    Q_EMIT stateChanged();
+}
+
+void SnapState::restoreLastUsedZone(const QString& zoneId, const QString& screenId, const QString& zoneClass,
+                                    int desktop)
+{
+    m_lastUsedZoneId = zoneId;
+    m_lastUsedScreenId = screenId;
+    m_lastUsedZoneClass = zoneClass;
+    m_lastUsedDesktop = desktop;
+    if (!zoneId.isEmpty()) {
+        m_lastUsedSeq = nextLastUsedSeq();
+    }
+}
+
+// ── Auto-Snap Bookkeeping ──────────────────────────────────────────────────
+
+void SnapState::recordSnapIntent(const QString& windowClass, bool wasUserInitiated)
+{
+    if (wasUserInitiated && !windowClass.isEmpty() && !m_userSnappedClasses.contains(windowClass)) {
+        m_userSnappedClasses.insert(windowClass);
+        Q_EMIT stateChanged();
+    }
+}
+
+void SnapState::markAsAutoSnapped(const QString& rawWindowId)
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    if (m_autoSnappedWindows.contains(windowId)) {
+        return;
+    }
+    m_autoSnappedWindows.insert(windowId);
+    Q_EMIT stateChanged();
+}
+
+bool SnapState::isAutoSnapped(const QString& rawWindowId) const
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    return m_autoSnappedWindows.contains(windowId);
+}
+
+bool SnapState::clearAutoSnapped(const QString& rawWindowId)
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    if (m_autoSnappedWindows.remove(windowId)) {
+        Q_EMIT stateChanged();
+        return true;
+    }
+    return false;
+}
+
+// ── Occupied Zone Queries ──────────────────────────────────────────────────
+
+QSet<QString> SnapState::buildOccupiedZoneSet(const QString& screenFilter, int desktopFilter) const
+{
+    QSet<QString> occupied;
+    for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
+        if (!screenFilter.isEmpty()) {
+            const QString windowScreen = m_windowScreenAssignments.value(it.key());
+            if (windowScreen != screenFilter) {
+                continue;
+            }
+        }
+        if (desktopFilter > 0) {
+            int windowDesktop = m_windowDesktopAssignments.value(it.key(), 0);
+            if (windowDesktop != 0 && windowDesktop != desktopFilter) {
+                continue;
+            }
+        }
+        for (const QString& zoneId : it.value()) {
+            occupied.insert(zoneId);
+        }
+    }
+    return occupied;
+}
+
+int SnapState::pruneStaleAssignments(const QSet<QString>& rawAliveWindowIds)
+{
+    // The stores are keyed by the canonical (first-seen) composite, so the alive
+    // set must be canonicalized to compare like-for-like — otherwise a window
+    // still alive under a mutated-class composite would be pruned just because
+    // its stored key is the first-seen one. canonicalizeForLookup (const, no
+    // seed) is correct: a stale window must not gain a fresh canonical entry.
+    QSet<QString> aliveWindowIds;
+    aliveWindowIds.reserve(rawAliveWindowIds.size());
+    for (const QString& id : rawAliveWindowIds) {
+        aliveWindowIds.insert(canonicalizeForLookup(id));
+    }
+
+    QSet<QString> allTracked;
+    for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
+        allTracked.insert(it.key());
+    }
+    for (auto it = m_windowScreenAssignments.constBegin(); it != m_windowScreenAssignments.constEnd(); ++it) {
+        allTracked.insert(it.key());
+    }
+    for (auto it = m_windowDesktopAssignments.constBegin(); it != m_windowDesktopAssignments.constEnd(); ++it) {
+        allTracked.insert(it.key());
+    }
+    allTracked.unite(m_floatingWindows);
+    for (auto it = m_preFloatZoneAssignments.constBegin(); it != m_preFloatZoneAssignments.constEnd(); ++it) {
+        allTracked.insert(it.key());
+    }
+    for (auto it = m_preFloatScreenAssignments.constBegin(); it != m_preFloatScreenAssignments.constEnd(); ++it) {
+        allTracked.insert(it.key());
+    }
+    allTracked.unite(m_autoSnappedWindows);
+
+    int pruned = 0;
+    for (const QString& windowId : allTracked) {
+        if (!aliveWindowIds.contains(windowId)) {
+            removeWindowData(windowId);
+            ++pruned;
+        }
+    }
+    if (pruned > 0) {
+        Q_EMIT stateChanged();
+    }
+    return pruned;
+}
+
+} // namespace PhosphorSnapEngine

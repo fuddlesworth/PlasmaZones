@@ -1,0 +1,356 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "decorationpreviewcontroller.h"
+
+#include "core/interfaces/isettings.h"
+#include "core/platform/logging.h"
+#include "core/types/cavaoptions.h"
+
+#include <PhosphorAudio/CavaSpectrumProvider.h>
+#include <PhosphorAudio/IAudioSpectrumProvider.h>
+#include <PhosphorShaders/ShaderRegistry.h>
+#include <PhosphorSurface/DecorationProfile.h>
+#include <PhosphorSurface/SurfaceChainCompose.h>
+#include <PhosphorSurface/SurfaceShaderEffect.h>
+#include <PhosphorSurface/SurfaceShaderRegistry.h>
+#include <PhosphorSurface/SurfaceThemeResolve.h>
+
+#include <QGuiApplication>
+#include <QMetaType>
+#include <QPalette>
+
+#include <algorithm>
+
+namespace PlasmaZones {
+
+namespace {
+
+/// @p params with every numeric value clamped to the pack's DECLARED range.
+///
+/// The preview's whole claim is that it "describes a chain stage exactly as the
+/// daemon does", and the declared range was the one place it did not: every render
+/// path flattens through `ShaderPresetRegistry::resolveParams`, which clamps, while
+/// the preview fed the slider's raw map straight into composeStageMap and
+/// paddingRequest. The visible divergence was a padding of 128 in the preview
+/// against 64 on the real surface for the same scenario, each asserted as correct
+/// by its own test.
+///
+/// Open-coded rather than routed through resolveParams, because that needs a preset
+/// registry this controller has no handle on and the question here has no preset in it:
+/// the values come from the editor's own sliders. The BOUND is the same one — the pack's
+/// own declared range — but the writeback is not identical: this always writes a double,
+/// where the library's clamp keeps an integral variant integral and rounds toward the
+/// interval. Safe here because nothing on the preview path branches on the variant type
+/// (non-colour params reach float slots through translateSurfaceParams, and
+/// paddingRequest reads toDouble), and stated rather than implied so the next reader does
+/// not take the two for byte-identical.
+QVariantMap clampToDeclaredRanges(const PhosphorSurfaceShaders::SurfaceShaderEffect& effect, QVariantMap params)
+{
+    for (const auto& p : effect.parameters) {
+        const auto it = params.find(p.id);
+        if (it == params.end()) {
+            continue;
+        }
+        const QMetaType::Type type = static_cast<QMetaType::Type>(it.value().typeId());
+        const bool numeric = type == QMetaType::Int || type == QMetaType::UInt || type == QMetaType::LongLong
+            || type == QMetaType::ULongLong || type == QMetaType::Double || type == QMetaType::Float;
+        if (!numeric) {
+            continue;
+        }
+        double value = it.value().toDouble();
+        // An inverted declared range is left alone rather than applied, the same
+        // decision clampToBounds makes: applying both ends of a backwards pair moves
+        // the value outside both of them.
+        if (p.minValue.isValid() && p.maxValue.isValid() && p.minValue.toDouble() > p.maxValue.toDouble()) {
+            continue;
+        }
+        if (p.minValue.isValid()) {
+            value = std::max(value, p.minValue.toDouble());
+        }
+        if (p.maxValue.isValid()) {
+            value = std::min(value, p.maxValue.toDouble());
+        }
+        it.value() = value;
+    }
+    return params;
+}
+
+} // namespace
+
+DecorationPreviewController::DecorationPreviewController(PhosphorSurfaceShaders::SurfaceShaderRegistry* registry,
+                                                         ISettings* settings, QObject* parent)
+    : QObject(parent)
+    , m_registry(registry)
+    , m_settings(settings)
+{
+    // Everything a composed preview depends on without being handed it as an
+    // argument. previewChain resolves theme colours per call and looks the pack
+    // up in the registry, so a colour-scheme change, a highlight-colour change
+    // or a pack installed while a preview is open all leave it showing stale
+    // output until the user reopens the dialog.
+    //
+    // The wallpaper is the one dependency NOT covered here. wallpaperPath() /
+    // wallpaperImage() resolve through PhosphorShaders::ShaderRegistry's static
+    // wallpaper resolver, which exposes no change notification this controller
+    // could connect to, so a wallpaper the user switches mid-preview is not
+    // picked up: it is a snapshot taken when the preview asks, and the revision
+    // is never bumped for it.
+    if (m_registry) {
+        connect(m_registry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
+                &DecorationPreviewController::bumpPreviewRevision);
+    }
+    if (auto* app = qGuiApp) {
+        // The palette is the fallback for both colours AND the source of the
+        // window background and foreground the theme-neutral resolver lerps
+        // between, so a colour-scheme switch moves a preview even when the
+        // user's own highlight/inactive overrides are set.
+        //
+        // Watched as an event rather than through QGuiApplication's
+        // paletteChanged signal, which Qt 6 deprecates in favour of exactly
+        // this event.
+        app->installEventFilter(this);
+    }
+    if (m_settings) {
+        connect(m_settings, &ISettings::highlightColorChanged, this, &DecorationPreviewController::bumpPreviewRevision);
+        connect(m_settings, &ISettings::inactiveColorChanged, this, &DecorationPreviewController::bumpPreviewRevision);
+        // Follow the setting for as long as a host wants capture. Without this
+        // a user who turns the visualizer off mid-preview leaves the external
+        // CAVA process running until the dialog closes, because the only stop
+        // calls are the dialog's own close and focus-loss handlers.
+        //
+        // The resume side is gated on m_captureRequested rather than on the
+        // setting alone: this controller outlives any one dialog, so reacting
+        // to the setting turning on while nothing is previewing would spawn
+        // CAVA for a preview nobody is looking at.
+        connect(m_settings, &ISettings::enableAudioVisualizerChanged, this, [this]() {
+            // Republish first: the pane's "the visualizer is off" notice binds
+            // to this, and it must update whether or not a preview is open.
+            Q_EMIT audioVisualizerEnabledChanged();
+            if (!m_captureRequested) {
+                return;
+            }
+            if (audioVisualizerEnabled()) {
+                startAudioCapture();
+            } else {
+                stopCapture();
+            }
+        });
+    }
+}
+
+DecorationPreviewController::~DecorationPreviewController()
+{
+    // Halt the external CAVA process directly rather than leaving it to the
+    // provider's destruction: same reasoning as ShaderPreviewController's dtor,
+    // no signal emission while we are being torn down.
+    if (m_audio && m_audio->isRunning()) {
+        m_audio->stop();
+    }
+}
+
+bool DecorationPreviewController::eventFilter(QObject* watched, QEvent* event)
+{
+    if (event && event->type() == QEvent::ApplicationPaletteChange) {
+        bumpPreviewRevision();
+    }
+    // Never consumed: this is an observer on the application object, and
+    // swallowing a palette change would break every other consumer of it.
+    return QObject::eventFilter(watched, event);
+}
+
+void DecorationPreviewController::bumpPreviewRevision()
+{
+    ++m_previewRevision;
+    Q_EMIT previewRevisionChanged();
+}
+
+QVariantList DecorationPreviewController::previewChain(const QString& packId, const QVariantMap& friendlyParams) const
+{
+    QVariantList chain;
+    if (!m_registry || packId.isEmpty() || !m_registry->hasEffect(packId)) {
+        return chain;
+    }
+    const PhosphorSurfaceShaders::SurfaceShaderEffect effect = m_registry->effect(packId);
+    if (!effect.isValid()) {
+        return chain;
+    }
+
+    // Theme colours resolved exactly as OverlayService::applyDecoration does,
+    // from the live palette plus the user's highlight / inactive settings, so a
+    // theme-reactive pack previews in the colours it will actually render in
+    // rather than in its raw metadata defaults.
+    // Parameters are used AS DECLARED — no scaling to stand in for a larger
+    // real window. The preview composes on a fixed canvas
+    // (DecorationChainPreview._canvasSize) which IS the surface the pack is
+    // judged on, and shrinking a pack's features to represent a bigger window
+    // makes them illegible in the browser thumbnail that draws that canvas at
+    // a reduced size. The zone/overlay preview is the opposite case and scales, see
+    // ShaderPreviewController::translateShaderParams.
+    // Clamped to the pack's declared ranges first, so the preview composes the same
+    // values the real surface will (see clampToDeclaredRanges).
+    QVariantMap resolved = clampToDeclaredRanges(effect, friendlyParams);
+    const QPalette pal = QGuiApplication::palette();
+    const QColor highlight =
+        m_settings ? m_settings->highlightColor() : pal.color(QPalette::Active, QPalette::Highlight);
+    const QColor inactive =
+        m_settings ? m_settings->inactiveColor() : pal.color(QPalette::Disabled, QPalette::WindowText);
+    PhosphorSurfaceShaders::resolveThemeParamColors(effect, resolved,
+                                                    {highlight, inactive, pal.color(QPalette::Active, QPalette::Window),
+                                                     pal.color(QPalette::Active, QPalette::WindowText)});
+
+    // No cornerRadius injection here, deliberately, and this is the one place
+    // the preview departs from OverlayService::applyDecoration on purpose. The
+    // daemon injects its popup slot's cardCornerRadius because that card draws
+    // a rounded body and every pack must round to IT. The preview's stand-in
+    // card wraps PopupFrame with a deliberately square-cornered body so the
+    // pack owns the corner radius (see DecorationPreviewCard), so the pack's
+    // own declared radius is the correct one to preview with. Injecting a card
+    // radius here would show the user a rounding their real windows will not
+    // get.
+    chain.append(PhosphorSurfaceShaders::composeStageMap(effect, resolved));
+    return chain;
+}
+
+double DecorationPreviewController::previewOuterPadding(const QString& packId, const QVariantMap& friendlyParams) const
+{
+    if (!m_registry || packId.isEmpty() || !m_registry->hasEffect(packId)) {
+        return 0.0;
+    }
+    const PhosphorSurfaceShaders::SurfaceShaderEffect effect = m_registry->effect(packId);
+    // Same validity gate previewChain applies, so the two agree on what a
+    // usable pack is. Without it a registered pack with no resolvable fragment
+    // shader yields an empty chain but a non-zero margin, and the stand-in
+    // card shrinks to reserve room for an effect that never draws.
+    if (!effect.isValid()) {
+        return 0.0;
+    }
+    // Same clamp the daemon and compositor apply — a typo'd or hostile pack
+    // must not be able to demand an absurd preview canvas either.
+    // The declared range FIRST, then the absolute ceiling. Both bounds are real and
+    // they are not the same bound: the declared one is what every render path applies
+    // through resolveParams, and the ceiling is the last-resort cap against a hostile
+    // pack that declares no maximum at all.
+    return qBound(0.0, PhosphorSurfaceShaders::paddingRequest(effect, clampToDeclaredRanges(effect, friendlyParams)),
+                  static_cast<double>(PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx));
+}
+
+QVariantMap DecorationPreviewController::packInfo(const QString& packId) const
+{
+    QVariantMap info;
+    if (!m_registry || packId.isEmpty() || !m_registry->hasEffect(packId)) {
+        return info;
+    }
+    const PhosphorSurfaceShaders::SurfaceShaderEffect effect = m_registry->effect(packId);
+    if (!effect.isValid()) {
+        return info;
+    }
+    info.insert(QStringLiteral("id"), effect.id);
+    info.insert(QStringLiteral("name"), effect.name);
+    // Surfaced by the pane: an audio pack drives CAVA capture, and a
+    // needsBackdrop pack gets a note explaining that the backdrop it samples
+    // is the desktop wallpaper standing in for the real windows (there is no
+    // scene behind a settings-app card, the same limit the daemon overlay path
+    // works around the same way).
+    info.insert(QStringLiteral("audio"), effect.audio);
+    info.insert(QStringLiteral("needsBackdrop"), effect.needsBackdrop);
+
+    QVariantList params;
+    params.reserve(effect.parameters.size());
+    for (const auto& p : effect.parameters) {
+        QVariantMap m;
+        m.insert(QStringLiteral("id"), p.id);
+        m.insert(QStringLiteral("name"), p.name);
+        m.insert(QStringLiteral("type"), p.type);
+        m.insert(QStringLiteral("description"), p.description);
+        m.insert(QStringLiteral("group"), p.group);
+        m.insert(QStringLiteral("default"), p.defaultValue);
+        m.insert(QStringLiteral("min"), p.minValue);
+        m.insert(QStringLiteral("max"), p.maxValue);
+        m.insert(QStringLiteral("step"), p.stepValue);
+        params.append(m);
+    }
+    info.insert(QStringLiteral("parameters"), params);
+    return info;
+}
+
+QString DecorationPreviewController::wallpaperPath() const
+{
+    // Same resolver the overlay preview uses for its wallpaper sampler, so both
+    // previews agree on what "the desktop" is.
+    return PhosphorShaders::ShaderRegistry::wallpaperPath();
+}
+
+QImage DecorationPreviewController::wallpaperImage() const
+{
+    // ShaderRegistry caches the decode, so the per-card calls behind the
+    // browser's thumbnails do not each re-read the file.
+    return PhosphorShaders::ShaderRegistry::loadWallpaperImage();
+}
+
+bool DecorationPreviewController::audioVisualizerEnabled() const
+{
+    return m_settings && m_settings->enableAudioVisualizer();
+}
+
+QVariant DecorationPreviewController::audioSpectrumVariant() const
+{
+    return QVariant::fromValue(m_spectrum);
+}
+
+void DecorationPreviewController::startAudioCapture()
+{
+    // A host asking for capture is remembered even when the request cannot be
+    // honoured right now (visualizer off, CAVA missing), so the setting
+    // becoming true later resumes for a preview that is still open.
+    m_captureRequested = true;
+    if (m_audio && m_audio->isRunning()) {
+        return;
+    }
+    if (!audioVisualizerEnabled()) {
+        return;
+    }
+    if (!PhosphorAudio::CavaSpectrumProvider::isCavaInstalled()) {
+        qCDebug(lcCore) << "Decoration preview: CAVA not available, audio-reactive preview disabled";
+        return;
+    }
+    if (!m_audio) {
+        m_audio = std::make_unique<PhosphorAudio::CavaSpectrumProvider>();
+        connect(m_audio.get(), &PhosphorAudio::IAudioSpectrumProvider::spectrumUpdated, this,
+                [this](const QVector<float>& spectrum) {
+                    // Emitted unconditionally, unlike the usual only-on-change
+                    // rule: this is a capture-rate stream of float vectors, and
+                    // comparing the whole vector every frame to spare a signal
+                    // the QML side is bound to anyway costs more than it saves.
+                    // A genuinely silent stretch is the only case that repeats,
+                    // and it is cheap to re-publish.
+                    m_spectrum = spectrum;
+                    Q_EMIT audioSpectrumChanged();
+                });
+    }
+    // The user's full Shaders.Audio parameter set, so the preview's bar motion
+    // matches what the daemon and the compositor produce.
+    m_audio->setOptions(m_settings ? cavaOptionsFromSettings(m_settings) : PhosphorAudio::SpectrumOptions{});
+    m_audio->start();
+}
+
+void DecorationPreviewController::stopAudioCapture()
+{
+    // The host is done previewing, so drop the standing request too: a later
+    // settings flip must not resurrect capture for a closed dialog.
+    m_captureRequested = false;
+    stopCapture();
+}
+
+void DecorationPreviewController::stopCapture()
+{
+    if (m_audio && m_audio->isRunning()) {
+        m_audio->stop();
+    }
+    if (!m_spectrum.isEmpty()) {
+        m_spectrum.clear();
+        Q_EMIT audioSpectrumChanged();
+    }
+}
+
+} // namespace PlasmaZones

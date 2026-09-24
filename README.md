@@ -2,7 +2,7 @@
 
 # PlasmaZones
 
-<img src="icons/hicolor/scalable/apps/plasmazones.svg" alt="PlasmaZones" width="96">
+<img src="plasmazones/icons/hicolor/scalable/apps/plasmazones.svg" alt="PlasmaZones" width="96">
 
 **Window snapping, tiling and scrolling for KDE Plasma**
 
@@ -17,6 +17,8 @@ Three placement modes in one daemon. Snap windows into zones you drew, let an al
 [![Wayland](https://img.shields.io/badge/Wayland-native-blue.svg)](https://wayland.freedesktop.org/)
 
 **Docs and screenshots: [phosphor-works.github.io/plasmazones](https://phosphor-works.github.io/plasmazones/)**
+
+**Questions, ideas or bug reports: [join the Discord](https://discord.gg/9CQzAptdJ5)**
 
 </div>
 

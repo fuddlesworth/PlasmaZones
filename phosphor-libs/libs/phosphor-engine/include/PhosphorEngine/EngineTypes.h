@@ -1,0 +1,313 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+#include <QHashFunctions>
+#include <QLatin1StringView>
+#include <QList>
+#include <QRect>
+#include <QSet>
+#include <QString>
+#include <QStringList>
+
+#include <functional>
+#include <utility>
+
+namespace PhosphorEngine {
+
+/// Identity of a per-screen placement state: a window's placement is scoped to
+/// the (screen, virtual desktop, activity) triple it was created in. Both the
+/// snap engine and the autotile engine key their per-screen state on this so a
+/// window keeps distinct placement per context (e.g. per desktop) and migrates
+/// between contexts as the window crosses monitors / desktops.
+struct PlacementStateKey
+{
+    QString screenId;
+    int desktop = 1;
+    QString activity;
+
+    bool operator==(const PlacementStateKey& other) const
+    {
+        return screenId == other.screenId && desktop == other.desktop && activity == other.activity;
+    }
+};
+
+inline size_t qHash(const PlacementStateKey& key, size_t seed = 0)
+{
+    return qHashMulti(seed, key.screenId, key.desktop, key.activity);
+}
+
+} // namespace PhosphorEngine
+
+/// std::hash alongside qHash, so the key works in a std:: container too. Needed
+/// where a value is move-only: Qt's containers are implicitly shared and require
+/// copyable values, so anything owning a unique_ptr cannot live in a QHash.
+template<>
+struct std::hash<PhosphorEngine::PlacementStateKey>
+{
+    size_t operator()(const PhosphorEngine::PlacementStateKey& key) const noexcept
+    {
+        return qHash(key);
+    }
+};
+
+namespace PhosphorEngine {
+
+/// Backwards-compatible spelling for autotile's existing sources. The autotile
+/// engine predates the shared base primitives and refers to this triple as
+/// `TilingStateKey`; keep the alias so that source keeps compiling unchanged.
+using TilingStateKey = PlacementStateKey;
+
+enum class SnapIntent {
+    UserInitiated,
+    AutoRestored,
+};
+
+/// Coarse structural classification for the snap-restore consume gate.
+/// Wire/JSON encoding is `int`; `Unknown` is the permissive default.
+enum class WindowKind : int {
+    Unknown = 0,
+    Normal = 1,
+    Transient = 2,
+};
+
+/// Clamp an integer wire value to a valid WindowKind. Unknown wire values
+/// (out-of-range, future enum values from an older daemon) collapse to
+/// `Unknown` rather than producing an undefined enum. The close-capture
+/// consume gate (CloseCaptureContext::windowKind) refuses only when both
+/// sides are concrete and disagree, so `Unknown` is permissive — the
+/// safe-by-default policy. On the restore side the value is carried in the
+/// record for that gate; `SnapEngine::resolveWindowRestore` itself no longer
+/// branches on it. Centralised here so the persistence-layer call sites
+/// (`WindowTrackingAdaptor::windowClosed`, `SnapAdaptor::resolveWindowRestore`,
+/// `WindowPlacement::fromJson`) stay in lockstep when a new kind is added.
+inline WindowKind clampWindowKindFromWire(int wire)
+{
+    switch (wire) {
+    case static_cast<int>(WindowKind::Normal):
+        return WindowKind::Normal;
+    case static_cast<int>(WindowKind::Transient):
+        return WindowKind::Transient;
+    default:
+        return WindowKind::Unknown;
+    }
+}
+
+/// Why a snap restore is being resolved. Replaces the `isOpenPath` bool the
+/// Snap.resolveWindowRestore wire used to carry.
+///
+/// The bool conflated FIVE drivers into "open / not open". The daemon-side gate
+/// that reads it is the cross-screen tile reclaim, which genuinely wants "is
+/// this an open", so it is `== Open` and nothing changed for it. What the bool
+/// could NOT express is the DesktopArrival re-drive. That is the continuation of
+/// an open whose window a RouteToDesktop rule sent to another desktop, so the
+/// effect parked it and re-drives once the desktop is shown. It is not a user
+/// action and not an open of its own: it must be eligible for the reclaim, which
+/// the bool permanently denied it, while retiring no reclaim credit, since the
+/// open pass that preceded it already spent this open's one credit.
+///
+/// A third gate reads it on the EFFECT side: the open-path setFrameGeometry
+/// shadow seed, which is what lets the daemon translate a bare RouteToScreen for
+/// a never-moved window. That one is `== Open` too, which is why the two
+/// deferred-routing flush call sites must stay Open — give them any other reason
+/// and RouteToScreen silently stops working for freshly flushed windows.
+enum class RestoreReason : int {
+    Open = 0, ///< a window OPEN: session restore, deferred-routing flush
+    Unminimize = 1, ///< unminimize of a window orphaned by a daemon restart
+    PendingSweep = 2, ///< the pending-restores sweep, once the daemon is ready
+    DesktopArrival = 3, ///< re-drive after the daemon moved the window to another desktop
+    DaemonRestartSweep = 4, ///< the bring-up stacking-restore sweep
+};
+
+/// Clamp an integer wire value to a valid RestoreReason. Mirrors
+/// clampWindowKindFromWire: an out-of-range value collapses to `Open`.
+///
+/// Note that Open is the most PERMISSIVE value, not the safest one — it is the
+/// only reason that grants both gates. It is chosen anyway because it is the
+/// default the effect's own signature carries, so an unrecognised value behaves
+/// like a caller that named nothing, which is what every pre-existing call site
+/// meant. Treating a garbled value as a non-open driver would instead silently
+/// suppress a genuine restore, and a silently skipped restore is far harder to
+/// notice than one that ran.
+inline RestoreReason clampRestoreReasonFromWire(int wire)
+{
+    switch (wire) {
+    case static_cast<int>(RestoreReason::Unminimize):
+        return RestoreReason::Unminimize;
+    case static_cast<int>(RestoreReason::PendingSweep):
+        return RestoreReason::PendingSweep;
+    case static_cast<int>(RestoreReason::DesktopArrival):
+        return RestoreReason::DesktopArrival;
+    case static_cast<int>(RestoreReason::DaemonRestartSweep):
+        return RestoreReason::DaemonRestartSweep;
+    default:
+        return RestoreReason::Open;
+    }
+}
+
+struct ResnapEntry
+{
+    QString windowId;
+    int zonePosition = 0;
+    QString screenId;
+    int virtualDesktop = 0;
+};
+
+struct PendingRestore
+{
+    QStringList zoneIds;
+    QString screenId;
+    int virtualDesktop = 0;
+    QString layoutId;
+    QList<int> zoneNumbers;
+    /// Closing window's kind; the consume gate refuses when both sides are concrete and disagree.
+    WindowKind windowKind = WindowKind::Unknown;
+};
+
+struct SnapResult
+{
+    bool shouldSnap = false;
+    QRect geometry;
+    QString zoneId;
+    QStringList zoneIds;
+    QString screenId;
+    /// Set (with shouldSnap false) when snap's resolve stood down because the
+    /// record homes the window TILED on another engine's screen — the signal
+    /// for the SnapAdaptor to offer the window to the tiling engines'
+    /// claimCrossScreenReopen, and for nothing else. Distinguished from a
+    /// plain no-snap so the reclaim runs ONLY on this verdict: an exclusion
+    /// refusal, a disabled context, or an ordinary no-match must not hand
+    /// the window to a reclaim the user's rules or gates already vetoed.
+    bool deferredToTilingEngine = false;
+    /// Target virtual desktop the snap should be committed in (1-based). 0 means
+    /// "the window's current desktop" — the historical behaviour. Set non-zero only
+    /// by a placement rule that also routes the window to a desktop (RouteToDesktop),
+    /// so the zone assignment is recorded on the desktop the window ends up on, not
+    /// the one it momentarily opened on.
+    int virtualDesktop = 0;
+
+    bool isValid() const
+    {
+        return shouldSnap && geometry.isValid() && !zoneId.isEmpty();
+    }
+
+    static SnapResult noSnap()
+    {
+        // Value-initialize so every field takes its in-class default; a
+        // positional initializer here would silently stop covering fields
+        // added to the struct later.
+        return SnapResult{};
+    }
+};
+
+struct UnfloatResult
+{
+    bool found = false;
+    QStringList zoneIds;
+    QRect geometry;
+    QString screenId;
+};
+
+struct ZoneAssignmentEntry
+{
+    QString windowId;
+    QString sourceZoneId;
+    QString targetZoneId;
+    QStringList targetZoneIds;
+    QRect targetGeometry;
+    QString targetScreenId;
+    /// Virtual desktop to record the assignment on (1-based). 0 means "the
+    /// window's current desktop" — the historical behaviour. Resnap producers
+    /// stamp the window's recorded desktop here so a batch commit preserves it
+    /// instead of re-stamping whatever desktop is currently active (which
+    /// corrupts off-desktop windows caught in a cross-desktop batch).
+    int virtualDesktop = 0;
+};
+
+enum class StickyWindowHandling {
+    TreatAsNormal = 0,
+    RestoreOnly = 1,
+    IgnoreAll = 2
+};
+
+/// Answers whether a window is on all desktops. The sticky-pin pass takes it
+/// from the caller rather than reading a tracker, so an engine needs no
+/// window-tracking dependency to maintain its pins.
+using StickyPredicate = std::function<bool(const QString&)>;
+
+/// The contexts a window occupies, as the per-desktop membership pass reads
+/// them: which desktops (x11 numbering, the numbering the state keys use) and
+/// which activity.
+///
+/// `known` separates "on every desktop" from "the registry has not stamped a
+/// desktop yet". The two used to share one spelling (an empty set), and
+/// reading an unknown desktop as sticky adopted a window into every desktop
+/// the user visited. An unknown span adopts nothing and releases nothing.
+struct DesktopSpan
+{
+    bool known = false; ///< false: no desktop information yet — leave memberships alone
+    bool sticky = false; ///< on every desktop
+    QSet<int> desktops; ///< when !sticky: the desktops it occupies (a span such as {1,2})
+    QString activity; ///< empty: every activity, or unknown
+
+    /// Whether the span reaches desktop @p desktop.
+    bool coversDesktop(int desktop) const
+    {
+        return known && (sticky || desktops.contains(desktop));
+    }
+    /// Whether the span reaches activity @p other. An empty activity on either
+    /// side means "every activity" and never mismatches.
+    bool coversActivity(const QString& other) const
+    {
+        return activity.isEmpty() || other.isEmpty() || activity == other;
+    }
+    /// Whether the span reaches the context @p key names.
+    bool coversKey(const PlacementStateKey& key) const
+    {
+        return coversDesktop(key.desktop) && coversActivity(key.activity);
+    }
+};
+
+/// Answers a window's DesktopSpan. The same query drives per-desktop
+/// membership for spans and for sticky windows without either being a special
+/// case.
+using DesktopSpanQuery = std::function<DesktopSpan(const QString&)>;
+
+/// What a membership pass did, so the caller can drive the bookkeeping the
+/// engines cannot reach: the placement re-capture and the effect's per-window
+/// zone mirror for a snap release, and the adaptor-level untrack for a window
+/// that holds no context at all any more.
+struct MembershipReconcileResult
+{
+    /// (windowId, key) memberships taken back because the span stopped
+    /// covering them.
+    QList<std::pair<QString, PlacementStateKey>> released;
+    /// (windowId, key) memberships granted.
+    QList<std::pair<QString, PlacementStateKey>> adopted;
+
+    bool isEmpty() const
+    {
+        return released.isEmpty() && adopted.isEmpty();
+    }
+};
+
+/// Which half of the sticky-screen pin pass to run. The halves resolve a
+/// screen's context key against OPPOSITE sides of a context change, so they
+/// cannot share a call site.
+///
+/// Acquire runs BEFORE the context moves: it decides whether to pin from the
+/// state under the key the screen resolves to now. Release runs AFTER: it
+/// migrates the pinned state onto the key the screen resolves to with the pin
+/// gone. Run Release early and that key still names the OUTGOING desktop, so
+/// the migration lands on the strip the user is leaving and force-releases
+/// every window it held. The pin is what keeps the split safe — while it is
+/// held the key resolves to the pinned desktop from either side.
+enum class StickyPinPhase {
+    Acquire,
+    Release
+};
+
+inline constexpr QLatin1StringView RestoreSentinel("__restore__");
+
+} // namespace PhosphorEngine

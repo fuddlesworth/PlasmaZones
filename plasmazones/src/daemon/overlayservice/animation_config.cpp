@@ -1,0 +1,509 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+/**
+ * @file animation_config.cpp
+ * @brief Per-role SurfaceAnimator config builders + animator wireup.
+ *
+ * Owns:
+ *   - resolveShaderLeg (tree → resolved leg, the build*Config consumer) /
+ *     resolveShaderEffect (debug-log only) / shaderParametersFor
+ *     (resolved leg → per-event parameter overrides)
+ *   - build*Config factories (one per overlay role: Osd, LayoutPicker,
+ *     ZoneSelector, SnapAssist, Cheatsheet), plus buildDefaultConfig for
+ *     everything else. Each documents the visual shape it encodes.
+ *   - OverlayService::setupSurfaceAnimator - animator construction +
+ *     initial config registration
+ *   - OverlayService::applyShaderProfilesToAnimator - per-role re-
+ *     registration on shader-tree changes (settings-edit live reload)
+ */
+
+#include "internal.h"
+#include "daemon/overlayservice.h"
+#include "phosphor_roles.h"
+
+#include <PhosphorAnimation/PhosphorProfileRegistry.h>
+#include <PhosphorAnimation/ProfilePaths.h>
+#include <PhosphorAnimation/ShaderProfile.h>
+#include <PhosphorAnimation/ShaderProfileTree.h>
+#include <PhosphorAnimation/SurfaceAnimator.h>
+#include <PhosphorShaders/ShaderPresetRegistry.h>
+
+#include <PhosphorOverlay/ShellHost.h>
+
+namespace PlasmaZones {
+
+namespace {
+
+// ── Per-role Config builders ───────────────────────────────────────────
+// One factory per overlay role so adding/tweaking a 6th overlay touches
+// exactly one named function rather than appending to a 100-line
+// setupSurfaceAnimator. Each builder documents the visual shape it
+// encodes; setupSurfaceAnimator just wires the builder output to the
+// matching PRole.
+//
+// **Surface-family separation policy.** Profile paths are partitioned by
+// surface family so each overlay tunes independently:
+//
+//   - **OSD family (`osd.*`)**: genuine OSDs only. Driven by the
+//     passive-shell OSD slot (LayoutOsd and NavigationOsd content). A
+//     JSON edit to `osd.hide` affects OSDs and ONLY OSDs.
+//   - **Popup family (`popup.<surface>.*`)** - non-OSD overlay
+//     surfaces. Each gets its own leaf paths under
+//     `popup.<surface>` per surface's needs:
+//       • `popup.layoutPicker.{show, hide}` (opacity legs; the show
+//         leg also scales, and the hide-scale couples to `.hide`)
+//       • `popup.zoneSelector.{show, hide}` (opacity-only)
+//       • `popup.snapAssist.{show, hide}` (opacity-only)
+//       • `popup.cheatsheet.{show, hide}` (opacity-only)
+//     A JSON edit to `popup.layoutPicker.hide` affects ONLY the
+//     layout picker; siblings are unaffected.
+//
+// The shipped tree carries zero bundled per-leaf profile JSONs - every
+// profile is sourced from the Settings UI's per-node overrides via
+// `PhosphorProfileRegistry::registerProfile`, with
+// `resolveWithInheritance()` walking the parent chain so a parent-node
+// edit (e.g. "All Popups → 2000 ms" written to `popup`)
+// propagates to every leaf under it. Unset paths fall through to
+// library defaults (150 ms OutCubic). Per-event overrides come from the
+// `Animations/MotionProfileTree` config key, installed into the registry by
+// `installMotionProfileTree`. The pre-v8 `plasmazones/profiles/<path>.json`
+// files are read once by the v7→v8 migration and never again — nothing
+// watches that directory now, so editing one has no effect.
+//
+// **Within-family scale-leg coupling (intentional, scoped).** Each
+// surface family's hide-leg-scale reuses the surface family's
+// hide-leg-opacity path (e.g. `osd.hide` drives both opacity and scale
+// hide for OSDs). Editing `osd.hide` to add Spring physics affects both
+// legs of the OSD hide. This is the same pattern OSDs and (formerly)
+// LayoutPicker shared - kept INSIDE each surface family but not BETWEEN
+// them, which is the change here. If a future surface needs decoupled
+// opacity/scale tuning, introduce a sibling path
+// (e.g. `popup.layoutPicker.popOut`) and register it on
+// `hideScaleProfile`.
+
+namespace PAL = PhosphorAnimationLayer;
+namespace PAS = PhosphorAnimationShaders;
+
+/// One tree walk per leg, for the build*Config functions below, applying the
+/// built-in per-event default via `resolveShaderWithDefault`. A
+/// default-constructed tree (empty baseline + no overrides) therefore
+/// resolves overlay show/hide paths to their default ("fade") and every
+/// other path to empty ("no shader leg" - motion runs alone). The
+/// setSettings() handler later re-registers configs with the live tree once
+/// settings exist, applying any user overrides on top.
+///
+/// **Source-of-truth note.** The settings UI gates its shader picker on the
+/// paths in `src/core/types/animationshadersupportedpaths.h`. The editable
+/// SSOT is `shaderConsumedLeafEventPaths` there (the leaf list);
+/// `shaderSupportedEventPaths` is DERIVED from it by walking ancestors, so a
+/// new shader-leg surface's leg paths must be appended to
+/// `shaderConsumedLeafEventPaths`, in lockstep with the `resolveShaderLeg`
+/// consumption below, so the settings UI starts surfacing the picker on the
+/// new path.
+///
+/// The build*Config factories need BOTH halves of a leg (the effect id and
+/// the parameter map), and
+/// asking the two path-taking helpers for them resolved the same path twice —
+/// four walks per config, twenty per `applyShaderProfilesToAnimator`, each one
+/// overlay-merging every override up the parent chain. This is not a paint path,
+/// but a settings-edit signal storm multiplies it. Resolving once here also keeps
+/// the `resolveShaderWithDefault` knowledge in ONE place instead of two helpers
+/// that must agree.
+PAS::ShaderProfile resolveShaderLeg(const PAS::ShaderProfileTree& tree,
+                                    const PhosphorShaders::ShaderPresetRegistry* presets, const QString& path)
+{
+    const PAS::ShaderProfile resolved = PAS::resolveShaderWithDefault(tree, path);
+    // AFTER the walk-up, never before it. A node can carry a preset while
+    // inheriting its pack from an ancestor, and the registry keys presets by
+    // (family, packId, presetId) — so flattening per node, before inheritance
+    // has supplied the pack, would look the preset up against an empty pack id
+    // and silently resolve nothing.
+    //
+    // Through the library's own `withPresetsResolved` rather than open-coded here.
+    // This was the same three lines written out again, and they had already drifted
+    // from the library's: the library does not ENGAGE an empty parameter map it had
+    // nothing to put in, because nullopt and engaged-empty are different statements
+    // on that type and one of them blocks inheritance.
+    return presets ? PAS::withPresetsResolved(resolved, *presets) : resolved;
+}
+
+QString resolveShaderEffect(const PAS::ShaderProfileTree& tree, const PhosphorShaders::ShaderPresetRegistry* presets,
+                            const QString& path)
+{
+    // Route through resolveShaderLeg so the `resolveShaderWithDefault`
+    // knowledge genuinely lives in one place (this helper is debug-log-only
+    // today; keeping it a thin forwarder means it cannot drift from the
+    // build*Config resolution).
+    return resolveShaderLeg(tree, presets, path).effectiveEffectId();
+}
+
+/// Extract the per-event parameter overrides from an already-resolved leg
+/// (the caller resolves the tree via resolveShaderLeg). When the resolved
+/// shader is @p path's built-in default AND that default is the fade overlay
+/// pack, and the user left `scaleAmount` unset, seed it from
+/// @p fadeScaleAmount — the surface's prior C++ scale depth
+/// (1 - showScaleFrom on show, 1 - hideScaleTo on hide; 0.0 for opacity-only
+/// surfaces) — so the shader reproduces the surface's existing pop feel. A user
+/// override of the shader (to anything but the default) or of scaleAmount
+/// itself wins. The seed only fires when the overlay default for this path IS
+/// "fade" (checked below): if the overlay default is ever retuned to a
+/// different pack id, the seeding silently stops rather than following the new
+/// default — the `builtinDefault == "fade"` guard is a deliberate scale-seed
+/// that is specific to the fade pack's scaleAmount parameter, not a generic
+/// contract that tracks whatever the default becomes.
+QVariantMap shaderParametersFor(const PAS::ShaderProfile& resolved, const QString& path, double fadeScaleAmount)
+{
+    namespace PP = PhosphorAnimation::ProfilePaths;
+    QVariantMap params = resolved.effectiveParameters();
+    const QString builtinDefault = PP::defaultShaderEffectIdForPath(path);
+    if (builtinDefault == QLatin1String("fade") && resolved.effectiveEffectId() == builtinDefault
+        && !params.contains(QLatin1String("scaleAmount"))) {
+        // Clamped to the fade pack's declared parameter range
+        // (data/animations/fade/metadata.json: scaleAmount min 0.0, max 0.3):
+        // the surface scale envelopes this value derives from are tuned
+        // independently of the pack metadata, and nothing else on this
+        // injection path range-checks, so retuning an envelope past 0.7 would
+        // otherwise emit an out-of-range parameter silently.
+        constexpr double kFadeScaleAmountMax = 0.3;
+        params.insert(QStringLiteral("scaleAmount"), qBound(0.0, fadeScaleAmount, kFadeScaleAmountMax));
+    }
+    return params;
+}
+
+/// Default config - empty. Surfaces that route through the animator
+/// without a registered config fall back to AnimatedValue's library
+/// default (150 ms OutCubic), same as a missing-profile lookup.
+///
+/// Load-bearing, not documentation, for ONE surface: ZoneOverlay has no
+/// per-role config and genuinely routes through the animator, so this default is
+/// the motion it gets. The registration site below names it.
+PAL::SurfaceAnimator::Config buildDefaultConfig()
+{
+    return PAL::SurfaceAnimator::Config{};
+}
+
+/// LayoutOsd / NavigationOsd: identical fade-and-pop shape. Shader leg
+/// resolves osd.show / osd.hide from the user's tree so OSDs can fly in
+/// (slide), dissolve, etc. independently of zone or popup events.
+///
+/// **Genuine-OSD surface family.** All four leg paths live under
+/// `osd.*`. A JSON edit to `osd.hide` affects OSDs and ONLY OSDs -
+/// LayoutPicker / ZoneSelector / SnapAssist live in the
+/// `popup.*` family.
+PAL::SurfaceAnimator::Config buildOsdConfig(const PAS::ShaderProfileTree& tree,
+                                            const PhosphorShaders::ShaderPresetRegistry* presets)
+{
+    namespace PP = PhosphorAnimation::ProfilePaths;
+    // Scale envelope, shared by the C++ scale-leg fallback (showScaleFrom /
+    // hideScaleTo) and the fade shader's scaleAmount seed (1 - the scale value),
+    // so retuning the envelope keeps both in lockstep.
+    constexpr double kShowScaleFrom = 0.92;
+    constexpr double kHideScaleTo = 0.96;
+    // ONE resolve per leg, read twice below.
+    const PAS::ShaderProfile showLeg = resolveShaderLeg(tree, presets, PP::OsdShow);
+    const PAS::ShaderProfile hideLeg = resolveShaderLeg(tree, presets, PP::OsdHide);
+    return PAL::SurfaceAnimator::Config{
+        .showProfile = PP::OsdShow,
+        .hideProfile = PP::OsdHide,
+        .showScaleProfile = PP::OsdShow,
+        .hideScaleProfile = PP::OsdHide,
+        .showScaleFrom = kShowScaleFrom,
+        .hideScaleTo = kHideScaleTo,
+        .showShaderEffectId = showLeg.effectiveEffectId(),
+        .hideShaderEffectId = hideLeg.effectiveEffectId(),
+        .showShaderProfile = PP::OsdShow,
+        .hideShaderProfile = PP::OsdHide,
+        .showShaderParameters = shaderParametersFor(showLeg, PP::OsdShow, 1.0 - kShowScaleFrom),
+        .hideShaderParameters = shaderParametersFor(hideLeg, PP::OsdHide, 1.0 - kHideScaleTo)};
+}
+
+/// LayoutPicker: OSD-style fade-and-pop shape with a softer scale
+/// envelope (0.94→1 vs the OSD's 0.92→1) since the picker is a larger
+/// surface.
+///
+/// **Popup surface family - dedicated path partition.** Every leg
+/// resolves under `popup.layoutPicker.*`, NOT under `osd.*`. A
+/// Settings-UI edit at `popup.layoutPicker.hide` affects ONLY
+/// the layout picker; OSD timings stay independent. With no override
+/// set, `resolveWithInheritance` walks up to `popup` and finally
+/// to library defaults (150 ms OutCubic).
+///
+/// Shader legs key on the same `.show` / `.hide` leaves so a user can
+/// dissolve in and slide out (or any asymmetric pair). Both leaves walk
+/// up to `popup.layoutPicker` and on to `popup`, so a user
+/// who wants symmetric treatment overrides the surface path once and
+/// skips the leaves.
+PAL::SurfaceAnimator::Config buildLayoutPickerConfig(const PAS::ShaderProfileTree& tree,
+                                                     const PhosphorShaders::ShaderPresetRegistry* presets)
+{
+    namespace PP = PhosphorAnimation::ProfilePaths;
+    // Scale envelope (softer than the OSD's 0.92→1 since the picker is larger),
+    // shared by the C++ scale-leg fallback and the fade scaleAmount seed.
+    constexpr double kShowScaleFrom = 0.94;
+    constexpr double kHideScaleTo = 0.97;
+    // ONE resolve per leg, read twice below.
+    const PAS::ShaderProfile showLeg = resolveShaderLeg(tree, presets, PP::PopupLayoutPickerShow);
+    const PAS::ShaderProfile hideLeg = resolveShaderLeg(tree, presets, PP::PopupLayoutPickerHide);
+    return PAL::SurfaceAnimator::Config{
+        .showProfile = PP::PopupLayoutPickerShow,
+        .hideProfile = PP::PopupLayoutPickerHide,
+        .showScaleProfile = PP::PopupLayoutPickerShow,
+        .hideScaleProfile = PP::PopupLayoutPickerHide,
+        .showScaleFrom = kShowScaleFrom,
+        .hideScaleTo = kHideScaleTo,
+        .showShaderEffectId = showLeg.effectiveEffectId(),
+        .hideShaderEffectId = hideLeg.effectiveEffectId(),
+        .showShaderProfile = PP::PopupLayoutPickerShow,
+        .hideShaderProfile = PP::PopupLayoutPickerHide,
+        .showShaderParameters = shaderParametersFor(showLeg, PP::PopupLayoutPickerShow, 1.0 - kShowScaleFrom),
+        .hideShaderParameters = shaderParametersFor(hideLeg, PP::PopupLayoutPickerHide, 1.0 - kHideScaleTo)};
+}
+
+/// Cheatsheet: fade+scale twin of the layout picker. Every leg resolves
+/// under `popup.cheatsheet.*` so a Settings-UI edit affects only the
+/// cheatsheet; with no override set, resolution walks up to `popup` and
+/// finally library defaults. The scale envelope matches the picker's
+/// (large centered card, softer than the OSD pop).
+PAL::SurfaceAnimator::Config buildCheatsheetConfig(const PAS::ShaderProfileTree& tree,
+                                                   const PhosphorShaders::ShaderPresetRegistry* presets)
+{
+    namespace PP = PhosphorAnimation::ProfilePaths;
+    constexpr double kShowScaleFrom = 0.94;
+    constexpr double kHideScaleTo = 0.97;
+    // ONE resolve per leg, read twice below.
+    const PAS::ShaderProfile showLeg = resolveShaderLeg(tree, presets, PP::PopupCheatsheetShow);
+    const PAS::ShaderProfile hideLeg = resolveShaderLeg(tree, presets, PP::PopupCheatsheetHide);
+    return PAL::SurfaceAnimator::Config{
+        .showProfile = PP::PopupCheatsheetShow,
+        .hideProfile = PP::PopupCheatsheetHide,
+        .showScaleProfile = PP::PopupCheatsheetShow,
+        .hideScaleProfile = PP::PopupCheatsheetHide,
+        .showScaleFrom = kShowScaleFrom,
+        .hideScaleTo = kHideScaleTo,
+        .showShaderEffectId = showLeg.effectiveEffectId(),
+        .hideShaderEffectId = hideLeg.effectiveEffectId(),
+        .showShaderProfile = PP::PopupCheatsheetShow,
+        .hideShaderProfile = PP::PopupCheatsheetHide,
+        .showShaderParameters = shaderParametersFor(showLeg, PP::PopupCheatsheetShow, 1.0 - kShowScaleFrom),
+        .hideShaderParameters = shaderParametersFor(hideLeg, PP::PopupCheatsheetHide, 1.0 - kHideScaleTo)};
+}
+
+/// ZoneSelector: opacity-only show/hide. `keepMappedOnHide=true` so the
+/// hide animation actually paints.
+///
+/// **Popup surface family - dedicated path partition.** Every leg
+/// resolves under `popup.zoneSelector.*`, NOT under the shared
+/// `popup` baseline or the generic `widget.fadeOut` it previously
+/// borrowed. A Settings-UI edit at `popup.zoneSelector.hide`
+/// affects ONLY the zone selector. With no override set,
+/// `resolveWithInheritance` walks up to `popup` then library
+/// defaults.
+PAL::SurfaceAnimator::Config buildZoneSelectorConfig(const PAS::ShaderProfileTree& tree,
+                                                     const PhosphorShaders::ShaderPresetRegistry* presets)
+{
+    namespace PP = PhosphorAnimation::ProfilePaths;
+    // ONE resolve per leg, read twice below.
+    const PAS::ShaderProfile showLeg = resolveShaderLeg(tree, presets, PP::PopupZoneSelectorShow);
+    const PAS::ShaderProfile hideLeg = resolveShaderLeg(tree, presets, PP::PopupZoneSelectorHide);
+    return PAL::SurfaceAnimator::Config{
+        .showProfile = PP::PopupZoneSelectorShow,
+        .hideProfile = PP::PopupZoneSelectorHide,
+        .showScaleProfile = {},
+        .hideScaleProfile = {},
+        .showShaderEffectId = showLeg.effectiveEffectId(),
+        .hideShaderEffectId = hideLeg.effectiveEffectId(),
+        .showShaderProfile = PP::PopupZoneSelectorShow,
+        .hideShaderProfile = PP::PopupZoneSelectorHide,
+        // Opacity-only surface (no scale leg) → fade scaleAmount 0.0 (pure fade).
+        .showShaderParameters = shaderParametersFor(showLeg, PP::PopupZoneSelectorShow, 0.0),
+        .hideShaderParameters = shaderParametersFor(hideLeg, PP::PopupZoneSelectorHide, 0.0)};
+}
+
+/// SnapAssist: full show/hide pair. Pre-unified-shell, snap-assist
+/// owned its own wl_surface and tore it down on hide (~Surface
+/// synchronously cancelling any in-flight beginHide), so the hide leg
+/// never painted and `popup.snapAssist.hide` was intentionally absent
+/// from the taxonomy. After the unified-shell migration the surface
+/// stays mapped (keepMappedOnHide=true on the shared shell wl_surface)
+/// and snap-assist's hide runs a normal SurfaceAnimator::beginHide on
+/// the slot - so the hide leg paints frames and a per-event shader
+/// assignment is now meaningful.
+///
+/// **Inheritance.** ShaderProfileTree::resolve walks parent paths, so
+/// within the popup family a user setting `popup` to dissolve cascades
+/// to LayoutPicker and ZoneSelector (both legs) and to SnapAssist's
+/// show AND hide legs via the chain `popup.<surface>.<leg>` →
+/// `popup.<surface>` → `popup` → `global`. The genuine OSD
+/// (`osd.show`/`osd.hide`) is in a separate subtree and is NOT touched
+/// by `popup` overrides regardless.
+PAL::SurfaceAnimator::Config buildSnapAssistConfig(const PAS::ShaderProfileTree& tree,
+                                                   const PhosphorShaders::ShaderPresetRegistry* presets)
+{
+    namespace PP = PhosphorAnimation::ProfilePaths;
+    // ONE resolve per leg, read twice below.
+    const PAS::ShaderProfile showLeg = resolveShaderLeg(tree, presets, PP::PopupSnapAssistShow);
+    const PAS::ShaderProfile hideLeg = resolveShaderLeg(tree, presets, PP::PopupSnapAssistHide);
+    return PAL::SurfaceAnimator::Config{
+        // Popup surface family - dedicated path. A user editing
+        // `popup.snapAssist.show.json` affects ONLY the snap
+        // assist; siblings are unaffected. Built-in default mirrors the
+        // prior `popup` (150 ms widget-out) so behaviour is
+        // preserved.
+        .showProfile = PP::PopupSnapAssistShow,
+        .hideProfile = PP::PopupSnapAssistHide,
+        .showScaleProfile = {},
+        .hideScaleProfile = {},
+        .showShaderEffectId = showLeg.effectiveEffectId(),
+        .hideShaderEffectId = hideLeg.effectiveEffectId(),
+        .showShaderProfile = PP::PopupSnapAssistShow,
+        .hideShaderProfile = PP::PopupSnapAssistHide,
+        // Opacity-only surface (no scale leg) → fade scaleAmount 0.0 (pure fade).
+        .showShaderParameters = shaderParametersFor(showLeg, PP::PopupSnapAssistShow, 0.0),
+        .hideShaderParameters = shaderParametersFor(hideLeg, PP::PopupSnapAssistHide, 0.0)};
+}
+
+} // namespace
+
+void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegistry& profileRegistry)
+{
+    namespace PAL = PhosphorAnimationLayer;
+
+    // THE FUNCTION'S PRECONDITION, checked before the first reference to the member
+    // rather than part-way down. It used to sit after the `setSurfaceAnimator(nullptr)`
+    // drop below — harmless, because that use is itself null-guarded, but a guard
+    // documented as a precondition should precede every use rather than most of them.
+    //
+    // Release-build fatal (qFatal aborts the process) on a null host, so a future
+    // caller that reorders the ctor and reaches this point with m_shellHost still
+    // nullptr exits with a clear diagnostic instead of segfaulting on the next
+    // `m_shellHost->`. A null-deref here previously caused a systemd-respawn loop in
+    // production, because applyShaderProfilesToAnimator's chain led straight into
+    // m_shellHost->registerConfigForRole before the host was up.
+    if (!m_shellHost) {
+        qFatal(
+            "OverlayService::setupSurfaceAnimator: the shell host must be constructed first "
+            "(applyShaderProfilesToAnimator dereferences m_shellHost on every call, and a host "
+            "without an animator cannot run hideSlot)");
+    }
+
+    // phosphor_roles.h defines eight roles. PassiveShell is not counted here:
+    // it is the HOST surface, and its doc records that per-content motion is
+    // resolved through the role-override beginShow / beginHide overloads, so
+    // it never carries an animation config of its own. Of the seven per-content
+    // roles that remain, applyShaderProfilesToAnimator registers five (Osd,
+    // LayoutPicker, ZoneSelector, SnapAssist, Cheatsheet) and these two do
+    // NOT have a per-role config, so they fall back to the empty default (no
+    // shader effect, the library-default 150 ms OutCubic motion):
+    //   - ZoneOverlay (zone overlay rendering): routes through the
+    //     animator (overlay.cpp passes PhosphorRoles::ZoneOverlay to
+    //     beginShow/beginHide on the passive-shell slot) but the default
+    //     motion is the intended visual; no shader leg is configured.
+    //   - ScrollDropIndicator (drag re-insert drop target): the
+    //     animation-profile taxonomy defines no domain for it, so the library
+    //     default is the intended motion for both legs, and the role doc
+    //     points back at this list.
+    // Drop the host's borrowed pointer before the assignment below destroys
+    // the animator it points at. Assigning through the unique_ptr would leave
+    // ShellHost::m_surfaceAnimator dangling for the span between the two
+    // statements. Nothing calls into the host there today, and this runs once
+    // from the ctor, but the window costs nothing to close.
+    if (m_shellHost) {
+        m_shellHost->setSurfaceAnimator(nullptr);
+    }
+    m_surfaceAnimator = std::make_unique<PAL::SurfaceAnimator>(profileRegistry, buildDefaultConfig());
+    if (m_animShaderRegistry) {
+        m_surfaceAnimator->setAnimationShaderRegistry(m_animShaderRegistry);
+    }
+    // Wire the new animator into the ShellHost BEFORE
+    // applyShaderProfilesToAnimator runs, since that function routes
+    // every per-role config write through ShellHost::registerConfigForRole
+    // (which is a no-op without an animator). The ShellHost is
+    // constructed earlier in the OverlayService ctor, and the precondition
+    // guard at the top of this function has already established it.
+    m_shellHost->setSurfaceAnimator(m_surfaceAnimator.get());
+    // Lifecycle invariant: `setupSurfaceAnimator` runs from the ctor
+    // before `setSettings` is ever called, so `m_settings` is null here
+    // and the animator stays at its default-enabled state until
+    // `setSettings` wires the live `animationsEnabled` value. If a
+    // future caller re-runs `setupSurfaceAnimator` after settings have
+    // been wired, route the gate through `setSettings` rather than
+    // re-introducing a defensive branch here.
+
+    // Profile names are the same paths PhosphorMotionAnimation in QML
+    // uses today, so the live-reload path (drop a JSON, see it apply on
+    // next show) automatically applies to the C++ side too.
+    //
+    // Post-shell-migration: the wl_surface that hosts OSD content is the
+    // unified PassiveShell (one per screen, scoped
+    // `plasmazones-passive-shell-{screenId}-{gen}`); OSD content rides
+    // a slot inside it via `PassiveOverlayShell.qml`'s Loader. The
+    // animator config registered here is keyed on PhosphorRoles::Osd's scope
+    // prefix (`plasmazones-osd`). Lookups go through the role-override
+    // path on beginShow / beginHide (osd.cpp passes PhosphorRoles::Osd as the
+    // override role), not through the longest-prefix surface lookup, so
+    // the passive-shell surface scope does not collide with this config.
+    //
+    // Initial registration runs with an empty tree - m_settings is wired
+    // later via setSettings(). A default-constructed tree resolves each
+    // path to its built-in default (overlay show/hide → "fade"; paths with
+    // no default → motion-only), so this pass installs the default shader
+    // configs. Once settings exist, setSettings calls
+    // applyShaderProfilesToAnimator again with the live tree (applying any
+    // user overrides), and connects shaderProfileTreeChanged for
+    // live-reload. This keeps the constructor's invariant ("animator is
+    // ready before any Surface is created") while deferring the live-tree
+    // wiring to the moment settings are available.
+    applyShaderProfilesToAnimator(PAS::ShaderProfileTree{});
+}
+
+void OverlayService::applyShaderProfilesToAnimator(const PAS::ShaderProfileTree& tree)
+{
+    // May be null (no preset registry injected, or a test double). Every leg
+    // below then resolves to its own parameters, which is what an assignment
+    // carrying no preset already does.
+    const PhosphorShaders::ShaderPresetRegistry* presets = m_presetRegistry;
+    // The m_shellHost check backs up the setupSurfaceAnimator qFatal for the
+    // one lifetime window where its invariant no longer holds: ~OverlayService
+    // resets m_shellHost while the shaderProfileTreeChanged live-reload
+    // connection stays armed until ~QObject, so a delivery in that window
+    // would dereference a null host below.
+    if (!m_surfaceAnimator || !m_shellHost) {
+        return;
+    }
+    // Diagnostic log gated on lcOverlay().isDebugEnabled() - qCDebug
+    // gates the OUTPUT but Qt evaluates argument expressions
+    // unconditionally, so the ten extra resolveShaderEffect calls
+    // would run even when debug logging is disabled. Each
+    // ShaderProfileTree::resolve walks the parent chain and overlay-
+    // merges every override; on a typical settings-edit signal storm
+    // this is wasted work the explicit gate eliminates.
+    if (lcOverlay().isDebugEnabled()) {
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        qCDebug(lcOverlay).nospace()
+            << "applyShaderProfilesToAnimator: overrides=" << tree.overriddenPaths().size()
+            << " resolved: osd.show=" << resolveShaderEffect(tree, presets, PP::OsdShow)
+            << " osd.hide=" << resolveShaderEffect(tree, presets, PP::OsdHide)
+            << " zoneSelector.show=" << resolveShaderEffect(tree, presets, PP::PopupZoneSelectorShow)
+            << " zoneSelector.hide=" << resolveShaderEffect(tree, presets, PP::PopupZoneSelectorHide)
+            << " layoutPicker.show=" << resolveShaderEffect(tree, presets, PP::PopupLayoutPickerShow)
+            << " layoutPicker.hide=" << resolveShaderEffect(tree, presets, PP::PopupLayoutPickerHide)
+            << " snapAssist.show=" << resolveShaderEffect(tree, presets, PP::PopupSnapAssistShow)
+            << " snapAssist.hide=" << resolveShaderEffect(tree, presets, PP::PopupSnapAssistHide)
+            << " cheatsheet.show=" << resolveShaderEffect(tree, presets, PP::PopupCheatsheetShow)
+            << " cheatsheet.hide=" << resolveShaderEffect(tree, presets, PP::PopupCheatsheetHide);
+    }
+    // Route through the lib so animator-config writes share the same
+    // host that owns slot lifecycle (3.x) and surface lifecycle (2.x).
+    // The lib is now the sole SurfaceAnimator client for both slot
+    // hides and per-role config registration; the daemon retains the
+    // SHAPE of each config (curves, durations, shader paths) via the
+    // build*Config helpers above.
+    m_shellHost->registerConfigForRole(PhosphorRoles::Osd, buildOsdConfig(tree, presets));
+    m_shellHost->registerConfigForRole(PhosphorRoles::LayoutPicker, buildLayoutPickerConfig(tree, presets));
+    m_shellHost->registerConfigForRole(PhosphorRoles::ZoneSelector, buildZoneSelectorConfig(tree, presets));
+    m_shellHost->registerConfigForRole(PhosphorRoles::SnapAssist, buildSnapAssistConfig(tree, presets));
+    m_shellHost->registerConfigForRole(PhosphorRoles::Cheatsheet, buildCheatsheetConfig(tree, presets));
+}
+
+} // namespace PlasmaZones

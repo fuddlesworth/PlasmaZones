@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'cpp'
+layer: 'application'
+stack: 'systems'
+tags: ['cmake']
+
+# phosphor-shell/tests reads plasmazones/data/surface at runtime
+# (PZ_BUNDLED_SURFACE_DIR, test_shell_chrome), and `dependsOn` does NOT cover
+# that: affectedness does not propagate from a dependency to its dependent, so
+# editing a bundled surface pack would mark only plasmazones affected and this
+# tier's tests would not run under `--affected`. The workspace-relative test
+# input below is what closes it, the same way phosphor-libs/moon.yml does for
+# data/animations and data/pointer.
+dependsOn:
+  - 'phosphor-libs'
+  - 'phosphor-shell-libs'
+
+project:
+  name: 'Phosphor shell'
+  description: 'The phosphor-shell binary, the phosphorctl IPC CLI, the bundled shell QML tree and the shell unit tests.'
+
+tasks:
+  test:
+    inputs:
+      - '/plasmazones/data/surface/**/*'

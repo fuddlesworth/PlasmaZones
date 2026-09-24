@@ -1,0 +1,554 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "internal.h"
+#include "daemon/overlayservice.h"
+#include "qml_property_names.h"
+#include <PhosphorAudio/IAudioSpectrumProvider.h>
+#include <PhosphorAnimation/SurfaceAnimator.h>
+#include <PhosphorRendering/ShaderCompiler.h>
+#include "core/types/cavaoptions.h"
+#include "core/platform/logging.h"
+#include <PhosphorTiles/ITileAlgorithmRegistry.h>
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/IZoneLayoutRegistry.h>
+#include "core/interfaces/shaderregistry.h"
+#include "core/utils/utils.h"
+#include <QQuickWindow>
+#include <QScreen>
+#include <QTimer>
+
+namespace PlasmaZones {
+
+void OverlayService::setSettings(ISettings* settings)
+{
+    if (m_settings != settings) {
+        // Single-sweep disconnect of every (m_settings → this) connection,
+        // fail-safe vs. future connects that forget a paired disconnect.
+        if (m_settings) {
+            disconnect(m_settings, nullptr, this, nullptr);
+        }
+        // The shader-registry connection (different sender, see
+        // m_shaderRegistry below) is NOT covered by the sweep above and
+        // is tracked separately via m_shadersChangedConnection so a
+        // future second shadersChanged slot on this receiver can't be
+        // accidentally severed by a (src, sig, this, nullptr) call.
+        if (m_shadersChangedConnection) {
+            QObject::disconnect(m_shadersChangedConnection);
+            m_shadersChangedConnection = {};
+        }
+
+        m_settings = settings;
+        // Seed the cached overlay shader tree for the new source (cleared
+        // when settings detach so no stale assignments survive).
+        m_overlayShaderTree = m_settings ? m_settings->overlayShaderTree() : OverlayShaderTree{};
+
+        // Connect to new settings signals
+        if (m_settings) {
+            auto refreshZoneSelectors = [this]() {
+                // Hidden selectors are skipped, matching refreshVisibleWindows:
+                // showZoneSelector() runs updateZoneSelectorWindow itself before
+                // showing, so a hidden selector needs no live re-push and the
+                // catch-all would otherwise pay ~20 property lookups per screen
+                // on every settings keystroke.
+                if (!m_zoneSelectorVisible) {
+                    return;
+                }
+                for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+                    updateZoneSelectorWindow(it.key());
+                }
+            };
+            // updateZoneSelectorWindow reads ~20 settings (zone padding, border
+            // width / radius, font, color, plus per-screen resolved
+            // ZoneSelectorConfig fields) and pushes them as QML properties.
+            // Connecting to ~20 specific *Changed signals would track the
+            // dependency graph manually with no functional difference: QML
+            // property writes short-circuit on equal value, so the worst case
+            // for the catch-all is N redundant property lookups across the
+            // selector windows - measured in microseconds. The catch-all is
+            // the maintenance-cheap choice; specific connections below cover
+            // the cases where the response is structurally different
+            // (overlay-window recreation, audio-spectrum start/stop, shader
+            // tree apply).
+            connect(m_settings, &ISettings::settingsChanged, this, refreshZoneSelectors);
+
+            // Recreate overlay windows when the overlay display mode changes
+            // (e.g. compact mode can't use shader overlays). Connected to the
+            // specific signal instead of settingsChanged to avoid redundant work.
+            connect(m_settings, &ISettings::overlayDisplayModeChanged, this,
+                    &OverlayService::recreateOverlayWindowsOnTypeMismatch);
+
+            connect(m_settings, &ISettings::enableAudioVisualizerChanged, this, &OverlayService::syncCavaState);
+
+            connect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, &OverlayService::syncCavaState);
+            // Frame rate drives BOTH the CAVA capture rate and the shader
+            // render loop's interval. syncCavaState covers the first; the
+            // second is applied only inside startShaderAnimation, so a live
+            // overlay must restart the loop or the new rate silently waits for
+            // the next stop/start cycle. Guard on isActive(): starting the
+            // loop on a hidden or warm-idled overlay would undo the quiesce
+            // (startShaderAnimation also re-pushes the rate into a running
+            // CAVA, so ordering after syncCavaState is safe either way).
+            connect(m_settings, &ISettings::shaderFrameRateChanged, this, [this]() {
+                syncCavaState();
+                if (m_shaderUpdateTimer && m_shaderUpdateTimer->isActive()) {
+                    startShaderAnimation();
+                }
+            });
+            // The full CAVA analysis parameter set (Shaders.Audio). Every knob
+            // routes through the same reconcile: setOptions no-ops on an
+            // unchanged set and restarts capture at most once per change.
+            connect(m_settings, &ISettings::audioAutosensChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioSensitivityChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioNoiseReductionChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioLowerCutoffHzChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioHigherCutoffHzChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioMonstercatChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioWavesChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioChannelModeChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioReverseChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioExtraSmoothingChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioInputMethodChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioInputSourceChanged, this, &OverlayService::syncCavaState);
+
+            // Shader profile tree drives the per-overlay shader effect (osd.show,
+            // popup.zoneSelector, etc.). Push it into the SurfaceAnimator
+            // now that settings are available, and re-push on every edit so
+            // users editing the tree at runtime see the new effects on the next
+            // show - no daemon restart needed. registerConfigForRole only
+            // affects subsequent show()/hide(), so animations mid-flight keep
+            // their bound config (matches motion-tree live-reload semantics).
+            applyShaderProfilesToAnimator(m_settings->shaderProfileTree());
+            connect(m_settings, &ISettings::shaderProfileTreeChanged, this, [this]() {
+                if (m_settings) {
+                    applyShaderProfilesToAnimator(m_settings->shaderProfileTree());
+                }
+            });
+
+            // Per-surface decoration tree drives each overlay's decoration
+            // (border/titlebar + shader-pack chain), resolved + pushed at show
+            // time. Re-apply it to any currently-visible transient overlay on a
+            // live edit so the decoration preview updates without waiting for the
+            // next show. Connected to the specific signal (not the settingsChanged
+            // catch-all) so unrelated edits don't re-bake decoration; each
+            // applyDecoration is null-safe per slot, so screens without a wired
+            // slot are skipped. OSDs are intentionally omitted — they auto-dismiss
+            // sub-second, so a live re-decorate has no observable effect.
+            connect(m_settings, &ISettings::decorationProfileTreeChanged, this,
+                    &OverlayService::reapplyVisiblePopupDecorations);
+
+            // Zone-overlay shader tree: an assignment edit in the settings
+            // app can flip a screen between rectangle and shader overlay
+            // modes (none↔shader), which refreshVisibleWindows alone cannot
+            // apply — same reasoning as the layoutModified coalesced-refresh
+            // hook (see observeLayout below). No coalescing needed here: tree
+            // writes arrive one per user action, not per drag frame.
+            connect(m_settings, &ISettings::overlayShaderTreeChanged, this, [this]() {
+                // Refresh the cached tree BEFORE the recreate/refresh below
+                // re-resolves shaders through effectiveOverlayShader().
+                m_overlayShaderTree = m_settings ? m_settings->overlayShaderTree() : OverlayShaderTree{};
+                if (m_visible) {
+                    recreateOverlayWindowsOnTypeMismatch();
+                }
+                refreshVisibleWindows();
+            });
+
+            // Global animations toggle: when off, SurfaceAnimator snaps
+            // beginShow / beginHide to the target opacity and fires
+            // completion synchronously, skipping motion + shader legs.
+            // Mirrors the kwin-effect's `m_windowAnimator->isEnabled()`
+            // gate on `tryBeginShaderForEvent` - single
+            // `Settings::animationsEnabled` flag stops every animation
+            // on both runtimes.
+            if (m_surfaceAnimator) {
+                m_surfaceAnimator->setEnabled(m_settings->animationsEnabled());
+            }
+            connect(m_settings, &ISettings::animationsEnabledChanged, this, [this]() {
+                if (m_settings && m_surfaceAnimator) {
+                    m_surfaceAnimator->setEnabled(m_settings->animationsEnabled());
+                }
+            });
+
+            // Hot-reload shaders when files change on disk.
+            // ShaderRegistry detects file changes via QFileSystemWatcher and emits
+            // shadersChanged(). We tell each overlay window's ZoneShaderItem to
+            // re-read its source from disk by invoking reloadShader() (inherited
+            // Q_INVOKABLE from PhosphorRendering::ShaderEffect).
+            // m_shaderRegistry is constructor-injected (overlayservice.cpp), so
+            // this branch is a null guard for test doubles built without a
+            // registry - for them, on-disk shader edits simply don't hot-reload.
+            if (m_shaderRegistry) {
+                m_shadersChangedConnection = connect(m_shaderRegistry, &ShaderRegistry::shadersChanged, this, [this]() {
+                    qCInfo(lcOverlay) << "Shader files changed on disk, triggering hot-reload";
+                    PhosphorRendering::ShaderCompiler::clearCache();
+                    for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
+                        if (!it_.value().overlayPhysScreen) {
+                            continue;
+                        }
+                        auto* slot = it_.value().mainOverlaySlot();
+                        if (slot && slot->property("useShader").toBool()) {
+                            QMetaObject::invokeMethod(slot, "reloadShader");
+                        }
+                    }
+                });
+            }
+
+            // Reconcile CAVA with current settings + visibility. At boot the
+            // overlay is hidden, so this no longer starts CAVA — it spins up on
+            // the first show() and stops (after a grace period) on hide().
+            syncCavaState();
+        }
+    }
+}
+
+void OverlayService::setLayoutManager(PhosphorZones::IZoneLayoutRegistry* layoutManager)
+{
+    // Disconnect from old layout manager if exists. The four catalog /
+    // assignment signals are declared on PhosphorZones::IZoneLayoutRegistry
+    // and reach this slot via Qt's metaobject signal table.
+    if (m_layoutManager) {
+        disconnect(m_layoutManager, &PhosphorZones::IZoneLayoutRegistry::activeLayoutChanged, this, nullptr);
+        disconnect(m_layoutManager, &PhosphorZones::IZoneLayoutRegistry::layoutAssigned, this, nullptr);
+        disconnect(m_layoutManager, &PhosphorZones::IZoneLayoutRegistry::layoutAdded, this, nullptr);
+        disconnect(m_layoutManager, &PhosphorZones::IZoneLayoutRegistry::layoutRemoved, this, nullptr);
+    }
+    // Disconnect any per-PhosphorZones::Layout connections to active layouts the previous manager owned
+    for (const QPointer<PhosphorZones::Layout>& layout : std::as_const(m_observedLayouts)) {
+        if (layout) {
+            disconnect(layout, &PhosphorZones::Layout::layoutModified, this, nullptr);
+        }
+    }
+    m_observedLayouts.clear();
+
+    m_layoutManager = layoutManager;
+
+    if (m_layoutManager) {
+        // Update visible zone selector and overlay windows when layout changes.
+        // Hidden windows are skipped: showZoneSelector()/show() refresh before showing.
+        // Both arms recreate before refreshing, for the same reason the
+        // layoutModified path below does: the new layout may resolve to a
+        // different overlay TYPE. updateOverlayWindow's two arms both require
+        // the slot to already be a shader slot, so a switch from a no-shader
+        // layout to a shader one matches neither and the overlay keeps drawing
+        // rectangles, and a switch the other way clears the shader properties
+        // without ever returning the slot to rectangle mode. The recreate is
+        // what flips the slot; it self-guards when no overlay window exists.
+        connect(m_layoutManager, &PhosphorZones::IZoneLayoutRegistry::activeLayoutChanged, this,
+                [this](PhosphorZones::Layout* layout) {
+                    observeLayoutForLiveEdits(layout);
+                    if (m_visible) {
+                        recreateOverlayWindowsOnTypeMismatch();
+                    }
+                    refreshVisibleWindows();
+                });
+        connect(m_layoutManager, &PhosphorZones::IZoneLayoutRegistry::layoutAssigned, this,
+                [this](const QString& /*screenId*/, int /*virtualDesktop*/, PhosphorZones::Layout* layout) {
+                    observeLayoutForLiveEdits(layout);
+                    if (m_visible) {
+                        recreateOverlayWindowsOnTypeMismatch();
+                    }
+                    refreshVisibleWindows();
+                });
+        // Observe newly-created layouts so edits reach the overlay before
+        // the layout is ever activated/assigned (e.g. user creates a new
+        // layout in the editor and immediately tweaks its shader).
+        connect(m_layoutManager, &PhosphorZones::IZoneLayoutRegistry::layoutAdded, this,
+                [this](PhosphorZones::Layout* layout) {
+                    observeLayoutForLiveEdits(layout);
+                });
+        // Drop per-layout connections + the m_observedLayouts entry when
+        // a layout is deleted. Without this, QPointer auto-null would
+        // leave tombstone entries in m_observedLayouts that only get
+        // compacted the next time observeLayoutForLiveEdits() runs:
+        // unbounded growth during editor create/delete sessions.
+        connect(m_layoutManager, &PhosphorZones::IZoneLayoutRegistry::layoutRemoved, this,
+                &OverlayService::stopObservingLayout);
+
+        // Observe EVERY loaded layout, not just the globally-active one.
+        // A per-screen-assigned layout loaded from disk at startup never
+        // triggers activeLayoutChanged / layoutAssigned, so its
+        // layoutModified signal would otherwise be invisible to us:
+        // editor edits to its shader/zones required a daemon restart to
+        // take effect. Observing the whole set is cheap (one signal
+        // connection per layout) and idempotent thanks to the dedupe
+        // pass in observeLayoutForLiveEdits.
+        for (PhosphorZones::Layout* layout : m_layoutManager->layouts()) {
+            observeLayoutForLiveEdits(layout);
+        }
+        // Redundant after the loop, but keeps the intent obvious in case
+        // activeLayout() is ever loaded through a different path than
+        // PhosphorZones::IZoneLayoutRegistry::layouts().
+        observeLayoutForLiveEdits(m_layoutManager->activeLayout());
+    }
+}
+
+void OverlayService::setAlgorithmRegistry(PhosphorTiles::ITileAlgorithmRegistry* registry)
+{
+    m_algorithmRegistry = registry;
+}
+
+void OverlayService::setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source)
+{
+    m_autotileLayoutSource = source;
+}
+
+void OverlayService::observeLayoutForLiveEdits(PhosphorZones::Layout* layout)
+{
+    if (!layout) {
+        return;
+    }
+    // Walk the list, skipping null QPointers (entries auto-cleared on PhosphorZones::Layout destroy).
+    // Compact stale entries while we're at it so the list doesn't grow without bound.
+    for (auto it = m_observedLayouts.begin(); it != m_observedLayouts.end();) {
+        if (it->isNull()) {
+            it = m_observedLayouts.erase(it);
+        } else if (it->data() == layout) {
+            return; // Already observing
+        } else {
+            ++it;
+        }
+    }
+    // PhosphorZones::Layout::layoutModified fires whenever any Q_PROPERTY changes (zones,
+    // appearance, overlay display mode, etc.). Without this hook the editor's
+    // changes only reach the live overlay after a layout switch or daemon
+    // restart, since PhosphorZones::IZoneLayoutRegistry::activeLayoutChanged only fires on switch.
+    //
+    // Route through a coalescing shim: zone-drag in the editor can fire
+    // layoutModified dozens of times per second; refreshVisibleWindows is
+    // the expensive path (rebuilds zone variant lists + uploads labels).
+    // The shim schedules a single refresh at the next event-loop tick.
+    connect(layout, &PhosphorZones::Layout::layoutModified, this, [this]() {
+        if (m_refreshCoalescePending) {
+            return;
+        }
+        m_refreshCoalescePending = true;
+        // 16 ms ≈ one display frame - small enough that live-edit feels
+        // instant, large enough that a burst of Q_PROPERTY writes collapses
+        // into one refresh.
+        QTimer::singleShot(16, this, [this]() {
+            m_refreshCoalescePending = false;
+            // A layout shaderId edit can flip a screen between rectangle and
+            // shader overlay modes (none↔shader). refreshVisibleWindows alone
+            // can't apply that flip: updateOverlayWindow's shader-apply branch
+            // is gated on the slot's CURRENT useShader mode, so a newly-enabled
+            // shader is skipped and the overlay keeps drawing rectangles until
+            // a hide/show (or daemon restart) rebuilds the slot. Run the
+            // type-mismatch recreate first — a no-op when no flip is needed —
+            // mirroring the overlayDisplayMode setting path so live edits take
+            // effect immediately. Only meaningful while visible; a hidden
+            // overlay rebuilds with the correct type on its next show.
+            if (m_visible) {
+                recreateOverlayWindowsOnTypeMismatch();
+            }
+            refreshVisibleWindows();
+        });
+    });
+    m_observedLayouts.append(QPointer<PhosphorZones::Layout>(layout));
+}
+
+void OverlayService::stopObservingLayout(PhosphorZones::Layout* layout)
+{
+    if (!layout) {
+        return;
+    }
+    disconnect(layout, &PhosphorZones::Layout::layoutModified, this, nullptr);
+    for (auto it = m_observedLayouts.begin(); it != m_observedLayouts.end();) {
+        if (it->isNull() || it->data() == layout) {
+            it = m_observedLayouts.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void OverlayService::refreshVisibleWindows()
+{
+    if (m_zoneSelectorVisible) {
+        for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+            updateZoneSelectorWindow(it.key());
+        }
+    }
+    if (m_visible) {
+        for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+            QScreen* physScreen = it.value().overlayPhysScreen;
+            if (physScreen) {
+                updateOverlayWindow(it.key(), physScreen);
+            }
+        }
+    }
+}
+
+// Grace period after the overlay goes idle before the render loop + CAVA are
+// actually stopped, so rapid drag thrash (modifier release/re-press, quick
+// re-trigger) keeps everything warm and avoids per-show spin-up.
+static constexpr int kIdleQuiesceGraceMs = 5000;
+
+bool OverlayService::isOverlayDisplaying() const
+{
+    return m_visible && !m_overlayIdled;
+}
+
+void OverlayService::syncCavaState()
+{
+    if (!m_audioProvider || !m_settings) {
+        return;
+    }
+
+    // CAVA is a continuous audio-capture + FFT child process feeding a per-frame
+    // spectrum; running it while nothing is displayed burns CPU on capture AND
+    // on per-frame overlay repaints. Run it only while audio-viz is enabled AND
+    // something that reacts to audio is on screen: the overlay (un-idled), the
+    // editor's shader preview, or a decoration surface (OSD / popup) carrying an
+    // audio-reactive pack. A plain decoration never starts audio (it declares no
+    // `audio` flag, so visibleAudioDecorationSlots() ignores it).
+    const bool wantRun =
+        m_settings->enableAudioVisualizer() && (isOverlayDisplaying() || !visibleAudioDecorationSlots().isEmpty());
+
+    if (wantRun) {
+        if (m_idleQuiesceTimer) {
+            m_idleQuiesceTimer->stop(); // cancel any pending grace-period quiesce
+        }
+        m_audioProvider->setOptions(cavaOptionsFromSettings(m_settings));
+        if (!m_audioProvider->isRunning()) {
+            m_audioProvider->start();
+        }
+        return;
+    }
+
+    // Audio-viz turned OFF entirely: stop the capture now and clear any stale
+    // spectrum from the surfaces. Merely idle/hidden (still enabled): the grace
+    // timer defers the stop so a quick re-trigger keeps it warm. Either way,
+    // fall through to scheduleIdleQuiesce() at the tail — the quiesce also owns
+    // the render-loop stop and the idle GPU-resource release, which are
+    // independent of CAVA. This branch used to cancel a pending quiesce and
+    // return, which meant any OSD/popup show inside the grace window (every
+    // such path calls syncCavaState, and snap-assist shows at exactly drag-end)
+    // silently killed the release with nothing re-arming it.
+    if (!m_settings->enableAudioVisualizer()) {
+        if (m_audioProvider->isRunning()) {
+            m_audioProvider->stop();
+            for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
+                const auto& st = it_.value();
+                if (st.overlayPhysScreen) {
+                    if (auto* slot = st.mainOverlaySlot()) {
+                        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
+                    }
+                }
+                // Decoration slots (OSD / popups) carry their own audioSpectrum,
+                // so an audio-reactive border must settle to silence too rather
+                // than freeze on the last pushed frame. Independent of the zone
+                // overlay, so cleared regardless of overlayPhysScreen.
+                for (QQuickItem* deco : {st.osdSlot(), st.snapAssistSlot(), st.layoutPickerSlot(),
+                                         st.zoneSelectorSlot(), st.cheatsheetSlot()}) {
+                    if (deco) {
+                        writeQmlProperty(deco, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
+                    }
+                }
+            }
+        }
+    }
+    scheduleIdleQuiesce();
+}
+
+void OverlayService::scheduleIdleQuiesce()
+{
+    // Nothing to wind down if neither the render loop nor CAVA is active —
+    // and no parked animation towers are waiting on the reap. The third term
+    // is load-bearing for the OSD-only session: navigation OSDs park a tower
+    // per show without ever starting the 60 Hz shader timer or CAVA, so
+    // without it the quiesce never armed and the towers (and their FBOs)
+    // were immortal exactly on the path that creates the most of them.
+    const bool shaderTimerActive = m_shaderUpdateTimer && m_shaderUpdateTimer->isActive();
+    const bool cavaActive = m_audioProvider && m_audioProvider->isRunning();
+    const bool parkedTowers = m_surfaceAnimator && m_surfaceAnimator->hasParkedShaders();
+    if (!shaderTimerActive && !cavaActive && !parkedTowers) {
+        return;
+    }
+    if (!m_idleQuiesceTimer) {
+        m_idleQuiesceTimer = new QTimer(this);
+        m_idleQuiesceTimer->setSingleShot(true);
+        m_idleQuiesceTimer->setInterval(kIdleQuiesceGraceMs);
+        connect(m_idleQuiesceTimer, &QTimer::timeout, this, [this]() {
+            // Re-check at fire time: a show()/refreshFromIdle() within the grace
+            // window both cancels this timer and resumes, but guard anyway. The
+            // overlay's QQuickWindows are intentionally left alive (NVIDIA
+            // teardown-deadlock avoidance); we only pause the 60 Hz shader
+            // render loop and the CAVA capture. Mirror syncCavaState's wantRun
+            // predicate: a visible audio decoration also keeps CAVA alive, so it
+            // must veto the quiesce too. A vetoed one-shot is NOT re-armed
+            // here: every path that shows or hides a decoration or overlay
+            // routes through syncCavaState (or calls scheduleIdleQuiesce
+            // directly), so the next show or hide re-arms it. The five
+            // DECORATION-HOSTING slots' hide-completion handlers (OSD, zone
+            // selector, snap-assist, layout picker, cheatsheet — exactly the
+            // set visibleAudioDecorationSlots walks) are the exception when
+            // their slot is undecorated: they call neither. Each is covered by
+            // the arm at its own next show, via applyDecoration's
+            // unconditional syncCavaState tail. The drop indicator's hide
+            // completion (scrolldropindicator.cpp) is NOT a sixth case: that
+            // slot hosts no decoration and never feeds CAVA, so neither its
+            // show nor its hide touches this timer at all. New hide paths must
+            // keep that contract or parked towers strand until the next
+            // show/hide cycle.
+            if (isOverlayDisplaying() || !visibleAudioDecorationSlots().isEmpty()) {
+                return;
+            }
+            stopShaderAnimation();
+            if (m_audioProvider && m_audioProvider->isRunning()) {
+                m_audioProvider->stop();
+            }
+            // Timers alone leave the GPU memory pinned: the kept-alive windows'
+            // shader nodes hold full-screen buffer FBOs, pipelines, and uploaded
+            // wallpaper/label textures for the daemon's whole lifetime after the
+            // first drag — on an iGPU that is system RAM taken from the shared
+            // pool. Free them now; they rebuild lazily on the first frame of the
+            // next show, well inside the grace window's cost model (a quick
+            // re-trigger cancels this timer before it fires, so a warm resume
+            // never pays the rebuild).
+            for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+                if (QQuickItem* slot = it.value().mainOverlaySlot()) {
+                    // A false return means the installed shell QML no longer
+                    // declares the forwarder (version skew) - without the log
+                    // the PR's whole memory win would vanish untraceably.
+                    // Latched once per process: the skew is permanent for the
+                    // daemon's lifetime and the quiesce re-arms every idle
+                    // cycle, so an unlatched warning would repeat per screen
+                    // per cycle forever without adding information.
+                    if (!QMetaObject::invokeMethod(slot, "releaseIdleGraphicsResources")) {
+                        static bool warnedSlotSkew = false;
+                        if (!warnedSlotSkew) {
+                            warnedSlotSkew = true;
+                            qCWarning(lcOverlay) << "idle quiesce: releaseIdleGraphicsResources not invokable on slot"
+                                                 << "(installed shell QML out of date?)";
+                        }
+                    }
+                }
+            }
+            // Parked animation-shader towers (SurfaceAnimator's pending-reuse
+            // stash) hold full-window FBOs per (surface, slot) for the
+            // keep-alive shells' lifetime — i.e. forever, after the first
+            // animated OSD/popup show on each slot. Genuine rest is exactly
+            // when the parking's amortisation argument no longer applies
+            // (it defends against per-toggle deleteLater floods, and there
+            // is no toggling here), so drop them; the next animated leg
+            // builds a fresh tower. Note the grace window is deliberately
+            // NOT extended by re-triggers (see the arming comment below),
+            // so an OSD-only session can reap a tower that is about to be
+            // reused - the cost is one fresh tower build on the next leg.
+            if (m_surfaceAnimator) {
+                m_surfaceAnimator->releaseParkedShaders();
+            }
+        });
+    }
+    // Arm only when not already pending: the grace window measures from the
+    // FIRST idle, not from the last settings poke or OSD hide - syncCavaState
+    // funnels 15 settings signals plus every decoration show/hide through
+    // here, and restarting on each would postpone the release indefinitely.
+    // A genuine resume (refreshFromIdle, wantRun) stops the timer, so the next
+    // idle re-arms a fresh window.
+    if (!m_idleQuiesceTimer->isActive()) {
+        m_idleQuiesceTimer->start();
+    }
+}
+
+} // namespace PlasmaZones

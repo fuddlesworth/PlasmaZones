@@ -101,7 +101,7 @@ atomic replacements of `shell.qml`.
 
 ## Verification
 
-Use `scripts/nested-shell/` with its private IPC socket. Headless screenshots
+Use `phosphor-shell/scripts/nested-shell/` with its private IPC socket. Headless screenshots
 show shell surfaces; they bypass the compositor's window transforms. Verify
 Stage's native preview using the visible nested compositor window as well.
 The implementation record distinguishes these captures from unit tests and

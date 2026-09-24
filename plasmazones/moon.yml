@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'cpp'
+layer: 'application'
+stack: 'systems'
+tags: ['cmake']
+
+# phosphor-shell-libs is reached only under BUILD_PHOSPHOR_SHELL: the daemon's
+# shell appearance adapter (plasmazones_shellappearance) and the Phosphor window
+# decoration plugin (kwin-effect/shell-decoration) both link PhosphorTheme.
+dependsOn:
+  - 'phosphor-libs'
+  - 'phosphor-shell-libs'
+
+project:
+  name: 'PlasmaZones'
+  description: 'Window snapping, tiling and scrolling for KDE Plasma. Covers the daemon, editor, settings, KCM, KWin effect, bundled data and tests.'
+
+tasks:
+  # The mirror image of the note in phosphor-libs/moon.yml. Two tests registered in
+  # THIS tier depend on phosphor-libs/libs/phosphor-tiles/src/pluau/pluau.luau:
+  # test_pluau_helpers opens it from disk via PHOSPHOR_SOURCE_DIR, and
+  # test_luau_parity consumes the same file through the Qt resource baked
+  # into PhosphorTiles. Either way an edit to the prelude changes what they
+  # assert, and affectedness does not propagate from a dependency to its
+  # dependent. So
+  # editing the prelude marks only `phosphor-libs` affected, `moon run :test
+  # --affected` runs ctest against build/phosphor-libs, and the only tests that pin
+  # those helpers never run. A workspace-relative input (leading `/`) closes
+  # the gap; task inputs merge with the inherited set rather than replacing it.
+  test:
+    inputs:
+      - '/phosphor-libs/libs/phosphor-tiles/src/pluau/pluau.luau'

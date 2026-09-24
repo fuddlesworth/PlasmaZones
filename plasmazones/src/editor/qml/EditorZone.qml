@@ -1,0 +1,666 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import "ColorUtils.js" as ColorUtils
+import "ThemeHelpers.js" as Theme
+import QtQuick
+import QtQuick.Window
+import org.kde.kirigami as Kirigami
+import org.phosphor.animation
+
+/**
+ * @brief Editable zone component with drag and resize handles
+ *
+ * Provides visual representation of a zone with:
+ * - Drag-to-move functionality
+ * - Resize handles on corners and edges
+ * - Context menu for zone operations
+ * - Visual feedback (selection, hover states)
+ *
+ * Uses zone IDs for stable selection and visual proxy during operations.
+ */
+Item {
+    // Context menu is now a shared instance at the EditorWindow level
+    // to avoid QQmlData use-after-free when Repeater destroys delegates.
+    // See EditorWindow.qml sharedContextMenu.
+
+    id: root
+
+    // State machine for operations
+    enum State {
+        Idle,
+        Dragging,
+        Resizing
+    }
+
+    // Properties from parent
+    required property real canvasWidth
+    required property real canvasHeight
+    required property var zoneData
+    required property string zoneId
+    required property bool isSelected
+    property bool isPartOfMultiSelection: false // True when zone is selected AND multiple zones are selected
+    required property bool previewMode
+    property var controller: null
+    property real zoneSpacing: 0 // Gap between adjacent zones (applied as zoneSpacing/2 per side)
+    property real edgeGap: 0 // Gap at screen edges
+    property var snapIndicator: null
+    // Fixed geometry support
+    property bool isFixedZone: zoneData ? (zoneData.geometryMode === 1) : false
+    // The real screen rather than a hardcoded 1920x1080: these divide the
+    // fixed-zone pixel coordinates in every toCanvas*/toRelative* conversion
+    // below, so a wrong reference size lays fixed zones out at the wrong
+    // scale. Matches the fallback DimensionTooltip is given in EditorWindow.
+    property real screenWidth: controller ? controller.targetScreenSize.width : Screen.width
+    property real screenHeight: controller ? controller.targetScreenSize.height : Screen.height
+    property int operationState: EditorZone.State.Idle
+    // Track if this zone is part of an active divider operation
+    // When true, syncFromZoneData() is blocked to prevent overwriting divider updates
+    property bool isDividerOperation: false
+    // Track if we're in an animated fill operation (menu/button triggered)
+    // When true, onZoneGeometryChanged is blocked to prevent interrupting the animation
+    property bool isAnimatingFill: false
+    // Visual position properties
+    // Synced from model when idle, overridden during operations, or updated from C++
+    // visualWidth/Height must be greater than zoneSpacing to avoid negative dimensions
+    // Initialize to default values, set immediately by syncFromZoneData()
+    property real visualX: 0
+    property real visualY: 0
+    property real visualWidth: 0
+    property real visualHeight: 0
+    // Fill preview animation - enabled only during fill preview transitions
+    property bool animateFillPreview: false
+    // Computed property to ensure dimensions are always valid
+    readonly property bool hasValidDimensions: isFinite(visualWidth) && isFinite(visualHeight) && visualWidth > zoneSpacing && visualHeight > zoneSpacing && canvasWidth > 0 && canvasHeight > 0
+    // Constants
+    readonly property int handleSize: Kirigami.Units.gridUnit * 1.5
+    // Shared resize-handle metrics, referenced by both ResizeHandles (visuals,
+    // hit margins) and ZoneDragHandler (geometric handle-proximity check).
+    // Unit multiples reproduce the previous hardcoded pixel values at default
+    // Kirigami units (smallSpacing = 4).
+    // Corner handles: small circles (10px diameter at default units)
+    readonly property real handleCornerSize: Kirigami.Units.smallSpacing * 2.5
+    // Edge handles: thin pills (4px thick, 24px long at default units)
+    readonly property real handleEdgeThickness: Kirigami.Units.smallSpacing
+    readonly property real handleEdgeLength: Kirigami.Units.smallSpacing * 6
+    // Square hit region around a corner/edge handle (24px at default units)
+    readonly property real handleHitSize: Kirigami.Units.smallSpacing * 6
+    // Extra margin enlarging each handle's mouse hit area (4px at default units)
+    readonly property real handleHitMargin: Kirigami.Units.smallSpacing
+    // Minimum zone size in pixels - acceptable as hardcoded
+    readonly property int minSize: 50
+    // Track if mouse is over zone or any controls
+    property bool mouseOverZone: hoverArea.containsMouse || anyButtonHovered || anyHandleHovered
+    property bool anyButtonHovered: false // Will be set by buttons
+    property bool anyHandleHovered: false // Will be set by handles
+    // Apply differentiated gaps: edgeGap at screen boundaries, zoneSpacing/2 between zones
+    // Detect screen boundaries using relative coordinates (tolerance 0.01)
+    readonly property real edgeTolerance: 0.01
+    // Zone data uses x, y, width, height (relative coordinates 0-1)
+    readonly property real relX: zoneData ? (zoneData.x || 0) : 0
+    readonly property real relY: zoneData ? (zoneData.y || 0) : 0
+    readonly property real relWidth: zoneData ? (zoneData.width || 0) : 0
+    readonly property real relHeight: zoneData ? (zoneData.height || 0) : 0
+    // During drag/resize, use visual position for gap calculation instead of stale model data.
+    // This ensures zones dragged to a screen edge get edgeGap (not zoneSpacing/2).
+    readonly property real effectiveRelX: operationState !== EditorZone.State.Idle && canvasWidth > 0 ? visualX / canvasWidth : relX
+    readonly property real effectiveRelY: operationState !== EditorZone.State.Idle && canvasHeight > 0 ? visualY / canvasHeight : relY
+    readonly property real effectiveRelWidth: operationState !== EditorZone.State.Idle && canvasWidth > 0 ? visualWidth / canvasWidth : relWidth
+    readonly property real effectiveRelHeight: operationState !== EditorZone.State.Idle && canvasHeight > 0 ? visualHeight / canvasHeight : relHeight
+    // Calculate gap for each edge: edgeGap if at screen boundary, zoneSpacing/2 otherwise
+    readonly property real leftGap: effectiveRelX < edgeTolerance ? edgeGap : zoneSpacing / 2
+    readonly property real topGap: effectiveRelY < edgeTolerance ? edgeGap : zoneSpacing / 2
+    readonly property real rightGap: (effectiveRelX + effectiveRelWidth) > (1 - edgeTolerance) ? edgeGap : zoneSpacing / 2
+    readonly property real bottomGap: (effectiveRelY + effectiveRelHeight) > (1 - edgeTolerance) ? edgeGap : zoneSpacing / 2
+    // Suppress color animations during delegate creation (Repeater recreates all
+    // delegates when the zones QVariantList changes, which would cause a visible
+    // color flash as Behaviors animate from default to target values).
+    property bool _animationsReady: false
+
+    // Signals
+    signal clicked(var event)
+    // Pass mouse event for modifier key handling (Ctrl+click, Shift+click)
+    signal contextMenuRequested
+    // Emitted when context menu should be shown
+    signal geometryChanged(real x, real y, real width, real height, bool skipSnapping)
+    signal deleteRequested
+    signal duplicateRequested
+    signal splitHorizontalRequested
+    signal splitVerticalRequested
+    signal expandToFillWithCoords(real mouseX, real mouseY) // Pass zone center for consistent algorithm
+    signal operationStarted(string zoneId, real x, real y, real width, real height)
+    signal operationUpdated(string zoneId, real x, real y, real width, real height)
+    signal operationEnded(string zoneId)
+
+    // Coordinate conversion helpers
+    // For fixed zones: value is in pixels, scale to canvas using screenWidth/screenHeight
+    // For relative zones: value is 0-1 normalized, scale to canvas directly
+    function toCanvasX(relX) {
+        if (!canvasWidth || canvasWidth <= 0 || !isFinite(canvasWidth))
+            return 0;
+
+        if (relX === undefined || relX === null || !isFinite(relX) || isNaN(relX))
+            return 0;
+
+        if (isFixedZone && screenWidth > 0) {
+            var result = (relX / screenWidth) * canvasWidth;
+            return isFinite(result) && !isNaN(result) ? result : 0;
+        }
+        var result = relX * canvasWidth;
+        return isFinite(result) && !isNaN(result) ? result : 0;
+    }
+
+    function toCanvasY(relY) {
+        if (!canvasHeight || canvasHeight <= 0 || !isFinite(canvasHeight))
+            return 0;
+
+        if (relY === undefined || relY === null || !isFinite(relY) || isNaN(relY))
+            return 0;
+
+        if (isFixedZone && screenHeight > 0) {
+            var result = (relY / screenHeight) * canvasHeight;
+            return isFinite(result) && !isNaN(result) ? result : 0;
+        }
+        var result = relY * canvasHeight;
+        return isFinite(result) && !isNaN(result) ? result : 0;
+    }
+
+    function toCanvasW(relW) {
+        if (!canvasWidth || canvasWidth <= 0 || !isFinite(canvasWidth))
+            return 0;
+
+        if (relW === undefined || relW === null || !isFinite(relW) || isNaN(relW))
+            return 0.25 * canvasWidth;
+
+        if (isFixedZone && screenWidth > 0) {
+            var result = (relW / screenWidth) * canvasWidth;
+            return isFinite(result) && !isNaN(result) && result > 0 ? result : 0.25 * canvasWidth;
+        }
+        var result = relW * canvasWidth;
+        return isFinite(result) && !isNaN(result) && result > 0 ? result : 0.25 * canvasWidth;
+    }
+
+    function toCanvasH(relH) {
+        if (!canvasHeight || canvasHeight <= 0 || !isFinite(canvasHeight))
+            return 0;
+
+        if (relH === undefined || relH === null || !isFinite(relH) || isNaN(relH))
+            return 0.25 * canvasHeight;
+
+        if (isFixedZone && screenHeight > 0) {
+            var result = (relH / screenHeight) * canvasHeight;
+            return isFinite(result) && !isNaN(result) && result > 0 ? result : 0.25 * canvasHeight;
+        }
+        var result = relH * canvasHeight;
+        return isFinite(result) && !isNaN(result) && result > 0 ? result : 0.25 * canvasHeight;
+    }
+
+    // For fixed zones: convert canvas pixel -> screen pixel value
+    // For relative zones: convert canvas pixel -> 0-1 normalized value
+    function toRelativeX(canvasX) {
+        if (!canvasWidth || canvasWidth <= 0 || !isFinite(canvasWidth))
+            return 0;
+
+        if (canvasX === undefined || canvasX === null || !isFinite(canvasX) || isNaN(canvasX))
+            return 0;
+
+        if (isFixedZone && screenWidth > 0) {
+            var result = (canvasX / canvasWidth) * screenWidth;
+            return isFinite(result) && !isNaN(result) ? result : 0;
+        }
+        var result = canvasX / canvasWidth;
+        return isFinite(result) && !isNaN(result) ? result : 0;
+    }
+
+    function toRelativeY(canvasY) {
+        if (!canvasHeight || canvasHeight <= 0 || !isFinite(canvasHeight))
+            return 0;
+
+        if (canvasY === undefined || canvasY === null || !isFinite(canvasY) || isNaN(canvasY))
+            return 0;
+
+        if (isFixedZone && screenHeight > 0) {
+            var result = (canvasY / canvasHeight) * screenHeight;
+            return isFinite(result) && !isNaN(result) ? result : 0;
+        }
+        var result = canvasY / canvasHeight;
+        return isFinite(result) && !isNaN(result) ? result : 0;
+    }
+
+    function toRelativeW(canvasW) {
+        if (!canvasWidth || canvasWidth <= 0 || !isFinite(canvasWidth))
+            return 0;
+
+        if (canvasW === undefined || canvasW === null || !isFinite(canvasW) || isNaN(canvasW))
+            return 0;
+
+        if (isFixedZone && screenWidth > 0) {
+            var result = (canvasW / canvasWidth) * screenWidth;
+            return isFinite(result) && !isNaN(result) && result > 0 ? result : 0;
+        }
+        var result = canvasW / canvasWidth;
+        return isFinite(result) && !isNaN(result) && result > 0 ? result : 0;
+    }
+
+    function toRelativeH(canvasH) {
+        if (!canvasHeight || canvasHeight <= 0 || !isFinite(canvasHeight))
+            return 0;
+
+        if (canvasH === undefined || canvasH === null || !isFinite(canvasH) || isNaN(canvasH))
+            return 0;
+
+        if (isFixedZone && screenHeight > 0) {
+            var result = (canvasH / canvasHeight) * screenHeight;
+            return isFinite(result) && !isNaN(result) && result > 0 ? result : 0;
+        }
+        var result = canvasH / canvasHeight;
+        return isFinite(result) && !isNaN(result) && result > 0 ? result : 0;
+    }
+
+    // Public function delegated to geometrySync
+    function syncFromZoneData() {
+        // Guard: zone removed from Repeater - avoid use-after-free from pending Qt.callLater
+        if (!parent)
+            return;
+
+        geometrySync.syncFromZoneData();
+    }
+
+    // Delegate to geometrySync
+    function ensureDimensionsInitialized() {
+        // Guard: zone removed from Repeater - avoid use-after-free from pending Qt.callLater
+        if (!parent)
+            return;
+
+        geometrySync.ensureDimensionsInitialized();
+    }
+
+    // QVariantMap property changes don't automatically trigger QML bindings,
+    // so copy the current zoneData appearance values into zoneRect's tracker
+    // properties to force re-evaluation.
+    function refreshTrackers() {
+        if (!zoneData)
+            return;
+
+        zoneRect._highlightColorTracker = zoneData.highlightColor;
+        zoneRect._inactiveColorTracker = zoneData.inactiveColor;
+        zoneRect._borderColorTracker = zoneData.borderColor;
+        zoneRect._activeOpacityTracker = zoneData.activeOpacity;
+        zoneRect._inactiveOpacityTracker = zoneData.inactiveOpacity;
+        zoneRect._borderWidthTracker = zoneData.borderWidth;
+        zoneRect._borderRadiusTracker = zoneData.borderRadius;
+        zoneRect._useCustomColorsTracker = zoneData.useCustomColors;
+    }
+
+    // Public functions delegated to fillAnimator
+    function startFillAnimation(targetX, targetY, targetWidth, targetHeight) {
+        fillAnimator.startFillAnimation(targetX, targetY, targetWidth, targetHeight);
+    }
+
+    function animatedExpandToFill() {
+        fillAnimator.animatedExpandToFill();
+    }
+
+    // Abort a running fill animation without committing its target geometry.
+    // Called by drag/resize handlers before they capture start geometry.
+    function stopFillAnimation() {
+        fillAnimator.stopFillAnimation();
+    }
+
+    focus: false
+    // Position with differentiated gaps
+    x: visualX + leftGap
+    y: visualY + topGap
+    width: Math.max(0, visualWidth - leftGap - rightGap)
+    height: Math.max(0, visualHeight - topGap - bottomGap)
+    // Watch for canvas size changes - sync when dimensions become valid
+    onCanvasWidthChanged: {
+        Qt.callLater(ensureDimensionsInitialized);
+    }
+    onCanvasHeightChanged: {
+        Qt.callLater(ensureDimensionsInitialized);
+    }
+    // When an operation (drag/resize) finishes, always reconcile the visual
+    // geometry against the authoritative model. onZoneGeometryChanged only fires
+    // when the model actually changes, so a committed no-op (e.g. snapping pulled
+    // the geometry back to its original spot, or validation rejected it) would
+    // otherwise leave the visual stranded at the dragged position while the model
+    // and properties panel keep the old values. Reconciling here makes the visual
+    // snap back to the model; it is idempotent for the normal committed case.
+    onOperationStateChanged: {
+        if (operationState === EditorZone.State.Idle && !isDividerOperation && !isAnimatingFill)
+            Qt.callLater(syncFromZoneData);
+    }
+    // Watch for divider operation state changes
+    onIsDividerOperationChanged: {
+        if (!isDividerOperation && operationState === EditorZone.State.Idle)
+            Qt.callLater(syncFromZoneData);
+    }
+    // Initialize visual properties when zoneData changes
+    onZoneDataChanged: {
+        if (root.operationState !== EditorZone.State.Idle || root.isDividerOperation)
+            return;
+
+        // Update color trackers when zoneData changes
+        refreshTrackers();
+        // Only sync if canvas dimensions are valid and dimensions need initialization
+        if (canvasWidth > 0 && canvasHeight > 0 && isFinite(canvasWidth) && isFinite(canvasHeight)) {
+            if (visualWidth === 0 || visualHeight === 0 || !hasValidDimensions)
+                Qt.callLater(syncFromZoneData);
+        }
+    }
+    // Initialize visual properties on component creation
+    Component.onCompleted: {
+        // Delegate to geometrySync for initialization
+        ensureDimensionsInitialized();
+        _animationsReady = true;
+    }
+    // Cleanup on destruction
+    Component.onDestruction: {
+        if (operationState !== EditorZone.State.Idle)
+            operationState = EditorZone.State.Idle;
+    }
+    // Handle context menu signal from drag handler — use shared EditorWindow menu
+    onContextMenuRequested: {
+        // Walk up to EditorWindow and use the shared context menu
+        var win = Window.window;
+        if (win && win.openContextMenu)
+            win.openContextMenu(root.zoneId);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // GEOMETRY SYNC - Extracted to ZoneGeometrySync.qml
+    // ═══════════════════════════════════════════════════════════════════
+    ZoneGeometrySync {
+        id: geometrySync
+
+        zoneRoot: root
+        controller: root.controller
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // FILL ANIMATION - Extracted to ZoneFillAnimation.qml
+    // ═══════════════════════════════════════════════════════════════════
+    ZoneFillAnimation {
+        id: fillAnimator
+
+        zoneRoot: root
+        controller: root.controller
+        canvasWidth: root.canvasWidth
+        canvasHeight: root.canvasHeight
+    }
+
+    // Zone background
+    Rectangle {
+        id: zoneRect
+
+        // Use custom colors if enabled, otherwise use theme colors
+        // Binding depends on tracker to force re-evaluation when useCustomColors changes
+        property bool useCustom: {
+            var _ = _useCustomColorsTracker; // Dependency on tracker
+            var _zone = zoneData; // Dependency on zoneData
+            return _zone && _zone.useCustomColors === true;
+        }
+        // Color trackers to force re-evaluation when colors change
+        // QVariantMap property changes don't automatically trigger QML bindings
+        property color _highlightColorTracker: zoneData ? zoneData.highlightColor : "transparent"
+        property color _inactiveColorTracker: zoneData ? zoneData.inactiveColor : "transparent"
+        property color _borderColorTracker: zoneData ? zoneData.borderColor : "transparent"
+        property real _activeOpacityTracker: zoneData ? zoneData.activeOpacity : 0
+        property real _inactiveOpacityTracker: zoneData ? zoneData.inactiveOpacity : 0
+        property int _borderWidthTracker: zoneData ? zoneData.borderWidth : 0
+        property int _borderRadiusTracker: zoneData ? zoneData.borderRadius : 0
+        property bool _useCustomColorsTracker: zoneData ? zoneData.useCustomColors : false
+        // Percentages for the accessibility description, guarded against
+        // zero/invalid canvas dimensions (same guard as DimensionTooltip)
+        // so a zero-sized canvas can't announce "NaN%".
+        readonly property int a11yXPercent: (root.canvasWidth > 0 && !isNaN(root.visualX)) ? Math.round((root.visualX / root.canvasWidth) * 100) : 0
+        readonly property int a11yYPercent: (root.canvasHeight > 0 && !isNaN(root.visualY)) ? Math.round((root.visualY / root.canvasHeight) * 100) : 0
+        readonly property int a11yWidthPercent: (root.canvasWidth > 0 && !isNaN(root.visualWidth)) ? Math.round((root.visualWidth / root.canvasWidth) * 100) : 0
+        readonly property int a11yHeightPercent: (root.canvasHeight > 0 && !isNaN(root.visualHeight)) ? Math.round((root.visualHeight / root.canvasHeight) * 100) : 0
+        // Bindings that depend on trackers to force re-evaluation
+        property color customHighlightColor: {
+            var _ = _highlightColorTracker; // Dependency on tracker
+            var _zone = zoneData; // Dependency on zoneData
+            return _zone && _zone.highlightColor ? ColorUtils.parseArgbHex(_zone.highlightColor) : Qt.transparent;
+        }
+        property color customInactiveColor: {
+            var _ = _inactiveColorTracker; // Dependency on tracker
+            var _zone = zoneData; // Dependency on zoneData
+            return _zone && _zone.inactiveColor ? ColorUtils.parseArgbHex(_zone.inactiveColor) : Qt.transparent;
+        }
+        property color customBorderColor: {
+            var _ = _borderColorTracker; // Dependency on tracker
+            var _zone = zoneData; // Dependency on zoneData
+            return _zone && _zone.borderColor ? ColorUtils.parseArgbHex(_zone.borderColor) : Qt.transparent;
+        }
+        property real customActiveOpacity: {
+            var _ = _activeOpacityTracker; // Dependency on tracker
+            var _zone = zoneData; // Dependency on zoneData
+            return _zone && _zone.activeOpacity !== undefined ? _zone.activeOpacity : 0.5;
+        }
+        property real customInactiveOpacity: {
+            var _ = _inactiveOpacityTracker; // Dependency on tracker
+            var _zone = zoneData; // Dependency on zoneData
+            return _zone && _zone.inactiveOpacity !== undefined ? _zone.inactiveOpacity : 0.3;
+        }
+        property int customBorderWidth: {
+            var _ = _borderWidthTracker; // Dependency on tracker
+            var _zone = zoneData; // Dependency on zoneData
+            // Clamped the way the daemon clamps it on the way to the overlay
+            // shader, so a legacy layout carrying a width above the current
+            // ceiling previews as it will actually be drawn.
+            var _w = _zone && _zone.borderWidth !== undefined ? _zone.borderWidth : 2;
+            return Math.min(_w, root.controller ? root.controller.zoneBorderWidthMax : 10);
+        }
+        property int customBorderRadius: {
+            var _ = _borderRadiusTracker; // Dependency on tracker
+            var _zone = zoneData; // Dependency on zoneData
+            var _r = _zone && _zone.borderRadius !== undefined ? _zone.borderRadius : (Kirigami.Units.smallSpacing * 1.5);
+            return Math.min(_r, root.controller ? root.controller.zoneBorderRadiusMax : 50);
+        }
+
+        anchors.fill: parent
+        // Combine color's alpha channel with opacity slider: final alpha = color.a * opacity
+        // This allows both color picker alpha AND opacity slider to affect the result
+        // Uses separate active/inactive opacity values
+        color: useCustom ? (isSelected ? Qt.rgba(customHighlightColor.r, customHighlightColor.g, customHighlightColor.b, customHighlightColor.a * customActiveOpacity) : Qt.rgba(customInactiveColor.r, customInactiveColor.g, customInactiveColor.b, customInactiveColor.a * customInactiveOpacity)) : (isSelected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, Theme.zoneHighlightAlpha) : Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, Theme.zoneInactiveAlpha))
+        border.color: useCustom ? customBorderColor : (isSelected ? Kirigami.Theme.highlightColor : (hoverArea.containsMouse ? Kirigami.Theme.hoverColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)))
+        // Raw pixels on purpose, like the nearby minSize. These are the editor's
+        // FALLBACK border widths for the no-custom-appearance case, and their
+        // job is to match what the overlay actually draws, which is a pixel
+        // count carried by the settings (zoneBorderWidth) and not a Kirigami
+        // spacing unit. Rounding them to Kirigami.Units would make the editor
+        // preview stop agreeing with the overlay it previews.
+        border.width: useCustom ? customBorderWidth : (isSelected ? 3 : 2)
+        radius: useCustom ? customBorderRadius : (Kirigami.Units.smallSpacing * 1.5)
+        // Accessibility: Screen reader announcements
+        // Accessible.role is optional
+        // Removing role to avoid enumeration issues in QML
+        Accessible.name: root.zoneData && root.zoneData.name ? i18nc("@info:accessibility", "Zone %1: %2", root.zoneData.zoneNumber || 1, root.zoneData.name) : i18nc("@info:accessibility", "Zone %1", root.zoneData ? (root.zoneData.zoneNumber || 1) : 0)
+        Accessible.description: isSelected ? i18nc("@info:accessibility", "Selected zone. Position: %1%, %2%, Size: %3% × %4%. Click to deselect, drag to move, use handles to resize.", zoneRect.a11yXPercent, zoneRect.a11yYPercent, zoneRect.a11yWidthPercent, zoneRect.a11yHeightPercent) : i18nc("@info:accessibility", "Zone. Position: %1%, %2%, Size: %3% × %4%. Click to select.", zoneRect.a11yXPercent, zoneRect.a11yYPercent, zoneRect.a11yWidthPercent, zoneRect.a11yHeightPercent)
+        Accessible.selectable: true
+        Accessible.selected: root.isSelected
+
+        // Multi-selection indicator badge (checkmark in top-left corner)
+        Rectangle {
+            id: multiSelectBadge
+
+            // opacity drives the fade and `visible` follows it, rather than
+            // `visible` binding the multi-selection state directly: an
+            // unbound opacity sits at 1.0 forever, so the Behavior below
+            // would never see a transition and the badge would pop.
+            opacity: root.isPartOfMultiSelection ? 1 : 0
+            visible: opacity > 0
+            width: Kirigami.Units.gridUnit
+            height: Kirigami.Units.gridUnit
+            radius: width / 2
+            color: Kirigami.Theme.highlightColor
+
+            anchors {
+                top: parent.top
+                left: parent.left
+                margins: Kirigami.Units.smallSpacing
+            }
+
+            Text {
+                anchors.centerIn: parent
+                text: "\u2713" // Unicode checkmark
+                color: Kirigami.Theme.highlightedTextColor
+                font.pixelSize: parent.width * 0.6
+                font.bold: true
+            }
+
+            Behavior on opacity {
+                PhosphorMotionAnimation {
+                    // Direction is taken from the badge's visibility condition
+                    // so the leg is decided synchronously when the multi-
+                    // selection state flips, not from the animated `opacity`
+                    // (which interpolates during the Behavior).
+
+                    // The override shortcuts widget.fadeOut's seeded 400 ms
+                    // tail: a small confirmation badge needs snappy state
+                    // feedback in both directions, not a graceful exit.
+                    profile: root.isPartOfMultiSelection ? "widget.fadeIn" : "widget.fadeOut"
+                    durationOverride: Kirigami.Units.shortDuration
+                }
+            }
+        }
+
+        Behavior on color {
+            enabled: root._animationsReady
+
+            PhosphorMotionAnimation {
+                profile: "widget.dim"
+                durationOverride: Kirigami.Units.longDuration
+            }
+        }
+
+        Behavior on border.color {
+            enabled: root._animationsReady
+
+            PhosphorMotionAnimation {
+                profile: "widget.dim"
+                durationOverride: Kirigami.Units.longDuration
+            }
+        }
+    }
+
+    // Zone content (number and name labels)
+    ZoneContent {
+        anchors.fill: parent
+        zoneData: root.zoneData
+        fontFamily: root.controller ? root.controller.labelFontFamily : ""
+        fontSizeScale: root.controller ? root.controller.labelFontSizeScale : 1
+        fontWeight: root.controller ? root.controller.labelFontWeight : Font.Bold
+        fontItalic: root.controller ? root.controller.labelFontItalic : false
+        fontUnderline: root.controller ? root.controller.labelFontUnderline : false
+        fontStrikeout: root.controller ? root.controller.labelFontStrikeout : false
+    }
+
+    // Listen for zone data changes - when zonesChanged is emitted, the Repeater model updates
+    // and zoneData (modelData) should automatically update, triggering property bindings
+    // However, QVariantMap property changes don't automatically trigger QML bindings,
+    // so we need to force re-evaluation by updating tracker properties
+    Connections {
+        // Avoid use-after-free when zone is removed from Repeater (e.g. deleteZone) but
+        // Qt.callLater callbacks from prior zoneColorChanged/zonesChanged still run.
+        // The try/catch swallows access errors expected when the zone is destroyed
+        // between the signal and the callLater.
+        function refreshTrackersLater() {
+            var rootRef = root;
+            Qt.callLater(function () {
+                try {
+                    // Guard: zone removed from scene (Repeater update) - avoid accessing destroyed objects
+                    if (!rootRef || !rootRef.parent)
+                        return;
+
+                    rootRef.refreshTrackers();
+                } catch (e) {}
+            });
+        }
+
+        function onZoneColorChanged(zoneId) {
+            if (zoneId !== root.zoneId || !root.zoneData)
+                return;
+
+            refreshTrackersLater();
+        }
+
+        function onZonesChanged() {
+            if (!root.zoneData)
+                return;
+
+            refreshTrackersLater();
+        }
+
+        target: root.controller
+        enabled: root.controller !== null
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // DRAG HANDLER - Extracted to ZoneDragHandler.qml
+    // ═══════════════════════════════════════════════════════════════════
+    ZoneDragHandler {
+        id: hoverArea
+
+        enabled: !root.previewMode
+        zoneRoot: root
+        controller: root.controller
+        snapIndicator: root.snapIndicator
+    }
+
+    // Hover action buttons (top-right)
+    ActionButtons {
+        id: hoverButtons
+
+        previewMode: root.previewMode
+        root: root
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // RESIZE HANDLES
+    // ═══════════════════════════════════════════════════════════════════
+    ResizeHandles {
+        visible: !root.previewMode
+        root: root
+        // z-index must be higher than hoverArea so handles receive mouse events first
+        z: 100
+        canvasWidth: root.canvasWidth
+        canvasHeight: root.canvasHeight
+        minSize: root.minSize
+        snapIndicator: root.snapIndicator
+    }
+
+    Behavior on visualX {
+        enabled: root.animateFillPreview
+
+        PhosphorMotionAnimation {
+            profile: "editor.snapResize"
+        }
+    }
+
+    Behavior on visualY {
+        enabled: root.animateFillPreview
+
+        PhosphorMotionAnimation {
+            profile: "editor.snapResize"
+        }
+    }
+
+    Behavior on visualWidth {
+        enabled: root.animateFillPreview
+
+        PhosphorMotionAnimation {
+            profile: "editor.snapResize"
+        }
+    }
+
+    Behavior on visualHeight {
+        enabled: root.animateFillPreview
+
+        PhosphorMotionAnimation {
+            profile: "editor.snapResize"
+        }
+    }
+}

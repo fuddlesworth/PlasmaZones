@@ -1,8 +1,7 @@
 # PlasmaZones RPM Spec File
 # Window snapping, tiling and scrolling for KDE Plasma
-# SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Requires Plasma 6.7+ (KF6 6.26, Qt 6.10, KWin 6.7+).
+# Requires Plasma 6.7+ (KF6 6.26, Qt 6.10, KWin 6.7+). Builds against 6.7 and 6.8.
 #
 # Build: rpmbuild -ba plasmazones.spec
 # Clean build: mock -r fedora-44-x86_64 plasmazones-3.3.0-1.fc44.src.rpm
@@ -29,14 +28,14 @@ URL:            https://github.com/fuddlesworth/PlasmaZones
 Source0:        %{url}/archive/refs/tags/v%{version}/%{name}-%{version}.tar.gz
 
 # Luau and valijson are vendored as committed source tarballs
-# (extern/luau-<ver>.tar.gz, extern/valijson-<ver>.tar.gz) and built into the
+# (phosphor-libs/extern/luau-<ver>.tar.gz, phosphor-libs/extern/valijson-<ver>.tar.gz) and built into the
 # shipped objects, so declare the bundled provides per Fedora's bundled-library
 # policy — this lets security tooling track CVEs against the bundled copies.
 # valijson is header-only, which does not exempt it: its code still lands in
 # libPhosphorFsLoader. Keep both versions in sync with
-# PHOSPHORSCRIPTING_LUAU_VERSION in libs/phosphor-scripting/CMakeLists.txt and
-# PHOSPHORFSLOADER_VALIJSON_VERSION in libs/phosphor-fsloader/CMakeLists.txt.
-Provides:       bundled(luau) = 0.730
+# PHOSPHORSCRIPTING_LUAU_VERSION in phosphor-libs/libs/phosphor-scripting/CMakeLists.txt and
+# PHOSPHORFSLOADER_VALIJSON_VERSION in phosphor-libs/libs/phosphor-fsloader/CMakeLists.txt.
+Provides:       bundled(luau) = 0.737
 Provides:       bundled(valijson) = 1.1.3
 
 # Plasma 6 / Wayland only
@@ -44,7 +43,7 @@ ExclusiveArch:  x86_64 aarch64
 
 # Build tools
 # wayland-scanner: protocol-glue code generator, located by CMake via
-# find_program (CMakeLists.txt:186, libs/phosphor-wayland/CMakeLists.txt:46).
+# find_program (the root CMakeLists.txt and phosphor-libs/libs/phosphor-wayland/CMakeLists.txt).
 # Depend on the pkgconfig(wayland-scanner) capability, not the bare
 # /usr/bin/wayland-scanner file path: the file-path form is reported
 # unresolvable by OBS on openSUSE Tumbleweed. wayland-devel ships both the
@@ -75,7 +74,7 @@ BuildRequires:  cmake(Qt6ShaderToolsPrivate)
 BuildRequires:  qt6-svg-devel
 BuildRequires:  qt6-core-private-devel
 BuildRequires:  qt6-gui-private-devel
-# Qt6QuickPrivate (CMakeLists.txt:120). openSUSE ships the private Quick
+# Qt6QuickPrivate (found by the root CMakeLists.txt). openSUSE ships the private Quick
 # CMake config in this explicit package; it does not auto-provide a
 # cmake(Qt6QuickPrivate) capability, unlike Qt6ShaderToolsPrivate.
 BuildRequires:  qt6-quick-private-devel
@@ -102,7 +101,8 @@ BuildRequires:  kf6-kcolorscheme-devel >= 6.26.0
 BuildRequires:  kf6-kirigami-devel >= 6.26.0
 %endif
 
-# Plasma 6.7 / KWin 6.7 (effect API)
+# Plasma 6.7 / KWin 6.7 (effect API). 6.8 (KWin 6.7.90) builds too: the effect
+# adapts to either paint-hook signature at compile time, see plasmazones/kwin-effect/kwincompat.h.
 # The KWin effect plugin's IID embeds KWin's exact upstream version
 # (KWIN_PLUGIN_VERSION_STRING in /usr/include/kwin/config-kwin.h). KWin refuses
 # to load any effect whose IID doesn't match its own version string — even
@@ -111,7 +111,7 @@ BuildRequires:  kf6-kirigami-devel >= 6.26.0
 # block for why an exact pin breaks whole-desktop upgrades.
 %if 0%{?suse_version}
 BuildRequires:  kwin6-devel
-# find_package(KWin) (kwin-effect/CMakeLists.txt:20) pulls in KWinConfig.cmake,
+# find_package(KWin) in plasmazones/kwin-effect/CMakeLists.txt pulls in KWinConfig.cmake,
 # which find_dependency()s the targets below (see KWinConfig.cmake.in, Plasma
 # 6.7). openSUSE's kwin6-devel does not drag these into the build root itself,
 # so the KWin effect's CMake configure step fails without them. KF6Config /
@@ -219,6 +219,14 @@ Features:
 %autosetup -n PlasmaZones-%{version}
 
 %build
+# There is no %%check section, deliberately. Building the tests needs glslang on
+# PATH, because the shader-validate gates hard-fail when it is missing rather
+# than skipping, and the suite also needs a session D-Bus. Neither is a
+# reasonable BuildRequires for a distro package. Test evidence for this tree
+# comes from CI, which builds and runs the full suite on every push and pull
+# request, including one job against the next Plasma. Worth remembering when
+# changing the KWin floor: this is the path that compiles against Fedora's and
+# openSUSE's KWin, so it proves the build rather than the behaviour.
 %cmake \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DBUILD_TESTING=OFF
@@ -270,8 +278,8 @@ echo ""
 %files
 %license LICENSE
 %license COPYING.LESSER
-# MIT licence of the vendored Luau runtime (extern/luau) and BSD-2-Clause
-# licence of the vendored valijson headers (extern/valijson), installed by the
+# MIT licence of the vendored Luau runtime (phosphor-libs/extern/luau) and BSD-2-Clause
+# licence of the vendored valijson headers (phosphor-libs/extern/valijson), installed by the
 # phosphor-scripting / phosphor-fsloader CMake in the default vendored build.
 %license %{_datadir}/licenses/plasmazones/LICENSE.Luau
 %license %{_datadir}/licenses/plasmazones/LICENSE.valijson

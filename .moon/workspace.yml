@@ -1,0 +1,75 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# moon workspace: one project per product tier, plus the repo root for the
+# checks that span tiers. CMake stays the build system inside each tier;
+# moon orders the tiers and runs only the affected ones. It does NOT cache
+# the build and test results: those tasks set `cache: false` because the
+# four tiers share one build directory (see .moon/tasks/cmake.yml), and
+# ccache remains the compile cache. See .moon/tasks/cmake.yml for the
+# shared task shapes.
+$schema: 'https://moonrepo.dev/schemas/workspace.json'
+
+projects:
+  repo: '.'
+  phosphor-libs: 'phosphor-libs'
+  phosphor-shell-libs: 'phosphor-shell-libs'
+  phosphor-shell: 'phosphor-shell'
+  plasmazones: 'plasmazones'
+
+vcs:
+  client: 'git'
+  defaultBranch: 'main'
+  provider: 'github'
+
+constraints:
+  # moon refuses an application depending on an application, which is the
+  # product order this workspace enforces: phosphor-shell and plasmazones are
+  # both applications and neither may list the other in dependsOn. The shell
+  # used to link three plasmazones targets for its surface decoration; those
+  # now live in phosphor-libs/libs/phosphor-surface-quick.
+  #
+  # What this does NOT police: runtime data reads that no dependsOn records.
+  # Three tier-1 tests read tier-4 data (phosphor-animation and
+  # phosphor-pointer read plasmazones/data/{animations,pointer}) and the
+  # shell tests read plasmazones/data/surface. Each project's moon.yml
+  # carries workspace-relative test inputs for them instead, because a
+  # dependsOn in that direction would cycle. Those are input edges for
+  # affected-ness, not layer edges, so enforcement stays meaningful for the
+  # link graph while they remain.
+  enforceLayerRelationships: true
+
+hasher:
+  # Walk the git index rather than the filesystem. This is a SPEED choice, not
+  # a filter: `vcs` does NOT exclude gitignored files from an input set.
+  # Measured on moon 2.5.5 -- `repo:conventions` hashed 3745 inputs, 35 of them
+  # gitignored (33 `.qmlls.ini`, 2 under `scripts/__pycache__`). Anything that
+  # must stay out of a hash needs an explicit ignorePatterns entry below.
+  walkStrategy: 'vcs'
+  ignorePatterns:
+    # NOTE the asymmetry, and do not "tidy" it. Measured on moon 2.5.5:
+    #
+    #   '**/build*/**'  REQUIRED. The bare 'build*/**' had been here since the
+    #     reorg's first commit and excluded NOTHING: repo:configure is the one
+    #     task whose input globs are workspace-root-relative and unbounded
+    #     ('**/CMakeLists.txt', '**/*.cmake'), and it was hashing 8560
+    #     generated files of 8781 inputs, across all five build trees. With
+    #     the prefix: 221 inputs, 0 from a build tree.
+    #
+    #   '.claude/**' and '.codex/**'  MUST STAY BARE. Prefixing them collapsed
+    #     the input set to ZERO, because a git worktree of this repo lives at
+    #     .claude/worktrees/<name>, so '**/.claude/**' matches every file in
+    #     it. Bare, they are root-relative and correct. They exclude nothing
+    #     from repo:configure today, since that task globs only CMake files
+    #     and .claude/ holds none, but they still guard a future task whose
+    #     inputs reach them.
+    - '**/build*/**'
+    - '.claude/**'
+    - '.codex/**'
+    # Editor and interpreter droppings that sit inside the `src/**` and
+    # `libs/**` source globs. qmlls rewrites `.qmlls.ini` whenever a QML build
+    # target changes and python rewrites `__pycache__` on every script run, so
+    # without these two every such run invalidates the cache for work that
+    # touched no tracked file.
+    - '**/.qmlls.ini'
+    - '**/__pycache__/**'

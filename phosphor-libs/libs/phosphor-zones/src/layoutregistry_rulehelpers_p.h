@@ -1,0 +1,191 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+//
+// Private (non-installed) header — rule-shape classification and context
+// helpers for the LayoutRegistry assignment cascade.
+//
+// These are pure functions with no LayoutRegistry-member dependency: they
+// classify and decode Rule / MatchExpression shapes, build the
+// windowless context query, and read an AssignmentEntry straight off a
+// rule's action list. They live here so any sibling .cpp in
+// phosphor-zones can share the one classifier set rather than
+// duplicating it.
+//
+// The functions live in the named PhosphorZones::RuleHelpers namespace
+// (not an anonymous one) precisely so they can be defined once in
+// layoutregistry_rulehelpers.cpp and referenced from other TUs.
+
+#pragma once
+
+#include <PhosphorZones/AssignmentEntry.h>
+
+#include <PhosphorRules/WindowQuery.h>
+
+#include <QList>
+#include <QString>
+
+namespace PhosphorRules {
+class MatchExpression;
+class Rule;
+} // namespace PhosphorRules
+
+namespace PhosphorZones::RuleHelpers {
+
+namespace PWR = PhosphorRules;
+
+// The decoded (screenId, virtualDesktop, activity) context a context-rule's
+// match expression pins. A non-context / nested-composite match leaves all
+// three at their defaults (empty / 0).
+struct ContextDims
+{
+    QString screenId;
+    int virtualDesktop = 0;
+    QString activity;
+
+    bool operator==(const ContextDims& other) const = default;
+};
+
+/// QSet/QHash key support. The batch driver collects its affected/emit contexts
+/// at the FULL triple so an erased context is not conflated with a rebuilt one
+/// on the same screen and desktop, and so the debug log can name the activity.
+/// The emit loops then dedupe down to (screen, desktop): layoutAssigned carries
+/// no activity and the payload resolves under the current activity, so two
+/// rules differing only in activity would fan out byte-identical signals.
+inline size_t qHash(const ContextDims& dims, size_t seed = 0) noexcept
+{
+    return qHashMulti(seed, dims.screenId, dims.virtualDesktop, dims.activity);
+}
+
+// Build the windowless context query for a (screen, desktop, activity) tuple.
+// No window attributes are set — window-property predicates evaluate false,
+// so only context-only rules contribute. This reproduces the old cascade.
+// @p mode is the placement-mode wire token ("snapping" / "tiling" /
+// "scrolling"); set by the mode-aware resolvers (gap cascade, and the
+// tiling/scrolling param resolvers, which stamp their own engine's token)
+// so a per-mode `Mode Equals "…"` rule resolves. Left empty for the four
+// mode-agnostic resolvers (assignment / lock / overlay / default-assignment),
+// which exclude Field::Mode STRUCTURALLY rather than relying on the empty
+// value to be a non-match — an unstamped mode reads back engaged-empty, which
+// a negated `None{Mode Equals …}` leaf matches.
+PWR::WindowQuery makeContextQuery(const QString& screenId, int virtualDesktop, const QString& activity,
+                                  const QString& mode = QString());
+
+// Human-readable label for a context assignment rule's (screen, desktop,
+// activity) tuple — the single place the " · Desktop N" / " · Activity"
+// suffix shape is constructed (used by upsert + every batch setter).
+QString contextRuleName(const QString& screenId, int virtualDesktop, const QString& activity);
+
+// Decode a match expression's pinned (screenId, desktop, activity) context
+// tuple via the shared ContextRuleBridge::contextDimsOf — the one classifier
+// for context-rule shape.
+ContextDims decodeDims(const PWR::MatchExpression& match);
+
+// True if @p match is exactly the context shape for the pinned dimensions of
+// (screenId, virtualDesktop, activity) — i.e. the match ContextRuleBridge
+// would emit for that tuple. A match pinning more/fewer dimensions, pinning
+// different values, or carrying ANY window-property leaf is NOT an exact
+// match. This is what hasExplicitAssignment relies on to distinguish a stored
+// entry from a wider cascade entry or the gated default.
+//
+// contextDimsOf ignores window-property leaves, so a flat rule mixing a
+// window predicate with the context leaves (e.g. All{ ScreenId==DP-1,
+// AppId==konsole }) would still decode to the same tuple — the
+// isContextOnly() gate is the discriminator that rejects it, mirroring
+// isContextAssignmentRule's "context-only" contract so upsert / clear never
+// clobber a window-property rule.
+bool matchIsExactContext(const PWR::MatchExpression& match, const QString& screenId, int virtualDesktop,
+                         const QString& activity);
+
+// True if @p rule carries a SetEngineMode action. Context assignment rules
+// carry one; the matchIsExactContext* shape filters reject a catch-all, so a
+// user-authored catch-all engine rule is handled by priority alone.
+bool hasEngineModeAction(const PWR::Rule& rule);
+
+// True if @p rule carries a SetSnappingLayout / SetTilingAlgorithm /
+// SetScrollingTemplate action. The
+// per-slot assignment resolver reads each layout slot independently of the
+// engine-mode slot, so a layout-only rule (no SetEngineMode) sets the layout
+// for its engine in a context without forcing the engine mode.
+bool hasSnappingLayoutAction(const PWR::Rule& rule);
+bool hasTilingAlgorithmAction(const PWR::Rule& rule);
+bool hasScrollingTemplateAction(const PWR::Rule& rule);
+
+// True when every action on @p rule is one of the four assignment slots
+// (SetEngineMode / SetSnappingLayout / SetTilingAlgorithm /
+// SetScrollingTemplate). False on an empty action list. Used by the
+// shape-based fallback in
+// findExactContextRule to refuse to claim a user-authored rule that
+// carries non-assignment actions (SetOpacity, OverrideAnimation*, Float,
+// Exclude, ...) — admitting it would silently strip those actions
+// through the assignment-rebuild path.
+bool isPureAssignmentRule(const PWR::Rule& rule);
+
+// True when @p rule fills at least ONE assignment slot, whatever else it
+// carries. The claim-side counterpart to isPureAssignmentRule's stricter
+// "and nothing else" test: a MIXED rule is still the rule that assigns its
+// context, and the rebuild paths preserve its other actions.
+bool hasAnyAssignmentSlotAction(const PWR::Rule& rule);
+
+// Append every action of @p existing that is NOT one of the four assignment
+// slots onto @p rebuilt. Every path that rebuilds an assignment rule through
+// makeAssignmentRule must call this: the rebuild carries the deterministic
+// context id, so it overwrites the stored rule whether or not a purity gate
+// let the caller CLAIM it, and makeAssignmentRule emits only the slot actions.
+// Without the carry-over, changing a context's layout silently destroys any
+// SetOpacity / LockContext / animation override the user attached to that same
+// context rule in the rules editor.
+void carryOverNonAssignmentActions(PWR::Rule& rebuilt, const PWR::Rule& existing);
+
+// Shape predicates for the per-screen-base / per-desktop / per-activity
+// context rule families — used by the batch setters to drop one family
+// before writing the new entries, and by the introspection helpers to keep
+// their family filter identical to the batch setters'. Each gates on
+// MatchExpression::isContextOnly() before decoding (see matchIsExactContext
+// for why a window-property leaf must never classify as a context family
+// member), then decomposes via the shared decodeDims (contextDimsOf).
+bool matchIsExactContextBase(const PWR::MatchExpression& match);
+bool matchIsExactContextDesktop(const PWR::MatchExpression& match);
+bool matchIsExactContextActivity(const PWR::MatchExpression& match);
+
+// True if @p rule is a context-shaped, engine-mode-carrying rule for one of
+// the cascade families (per-screen-base / per-desktop / per-activity) — i.e.
+// it carries a SetEngineMode action AND its match is exactly a pinned context
+// shape (not the catch-all, not a window-property rule that happens to carry
+// an engine-mode action).
+//
+// NOT a purity check, despite the family name: this says nothing about the
+// rule's OTHER actions. Any caller that REBUILDS rule.actions must therefore
+// either gate on isPureAssignmentRule OR call carryOverNonAssignmentActions,
+// because rebuilding force-injects the four slot actions and drops
+// everything else — so a context rule carrying SetEngineMode alongside
+// SetOpacity or LockContext would lose the extra action. Every rebuild path
+// now takes the second option, which is why clearAutotileAssignments can flip
+// a mixed rule without a purity gate.
+bool isContextAssignmentRule(const PWR::Rule& rule);
+
+// Build the AssignmentEntry encoded directly by a rule's action list (no
+// evaluation — used by introspection helpers like desktopAssignments()).
+AssignmentEntry entryFromRuleMatchActions(const PWR::Rule& rule);
+
+// The lowest priority that strictly outranks every existing context-assignment
+// rule in @p rules — (max isContextAssignmentRule priority) + 1, or the Context
+// band top (kContextBandBase + 99) when none exist. A freshly CREATED runtime
+// assignment seeds from this so it wins over any prior assignment (the
+// priority-wins model); an UPDATE preserves its own stored priority instead.
+int nextAssignmentPriority(const QList<PWR::Rule>& rules);
+
+// Whether @p narrow pins a strictly smaller slice of @p broad's context: the
+// same screen, every dimension @p broad pins (desktop, activity) pinned to the
+// same value, and at least one more dimension pinned.
+bool contextIsNarrowerThan(const ContextDims& narrow, const ContextDims& broad);
+
+// Lift, in place, every context-assignment rule in @p rules whose context is
+// narrower than @p written's and whose priority does not exceed
+// written.priority, to consecutive values above it (their relative order
+// kept). Returns the lifted rules' ids. Priority-wins gives a freshly created
+// assignment the top value so the newest write wins among its peers; without
+// this a SCREEN-level write made after per-desktop ones silently shadowed
+// every one of them, which is never what a broader write means.
+QList<QUuid> liftNarrowerAssignmentsAbove(QList<PWR::Rule>& rules, const PWR::Rule& written);
+
+} // namespace PhosphorZones::RuleHelpers

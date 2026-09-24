@@ -1,3 +1,4 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # flake.nix — PlasmaZones. Thin wiring only. The build recipe lives in
@@ -21,8 +22,10 @@
 
   inputs = {
     # Tracks nixos-unstable for the most current KDE Frameworks and KWin
-    # packages. The kwin-effect requires the Plasma 6.7 effect API, which the
-    # channel has shipped since it advanced to KWin 6.7.
+    # packages. The kwin-effect requires the Plasma 6.7 or 6.8 effect API and
+    # adapts to whichever it is built against, so any channel from KWin 6.7
+    # onwards works. Nix builds from source against the channel's own KWin, so
+    # nothing here needs changing when the channel advances to 6.8.
     #
     # This input was briefly pinned to an explicit master rev while the channel
     # was still on KWin 6.6.5. Do not reach for that again without knowing the
@@ -68,15 +71,16 @@
           throw "plasmazones: could not parse VERSION from CMakeLists.txt";
 
       # Scope the build source so edits to docs / CI / flake files don't
-      # invalidate the build. `self` is already git-clean (build/, .claude/ are
-      # gitignored); this additionally drops tracked-but-build-irrelevant paths.
+      # invalidate the build. `self` is git-clean, so build/ is already out, but
+      # NOT .claude/: .gitignore deliberately un-ignores 22 tracked files under
+      # it. Everything below is subtracted explicitly.
       src = lib.fileset.toSource {
         root = ./.;
         fileset = lib.fileset.difference ./. (
           lib.fileset.unions [
             ./.github
             ./docs
-            ./examples
+            ./phosphor-shell-libs/examples
             ./README.md
             ./CHANGELOG.md
             ./CONTRIBUTING.md
@@ -87,6 +91,25 @@
             ./lefthook.yml
             ./flake.nix
             ./flake.lock
+            # Build-orchestration and agent tooling. None of it is read by
+            # the CMake build, and moon.yml in particular is edited often
+            # enough that leaving it in invalidated the whole build hash on
+            # every tier-graph tweak.
+            ./.moon
+            ./moon.yml
+            ./phosphor-libs/moon.yml
+            ./phosphor-shell-libs/moon.yml
+            ./phosphor-shell/moon.yml
+            ./plasmazones/moon.yml
+            ./AGENTS.md
+            # .agents holds only symlinks INTO .claude/skills, so excluding it
+            # alone achieved nothing: .gitignore un-ignores 22 tracked files
+            # under .claude/ (agents/review, agents/shader-theme, five skills
+            # trees, settings.json) plus 2 under .codex/, and editing any of
+            # them changed the src hash and forced a full rebuild.
+            ./.agents
+            ./.claude
+            ./.codex
           ]
         );
       };

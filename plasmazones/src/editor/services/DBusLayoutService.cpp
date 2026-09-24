@@ -1,0 +1,169 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "DBusLayoutService.h"
+#include "core/platform/logging.h"
+#include "phosphor_i18n.h"
+
+#include <PhosphorLayoutApi/LayoutId.h>
+#include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorProtocol/ServiceConstants.h>
+
+#include <QDBusError>
+#include <QDBusMessage>
+
+namespace PlasmaZones {
+
+namespace {
+
+QDBusMessage callLayoutRegistry(const QString& method, const QVariantList& args = {})
+{
+    return PhosphorProtocol::ClientHelpers::syncCall(PhosphorProtocol::Service::Interface::LayoutRegistry, method,
+                                                     args);
+}
+
+QString errorMessage(const QDBusMessage& reply)
+{
+    return reply.type() == QDBusMessage::ErrorMessage ? QDBusError(reply).message() : QString();
+}
+
+} // namespace
+
+DBusLayoutService::DBusLayoutService(QObject* parent)
+    : ILayoutService(parent)
+{
+}
+
+QString DBusLayoutService::loadLayout(const QString& layoutId)
+{
+    if (layoutId.isEmpty()) {
+        // Composed from the two strings this file already has rather than
+        // re-worded into one: errorOccurred is now relayed verbatim, so a bare
+        // "Layout ID cannot be empty" would toast with no hint of what failed,
+        // while re-wording the source would re-key the catalogue entry and drop
+        // the translations all seven languages already have for both halves.
+        Q_EMIT errorOccurred(
+            PhosphorI18n::tr("Failed to load layout: %1").arg(PhosphorI18n::tr("Layout ID cannot be empty")));
+        return QString();
+    }
+
+    const QDBusMessage reply = callLayoutRegistry(QStringLiteral("getLayout"), {layoutId});
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
+        const QString err = errorMessage(reply);
+        qCWarning(lcDbus) << "loadLayout: failed for" << layoutId << err;
+        Q_EMIT errorOccurred(PhosphorI18n::tr("Failed to load layout: %1").arg(err));
+        return QString();
+    }
+    // An empty document is how getLayout reports a layout it does not hold, and
+    // that is a ReplyMessage like any other. The caller reads an empty return as
+    // failure and stays silent on the strength of this method having reported
+    // it, so the report has to happen here or the load fails with no diagnostic.
+    const QString jsonLayout = reply.arguments().constFirst().toString();
+    if (jsonLayout.isEmpty()) {
+        qCWarning(lcDbus) << "loadLayout: daemon holds no layout with id" << layoutId;
+        Q_EMIT errorOccurred(PhosphorI18n::tr("That layout is no longer available."));
+        return QString();
+    }
+    return jsonLayout;
+}
+
+QString DBusLayoutService::createLayout(const QString& jsonLayout)
+{
+    if (jsonLayout.isEmpty()) {
+        // Composed, not re-worded — see loadLayout above.
+        Q_EMIT errorOccurred(
+            PhosphorI18n::tr("Failed to create layout: %1").arg(PhosphorI18n::tr("Layout JSON cannot be empty")));
+        return QString();
+    }
+
+    const QDBusMessage reply = callLayoutRegistry(QStringLiteral("createLayoutFromJson"), {jsonLayout});
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
+        const QString err = errorMessage(reply);
+        qCWarning(lcDbus) << "createLayout: failed:" << err;
+        Q_EMIT errorOccurred(PhosphorI18n::tr("Failed to create layout: %1").arg(err));
+        return QString();
+    }
+    const QString layoutId = reply.arguments().constFirst().toString();
+    if (layoutId.isEmpty()) {
+        QString error = PhosphorI18n::tr("Created layout but received empty ID");
+        qCWarning(lcDbus) << error;
+        Q_EMIT errorOccurred(error);
+        return QString();
+    }
+    return layoutId;
+}
+
+bool DBusLayoutService::updateLayout(const QString& jsonLayout)
+{
+    if (jsonLayout.isEmpty()) {
+        // Composed, not re-worded — see loadLayout above.
+        Q_EMIT errorOccurred(
+            PhosphorI18n::tr("Failed to update layout: %1").arg(PhosphorI18n::tr("Layout JSON cannot be empty")));
+        return false;
+    }
+
+    const QDBusMessage reply = callLayoutRegistry(QStringLiteral("updateLayout"), {jsonLayout});
+    if (reply.type() != QDBusMessage::ReplyMessage) {
+        const QString err = errorMessage(reply);
+        qCWarning(lcDbus) << "updateLayout: failed:" << err;
+        Q_EMIT errorOccurred(PhosphorI18n::tr("Failed to update layout: %1").arg(err));
+        return false;
+    }
+    // A reply arrived, which only says the daemon was reachable. updateLayout is
+    // declared bool and answers false for a payload it refused (schema gate,
+    // unknown layout id, empty autotile algorithm key), and that refusal is a
+    // ReplyMessage like any other. Reporting success on the message type alone
+    // would let the editor clear its unsaved-changes flag and undo stack over a
+    // write the daemon threw away.
+    if (reply.arguments().isEmpty() || !reply.arguments().constFirst().toBool()) {
+        qCWarning(lcDbus) << "updateLayout: daemon rejected the layout";
+        Q_EMIT errorOccurred(PhosphorI18n::tr("The layout could not be saved."));
+        return false;
+    }
+    return true;
+}
+
+QString DBusLayoutService::getLayoutIdForScreen(const QString& screenName)
+{
+    if (screenName.isEmpty()) {
+        qCWarning(lcDbus) << "getLayoutIdForScreen: empty screenName";
+        return QString();
+    }
+
+    // getAssignedLayoutForScreen, NOT getLayoutForScreen: the latter falls
+    // back to the registry-wide default layout for an unassigned screen, so
+    // switching the editor to that screen would open the default layout for
+    // in-place editing and a save would overwrite it (discussion #858). An
+    // empty reply here routes the caller to createNewLayout() instead.
+    const QDBusMessage reply = callLayoutRegistry(QStringLiteral("getAssignedLayoutForScreen"), {screenName});
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
+        qCWarning(lcDbus) << "getAssignedLayoutForScreen: failed, screen=" << screenName << errorMessage(reply);
+        return QString();
+    }
+    const QString assignedId = reply.arguments().constFirst().toString();
+    // An autotile-assigned screen returns "autotile:<algorithmId>", which is
+    // not a loadable layout uuid — loadLayout would fail the parse and surface
+    // "That layout is no longer available." to the user. Treat it like an
+    // unassigned screen so the caller falls through to createNewLayout().
+    if (PhosphorLayout::LayoutId::isAutotile(assignedId)) {
+        return QString();
+    }
+    return assignedId;
+}
+
+void DBusLayoutService::assignLayoutToScreen(const QString& screenName, const QString& layoutId)
+{
+    if (screenName.isEmpty() || layoutId.isEmpty()) {
+        qCWarning(lcDbus) << "assignLayoutToScreen: empty parameters, screen=" << screenName << "layoutId=" << layoutId;
+        return;
+    }
+
+    const QDBusMessage reply = callLayoutRegistry(QStringLiteral("assignLayoutToScreen"), {screenName, layoutId});
+    if (reply.type() != QDBusMessage::ReplyMessage) {
+        const QString err = errorMessage(reply);
+        qCWarning(lcDbus) << "assignLayoutToScreen: failed for layout" << layoutId << "to screen" << screenName << err;
+        Q_EMIT errorOccurred(PhosphorI18n::tr("Failed to assign layout to screen: %1").arg(err));
+    }
+}
+
+} // namespace PlasmaZones

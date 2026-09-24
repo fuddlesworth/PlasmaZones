@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2026 fuddlesworth
 # Generate packaging changelogs from CHANGELOG.md
 #
 # Usage:
@@ -66,7 +67,7 @@ parse_changelog() {
 
 # Convert ISO date (2026-02-05) to RFC 2822 (Wed, 05 Feb 2026 00:00:00 +0000)
 iso_to_rfc2822() {
-    date -d "$1" -u '+%a, %d %b %Y %H:%M:%S +0000' 2>/dev/null || \
+    LC_ALL=C date -d "$1" -u '+%a, %d %b %Y %H:%M:%S +0000' 2>/dev/null || \
     python3 -c "
 from datetime import datetime
 d = datetime.strptime('$1', '%Y-%m-%d')
@@ -77,7 +78,7 @@ print(d.strftime('%a, %d %b %Y 00:00:00 +0000'))
 
 # Convert ISO date (2026-02-05) to RPM format (Wed Feb  5 2026)
 iso_to_rpm() {
-    date -d "$1" -u '+%a %b %e %Y' 2>/dev/null || \
+    LC_ALL=C date -d "$1" -u '+%a %b %e %Y' 2>/dev/null || \
     python3 -c "
 from datetime import datetime
 d = datetime.strptime('$1', '%Y-%m-%d')
@@ -91,10 +92,8 @@ generate_debian() {
     local filter_version="${1:-}"
     local revision="${2:-1}"
     local outfile="$SCRIPT_DIR/debian/changelog"
-    local current_version="" current_date="" first_entry=1
+    local current_version="" current_date=""
     local current_version_seen=""
-    local tmpfile
-    tmpfile=$(mktemp)
 
     while IFS='|' read -r version date bullet; do
         if [[ -n "$filter_version" && "$version" != "$filter_version" ]]; then
@@ -212,8 +211,13 @@ generate_rpm() {
         rm -f "$headfile"
         echo "Updated %changelog in $specfile" >&2
     else
-        echo "Warning: $specfile not found, printing to stdout" >&2
-        cat "$tmpfile"
+        # Hard-fail, matching the missing-%changelog-marker branch above.
+        # Warning and returning success meant .copr/Makefile saw a clean
+        # exit and went on to rpmbuild with the spec's 1970 placeholder
+        # changelog still in place.
+        echo "Error: $specfile not found" >&2
+        rm -f "$tmpfile"
+        exit 1
     fi
 
     rm -f "$tmpfile"
@@ -254,7 +258,7 @@ generate_notes() {
 # Without a revision bump apt/dnf/zypper see the same NEVR and offer no
 # upgrade, so the rebuild never reaches anyone. Mirrors Arch's pkgrel.
 REVISION="${3:-1}"
-if [[ ! "$REVISION" =~ ^[0-9]+$ ]]; then
+if [[ ! "$REVISION" =~ ^[1-9][0-9]*$ ]]; then
     echo "Error: revision must be a positive integer, got: $REVISION" >&2
     exit 1
 fi

@@ -1,0 +1,280 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#pragma once
+
+// Inline helpers shared across the daemon TU files in this directory
+// (start.cpp, signals.cpp, navigation.cpp, osd.cpp, cheatsheet.cpp,
+// lifecycle.cpp, the init_*.cpp files, autotile_init.cpp and
+// scrolling_init.cpp). Defined inline to avoid ODR issues in both unity and
+// normal builds.
+
+#include <QScreen>
+#include "core/platform/logging.h"
+#include "core/interfaces/settings_interfaces.h"
+#include "core/utils/utils.h"
+#include "dbus/tilingadaptor/tilingadaptor.h"
+#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/ScreenIdentity.h>
+#include <PhosphorContext/DisabledReason.h>
+#include <PhosphorEngine/IPlacementEngine.h>
+
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusPendingCall>
+
+#include <optional>
+
+namespace PlasmaZones {
+
+/// Run one phase of the sticky-screen pin pass on the tiling-family engines.
+///
+/// The phases bracket a context change and the order is not cosmetic: Release
+/// run BEFORE the context moves resolves the migration's destination against
+/// the context being LEFT, dropping the pinned state on that context's live
+/// one and force-releasing every window it held. See
+/// PhosphorEngine::StickyPinPhase.
+inline void applyStickyScreenPins(WindowTrackingAdaptor* adaptor, PhosphorEngine::IPlacementEngine* autotileEngine,
+                                  PhosphorEngine::IPlacementEngine* scrollEngine, PhosphorEngine::StickyPinPhase phase)
+{
+    // Null-guarded service, matching every other daemon ->service() consumer.
+    auto* service = adaptor ? adaptor->service() : nullptr;
+    if (!service) {
+        return;
+    }
+    const auto sticky = [service](const QString& windowId) {
+        return service->isWindowSticky(windowId);
+    };
+    // Only the tiling-family engines keep pins; the snap engine has no pin
+    // concept and inherits the interface's no-op.
+    if (autotileEngine) {
+        autotileEngine->updateStickyScreenPins(sticky, phase);
+    }
+    if (scrollEngine) {
+        scrollEngine->updateStickyScreenPins(sticky, phase);
+    }
+}
+
+/// Run the engines' per-desktop membership pass for each of @p screenIds:
+/// every window whose span covers a screen's current context gets a place
+/// in it, and the places the spans no longer cover are given back.
+///
+/// Ordered AFTER updateEngineScreens() by every caller, and the order is not
+/// cosmetic: the tiling engines gate the pass on their active-screen set,
+/// which that call recomputes for the context just entered. Run before it,
+/// a per-desktop mode assignment (tiling on one desktop, snapping on the
+/// next) had the pass adopt windows into a state the same handler then tore
+/// down, taking the windows' other memberships with it. The adopts only
+/// schedule retiles, which coalesce behind the announce that follows.
+inline void reconcileMembershipsForScreens(TilingAdaptor* adaptor, const QStringList& screenIds)
+{
+    if (!adaptor) {
+        return;
+    }
+    for (const QString& screenId : screenIds) {
+        adaptor->reconcileDesktopMemberships(screenId);
+    }
+}
+
+/// Ask plasmashell to show its own text OSD.
+///
+/// Lives here rather than in osd.cpp because cheatsheet.cpp calls it too. It
+/// was a static in osd.cpp's anonymous namespace, which only linked because a
+/// UNITY build puts both TUs in one blob; a non-unity configure (a packager
+/// build, or -DCMAKE_UNITY_BUILD=OFF) failed to resolve it. Inline here for the
+/// same reason the rest of this header is: one definition that works in both
+/// build modes.
+inline void showKdeTextOsd(const QString& icon, const QString& text)
+{
+    QDBusMessage msg =
+        QDBusMessage::createMethodCall(QStringLiteral("org.kde.plasmashell"), QStringLiteral("/org/kde/osdService"),
+                                       QStringLiteral("org.kde.osdService"), QStringLiteral("showText"));
+    msg << icon << text;
+    QDBusConnection::sessionBus().asyncCall(msg);
+}
+
+inline DisabledReason toDaemonDisabledReason(PhosphorContext::DisabledReason reason)
+{
+    switch (reason) {
+    case PhosphorContext::DisabledReason::NotDisabled:
+        return DisabledReason::NotDisabled;
+    case PhosphorContext::DisabledReason::MonitorDisabled:
+        return DisabledReason::MonitorDisabled;
+    case PhosphorContext::DisabledReason::DesktopDisabled:
+        return DisabledReason::DesktopDisabled;
+    case PhosphorContext::DisabledReason::ActivityDisabled:
+        return DisabledReason::ActivityDisabled;
+    }
+    Q_UNREACHABLE();
+    return DisabledReason::NotDisabled;
+}
+
+/**
+ * @brief Resolve a physical screen ID to a virtual screen ID if subdivisions exist.
+ *
+ * When the KWin effect sends a physical screen ID (e.g., during daemon reconnect
+ * before virtual screen configs are loaded), the daemon must resolve it to the
+ * correct virtual screen. Resolution cascade: the focused window's
+ * daemon-tracked screen assignment, then the effect-reported active screen,
+ * then the optional cursor-position hint, then vs:0 (leftmost).
+ *
+ * @p mgr is the injected ScreenManager (required — pass null only in tests
+ * that don't exercise VS resolution; null is treated as "no subdivision").
+ * @p cursorPos optional cursor hint; disengaged by default. No production
+ * caller currently supplies one — the parameter is kept for shortcut paths
+ * that have an effect-reported cursor and no focused window.
+ */
+inline QString resolveVirtualScreenId(PhosphorScreens::ScreenManager* mgr, const QString& physicalId,
+                                      const WindowTrackingAdaptor* trackingAdaptor,
+                                      const std::optional<QPoint>& cursorPos = std::nullopt)
+{
+    if (!mgr || !mgr->hasVirtualScreens(physicalId)) {
+        return physicalId;
+    }
+
+    // Best source: the focused window's daemon-tracked screen assignment.
+    // When a window is snapped to a zone, windowSnapped() stores the virtual
+    // screen ID in m_windowScreenAssignments.  This is authoritative — it was
+    // set at snap time by the daemon itself, not by the effect.
+    if (trackingAdaptor && trackingAdaptor->service()) {
+        const QString activeWindowId = trackingAdaptor->lastActiveWindowId();
+        if (!activeWindowId.isEmpty()) {
+            const QString trackedScreen = trackingAdaptor->service()->screenForWindow(activeWindowId);
+            if (PhosphorIdentity::VirtualScreenId::isVirtual(trackedScreen)
+                && PhosphorIdentity::VirtualScreenId::extractPhysicalId(trackedScreen) == physicalId) {
+                return trackedScreen;
+            }
+        }
+    }
+
+    // Fallback: effect-reported active screen (may be virtual if effect has VS configs)
+    if (trackingAdaptor) {
+        const QString activeScreen = trackingAdaptor->lastActiveScreenName();
+        if (PhosphorIdentity::VirtualScreenId::isVirtual(activeScreen)
+            && PhosphorIdentity::VirtualScreenId::extractPhysicalId(activeScreen) == physicalId) {
+            return activeScreen;
+        }
+    }
+
+    // Cursor position hint: when a keyboard shortcut fires with no focused window,
+    // the cursor position (from the effect) can resolve the correct virtual
+    // screen. std::optional, not a negative-coord sentinel — multi-monitor
+    // layouts legitimately have negative coordinates, so (-1,-1) was a valid
+    // position masquerading as "absent".
+    if (cursorPos.has_value()) {
+        const QString vsAtCursor = mgr->effectiveScreenAt(*cursorPos);
+        if (PhosphorIdentity::VirtualScreenId::isVirtual(vsAtCursor)
+            && PhosphorIdentity::VirtualScreenId::extractPhysicalId(vsAtCursor) == physicalId) {
+            return vsAtCursor;
+        }
+    }
+
+    // Last resort: first virtual screen (vs:0)
+    QStringList vsIds = mgr->virtualScreenIdsFor(physicalId);
+    if (!vsIds.isEmpty()) {
+        return vsIds.first();
+    }
+    return physicalId;
+}
+
+/**
+ * @brief Resolve the screen ID for a keyboard shortcut action (virtual-screen-aware).
+ *
+ * Every navigation shortcut (float, move, focus, restore, swap, ...) targets
+ * the focused window, so the focused window's screen is authoritative — the
+ * cursor is only consulted when there is no active window (e.g. empty-desktop
+ * shortcuts). Using cursor-first silently misroutes actions when the user
+ * lets the mouse rest on a different virtual screen than the focused window.
+ */
+inline QString resolveShortcutScreenId(PhosphorScreens::ScreenManager* mgr,
+                                       const WindowTrackingAdaptor* trackingAdaptor)
+{
+    if (!trackingAdaptor) {
+        QScreen* primary = Utils::primaryScreen();
+        return primary ? PhosphorScreens::ScreenIdentity::identifierFor(primary) : QString();
+    }
+
+    // Primary: focused window's screen (may already be a virtual ID from the effect)
+    const QString activeScreen = trackingAdaptor->lastActiveScreenName();
+    if (!activeScreen.isEmpty()) {
+        if (!PhosphorIdentity::VirtualScreenId::isVirtual(activeScreen)) {
+            return resolveVirtualScreenId(mgr, activeScreen, trackingAdaptor);
+        }
+        return activeScreen;
+    }
+
+    // Fallback: cursor screen, for shortcuts fired with no focused window
+    const QString cursorScreen = trackingAdaptor->lastCursorScreenName();
+    if (!cursorScreen.isEmpty()) {
+        if (!PhosphorIdentity::VirtualScreenId::isVirtual(cursorScreen)) {
+            return resolveVirtualScreenId(mgr, cursorScreen, trackingAdaptor);
+        }
+        return cursorScreen;
+    }
+
+    // Last resort: primary screen physical ID
+    QScreen* primary = Utils::primaryScreen();
+    return primary ? PhosphorScreens::ScreenIdentity::identifierFor(primary) : QString();
+}
+
+/**
+ * @brief Resolve the screen ID for a screen-targeted shortcut (cursor-first).
+ *
+ * Sibling of @ref resolveShortcutScreenId for actions that target a screen
+ * (per-VS layout-source toggle) rather than a window (focus, move, swap).
+ * The user's intent for a screen-targeted shortcut is "the screen I am
+ * looking at right now" — i.e. the cursor's screen. Routing those off the
+ * focused window's screen silently misroutes the action when the focused
+ * window lives on a different VS than the cursor.
+ *
+ * Falls back to focused-window screen, then primary screen.
+ *
+ * @p mgr is unused today: WindowTrackingAdaptor::cursorScreenChanged resolves
+ * m_lastCursorScreenId to a virtual ID at the source whenever the physical
+ * screen is split, so a physical ID from lastCursorScreenName means the
+ * screen has no virtual split and IS the effective ID — no further mapping
+ * needed. (resolveShortcutScreenId still re-resolves its inputs because its
+ * primary source, lastActiveScreenName, arrives from the effect and may be a
+ * raw physical ID on a split screen; the two helpers' assumptions differ
+ * because their sources do, not because either is wrong.) Kept in the
+ * signature so the call site mirrors @ref resolveShortcutScreenId and so a
+ * future resolution policy that needs ScreenManager has a place to land.
+ */
+inline QString resolveCursorScreenId(PhosphorScreens::ScreenManager* /*mgr*/,
+                                     const WindowTrackingAdaptor* trackingAdaptor)
+{
+    if (trackingAdaptor) {
+        const QString cursorScreen = trackingAdaptor->lastCursorScreenName();
+        if (!cursorScreen.isEmpty()) {
+            return cursorScreen;
+        }
+        const QString activeScreen = trackingAdaptor->lastActiveScreenName();
+        if (!activeScreen.isEmpty()) {
+            return activeScreen;
+        }
+    }
+    QScreen* primary = Utils::primaryScreen();
+    return primary ? PhosphorScreens::ScreenIdentity::identifierFor(primary) : QString();
+}
+
+/**
+ * @brief Convert NavigationDirection enum to string for D-Bus/engine calls
+ */
+inline QString navigationDirectionToString(NavigationDirection direction)
+{
+    switch (direction) {
+    case NavigationDirection::Left:
+        return QStringLiteral("left");
+    case NavigationDirection::Right:
+        return QStringLiteral("right");
+    case NavigationDirection::Up:
+        return QStringLiteral("up");
+    case NavigationDirection::Down:
+        return QStringLiteral("down");
+    }
+    Q_UNREACHABLE();
+    return QString();
+}
+
+} // namespace PlasmaZones

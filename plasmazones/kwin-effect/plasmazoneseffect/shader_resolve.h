@@ -1,0 +1,312 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#pragma once
+
+#include <PhosphorAnimation/Profile.h>
+#include <PhosphorAnimation/ShaderProfile.h>
+#include <PhosphorAnimation/ShaderProfileTree.h>
+#include <PhosphorRules/WindowQuery.h>
+#include <PhosphorShaders/ShaderPresetRegistry.h>
+
+#include <QColor>
+#include <QString>
+#include <QStringList>
+#include <QVariantMap>
+
+#include <optional>
+
+namespace PhosphorAnimation {
+class CurveRegistry;
+}
+
+namespace PhosphorRules {
+class RuleEvaluator;
+class ResolvedActions;
+struct Rule;
+}
+
+namespace PlasmaZones {
+
+/**
+ * @file shader_resolve.h
+ * @brief Effect-local per-window animation cascade shims, built on
+ *        PhosphorRules::RuleEvaluator.
+ *
+ * These walk the event-scoped action slots (`anim-shader:<event>`,
+ * `anim-timing:<event>`, `anim-curve:<event>`) populated by `Rule`s
+ * carrying `OverrideAnimation{Shader,Timing,Curve}` actions, falling back to
+ * the per-event ShaderProfileTree / motion-profile defaults when no rule
+ * matches. The duration clamp, the curve `tryCreate` fallback, the
+ * engaged-empty `effectId` sentinel, and the empty-input short-circuits all
+ * live in these shims — the evaluator stays generic.
+ *
+ * Every resolver takes a `PhosphorRules::WindowQuery` carrying the FULL
+ * window context (AppId / WindowClass / Title / WindowRole / DesktopFile /
+ * WindowType / Pid / state flags / placement state), built once per window by
+ * the GPL-side caller via `PlasmaZonesEffect::ruleQuery(w)`, which threads
+ * the effect's floating / snapped / zone caches into the free `ruleQueryFor`
+ * builder. Pre-PR the resolvers took a bare `windowClass` and the rule layer
+ * matched exclusively on `WindowClass Contains <pattern>`; v4 widened the match
+ * shape so a user-authored rule may pin to `AppId` / `DesktopFile` / `Title` / etc.
+ * Routing the full query through to the resolver keeps the rule-override
+ * gate (which already builds the full query) and the slot resolution in
+ * lockstep — a rule that passes the gate also resolves its slot.
+ */
+
+/**
+ * @brief The resolved SHADER for a per-window event, and where it came from.
+ *
+ * The shader slot only. It carries NO duration: the Rule timing slot is owned by
+ * `resolveEventMotionProfile`, which reads it once, clamps it once, and feeds both
+ * the animator leg and the shader leg of the same rule from that one result. This
+ * struct used to carry a duration too, resolved and clamped a second time from the
+ * same slot — idempotent only because both sites happened to spell an identical
+ * qBound, and a silent desync waiting for one of them to change.
+ *
+ * Windowless @p query (`hasWindow()` false) or an empty @p eventPath resolves
+ * straight from the tree without touching the evaluator: no window attribute could
+ * match any rule predicate, so the walk would be wasted and would consume a cache
+ * slot for nothing.
+ */
+struct ResolvedShaderProfile
+{
+    PhosphorAnimationShaders::ShaderProfile profile;
+    /// True when a window RULE filled the shader slot (verbatim, including an
+    /// engaged-empty "None" sentinel). False when the profile came from the
+    /// tree / baseline. Callers that apply a built-in per-event default must
+    /// NOT override a rule decision: a rule "None" is a deliberate per-app
+    /// opt-out, so the default only applies when no rule matched.
+    bool shaderSlotFromRule = false;
+};
+/// Resolve ONLY the shader slot (rule → tree → baseline).
+///
+/// It deliberately does NOT read the Rule timing slot. That slot is owned by
+/// `PlasmaZonesEffect::resolveEventMotionProfile`, which reads it, clamps it into
+/// the animation envelope, and hands the result to both the animator leg and the
+/// shader leg. This function used to read and clamp the SAME slot a second time —
+/// idempotent only because both sites happened to spell an identical qBound, and
+/// a silent desync waiting for one of them to change. One read, one clamp.
+///
+/// @p presets resolves the profile's `presetId` into the parameters it stands
+/// for, overlaid with the profile's own edits, so every caller downstream sees
+/// one flat parameter map and never has to know a preset was involved. The
+/// returned profile's `presetId` is cleared to say it has already been applied.
+ResolvedShaderProfile resolveAnimationShaderProfile(const PhosphorRules::RuleEvaluator& evaluator,
+                                                    const PhosphorAnimationShaders::ShaderProfileTree& tree,
+                                                    const PhosphorShaders::ShaderPresetRegistry& presets,
+                                                    const QString& windowId, const PhosphorRules::WindowQuery& query,
+                                                    const QString& eventPath);
+
+/**
+ * @brief Motion-profile cascade: per-window timing rule → base profile.
+ *
+ * Returns @p base with its `curve` / `duration` replaced when a timing rule
+ * fills the `anim-timing:<eventPath>` slot. A non-empty curve is parsed via
+ * @p curveRegistry's `tryCreate` (a malformed curve keeps the base curve); a
+ * `durationMs > 0` overrides the duration, clamped into the animation envelope
+ * `[Limits::MinAnimationDurationMs, Limits::MaxAnimationDurationMs]`. A
+ * windowless @p query (`hasWindow()` false) or empty @p eventPath, or no
+ * matching rule, returns @p base unchanged.
+ *
+ * @p windowId routes the lookup through the evaluator's per-window match
+ * cache so the curve / timing / shader resolvers share their walks. Pass
+ * the same frozen composite the sister resolvers use; on a default-state
+ * tree (no rules, no profile overrides) the result is the unchanged
+ * base profile and the cache reads are O(1).
+ */
+PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorRules::RuleEvaluator& evaluator,
+                                                         const PhosphorAnimation::Profile& base,
+                                                         const PhosphorRules::WindowQuery& query,
+                                                         const QString& eventPath, const QString& windowId,
+                                                         const PhosphorAnimation::CurveRegistry& curveRegistry);
+
+/**
+ * @brief Per-window opacity cascade — the runtime consumer for
+ *        `SetOpacity` rules.
+ *
+ * Returns the rule-resolved opacity in `[0.0, 1.0]` when an enabled rule fills
+ * the `opacity` slot of @p resolved with a valid `value` param, or `std::nullopt`
+ * when no rule filled it / the param is missing / the value falls outside the
+ * documented range. SetOpacity is layer-backed, so callers fold the returned
+ * value into the plain opacity-tint layer's pack param at decoration-update
+ * time, or cache it per frame for the shader-transition draw's
+ * bare-uTexture0 fallback (`iWindowOpacity`). Either way the value is an
+ * absolute set, not multiplicative — SetOpacity semantics are "make the
+ * window THIS opaque," not "scale by this factor".
+ *
+ * @p resolved comes from the effect's `resolveRuleActions` helper, which
+ * peeks the evaluator's per-window cache and only builds the WindowQuery on a
+ * miss — so this pure extractor stays off the per-frame query-build hot path. An
+ * empty `resolved` (windowless / unmatched window) simply has no opacity slot →
+ * `nullopt`.
+ */
+std::optional<qreal> resolveWindowOpacity(const PhosphorRules::ResolvedActions& resolved);
+
+/**
+ * @brief Per-window border / title-bar appearance override — the runtime
+ *        consumer for the SetBorder* / SetHideTitleBar rules.
+ *
+ * Each field is set only when an enabled rule fills the corresponding slot of
+ * @p resolved with a valid param (bool for hideTitleBar/showBorder, an int in
+ * the descriptor range for width/radius, a parseable `#AARRGGBB` for the
+ * colours). Unset fields mean "no override — fall back to the global
+ * snap/autotile border state." Returns `std::nullopt` when no rule fills any
+ * slot (including the windowless / empty `resolved` case), so the caller can
+ * skip the merge entirely.
+ *
+ * Applies to ANY matched window (snapped OR floating), mirroring
+ * `resolveWindowOpacity`. The bool/int re-reads here mirror the load-time
+ * descriptor validators in ruleaction.cpp (defence-in-depth). The colour reads
+ * parse via `QColor(QString)`, which accepts the same hex shapes the load-time
+ * `hasHexColor` validator admits (`#RGB`, `#RRGGBB`, `#AARRGGBB`) plus named
+ * colours; the load boundary stays hex-only, so a named colour can only reach
+ * this reader through an in-process path that bypassed load — still safe, since
+ * any `QColor::isValid()` result renders fine.
+ */
+struct ResolvedWindowAppearance
+{
+    std::optional<bool> hideTitleBar;
+    std::optional<bool> showBorder;
+    std::optional<int> borderWidth;
+    std::optional<int> borderRadius;
+    // `activeColor` is the focused colour (from SetBorderColorActive),
+    // `inactiveColor` the unfocused one (from SetBorderColorInactive, already
+    // defaulted to active when that action was omitted). The accent sentinel has
+    // been resolved to the matching system colour by the time it lands here —
+    // the accent/highlight in activeColor, the inactive colour in inactiveColor.
+    // updateWindowDecoration picks by the window's focus state. A focus-scoped
+    // single-colour rule (matching IsFocused) still works — it just fills
+    // activeColor in its matching state.
+    std::optional<QColor> activeColor;
+    std::optional<QColor> inactiveColor;
+    // Plain opacity+tint layer slots (SetOpacityTintVisible / SetTintStrength /
+    // SetTintColor), mirroring the border trio above. `tintColor`'s accent
+    // sentinel resolves to the system accent like `activeColor`. `opacity`
+    // carries the CONFIG value only — resolveWindowAppearance never fills it
+    // (the SetOpacity rule has its own resolver, resolveWindowOpacity, and
+    // updateWindowDecoration folds that rule over this config value when the
+    // layer renders); it exists here so resolveEffectiveWindowAppearance can
+    // carry the config value alongside the rule-resolved tint slots.
+    std::optional<bool> showOpacityTint;
+    std::optional<double> opacity;
+    std::optional<double> tintStrength;
+    std::optional<QColor> tintColor;
+
+    bool any() const
+    {
+        return hideTitleBar || showBorder || borderWidth || borderRadius || activeColor || inactiveColor
+            || showOpacityTint || tintStrength || tintColor;
+    }
+};
+
+/// @p accentColor / @p inactiveColor are the live system colours the
+/// `BorderColorToken::Accent` sentinel resolves to per focus state: @p accentColor
+/// (the system accent / highlight) fills the focused/active slot, @p inactiveColor
+/// the unfocused/inactive slot. Pass an invalid QColor for either when none is
+/// known (the sentinel then contributes no colour for that state).
+std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorRules::ResolvedActions& resolved,
+                                                                const QColor& accentColor, const QColor& inactiveColor);
+
+/**
+ * @brief Per-window decoration-chain override — the runtime consumer for the
+ *        OverrideDecorationChain rule.
+ *
+ * `chain` is the ordered surface-pack id list that REPLACES the
+ * DecorationProfileTree's user packs for the matched window; an empty list is
+ * the "no decoration" sentinel (block the tree chain outright). No id is
+ * reserved: a rule may name "border" / "opacity-tint" like any other pack, and
+ * both those ids and their params are kept whole. They also back the plain
+ * easy-mode layers, but the effect injects those only for a window with no user
+ * packs, and a non-empty rule chain IS user packs — so naming one takes the
+ * plain layer's place rather than stacking a second copy on it. `params`
+ * carries the action's per-pack parameter map ({packId -> {paramId ->
+ * value}}), which overrides the tree profile's map per pack. Returns
+ * `std::nullopt` when no rule fills the slot, so updateWindowDecoration
+ * falls through to the tree unchanged.
+ */
+struct ResolvedDecorationChain
+{
+    QStringList chain;
+    QVariantMap params;
+    /// Per-pack preset references, `{packId -> presetId}`, the same nested
+    /// shape `params` uses. A rule can point one layer at a preset and tune the
+    /// next by hand, exactly as a decoration tree node can.
+    QVariantMap presetIds;
+};
+
+std::optional<ResolvedDecorationChain> resolveDecorationChain(const PhosphorRules::ResolvedActions& resolved);
+
+/**
+ * @brief Per-window stacking-layer override — the runtime consumer for the
+ *        SetWindowLayer rule.
+ *
+ * Returns the validated layer token (`WindowLayerToken::Above` / `Normal` /
+ * `Below`) when an enabled rule fills the `window-layer` slot of @p resolved,
+ * or `std::nullopt` when no rule fills it or the value is outside the closed
+ * vocabulary (defence in depth against a hand-edited payload that bypassed the
+ * load-time validator, mirroring the other consumers). The caller
+ * (reconcileRuleWindowLayer) maps the token onto KWin's keepAbove/keepBelow
+ * pair, always writing both flags.
+ */
+std::optional<QString> resolveWindowLayer(const PhosphorRules::ResolvedActions& resolved);
+
+/**
+ * @brief Fullscreen-at-open verdict — the runtime consumer for the
+ *        OpenFullscreen rule.
+ *
+ * Returns the boolean payload when an enabled rule fills the
+ * `open-fullscreen` slot of @p resolved (true = open in real KWin
+ * fullscreen, false = veto the app's own fullscreen request at open), or
+ * `std::nullopt` when no rule fills it or the value is not a strict JSON
+ * bool (same defence-in-depth stance as the other consumers). The caller
+ * (applyRuleOpenFullscreen) flips `KWin::Window::setFullScreen` once, at
+ * windowAdded time, before the window is announced to the daemon — and the
+ * tiling-eligibility gate rejects on the REQUESTED bit as well as the
+ * committed one, so the announce path is not fooled by the commit lag this
+ * flip leaves behind on Wayland.
+ *
+ * Resolved against the effect-VERDICT evaluator (`Tag::EffectVerdict`), whose
+ * terminal scope is the blanket `Exclude` only: an `ExcludeAnimations` rule
+ * must not cancel a fullscreen-at-open decision.
+ */
+std::optional<bool> resolveOpenFullscreen(const PhosphorRules::ResolvedActions& resolved);
+
+/**
+ * @brief Per-window scroll-speed multiplier — the runtime consumer for the
+ *        ScrollFactor rule.
+ *
+ * Returns the validated factor when an enabled rule fills the `scroll-factor`
+ * slot of @p resolved, or `std::nullopt` when no rule fills it or the value is
+ * non-numeric / non-finite / outside [MinScrollFactor, MaxScrollFactor]
+ * (reject-not-clamp, matching the load-time validator; NaN fails an ordered
+ * comparison in BOTH directions, so it is rejected by an explicit finiteness
+ * test rather than by the range test). Resolved against the effect-VERDICT
+ * evaluator, so an `ExcludeAnimations` rule cannot cancel it. The caller (the
+ * effect's input filter,
+ * via ruleScrollFactorFor) rescales the axis event's delta and deltaV120 in
+ * place before the forwarding filter delivers it to the client.
+ */
+std::optional<qreal> resolveScrollFactor(const PhosphorRules::ResolvedActions& resolved);
+
+/// True when @p rule carries at least one appearance action that can actually
+/// take effect on a window.
+///
+/// The animation window-filter force-animates a window past the user's min-size
+/// and exclusion settings when a rule matches it, on the reasoning that
+/// authoring a matching rule is the opt-in signal. That reasoning needs the
+/// rule to be able to DO something. An animation override names an event, and
+/// rule slots are looked up by exact event path with no parent cascade (see
+/// shaderSlotFor and friends), so an override pinned to an event the compositor
+/// resolves windowless is never consulted and the rule signals nothing.
+///
+/// "Live" is asked through the action descriptor rather than against a list of
+/// animation action type ids, which would drift the day a fourth event-scoped
+/// action is registered. An action declaring no `animationEvent` param is not
+/// event-scoped at all (a border, an opacity, a layer) and is always live. An
+/// EMPTY event is unset rather than windowless and stays live; an event this
+/// build does not know names no leg any resolver asks for, so it is inert
+/// exactly like a windowless one.
+bool ruleCarriesLiveEffectAction(const PhosphorRules::Rule& rule);
+
+} // namespace PlasmaZones

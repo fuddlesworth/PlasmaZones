@@ -1,0 +1,108 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import org.kde.kirigami as Kirigami
+
+/**
+ * @brief Simple tooltip showing zone dimensions during drag/resize operations
+ *
+ * Displays position and size (percentage) in a clean, minimal format at the bottom of the zone.
+ * Shows percentage-based dimensions for zone sizing feedback.
+ */
+Rectangle {
+    id: dimensionTooltip
+
+    // Stacking order among drawingArea siblings. Zones stack unbounded
+    // (zoneBaseZ + zOrder), so the instantiation site passes canvasOverlayZ + 1
+    // to keep the tooltip above the zones and the snap lines.
+    required property int overlayZ
+    property real zoneX: 0
+    property real zoneY: 0
+    property real zoneWidth: 0
+    property real zoneHeight: 0
+    property real canvasWidth: 1
+    property real canvasHeight: 1
+    property bool showDimensions: false
+    property bool isFixedMode: false
+    // Zero rather than a fake screen size: the percentage readouts below
+    // already guard on > 0, and the only instantiation binds both from the
+    // controller (falling back to the real Screen), so these defaults are
+    // never the value in use. A plausible-looking 1920x1080 here would print
+    // confidently wrong percentages if that ever stopped being true.
+    property real screenWidth: 0
+    property real screenHeight: 0
+    // Calculate percentages (relative mode)
+    property int widthPercent: (canvasWidth > 0 && !isNaN(zoneWidth)) ? Math.round((zoneWidth / canvasWidth) * 100) : 0
+    property int heightPercent: (canvasHeight > 0 && !isNaN(zoneHeight)) ? Math.round((zoneHeight / canvasHeight) * 100) : 0
+    property int xPercent: (canvasWidth > 0 && !isNaN(zoneX)) ? Math.round((zoneX / canvasWidth) * 100) : 0
+    property int yPercent: (canvasHeight > 0 && !isNaN(zoneY)) ? Math.round((zoneY / canvasHeight) * 100) : 0
+    // Calculate pixel values (fixed mode)
+    property int fixedPosX: (canvasWidth > 0 && screenWidth > 0) ? Math.round((zoneX / canvasWidth) * screenWidth) : 0
+    property int fixedPosY: (canvasHeight > 0 && screenHeight > 0) ? Math.round((zoneY / canvasHeight) * screenHeight) : 0
+    property int fixedSizeW: (canvasWidth > 0 && screenWidth > 0) ? Math.round((zoneWidth / canvasWidth) * screenWidth) : 0
+    property int fixedSizeH: (canvasHeight > 0 && screenHeight > 0) ? Math.round((zoneHeight / canvasHeight) * screenHeight) : 0
+    // Padding between the tooltip and the zone's bottom edge (one grid unit);
+    // the tooltip is positioned at the bottom center of the zone
+    readonly property real bottomPadding: Kirigami.Units.gridUnit
+
+    visible: showDimensions && zoneWidth > 0 && zoneHeight > 0 && canvasWidth > 0 && canvasHeight > 0
+    x: {
+        var centerX = zoneX + (zoneWidth - width) / 2;
+        var minX = zoneX + Kirigami.Units.smallSpacing;
+        var maxX = zoneX + zoneWidth - width - Kirigami.Units.smallSpacing;
+        return Math.max(minX, Math.min(maxX, centerX));
+    }
+    y: zoneY + zoneHeight - height - bottomPadding // Bottom of zone with proper padding
+    width: contentColumn.implicitWidth + Kirigami.Units.gridUnit
+    height: contentColumn.implicitHeight + Kirigami.Units.smallSpacing * 2
+    radius: Kirigami.Units.smallSpacing
+    // Use Tooltip colorSet for proper theme colors
+    Kirigami.Theme.inherit: false
+    Kirigami.Theme.colorSet: Kirigami.Theme.Tooltip
+    color: Kirigami.Theme.backgroundColor
+    border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+    border.width: 1 // Hairline tooltip border
+    z: dimensionTooltip.overlayZ
+    Accessible.name: i18nc("@info:accessibility", "Zone dimensions")
+    Accessible.description: isFixedMode ? i18nc("@info:accessibility", "Position: %1px, %2px  Size: %3px × %4px", fixedPosX, fixedPosY, fixedSizeW, fixedSizeH) : i18nc("@info:accessibility", "Position: %1%, %2%  Size: %3% × %4%", xPercent, yPercent, widthPercent, heightPercent)
+
+    GridLayout {
+        id: contentColumn
+
+        anchors.centerIn: parent
+        columns: 2
+        columnSpacing: Kirigami.Units.smallSpacing
+        rowSpacing: Kirigami.Units.smallSpacing / 2
+
+        // Row 1: Position
+        Label {
+            text: i18nc("@label", "Pos:")
+            font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+            color: Kirigami.Theme.disabledTextColor
+        }
+
+        Label {
+            text: isFixedMode ? i18nc("@info Position in pixels", "%1px, %2px", fixedPosX, fixedPosY) : i18nc("@info Position as percentages", "%1%, %2%", xPercent, yPercent)
+            font.family: Kirigami.Theme.fixedWidthFont.family
+            font.pixelSize: Kirigami.Theme.defaultFont.pixelSize
+            color: Kirigami.Theme.textColor
+        }
+
+        // Row 2: Size
+        Label {
+            text: i18nc("@label", "Size:")
+            font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+            color: Kirigami.Theme.disabledTextColor
+        }
+
+        Label {
+            text: isFixedMode ? i18nc("@info Size in pixels", "%1px × %2px", fixedSizeW, fixedSizeH) : i18nc("@info Size as percentages", "%1% × %2%", widthPercent, heightPercent)
+            font.family: Kirigami.Theme.fixedWidthFont.family
+            font.pixelSize: Kirigami.Theme.defaultFont.pixelSize
+            color: Kirigami.Theme.textColor
+        }
+    }
+}

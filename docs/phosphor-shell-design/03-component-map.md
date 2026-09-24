@@ -10,7 +10,8 @@ all of it.
 ## Layout
 
 ```
-libs/
+phosphor/libs/ and phosphor-shell-libs/libs/  (the two library tiers; the
+                             rows below span both)
   phosphor-theme/            Phosphor.Theme: Theme, Tokens, Motion, StateLayer, Spectrum,
                              PaletteStore, AppearanceStore, Appearance, FontFaces, MatugenRunner, TemplateEngine
   phosphor-shell-widgets/    Phosphor.Widgets: SpectrumRail/Stroke/Underline, TabularText,
@@ -39,7 +40,7 @@ libs/
   phosphor-service-*/        sni, upower, mpris, pipewire, network, bluetooth, brightness,
                              notifications, polkit, idle, clipboard, lock, session, icontheme
 
-src/shell/                   The shell process (GPL)
+phosphor-shell/src/          The shell process (GPL)
   main.cpp                   Composition: registries, transports, context properties
   BarController              IBarWidgetFactory registry owner
   ControlCenterController    Tile registry + pane open state per screen
@@ -52,7 +53,7 @@ src/shell/                   The shell process (GPL)
   ShellGestures              CompositorBridge.gestureReported relay
   ShellChrome                Decoration tree + pack registry → stage lists for DecorationSlot
 
-examples/phosphor-shell/shell.qml   The composition root: every surface mounted per screen
+phosphor-shell/shell/shell.qml   The composition root: every surface mounted per screen
 ```
 
 ## Data flow

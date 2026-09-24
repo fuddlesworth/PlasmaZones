@@ -1,0 +1,1149 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import QtQuick.Dialogs
+import org.kde.kirigami as Kirigami
+import PlasmaZones
+import org.plasmazones.common as PZCommon
+
+import "../../js/FontUtils.js" as FontUtils
+
+/**
+ * @brief Detail view for a single shader effect (pack-agnostic).
+ *
+ * Side-by-side layout (mirroring the zone editor): the metadata and parameters scroll
+ * independently on the left while a PINNED preview fills the right, so the preview never
+ * scrolls out of view and the parameters always have room. Drives both the
+ * animation-shaders browser and the snapping-overlay-shaders browser via a `bridge`.
+ *
+ * When the bridge also exposes a `previewController`, the right pane is a LIVE
+ * preview (selected by the bridge's `previewKind`: a ZoneShaderItem render for
+ * zone/overlay, the composed chain for decorations, a driven transition for
+ * animations) and the left column an editable ParameterEditor whose changes are
+ * transient. A bridge with no previewController shows a read-only parameter list.
+ *
+ * Required:
+ *   - `effect`: var — set by the host before calling `open()`.
+ *   - `bridge`: QtObject — `shaderEffectUsages(id)`; optionally `previewController`.
+ * Optional:
+ *   - `usagesRev`: int — invalidates the cached `shaderEffectUsages` result.
+ *   - `usageHeaderTextFn`: function(count) → string — domain-tuned copy.
+ */
+Kirigami.Dialog {
+    id: root
+
+    property var effect: null
+    required property var bridge
+    property int usagesRev: 0
+    property var usageHeaderTextFn: function (count) {
+        return i18ncp("@info shader usage section header", "Used in %n event", "Used in %n events", count);
+    }
+    readonly property string _description: effect && typeof effect.description === "string" ? effect.description : ""
+    readonly property string _author: effect && effect.author && effect.author.length > 0 ? effect.author : ""
+    readonly property string _version: effect && effect.version && effect.version.length > 0 ? effect.version : ""
+    readonly property var _usages: {
+        usagesRev; // reactive dep
+        var id = effect ? effect.id : "";
+        if (!id || id.length === 0 || !bridge)
+            return [];
+
+        return bridge.shaderEffectUsages(id) || [];
+    }
+    readonly property bool _hasParameters: effect && effect.parameters && effect.parameters.length > 0
+
+    // Percent-encode a local file path for a file:// URL. `encodeURI` handles spaces and
+    // unicode while preserving path separators but leaves `#` and `?` untouched, so those
+    // two are escaped explicitly or they parse as fragment/query delimiters.
+    // Twin site: AnimationPreviewPane.qml wallpaper Image source.
+    function _encodeFilePath(path) {
+        return encodeURI(path).replace(/#/g, "%23").replace(/\?/g, "%3F");
+    }
+
+    // ── T3.1 live preview ──────────────────────────────────────────────
+    // Every shipped bridge (zone/overlay, decoration, animation) exposes a
+    // preview controller these days, and previewKind selects the pane. The
+    // null case remains the contract for a bridge without one: the right
+    // pane then degrades to the read-only parameter list below.
+    readonly property string _effectId: effect ? (effect.id || "") : ""
+    // Resolved PER PACK where the bridge can do that, and per bridge otherwise.
+    // The decoration bridge serves two pack families (surface and pointer) that
+    // preview through different hosts, so it exposes previewControllerFor /
+    // previewKindFor and answers for the selected pack. A bridge that has only
+    // one family exposes neither, and is answered for by its own CONSTANT
+    // previewController / previewKind, so every other browser is unchanged.
+    readonly property var previewController: {
+        if (!bridge)
+            return null;
+        if (_effectId.length > 0 && typeof bridge.previewControllerFor === "function") {
+            const scoped = bridge.previewControllerFor(_effectId);
+            if (scoped)
+                return scoped;
+        }
+        return bridge.previewController ? bridge.previewController : null;
+    }
+    readonly property bool _livePreview: previewController !== null && effect !== null
+    // Which preview pane this pack wants. The decoration bridge reports
+    // "decoration" or "pointer" per pack; the zone/overlay bridges predate the
+    // property and report nothing, so a controller with no declared kind falls
+    // back to "zone" — that fallback is what keeps the snapping and overlay
+    // browsers unchanged.
+    readonly property string _previewKind: {
+        if (!bridge)
+            return "";
+        if (_effectId.length > 0 && typeof bridge.previewKindFor === "function") {
+            const scoped = bridge.previewKindFor(_effectId);
+            if (scoped)
+                return scoped;
+        }
+        return bridge.previewKind ? bridge.previewKind : (previewController ? "zone" : "");
+    }
+    // The two panes need different halves of this dialog. A zone preview drives
+    // the shader-info / translated-param / preset machinery below; a decoration
+    // preview drives none of it (its controller composes a whole chain instead,
+    // and exposes no preset API), so those calls are gated on the zone kind
+    // rather than on _livePreview alone — calling getShaderInfo on the
+    // decoration controller would be a hard "not a function" at open time.
+    readonly property bool _zonePreview: _livePreview && _previewKind === "zone"
+    readonly property bool _decorationPreview: _livePreview && _previewKind === "decoration"
+    readonly property bool _animationPreview: _livePreview && _previewKind === "animation"
+    readonly property bool _pointerPreview: _livePreview && _previewKind === "pointer"
+
+    // The wallpaper the zone pane draws behind its zones, as a file:// URL.
+    // Resolved once per dialog rather than per frame — the path does not change
+    // while the dialog is open, and ShaderRegistry caches the decode anyway.
+    // Empty when the zone pane is not the active one or the path cannot be
+    // resolved, which leaves the pane on its black ground.
+    readonly property string _zoneWallpaperUrl: {
+        if (!_zonePreview || !previewController)
+            return "";
+        var p = previewController.wallpaperPath() || "";
+        return p.length > 0 ? "file://" + _encodeFilePath(p) : "";
+    }
+
+    // Transient (non-persisted) state driving the preview.
+    property var _liveParams: ({})
+    property var _lockedParams: ({})
+    property var _shaderInfo: ({})
+    property var _translatedParams: ({})
+    /// Width the zone pane renders at, in logical px, published by the pane
+    /// itself because the translation below needs it.
+    ///
+    /// A zone shader's px parameters (a border width, a corner radius) are absolute
+    /// against the SCREEN. This pane is a few hundred px standing in for a few thousand,
+    /// so raw values draw an effect several times too coarse for the zone rectangles
+    /// beside them, which zonesForShaderPreview has already scaled into pane space.
+    /// Handing the width to translateShaderParams puts the two on the same footing.
+    ///
+    /// A binding, not a handler write: `livePreviewPane` is declared in this file, so the
+    /// root reads its width directly. Floored at 1 to match the zone geometry call — a 0
+    /// would leave the px parameters raw while the geometry scaled as if the pane were
+    /// 1px, the exact mismatch this scaling exists to avoid.
+    readonly property int _zonePreviewWidth: Math.max(1, Math.round(livePreviewPane.width))
+    on_ZonePreviewWidthChanged: _recompute()
+    /// Which preset the preview is currently showing, or empty for none. Local
+    /// to the dialog: the browser has no assignment to store it on.
+    property string _browsePresetId: ""
+
+    /// The family's preset bridge, picked the same way `previewController` is.
+    /// Null for a family the host did not hand one over for, which hides the
+    /// row rather than breaking it.
+    readonly property QtObject _presetBridge: {
+        if (root._animationPreview)
+            return settingsController.animationPresets;
+        if (root._pointerPreview)
+            return settingsController.pointerPresets;
+        if (root._decorationPreview)
+            return settingsController.surfacePresets;
+        if (root._zonePreview)
+            return settingsController.overlayPresets;
+        return null;
+    }
+
+    /// Load @p presetId's values onto the live preview map, falling back to each
+    /// parameter's declared default for anything the preset does not mention — so
+    /// picking a preset shows exactly what it specifies rather than what happened to
+    /// be on screen before. Hence NOT `effectiveParams`, which leaves such a
+    /// parameter absent: right for an assignment, wrong for a preview.
+    function _applyPresetToPreview(presetId) {
+        if (!root._presetBridge || !root.effect)
+            return;
+        const preset = presetId.length > 0 ? root._presetBridge.presetParams(root.effect.id, presetId) : ({});
+        const next = {};
+        const defs = (root.effect && root.effect.parameters) ? root.effect.parameters : [];
+        for (let i = 0; i < defs.length; ++i) {
+            const def = defs[i];
+            if (!def || !def.id)
+                continue;
+            next[def.id] = (preset[def.id] !== undefined) ? preset[def.id] : def["default"];
+        }
+        root._liveParams = next;
+        // Remembered so a SAVE from here writes what the preset is about rather than
+        // the whole defaults-filled preview map. See `_presetSaveValues`.
+        root._presetNamedKeys = Object.keys(preset);
+        root._appliedValues = next;
+        root._recompute();
+    }
+
+    /// Tolerant value compare, the shape PresetRow._sameValue uses: numbers within an
+    /// epsilon, everything else by string form, because a round trip through C++ can
+    /// change a value's TYPE without changing what it means.
+    function _sameValue(a, b) {
+        if (typeof a === "number" && typeof b === "number")
+            return Math.abs(a - b) < 0.0001;
+        return String(a) === String(b);
+    }
+
+    /// Which keys the loaded preset named, and the map loading it produced.
+    property var _presetNamedKeys: []
+    property var _appliedValues: ({})
+
+    /// What a save or update from here stores: the keys the preset already names plus
+    /// whatever the user moved since it loaded. NOT `_liveParams`, which
+    /// `_applyPresetToPreview` fills with every declared default so the PREVIEW shows what
+    /// the preset specifies; handing that to PresetRow expanded a two-parameter preset into
+    /// one pinning all of them, and no-delta assignments then followed those defaults.
+    readonly property var _presetSaveValues: {
+        const live = root._liveParams || {};
+        const applied = root._appliedValues || {};
+        const named = root._presetNamedKeys || [];
+        const out = {};
+        for (let i = 0; i < named.length; ++i)
+            if (live[named[i]] !== undefined)
+                out[named[i]] = live[named[i]];
+        // The tolerant compare, not `!==`: a value can come back from C++ as an int where
+        // it went in as a double, or a colour as a QColor rather than its string, and a
+        // strict test then reads an untouched key as user-changed and pins it.
+        for (const key in live)
+            if (applied[key] === undefined || !root._sameValue(live[key], applied[key]))
+                out[key] = live[key];
+        return out;
+    }
+
+    // T3.2: drives the preview-renderer Loader. Toggled off→on in _resetPreview
+    // so the ZoneShaderItem is destroyed and recreated on every shader switch —
+    // a fresh item has no inherited Error/errorLog, so the placeholder covers the
+    // load and the compile-error banner can only reflect the shader in view.
+    property bool _rendererActive: false
+    // Drives the decoration pane's Loader, the same way _rendererActive drives
+    // the zone renderer's. Written ONLY by _teardownPanes / _armPanes — see
+    // the shared-lifecycle contract below.
+    property bool _decorationArmed: false
+    // The animation pane's arm flag, lifecycle-twin of _decorationArmed:
+    // written ONLY by _teardownPanes / _armPanes. The animation pane covers
+    // itself until its shader compiles, so it arms on the decoration
+    // schedule (a tick after teardown), not the zone one.
+    property bool _animationArmed: false
+    // The pointer pane's arm flag, lifecycle-twin of the two above: written
+    // ONLY by _teardownPanes / _armPanes. Like the animation pane it covers
+    // itself until its shader compiles, so it arms on the decoration schedule
+    // (a tick after teardown) rather than waiting for `opened`.
+    property bool _pointerArmed: false
+    // Animated clock for the preview shader.
+    property real _previewITime: 0
+    property real _previewTimeDelta: 0
+    property real _previewLastTime: 0
+    property int _previewFrame: 0
+
+    // True while the application itself is frontmost. Folded into the preview
+    // clock's `running` and the audio capture, mirroring the editor dialog's
+    // onAppActiveChanged: pane visibility alone does not drop when the
+    // settings window is merely unfocused or covered, so without this gate an
+    // open dialog kept the 60 Hz tick and the CAVA child process running in
+    // the background until the dialog closed.
+    readonly property bool _appActive: Qt.application.state === Qt.ApplicationActive
+
+    // Whether the browsed pack actually consumes the audio spectrum, so a
+    // non-audio pack's dialog session does not spawn the external CAVA process at all.
+    // Only the animation controller can answer per pack (packInfo); the zone and
+    // decoration controllers expose no such probe, so those kinds keep the historical
+    // start-always behaviour, a known cost until their bridges grow one. The pointer
+    // controller has no audio API at all, so there is nothing to start and asking would
+    // call a method that does not exist.
+    function _packWantsAudio() {
+        if (_previewKind === "pointer")
+            return false;
+        if (_previewKind !== "animation")
+            return true;
+        var info = previewController.packInfo(effect ? (effect.id || "") : "");
+        return info && info.audio === true;
+    }
+
+    // Paired with _packWantsAudio for the stop side, which has no per-pack
+    // question to ask and so cannot reuse it: a controller that never started
+    // capture also has nothing to stop, and only some of them expose the call.
+    function _canStopAudio() {
+        return previewController && typeof previewController.stopAudioCapture === "function";
+    }
+
+    on_AppActiveChanged: {
+        if (!opened || !_livePreview)
+            return;
+        if (_appActive) {
+            // Re-baseline so the first post-resume delta is ~one frame, not
+            // the clamped 100 ms jump.
+            _previewLastTime = Date.now() / 1000;
+            if (_packWantsAudio())
+                previewController.startAudioCapture();
+        } else if (_canStopAudio()) {
+            previewController.stopAudioCapture();
+        }
+    }
+
+    function _resetPreview() {
+        // The PRESET state first, ABOVE the no-preview early return, because the preset
+        // row shows on a family with no preview pane too. Without this a pack switch left
+        // the previous pack's id selected (rendering as "Missing preset" for a pack with
+        // nothing wrong with it) and left `_appliedValues` / `_presetNamedKeys` pointing
+        // at the previous pack, so `_presetSaveValues` judged nearly every key
+        // user-changed and a Save pinned every declared default again.
+        _browsePresetId = "";
+        _presetNamedKeys = [];
+        _appliedValues = ({});
+        if (!_livePreview)
+            return;
+        // Fresh clock per shader: without this the previous shader's iTime
+        // carries over (a time-driven pack starts mid-animation) and the
+        // first tick computes its delta against a stale wall-clock stamp.
+        _previewITime = 0;
+        _previewTimeDelta = 0;
+        _previewFrame = 0;
+        _previewLastTime = Date.now() / 1000;
+        // Zone-only: the decoration controller has no getShaderInfo, and its
+        // pane reads what it needs (parameters, audio / backdrop flags) from
+        // packInfo itself.
+        _shaderInfo = _zonePreview ? (previewController.getShaderInfo(effect.id) || ({})) : ({});
+        var p = {};
+        var params = effect.parameters || [];
+        for (var i = 0; i < params.length; i++) {
+            if (params[i] && params[i].id !== undefined && params[i].default !== undefined)
+                p[params[i].id] = params[i].default;
+        }
+        _liveParams = p;
+        _lockedParams = {};
+        _recompute();
+        // Both panes now rebuild through the shared lifecycle below, and only
+        // through it. Neither pane may manage its own lifetime: every regression
+        // this dialog has had came from one pane's teardown or arm living
+        // somewhere the other pane's didn't.
+        _teardownPanes();
+        _armPanes();
+    }
+
+    // ── The ONE preview lifecycle, shared by both panes ────────────────────
+    //
+    // One reused dialog serves two preview panes, and three regressions in a row came
+    // from arming or tearing one down somewhere the other did not know about. The
+    // lifecycle lives here, in one pair of functions, and the panes' Loaders gate on
+    // flags only these functions write. The contract:
+    //
+    //   - TEARDOWN is synchronous and unconditional, in _resetPreview. It cannot rely on
+    //     `visible` dropping: a QQC2 Popup keeps `visible` true until its EXIT transition
+    //     finishes, so reopening on another pack mid-close never deactivated a
+    //     `visible`-gated Loader and the old pack's stale composition survived into the
+    //     new open. That was the stale / unavailable flicker.
+    //
+    //   - ARM is per pane, because the two build differently, which is what kept
+    //     breaking. Decoration arms a TICK after teardown (Qt.callLater, so the Loader
+    //     destroys the old item first): its chain composes asynchronously and covers
+    //     itself until ready, so deferring it to `opened` made the card arrive bare and
+    //     decorate late. Zone arms from onOpened, after the enter transition, because a
+    //     ZoneShaderItem compiles and links synchronously and doing that before the
+    //     popup is on screen spent the compile on a window nobody could see.
+    //
+    // Net effect for both: popup appears, "Preview unavailable" covers, preview
+    // reveals when ready. The contract test in test_animations_qml_contracts.cpp names
+    // the symptom you would reintroduce by moving one of these lines.
+    function _teardownPanes() {
+        _rendererActive = false; // zone
+        _decorationArmed = false; // decoration
+        _animationArmed = false; // animation
+        _pointerArmed = false; // pointer
+    }
+    function _armPanes() {
+        Qt.callLater(function () {
+            root._decorationArmed = root.visible && root._decorationPreview;
+            root._animationArmed = root.visible && root._animationPreview;
+            root._pointerArmed = root.visible && root._pointerPreview;
+        });
+        // The zone arm normally waits for onOpened. A reset while ALREADY
+        // open (a mid-session caller, or a fast pack switch on a dialog whose
+        // `opened` never dropped) re-arms here instead, since onOpened will
+        // not fire again.
+        if (opened)
+            Qt.callLater(_armZoneRenderer);
+    }
+    function _armZoneRenderer() {
+        root._rendererActive = root.opened && root._zonePreview;
+    }
+
+    // A pack switch on a still-visible dialog (open B while A's exit
+    // transition runs — `visible` has not dropped, and aboutToShow is not
+    // guaranteed to re-fire on a popup that never finished closing). Without
+    // this, the previous pack's pane lives on under the new effect until its
+    // bindings recompose: the stale frame at the front of the flicker.
+    onEffectChanged: {
+        if (visible && _livePreview)
+            _resetPreview();
+    }
+    function _recompute() {
+        // Zone-only. A decoration pack's params reach its shader inside the
+        // composed chain (previewChain translates them through the SAME builder
+        // the daemon uses), so there is no separate translated-param map here
+        // and no translateShaderParams on that controller to call.
+        if (!_zonePreview)
+            return;
+        _translatedParams = previewController.translateShaderParams(effect.id, _liveParams, _zonePreviewWidth) || ({});
+    }
+    function _setLiveParam(id, value) {
+        var next = Object.assign({}, _liveParams);
+        next[id] = value;
+        _liveParams = next;
+        _recompute();
+    }
+
+    // BEFORE the panes are built, not after. `opened` does not fire until the enter
+    // transition has finished, but the preview Loaders activate on `visible`, set at the
+    // START of it — so resetting there handed the decoration pane the PREVIOUS pack's
+    // parameters, let it compose and show that, then changed them under it. The chain
+    // recomposed, the placeholder came back and the preview arrived twice: the
+    // preview / unavailable / preview flicker on every open.
+    //
+    // aboutToShow runs before the popup becomes visible, so the panes are built
+    // once, with the right parameters, and compose once.
+    onAboutToShow: {
+        if (_livePreview)
+            _resetPreview();
+    }
+    onOpened: {
+        // AFTER the popup is on screen, so the placeholder covers the compile
+        // rather than the compile delaying the popup — see _armZoneRenderer.
+        if (_livePreview)
+            _armZoneRenderer();
+        // Gate on _appActive: opening the dialog while the settings app
+        // is backgrounded must not start CAVA — the on_AppActiveChanged
+        // handler starts it when the app comes to the front.
+        if (_livePreview && _appActive && _packWantsAudio())
+            previewController.startAudioCapture();
+    }
+    onClosed: {
+        // Tear BOTH panes down on close so no (possibly Error) state survives
+        // on the reused dialog and flashes on the next shader's open — the
+        // next _resetPreview rebuilds them fresh. Through the shared lifecycle,
+        // not by writing one pane's flag here and forgetting the other's.
+        _teardownPanes();
+        if (_canStopAudio())
+            previewController.stopAudioCapture();
+    }
+
+    function _fmt(v) {
+        if (typeof v === "number")
+            return Number.isInteger(v) ? String(v) : v.toFixed(2);
+
+        if (typeof v === "boolean")
+            return v ? i18nc("@info bool true", "Yes") : i18nc("@info bool false", "No");
+
+        return String(v);
+    }
+
+    title: effect ? (effect.name || effect.id || "") : ""
+    // Wide (side-by-side with the live preview) whenever a bridge supplies a
+    // preview controller — all three shipped browsers do; narrower
+    // single-column for the no-previewController fallback.
+    preferredWidth: _livePreview ? Kirigami.Units.gridUnit * 54 : Kirigami.Units.gridUnit * 38
+    maximumHeight: Kirigami.Units.gridUnit * 26
+    standardButtons: Kirigami.Dialog.Close
+    padding: Kirigami.Units.largeSpacing
+
+    // Preset controls on the footer's left (Close stays on the right).
+    //
+    // No longer zone-only. This used to drive two file dialogs through
+    // shaderPresetDirectory / saveShaderPreset / loadShaderPreset, which
+    // existed on the zone preview controller alone, so the whole row was gated
+    // on `_zonePreview`. Named presets live in a registry every family shares,
+    // so the row now works wherever this dialog does.
+    footerLeadingComponent: Component {
+        // Span the full params column (left ScrollView) so the row sits at its
+        // left, lining up under the params/preview split.
+        Item {
+            visible: root._hasParameters && root._presetBridge !== null
+            // Width = the params content width: availableWidth already excludes
+            // the scrollbar, and subtracting one largeSpacing matches the params
+            // column's own right margin. MUST be 0 when hidden: a bridge without
+            // a previewController gets no preview column, so availableWidth is
+            // nearly the full dialog width — claiming that here would make the
+            // footer wider than the dialog and feed back into availableWidth, a
+            // runaway layout loop that freezes the dialog.
+            implicitWidth: visible ? detailsScroll.availableWidth - Kirigami.Units.largeSpacing : 0
+            implicitHeight: visible ? browserPresetRow.implicitHeight : 0
+
+            PresetRow {
+                id: browserPresetRow
+
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+
+                packId: root.effect ? root.effect.id : ""
+                packDisplayName: root.effect ? (root.effect.name || root.effect.id || "") : ""
+                presetBridge: root._presetBridge
+                presetId: root._browsePresetId
+                // The filtered map, not the defaults-filled preview one: see
+                // `_presetSaveValues`.
+                currentValues: root._presetSaveValues
+                deltas: null // no assignment here; see PresetRow's `deltas` doc
+                // The browser tunes a PREVIEW, not an assignment, so picking a
+                // preset loads its values into the live map rather than storing
+                // a reference. Persisting one belongs to the pages that own an
+                // assignment; this dialog owns none.
+                onPresetSelected: function (id) {
+                    root._browsePresetId = id;
+                    root._applyPresetToPreview(id);
+                }
+                onPresetDeleted: root._browsePresetId = "" // values stay; a delete is not a pick
+                onRevertRequested: root._applyPresetToPreview(root._browsePresetId)
+            }
+        }
+    }
+
+    Item {
+        implicitWidth: root.preferredWidth - root.leftPadding - root.rightPadding
+        implicitHeight: mainRow.implicitHeight
+
+        RowLayout {
+            id: mainRow
+
+            anchors.left: parent.left
+            anchors.right: parent.right
+            spacing: Kirigami.Units.largeSpacing
+
+            // ── LEFT: scrollable metadata + parameters ──────────────────
+            ScrollView {
+                id: detailsScroll
+
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredHeight: Kirigami.Units.gridUnit * 18
+                Layout.maximumHeight: Kirigami.Units.gridUnit * 22
+                contentWidth: availableWidth
+                clip: true
+
+                ColumnLayout {
+                    // Leave a right margin so content (the param-count label, the
+                    // per-row value + lock) doesn't butt against the divider /
+                    // scrollbar.
+                    width: detailsScroll.availableWidth - Kirigami.Units.largeSpacing
+                    spacing: Kirigami.Units.largeSpacing
+
+                    // ── Header row: category pill + badges + param count ──
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Rectangle {
+                            visible: root.effect && root.effect.category && root.effect.category.length > 0
+                            radius: height / 2
+                            // Filled highlight chip with contrasting text so it's
+                            // legible on the dark dialog (the faint-tint version
+                            // was nearly invisible).
+                            color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.85)
+                            Layout.preferredWidth: categoryLabel.implicitWidth + Kirigami.Units.largeSpacing
+                            Layout.preferredHeight: categoryLabel.implicitHeight + Kirigami.Units.smallSpacing
+                            Layout.alignment: Qt.AlignVCenter
+
+                            Label {
+                                id: categoryLabel
+
+                                anchors.centerIn: parent
+                                text: root.effect ? (root.effect.category || "") : ""
+                                // Via FontUtils: a theme small font carries
+                                // either a pixelSize or a pointSize, and the
+                                // other reads -1, so assigning pixelSize
+                                // directly sizes the chip wrong on a
+                                // pointSize theme and desyncs the pill that
+                                // measures this label.
+                                font: FontUtils.withProps(Kirigami.Theme.smallFont, {
+                                    "weight": Font.Medium
+                                })
+                                color: Kirigami.Theme.highlightedTextColor
+                            }
+                        }
+
+                        Label {
+                            visible: root.effect && root.effect.isUserEffect
+                            text: i18nc("@info shader source badge", "User")
+                            font: Kirigami.Theme.smallFont
+                            color: Kirigami.Theme.highlightColor
+                        }
+
+                        Item {
+                            Layout.fillWidth: true
+                        }
+
+                        Label {
+                            visible: root._hasParameters
+                            text: i18np("%n parameter", "%n parameters", root.effect ? (root.effect.parameters || []).length : 0)
+                            font: Kirigami.Theme.smallFont
+                            color: Kirigami.Theme.disabledTextColor
+                        }
+                    }
+
+                    // ── Description + author/version ──────────────────────
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        visible: root._description.length > 0 || root._author.length > 0 || root._version.length > 0
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Label {
+                            visible: root._description.length > 0
+                            Layout.fillWidth: true
+                            text: root._description
+                            wrapMode: Text.WordWrap
+                        }
+
+                        Label {
+                            visible: root._author.length > 0 || root._version.length > 0
+                            Layout.fillWidth: true
+                            text: {
+                                var parts = [];
+                                if (root._author.length > 0)
+                                    parts.push(i18nc("@info shader author", "by %1", root._author));
+
+                                if (root._version.length > 0)
+                                    parts.push(i18nc("@info shader version", "v%1", root._version));
+
+                                return parts.join(" · ");
+                            }
+                            color: Kirigami.Theme.disabledTextColor
+                            // One binding: a font.<sub> sibling next to a whole-group `font:` is an
+                            // illegal duplicate binding that fails the whole document. FontUtils
+                            // passes only the size dimension the theme font actually carries.
+                            font: FontUtils.withProps(Kirigami.Theme.smallFont, {
+                                italic: true
+                            })
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    // ── Used-in section ──────────────────────────────────
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        visible: root._usages.length > 0
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Kirigami.Separator {
+                            Layout.fillWidth: true
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Kirigami.Units.smallSpacing
+
+                            Kirigami.Icon {
+                                source: "checkmark"
+                                implicitWidth: Kirigami.Units.iconSizes.small
+                                implicitHeight: Kirigami.Units.iconSizes.small
+                                color: Kirigami.Theme.positiveTextColor
+                            }
+
+                            Label {
+                                text: root.usageHeaderTextFn(root._usages.length)
+                                font.weight: Font.DemiBold
+                            }
+                        }
+
+                        Label {
+                            Layout.fillWidth: true
+                            Layout.leftMargin: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
+                            text: {
+                                var labels = [];
+                                for (var i = 0; i < root._usages.length; i++)
+                                    labels.push(root._usages[i].label || root._usages[i].path);
+                                return labels.join(", ");
+                            }
+                            color: Kirigami.Theme.disabledTextColor
+                            font: Kirigami.Theme.smallFont
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+
+                    Kirigami.Separator {
+                        Layout.fillWidth: true
+                        visible: root._hasParameters
+                    }
+
+                    // ── Parameters ────────────────────────────────────────
+                    // Editable editor (live preview) carries its own toolbar +
+                    // "Parameters" header, so the read-only heading below shows
+                    // only for a bridge without a previewController (none shipped
+                    // today; the fallback is the contract for third-party bridges).
+                    Kirigami.Heading {
+                        visible: root._hasParameters && !root._livePreview
+                        text: i18nc("@title:group shader parameters section", "Parameters")
+                        level: 4
+                    }
+
+                    // Editable editor — any bridge with a previewController
+                    // (all three shipped browsers). Wrapped in a Loader so it
+                    // is NOT instantiated for the no-previewController
+                    // fallback (which uses the read-only Repeater below);
+                    // otherwise it eagerly builds slider rows for params it
+                    // never shows.
+                    Loader {
+                        Layout.fillWidth: true
+                        active: root._livePreview && root._hasParameters
+
+                        sourceComponent: PZCommon.ParameterEditor {
+                            id: paramEditor
+
+                            compact: false
+                            enableLocking: true
+                            enableRandomize: true
+                            // Reset lives in the shared editor's own header, beside
+                            // lock-all and randomize, as everywhere else ParameterEditor
+                            // is used. This dialog used to suppress it and hand-roll a
+                            // "Default" button into its footer, which put the same action
+                            // somewhere different from the rest of the app.
+                            enableReset: true
+                            enableGroups: true
+                            enableImage: true
+                            parameters: root.effect && root.effect.parameters ? root.effect.parameters : []
+                            currentValues: root._liveParams
+                            lockedParams: root._lockedParams
+                            onValueChanged: function (id, value) {
+                                root._setLiveParam(id, value);
+                            }
+                            onLockToggled: function (id, locked) {
+                                root._lockedParams = paramEditor.lockedAfterToggle(id, locked);
+                            }
+                            onLockAllRequested: function (locked) {
+                                root._lockedParams = paramEditor.lockedAfterAllToggle(locked);
+                            }
+                            onRandomizeRequested: {
+                                root._liveParams = paramEditor.computeRandomized();
+                                root._recompute();
+                            }
+                            // Parameters only. The old footer button called
+                            // _resetPreview(), which also restarted the preview
+                            // clock, cleared every lock and rebuilt the
+                            // renderer — reasonable for a button labelled
+                            // "Default" sitting apart from the editor, but not
+                            // what a reset beside lock-all and randomize should
+                            // do. Locks survive, matching randomize, which
+                            // leaves locked parameters alone.
+                            onResetRequested: {
+                                root._liveParams = paramEditor.computeDefaults();
+                                root._recompute();
+                            }
+                            onRequestColorPicker: function (id, name, current) {
+                                shaderColorDialog.openFor(id, current);
+                            }
+                            onRequestImagePicker: function (id) {
+                                shaderImageDialog.paramId = id;
+                                shaderImageDialog.open();
+                            }
+                        }
+                    }
+
+                    // Read-only fallback for a bridge without a
+                    // previewController. Unreachable in every shipped
+                    // configuration; kept as the degraded contract for
+                    // third-party bridges.
+                    Repeater {
+                        model: !root._livePreview && root.effect && root.effect.parameters ? root.effect.parameters : []
+
+                        delegate: Rectangle {
+                            id: paramRow
+
+                            required property var modelData
+                            required property int index
+
+                            Layout.fillWidth: true
+                            implicitHeight: rowContent.implicitHeight + Kirigami.Units.smallSpacing
+                            radius: Kirigami.Units.smallSpacing / 2
+                            color: index % 2 === 0 ? "transparent" : Kirigami.Theme.alternateBackgroundColor
+
+                            RowLayout {
+                                id: rowContent
+
+                                anchors.fill: parent
+                                anchors.leftMargin: Kirigami.Units.smallSpacing
+                                anchors.rightMargin: Kirigami.Units.smallSpacing
+                                spacing: Kirigami.Units.smallSpacing
+
+                                Label {
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 10
+                                    Layout.alignment: Qt.AlignVCenter
+                                    text: paramRow.modelData ? (paramRow.modelData.name || paramRow.modelData.id || "") : ""
+                                    font.weight: Font.Medium
+                                    elide: Text.ElideRight
+                                }
+
+                                Label {
+                                    Layout.fillWidth: true
+                                    Layout.alignment: Qt.AlignVCenter
+                                    text: {
+                                        var p = paramRow.modelData;
+                                        if (!p)
+                                            return "";
+
+                                        var parts = [];
+                                        if (p.type && p.type.length > 0)
+                                            parts.push(p.type);
+
+                                        if (p.min !== undefined && p.max !== undefined)
+                                            parts.push(i18nc("@info parameter range", "[%1 .. %2]", root._fmt(p.min), root._fmt(p.max)));
+
+                                        if (p.default !== undefined)
+                                            parts.push(i18nc("@info parameter default value", "default %1", root._fmt(p.default)));
+
+                                        return parts.join(" · ");
+                                    }
+                                    color: Kirigami.Theme.disabledTextColor
+                                    font: Kirigami.Theme.smallFont
+                                    elide: Text.ElideRight
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── RIGHT: pinned preview (fills the column) ────────────────
+            // Hidden (and so excluded from the row, letting the params fill
+            // width) for a bridge with no previewController. Each browser
+            // gets its own pane below, selected by _previewKind.
+            Item {
+                visible: root._livePreview
+                // Wide enough that a pane-shaped preview holds the composition
+                // canvas at 1:1. The slot loses margins twice on the way in,
+                // once to the Loader below and once to the pane's own column,
+                // plus the frame border, so a slot merely as wide as the canvas
+                // leaves the frame inside NARROWER than it. The pane's fit then
+                // reduces by a percent or two, and that reduction switches on a
+                // layer whose render node stops repainting for the classes that
+                // animate by driving iTime alone — the preview renders one
+                // still frame and never moves. Both bounds carry it: shrinking
+                // the dialog must not reintroduce that.
+                readonly property real _minPreviewWidth: PreviewCanvas.size.width + Kirigami.Units.gridUnit * 2
+                Layout.preferredWidth: Math.max(Kirigami.Units.gridUnit * 24, _minPreviewWidth)
+                Layout.minimumWidth: Math.max(Kirigami.Units.gridUnit * 20, _minPreviewWidth)
+                Layout.fillHeight: true
+
+                // Live decoration preview: the stand-in card run through the real
+                // SurfaceDecoration chain host. In a Loader so the whole capture / shader
+                // chain is instantiated only for a decoration pack and torn down when the
+                // dialog closes: this dialog is one reused instance and _decorationPreview
+                // depends only on the controller and the effect, neither cleared on close,
+                // so an ungated Loader would keep the pane alive for the app's life.
+                //
+                // `visible`, NOT `opened`. Popup.opened goes true only once the ENTER
+                // TRANSITION has finished, so gating on it composed the chain after the
+                // dialog had animated in and you watched the card arrive bare and then
+                // turn decorated. `visible` covers the whole shown state including both
+                // transitions, so the chain is ready as the dialog appears, the pane still
+                // tears down on close, and it does not empty on the first frame of the
+                // CLOSE animation the way `opened` did.
+                Loader {
+                    anchors.fill: parent
+                    anchors.margins: Kirigami.Units.smallSpacing
+                    // _decorationArmed, not bare `visible`: `visible` alone
+                    // cannot tear this down on a fast pack switch, because a
+                    // Popup keeps it true until the exit transition ends — the
+                    // previous pack's pane survived into the next open and its
+                    // stale composition led the flicker. The armed flag drops
+                    // synchronously in _resetPreview and comes back a tick
+                    // later, so every open gets a FRESH pane that starts
+                    // covered. See the shared-lifecycle contract up top.
+                    active: root.visible && root._decorationPreview && root._decorationArmed
+                    visible: active
+
+                    sourceComponent: DecorationPreviewPane {
+                        previewController: root.previewController
+                        packId: root.effect ? (root.effect.id || "") : ""
+                        liveParams: root._liveParams
+                        // Same `visible` rather than `opened`, and for the same
+                        // reason: this gates the chain composition, not just the
+                        // ticking, so deferring it to the end of the open
+                        // transition is what produced the pop. _appActive is
+                        // deliberately NOT here — focus loss must freeze, not
+                        // tear down, the same split the zone pane gets from its
+                        // clock's `running` gate.
+                        active: root.visible
+                        animating: root._appActive
+                    }
+                }
+
+                // Live animation preview: the stand-in card played through
+                // the pack as a real transition leg plays it. Same Loader
+                // shape and armed-flag lifecycle as the decoration pane
+                // above; the pane covers itself until its shader compiles,
+                // so it builds during the enter transition too.
+                Loader {
+                    anchors.fill: parent
+                    anchors.margins: Kirigami.Units.smallSpacing
+                    active: root.visible && root._animationPreview && root._animationArmed
+                    visible: active
+
+                    sourceComponent: AnimationPreviewPane {
+                        previewController: root.previewController
+                        packId: root.effect ? (root.effect.id || "") : ""
+                        liveParams: root._liveParams
+                        active: root.visible
+                        animating: root._appActive
+                    }
+                }
+
+                // Live pointer preview: the pack run as one screen-space pass
+                // over a stand-in desktop with a simulated cursor. Same Loader
+                // shape and armed-flag lifecycle as the two panes above.
+                Loader {
+                    anchors.fill: parent
+                    anchors.margins: Kirigami.Units.smallSpacing
+                    active: root.visible && root._pointerPreview && root._pointerArmed
+                    visible: active
+
+                    sourceComponent: PointerPreviewPane {
+                        previewController: root.previewController
+                        packId: root.effect ? (root.effect.id || "") : ""
+                        liveParams: root._liveParams
+                        active: root.visible
+                        animating: root._appActive
+                    }
+                }
+
+                // Live ZoneShaderItem preview (zone/overlay browser).
+                Rectangle {
+                    id: livePreviewPane
+
+                    anchors.fill: parent
+                    anchors.margins: Kirigami.Units.smallSpacing
+                    visible: root._zonePreview
+                    radius: Kirigami.Units.smallSpacing
+                    // True black, not a theme colour: it is what shows while the
+                    // wallpaper decodes and where it cannot be resolved, and a
+                    // tinted ground would contaminate the previewed colours.
+                    color: "black"
+                    border.width: 1
+                    border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+                    clip: true
+
+                    // The user's wallpaper behind the zones, matching the
+                    // decoration and animation panes. Every overlay pack is
+                    // translucent somewhere — that is what an overlay is — so
+                    // over flat black they all read as far more opaque than they
+                    // will be on a real desktop, and a pack whose whole point is
+                    // what shows through cannot be judged at all.
+                    //
+                    // Distinct from the useWallpaper SAMPLER feed below: this is
+                    // the backdrop, and it is drawn for every pack, not only the
+                    // ones that sample it.
+                    Image {
+                        anchors.fill: parent
+                        source: root._zoneWallpaperUrl
+                        visible: source.toString().length > 0
+                        fillMode: Image.PreserveAspectCrop
+                        // A wallpaper is far larger than this pane and the decode is
+                        // cached by ShaderRegistry, so ask for the pane's size.
+                        sourceSize.width: Math.max(1, Math.round(parent.width))
+                        sourceSize.height: Math.max(1, Math.round(parent.height))
+                        asynchronous: true
+                        cache: true
+                    }
+
+                    // Zones the preview renders over, shared by the renderer, the label
+                    // texture and the hover hit-test. Recomputed on
+                    // resize; the settings backend supplies a four-zone sample
+                    // (one master, three stack) so multi-zone + per-zone-highlight effects are visible.
+                    readonly property var _zones: (root._zonePreview && root.previewController) ? root.previewController.zonesForShaderPreview(Math.max(1, Math.round(width)), Math.max(1, Math.round(height))) : []
+                    // Mouse position within the pane (preview pixels); -1,-1 when
+                    // not hovering. Drives iMouse + the hovered-zone highlight.
+                    property point _mouse: Qt.point(-1, -1)
+                    readonly property int _hoveredZone: {
+                        if (_mouse.x < 0 || _mouse.y < 0)
+                            return -1;
+                        for (var i = 0; i < _zones.length; i++) {
+                            var z = _zones[i];
+                            var zx = (z.x !== undefined) ? z.x : 0;
+                            var zy = (z.y !== undefined) ? z.y : 0;
+                            var zw = (z.width !== undefined) ? z.width : 0;
+                            var zh = (z.height !== undefined) ? z.height : 0;
+                            if (_mouse.x >= zx && _mouse.x < zx + zw && _mouse.y >= zy && _mouse.y < zy + zh)
+                                return i;
+                        }
+                        return -1;
+                    }
+
+                    HoverHandler {
+                        id: previewHover
+
+                        onPointChanged: {
+                            if (previewHover.hovered)
+                                livePreviewPane._mouse = Qt.point(previewHover.point.position.x, previewHover.point.position.y);
+                        }
+                        onHoveredChanged: {
+                            if (!previewHover.hovered)
+                                livePreviewPane._mouse = Qt.point(-1, -1);
+                        }
+                    }
+
+                    // ~60fps clock — only ticks while the pane is shown AND the
+                    // application is frontmost (see root._appActive).
+                    Timer {
+                        running: livePreviewPane.visible && root._appActive
+                        interval: 16
+                        repeat: true
+                        onTriggered: {
+                            var now = Date.now() / 1000;
+                            var delta = Math.min(now - root._previewLastTime, 0.1);
+                            root._previewLastTime = now;
+                            root._previewITime += delta;
+                            root._previewTimeDelta = delta;
+                            root._previewFrame = (root._previewFrame + 1) % 1000000000;
+                        }
+                    }
+
+                    // Expensive feeds cached as properties so the per-frame
+                    // config rebuild below (iTime) doesn't re-run C++ calls —
+                    // these recompute only when zones / size / shader change.
+                    readonly property string _preamble: (root._zonePreview && root.previewController) ? root.previewController.shaderParamPreamble(root.effect.id) : ""
+                    readonly property var _labelsTex: (root._zonePreview && root.previewController && _zones.length > 0) ? root.previewController.buildLabelsTexture(_zones, livePreviewPane) : null
+                    readonly property var _wallpaperTex: (root._zonePreview && root.previewController && root._shaderInfo.wallpaper === true) ? root.previewController.loadWallpaperTexture() : null
+                    // Cached so the per-frame config rebuild below doesn't read it
+                    // off the controller every frame (a QVariant vector copy) and
+                    // doesn't hand the renderer a new container reference each tick;
+                    // updates only on audioSpectrumChanged.
+                    readonly property var _audioSpectrum: root.previewController ? root.previewController.audioSpectrum : []
+
+                    // Shared zone-shader renderer (org.plasmazones.common) — the
+                    // single source of truth for the ZoneShaderItem bindings (also
+                    // used by the overlay). Wrapped in a Loader and recreated on
+                    // every shader switch (via _rendererActive, toggled in
+                    // _resetPreview): a fresh item starts at Loading with no
+                    // inherited Error/errorLog, so the placeholder shows during the
+                    // load and the banner only ever reflects THIS shader.
+                    Loader {
+                        id: rendererLoader
+
+                        anchors.fill: parent
+                        active: root._rendererActive
+                        // Reveal the surface only once it has actually compiled —
+                        // the placeholder covers loading, the banner covers errors.
+                        visible: item !== null && item.status === ZoneShaderItem.Ready
+
+                        sourceComponent: PZCommon.ZoneShaderRenderer {
+                            config: ({
+                                    "shaderSource": root._shaderInfo.shaderUrl || "",
+                                    "paramPreamble": livePreviewPane._preamble,
+                                    "bufferShaderPaths": root._shaderInfo.bufferShaderPaths || [],
+                                    "bufferFeedback": root._shaderInfo.bufferFeedback || false,
+                                    "bufferScale": root._shaderInfo.bufferScale !== undefined ? root._shaderInfo.bufferScale : 1,
+                                    "halfFloatBuffers": root._shaderInfo.halfFloatBuffers !== undefined ? root._shaderInfo.halfFloatBuffers : true,
+                                    "bufferWrap": root._shaderInfo.bufferWrap || "clamp",
+                                    "bufferWraps": root._shaderInfo.bufferWraps || [],
+                                    "bufferFilter": root._shaderInfo.bufferFilter || "linear",
+                                    "bufferFilters": root._shaderInfo.bufferFilters || [],
+                                    "useDepthBuffer": root._shaderInfo.depthBuffer || false,
+                                    "useWallpaper": root._shaderInfo.wallpaper || false,
+                                    "zones": livePreviewPane._zones,
+                                    "shaderParams": root._translatedParams,
+                                    "hoveredZoneIndex": livePreviewPane._hoveredZone,
+                                    "iTime": root._previewITime,
+                                    "iTimeDelta": root._previewTimeDelta,
+                                    "iFrame": root._previewFrame,
+                                    "iMouse": livePreviewPane._mouse,
+                                    "audioSpectrum": livePreviewPane._audioSpectrum,
+                                    "labelsTexture": livePreviewPane._labelsTex,
+                                    "wallpaperTexture": livePreviewPane._wallpaperTex
+                                })
+                        }
+                    }
+
+                    // Neutral placeholder while the freshly-created renderer is
+                    // still loading / compiling the new shader (the "round trip").
+                    // No fill needed: this pane HIDES its renderer until Ready,
+                    // so there is nothing underneath to conceal.
+                    PZCommon.ShaderPreviewPlaceholder {
+                        anchors.centerIn: parent
+                        width: parent.width - Kirigami.Units.largeSpacing * 2
+                        // Shown until the new shader is Ready (or has errored, when
+                        // the banner takes over) — also covers the recreate tick
+                        // when the Loader item is briefly null. The enclosing pane
+                        // is hidden for the animation browser, so no extra gate.
+                        visible: !rendererLoader.item || (rendererLoader.item.status !== ZoneShaderItem.Ready && rendererLoader.item.status !== ZoneShaderItem.Error)
+                    }
+
+                    // T3.2: surface the live preview's actual GLSL compile error
+                    // in-app (shared with the editor preview). The renderer is
+                    // recreated per shader, so its Error is always THIS shader's.
+                    PZCommon.ShaderCompileErrorBanner {
+                        anchors.centerIn: parent
+                        width: Math.min(parent.width - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 22)
+                        height: Math.min(parent.height - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 12)
+                        errorLog: (rendererLoader.item && rendererLoader.item.status === ZoneShaderItem.Error) ? ((rendererLoader.item.errorLog && rendererLoader.item.errorLog.length > 0) ? rendererLoader.item.errorLog : i18nc("@info shader preview", "No error details available.")) : ""
+                    }
+                }
+            }
+        }
+    }
+
+    // Color picker for color params, kept as a child of the dialog root so it
+    // outlives any param row destroyed mid-edit.
+    ColorDialog {
+        id: shaderColorDialog
+
+        options: ColorDialog.ShowAlphaChannel
+
+        property string paramId: ""
+
+        function openFor(id, current) {
+            paramId = id;
+            if (current !== undefined && current !== null)
+                selectedColor = current;
+            open();
+        }
+
+        onAccepted: {
+            // Store the STRING form, matching the editor twin and every other
+            // producer of this map (randomize, preset load): a QColor object
+            // renders fine live (extractColor converts) but skips the registry's
+            // colour normalisation and does not survive the preset store's JSON
+            // serialisation, dropping the alpha the picker's ShowAlphaChannel let
+            // the user choose (or the whole param).
+            if (paramId.length > 0)
+                root._setLiveParam(paramId, selectedColor.toString());
+        }
+    }
+
+    // Image picker for image (texture) params.
+    FileDialog {
+        id: shaderImageDialog
+
+        property string paramId: ""
+
+        title: i18nc("@title:window", "Select Image")
+        fileMode: FileDialog.OpenFile
+        nameFilters: [i18nc("@item:inlistbox image file filter", "Images (*.png *.jpg *.jpeg *.bmp *.webp)")]
+
+        onAccepted: {
+            // Guarded lookup: settingsController is a host-app context
+            // property, and this dialog is shared between two browsers —
+            // every other controller access here goes through the guarded
+            // root.previewController pattern, so the bare name must not be
+            // the one lookup that throws in a host without it.
+            if (paramId.length > 0 && typeof settingsController !== "undefined" && settingsController)
+                root._setLiveParam(paramId, settingsController.urlToLocalFile(selectedFile));
+        }
+    }
+
+    // The two FileDialogs and the previewController save/load-failure Connections
+    // that used to live here went with the loose-file flow they served.
+    //
+    // There is deliberately NO onPresetWriteFailed handler here either. PresetRow owns
+    // that report now, because it is the control that raised the refusal and it sits
+    // in all four assignment hosts, where nothing was listening at all. This dialog
+    // embeds the same PresetRow, so a handler here reported every refusal TWICE: once
+    // as an InlineMessage above the parameters and once in the row's own footer.
+}

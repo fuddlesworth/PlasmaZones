@@ -1,0 +1,467 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// Config migration system with versioned migration chain.
+// Handles INI→JSON conversion and sequential schema upgrades (v1→v2→v3→...).
+// Each version bump adds one migration function; the chain runs automatically.
+
+#pragma once
+
+#include "plasmazones_export.h"
+#include <QJsonObject>
+#include <QMap>
+#include <QString>
+#include <QVariant>
+
+namespace PlasmaZones {
+
+/// Current config schema version. Written by JsonBackend::sync() (fresh
+/// installs, via the version stamp wired up in configbackends.cpp),
+/// migrateIniToJson() (INI upgrades), and migrateV1ToV2() (schema upgrades).
+/// v1: flat groups (Activation, Display, Appearance, etc.)
+/// v2: nested dot-path groups (Snapping.Behavior.ZoneSpan, Tiling.Gaps, etc.)
+/// v3: per-mode disable lists — Snapping.Behavior.Display.{Disabled*} relocates
+///     to Display.{Snapping,Autotile}Disabled{Monitors,Desktops,Activities}.
+/// v4: window-rule consolidation — zone Assignments (assignments.json) and the
+///     per-mode disable lists become context-only Rules in the new
+///     rules.json store. config.json loses the Display.*Disabled* keys;
+///     assignments.json is superseded. QuickLayouts slots relocate to the
+///     quicklayouts.json sidecar. The Animations.AnimationAppRules array also
+///     folds into rules.json as OverrideAnimation{Shader,Timing} actions
+///     on `WindowClass Contains <pattern>` matchers — the legacy
+///     AnimationAppRule/Bridge types are removed and the runtime reads
+///     animation overrides exclusively from the unified rule store.
+///     The legacy `Exclusions` group (`Applications` / `WindowClasses`
+///     comma-joined pattern lists) folds into the same rules.json: each
+///     surviving pattern becomes an Application-subject `AppId AppIdMatches
+///     <pattern>` matcher with a terminal `Exclude` action, matching the
+///     shape the legacy runtime bridge produced (see
+///     `appendExclusionRulesFromStash` in configmigration.cpp for the
+///     builder) so an upgrading user's exclusion behaviour is preserved.
+///     The standalone
+///     "Exclusions" settings page disappears; the three global window-filtering
+///     knobs (excludeTransientWindows / minimumWindowWidth /
+///     minimumWindowHeight) move to the General page.
+///     Each layout's retired per-layout `appRules` triple
+///     (`{pattern, zoneNumber, targetScreen}`) also folds into rules.json
+///     as an `AppId AppIdMatches <pattern> → SnapToZone [zoneNumber]` rule,
+///     deduped by normalized pattern across layouts. A legacy `targetScreen` is
+///     carried over as a companion `RouteToScreen` action so the app reopens on
+///     its pinned monitor. See appendLayoutAppRulesAsSnapToZone in
+///     configmigration.cpp.
+///     Additionally renames the drag-time zone-overlay groups
+///     Snapping.Appearance.{Colors,Opacity,Border,Labels} → Snapping.Zones.*,
+///     freeing the Snapping.Appearance.* namespace for the new per-window
+///     snapped-window decoration settings (snapping*). See moveGroupAtPath
+///     in configmigration.cpp.
+///     v4 also relocates per-layout SETTINGS out of the layout files. The
+///     settings that used to be embedded in each layout JSON (per-zone
+///     appearance, gap/padding overrides, showZoneNumbers, overlay display mode,
+///     auto-assign, shader binding) move into a single layout-settings.json
+///     sidecar keyed by layout UUID — the same sibling-store pattern as
+///     rules.json / quicklayouts.json. Layout files keep only their
+///     structural definition (zones, geometry, identity, matching rules). The
+///     relocation runs from finalizeV4Conversion (see relocateLayoutSettings),
+///     and the runtime LayoutSettingsStore (in phosphor-zones) merges the
+///     sidecar back onto each layout on load, so the in-memory model is
+///     unchanged.
+///
+/// Rule precedence later became pure `priority` (highest wins per slot, ties by
+/// list order): the synthesized provider-default catch-all assignment rule was
+/// retired (the gated default resolver is the sole global-default source) and
+/// the per-rule `pinnedPriority` flag was dropped. That change needed no schema
+/// bump — the gated resolver already ignored the priority-0 catch-all at
+/// runtime, so the stale rule is pruned from rules.json by finalizeV4Conversion's
+/// idempotent cleanup (see pruneRetiredProviderDefaultRule), not a version step.
+/// The premade Steam rule's correction rides the same path for the same reason
+/// (see repairSeededSteamRule): both fix a row this code seeded into the
+/// rules.json SIDECAR, which the version chain does not cover. The v7 rename of
+/// the window-movement animation events rides it too, for a different reason:
+/// a rule action scoped to a retired event lives in that same sidecar, so the
+/// v7 config step cannot reach it (see renameRetiredAnimationEventPaths).
+/// Those three are the only cleanups that run outside the chain — anything
+/// else touching the config root needs a version bump.
+/// v5: the per-mode Snapping/Tiling appearance and gap settings fold into the
+///     unified Windows / Gaps groups (see migrateV4ToV5).
+/// v6: the snapping zone colours and the Windows border/tint colours become
+///     theme-fallback strings (EMPTY means "follow the system palette"); the
+///     Snapping.Zones.Colors/UseSystem bool and the "accent" token default
+///     are retired (see migrateV5ToV6).
+/// v7: the window-movement placement animation nodes `snapIn` / `snapOut` are
+///     renamed `placeIn` / `placeOut`, and `window.movement.maximize` is
+///     retired into them (see migrateV6ToV7).
+/// v8: two stores fold into config. Per-event animation TIMING overrides move
+///     out of the loose `<data>/plasmazones/profiles/<event.path>.json` files
+///     and into `Animations/MotionProfileTree`, beside the pack assignment
+///     already in `Animations/ShaderProfileTree` (see migrateV7ToV8); and
+///     zone-overlay shader assignments move out of the layout-settings sidecar
+///     into `Overlays/OverlayShaderTree` (global baseline +
+///     per-layout overrides). The overlay half has no chain step of its own:
+///     the sidecar lift needs filesystem access, so it runs from
+///     ensureJsonConfig's finalize pass (see relocateOverlayShaderAssignments),
+///     mirroring how the v4 layout-settings relocation runs outside the chain.
+inline constexpr int ConfigSchemaVersion = 8;
+
+class PLASMAZONES_EXPORT ConfigMigration
+{
+public:
+    /// Run all needed migrations (INI→JSON and/or schema upgrades).
+    ///
+    /// Returns true if:
+    /// - config.json already exists at current version, or
+    /// - No old config exists (fresh install), or
+    /// - All migrations succeeded
+    ///
+    /// Returns false if any migration failed (old file preserved, error logged).
+    ///
+    /// Internally short-circuits after the first successful call in a given
+    /// process, so repeated invocations on the editor startup hot path don't
+    /// re-read and re-parse the config file. Tests that swap the backing
+    /// config file underneath the process must call
+    /// resetMigrationGuardForTesting() between cases — see that method's
+    /// docs for the rationale.
+    ///
+    /// Trusts PlasmaZones' single-writer-per-session model: once the guard
+    /// latches, a later out-of-process rewrite of config.json (e.g. a user
+    /// editing the file by hand, or a second daemon downgrading the schema
+    /// mid-session) will NOT be re-detected by this function. Readers still
+    /// re-open the file fresh on every load(), so config values themselves
+    /// remain live — only the schema-version check is skipped. If you
+    /// introduce a workflow that involves external rewrites during a
+    /// session, drop the guard first via resetMigrationGuardForTesting().
+    static bool ensureJsonConfig();
+
+    /// Reset the process-level "already migrated" flag set by
+    /// ensureJsonConfig(). Exists so test harnesses can reuse a single
+    /// process to exercise multiple migration scenarios against different
+    /// isolated config directories — in production code the guard is
+    /// strictly one-way and this should never be called.
+    static void resetMigrationGuardForTesting();
+
+    /// External state a migration step may read.
+    ///
+    /// `Disabled` is for a root that is NOT this machine's live config — a
+    /// settings profile's sparse delta, or a config blob imported from another
+    /// machine — where a step that imports from the filesystem would write the
+    /// migrating machine's own state into a document that never carried it.
+    /// Steps that are pure JSON→JSON transforms ignore this.
+    ///
+    /// Declared ahead of the runners below because they take it as a
+    /// parameter. Deliberately NOT defaulted anywhere: importing this
+    /// machine's loose files into a document is only correct when the document
+    /// IS this machine's config, and a default made that the silent behaviour
+    /// of any new call site. Every caller states which it has.
+    enum class ExternalImports {
+        Enabled,
+        Disabled
+    };
+
+    /// Convert an INI config file to JSON format. Produces v1 JSON.
+    /// Used by ensureJsonConfig() for one-time INI migration,
+    /// and by settings import for legacy INI files.
+    ///
+    /// Pass `Disabled` when @p iniPath is a foreign blob rather than this
+    /// machine's own former config: the chain this runs ends at the current
+    /// schema version, so it executes every import-bearing step.
+    static bool migrateIniToJson(const QString& iniPath, const QString& jsonPath, ExternalImports imports);
+
+    /// Run the schema migration chain on a JSON config file.
+    /// Reads the file, applies all steps from current _version to
+    /// ConfigSchemaVersion, writes atomically.
+    ///
+    /// @p imports is about the CONTENT, not the path. Settings import writes a
+    /// foreign export over the live config path and then migrates it, so the
+    /// path being the live one does not make the document this machine's.
+    /// Recover pre-v8 per-event timing files on the ensureJsonConfig exits the
+    /// version chain never reaches (corrupt-with-no-INI, whitespace-only, fresh
+    /// install). Idempotent, and a no-op unless the config is already stamped
+    /// v8 and carries no MotionProfileTree. Mirrors finalizeV4Conversion, which
+    /// exists on the same exits for the same reason.
+    static bool finalizeV8MotionImport(const QString& jsonPath);
+
+    static bool runMigrationChain(const QString& jsonPath, ExternalImports imports);
+
+    /// Run the migration chain in-memory. Two callers: ensureJsonConfig's
+    /// INI→JSON + upgrade single pass (a full nested config root), and
+    /// ProfileStore::readProfileFile, which feeds it a profile's SPARSE
+    /// config delta translated into the nested shape — so a step must be
+    /// correct for a sparse input too (write retired values' replacements
+    /// explicitly; removal there means "inherit", not "default").
+    static void runMigrationChainInMemory(QJsonObject& root, ExternalImports imports);
+
+    // Schema migration functions (one per version bump).
+    // Public so the `PhosphorConfig::MigrationStep` registry built in
+    // makeMigrationSchema() can take their addresses.
+    static void migrateV1ToV2(QJsonObject& root);
+    static void migrateV2ToV3(QJsonObject& root);
+
+    /// v3 → v4 schema step. Each migration step has signature
+    /// `void(QJsonObject&)` — it can only touch config.json. This step:
+    ///   - Removes the Display.*Disabled* keys and stashes their values under
+    ///     the temporary `_v4DisableStash` root key.
+    ///   - Removes the `Animations.AnimationAppRules` array and stashes it
+    ///     under the temporary `_v4AnimationRulesStash` root key.
+    ///   - Removes the `Exclusions.Applications` and `Exclusions.WindowClasses`
+    ///     comma-joined pattern lists and stashes them under the temporary
+    ///     `_v4ExclusionStash` root key.
+    ///   - Removes the `Animations.WindowFiltering.Applications` and
+    ///     `Animations.WindowFiltering.WindowClasses` comma-joined pattern
+    ///     lists and stashes them under the temporary
+    ///     `_v4AnimationExclusionStash` root key.
+    /// All four stashes feed @ref finalizeV4Conversion. Empty inputs produce
+    /// no stash entries (the finalizer treats an absent key as a no-op for
+    /// that input). migrateV3ToV4 itself stamps `_version = 4` as its last
+    /// action, during the chain — the finalizer runs after the whole chain.
+    static void migrateV3ToV4(QJsonObject& root);
+
+    /// Post-chain finalizer for the v4 conversion. The cross-file migration
+    /// (config.json + assignments.json → rules.json) cannot live in a
+    /// single `void(QJsonObject&)` migration step, so this runs after the
+    /// chain, from @ref ensureJsonConfigImpl.
+    ///
+    /// First, on every path, it adopts a legacy `windowrules.json` as `rules.json`
+    /// when the new file is absent (the rule store was renamed alongside the
+    /// v5 bump, not by the v5 migration step itself, which creates no rules), so an
+    /// already-converted store is not rebuilt from the retired assignments.json.
+    ///
+    /// It then reads assignments.json + the four `_v4*` stashes left in
+    /// config.json (`_v4DisableStash`, `_v4AnimationRulesStash`,
+    /// `_v4ExclusionStash`, `_v4AnimationExclusionStash`), builds the
+    /// RuleSet (assignment rules + disable-list rules + per-window
+    /// animation-override rules ported from the legacy AnimationAppRule
+    /// JSON + `Exclude`-action rules + `ExcludeAnimations`-action rules),
+    /// writes rules.json (atomic), relocates the QuickLayouts slots
+    /// into the quicklayouts.json sidecar, strips all four stash keys
+    /// from config.json, then — as the last, irreversible step — retires
+    /// assignments.json (renamed to `.migrated` for forensic recovery; if
+    /// the rename fails the file is removed outright).
+    ///
+    /// Idempotent: the cleanup-only branch runs whenever rules.json
+    /// already exists as a valid v4 `RuleSet` (probed via
+    /// `RuleSet::loadFromFile`, which requires `_version ==
+    /// RuleSet::SchemaVersion`, pinned at 4 independently of the config
+    /// ConfigSchemaVersion — that pin is why an already-converted rules.json
+    /// survives a config schema bump without a rebuild). It is NOT a strict no-op — it
+    /// retries the still-pending tail steps (strip surviving `_v4*Stash`
+    /// keys, retire a still-present assignments.json, and the two rules.json
+    /// fix-ups `pruneRetiredProviderDefaultRule` and `repairSeededSteamRule`,
+    /// which DO write the sidecar) so a partial earlier
+    /// run that crashed between rules.json commit and the tail
+    /// converges to a clean state on the next startup. The rule-rebuild
+    /// path itself NEVER runs from the cleanup branch.
+    ///
+    /// Rebuild trigger: a missing/invalid rules.json triggers a
+    /// rebuild PROVIDED config.json has reached
+    /// `_version == ConfigSchemaVersion`. When assignments.json is absent
+    /// the rebuild still runs and writes a rule set carrying no assignment
+    /// rules (just the seeded built-in defaults plus any disable-list,
+    /// animation-rule, exclusion, and animation-exclusion stash entries from
+    /// config.json). If the migration chain stalled below v4 (e.g. a
+    /// chain step's side-effect write failed), finalizeV4Conversion
+    /// refuses to commit a stub rules.json so the next run can
+    /// retry the chain without masking the stall. The
+    /// rebuild-vs-cleanup-only decision keys off the rules.json
+    /// probe alone; the config-version gate is layered on top to refuse
+    /// the stub case.
+    ///
+    /// Degraded path under config corruption: if config.json is corrupt (or
+    /// absent) with no INI fallback, the rebuild proceeds with an empty
+    /// `configRoot`, so the migrated rules fall back to compile defaults. The
+    /// global default engine/layout is resolved at runtime from settings, not
+    /// from a rule, so no catch-all placeholder is written. This is accepted
+    /// degradation — no regression versus the pre-PR behaviour — and is
+    /// intentionally not treated as a failure.
+    ///
+    /// @param jsonPath Path to config.json (assignments.json / rules.json
+    ///                 are derived as siblings via ConfigDefaults).
+    /// @return true on success or a clean no-op; false on an I/O failure.
+    static bool finalizeV4Conversion(const QString& jsonPath);
+
+    /// v4 → v5 schema step. The v4 schema stored per-mode (separate Snapping vs
+    /// Tiling) window appearance (borders, title bars, colours) and gap settings
+    /// in config.json; v5 unifies the global per-mode values into two config
+    /// groups that apply to both modes: `Windows` (appearance) and `Gaps`. This
+    /// step reads the v4 groups (`Snapping.Appearance.*`, `Snapping.Gaps`, and
+    /// the `Tiling.*` equivalents), COLLAPSES the two per-mode value sets into
+    /// one (per field: prefer the value that differs from the v4 compile
+    /// default, else the Snapping value), writes the differing-from-default
+    /// values into the `Windows` / `Gaps` groups, REMOVES the consumed
+    /// keys/groups from config.json (leaving surviving non-appearance keys such
+    /// as `Snapping.Gaps.AdjacentThreshold` and `Tiling.Gaps.SmartGaps` in
+    /// place), and stamps `_version = 5`. It creates NO rules. The per-screen
+    /// `PerScreen.{Snapping,Autotile}` gap subsets are consumed IN-PLACE here too
+    /// (consumeV4PerScreenGaps): each screen's gap dimensions collapse into that
+    /// screen's per-screen autotile config group (`AutotileScreen:*`) and the
+    /// consumed v4 per-screen gap keys are stripped. Do NOT add a second
+    /// per-screen gap migration step — these are already folded.
+    static void migrateV4ToV5(QJsonObject& root);
+
+    /// v5 → v6 schema step. The v5 schema stored the four snapping zone
+    /// colours (`Snapping.Zones.Colors/{Highlight,Inactive,Border}` and
+    /// `Snapping.Zones.Labels/FontColor`) as concrete colours gated by one
+    /// `Snapping.Zones.Colors/UseSystem` bool; when the bool was on, the
+    /// settings layer WROTE palette-derived colours into those keys. v6 makes
+    /// them theme-fallback strings (the scrolling colour convention): EMPTY
+    /// means "follow the system palette", resolved in the getters, and the
+    /// bool is gone. This step removes the four colour keys when UseSystem
+    /// was on (or absent — its v5 default was true), since their stored
+    /// values were palette snapshots rather than user picks; keeps the hex
+    /// strings verbatim when it was off; and strips the UseSystem key either
+    /// way. The window-appearance colours
+    /// (`Windows/{BorderColorActive,BorderColorInactive,TintColor}`) adopt
+    /// the same empty sentinel: a stored `"accent"` token (their v5 sentinel)
+    /// is removed so the key falls back to following the system accent.
+    /// Stamps `_version = 6`.
+    static void migrateV5ToV6(QJsonObject& root);
+
+    /// v6 → v7 schema step. The window-movement placement animation nodes
+    /// were still named for snapping (`window.movement.snapIn` /
+    /// `.snapOut`) although every placement mode rides them; v7 renames them
+    /// `placeIn` / `placeOut`. `window.movement.maximize` is retired: the
+    /// native maximize morph rides the two placement nodes, and an engine
+    /// placement that set KWin's maximize bit on the way is a placement. In
+    /// the `Animations/ShaderProfileTree` blob each override's `path` is
+    /// rewritten; a `maximize` override folds into `placeIn` when no placeIn
+    /// override will otherwise exist, and is dropped when one will (the
+    /// placement node's own assignment is the more general statement).
+    /// Rule actions scoped to those events are renamed by
+    /// renameRetiredAnimationEventPaths, since rules.json is outside this
+    /// chain. Stamps `_version = 7`.
+    static void migrateV6ToV7(QJsonObject& root);
+
+    /// v7 → v8: fold the per-event motion override FILES into config.
+    ///
+    /// Per-event timing (curve, duration, ...) was the last part of an
+    /// animation's look kept in loose files under the data dir, while the pack
+    /// that plays it, and the whole decoration domain, were already config. So
+    /// a settings profile captured an event's PACK and not its TIMING, a motion
+    /// set had to snapshot two different stores, and the animations page
+    /// carried a private file-staging apparatus that the decoration page,
+    /// backed by one config tree, does not need at all.
+    ///
+    /// This reads `<data>/plasmazones/profiles/<event.path>.json` and writes the
+    /// equivalent ProfileTree into Animations/MotionProfileTree. Files whose
+    /// `name` is not a built-in event path are USER PRESETS and are left alone;
+    /// the override files themselves are also left in place, so a downgrade
+    /// still finds them.
+    ///
+    /// @param importOverrideFiles whether to read the profiles directory at
+    ///        all. FALSE for the settings-PROFILE delta path: a saved profile
+    ///        stores only the keys it changes, and importing the migrating
+    ///        machine's own override files into one would silently write this
+    ///        user's timings into every profile they load. That path only needs
+    ///        the version stamp, which is applied either way.
+    static void migrateV7ToV8(QJsonObject& root, bool importOverrideFiles);
+
+    /// The overlay-shader half of v8: lift zone-overlay shader assignments
+    /// from the layout-settings sidecar into the config's OverlayShaderTree,
+    /// stripping the relocated keys from the sidecar, and rewrite every
+    /// OverrideOverlayShader rule written against the old per-layout property
+    /// onto the tree's node shape (the global-default node made explicit, so
+    /// the rule keeps meaning "every layout in this context").
+    ///
+    /// It has no chain step of its own. The lift needs filesystem access and
+    /// must not run on sparse profile deltas, so like the v4 layout-settings
+    /// relocation it runs from the finalize pass instead, and migrateV7ToV8
+    /// owns the version stamp for both halves.
+    ///
+    /// Idempotent and crash-safe — ensureJsonConfig calls it on every run
+    /// beside finalizeV4Conversion. An already-present tree entry for a layout
+    /// always wins over the sidecar copy (a retry after a partial run must not
+    /// clobber a since-edited assignment).
+    static bool relocateOverlayShaderAssignments(const QString& jsonPath);
+
+    /// Prune the retired provider-default catch-all assignment rule from
+    /// rules.json. Runs from @ref finalizeV4Conversion's idempotent cleanup
+    /// path, so it executes for every already-converted user without consuming a
+    /// schema version. The rule was synthesized by the v3→v4 conversion before
+    /// the priority-wins model retired it; the gated default resolver already
+    /// ignores the priority-0 catch-all at runtime, so deleting the stale rule
+    /// is a display-only cleanup that needs no `_version` bump.
+    ///
+    /// It loads rules.json via `RuleSet::loadFromFile` and removes the rule by
+    /// its deterministic provider-default UUID. Remaining rules keep their
+    /// priorities verbatim. Idempotent: once the rule is gone this is a clean
+    /// no-op (the id is stable, so a re-run finds nothing to remove).
+    ///
+    /// @param jsonPath Path to config.json (rules.json is derived as a sibling
+    ///                 via ConfigDefaults).
+    /// @return true on success or a clean no-op; false on an I/O failure.
+    static bool pruneRetiredProviderDefaultRule(const QString& jsonPath);
+
+    /// Bring the premade Steam rule in an already-converted rules.json up to
+    /// the shape `appendSteamDefaultRule` seeds today.
+    ///
+    /// Two earlier generations are reclaimed. The rule first shipped matching
+    /// `WindowClass Contains "steam"`, which is compared against KWin's
+    /// `"resourceName resourceClass"` pair — so a Steam-launched game
+    /// ("steam_app_2342813033 steam_app_2342813033") matched, and the blanket
+    /// `Exclude` action left every game unmanaged and undecorated. The
+    /// narrowing that replaced it guarded Steam's notification toasts only,
+    /// which left its fixed-size game-launch dialog placing as though it were
+    /// an ordinary window. Runs from the same cleanup path as
+    /// `pruneRetiredProviderDefaultRule` because the seeder itself only runs on
+    /// the rebuild path, so an already-converted config would never otherwise
+    /// see the correction.
+    ///
+    /// Only rewrites a rule whose match and action are both still one of those
+    /// generations verbatim (see `isRetiredSteamRuleShape`); a rule with either
+    /// half edited is left untouched, as is an already-current or deleted one. A
+    /// rule that was only RENAMED is still repaired, and its name is re-stamped
+    /// along with the match and action. The enabled flag and priority are
+    /// carried across. Idempotent: after the rewrite the shape check no longer
+    /// fires.
+    ///
+    /// @param jsonPath Path to config.json (rules.json is derived as a sibling
+    ///                 via ConfigDefaults).
+    /// @return true on success or a clean no-op; false on an I/O failure.
+    static bool repairSeededSteamRule(const QString& jsonPath);
+
+    /// Rename rule actions scoped to a retired window-movement animation event
+    /// (`window.movement.snapIn` / `.snapOut` / `.maximize`) onto the v7 nodes
+    /// (`placeIn` / `placeOut` / `placeIn`). Every event-scoped animation
+    /// action type is covered (shader, timing and curve overrides). Runs from
+    /// finalizeV4Conversion's cleanup path because the rule store is a sidecar
+    /// the version chain does not cover, and a rule left naming a retired
+    /// event would silently never match again. Idempotent: once renamed there
+    /// is nothing left to match.
+    ///
+    /// @param jsonPath Path to config.json (rules.json is derived as a sibling
+    ///                 via ConfigDefaults).
+    /// @return true on success or a clean no-op; false on an I/O failure.
+    static bool renameRetiredAnimationEventPaths(const QString& jsonPath);
+
+    /// Part of the v4 conversion: read every `*.json` layout in @p layoutsDir,
+    /// split its embedded per-layout settings into the @p sidecarPath store
+    /// (keyed by layout UUID, in the LayoutSettingsStore format), and rewrite the
+    /// layout file stripped of those settings. Merges into an existing sidecar
+    /// rather than clobbering it, and skips already-slimmed files, so it is
+    /// idempotent and crash-safe — finalizeV4Conversion calls it on every run.
+    /// A layout the sidecar already has an entry for is NOT re-imported: a
+    /// still-fat file on a later run means the strip failed earlier, so the
+    /// sidecar copy is the live one the runtime has been editing since and the
+    /// embedded block is stale. It is still slimmed.
+    /// A missing layouts dir is a no-op success. Returns false only on a write
+    /// failure. Public for direct testing.
+    static bool relocateLayoutSettings(const QString& layoutsDir, const QString& sidecarPath);
+
+private:
+    ConfigMigration() = default;
+
+    /// Actual implementation of ensureJsonConfig() — runs the file
+    /// check / INI→JSON / version-upgrade logic unconditionally. The
+    /// public ensureJsonConfig() wraps this in the process-level
+    /// short-circuit guard so repeat calls on the startup hot path are
+    /// free.
+    static bool ensureJsonConfigImpl();
+
+    // INI→JSON helpers
+    static QJsonObject iniMapToJson(const QMap<QString, QVariant>& flatMap);
+    /// Convert an INI value to its JSON form. @p keyName is the leaf key
+    /// (without group prefix); it's used to decide whether a comma-separated
+    /// int list should be read as an r,g,b[,a] color — the content heuristic
+    /// alone can't tell a color from e.g. a comma-separated layout order.
+    static QJsonValue convertValue(const QString& keyName, const QVariant& value);
+};
+
+} // namespace PlasmaZones
