@@ -80,6 +80,14 @@ vec4 pSurface(vec2 uv) {
     // hash13 per cell, so the call is about forty hash13 per fragment — the
     // single most expensive thing in this shader. Ungated, a user who turns the
     // grain off paid all of it to multiply the result by zero.
+    // NOTE for the no-backdrop fallback below: gradientStrength controls the
+    // slab's ALPHA there, not whether the gradient appears. So at its declared
+    // minimum of 0 the fallback still draws a full-saturation two-colour
+    // gradient, at 40% alpha, while the backdrop path at 0 shows no gradient at
+    // all. That asymmetry is deliberate — the fallback has nothing else to
+    // draw, and a fully transparent pane would communicate nothing — but it is
+    // not what the parameter's description says, so do not read the two paths
+    // as one control.
     float variation = 0.0;
     if (p_grainAmount > 0.0) {
         float frost = frostedTexture(fuv * p_grainScale, iTime * p_grainSpeed);

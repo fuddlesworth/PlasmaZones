@@ -56,8 +56,13 @@ layout(std140, binding = 0) uniform ZoneUniforms {
 // dispatch loop: for each visible zone it fills one ZoneCtx and accumulates the
 // returned colors with blendOver(), then clampFragColor()s the result. The full
 // zoneRects[]/iTime/audio globals stay readable inside pZone, so continuous-
-// field and cross-zone effects remain expressible. Unused by packs that keep
-// their own main().
+// field and cross-zone effects remain expressible.
+//
+// THREE ENTRY SHAPES, not two, and this is the least used of them. The scaffold
+// that prepends this header accepts `vec4 pZone(ZoneCtx)` (per-zone, this
+// struct), `vec4 pImage(vec2 fragCoord)` (whole-canvas, which is what most
+// bundled packs write), and a pack's own `main()`. ZoneCtx is unused by the
+// latter two.
 struct ZoneCtx {
     int   index;         // zone i (0 .. zoneCount-1)
     vec2  fragCoord;     // screen-space pixel (the vFragCoord the loop passes in)

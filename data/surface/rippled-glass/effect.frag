@@ -63,6 +63,10 @@ vec4 pSurface(vec2 uv) {
         // Ripple-space coordinate: p_rippleSize is the ripple's logical-px
         // size, so the pattern is DPI-stable and does not stretch with the
         // pane (unlike a frame-normalized uv).
+        // The 1.0 is NOT the parameter's floor: rippleSize declares a minimum
+        // of 12. It guards a hand-edited metadata.json only, keeping a zero or
+        // negative out of the divide below. Same shape as the guards in the
+        // sibling packs.
         float sizePx = max(p_rippleSize, 1.0) * max(uSurfaceScale, 0.001);
         // Anchored to the frame, not the canvas, so the pattern stays put when
         // a padding-declaring pack joins or leaves the chain and moves the

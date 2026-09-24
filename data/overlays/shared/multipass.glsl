@@ -11,6 +11,11 @@
 // iChannelResolution[4] covers the first four channels only; channelUv sizes
 // the later ones with textureSize().
 
+// iResolution INSIDE A BUFFER PASS is still the item size, not the pass's own
+// target size. A pass rendered at a reduced bufferScale therefore reads an
+// iResolution larger than the surface it is writing; size the pass's own target
+// with iChannelResolution[N].xy or textureSize() instead.
+
 #ifndef PLASMAZONES_MULTIPASS_GLSL
 #define PLASMAZONES_MULTIPASS_GLSL
 

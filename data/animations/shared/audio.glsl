@@ -31,6 +31,13 @@
 // include this module keep the canonical header's compile-error guard against
 // reaching for it.
 
+// NO BUNDLED PACK USES THIS MODULE TODAY. No data/animations pack includes it
+// or names its helpers, and no animation metadata.json declares "audio", so the
+// flag is live plumbing with no declarant. That also means no gate compiles
+// this file: shader_validate_animations walks PACKS, and shared/ is not one, so
+// the kwin branch below and the CAVA run-gate it describes are uncovered. A
+// pack that adopts it is the first thing to compile it.
+
 #ifndef PLASMAZONES_ANIMATION_AUDIO_GLSL
 #define PLASMAZONES_ANIMATION_AUDIO_GLSL
 

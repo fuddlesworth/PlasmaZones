@@ -684,35 +684,40 @@ inline QString colorKey(int slot)
     return PhosphorShaders::CustomColors::colorKey(slot);
 }
 
-/// @par Multipass limitation (compositor path)
-/// Animation shaders may declare multipass buffer shaders, wallpaper,
-/// and depth in their metadata. The daemon's SurfaceAnimator wires
-/// these through to PhosphorRendering::ShaderEffect which has full
-/// multipass support. However, the kwin-effect compositor path uses
-/// KWin::GLShader via OffscreenEffect, which is single-pass with no
-/// auxiliary FBOs. Multipass animation shaders degrade to single-pass
-/// on the compositor with a diagnostic log.
+// These two paragraphs document the CONTRACT rather than any one
+// declaration, so they are plain comments: a /// block followed by a blank
+// line attaches to nothing and Doxygen discards it. Every @par that does
+// belong to a declaration lives in the namespace doc at the top of this file.
+//
+// MULTIPASS LIMITATION (compositor path)
+// Animation shaders may declare multipass buffer shaders, wallpaper,
+// and depth in their metadata. The daemon's SurfaceAnimator wires
+// these through to PhosphorRendering::ShaderEffect which has full
+// multipass support. However, the kwin-effect compositor path uses
+// KWin::GLShader via OffscreenEffect, which is single-pass with no
+// auxiliary FBOs. Multipass animation shaders degrade to single-pass
+// on the compositor with a diagnostic log.
 
-/// @par Std140 offset contract
-/// The canonical `data/animations/shared/animation_uniforms.glsl` UBO
-/// declares its fields at the same byte offsets as
-/// `PhosphorShaders::BaseUniforms` (the daemon's `binding=0` upload
-/// struct). That alignment is what lets a single `effect.frag` source
-/// run on both runtimes without per-runtime overrides.
-///
-/// The C++ side of the contract is pinned by `static_assert(offsetof(...))`
-/// statements in `<PhosphorShaders/BaseUniforms.h>` for every BASE field
-/// declared in the GLSL UBO (through iIsReversed at byte 660); the anchor
-/// tail (iSurfaceScreenPos .. iMoveMesh, bytes 672-1343, 1344 total)
-/// is supplied by AnimationUniformExtension and pinned by the size
-/// static_asserts in `<PhosphorAnimation/AnimationUniformExtension.h>`.
-/// If anyone reorders `BaseUniforms`, those asserts fail at compile time
-/// and the canonical GLSL header has to be updated to match. The GLSL side
-/// is exercised at build time by
-/// `tests/unit/ui/shaders/test_animation_shader_bake.cpp`, which runs every
-/// built-in animation shader through `qsb` (which in turn computes
-/// std140 offsets) — a layout drift would surface there as a bake
-/// failure.
+// STD140 OFFSET CONTRACT
+// The canonical `data/animations/shared/animation_uniforms.glsl` UBO
+// declares its fields at the same byte offsets as
+// `PhosphorShaders::BaseUniforms` (the daemon's `binding=0` upload
+// struct). That alignment is what lets a single `effect.frag` source
+// run on both runtimes without per-runtime overrides.
+//
+// The C++ side of the contract is pinned by `static_assert(offsetof(...))`
+// statements in `<PhosphorShaders/BaseUniforms.h>` for every BASE field
+// declared in the GLSL UBO (through iIsReversed at byte 660); the anchor
+// tail (iSurfaceScreenPos .. iMoveMesh, bytes 672-1343, 1344 total)
+// is supplied by AnimationUniformExtension and pinned by the size
+// static_asserts in `<PhosphorAnimation/AnimationUniformExtension.h>`.
+// If anyone reorders `BaseUniforms`, those asserts fail at compile time
+// and the canonical GLSL header has to be updated to match. The GLSL side
+// is exercised at build time by
+// `tests/unit/ui/shaders/test_animation_shader_bake.cpp`, which runs every
+// built-in animation shader through `qsb` (which in turn computes
+// std140 offsets) — a layout drift would surface there as a bake
+// failure.
 
 /// The accepted texture `wrap` vocabulary, shared by every animation
 /// validation site (metadata parse in `AnimationShaderEffect::fromJson`, and

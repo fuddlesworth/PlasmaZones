@@ -58,12 +58,11 @@ inline constexpr int kDefaultUserTextureSvgSize = 1024;
 /// referencing one).
 ///
 /// Returns the PEELED variant only — it deliberately does not convert to a
-/// payload type, because each call site wants a different terminal
-/// conversion. There are THREE: `ShaderEffect::setAudioSpectrumVariant` walks
-/// a QVariantList into a QVector<float>, `ShaderEffect::setWallpaperTextureVariant`
-/// wants a QImage, and `ZoneShaderItem::setLabelsTextureVariant` wants a
-/// `ZoneLabelTexture` through a registered converter. Each caller keeps its
-/// own conversion and its own handling of an invalid or unconvertible result.
+/// payload type, because each of the THREE call sites wants a different
+/// terminal conversion: `setAudioSpectrumVariant` a QVector<float> through a
+/// QVariantList walk, `setWallpaperTextureVariant` a QImage, and
+/// `ZoneShaderItem::setLabelsTextureVariant` a `ZoneLabelTexture` through a
+/// registered converter. Each keeps its own handling of an unconvertible one.
 PHOSPHORRENDERING_EXPORT QVariant peelQmlVariant(const QVariant& value);
 
 /**
@@ -724,7 +723,8 @@ public:
      *  fragment source defines no `main()`, the node prepends @p prologue and
      *  appends the generated `main()` of the first @p candidates entry function
      *  the source defines. Empty/empty (the default) disables assembly. Forces a
-     *  reload so the new scaffold takes; folded into the node's bake-cache key. */
+     *  reload so the new scaffold takes; folded into the node's bake-cache key.
+     *  NO GETTER, unlike its two neighbours: write-only, never read back. */
     void setEntryScaffold(const QString& prologue, const QList<PhosphorShaders::EntryCandidate>& candidates);
 
     // ── Status ───────────────────────────────────────────────────────

@@ -104,6 +104,9 @@ vec4 pSurface(vec2 uv) {
     // profile value the settings UI can neither produce nor undo.
     float cellPx = 90.0 * clamp(p_dropletScale, 0.5, 2.0) * max(uSurfaceScale, 0.001);
     vec2 st = (px - uSurfaceFrameTopLeft) / cellPx;
+    // The 0.0 is NOT the parameter's floor: rainSpeed declares a minimum of
+    // 0.05, so the rain never actually stops from the slider. It guards a
+    // hand-edited negative, which would run the animation backwards.
     float t = iTime * max(p_rainSpeed, 0.0);
 
     // Two falling layers at offset scales/speeds plus one static bead layer;

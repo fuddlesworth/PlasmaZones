@@ -43,6 +43,9 @@ vec4 pSurface(vec2 uv) {
         // moves, so cell colours jump texel to texel during a drag. Averaging
         // would need a mip or a blur chain and this pack is single-pass by
         // design, which is also what makes it the cheapest pack in the family.
+        // The 2.0 is NOT the parameter's floor: cellSize declares a minimum of
+        // 4. It guards a hand-edited metadata.json only, keeping a zero or
+        // negative out of the divide below.
         float cell = max(p_cellSize, 2.0) * max(uSurfaceScale, 0.001);
         vec2 local = px - uSurfaceFrameTopLeft;
         vec2 snapped = (floor(local / cell) + 0.5) * cell;
