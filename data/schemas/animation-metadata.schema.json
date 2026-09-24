@@ -2,7 +2,7 @@
     "$schema": "http://json-schema.org/draft-07/schema#",
     "$id": "urn:plasmazones:schema:animation-metadata",
     "title": "PlasmaZones Animation Shader Metadata",
-    "description": "metadata.json for a bundled or user animation-shader pack. Core identity and the parameter contract are enforced. Optional rendering keys (vertexShader, fboExtent, textures, appliesTo, geometryGrid), named parameter presets and descriptive metadata (description, author, version, category) are allowed through. Unknown top-level keys are accepted rather than rejected, so this schema will not catch a mis-spelled key such as \"preset\" for \"presets\". The loader ignores anything it does not know.",
+    "description": "metadata.json for a bundled or user animation-shader pack. Core identity and the parameter contract are enforced. The optional rendering keys (vertexShader, fboExtent, textures, appliesTo, geometryGrid, anchor, surface, preview), the audio and multipass keys (audio, multipass, bufferShaders, bufferScale, bufferWrap, bufferWraps, bufferFilter, bufferFilters, bufferFeedback, depthBuffer, wallpaper), the named parameter presets and the descriptive metadata (description, author, version, category) are type-checked, so a wrong-typed value is rejected at the gate rather than swallowed by a typed accessor at load. Unknown top-level keys are still accepted rather than rejected, so this schema will not catch a mis-spelled key such as \"preset\" for \"presets\". The loader ignores anything it does not know. There is no per-pass bufferScales list here; that is surface-only, and one bufferScale covers the whole chain.",
     "type": "object",
     "required": ["id", "name", "fragmentShader", "parameters"],
     "properties": {
@@ -14,6 +14,38 @@
         "category": { "type": "string" },
         "fragmentShader": { "type": "string", "minLength": 1 },
         "vertexShader": { "type": "string" },
+        "preview": { "type": "string" },
+        "audio": {
+            "type": "boolean",
+            "description": "The pack samples the CAVA spectrum through data/animations/shared/audio.glsl. This flag is what keys the compositor's CAVA run-gate. The daemon reads it nowhere, including in its own run-gate, so an audio animation pack hosted by the daemon can be fed a spectrum that was never started."
+        },
+        "multipass": { "type": "boolean" },
+        "bufferShaders": {
+            "type": "array",
+            "items": { "type": "string" },
+            "maxItems": 8
+        },
+        "bufferScale": {
+            "type": "number",
+            "minimum": 0.0078125,
+            "maximum": 1.0,
+            "description": "Render scale for the WHOLE buffer chain. Bounds track PhosphorShaders::kMinBufferScale and kMaxBufferScale."
+        },
+        "bufferWrap": { "type": "string", "enum": ["clamp", "repeat", "mirror"] },
+        "bufferWraps": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["clamp", "repeat", "mirror"] },
+            "maxItems": 8
+        },
+        "bufferFilter": { "type": "string", "enum": ["linear", "nearest", "mipmap"] },
+        "bufferFilters": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["linear", "nearest", "mipmap"] },
+            "maxItems": 8
+        },
+        "bufferFeedback": { "type": "boolean" },
+        "depthBuffer": { "type": "boolean" },
+        "wallpaper": { "type": "boolean" },
         "presets": {
             "type": "object",
             "maxProperties": 64,

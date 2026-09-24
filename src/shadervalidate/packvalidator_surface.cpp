@@ -746,6 +746,21 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
         }
     }
 
+    // A NOTE, not a lint: declaring depth is legal and the runtime honours it.
+    // What an author cannot see is that it is honoured on the DAEMON alone, and
+    // the compositor is where a decoration lives on a real window, so the same
+    // pack reads one way in the settings preview and another on screen. Printed
+    // for a single-pass pack too; the multipass block below only knows about
+    // the interaction with bufferScales, which a single-pass pack does not have.
+    if (doc.object().value(QLatin1String("depthBuffer")).toBool()) {
+        out << "  " << padLabel(QStringLiteral("note"))
+            << "\"depthBuffer\" is honoured on the daemon only (settings preview, OSD and popup decorations); "
+               "the compositor implements no depth buffer for surface packs\n";
+        out << "  " << padLabel(QString())
+            << "and the surface family ships no depth module, so declare "
+               "`layout(binding = 16) uniform sampler2D uDepthBuffer;` yourself\n";
+    }
+
     // Preset lint: every preset key must name a declared parameter, and every value
     // must match that parameter's declared type and range. AFTER the metadata block,
     // matching the animation and pointer arms. Run before it, this printed

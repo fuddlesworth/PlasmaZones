@@ -32,7 +32,12 @@
         "multipass": { "type": "boolean" },
         "bufferShader": { "type": "string" },
         "bufferShaders": { "type": "array", "items": { "type": "string" } },
-        "bufferScale": { "type": "number" },
+        "bufferScale": {
+            "type": "number",
+            "minimum": 0.0078125,
+            "maximum": 1.0,
+            "description": "Render scale for the WHOLE buffer chain. The overlay family has no per-pass bufferScales list, because that one is surface-only. Bounds track PhosphorShaders::kMinBufferScale and kMaxBufferScale."
+        },
         "bufferWrap": { "type": "string" },
         "bufferWraps": { "type": "array", "items": { "type": "string" } },
         "bufferFilter": { "type": "string" },

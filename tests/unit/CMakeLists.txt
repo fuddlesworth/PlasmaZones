@@ -811,6 +811,15 @@ p_add_test(test_whatsnew_data data/test_whatsnew_data.cpp)
 target_link_libraries(test_whatsnew_data PRIVATE PhosphorFsLoader::PhosphorFsLoader)
 target_compile_definitions(test_whatsnew_data PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 
+# The other direction of the same contract. validate-json-schemas.py checks DATA
+# against the shader schemas; nothing checked the schemas' own numeric bounds
+# against the C++ constants they are meant to track, so every pass-budget or
+# buffer-scale change was a hand edit across four files with no gate behind it.
+# This target reads the committed schemas and compares each published bound to
+# its constant. Header-only contracts, so it links nothing.
+p_add_test(test_shader_schema_bounds data/test_shader_schema_bounds.cpp)
+target_compile_definitions(test_shader_schema_bounds PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+
 p_add_test(test_layoutmanager_assignment core/layout/test_layoutmanager_assignment.cpp)
 # The AssignmentEntry-shape half of the suite above, split off at its P6 banner
 # when the single file passed the 1150-line ceiling. Shares the same fixture.
