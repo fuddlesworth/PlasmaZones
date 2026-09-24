@@ -144,6 +144,13 @@ namespace PhosphorAnimationShaders {
 /// provider warm so a transition's first frame already has a spectrum.
 /// The helpers read 0 (render static) while the visualizer is off.
 ///
+/// The daemon does not read that flag anywhere. Its feed to attached
+/// shaders is unconditional, so a pack needs no flag to be fed, but its
+/// CAVA run-gate counts only a displaying zone overlay or a visible
+/// audio-reactive DECORATION slot. An audio animation pack on a
+/// daemon-hosted surface can therefore be fed a spectrum that was never
+/// started, which looks exactly like the visualizer being off.
+///
 /// @par Daemon-only extensions
 /// Shaders that need these must run on the daemon overlay path until
 /// the compositor wires the matching producers — but the two fail in

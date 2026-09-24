@@ -12,9 +12,17 @@
 // packs must declare the metadata flag: the kwin-effect keys its CAVA run-gate
 // on it, keeping the provider warm while an audio pack is assigned anywhere in
 // the shader profile tree so a transition's FIRST frame already has a spectrum
-// (cava spawn latency would otherwise eat a whole open/close leg). The daemon
-// path needs no flag — SurfaceAnimator::setAudioSpectrum feeds every attached
-// animation shader.
+// (cava spawn latency would otherwise eat a whole open/close leg).
+//
+// THE DAEMON READS THAT FLAG NOWHERE, and that cuts both ways. The feed is
+// unconditional, so nothing needs the flag to receive a spectrum:
+// SurfaceAnimator::setAudioSpectrum pushes to every attached animation shader.
+// But the daemon's CAVA RUN-GATE never counts an animation pack either. It asks
+// whether the ZONE OVERLAY is displaying or some DECORATION slot carries an
+// audio-reactive surface pack, and nothing else. So an audio animation pack on
+// an OSD, snap-assist or layout-picker leg reads bar count 0 and renders static
+// on the daemon unless one of those two unrelated things happens to be true at
+// the same moment. There is no warning at any level.
 //
 // iAudioSpectrumSize is the bar count, 0 when the visualizer is off or cava is
 // unavailable. On the daemon it lives in the AnimationUniforms UBO (declared by

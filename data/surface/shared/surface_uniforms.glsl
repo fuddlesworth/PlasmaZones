@@ -61,8 +61,14 @@ uniform vec2 uSurfaceFrameSize;
 // border width or corner radius) by this to reach the device-px space the
 // geometry uniforms above are in.
 uniform float uSurfaceScale;
-// 1.0 when the surface is focused/active, else 0.0. A pack with active/inactive
-// colour params mixes them on this rather than the host picking one.
+// How focused/active the surface is, 0.0 to 1.0. A pack with active/inactive
+// colour params mixes them on this rather than the host picking one, and should
+// test `>= 0.5` rather than `== 1.0`, because the ends are not the only values
+// it takes. The compositor ramps it toward its target over the focus-fade
+// duration setting, so a real window passes through every value between; daemon
+// hosts (the settings preview, OSD and popup decorations) push a hard 0.0 or
+// 1.0. The same pack therefore cross-fades on a window and snaps in a preview,
+// and cannot tell which host it has.
 uniform float uSurfaceFocused;
 
 // Continuously-increasing seconds, for ANIMATED packs (pulsing glow, shimmer,

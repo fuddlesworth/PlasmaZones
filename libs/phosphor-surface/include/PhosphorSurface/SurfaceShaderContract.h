@@ -144,15 +144,25 @@ inline constexpr const char* kUSurfaceFrameSize = "uSurfaceFrameSize";
 /// any per-window state-change bookkeeping.
 inline constexpr const char* kUSurfaceScale = "uSurfaceScale";
 
-/// `float uSurfaceFocused` — `1.0` when the window owning this surface
-/// is focused, `0.0` otherwise. A pack with active/inactive appearance
-/// (e.g. the border's `p_activeColor` / `p_inactiveColor`) mixes its own
-/// parameters on this flag rather than the host pre-resolving a single
+/// `float uSurfaceFocused` — how focused the window owning this surface
+/// is, from `0.0` to `1.0`. A pack with active/inactive appearance (e.g.
+/// the border's `p_activeColor` / `p_inactiveColor`) mixes its own
+/// parameters on this rather than the host pre-resolving a single
 /// focus-applied value. Per-frame-dynamic: focus toggles independently
-/// of window content, so this is re-pushed every paint. Authoring rule:
-/// treat any value `>= 0.5` as focused rather than testing `== 1.0`, so
-/// a future runtime that elects to ramp this for a focus-fade transition
-/// degrades gracefully.
+/// of window content, so this is re-pushed every paint.
+///
+/// THE TWO RUNTIMES DISAGREE ON THE VALUES BETWEEN THE ENDS, and a pack
+/// cannot tell which one it is running under. The compositor RAMPS it
+/// toward the 0-or-1 target over the focus-fade duration setting, so it
+/// takes every intermediate value on a real window. Daemon hosts (the
+/// settings preview pane, OSD and popup decorations) push a hard `0.0`
+/// or `1.0`, because the property behind it is a bool and there is no
+/// clock on that side to drive a ramp. So a pack that writes
+/// `mix(inactive, active, uSurfaceFocused)`, which the whole border
+/// family does, cross-fades on a window and snaps in the preview.
+///
+/// Authoring rule: treat any value `>= 0.5` as focused rather than
+/// testing `== 1.0`. That is a live rule, not future-proofing.
 inline constexpr const char* kUSurfaceFocused = "uSurfaceFocused";
 
 /// `float iTime` — continuously-increasing seconds for ANIMATED surface

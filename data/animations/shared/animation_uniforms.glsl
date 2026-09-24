@@ -438,6 +438,16 @@ layout(std140, binding = 0) uniform AnimationUniforms {
 #define iWindowOpacity 1.0
 #define iHasSurfaceLayer 0
 #define iLayerRectInTexture vec4(0.0, 0.0, 1.0, 1.0)
+// The layer SAMPLER needs a stand-in too, and it is the one name on the kwin
+// branch that had none. `#define iHasSurfaceLayer 0` does not save a pack that
+// writes the idiomatic guard, because a #define is a constant rather than a
+// compile-time branch: the body of `if (iHasSurfaceLayer != 0) { texture(
+// uSurfaceLayer, uv); }` is still compiled here, and an undeclared sampler
+// inside it fails the bake on the daemon, the preview and the SPIR-V path
+// while compiling fine on the compositor. Aliasing it is also what it MEANS:
+// with no layer stack the layered surface IS the unlayered one, which is the
+// same aliasing old_content.glsl does for uOldWindow.
+#define uSurfaceLayer uTexture0
 // The move-class history arrays (iMoveTrail / iMoveMesh) are REAL block
 // members on this branch these days — see the transition tail above. A
 // host with no drag to report leaves them zero, which reads as "no motion

@@ -164,6 +164,11 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     /// a spectrum), and the daemon's SurfaceAnimator feeds the spectrum
     /// unconditionally. Helpers read 0 (render static) when the visualizer
     /// is off or cava is unavailable.
+    ///
+    /// The daemon reads this flag nowhere, its own run-gate included: that
+    /// gate counts a displaying zone overlay or a visible audio-reactive
+    /// decoration and nothing else, so on a daemon-hosted surface the
+    /// provider behind the unconditional feed may never start.
     bool useAudio = false;
 
     /// How wide the shader effect's render target is — relative to its
