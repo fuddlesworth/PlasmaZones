@@ -130,7 +130,7 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     bool bufferFeedback = false;
 
     /// Render-target scale relative to the surface size. Clamped to
-    /// `[0.125, 1.0]` at `fromJson` time. Daemon-only — the compositor
+    /// `[kMinBufferScale, kMaxBufferScale]` at `fromJson` time. Daemon-only — the compositor
     /// path doesn't allocate auxiliary FBOs.
     qreal bufferScale = 1.0;
 

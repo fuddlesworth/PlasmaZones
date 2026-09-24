@@ -278,7 +278,83 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     // which is the loudest possible difference between what the validator says
     // and what the user sees. The converse (multipass true, no bufferShaders)
     // already fails closed further down.
+    // Boolean pack keys are read with toBool(default), which answers the DEFAULT
+    // for anything that is not a bool rather than complaining. So
+    // `"halfFloatBuffers": "false"` loads as TRUE, the exact opposite of what the
+    // author wrote, and `"multipass": 1` leaves the pack single-pass. The JSON
+    // schema catches this for the bundled packs only; a user pack never meets it.
+    {
+        static const QStringList kBoolKeys = {
+            QStringLiteral("multipass"),        QStringLiteral("needsBackdrop"),
+            QStringLiteral("animated"),         QStringLiteral("audio"),
+            QStringLiteral("bufferFeedback"),   QStringLiteral("depthBuffer"),
+            QStringLiteral("halfFloatBuffers"), QStringLiteral("interiorOpaque"),
+            QStringLiteral("providesBorder"),   QStringLiteral("providesOpacityTint")};
+        for (const QString& k : kBoolKeys) {
+            const QJsonValue v = doc.object().value(k);
+            if (!v.isUndefined() && !v.isNull() && !v.isBool()) {
+                lints << QStringLiteral(
+                             "\"%1\" must be true or false; any other value is ignored and the default "
+                             "is used instead")
+                             .arg(k);
+            }
+        }
+    }
+    // paddingParam names the parameter whose value becomes the pack's outer
+    // padding request. paddingRequest answers 0 for a name that resolves to no
+    // numeric parameter, so a typo does not fail anything: the pack simply asks
+    // for no margin and clips at the frame edge, which looks like a shader bug.
+    {
+        const QString paddingParam = doc.object().value(QLatin1String("paddingParam")).toString();
+        if (!paddingParam.isEmpty()) {
+            bool resolves = false;
+            for (const SurfaceShaderEffect::ParameterInfo& p : eff.parameters) {
+                if (p.id == paddingParam && (p.type == QLatin1String("float") || p.type == QLatin1String("int"))) {
+                    resolves = true;
+                    break;
+                }
+            }
+            if (!resolves) {
+                lints << QStringLiteral(
+                             "paddingParam '%1' names no declared float or int parameter, so the pack "
+                             "requests no padding and clips at the frame edge")
+                             .arg(paddingParam);
+            }
+        }
+    }
+    // preview is the pack's thumbnail. The registry clears one that escapes the
+    // pack directory with a journal warning only, and accepts a name whose file
+    // does not exist, so either mistake ships green and shows up as a pack with
+    // no thumbnail. Same shape as the texture branch above.
+    {
+        const QString preview = doc.object().value(QLatin1String("preview")).toString();
+        if (!preview.isEmpty()) {
+            const auto confined = confinedPackPath(packDir, preview);
+            if (!confined) {
+                lints << QStringLiteral(
+                             "preview path escapes the pack directory: %1 (cleared at load, so the pack "
+                             "shows no thumbnail)")
+                             .arg(preview);
+            } else if (!QFile::exists(*confined)) {
+                lints << QStringLiteral("preview missing: %1 (the pack shows no thumbnail)").arg(preview);
+            }
+        }
+    }
+
     const QJsonArray rawBufferShaders = doc.object().value(QLatin1String("bufferShaders")).toArray();
+    // The buffer keys are read only inside the multipass branch, so on a
+    // single-pass pack they are inert. Declaring them reads as a pack that thinks
+    // it is multipass, which is the same authoring mistake the gate below names
+    // from the other side.
+    if (!eff.isMultipass) {
+        for (const QLatin1String key :
+             {QLatin1String("bufferScales"), QLatin1String("bufferWraps"), QLatin1String("bufferFilters")}) {
+            if (!doc.object().value(key).toArray().isEmpty()) {
+                lints
+                    << QStringLiteral("%1 is declared on a single-pass pack, where it is never read").arg(QString(key));
+            }
+        }
+    }
     if (!rawBufferShaders.isEmpty() && !eff.isMultipass) {
         lints << QStringLiteral(
                      "bufferShaders declares %1 pass(es) but \"multipass\" is not true, so every one of "
@@ -291,6 +367,30 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     // a lint over the parsed values would hide author errors.
     if (eff.isMultipass) {
         const QJsonArray declaredBuffers = doc.object().value(QLatin1String("bufferShaders")).toArray();
+        // The inverse of the gate above. With no usable bufferShaders every
+        // buffer lint below and the whole buffer bake become no-ops while the
+        // header still prints "multipass", and the registry quietly normalises
+        // the pack back to single-pass with no warning of its own.
+        if (declaredBuffers.isEmpty()) {
+            lints << QStringLiteral(
+                "\"multipass\" is true but bufferShaders is missing, empty or not an array, so "
+                "the pack is normalised back to single-pass at load");
+        }
+        // A key handed something other than an array is ignored ENTIRELY at load,
+        // because QJsonValue::toArray() answers an empty array for any non-array
+        // value. So `"bufferScales": 0.5` or `"bufferWraps": "clamp"` ships green
+        // with the whole list silently dropped.
+        const auto lintIsArray = [&](QLatin1String key) {
+            const QJsonValue v = doc.object().value(key);
+            if (!v.isUndefined() && !v.isNull() && !v.isArray()) {
+                lints << QStringLiteral("%1 must be an array; any other value is ignored entirely at load")
+                             .arg(QString(key));
+            }
+        };
+        lintIsArray(QLatin1String("bufferShaders"));
+        lintIsArray(QLatin1String("bufferWraps"));
+        lintIsArray(QLatin1String("bufferFilters"));
+        lintIsArray(QLatin1String("bufferScales"));
         // The builtin Kawase pyramid is POSITIONAL, not a set: each pass is bound
         // to iChannel<j> by its INDEX, and the seven frags hardcode which channel
         // they read, so the chain composes in exactly one order. Reordered or
@@ -367,17 +467,24 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
                          .arg(static_cast<int>(declaredBuffers.size()))
                          .arg(PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses);
         }
-        // bufferWraps / bufferFilters are positionally aligned to bufferShaders
-        // and lossy in BOTH directions at load: a longer array is trimmed and a
-        // shorter one is padded with the single-value default, neither with a
-        // warning. Flag any mismatch, matching the animation arm, rather than
-        // surplus alone — a short array is the likelier authoring slip.
+        // bufferWraps / bufferFilters / bufferScales are positionally aligned to
+        // bufferShaders, and a short array is padded with the single-value default
+        // at load with no warning. Flag any mismatch, matching the animation arm,
+        // rather than surplus alone, since a short array is the likelier slip.
+        //
+        // The message deliberately does NOT say the surplus is "dropped". That
+        // wording was carried over from the animation arm and is false here: the
+        // surface loader keeps these arrays at their declared length and only ever
+        // reads the first bufferShaders.size() entries, so a surplus entry is
+        // retained and simply never consulted. The one place anything really is
+        // dropped is the pass budget, which the bufferScales block below reports
+        // on its own.
         const auto lintBufferArrayLen = [&](QLatin1String key) {
             const QJsonArray arr = doc.object().value(key).toArray();
             if (!arr.isEmpty() && arr.size() != declaredBuffers.size()) {
                 lints << QStringLiteral(
-                             "%1 has %2 entries for %3 buffer shaders (aligned positionally; "
-                             "surplus dropped and missing entries fall back at load)")
+                             "%1 has %2 entries for %3 buffer shaders (aligned positionally; surplus entries are "
+                             "never read and missing ones fall back to the single value at load)")
                              .arg(QString(key))
                              .arg(static_cast<int>(arr.size()))
                              .arg(static_cast<int>(declaredBuffers.size()));
@@ -391,7 +498,19 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
         lintBufferArrayLen(QLatin1String("bufferScales"));
         {
             const QJsonArray scales = doc.object().value(QLatin1String("bufferScales")).toArray();
-            for (qsizetype i = 0; i < scales.size(); ++i) {
+            // Past the pass budget fromJson DROPS the entry rather than clamping
+            // it, so the per-entry messages below would state a consequence that
+            // does not happen. Report the overflow once and lint only the entries
+            // that survive.
+            const qsizetype scaleCap = PhosphorShaders::kMaxBufferPasses;
+            if (scales.size() > scaleCap) {
+                lints << QStringLiteral(
+                             "bufferScales has %1 entries, past the %2-pass budget; the surplus is "
+                             "dropped at load rather than clamped")
+                             .arg(static_cast<int>(scales.size()))
+                             .arg(static_cast<int>(scaleCap));
+            }
+            for (qsizetype i = 0; i < scales.size() && i < scaleCap; ++i) {
                 const QJsonValue v = scales.at(i);
                 if (!v.isDouble()) {
                     lints << QStringLiteral(
@@ -412,6 +531,15 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
         // clear an unrecognised token to empty with a journal warning only.
         const auto lintSurfaceTokens = [&lints, &doc](QLatin1String key, bool wrap) {
             for (const QJsonValue& v : doc.object().value(key).toArray()) {
+                // A NON-STRING entry was the one wrap/filter fault that reached
+                // the user with no diagnostic anywhere, not even a journal line:
+                // QJsonValue::toString() answers empty for a number, bool, null,
+                // array or object, and the emptiness gate below then reads it as
+                // "not specified" rather than as the mistake it is.
+                if (!v.isString()) {
+                    lints << QStringLiteral("%1 has a non-string entry, which is ignored at load").arg(QString(key));
+                    continue;
+                }
                 const QString tok = v.toString();
                 const bool ok = wrap ? PhosphorSurfaceShaders::SurfaceShaderContract::isValidWrapToken(tok)
                                      : PhosphorSurfaceShaders::SurfaceShaderContract::isValidFilterToken(tok);
@@ -431,7 +559,14 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             && !PhosphorSurfaceShaders::SurfaceShaderContract::isValidFilterToken(singleFilter)) {
             lints << QStringLiteral("bufferFilter value '%1' not in vocabulary (cleared at load)").arg(singleFilter);
         }
-        const double rawScale = doc.object().value(QLatin1String("bufferScale")).toDouble(1.0);
+        // The single-value twin of the per-entry not-a-number lint above. toDouble
+        // answers its DEFAULT for a string or a bool, so `"bufferScale": "0.5"`
+        // silently loads as 1.0 and the range check below sees nothing wrong.
+        const QJsonValue rawScaleValue = doc.object().value(QLatin1String("bufferScale"));
+        if (!rawScaleValue.isUndefined() && !rawScaleValue.isNull() && !rawScaleValue.isDouble()) {
+            lints << QStringLiteral("bufferScale is not a number, so it falls back to 1.0 at load");
+        }
+        const double rawScale = rawScaleValue.toDouble(1.0);
         if (rawScale < PhosphorShaders::kMinBufferScale || rawScale > PhosphorShaders::kMaxBufferScale) {
             lints << QStringLiteral("bufferScale out of range [%1, %2]: %3 (clamped at load)")
                          .arg(PhosphorShaders::kMinBufferScale)

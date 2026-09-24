@@ -200,7 +200,7 @@ int validatePack(const QString& packDir, QTextStream& out)
         flagPool(poolName(QStringLiteral("image")), imageCount, PhosphorShaders::kMaxImageSlots);
     }
     // Buffer-pass + bufferScale lints check the RAW metadata, not the parsed
-    // ShaderInfo: parseShaderMetadata clamps bufferScale into [0.125, 1.0] and
+    // ShaderInfo: parseShaderMetadata clamps bufferScale into [kMinBufferScale, 1.0] and
     // clears bufferShaderPaths when a declared buffer is missing, so a lint reading
     // the parsed values would silently pass an author error the runtime hid.
     //

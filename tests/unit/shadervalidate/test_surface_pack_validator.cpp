@@ -441,6 +441,139 @@ private Q_SLOTS:
         QVERIFY2(!r.report.contains(QStringLiteral("positional")), qPrintable(r.report));
     }
 
+    /// Boolean keys are read with toBool(default), which answers the DEFAULT for
+    /// a non-bool, so `"halfFloatBuffers": "false"` loads as TRUE. Nothing in the
+    /// tree told the author, since the JSON schema only covers bundled packs.
+    void aNonBooleanPackFlagIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(QStringLiteral("sf-bool"), QJsonArray{});
+        obj.insert(QStringLiteral("halfFloatBuffers"), QStringLiteral("false"));
+
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-bool"), obj, surfaceBodyReading({}));
+        QVERIFY2(r.report.contains(QStringLiteral("\"halfFloatBuffers\" must be true or false")), qPrintable(r.report));
+        QVERIFY(r.errors > 0);
+    }
+
+    /// paddingRequest answers 0 for a paddingParam that resolves to no numeric
+    /// parameter, so a typo does not fail: the pack just asks for no margin and
+    /// clips at the frame edge, which reads as a shader bug rather than a typo.
+    void aPaddingParamNamingNoParameterIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj =
+            surfacePack(QStringLiteral("sf-padding"),
+                        QJsonArray{surfaceParam(QStringLiteral("glowSize"), QStringLiteral("int"), 8, 0.0, 64.0)});
+        obj.insert(QStringLiteral("paddingParam"), QStringLiteral("glowSizee"));
+
+        const PackResult r =
+            validateSurface(tmp, QStringLiteral("sf-padding"), obj, surfaceBodyReading({QStringLiteral("glowSize")}));
+        QVERIFY2(r.report.contains(QStringLiteral("paddingParam 'glowSizee'")), qPrintable(r.report));
+        QVERIFY(r.errors > 0);
+    }
+
+    /// A preview naming a file that is not there is accepted at load, so the pack
+    /// ships with no thumbnail and nothing says why.
+    void aMissingPreviewIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(QStringLiteral("sf-preview"), QJsonArray{});
+        obj.insert(QStringLiteral("preview"), QStringLiteral("thumb.png"));
+
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-preview"), obj, surfaceBodyReading({}));
+        QVERIFY2(r.report.contains(QStringLiteral("preview missing: thumb.png")), qPrintable(r.report));
+        QVERIFY(r.errors > 0);
+    }
+
+    /// toDouble answers its DEFAULT for a string, so a quoted bufferScale loads as
+    /// 1.0 and the range check never sees anything wrong.
+    void aNonNumericBufferScaleIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(QStringLiteral("sf-scale-str"), QJsonArray{});
+        obj.insert(QStringLiteral("multipass"), true);
+        obj.insert(QStringLiteral("bufferShaders"), QJsonArray{QStringLiteral("builtin:gaussian-h")});
+        obj.insert(QStringLiteral("bufferScale"), QStringLiteral("0.5"));
+
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-scale-str"), obj, surfaceBodyReading({}));
+        QVERIFY2(r.report.contains(QStringLiteral("bufferScale is not a number")), qPrintable(r.report));
+        QVERIFY(r.errors > 0);
+    }
+
+    /// toArray() answers an EMPTY array for any non-array value, so a list handed
+    /// a scalar is dropped whole with no diagnostic.
+    void aNonArrayBufferScalesIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(QStringLiteral("sf-scales-scalar"), QJsonArray{});
+        obj.insert(QStringLiteral("multipass"), true);
+        obj.insert(QStringLiteral("bufferShaders"), QJsonArray{QStringLiteral("builtin:gaussian-h")});
+        obj.insert(QStringLiteral("bufferScales"), 0.5);
+
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-scales-scalar"), obj, surfaceBodyReading({}));
+        QVERIFY2(r.report.contains(QStringLiteral("bufferScales must be an array")), qPrintable(r.report));
+        QVERIFY(r.errors > 0);
+    }
+
+    /// The one wrap/filter fault that reached the user with no diagnostic at all,
+    /// because toString() answers empty for a number and the emptiness gate then
+    /// reads that as "not specified".
+    void aNonStringBufferWrapEntryIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(QStringLiteral("sf-wrap-num"), QJsonArray{});
+        obj.insert(QStringLiteral("multipass"), true);
+        obj.insert(QStringLiteral("bufferShaders"), QJsonArray{QStringLiteral("builtin:gaussian-h")});
+        obj.insert(QStringLiteral("bufferWraps"), QJsonArray{3});
+
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-wrap-num"), obj, surfaceBodyReading({}));
+        QVERIFY2(r.report.contains(QStringLiteral("bufferWraps has a non-string entry")), qPrintable(r.report));
+        QVERIFY(r.errors > 0);
+    }
+
+    /// The inverse of bufferShadersWithoutTheMultipassKeyIsLinted: the header
+    /// still says "multipass" while every buffer lint and the whole buffer bake
+    /// quietly become no-ops.
+    void multipassWithoutBufferShadersIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(QStringLiteral("sf-empty-multipass"), QJsonArray{});
+        obj.insert(QStringLiteral("multipass"), true);
+
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-empty-multipass"), obj, surfaceBodyReading({}));
+        QVERIFY2(r.report.contains(QStringLiteral("normalised back to single-pass")), qPrintable(r.report));
+        QVERIFY(r.errors > 0);
+    }
+
+    /// Buffer keys are read only inside the multipass branch, so on a single-pass
+    /// pack they are inert and their presence is an authoring mistake.
+    void bufferScalesOnASinglePassPackIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(QStringLiteral("sf-stray-scales"), QJsonArray{});
+        obj.insert(QStringLiteral("bufferScales"), QJsonArray{0.5});
+
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-stray-scales"), obj, surfaceBodyReading({}));
+        QVERIFY2(r.report.contains(QStringLiteral("declared on a single-pass pack")), qPrintable(r.report));
+        QVERIFY(r.errors > 0);
+    }
+
     /// A depth pack pins every pass to the single bufferScale on the daemon,
     /// because the passes share one depth attachment. That is correct, but it
     /// means a pack declaring both gets its whole pyramid flattened at load, and
