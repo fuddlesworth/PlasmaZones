@@ -31,6 +31,7 @@
 #include <QTemporaryDir>
 #include <QTextStream>
 
+#include <PhosphorShaders/CustomParamsKey.h>
 #include <PhosphorSurface/SurfaceShaderContract.h>
 
 #include "packvalidatortesthelpers.h"
@@ -795,6 +796,113 @@ private Q_SLOTS:
         QVERIFY2(!reportLineHas(r.report, QStringLiteral("surface.vert"), QStringLiteral("(compositor)")),
                  qPrintable(r.report));
         QCOMPARE(r.errors, 0);
+    }
+
+    /// bufferScales is the field this whole change introduced and NOTHING
+    /// asserted any of its lints. Each of the four arms answers a different
+    /// load-time behaviour, and the messages are not interchangeable because
+    /// the consequences are not: a short array falls back per pass, a non-number
+    /// falls back to the single bufferScale, an out-of-range value is CLAMPED,
+    /// and an entry past the pass budget is DROPPED rather than clamped.
+    ///
+    /// Positional alignment is why the length arm matters: bufferScales[i] is
+    /// the scale of pass i, so an array one short does not mean "the last pass
+    /// has no scale", it means every later pass is reading a neighbour's.
+    void bufferScalesLintsCoverLengthTypeRangeAndTheBudget()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        const auto twoPassPack = [](const QString& id) {
+            QJsonObject obj = surfacePack(id, QJsonArray{});
+            obj.insert(QStringLiteral("multipass"), true);
+            obj.insert(QStringLiteral("bufferShaders"),
+                       QJsonArray{QStringLiteral("builtin:kawase-down-0"), QStringLiteral("builtin:kawase-up-2")});
+            return obj;
+        };
+
+        // LENGTH: one scale for two passes.
+        {
+            QJsonObject obj = twoPassPack(QStringLiteral("sf-scales-len"));
+            obj.insert(QStringLiteral("bufferScales"), QJsonArray{0.25});
+            const PackResult r = validateSurface(tmp, QStringLiteral("sf-scales-len"), obj, surfaceBodyReading({}));
+            QVERIFY2(r.report.contains(QStringLiteral("bufferScales has 1 entries for 2 buffer shaders")),
+                     qPrintable(r.report));
+        }
+
+        // TYPE: a string where a number belongs. The likeliest spelling of this
+        // mistake, since every sibling buffer array IS a list of strings.
+        {
+            QJsonObject obj = twoPassPack(QStringLiteral("sf-scales-type"));
+            obj.insert(QStringLiteral("bufferScales"), QJsonArray{0.25, QStringLiteral("0.125")});
+            const PackResult r = validateSurface(tmp, QStringLiteral("sf-scales-type"), obj, surfaceBodyReading({}));
+            QVERIFY2(r.report.contains(QStringLiteral("bufferScales entry 1 is not a number")), qPrintable(r.report));
+            // Entry 0 is fine and must draw nothing, or the arm would be firing
+            // on the array rather than on the entry.
+            QVERIFY2(!r.report.contains(QStringLiteral("bufferScales entry 0")), qPrintable(r.report));
+        }
+
+        // RANGE, on both ends. The floor is the one this change lowered, so a
+        // value under it is exactly the case a stale bound would let through.
+        {
+            QJsonObject obj = twoPassPack(QStringLiteral("sf-scales-range"));
+            obj.insert(QStringLiteral("bufferScales"),
+                       QJsonArray{PhosphorShaders::kMinBufferScale / 2.0, PhosphorShaders::kMaxBufferScale * 2.0});
+            const PackResult r = validateSurface(tmp, QStringLiteral("sf-scales-range"), obj, surfaceBodyReading({}));
+            QVERIFY2(r.report.contains(QStringLiteral("bufferScales entry 0 out of range")), qPrintable(r.report));
+            QVERIFY2(r.report.contains(QStringLiteral("bufferScales entry 1 out of range")), qPrintable(r.report));
+            QVERIFY2(r.report.contains(QStringLiteral("clamped at load")), qPrintable(r.report));
+        }
+
+        // Exactly AT each bound draws nothing. Without this the range arm would
+        // pass just as well with a `<=` in place of the `<`, which would reject
+        // the pyramid's own base scale.
+        {
+            QJsonObject obj = twoPassPack(QStringLiteral("sf-scales-edge"));
+            obj.insert(QStringLiteral("bufferScales"),
+                       QJsonArray{PhosphorShaders::kMinBufferScale, PhosphorShaders::kMaxBufferScale});
+            const PackResult r = validateSurface(tmp, QStringLiteral("sf-scales-edge"), obj, surfaceBodyReading({}));
+            QVERIFY2(!r.report.contains(QStringLiteral("out of range")), qPrintable(r.report));
+        }
+
+        // THE PASS BUDGET. One past kMaxBufferPasses, and the surplus is
+        // reported as DROPPED rather than clamped, which is the distinction the
+        // per-entry loop stops short of the cap to preserve.
+        {
+            QJsonObject obj = surfacePack(QStringLiteral("sf-scales-cap"), QJsonArray{});
+            obj.insert(QStringLiteral("multipass"), true);
+            QJsonArray passes;
+            QJsonArray scales;
+            for (int i = 0; i < PhosphorShaders::kMaxBufferPasses + 1; ++i) {
+                passes.append(QStringLiteral("builtin:kawase-down-0"));
+                scales.append(0.25);
+            }
+            obj.insert(QStringLiteral("bufferShaders"), passes);
+            obj.insert(QStringLiteral("bufferScales"), scales);
+            const PackResult r = validateSurface(tmp, QStringLiteral("sf-scales-cap"), obj, surfaceBodyReading({}));
+            QVERIFY2(
+                r.report.contains(
+                    QStringLiteral("past the %1-pass budget").arg(static_cast<int>(PhosphorShaders::kMaxBufferPasses))),
+                qPrintable(r.report));
+            QVERIFY2(r.report.contains(QStringLiteral("dropped at load rather than clamped")), qPrintable(r.report));
+        }
+
+        // Exactly AT the budget is silent, so the cap cannot drift down by one
+        // without this failing.
+        {
+            QJsonObject obj = surfacePack(QStringLiteral("sf-scales-atcap"), QJsonArray{});
+            obj.insert(QStringLiteral("multipass"), true);
+            QJsonArray passes;
+            QJsonArray scales;
+            for (int i = 0; i < PhosphorShaders::kMaxBufferPasses; ++i) {
+                passes.append(QStringLiteral("builtin:kawase-down-0"));
+                scales.append(0.25);
+            }
+            obj.insert(QStringLiteral("bufferShaders"), passes);
+            obj.insert(QStringLiteral("bufferScales"), scales);
+            const PackResult r = validateSurface(tmp, QStringLiteral("sf-scales-atcap"), obj, surfaceBodyReading({}));
+            QVERIFY2(!r.report.contains(QStringLiteral("pass budget")), qPrintable(r.report));
+        }
     }
 };
 

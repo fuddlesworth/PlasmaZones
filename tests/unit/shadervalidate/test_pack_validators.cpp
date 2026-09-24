@@ -40,11 +40,15 @@
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 
+#include <PhosphorRendering/ShaderCompiler.h>
 #include <PhosphorShaders/ShaderPreset.h>
+
+#include <rhi/qshader.h>
 
 #include "packvalidatortesthelpers.h"
 
 using namespace PackValidatorTest;
+using PhosphorRendering::ShaderCompiler;
 
 namespace {
 
@@ -627,6 +631,103 @@ private Q_SLOTS:
             obj.insert(QStringLiteral("bufferWrap"), QStringLiteral("tile"));
             const PackResult r = validateOverlay(tmp, QStringLiteral("ov-single"), obj);
             QVERIFY2(r.report.contains(QStringLiteral("bufferWrap value 'tile'")), qPrintable(r.report));
+        }
+    }
+
+    // bindingLayoutProblems is declared "Exposed so the tests can pin the rule
+    // without going through a whole pack", and until this slot nothing called
+    // it directly: every exercise of it came through a pack bake, where a pack
+    // whose bindings are right says nothing and a pack cannot easily be made to
+    // declare a WRONG one, because the shared headers own the slots. So the
+    // rule's three arms were reachable only by accident, and the uniform-block
+    // arm was not reachable at all, since no header puts the block anywhere but
+    // binding 0.
+    //
+    // Baking tiny sources directly is what makes the wrong cases expressible.
+    void theBindingLayoutRuleAnswersEachArmDirectly()
+    {
+        const auto bake = [](const QByteArray& body) {
+            const ShaderCompiler::Result r = ShaderCompiler::compile(body, QShader::FragmentStage);
+            QStringList problems;
+            if (!r.success) {
+                // Surfaced rather than swallowed: a source that fails to compile
+                // would otherwise reflect as "no problems" and pass every
+                // negative assertion below without ever testing the rule.
+                problems << QStringLiteral("FIXTURE: source did not compile: ") + r.error;
+                return problems;
+            }
+            return PlasmaZones::ShaderValidate::bindingLayoutProblems(r.shader);
+        };
+
+        // A contract sampler at the slot the table assigns, and the block at 0.
+        // The positive control: without it, a rule that rejected EVERYTHING
+        // would satisfy all three negative cases below.
+        {
+            const QStringList problems = bake(
+                "#version 450\n"
+                "layout(std140, binding = 0) uniform Buf { vec4 pad; };\n"
+                "layout(binding = 2) uniform sampler2D iChannel0;\n"
+                "layout(location = 0) in vec2 uv;\n"
+                "layout(location = 0) out vec4 fragColor;\n"
+                "void main() { fragColor = texture(iChannel0, uv) + pad; }\n");
+            QVERIFY2(problems.isEmpty(), qPrintable(problems.join(QLatin1String(" | "))));
+        }
+
+        // THE UNIFORM-BLOCK ARM, which no pack can reach: every shared header
+        // puts the block at binding 0, so only a hand-written source gets here.
+        {
+            const QStringList problems = bake(
+                "#version 450\n"
+                "layout(std140, binding = 3) uniform Buf { vec4 pad; };\n"
+                "layout(location = 0) out vec4 fragColor;\n"
+                "void main() { fragColor = pad; }\n");
+            QVERIFY2(problems.size() == 1, qPrintable(problems.join(QLatin1String(" | "))));
+            QVERIFY2(problems.first().contains(QLatin1String("uniform block")), qPrintable(problems.first()));
+            QVERIFY2(problems.first().contains(QLatin1String("binding 3")), qPrintable(problems.first()));
+        }
+
+        // A CONTRACT sampler at the wrong slot. iChannel0 belongs at 2.
+        {
+            const QStringList problems = bake(
+                "#version 450\n"
+                "layout(std140, binding = 0) uniform Buf { vec4 pad; };\n"
+                "layout(binding = 5) uniform sampler2D iChannel0;\n"
+                "layout(location = 0) in vec2 uv;\n"
+                "layout(location = 0) out vec4 fragColor;\n"
+                "void main() { fragColor = texture(iChannel0, uv) + pad; }\n");
+            QVERIFY2(problems.size() == 1, qPrintable(problems.join(QLatin1String(" | "))));
+            QVERIFY2(problems.first().contains(QLatin1String("iChannel0")), qPrintable(problems.first()));
+        }
+
+        // A sampler the contract does not define AT ALL. Nothing binds it on
+        // either host, so the message deliberately names no correct slot.
+        {
+            const QStringList problems = bake(
+                "#version 450\n"
+                "layout(std140, binding = 0) uniform Buf { vec4 pad; };\n"
+                "layout(binding = 6) uniform sampler2D uPackInvented;\n"
+                "layout(location = 0) in vec2 uv;\n"
+                "layout(location = 0) out vec4 fragColor;\n"
+                "void main() { fragColor = texture(uPackInvented, uv) + pad; }\n");
+            QVERIFY2(problems.size() == 1, qPrintable(problems.join(QLatin1String(" | "))));
+            QVERIFY2(problems.first().contains(QLatin1String("uPackInvented")), qPrintable(problems.first()));
+            QVERIFY2(problems.first().contains(QLatin1String("nothing will bind")), qPrintable(problems.first()));
+        }
+
+        // Two resources on ONE slot. Only one reaches the SRB, and which one is
+        // not the author's choice, so it is reported whatever the slot is.
+        {
+            const QStringList problems = bake(
+                "#version 450\n"
+                "layout(std140, binding = 0) uniform Buf { vec4 pad; };\n"
+                "layout(binding = 2) uniform sampler2D iChannel0;\n"
+                "layout(binding = 2) uniform sampler2D iChannel1;\n"
+                "layout(location = 0) in vec2 uv;\n"
+                "layout(location = 0) out vec4 fragColor;\n"
+                "void main() { fragColor = texture(iChannel0, uv) + texture(iChannel1, uv) + pad; }\n");
+            QVERIFY2(!problems.isEmpty(), "a shared binding must be reported");
+            QVERIFY2(problems.join(QLatin1String(" | ")).contains(QLatin1String("both declare binding 2")),
+                     qPrintable(problems.join(QLatin1String(" | "))));
         }
     }
 };

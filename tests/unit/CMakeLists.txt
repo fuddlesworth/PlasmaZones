@@ -2503,6 +2503,25 @@ foreach(_pv_test IN ITEMS test_pack_validators test_pack_validator_presets test_
     # No isolation call here on purpose: the directory-wide loop at the bottom of
     # this file picks up every add_test registered above it, these included.
     add_test(NAME ${_pv_test} COMMAND ${_pv_test})
+    # Every stage-compile assertion in these targets can be answered from the
+    # PERSISTENT shader cache instead of a fresh bake: a hit deserializes a
+    # QShader from disk and skips QShaderBaker entirely. Its key is SHA-256 over
+    # the stage byte plus the expanded source and NOTHING ELSE, so the baker
+    # configuration (bakeTargets(), the generated variant set) is not in it.
+    # Change either without moving the cache directory's "-v1" tag and a warm
+    # tree validates the PREVIOUS bake while a cold one bakes fresh.
+    #
+    # The isolation helper below is not enough on its own, though it is closer
+    # than it looks: it DOES set XDG_CACHE_HOME, per target, so the developer's
+    # own ~/.cache copy is already out of reach. What it cannot do is make the
+    # cache cold, because that per-target directory lives under the build tree
+    # and survives every ctest run in it. So the stale-hit window is a rebuilt
+    # baker against a build tree that was not wiped, which is exactly the
+    # configuration a developer has and CI never does.
+    #
+    # APPEND, not PROPERTIES ENVIRONMENT: the helper's own contract, since a
+    # plain set anywhere around it replaces the whole sandbox list.
+    set_property(TEST ${_pv_test} APPEND PROPERTY ENVIRONMENT "PHOSPHOR_DISABLE_SHADER_DISK_CACHE=1")
 endforeach()
 unset(_pack_validator_arms)
 
