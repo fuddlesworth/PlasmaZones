@@ -61,7 +61,7 @@
             "name": "Round bottom corners",
             "type": "bool",
             "default": true,
-            "description": "Round the bottom corners as well as the top. Turn off for a pane that only rounds under a title bar",
+            "description": "Round the bottom corners as well as the top. Turn off to round only the top two",
             "group": "Shape"
         },
         {

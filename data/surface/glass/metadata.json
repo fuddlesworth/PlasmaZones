@@ -112,7 +112,7 @@
             "name": "Physically based refraction",
             "type": "bool",
             "default": false,
-            "description": "Bend the backdrop with Snell's law instead of the simple offset",
+            "description": "Bend the backdrop with Snell's law instead of the simple offset. Ignored while Concave lens is on",
             "group": "Refraction"
         },
         {
@@ -122,7 +122,7 @@
             "default": 1.0,
             "min": 0.0,
             "max": 3.0,
-            "description": "How steeply the physically based bevel tilts the glass surface",
+            "description": "How steeply the physically based bevel tilts the glass surface. Ignored while Concave lens is on",
             "group": "Refraction"
         },
         {
@@ -132,7 +132,7 @@
             "default": 0.5,
             "min": 0.0,
             "max": 2.0,
-            "description": "Extra outward lens pull toward the corners in the physically based mode",
+            "description": "Extra outward lens pull toward the corners in the physically based mode. Ignored while Concave lens is on",
             "group": "Refraction"
         },
         {
@@ -184,7 +184,7 @@
             "name": "Round bottom corners",
             "type": "bool",
             "default": true,
-            "description": "Round the bottom corners as well as the top. Turn off for a pane that only rounds under a title bar",
+            "description": "Round the bottom corners as well as the top. Turn off to round only the top two",
             "group": "Shape"
         },
         {
