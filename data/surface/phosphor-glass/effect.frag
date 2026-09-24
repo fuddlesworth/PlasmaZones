@@ -9,9 +9,10 @@
 // #22D3EE → blue #3B82F6 → purple #A855F7 → rose #F43F5E) — light behind the
 // window literally charges the pane. The excited response breathes slowly
 // (phosphor persistence), and a soft diagonal recharge sweep passes over the
-// pane, briefly lifting even dim regions. Luminance-reactive, unlike every
-// other blur pack: move a bright window behind this glass and the glow
-// follows it.
+// pane, briefly lifting even dim regions. Luminance-reactive, like Duotone
+// and unlike the rest of the family: move a bright window behind this glass
+// and the glow follows it. Duotone reads luminance too, but maps it to a
+// fixed two-colour ramp rather than driving an emissive response.
 //
 // SHARED BACKDROP STAGES, in order: the blurred sample runs through
 // surfaceBackdropGrade (brightness, contrast, OKLab saturation, vibrancy)
@@ -79,7 +80,7 @@ vec4 pSurface(vec2 uv) {
 
         // Un-premultiplied backdrop luminance drives the excitation.
         float lumN = blurred.a > 0.001
-            ? dot(blurred.rgb / blurred.a, vec3(0.299, 0.587, 0.114))
+            ? luma601(blurred.rgb / blurred.a)
             : 0.0;
 
         // ── Phosphor excitation: bright backdrop charges the glass. The

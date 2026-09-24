@@ -204,7 +204,7 @@
             "default": 1.0,
             "min": 0.0,
             "max": 2.0,
-            "description": "Gain on the blurred scene. 1.0 leaves it as captured",
+            "description": "Gain on the finished pane, the blurred scene with the pack's own rim light and glint already on it. 1.0 leaves it unchanged",
             "group": "Colour"
         },
         {
@@ -214,7 +214,7 @@
             "default": 1.0,
             "min": 0.0,
             "max": 2.0,
-            "description": "Contrast of the blurred scene around mid grey. 1.0 leaves it as captured",
+            "description": "Contrast of the finished pane around mid grey, rim light and glint included. 1.0 leaves it unchanged",
             "group": "Colour"
         },
         {

@@ -151,7 +151,7 @@
             "default": 1.0,
             "min": 0.0,
             "max": 2.0,
-            "description": "Gain on the blurred scene. 1.0 leaves it as captured",
+            "description": "Gain on the finished pane, the refracted scene with the ripple glint already on it. 1.0 leaves it unchanged",
             "group": "Colour"
         },
         {
@@ -161,7 +161,7 @@
             "default": 1.0,
             "min": 0.0,
             "max": 2.0,
-            "description": "Contrast of the blurred scene around mid grey. 1.0 leaves it as captured",
+            "description": "Contrast of the finished pane around mid grey, ripple glint included. 1.0 leaves it unchanged",
             "group": "Colour"
         },
         {
@@ -171,7 +171,7 @@
             "default": 1.0,
             "min": 0.0,
             "max": 2.0,
-            "description": "Colour saturation of the blurred scene. 0 is greyscale and 1.0 leaves it as captured",
+            "description": "Colour saturation of the finished pane, ripple glint included. 0 is greyscale and 1.0 leaves it unchanged",
             "group": "Colour"
         },
         {

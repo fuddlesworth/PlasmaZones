@@ -47,7 +47,9 @@ vec4 pSurface(vec2 uv) {
         pane = vec4(clamp(mapped, 0.0, 1.0) * blurred.a, blurred.a) * slab.mask;
     } else {
         // Original pseudo look with no backdrop: a vertical
-        // shadow-to-highlight gradient slab at modest alpha.
+        // shadow-to-highlight gradient slab at modest alpha, running bottom
+        // to top across the frame (1.0 - frameUv().y, so the shadow colour
+        // is at the bottom).
         vec2 fuv = frameUv(slab.px);
         vec3 grad = mix(p_colorA.rgb, p_colorB.rgb, smoothstep(0.0, 1.0, 1.0 - fuv.y));
         pane = vec4(grad, 1.0) * 0.4 * slab.mask;

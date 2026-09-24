@@ -108,7 +108,7 @@
             "default": 0.0,
             "min": 0.0,
             "max": 0.2,
-            "description": "Fine grain over the blur that hides banding in smooth gradients",
+            "description": "Fine grain over the two-colour map that hides banding in its gradient",
             "group": "Colours"
         }
     ]

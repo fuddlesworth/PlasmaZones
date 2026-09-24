@@ -96,9 +96,11 @@ vec4 pSurface(vec2 uv) {
             lit.b = texture(iChannel6, rippleCoord(uv + shift * (1.0 - fringe))).b;
         }
 
-        // Soft directional highlight: slopes facing the up-left "light"
-        // catch a dim glint, scaled by how steep the ripple is — flat glass
-        // stays clean. Premultiplied add, weighted by the backdrop alpha so
+        // Soft directional highlight, lit where the height GRADIENT points
+        // up-left. The gradient points uphill, so the lit face is the one
+        // sloping AWAY from the up-left light, which is what gives the
+        // ripples their raised look rather than an engraved one. Scaled by
+        // how steep the ripple is, so flat glass stays clean. Premultiplied add, weighted by the backdrop alpha so
         // the glint never brightens the cleared off-capture margin.
         float slope = length(grad);
         if (slope > 0.0001) {

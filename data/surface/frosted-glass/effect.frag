@@ -5,9 +5,11 @@
 // (examples/phosphor-shell/shaders/frosted_glass.frag) ported onto a REAL
 // blurred backdrop. The original faked frosting with a translucent tint
 // slab; here the slab is the dual-Kawase-blurred scene behind the surface
-// (iChannel6), and the original's layers ride on top unchanged: the
-// multi-octave crystalline Voronoi grain (slow-drifting on iTime), the
-// tint, the multiplicative vignette, and the rounded-corner SDF clip.
+// (iChannel6), and the original's layers ride on top: the multi-octave
+// crystalline Voronoi grain (its finer octaves drift on iTime; the dominant
+// one is static), the multiplicative vignette, and the rounded-corner SDF
+// clip. NOT unchanged: the original's flat tint is replaced by the turning
+// two-colour gradient, which is also what the no-backdrop fallback draws.
 //
 // SHARED BACKDROP STAGES, in order: the blurred sample runs through
 // surfaceBackdropGrade (brightness, contrast, OKLab saturation, vibrancy)

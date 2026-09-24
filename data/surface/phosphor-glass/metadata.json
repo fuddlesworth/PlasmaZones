@@ -60,12 +60,12 @@
         },
         {
             "id": "tintStrength",
-            "name": "Navy depth",
+            "name": "Tint strength",
             "type": "float",
             "default": 0.55,
             "min": 0.0,
             "max": 1.0,
-            "description": "How far the blurred scene sinks toward the navy surface",
+            "description": "How far the blurred scene sinks toward the glass tint",
             "group": "Tint"
         },
         {
@@ -145,7 +145,7 @@
             "name": "Glass tint",
             "type": "color",
             "default": "#ff0b1730",
-            "description": "The navy surface the blurred scene sinks toward",
+            "description": "The surface colour the blurred scene sinks toward",
             "group": "Tint"
         },
         {

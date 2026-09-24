@@ -29,8 +29,11 @@
 // refracting a capture.
 //
 // ANIMATED (references iTime): metadata declares "animated": true so the
-// daemon host ticks the item; the compositor detects the linked iTime
-// uniform itself and repaints the window continuously while decorated.
+// daemon host ticks the item, and the compositor detects the linked iTime
+// uniform itself rather than reading the flag. Neither repaints without
+// limit: the compositor stops while the performance pause is on and while
+// the session is idle-gated, so an animated pack freezes rather than
+// burning frames on a desktop nobody is looking at.
 
 #include <surface_multipass.glsl>
 #include <surface_noise.glsl>
