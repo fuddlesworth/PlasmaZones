@@ -9,6 +9,7 @@
 #include <QVector4D>
 #include <QSizeF>
 #include <QUrl>
+#include <QtNumeric>
 
 #include "daemon/rendering/zoneshaderitem.h"
 #include "daemon/rendering/zonelabeltexturebuilder.h"
@@ -467,6 +468,37 @@ private Q_SLOTS:
         }
         item.setBufferScales(tooMany);
         QCOMPARE(item.bufferScales().size(), PhosphorShaders::kMaxBufferPasses);
+    }
+
+    /// The fourth contract of the same setter, and the one a bound would get
+    /// wrong: an entry that is not a finite number falls back to the PACK-WIDE
+    /// bufferScale, not to a bound.
+    ///
+    /// The pack-wide scale is set away from its 1.0 default first, because 1.0
+    /// is also kMaxBufferScale, and against the default the fallback and a clamp
+    /// to the maximum are indistinguishable. At 0.25 they are three different
+    /// answers: 0.25 is the fallback, kMinBufferScale is what qBound gives a
+    /// QVariant::toDouble of 0, and kMaxBufferScale is the other bound. Only the
+    /// first leaves the pass rendering at the size the pack asked for, instead of
+    /// at 1/128 of the canvas looking like a broken shader.
+    void testZoneShaderItem_bufferScalesNonFiniteEntryFallsBackToPackScale()
+    {
+        ZoneShaderItem item;
+        item.setBufferScale(0.25);
+
+        // Not parseable as a number at all: `ok` is false.
+        item.setBufferScales(QVariantList{QStringLiteral("half"), 0.5});
+        QCOMPARE(item.bufferScales().size(), 2);
+        QCOMPARE(item.bufferScales().at(0).toDouble(), 0.25);
+        QCOMPARE(item.bufferScales().at(1).toDouble(), 0.5);
+
+        // Parses, but is not finite. qBound on a NaN is unspecified, so this arm
+        // has to be taken before the clamp rather than inside it.
+        item.setBufferScales(QVariantList{qQNaN(), qInf(), -qInf()});
+        QCOMPARE(item.bufferScales().size(), 3);
+        QCOMPARE(item.bufferScales().at(0).toDouble(), 0.25);
+        QCOMPARE(item.bufferScales().at(1).toDouble(), 0.25);
+        QCOMPARE(item.bufferScales().at(2).toDouble(), 0.25);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

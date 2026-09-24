@@ -46,7 +46,31 @@ inline constexpr int kDepth = kWallpaper + 1;
 /// Last binding the library manages; everything above is a consumer slot.
 inline constexpr int kReservedEnd = kDepth;
 inline constexpr int kExtraBase = kReservedEnd + 1;
-/// Highest portable SRB binding: Qt RHI's minimum guarantee across backends.
+/// Highest binding a consumer may claim. This is a PROJECT ceiling, not a Qt
+/// one. QRhi exposes no resource limit for binding count, and neither
+/// QRhiShaderResourceBindings nor QRhiShaderResourceBinding documents a portable
+/// maximum binding INDEX, so 31 is a convention this library enforces rather
+/// than a guarantee it inherits. ShaderNodeRhi.h says the same of
+/// kMaxConsumerBinding, which is this constant.
+///
+/// What Qt does document is a different quantity, and a smaller one: a
+/// per-shader SAMPLER COUNT. QRhiShaderResourceBinding states, of
+/// sampledTexture(), texture() and sampler() alike, that a shader may not be
+/// able to consume more than 16 textures or samplers depending on the
+/// underlying graphics API. The reserved range above claims bindings 1 to 16,
+/// which is exactly that many, so the contract sits AT the documented ceiling
+/// and every consumer slot in 17..31 is the seventeenth sampler onward in any
+/// stage that reaches it.
+///
+/// That became live rather than theoretical when the channel budget went from
+/// four to eight: createImageSrbMulti binds all kChannelCount channel slots
+/// unconditionally, dummy-filled for a pack that declares fewer, and the user
+/// textures, wallpaper and depth bindings are unconditional too, so a multipass
+/// pack already carries 14 fragment-stage samplers, 15 with audio and 16 with
+/// one consumer extra. Nothing has failed on the target: desktop Mesa and
+/// NVIDIA report far above the Vulkan minimum of 16 per-stage sampled images,
+/// and GL_MAX_TEXTURE_IMAGE_UNITS is 32 on Mesa. A conservative backend is
+/// where it would show, and adding a reserved slot is what would push it there.
 inline constexpr int kMaxBinding = 31;
 /// How many channel sizes the uniform block carries (`iChannelResolution[4]`).
 inline constexpr int kChannelResolutionSlots = 4;

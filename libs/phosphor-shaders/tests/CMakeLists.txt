@@ -47,6 +47,9 @@ endfunction()
 
 phosphorshaders_add_test(test_baseuniformprofile)
 phosphorshaders_add_test(test_pixelunits)
+# The descriptor-binding table every Qt-RHI family declares against, and the two
+# predicates plasmazones-shader-validate reflects each baked stage back through.
+phosphorshaders_add_test(test_shaderbindings)
 phosphorshaders_add_test(test_shaderpresets)
 # The store half of the same feature, split out when the file above reached the size
 # ceiling: the directory loader and its watcher, the legacy migration, and the store.
