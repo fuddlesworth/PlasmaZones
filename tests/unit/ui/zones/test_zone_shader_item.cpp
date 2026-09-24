@@ -103,9 +103,22 @@ private Q_SLOTS:
         const int versionBefore = before.version;
 
         // Changing hoveredZoneIndex should update highlight flags but NOT reparse
-        // all zone data from scratch. We verify by checking that the rect geometry
-        // is identical and version incremented only by 1 (lightweight update).
+        // all zone data from scratch.
+        //
+        // The geometry and version assertions below CANNOT show that on their own,
+        // and used to be all this slot had: both paths bump the version exactly
+        // once (parseZoneData and updateHoveredHighlightOnly each do
+        // `version = ++m_dataVersion`), and a full reparse of an unchanged list
+        // reproduces the same geometry, so every one of them is satisfied by the
+        // behaviour this test exists to rule out. The spies are the discriminator:
+        // a reparse goes through setZones, which announces itself.
+        QSignalSpy zonesSpy(&item, &ZoneShaderItem::zonesChanged);
+        QSignalSpy countSpy(&item, &ZoneShaderItem::zoneCountChanged);
+
         item.setHoveredZoneIndex(2);
+
+        QCOMPARE(zonesSpy.count(), 0);
+        QCOMPARE(countSpy.count(), 0);
 
         PhosphorRendering::ZoneDataSnapshot after = item.getZoneDataSnapshot();
 
@@ -403,10 +416,57 @@ private Q_SLOTS:
         // the contract is now "a refused write leaves everything as it
         // was".
         ZoneShaderItem item;
+
+        // "Leaves everything as it was" is only observable against a PRIOR state,
+        // and this slot used to run the refused write on a fresh item and assert
+        // status Null, an empty log and an empty source — which are the
+        // constructor's own defaults. It passed whether the write was refused,
+        // accepted, or ignored entirely. Accept one first so there is something
+        // to preserve.
+        const QUrl accepted(QStringLiteral("qrc:/zone-shader-item-test-does-not-exist.frag"));
+        item.setShaderSource(accepted);
+        QCOMPARE(item.shaderSource(), accepted);
+        const ZoneShaderItem::Status statusBefore = item.status();
+        const QString logBefore = item.errorLog();
+
         item.setShaderSource(QUrl(QStringLiteral("http://example.com/shader.frag")));
-        QCOMPARE(item.status(), ZoneShaderItem::Status::Null);
-        QVERIFY(item.errorLog().isEmpty());
-        QVERIFY(item.shaderSource().isEmpty());
+
+        QCOMPARE(item.shaderSource(), accepted);
+        QCOMPARE(item.status(), statusBefore);
+        QCOMPARE(item.errorLog(), logBefore);
+    }
+
+    /// setBufferScales, the per-pass list, had NO coverage anywhere in the tree
+    /// while the single-value setBufferScale beside it was covered. Its three
+    /// contracts are the per-entry clamp, the drop past the pass budget, and the
+    /// equal-list early return.
+    void testZoneShaderItem_bufferScalesClampedCappedAndDeduplicated()
+    {
+        ZoneShaderItem item;
+        QVERIFY(item.bufferScales().isEmpty());
+
+        QSignalSpy spy(&item, &PhosphorRendering::ShaderEffect::bufferScalesChanged);
+
+        item.setBufferScales(QVariantList{0.0001, 0.5, 5.0});
+        QCOMPARE(item.bufferScales().size(), 3);
+        QCOMPARE(item.bufferScales().at(0).toDouble(), PhosphorShaders::kMinBufferScale);
+        QCOMPARE(item.bufferScales().at(1).toDouble(), 0.5);
+        QCOMPARE(item.bufferScales().at(2).toDouble(), PhosphorShaders::kMaxBufferScale);
+        QCOMPARE(spy.count(), 1);
+
+        // Re-pushing the SAME raw values must not re-emit. The stored list is
+        // already clamped, so this also proves the comparison is made against the
+        // clamped form rather than the raw one, which a QML binding re-evaluating
+        // every frame depends on.
+        item.setBufferScales(QVariantList{0.0001, 0.5, 5.0});
+        QCOMPARE(spy.count(), 1);
+
+        QVariantList tooMany;
+        for (int i = 0; i < PhosphorShaders::kMaxBufferPasses + 3; ++i) {
+            tooMany.append(0.5);
+        }
+        item.setBufferScales(tooMany);
+        QCOMPARE(item.bufferScales().size(), PhosphorShaders::kMaxBufferPasses);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

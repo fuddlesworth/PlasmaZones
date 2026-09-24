@@ -28,11 +28,19 @@ vec3 hsv2rgb(vec3 c) {
 }
 
 // sRGB <-> linear.
+//
+// The pow() inputs are floored at 0 because BOTH arms of mix() are evaluated:
+// mix(x, y, a) is x * (1 - a) + y * a, so the pow runs on every component,
+// including the ones step() is about to discard. GLSL leaves pow(x, y)
+// undefined for x < 0, and a NaN multiplied by a zero weight is still a NaN, so
+// a single negative component poisoned the channel and spread through the
+// premultiplied composite. The floor cannot change a component step() actually
+// selects, since every selected one is already above its threshold.
 vec3 srgbToLinear(vec3 c) {
-    return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
+    return mix(c / 12.92, pow(max((c + 0.055) / 1.055, 0.0), vec3(2.4)), step(0.04045, c));
 }
 vec3 linearToSrgb(vec3 c) {
-    return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
+    return mix(c * 12.92, 1.055 * pow(max(c, 0.0), vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
 }
 
 // linear <-> OKLab (Ottosson reference matrices).

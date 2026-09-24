@@ -226,15 +226,28 @@ vec4 faintTintSlab(vec3 tint, float tintStrength, float mask) {
 float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float strength, float focusFloor) {
     // reach is caller-supplied and a zero would make this inf, then NaN through
     // exp(), and a NaN propagates through the whole composite rather than
-    // showing up as one bad pixel. Defensive rather than live: both in-tree
-    // callers (glow, shadow) already floor it at 1.0, so this changes no
-    // output today. It does NOT make a zero reach wholly safe either — the
-    // smoothstep below still collapses to edge0 == edge1 there — so a caller
-    // that stops flooring needs both guarded, not just this one.
+    // showing up as one bad pixel. Both in-tree callers (glow, shadow) floor it
+    // at 1.0, so this changes no output today; it is here so that a caller which
+    // stops flooring cannot poison the frame.
+    //
+    // KNOWN, AND NOT SAFE TO CHANGE HERE. Clamping d at 0 makes t zero for every
+    // fragment INSIDE the frame, so halo is exp(0) = 1, the full profile rather
+    // than a falloff, and the only thing confining it to the margin is the
+    // (1 - baseAlpha) term below. A translucent window therefore wears the halo
+    // across its whole body. Two fixes were considered and both cost something a
+    // shader-local edit cannot weigh: gating on d > 0 loses the transparent
+    // CORNER SLIVER whenever a pack's halo radius is smaller than the border
+    // pack's, and making the profile symmetric in d fades the shadow out inside
+    // its own displaced rect, which is exactly the band a drop shadow is for.
+    // Left as it is on purpose, with the choice recorded rather than taken.
     float t = max(d, 0.0) / max(reach, 1e-3);
     float halo = exp(-4.0 * t * t);
     float edgeDist = min(min(edgePx.x, edgePx.y), min(uSurfaceSize.x - edgePx.x, uSurfaceSize.y - edgePx.y));
-    halo *= smoothstep(0.0, min(0.35 * reach, 12.0 * max(uSurfaceScale, 0.001)), edgeDist);
+    // Floored so edge0 != edge1: smoothstep is undefined when they are equal, and
+    // a zero reach collapsed them. With this, a zero reach is wholly safe rather
+    // than half-guarded.
+    float feather = max(min(0.35 * reach, 12.0 * max(uSurfaceScale, 0.001)), 1e-3);
+    halo *= smoothstep(0.0, feather, edgeDist);
     halo *= (1.0 - baseAlpha);
     halo *= strength * focusDim(focusFloor);
     return halo;
