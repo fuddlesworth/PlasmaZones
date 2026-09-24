@@ -1,13 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// Canonical uniform contract for SURFACE shaders — the third shader-pack
-// category, alongside animation (data/animations) and overlay (data/overlays).
-// A surface shader decorates a rendered surface: it samples the surface's own
-// content (uTexture0) and the geometry of the content rect within that texture,
-// and paints decoration (rounded corners + border today; tint / glow / frost in
-// future packs). The window border/rounded-corner effect is the first surface
-// pack (data/surface/border).
+// Canonical uniform contract for SURFACE shaders, one of the four shader-pack
+// categories alongside animation (data/animations), overlay (data/overlays) and
+// pointer (data/pointer). A surface shader decorates a rendered surface: it
+// samples the surface's own content (uTexture0) and the geometry of the content
+// rect within that texture, and paints decoration over it. Two dozen packs ship
+// today, from the plain border and rounded corners through tint, glow, frost,
+// blur and the refracting glass family.
 //
 // DUAL-RUNTIME, like the animation contract. The SAME pack source compiles for:
 //
@@ -22,9 +22,12 @@
 //     SurfaceShaderUniforms.h and filled by SurfaceUniformProfile — the daemon
 //     consumes it through SurfaceShaderItem on the OSD/popup decoration hosts.
 //
-// The host (compositor or daemon) provides only the surface GEOMETRY (the
-// content rect within the texture, in device px), a logical-to-device SCALE, and
-// a FOCUS flag. Decoration APPEARANCE — border width, corner radius, colours,
+// The host (compositor or daemon) provides the surface STATE: the geometry of
+// the content rect within the texture in device px, a logical-to-device scale, a
+// focus value, and — for packs that ask for them — time, the audio spectrum, the
+// cursor, the backdrop and its rect, the folded opacity, and the sizes of any
+// buffer-pass and user-texture inputs. Every one of those is declared below.
+// What the host does NOT provide is decoration APPEARANCE — border width, corner radius, colours,
 // glow, etc. — is NOT host state: it is each pack's own declared PARAMETERS
 // (customParams / customColors via the standard parameter slots), so "border" is
 // just a shader whose width/radius/colour are its params, not a separately
@@ -37,8 +40,10 @@
 #ifdef PLASMAZONES_KWIN
 
 // ── Compositor branch — classic default-block uniforms ──────────────────────
-// uTexture0 is bound to texture unit 0 by KWin's OffscreenData::paint; a
-// sampler2D left unset defaults to unit 0, so no explicit binding is needed.
+// uTexture0 lives on texture unit 0. The effect binds it and sets the sampler
+// explicitly in the composite fold rather than relying on the unset-sampler
+// default, because the fold rebinds unit 0 several times per pack and an unset
+// sampler would follow whatever was bound last.
 uniform sampler2D uTexture0;
 
 // Geometry of the surface texture and the content rect within it (device px).
@@ -63,8 +68,10 @@ uniform float uSurfaceFocused;
 // Continuously-increasing seconds, for ANIMATED packs (pulsing glow, shimmer,
 // …) — the same role iTime plays in the overlay / animation categories. The
 // host captures an epoch at first use so this begins near 0 (float precision).
-// The linker drops it for a static pack (e.g. the border); a window whose packs
-// never reference iTime is not driven to repaint, so static decoration is free.
+// The linker drops it for a static pack (e.g. the border). iTime is not the only
+// repaint driver, though: a pack that reads the audio spectrum or iMouse is
+// driven by those instead, so "references no iTime" means free only for a pack
+// that reads none of the three.
 uniform float iTime;
 
 // Audio spectrum bar count (CAVA), 0 when the audio visualizer is off. Both
@@ -76,13 +83,18 @@ uniform float iTime;
 uniform int iAudioSpectrumSize;
 
 // Pack-specific tweakable parameters (declared in metadata.json, addressed by
-// `#define p_<id> customParamsN_x` / `customColorN` preambles the registry
-// generates — identical to the animation/overlay categories).
+// `#define p_<id> customParams[N].x` / `customColors[N]` preambles the registry
+// generates — identical to the animation/overlay categories). The metadata KEY
+// for a preset value is the flat `customParamsN_x` spelling; the GLSL the
+// preamble emits is the indexed one, and only the latter appears in a shader.
 uniform vec4 customParams[8];
 uniform vec4 customColors[16];
 
 // Multipass buffer-pass output SIZES: iChannelResolution[N].xy is the pixel
-// size of iChannelN. The iChannelN samplers themselves live in the opt-in
+// size of iChannelN, FOR N < 4 ONLY. There are up to eight buffer passes and
+// only four declared sizes, so a pass reading iChannel4..7 sizes it with
+// textureSize(iChannelN, 0) instead, which the builtin Kawase passes do for
+// every channel. The iChannelN samplers themselves live in the opt-in
 // surface_multipass.glsl module — a single-pass pack (the border) declares
 // neither. This resolution array stays in the core contract because it is a
 // pinned std140 UBO member on the daemon.

@@ -21,7 +21,6 @@
 #include <opengl/glshader.h>
 #include <opengl/gltexture.h>
 
-#include <QColor>
 #include <QHash>
 #include <QPointF>
 #include <QRect>
@@ -35,7 +34,6 @@
 #include <vector>
 
 namespace KWin {
-class Item;
 }
 
 namespace PlasmaZones {
@@ -76,7 +74,16 @@ struct CompiledSurfaceBufferPass
     }();
     /// iChannelResolution[0..3] element locations (the .xy pixel size of each; the
     /// contract declares four, a pass reading a later channel uses textureSize()).
-    std::array<int, PhosphorShaders::Bindings::kChannelResolutionSlots> iChannelResolutionLoc{{-1, -1, -1, -1}};
+    /// fill(-1), not a brace literal: the array is SIZED by
+    /// kChannelResolutionSlots, so a bump would leave the surplus slots
+    /// value-initialised to 0 — and 0 is a valid uniform location, not a miss,
+    /// so the push would land on whatever uniform really lives there. Same
+    /// idiom as iChannelLoc above.
+    std::array<int, PhosphorShaders::Bindings::kChannelResolutionSlots> iChannelResolutionLoc = []() {
+        std::array<int, PhosphorShaders::Bindings::kChannelResolutionSlots> a;
+        a.fill(-1);
+        return a;
+    }();
     /// Pack-declared parameter slot locations (reuse the main pass's values).
     std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomParams> customParamsLoc = []() {
         std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomParams> a;
@@ -179,7 +186,16 @@ struct CompiledSurfacePack
         a.fill(-1);
         return a;
     }();
-    std::array<int, PhosphorShaders::Bindings::kChannelResolutionSlots> iChannelResolutionLoc{{-1, -1, -1, -1}};
+    /// fill(-1), not a brace literal: the array is SIZED by
+    /// kChannelResolutionSlots, so a bump would leave the surplus slots
+    /// value-initialised to 0 — and 0 is a valid uniform location, not a miss,
+    /// so the push would land on whatever uniform really lives there. Same
+    /// idiom as iChannelLoc above.
+    std::array<int, PhosphorShaders::Bindings::kChannelResolutionSlots> iChannelResolutionLoc = []() {
+        std::array<int, PhosphorShaders::Bindings::kChannelResolutionSlots> a;
+        a.fill(-1);
+        return a;
+    }();
 
     /// User-declared image textures (metadata `textures`): sampler +
     /// iTextureResolution[N] element locations, plus the textures themselves,
@@ -232,8 +248,9 @@ struct CompiledSurfacePack
 /// The cursor, when it is not over a window's canvas. Far outside any real screen, so a
 /// never-folded state can never compare equal to a live pointer.
 ///
-/// ONE definition, shared by the two that must agree EXACTLY: the fold keys its cache on
-/// it and the repaint driver decides whether to drive on it. (The shader is handed its own
+/// ONE definition, shared by the three that must agree EXACTLY: the fold keys its cache
+/// on it, the repaint driver decides whether to drive on it, and pushBorderUniforms
+/// compares against it to map the sentinel for the shader. (The shader is handed its own
 /// (-1, -1) "cursor absent" sentinel instead — a canvas-relative value, not a global one —
 /// so it is deliberately not this constant.)
 inline constexpr QPointF kCursorOutside(-1.0e9, -1.0e9);
@@ -680,10 +697,12 @@ struct WindowDecoration
     QString basePackId;
 
     /// True when the window resolved onto a `shell.*` surface path (a
-    /// plasmashell panel or applet popup). Two consumers: the fold scans the
+    /// plasmashell panel or applet popup). Consumers: the fold scans the
     /// capture's visible-content bounds for these (updateShellContentRect),
-    /// and pushBorderUniforms substitutes those bounds for frameGeometry() so
-    /// packs hug what the user actually sees (a floating or Panel
+    /// pushBorderUniforms substitutes those bounds for frameGeometry() so
+    /// packs hug what the user actually sees, and both the present rebind and
+    /// the capture pin uSurfaceFocused high for a shell surface, which has no
+    /// focus of its own to track (a floating or Panel
     /// Colorizer-styled panel is a rounded body inset in a mostly transparent
     /// full-width window). Set by updateWindowDecoration from the same
     /// resolved surface path that selected chain-only resolution.
@@ -722,9 +741,11 @@ struct WindowDecoration
 
     /// True when the chain carries the plain opacity-tint layer, whose
     /// opacity param is the resolved config + SetOpacity fold — the chain
-    /// BAKES the window's opacity into its composite. Sole runtime consumer
-    /// is the transition iWindowOpacity push: 1.0 when the fold's composite
-    /// is what the transition samples, the foldedOpacity fallback otherwise
+    /// BAKES the window's opacity into its composite. Read by the transition
+    /// iWindowOpacity push (1.0 when the fold's composite is what the
+    /// transition samples, the foldedOpacity fallback otherwise), by the fold's
+    /// capture-opacity fail-safe gate, and by the re-capture-on-opacity-move
+    /// check
     /// (refined by the per-frame rule cache when one is populated).
     /// SetOpacity has no other application path: custom chains configure
     /// their own dimming through pack params (frost/glass contentOpacity).
@@ -732,13 +753,15 @@ struct WindowDecoration
 
     /// The effective opacity folded into the opacity-tint layer's `opacity`
     /// param (config default, SetOpacity rule winning); 1.0 when the layer is
-    /// off. Two direct consumers, both fallbacks for paths where the fold's
-    /// composite is not what reaches the screen: the fold's failed-compile
-    /// fallback (the opacity-tint pack has no compiled shader, so the window
-    /// CAPTURE dims by this value under KWin's default modulating shader),
-    /// and the transition iWindowOpacity push on the bare-uTexture0 fallback
-    /// of an opacity-baking chain (paintWindow). Single-apply holds on both —
-    /// they fire only when the pack that owns the value did not run. Every
+    /// off. Two direct FALLBACK consumers, for paths where the fold's composite
+    /// is not what reaches the screen: the fold's failed-compile fallback (the
+    /// opacity-tint pack has no compiled shader, so the window CAPTURE dims by
+    /// this value under KWin's default modulating shader), and the transition
+    /// iWindowOpacity push on the bare-uTexture0 fallback of an opacity-baking
+    /// chain (paintWindow). Single-apply holds on both — they fire only when
+    /// the pack that owns the value did not run. It is also read as the fold
+    /// cache key and as the setTranslucent-skip gate, which are not fallbacks
+    /// and are named further down this header. Every
     /// other path reads the value through packParamValues like any pack
     /// param.
     double foldedOpacity = 1.0;
