@@ -849,6 +849,10 @@ private:
         return a;
     }();
     std::array<bool, kMaxUserTextures> m_userTextureDirty = {};
+    /// One warning per slot for a failed sampler create. The retry itself is
+    /// per-frame by design (the slot stays dirty), so without this the failure
+    /// line repeats at vsync for as long as the backend stays unhappy.
+    std::array<bool, kMaxUserTextures> m_userTextureSamplerWarned = {};
 
     // ── Source texture override (slot 0 / binding 11) ───────────────────
     // Texture-provider source — typically a `QQuickItem::textureProvider()`
@@ -901,6 +905,10 @@ private:
     /// at slot 0", so a transient null must not unmask the QImage. Allocated
     /// lazily on first use; released in releaseRhiResources().
     std::unique_ptr<QRhiTexture> m_transparentFallbackTexture;
+    /// Latch for the 1x1 transparent fallback's create failure. That allocation
+    /// is retried on EVERY prepare() while a source provider is set and
+    /// unresolved, and it used to fail in complete silence.
+    bool m_transparentFallbackWarned = false;
     bool m_transparentFallbackTextureNeedsUpload = false;
 
     // ── Depth buffer (binding 16) ──────────────────────────────────────

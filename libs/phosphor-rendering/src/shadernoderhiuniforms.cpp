@@ -462,10 +462,18 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 // gate above fires again next frame (dirty is still set) —
                 // a stranded non-created sampler would otherwise pass the
                 // truthiness gates below and be bound into the SRB.
-                qCWarning(lcShaderNode) << "user texture slot" << i << "sampler create() failed, will retry next frame";
+                // Latched per slot: the retry is per-frame by design (the slot
+                // stays dirty and this gate re-fires), so an unlatched line here
+                // repeats at vsync for as long as the backend refuses.
+                if (!m_userTextureSamplerWarned[static_cast<size_t>(i)]) {
+                    m_userTextureSamplerWarned[static_cast<size_t>(i)] = true;
+                    qCWarning(lcShaderNode) << "user texture slot" << i
+                                            << "sampler create() failed; retrying every frame, reported once per slot";
+                }
                 m_userTextureSamplers[i].reset();
                 continue;
             }
+            m_userTextureSamplerWarned[static_cast<size_t>(i)] = false;
             resetAllBindingsAndPipelines();
         }
         // Sampler is the only hard prerequisite. m_userTextures[i] is null
@@ -600,7 +608,17 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         m_transparentFallbackTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
         if (m_transparentFallbackTexture->create()) {
             m_transparentFallbackTextureNeedsUpload = true;
+            m_transparentFallbackWarned = false;
         } else {
+            // This whole block is retried on EVERY prepare() while a source
+            // provider is set and unresolved, because the reset below restores
+            // the gate above. A backend that cannot give us a 1x1 RGBA8 is in
+            // serious trouble, and it used to say nothing at all.
+            if (!m_transparentFallbackWarned) {
+                m_transparentFallbackWarned = true;
+                qCWarning(lcShaderNode) << "transparent fallback texture create() failed; the source-provider "
+                                           "slot will sample unit 0 until it succeeds (reported once)";
+            }
             m_transparentFallbackTexture.reset();
         }
     }
@@ -707,6 +725,8 @@ void ShaderNodeRhi::releaseRhiResources()
     m_warnedAudioTruncated = false;
     m_warnedAudioCreateFailed = false;
     m_warnedWallpaperBindingOmitted = false;
+    m_userTextureSamplerWarned.fill(false);
+    m_transparentFallbackWarned = false;
     m_depthMultiBufferWarned = false;
     m_depthScalesWarned = false;
     m_transparentFallbackTexture.reset();
@@ -791,7 +811,12 @@ void ShaderNodeRhi::bakeBufferShaders()
             if (src.isEmpty()) {
                 // loadAndExpand already returns empty on missing/unreadable;
                 // no separate exists() check needed (and the prior check was
-                // itself a TOCTOU race).
+                // itself a TOCTOU race). It DOES fill `err`, which this arm used
+                // to discard, leaving the pass that failed and the reason it
+                // failed nowhere at all — the only survivor was a later message
+                // blaming compilation for what was a load.
+                qCWarning(lcShaderNode) << "Buffer pass" << i << "load failed, path=" << path
+                                        << "error=" << (err.isEmpty() ? QStringLiteral("(no detail)") : err);
                 allOk = false;
                 break;
             }
@@ -821,9 +846,14 @@ void ShaderNodeRhi::bakeBufferShaders()
         } else {
             if (++m_multiBufferShaderRetries < 3) {
                 m_multiBufferShaderDirty = true;
+                // Ask for the frame that performs the retry. Re-arming the flag
+                // alone schedules nothing, so a pack with no per-frame input got
+                // exactly one retry and then sat blank until something unrelated
+                // repainted it.
+                requestAnotherFrame();
             } else {
-                qCWarning(lcShaderNode)
-                    << "Multi-buffer shader compilation failed after 3 attempts; giving up until shader path changes";
+                qCWarning(lcShaderNode) << "Multi-buffer shader load or compilation failed after 3 attempts; "
+                                           "giving up until shader path changes";
             }
         }
     }
@@ -845,6 +875,7 @@ void ShaderNodeRhi::bakeBufferShaders()
                                         << "error=" << (err.isEmpty() ? QStringLiteral("(no detail)") : err);
                 if (++m_bufferShaderRetries < 3) {
                     m_bufferShaderDirty = true;
+                    requestAnotherFrame(); // see the multi-buffer arm above
                 } else {
                     qCWarning(lcShaderNode)
                         << "Buffer shader load failed after 3 attempts; giving up until shader path changes";
@@ -864,7 +895,14 @@ void ShaderNodeRhi::bakeBufferShaders()
                 qCWarning(lcShaderNode) << "Buffer shader: compile failed, path=" << m_bufferPath
                                         << "error=" << result.error;
                 if (++m_bufferShaderRetries < 3) {
+                    // Drop the cached source so the retry RE-READS the file. Left
+                    // in place it recompiled the identical bytes and failed the
+                    // identical way, which made the three attempts one attempt
+                    // repeated: the only thing that can have changed between them
+                    // is the file on disk.
+                    m_bufferFragmentShaderSource.clear();
                     m_bufferShaderDirty = true;
+                    requestAnotherFrame(); // see the multi-buffer arm above
                 } else {
                     qCWarning(lcShaderNode)
                         << "Buffer shader compilation failed after 3 attempts; giving up until shader path changes";
