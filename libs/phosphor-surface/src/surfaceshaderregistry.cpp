@@ -617,6 +617,13 @@ QVariantMap SurfaceShaderRegistry::translateSurfaceParams(const SurfaceShaderEff
     // surface-layer resolution) can swap a packaged texture without
     // touching the pack on disk.
     //
+    // These override keys are honoured on the DAEMON path only. The
+    // kwin-effect compositor calls translateSurfaceParams for the scalar and
+    // colour slots and ignores the texture keys, uploading `effect.textures`
+    // once per pack and caching for the pack's lifetime; see the
+    // `SurfaceShaderEffect::textures` doc. Anything added here that a surface
+    // decoration must show on a real window needs a compositor arm too.
+    //
     // Slot offset: the canonical surface contract reserves `uTexture0`
     // for the captured surface. `effect.textures[0]` therefore maps to
     // `uTexture1` and so on. friendlyParams may use the GLSL slot name

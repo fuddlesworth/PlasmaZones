@@ -203,13 +203,14 @@ SurfaceShaderEffect SurfaceShaderEffect::fromJson(const QJsonObject& obj)
     for (const QJsonValue& v : bufArr) {
         const QString name = v.toString();
         // Capped at the boundary: each pass costs a canvas-sized texture and a
-        // fullscreen draw per decorated window per frame, and anything past the
-        // fourth is structurally unreadable (the fold binds iChannel0..3). Drop the
-        // surplus loudly rather than allocating VRAM nothing can ever sample.
+        // fullscreen draw per decorated window per frame, and anything past
+        // kMaxBufferPasses is structurally unreadable (the fold binds
+        // iChannel0..kMaxBufferPasses-1). Drop the surplus loudly rather than
+        // allocating VRAM nothing can ever sample.
         if (e.bufferShaderPaths.size() >= kMaxBufferPasses) {
             qCWarning(lcSurfaceShader) << "SurfaceShaderEffect::fromJson: effect" << e.id << "declares more than"
                                        << kMaxBufferPasses << "buffer passes; ignoring" << name
-                                       << "— the fold binds iChannel0..3, so later passes are unreadable";
+                                       << "— the fold binds that many iChannels, so later passes are unreadable";
             continue;
         }
         e.bufferShaderPaths.append(name);

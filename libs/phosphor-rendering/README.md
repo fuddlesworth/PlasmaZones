@@ -20,8 +20,9 @@ replaces it with three cooperating pieces:
 - **`ShaderNodeRhi`** — the scene-graph render node. Owns the QRhi
   pipeline, vertex and index buffers, the uniform buffer object (UBO),
   texture bindings, and per-pass targets. Supports multipass via
-  ping-pong buffers, input-channel textures (`iChannel0..3`,
-  Shadertoy-style), and writeable depth attachments.
+  ping-pong buffers, input-channel textures (`iChannel0..7`,
+  Shadertoy-style, with `iChannelResolution` declared for the first four),
+  and writeable depth attachments.
 - **`ShaderCompiler`** — a runtime GLSL to SPIR-V compiler using
   `Qt6::ShaderToolsPrivate`. Feeds into Qt's shader pipeline. Caches
   compiled modules keyed on source-hash and target-API, so re-entering

@@ -44,7 +44,7 @@ namespace PlasmaZones {
 /// composite fold). Each buffer.frag is a fullscreen-quad fragment that
 /// samples the captured window surface (uTexture0) plus any prior buffer outputs
 /// (iChannel0..N-1) and writes into its own FBO; the main effect.frag then
-/// samples the final buffer output(s) as iChannel0..3. Compiled in
+/// samples the buffer outputs as iChannel0..kMaxBufferPasses-1. Compiled in
 /// compiledPack() right after the main pack shader, cleared (fail-closed) if any
 /// buffer pass fails to compile so the pack degrades to single-pass. The vector
 /// of these is shared by every decorated window — the per-window FBO targets
@@ -169,8 +169,11 @@ struct CompiledSurfacePack
     /// common case); pushBorderUniforms then skips the push entirely.
     int iMouseLoc = -1;
 
-    /// MAIN-pass iChannel0..3 sampler + iChannelResolution[0..3] element
-    /// locations. -1 when the linker dropped the uniform (single-pass pack).
+    /// MAIN-pass iChannel sampler locations, one per buffer pass
+    /// (iChannel0..kMaxBufferPasses-1). The companion resolution array below
+    /// is shorter: the contract declares only kChannelResolutionSlots sizes,
+    /// and a pass reading a later channel uses textureSize(). -1 when the
+    /// linker dropped the uniform (single-pass pack).
     std::array<int, PhosphorShaders::kMaxBufferPasses> iChannelLoc = []() {
         std::array<int, PhosphorShaders::kMaxBufferPasses> a;
         a.fill(-1);
