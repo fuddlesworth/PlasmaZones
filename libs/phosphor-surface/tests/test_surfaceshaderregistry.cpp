@@ -469,6 +469,11 @@ private Q_SLOTS:
         QJsonArray filters;
         filters.append(QStringLiteral("nearest"));
         meta.insert(QLatin1String("bufferFilters"), filters);
+        // bufferScales is the third member of the positionally-aligned set and
+        // was the one the coherence block missed.
+        QJsonArray scales;
+        scales.append(0.5);
+        meta.insert(QLatin1String("bufferScales"), scales);
         QVERIFY(writePack(tmp.path(), QStringLiteral("orphan"), meta, {QStringLiteral("effect.frag")}));
 
         SurfaceShaderRegistry registry;
@@ -479,6 +484,7 @@ private Q_SLOTS:
         QVERIFY(!e.isMultipass);
         QVERIFY2(e.bufferWraps.isEmpty(), "single-pass pack must not carry orphan bufferWraps");
         QVERIFY2(e.bufferFilters.isEmpty(), "single-pass pack must not carry orphan bufferFilters");
+        QVERIFY2(e.bufferScales.isEmpty(), "single-pass pack must not carry orphan bufferScales");
     }
 
     void parseEffect_clears_bufferShaderPaths_when_multipass_flag_absent()

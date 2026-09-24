@@ -307,6 +307,13 @@ std::optional<SurfaceShaderEffect> parseEffect(const QString& effectDir, const Q
         // (bogus) paths. Clearing it is the whole point of this coherence block.
         e.bufferShaderPaths.clear();
         e.bufferWraps.clear();
+        // bufferScales belongs with its two sibling override arrays and was the
+        // one the block missed. It claims the same positional alignment with a
+        // bufferShaderPaths that is now empty, and it survives toJson and
+        // operator== exactly as they do, so leaving it set makes a single-pass
+        // pack compare unequal to an identical one that never declared it and
+        // re-emit per-pass scales for passes it does not have.
+        e.bufferScales.clear();
         e.bufferFilters.clear();
         e.bufferWrap.clear();
         e.bufferFilter.clear();
