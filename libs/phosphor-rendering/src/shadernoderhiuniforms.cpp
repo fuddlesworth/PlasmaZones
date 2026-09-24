@@ -21,23 +21,26 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
 {
     PhosphorShaders::UboFrameState state;
 
-    // UboFrameState's array extents are declared independently of the contract
-    // constants that bound the write loops below (phosphor-shaders cannot see
-    // the animation contract — dependency direction). Pin them here, the one
-    // TU that sees both, so a future kMax* bump cannot silently overrun the
-    // state arrays.
+    // UboFrameState's array extents are declared independently of the constants
+    // that bound the write loops below (phosphor-shaders cannot see this
+    // library — dependency direction). Pin them here, the one TU that sees
+    // both, so a future bump cannot silently overrun the state arrays.
+    //
+    // The bounds are PhosphorRendering's own namespace-scope constants, not a
+    // shader family's contract. kChannelResolutionSlots is the one exception,
+    // and it comes from the shared binding table rather than a contract too.
     static_assert(std::extent_v<decltype(state.customParams)> == kMaxCustomParams,
-                  "UboFrameState::customParams must match the contract's kMaxCustomParams");
+                  "UboFrameState::customParams must match PhosphorRendering::kMaxCustomParams");
     static_assert(std::extent_v<decltype(state.customColors)> == kMaxCustomColors,
-                  "UboFrameState::customColors must match the contract's kMaxCustomColors");
+                  "UboFrameState::customColors must match PhosphorRendering::kMaxCustomColors");
     // The UBO describes only the first kChannelResolutionSlots channel sizes
     // (its 672-byte base layout predates the eight-channel budget); a pass
     // reading a later channel sizes it with textureSize().
     static_assert(std::extent_v<decltype(state.channelResolution)>
                       == PhosphorShaders::Bindings::kChannelResolutionSlots,
-                  "UboFrameState::channelResolution must match the contract's kChannelResolutionSlots");
+                  "UboFrameState::channelResolution must match Bindings::kChannelResolutionSlots");
     static_assert(std::extent_v<decltype(state.textureResolution)> == kMaxUserTextures,
-                  "UboFrameState::textureResolution must match the contract's kMaxUserTextures");
+                  "UboFrameState::textureResolution must match PhosphorRendering::kMaxUserTextures");
 
     // Split full-precision m_time (double) into iTime (wrapped lo) + iTimeHi (wrap offset)
     state.time = static_cast<float>(m_time - static_cast<double>(m_timeHi));
@@ -232,7 +235,12 @@ void ShaderNodeRhi::uploadExtensionToUbo(QRhiResourceUpdateBatch* batch)
 //   m_appFieldsDirty  ← setAppField0, setAppField1
 //   extension dirty   ← tracked via m_uniformExtension->isDirty() (set by the
 //                        extension's own updateFromX() methods)
-//   m_uniformsDirty   ← mirror: true if any of the five above are true
+//   m_uniformsDirty   ← mirror of the FOUR NODE-SIDE flags above. NOT the
+//                        extension: an extension that reports itself dirty
+//                        while m_uniformsDirty is false is uploaded by the
+//                        else branch below, which exists for exactly that
+//                        case, so folding it into the mirror would describe
+//                        a coupling the code deliberately does not have.
 // A setter that forgets to update m_uniformsDirty will correctly dirty its
 // region but skip the upload pass entirely — keep the mirror in sync.
 void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
@@ -791,7 +799,17 @@ void ShaderNodeRhi::releaseRhiResources()
 // side without the other makes the validator pass sources that fail live.
 void ShaderNodeRhi::bakeBufferShaders()
 {
-    const bool multipass = !m_bufferPath.isEmpty();
+    // The LIST, not its first entry. setBufferShaderPaths strips only TRAILING
+    // empties (an interior one keeps its slot so bufferWraps / bufferFilters stay
+    // positionally aligned), so a pack whose FIRST entry is empty leaves
+    // m_bufferPath empty while m_bufferPaths still has several entries. Deriving
+    // `multipass` from m_bufferPath then skipped this bake and both prepare()
+    // gates while multiBufferMode stayed true, so ensurePipeline took the multi
+    // branch and rendered against all-dummy channels with nothing logged. Gating
+    // on the list makes a leading empty behave like an interior one: the bake
+    // runs, the per-pass load fails on the empty path, and it fails closed with a
+    // diagnostic naming the pass.
+    const bool multipass = !m_bufferPaths.isEmpty();
     const bool multiBufferMode = m_bufferPaths.size() > 1;
 
     if (multipass && multiBufferMode && m_multiBufferShaderDirty) {

@@ -674,12 +674,15 @@ void ShaderNodeRhi::prepare()
     // Create buffer targets before the image pass SRB
     const bool multiBufferMode = m_bufferPaths.size() > 1;
     const bool bufferReady = multiBufferMode ? m_multiBufferShadersReady : m_bufferShaderReady;
-    if (!m_bufferPath.isEmpty() && bufferReady && !ensureBufferTarget()) {
+    // m_bufferPaths, not m_bufferPath: a leading empty entry leaves the latter
+    // empty while the list is multi-entry. See bakeBufferShaders for the whole
+    // failure this gate was half of.
+    if (!m_bufferPaths.isEmpty() && bufferReady && !ensureBufferTarget()) {
         return;
     }
 
     // Late pipeline recovery
-    if (!m_bufferPath.isEmpty() && bufferReady) {
+    if (!m_bufferPaths.isEmpty() && bufferReady) {
         if (!multiBufferMode && m_bufferRenderTarget && !m_bufferRenderPassDescriptor
             && !m_bufferRenderTarget->renderPassDescriptor()) {
             m_bufferPipeline.reset();
@@ -728,7 +731,7 @@ void ShaderNodeRhi::prepare()
     // ========================================================================
     // Multipass buffer passes recorded in prepare()
     // ========================================================================
-    const bool multipassSingle = !multiBufferMode && !m_bufferPath.isEmpty() && m_bufferShaderReady && m_bufferPipeline
+    const bool multipassSingle = !multiBufferMode && !m_bufferPaths.isEmpty() && m_bufferShaderReady && m_bufferPipeline
         && m_bufferSrb && m_bufferRenderTarget && m_bufferTexture;
     const bool multipassMulti =
         multiBufferMode && m_multiBufferShadersReady && m_multiBufferTextures[0] && m_multiBufferPipelines[0];
@@ -978,7 +981,7 @@ void ShaderNodeRhi::render(const RenderState* state)
     cb->setGraphicsPipeline(m_pipeline.get());
 
     const bool multiBufferMode = m_bufferPaths.size() > 1;
-    const bool multipassSingle = !multiBufferMode && !m_bufferPath.isEmpty() && m_bufferShaderReady && m_bufferPipeline
+    const bool multipassSingle = !multiBufferMode && !m_bufferPaths.isEmpty() && m_bufferShaderReady && m_bufferPipeline
         && m_bufferRenderTarget && m_bufferTexture;
     const int imageWriteIndex = multipassSingle && m_bufferFeedback ? (m_frame % 2) : 0;
     QRhiShaderResourceBindings* imageSrb =
