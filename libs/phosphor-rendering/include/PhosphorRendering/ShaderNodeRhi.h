@@ -97,7 +97,9 @@ constexpr bool isConsumerBinding(int binding) noexcept
  * Application-specific UBO data is appended via IUniformExtension.
  * Application-specific texture bindings use setExtraBinding() / removeExtraBinding().
  *
- * Uses QRhi and QShaderBaker (runtime SPIR-V + GLSL 330 bake). Requires Qt 6.6+
+ * Uses QRhi and QShaderBaker (runtime SPIR-V + GLSL 330 bake). The APIs it
+ * needs (commandBuffer(), renderTarget()) arrived in Qt 6.6; the project
+ * builds against QT_MIN_VERSION, which is 6.10.
  * (commandBuffer(), renderTarget()).
  *
  * @par Threading contract
