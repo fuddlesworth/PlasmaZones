@@ -98,7 +98,17 @@ uniform vec4 customParams[8];
 uniform vec4 customColors[16];
 // `iChannelResolution[4]` from the UBO branch is intentionally absent
 // here: the kwin-effect never calls `setUniform` for it (single-pass, no
-// buffer FBOs), and no animation shader references it. Adding a
+// buffer FBOs), and no animation shader references it — which stays true
+// because THIS FAMILY DECLARES NO iChannel SAMPLERS AT ALL, on either
+// branch. The parser and the validator both accept `multipass` on an
+// animation pack, so its buffer passes would run; nothing in the pack could
+// then sample them, and the validator says so rather than leaving it silent.
+// Anyone adding the channel block here needs the sibling headers too, and
+// should note that they disagree on the TYPE: animation, pointer and surface
+// declare `vec4 iChannelResolution[4]` while overlay and the phosphor-shaders
+// copy declare `vec2[4]`. The std140 byte layout is identical (a vec2 array
+// pads to 16 bytes per element), so a shared helper must read `.xy` rather
+// than assume either spelling. Adding a
 // default-block declaration would compile and silently read ZERO at runtime
 // (GL zero-initialises default-block uniforms, as this file says at the top
 // and pointer_uniforms.glsl repeats) — better to surface the gap as a
