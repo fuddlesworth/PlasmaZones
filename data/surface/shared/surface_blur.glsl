@@ -134,8 +134,25 @@ const float kSurfaceKawaseBaseTexel = 4.0;
 // sigma = radius / 3 gives 82% and 45%; the shorter reaches move each depth's
 // band down to where the radius reads as the width it names, and 64 px and
 // beyond were already on the curve.
+// Only ONE of the three band boundaries is made continuous, and the other two are
+// deliberate steps.
+//
+// 120 -> 121 IS continuous, and that is what the 3.6 floor below buys. The summed
+// tap extent per (o + 0.5) is 14 at depth 2, 38 at depth 3 and 86 at depth 4, so a
+// radius of 120 reaches 4.0 x 38 = 152 px. With a 3.0 floor a radius of 121 reached
+// only 1.5125 x 86 = 130 px, i.e. asking for more blur gave LESS. Continuity needs
+// a floor of at least 3.5349; 3.6 clears it and keeps the band monotonic to the top
+// (320 px reaches 344).
+//
+// 40 -> 41 is left as a step, from 35 px to 58 px. Closing it would need a depth-3
+// offset floor near 1.84, below the reference's own floor for a texel that size, so
+// the step is the lesser evil.
+//
+// 15 -> 16 is left as a step for a different reason: depth 1 IS the quarter-res
+// floor. Closing it would need an offset near 6.9 at quarter resolution, which is
+// the square Kawase ghosting this calibration exists to avoid.
 const vec4 kSurfaceKawaseReach = vec4(15.0, 40.0, 120.0, 320.0);
-const vec4 kSurfaceKawaseOffsetMin = vec4(1.0, 2.0, 3.0, 3.0);
+const vec4 kSurfaceKawaseOffsetMin = vec4(1.0, 2.0, 3.0, 3.6);
 const vec4 kSurfaceKawaseOffsetMax = vec4(3.0, 5.0, 8.0, 8.0);
 
 int surfaceKawaseDepth() {

@@ -55,36 +55,63 @@ float audioBarSmooth(float u) {
 }
 
 // ── Frequency-band helpers ───────────────────────────────────────────────────
+// The spectrum is NOT one low-to-high block. The shipped default channel mode is
+// stereo, and cava emits the left channel's bars low-to-high followed by the right
+// channel's (IAudioSpectrumProvider documents that layout, and nothing between
+// cava's stdout and the sampler reorders it). Banding the raw vector therefore
+// mixed one channel's treble with the other's bass. These helpers fold the two
+// channels first, so a band means the same thing in either mode. audioBar() and
+// audioBarSmooth() still address the RAW vector, which is what a spectrum-bar
+// visualiser wants.
+
+// Per-channel bar count: half the vector in stereo, all of it in the mono modes.
+int audioHalf() {
+    return (iAudioSpectrumSize >= 2) ? iAudioSpectrumSize / 2 : iAudioSpectrumSize;
+}
+
+// Bar `i` of the folded mono spectrum, for 0 <= i < audioHalf().
+float audioBarMono(int i) {
+    int h = audioHalf();
+    if (h == iAudioSpectrumSize)
+        return audioBar(i);
+    return 0.5 * (audioBar(i) + audioBar(i + h));
+}
 
 float getBass() {
-    if (iAudioSpectrumSize <= 0)
+    int h = audioHalf();
+    if (h <= 0)
         return 0.0;
+    // Fractional, like the two bands below. An absolute window made "bass" the
+    // bottom half of the vector at the minimum bar count and a thirtieth of it at
+    // the maximum, so a settings slider changed which frequencies the band covered.
+    int hi = max(h / 8, 1);
     float sum = 0.0;
-    int n = min(iAudioSpectrumSize, 8);
-    for (int i = 0; i < n; i++)
-        sum += audioBar(i);
-    return sum / float(n);
+    for (int i = 0; i < hi; i++)
+        sum += audioBarMono(i);
+    return sum / float(hi);
 }
 
 float getMids() {
-    if (iAudioSpectrumSize <= 0)
+    int h = audioHalf();
+    if (h <= 0)
         return 0.0;
+    int lo = h / 4;
+    int hi = h * 3 / 4;
     float sum = 0.0;
-    int lo = iAudioSpectrumSize / 4;
-    int hi = iAudioSpectrumSize * 3 / 4;
-    for (int i = lo; i < hi && i < iAudioSpectrumSize; i++)
-        sum += audioBar(i);
+    for (int i = lo; i < hi; i++)
+        sum += audioBarMono(i);
     return sum / float(max(hi - lo, 1));
 }
 
 float getTreble() {
-    if (iAudioSpectrumSize <= 0)
+    int h = audioHalf();
+    if (h <= 0)
         return 0.0;
+    int lo = h * 3 / 4;
     float sum = 0.0;
-    int lo = iAudioSpectrumSize * 3 / 4;
-    for (int i = lo; i < iAudioSpectrumSize; i++)
-        sum += audioBar(i);
-    return sum / float(max(iAudioSpectrumSize - lo, 1));
+    for (int i = lo; i < h; i++)
+        sum += audioBarMono(i);
+    return sum / float(max(h - lo, 1));
 }
 
 float getOverall() {
