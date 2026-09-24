@@ -52,6 +52,13 @@ if(NOT TARGET PhosphorLayoutApi::PhosphorLayoutApi)
     find_package(PhosphorLayoutApi CONFIG REQUIRED)
 endif()
 
+# the D-Bus contract types. Linked as PhosphorProtocol::Types, an alias whose
+# target name differs from the package name, which is why the first sweep
+# over Pkg::Pkg spellings did not catch it.
+if(NOT TARGET PhosphorProtocol::PhosphorProtocol)
+    find_package(PhosphorProtocol CONFIG REQUIRED)
+endif()
+
 add_library(PhosphorEngine SHARED
     include/PhosphorEngine/PlacementEngineBase.h
     include/PhosphorEngine/GapResolution.h

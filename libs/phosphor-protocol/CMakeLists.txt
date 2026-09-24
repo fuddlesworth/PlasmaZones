@@ -72,6 +72,12 @@ add_library(PhosphorProtocolTypes SHARED
 )
 
 add_library(PhosphorProtocol::Types ALIAS PhosphorProtocolTypes)
+# EXPORT_NAME so the INSTALLED package exports the same name the alias above
+# gives in-tree. install(EXPORT) namespaces the TARGET name, not the alias, so
+# without this the package shipped PhosphorProtocol::PhosphorProtocolTypes while every consumer
+# in the repo writes PhosphorProtocol::Types — a name an installed or standalone
+# consumer could not resolve at all.
+set_target_properties(PhosphorProtocolTypes PROPERTIES EXPORT_NAME Types)
 
 generate_export_header(PhosphorProtocolTypes
     BASE_NAME PhosphorProtocolTypes

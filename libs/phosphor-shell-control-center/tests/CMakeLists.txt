@@ -15,8 +15,12 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickTest)
 # sandbox (so nothing writes into the developer's real ~/.config/plasmazones).
 # Guarded so a standalone subtree configure of this library still works
 # without the top-level module, matching the launcher's sibling tests.
-if(EXISTS "${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake")
-    include(${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake)
+# CMAKE_CURRENT_LIST_DIR, not CMAKE_SOURCE_DIR: the latter is the repo root
+# in-tree but this LIBRARY's directory in a standalone configure, so the guard
+# below was always FALSE there and the isolation was skipped even though the
+# module was reachable. The relative walk finds it from either.
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../../cmake/PhosphorTestIsolation.cmake")
+    include(${CMAKE_CURRENT_LIST_DIR}/../../../cmake/PhosphorTestIsolation.cmake)
 endif()
 add_executable(test_phosphor_shell_control_center tst_controlcenter.cpp)
 

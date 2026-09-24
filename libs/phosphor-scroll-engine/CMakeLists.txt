@@ -38,6 +38,19 @@ if(NOT TARGET PhosphorIdentity::PhosphorIdentity)
     find_package(PhosphorIdentity CONFIG REQUIRED)
 endif()
 
+# the D-Bus contract types. Linked as PhosphorProtocol::Types, an alias whose
+# target name differs from the package name, which is why the first sweep
+# over Pkg::Pkg spellings did not catch it.
+if(NOT TARGET PhosphorProtocol::PhosphorProtocol)
+    find_package(PhosphorProtocol CONFIG REQUIRED)
+endif()
+
+# the screen model. Linked as PhosphorScreens::Runtime, an alias whose target
+# name differs from the package name.
+if(NOT TARGET PhosphorScreens::PhosphorScreens)
+    find_package(PhosphorScreens CONFIG REQUIRED)
+endif()
+
 add_library(PhosphorScrollEngine SHARED
     include/PhosphorScrollEngine/StripAxis.h
     include/PhosphorScrollEngine/ScrollTypes.h

@@ -158,6 +158,12 @@ add_library(PhosphorScreensCore SHARED
 )
 
 add_library(PhosphorScreens::Core ALIAS PhosphorScreensCore)
+# EXPORT_NAME so the INSTALLED package exports the same name the alias above
+# gives in-tree. install(EXPORT) namespaces the TARGET name, not the alias, so
+# without this the package shipped PhosphorScreens::PhosphorScreensCore while every consumer
+# in the repo writes PhosphorScreens::Core — a name an installed or standalone
+# consumer could not resolve at all.
+set_target_properties(PhosphorScreensCore PROPERTIES EXPORT_NAME Core)
 
 generate_export_header(PhosphorScreensCore
     BASE_NAME PhosphorScreensCore
@@ -210,6 +216,12 @@ add_library(PhosphorScreensRuntime SHARED
 )
 
 add_library(PhosphorScreens::Runtime ALIAS PhosphorScreensRuntime)
+# EXPORT_NAME so the INSTALLED package exports the same name the alias above
+# gives in-tree. install(EXPORT) namespaces the TARGET name, not the alias, so
+# without this the package shipped PhosphorScreens::PhosphorScreensRuntime while every consumer
+# in the repo writes PhosphorScreens::Runtime — a name an installed or standalone
+# consumer could not resolve at all.
+set_target_properties(PhosphorScreensRuntime PROPERTIES EXPORT_NAME Runtime)
 
 generate_export_header(PhosphorScreensRuntime
     BASE_NAME PhosphorScreensRuntime
