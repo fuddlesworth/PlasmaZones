@@ -1276,7 +1276,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Layout popup algorithm previews**: Algorithm previews in the zone selector and layout picker popup now respect algorithm metadata (zone number display mode, producesOverlappingZones, master indicator dots) like the settings app does.
 - **Window picker exclusion lists**: WindowPickerDialog was shadowing the `appSettings` context property, causing addExcludedApplication/addExcludedWindowClass to silently fail. Now routes through settingsController.settings.
-- **Autotile split ratio state corruption**: Reset suspiciously high split ratios (> max - 0.05) on state load to prevent layouts from being stuck with unusable splits.
+- **Autotile split ratio state corruption**: Reset suspiciously high split ratios (`> max - 0.05`) on state load to prevent layouts from being stuck with unusable splits.
 - **Autotile cursor hover focus**: The hover-to-focus check in AutotileHandler was using the old `shouldHandleWindow` method. It now uses `isTileableWindow` for consistency.
 
 ## [2.5.1] - 2026-03-30

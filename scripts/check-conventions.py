@@ -438,15 +438,19 @@ def prose_problems(s: str) -> list[str]:
     # in a label.
     s = "\n".join(ln for ln in s.split("\n") if not ln.lstrip().startswith("#"))
     core = s.strip()
-    if "—" in s or "&mdash;" in s:
+    # Backticked spans are CODE, and CLAUDE.md puts code out of scope for these
+    # rules. That was already true of the semicolon check; it has to be true of
+    # the others too, or a backticked `a - b` reads as a stand-in dash and a
+    # backticked shell pipeline reads as a splice. Stripped once, up front.
+    without_code = re.sub(r"`[^`]*`", "", s)
+    if "—" in without_code or "&mdash;" in without_code:
         if not is_title_separator(core):
             problems.append("em-dash splice; write two sentences or join with a plain word")
-    if " - " in s:
+    if " - " in without_code:
         problems.append("spaced hyphen used as a dash; rewrite the sentence")
     # Clause-splicing semicolon: only when both sides look like independent
-    # clauses. Semicolons inside backticked code and those separating genuine
-    # comma-bearing list items are legitimate, so both are excluded.
-    without_code = re.sub(r"`[^`]*`", "", s)
+    # clauses. Semicolons separating genuine comma-bearing list items are
+    # legitimate, so those are excluded too.
     for part in re.finditer(r";\s+(\w+)", without_code):
         before = without_code[: part.start()]
         after = without_code[part.start() + 1 :]
@@ -498,6 +502,8 @@ SCHEMA_DESCRIPTION = re.compile(
 DESKTOP_FIELD = re.compile(r"^(Name|GenericName|Comment)(\[[^\]]+\])?\s*=\s*(.+)$", re.M)
 XML_PROSE = re.compile(r"<(summary|p|name|caption)(?:\s[^>]*)?>(.*?)</\1>", re.S)
 PKG_DESC = re.compile(r"^\s*(?:pkgdesc|Summary|Description)\s*[=:]\s*(.+)$", re.M)
+# The trailing pull-request reference on a changelog entry: markup, not prose.
+CHANGELOG_REF = re.compile(r"\(\[#\d+\]\([^)]*\)(?:,\s*\[[^\]]*\]\([^)]*\))*\)")
 
 
 def rule_prose(files: list[str]) -> list[Violation]:
@@ -538,6 +544,25 @@ def rule_prose(files: list[str]) -> list[Violation]:
                 body = re.sub(r"\s+", " ", m.group(2)).strip()
                 for p in prose_problems(body):
                     out.append(Violation("prose", f, line_of(text, m.start()), f"{p} -> {body[:80]!r}"))
+            continue
+
+        # CLAUDE.md names "CHANGELOG.md entries" among the user-facing surfaces
+        # these rules govern, and nothing here checked them, so every release
+        # note this project has ever written went through the gate unread.
+        #
+        # Only the ENTRY BODY is checked. The Keep-a-Changelog "**Term**:"
+        # lead-in is an explicitly allowed colon, headings are structure rather
+        # than prose, and the trailing ([#nnnn](url)) reference is markup whose
+        # URL would otherwise read as prose punctuation.
+        if Path(f).name == "CHANGELOG.md":
+            text = read(f)
+            for n, ln in enumerate(text.splitlines(), 1):
+                if not ln.startswith("- "):
+                    continue
+                body = ln.split("**:", 1)[1] if "**:" in ln else ln[2:]
+                body = CHANGELOG_REF.sub("", body)
+                for pr in prose_problems(body):
+                    out.append(Violation("prose", f, n, f"{pr} -> {body.strip()[:80]!r}"))
             continue
 
         if f.startswith("packaging/"):
