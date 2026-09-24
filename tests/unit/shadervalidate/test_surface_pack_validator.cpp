@@ -32,6 +32,8 @@
 #include <QTemporaryDir>
 #include <QTextStream>
 
+#include <PhosphorSurface/SurfaceShaderContract.h>
+
 #include "packvalidatortesthelpers.h"
 
 using namespace PackValidatorTest;
@@ -571,6 +573,65 @@ private Q_SLOTS:
 
         const PackResult r = validateSurface(tmp, QStringLiteral("sf-stray-scales"), obj, surfaceBodyReading({}));
         QVERIFY2(r.report.contains(QStringLiteral("declared on a single-pass pack")), qPrintable(r.report));
+        QVERIFY(r.errors > 0);
+    }
+
+    /// A declared default is never checked against its own parameter's type, in
+    /// the parser or the validator, so a quoted number on a float parameter
+    /// renders 0.0 because the conversion fails silently.
+    void aParameterDefaultOfTheWrongTypeIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject param = surfaceParam(QStringLiteral("width"), QStringLiteral("float"), 2.0, 0.0, 8.0);
+        param.insert(QStringLiteral("default"), QStringLiteral("wide"));
+        const QJsonObject obj = surfacePack(QStringLiteral("sf-bad-default"), QJsonArray{param});
+
+        const PackResult r =
+            validateSurface(tmp, QStringLiteral("sf-bad-default"), obj, surfaceBodyReading({QStringLiteral("width")}));
+        QVERIFY2(r.report.contains(QStringLiteral("parameter 'width' is float but its default is not a number")),
+                 qPrintable(r.report));
+        QVERIFY(r.errors > 0);
+    }
+
+    /// And a default outside the range the pack itself declares, which the UI
+    /// then clamps to a value the author never chose.
+    void aParameterDefaultOutsideItsOwnRangeIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        const QJsonObject obj =
+            surfacePack(QStringLiteral("sf-default-range"),
+                        QJsonArray{surfaceParam(QStringLiteral("width"), QStringLiteral("float"), 99.0, 0.0, 8.0)});
+
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-default-range"), obj,
+                                             surfaceBodyReading({QStringLiteral("width")}));
+        QVERIFY2(r.report.contains(QStringLiteral("default 99 is outside its own declared range")),
+                 qPrintable(r.report));
+        QVERIFY(r.errors > 0);
+    }
+
+    /// The registry drops every colour parameter past the budget with a journal
+    /// warning and emits no p_<id> for it, so a pack reading one fails its bake
+    /// with an undeclared identifier whose name IS declared. The animation arm
+    /// has had this lint all along.
+    void tooManyColourParamsIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonArray params;
+        const int over = PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomColors + 1;
+        for (int i = 0; i < over; ++i) {
+            params.append(surfaceParam(QStringLiteral("tint%1").arg(i), QStringLiteral("color"),
+                                       QStringLiteral("#ffffffff"), 0.0, 1.0));
+        }
+        const QJsonObject obj = surfacePack(QStringLiteral("sf-colour-budget"), params);
+
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-colour-budget"), obj, surfaceBodyReading({}));
+        QVERIFY2(r.report.contains(QStringLiteral("too many color params")), qPrintable(r.report));
         QVERIFY(r.errors > 0);
     }
 

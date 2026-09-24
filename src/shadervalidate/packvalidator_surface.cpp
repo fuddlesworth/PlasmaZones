@@ -214,6 +214,93 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
                 << QStringLiteral("invalid parameter id '%1' (not a GLSL identifier; skipped, no p_ define)").arg(p.id);
         }
     }
+    // Slot budget, mirroring the animation arm. translateSurfaceParams drops
+    // every scalar past kMaxParameterSlots and every colour past
+    // kMaxCustomColors at load with a journal warning, and buildParamPreamble
+    // emits no p_<id> for them, so a pack that READS such a parameter fails its
+    // bake with a bare undeclared-identifier error the did-you-mean hint cannot
+    // explain (the name IS declared), and one that does not read it ships green.
+    {
+        int scalarParams = 0;
+        int colorParams = 0;
+        for (const SurfaceShaderEffect::ParameterInfo& p : eff.parameters) {
+            if (p.type == QLatin1String("color")) {
+                ++colorParams;
+            } else {
+                // float / int / bool all take a scalar sub-slot.
+                ++scalarParams;
+            }
+        }
+        const int scalarBudget = PhosphorSurfaceShaders::SurfaceShaderContract::kMaxParameterSlots;
+        const int colorBudget = PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomColors;
+        if (scalarParams > scalarBudget) {
+            lints << QStringLiteral(
+                         "too many scalar params: %1 declared, budget is %2 (the surplus get no p_<id> "
+                         "and are dropped at load)")
+                         .arg(scalarParams)
+                         .arg(scalarBudget);
+        }
+        if (colorParams > colorBudget) {
+            lints << QStringLiteral(
+                         "too many color params: %1 declared, budget is %2 (the surplus get no p_<id> "
+                         "and are dropped at load)")
+                         .arg(colorParams)
+                         .arg(colorBudget);
+        }
+    }
+    // A declared default / min / max is never checked against the parameter's own
+    // type, in fromJson or here, so `"type": "float", "default": "wide"` ships
+    // green and renders 0.0 because the conversion fails silently. Same for a
+    // default outside the min/max the pack itself declares, which the UI then
+    // clamps to something the author never chose.
+    for (const QJsonValue& v : doc.object().value(QLatin1String("parameters")).toArray()) {
+        const QJsonObject po = v.toObject();
+        const QString pid = po.value(QLatin1String("id")).toString();
+        const QString ptype = po.value(QLatin1String("type")).toString();
+        if (pid.isEmpty() || ptype.isEmpty()) {
+            continue; // already linted above
+        }
+        const QJsonValue def = po.value(QLatin1String("default"));
+        if (ptype == QLatin1String("bool")) {
+            if (!def.isUndefined() && !def.isBool()) {
+                lints << QStringLiteral("parameter '%1' is bool but its default is not true or false").arg(pid);
+            }
+            continue;
+        }
+        if (ptype == QLatin1String("color") || ptype == QLatin1String("image")) {
+            if (!def.isUndefined() && !def.isString()) {
+                lints << QStringLiteral("parameter '%1' is %2 but its default is not a string").arg(pid, ptype);
+            }
+            continue;
+        }
+        // float / int from here.
+        if (!def.isUndefined() && !def.isDouble()) {
+            lints << QStringLiteral("parameter '%1' is %2 but its default is not a number").arg(pid, ptype);
+            continue;
+        }
+        const QJsonValue lo = po.value(QLatin1String("min"));
+        const QJsonValue hi = po.value(QLatin1String("max"));
+        if (!lo.isUndefined() && !lo.isDouble()) {
+            lints << QStringLiteral("parameter '%1' has a non-numeric min").arg(pid);
+        }
+        if (!hi.isUndefined() && !hi.isDouble()) {
+            lints << QStringLiteral("parameter '%1' has a non-numeric max").arg(pid);
+        }
+        if (lo.isDouble() && hi.isDouble() && lo.toDouble() > hi.toDouble()) {
+            lints << QStringLiteral("parameter '%1' has min %2 above max %3")
+                         .arg(pid)
+                         .arg(lo.toDouble())
+                         .arg(hi.toDouble());
+        }
+        if (def.isDouble() && lo.isDouble() && hi.isDouble()
+            && (def.toDouble() < lo.toDouble() || def.toDouble() > hi.toDouble())) {
+            lints << QStringLiteral("parameter '%1' default %2 is outside its own declared range [%3, %4]")
+                         .arg(pid)
+                         .arg(def.toDouble())
+                         .arg(lo.toDouble())
+                         .arg(hi.toDouble());
+        }
+    }
     // Duplicate ids are linted over the RAW array rather than eff.parameters,
     // because fromJson drops the second declaration with only a qCWarning. A
     // pack that declares one id twice therefore lints clean against the parsed
@@ -245,7 +332,9 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     for (const QJsonValue& v : declaredTextures) {
         const QString texPath = v.toObject().value(QLatin1String("path")).toString();
         if (texPath.isEmpty()) {
-            lints << QStringLiteral("texture entry with empty `path` (dropped at load)");
+            lints << QStringLiteral(
+                "texture entry with empty `path` (dropped at load, which also shifts "
+                "every later texture down one sampler slot)");
         } else {
             // Same confinement and existence check the animation arm applies,
             // and for the same reason: the registry clears a rejected texture
