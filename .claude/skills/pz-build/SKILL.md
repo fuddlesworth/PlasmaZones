@@ -44,9 +44,10 @@ cmake -B build -DBUILD_TESTING=ON -DBUILD_PHOSPHOR_SHELL=ON
   `USE_KDE_FRAMEWORKS=ON` (the default); those libraries need KF6 Kirigami for
   icon rendering and have no Qt-only fallback.
 - `BUILD_TOOLS=ON` adds `shader-render` and friends.
-- The `shader_validate_animations` and `shader_validate_pointer` gates shell out
-  to `glslangValidator` (or `glslang`) and **hard-fail when neither is on PATH**
-  rather than skipping. Install the distro glslang package before running ctest.
+- The `shader_validate_animations`, `shader_validate_surface` and
+  `shader_validate_pointer` gates shell out to `glslangValidator` (or `glslang`)
+  and **hard-fail when neither is on PATH** rather than skipping. Install the
+  distro glslang package before running ctest.
 
 ## Build
 

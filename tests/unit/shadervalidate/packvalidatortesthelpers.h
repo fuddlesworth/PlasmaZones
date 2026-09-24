@@ -223,14 +223,23 @@ inline QJsonArray toArray(const QStringList& values)
 /// broke no test and failed no link. The topology was an artifact of the file-size
 /// ceiling rather than of the family boundary, which is why the gap went unnoticed.
 ///
-/// Deliberately does NOT require glslangValidator, unlike the pointer twin above.
-/// The surface arm compiles through `ShaderCompiler::compile` (QShaderBaker, Qt's
-/// vendored glslang) and never shells out to the binary — `glslangValidatorPath` is
-/// read only by the animation and pointer arms. Requiring it here skipped all six
-/// surface slots on any machine without the package, which would have silently
-/// un-done the coverage this macro exists to provide.
+/// Requires glslangValidator, exactly as the pointer twin above does, and for the
+/// same reason. The surface arm bakes BOTH branches every surface pack ships on:
+/// the daemon branch through `ShaderCompiler::compile` (QShaderBaker, Qt's vendored
+/// glslang), and the compositor branch by shelling out to the binary, because
+/// QShaderBaker wants Vulkan-dialect GLSL and rejects the default-block uniforms
+/// that branch declares.
+///
+/// Skipping rather than failing is deliberate and is the safer degrade here. The
+/// slots asserting `errors == 0` would break outright without the tool, and the
+/// ones asserting a threshold would otherwise PASS on the tool-missing error
+/// alone, which is worse than failing because it reads as coverage while testing
+/// nothing.
 #define REQUIRE_SURFACE_FIXTURE(tmp)                                                                                   \
     QVERIFY((tmp).isValid());                                                                                          \
+    if (PlasmaZones::ShaderValidate::glslangValidatorPath().isEmpty()) {                                               \
+        QSKIP("glslangValidator not on PATH");                                                                         \
+    }                                                                                                                  \
     if (!PackValidatorTest::linkSurfaceSharedIncludes(tmp)) {                                                          \
         QSKIP("data/surface/shared not found — running outside source tree");                                          \
     }

@@ -5,13 +5,15 @@
 // harness at all.
 //
 // That absence was structural rather than accidental. The validator has four
-// production arms and, before this file, three test executables: animation and
-// overlay share test_pack_validators.cpp, pointer has its own, and surface had
-// none. Each executable compiles ALL FOUR arms, so a lint removed from the
-// surface arm alone broke no test and failed no link either — nothing in the
-// topology made a missing family visible. The split that produced it was made
-// when the shared file passed the file-size ceiling, so the cut followed line
-// count rather than the family boundary.
+// production arms, and the executables beside this one reached only three of
+// them: test_pack_validators covers animation and overlay, test_pointer_pack_-
+// validator covers pointer, test_animation_pack_bakes and test_pack_model_-
+// detection cover the animation stage bakes and the shared/ marker lookup, and
+// surface had nothing at all. Each executable compiles ALL FOUR arms, so a lint
+// removed from the surface arm alone broke no test and failed no link either.
+// Nothing in the topology made a missing family visible. The split that produced
+// it was made when the shared file passed the file-size ceiling, so the cut
+// followed line count rather than the family boundary.
 //
 // The bundled-pack gate (shader_validate_surface) only proves the shipped packs
 // are clean; it cannot show that a BROKEN pack is caught. These slots build
@@ -39,8 +41,10 @@ namespace {
 /// The surface twin of `validate`. Writes the pack plus a `pSurface` entry body,
 /// which the validator assembles into a full TU exactly as the daemon and the
 /// compositor do.
+/// @p vertBody, when given, is written under the name @p metadata declares in
+/// `vertexShader`, so the fixture cannot drift from what the pack claims to ship.
 PackResult validateSurface(const QTemporaryDir& tmp, const QString& name, const QJsonObject& metadata,
-                           const QString& body)
+                           const QString& body, const QString& vertBody = QString())
 {
     const QString dir = tmp.filePath(name);
     if (!writePackFile(dir, QStringLiteral("metadata.json"), QJsonDocument(metadata).toJson())) {
@@ -48,6 +52,15 @@ PackResult validateSurface(const QTemporaryDir& tmp, const QString& name, const 
     }
     if (!writePackFile(dir, QStringLiteral("effect.frag"), body.toUtf8())) {
         return fixtureFailure(QStringLiteral("failed to write effect.frag under ") + dir);
+    }
+    if (!vertBody.isEmpty()) {
+        const QString vertName = metadata.value(QLatin1String("vertexShader")).toString();
+        if (vertName.isEmpty()) {
+            return fixtureFailure(QStringLiteral("vertex body given but metadata declares no vertexShader"));
+        }
+        if (!writePackFile(dir, vertName, vertBody.toUtf8())) {
+            return fixtureFailure(QStringLiteral("failed to write ") + vertName + QStringLiteral(" under ") + dir);
+        }
     }
 
     PackResult result;
@@ -92,6 +105,45 @@ QString surfaceBodyReading(const QStringList& ids)
     }
     body += QStringLiteral("    return vec4(acc, 0.0, 0.0, 1.0);\n}\n");
     return body;
+}
+
+/// A vertex stage a pack ships ITSELF, with @p assign spliced in as the
+/// gl_Position write. Deliberately free of `qt_Matrix`: that uniform is declared
+/// only in the daemon UBO branch of surface_uniforms.glsl, so a stage using it
+/// cannot bake for the compositor. The shared `surface.vert` fallback does use
+/// it, which is why the validator bakes the fallback on the Qt-RHI path alone.
+///
+/// Carries its own `#version`, unlike the fragment bodies above: the validator
+/// splices a generated preamble ahead of a fragment, so a `#version` there lands
+/// mid-file, while a vertex stage is passed through and must declare its own.
+QString packVertexBody(const QString& assign)
+{
+    return QStringLiteral(
+               "#version 450\n"
+               "#include <surface_uniforms.glsl>\n"
+               "layout(location = 0) in vec2 position;\n"
+               "layout(location = 1) in vec2 texCoord;\n"
+               "layout(location = 0) out vec2 vTexCoord;\n"
+               "void main()\n"
+               "{\n"
+               "    vTexCoord = texCoord;\n")
+        + assign + QStringLiteral("}\n");
+}
+
+/// True when some ONE line of @p report names both @p stage and @p marker.
+/// A bare `report.contains(...)` cannot express this: every slot's report also
+/// carries the fragment's own compile lines, so asserting on "OK (compositor)"
+/// across the whole report passes whether or not the stage under test was baked
+/// at all.
+bool reportLineHas(const QString& report, const QString& stage, const QString& marker)
+{
+    const QStringList lines = report.split(QLatin1Char('\n'));
+    for (const QString& line : lines) {
+        if (line.contains(stage) && line.contains(marker)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace
@@ -281,6 +333,72 @@ private Q_SLOTS:
             r.report.contains(QStringLiteral("sampler uBackdrop declared at binding 20, the contract puts it at 15")),
             qPrintable(r.report));
         QVERIFY(r.errors > 0);
+    }
+
+    /// A pack that ships its OWN vertex stage gets it baked on BOTH hosts. No
+    /// bundled pack declares one, so shader_validate_surface never reaches this
+    /// arm and a regression in it would surface to a third-party author before
+    /// it ever surfaced in CI.
+    void aPackDeclaredVertexBakesOnBothBranches()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(QStringLiteral("sf-vert"), QJsonArray{});
+        obj.insert(QStringLiteral("vertexShader"), QStringLiteral("probe.vert"));
+
+        const PackResult r =
+            validateSurface(tmp, QStringLiteral("sf-vert"), obj, surfaceBodyReading({}),
+                            packVertexBody(QStringLiteral("    gl_Position = vec4(position, 0.0, 1.0);\n")));
+        QVERIFY2(reportLineHas(r.report, QStringLiteral("probe.vert"), QStringLiteral("OK (compositor)")),
+                 qPrintable(r.report));
+        QCOMPARE(r.errors, 0);
+    }
+
+    /// And that compositor half is a real compile, not a line in a report: a
+    /// break behind PLASMAZONES_KWIN passes the Qt-RHI bake and must still fail
+    /// the pack. Without this, a bake that silently no-opped would look exactly
+    /// like the slot above passing.
+    void aCompositorOnlyBreakInAPackVertexIsCaught()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(QStringLiteral("sf-vert-kwin"), QJsonArray{});
+        obj.insert(QStringLiteral("vertexShader"), QStringLiteral("probe.vert"));
+
+        const QString assign = QStringLiteral(
+            "#ifdef PLASMAZONES_KWIN\n"
+            "    gl_Position = pzNoSuchFunction(position);\n"
+            "#else\n"
+            "    gl_Position = vec4(position, 0.0, 1.0);\n"
+            "#endif\n");
+        const PackResult r =
+            validateSurface(tmp, QStringLiteral("sf-vert-kwin"), obj, surfaceBodyReading({}), packVertexBody(assign));
+        QVERIFY2(reportLineHas(r.report, QStringLiteral("probe.vert"), QStringLiteral("OK")), qPrintable(r.report));
+        QVERIFY2(reportLineHas(r.report, QStringLiteral("probe.vert"), QStringLiteral("ERROR (compositor)")),
+                 qPrintable(r.report));
+        QVERIFY(r.errors > 0);
+    }
+
+    /// The shared `surface.vert` fallback is deliberately NOT baked for the
+    /// compositor, and that exclusion needs pinning because it reads like an
+    /// oversight sitting next to the fragment and buffer passes. The fallback
+    /// multiplies by `qt_Matrix`, which surface_uniforms.glsl declares only in
+    /// the daemon UBO branch, so the obvious "completeness" fix would fail every
+    /// pack that does not ship a vertex stage of its own, on an undeclared
+    /// identifier in a file the author never wrote.
+    void theSharedVertexFallbackIsNotBakedForTheCompositor()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        const QJsonObject obj = surfacePack(QStringLiteral("sf-vert-fallback"), QJsonArray{});
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-vert-fallback"), obj, surfaceBodyReading({}));
+        QVERIFY2(reportLineHas(r.report, QStringLiteral("surface.vert"), QStringLiteral("OK")), qPrintable(r.report));
+        QVERIFY2(!reportLineHas(r.report, QStringLiteral("surface.vert"), QStringLiteral("(compositor)")),
+                 qPrintable(r.report));
+        QCOMPARE(r.errors, 0);
     }
 };
 

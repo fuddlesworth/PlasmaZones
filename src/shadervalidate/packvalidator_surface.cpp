@@ -18,6 +18,7 @@
 #include <PhosphorRendering/ShaderCompiler.h>
 #include <PhosphorShaders/CustomParamsKey.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
+#include <PhosphorShaders/ShaderIncludeResolver.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
 #include <PhosphorSurface/SurfaceShaderContract.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
@@ -41,18 +42,96 @@ using PhosphorSurfaceShaders::SurfaceShaderRegistry;
 
 namespace PlasmaZones::ShaderValidate {
 
-// Validate one SURFACE pack directory (data/surface/*). Reproduces the surface
-// runtime's fragment assembly on the daemon (Qt-RHI) path — the pSurface entry
-// scaffold (an entry-only pack gets a generated main(); a pack with its own
-// main() passes through unchanged) + include expansion + the generated p_<id>
-// preamble — then bakes through headless glslang. Returns the error count.
+namespace {
+
+// Bake one stage on the COMPOSITOR dialect (`#define PLASMAZONES_KWIN`,
+// default-block uniforms), which QShaderBaker cannot compile — it wants
+// Vulkan-dialect GLSL — so this shells out to glslang the way the animation and
+// pointer arms do.
 //
-// As with animation packs, the kwin-effect classic-GL branch
-// (`#define PLASMAZONES_KWIN`, default-block uniforms) is NOT baked here:
-// QShaderBaker compiles Vulkan-dialect GLSL and rejects default-block uniforms.
-// Baking the #else branch validates the daemon UBO contract in
-// surface_uniforms.glsl; the PLASMAZONES_KWIN plumbing is identical for every
-// pack and exercised by the live compositor compile.
+// Modelled on the POINTER arm rather than the animation one: the animation helper
+// carries a finalizeColor argument because its per-window path splices KWin's
+// colour-management block, and the surface compositor path splices no such block
+// (surface_compile.cpp assembles the entry, expands includes, splices the param
+// preamble and injects the KWin define, and nothing else).
+//
+// Expansion goes through ShaderIncludeResolver, NOT ShaderCompiler::expandSource,
+// because that is what the compositor uses and the two differ: expandSource also
+// searches the shader's own directory for an angle include, so a pack-local angle
+// include resolves on the daemon and fails where it ships.
+int bakeCompositorStage(QTextStream& out, const SurfaceShaderEffect& eff, const QString& path, const QString& label,
+                        const QString& stage, const QStringList& includePaths, bool scaffold)
+{
+    if (!QFile::exists(path)) {
+        return 0; // an absent stage is already linted by the caller
+    }
+    const QString tool = glslangValidatorPath();
+    if (tool.isEmpty()) {
+        // Hard failure rather than a skip, for the reason the two sibling arms
+        // give: a pack cannot reach a release with the branch it ships on
+        // uncompiled, and a quiet degrade is how that happened before. Explained
+        // once per run; every stage still counts the error.
+        static bool explained = false;
+        out << "  " << padLabel(label) << "ERROR (compositor)\n";
+        if (!explained) {
+            explained = true;
+            out << "    neither glslangValidator nor glslang found on PATH. One of them is required to "
+                   "compile the compositor dialect every surface pack ships on (install the glslang package)\n";
+        }
+        return 1;
+    }
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        out << "  " << padLabel(label) << "ERROR\n    cannot read " << path << "\n";
+        return 1;
+    }
+    const QString raw = QString::fromUtf8(f.readAll());
+    const QString assembled = scaffold
+        ? PhosphorShaders::assembleEntryPoint(raw, SurfaceShaderRegistry::surfaceEntryPrologue(),
+                                              SurfaceShaderRegistry::surfaceEntryCandidates())
+        : raw;
+    QString err;
+    QString src = PhosphorShaders::ShaderIncludeResolver::expandIncludes(assembled, QFileInfo(path).absolutePath(),
+                                                                         includePaths, &err);
+    if (src.isEmpty()) {
+        out << "  " << padLabel(label) << "ERROR (compositor)\n    include expansion failed the way the compositor "
+            << "expands it: " << err
+            << "\n    (if the file sits beside this one, note that the compositor resolves an angle include only "
+            << "against the registry roots; the quoted form is the pack-local one)\n";
+        return 1;
+    }
+    if (scaffold) {
+        // Buffer passes compile WITHOUT the generated preamble and read their
+        // parameters by raw contract slot, so splicing one here would let a buffer
+        // reference a p_<id> that fails on both paths that ship.
+        src = PhosphorShaders::spliceAfterVersion(src, SurfaceShaderRegistry::paramPreamble(eff));
+    }
+    // LAST, so the define block lands above the preamble, which is what
+    // injectKwinDefineAfterVersion produces at runtime.
+    src = PhosphorShaders::spliceAfterVersion(src, PhosphorShaders::kwinDefineBlock());
+    return reportCompositorCompile(out, label, stage, src, tool);
+}
+
+} // namespace
+
+// Validate one SURFACE pack directory (data/surface/*). Reproduces the surface
+// runtime's fragment assembly — the pSurface entry scaffold (an entry-only pack
+// gets a generated main(); a pack with its own main() passes through unchanged) +
+// include expansion + the generated p_<id> preamble — and bakes BOTH branches
+// every surface pack ships on. Returns the error count.
+//
+// The daemon (Qt-RHI) branch bakes through QShaderBaker, which validates the UBO
+// contract in surface_uniforms.glsl. The kwin-effect classic-GL branch
+// (`#define PLASMAZONES_KWIN`, default-block uniforms) is baked separately through
+// glslang, because QShaderBaker wants Vulkan-dialect GLSL and rejects default-block
+// uniforms. Both are required: a contract error on the compositor branch used to
+// ship and surface as a black decoration, since the compositor swallows a compile
+// failure.
+//
+// COVERAGE BOUNDARY, as on the animation arm. The compositor recompiles `#version
+// 450` down to its context core version at load, so a construct this gate accepts
+// at 450 can still fail there. And glslang is not the compositor's own driver
+// compiler, so a driver-specific rejection is out of reach either way.
 int validateSurfacePack(const QString& packDir, QTextStream& out)
 {
     const QString name = QFileInfo(packDir).fileName();
@@ -351,6 +430,14 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             }
         }
     }
+    // The COMPOSITOR branch of the same stage. Outside the exists() guard above:
+    // the helper does its own check, and an absent stage is already linted.
+    {
+        const QStringList compositorIncludePaths = QStringList(packSharedRoots(packDir))
+            << QFileInfo(packDir).absolutePath();
+        errors += bakeCompositorStage(out, eff, eff.fragmentShaderPath, fragLabel, QStringLiteral("frag"),
+                                      compositorIncludePaths, /*scaffold=*/true);
+    }
 
     // ── multipass buffer passes ──
     // Buffer passes carry their own main() (no entry scaffold, no param preamble)
@@ -397,6 +484,11 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
                     ShaderCompiler::compile(expanded.toUtf8(), QShader::FragmentStage);
                 errors += reportCompile(out, label, result, declaredParamNames(eff.parameters));
             }
+            // The COMPOSITOR branch of the same buffer pass. scaffold=false: a
+            // buffer ships its own main() and reads its parameters by raw contract
+            // slot, so it takes neither the entry scaffold nor the preamble.
+            errors += bakeCompositorStage(out, eff, buf, label, QStringLiteral("frag"), bufferIncludePaths,
+                                          /*scaffold=*/false);
         }
     }
 
@@ -459,6 +551,16 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
                     errors += reportCompile(out, label, result, declaredParamNames(eff.parameters));
                 }
             }
+        }
+        // The COMPOSITOR branch, for a DECLARED vertex stage ONLY. The shared
+        // surface.vert fallback resolved above is deliberately not baked here: the
+        // compositor never resolves that file (it supplies its own built-in
+        // fullscreen-quad stage), and the shared one reads qt_Matrix, which is a
+        // daemon UBO member and undeclared under PLASMAZONES_KWIN. Baking it would
+        // fail every bundled pack on a stage that never runs there.
+        if (!eff.vertexShaderPath.isEmpty()) {
+            errors += bakeCompositorStage(out, eff, eff.vertexShaderPath, QFileInfo(eff.vertexShaderPath).fileName(),
+                                          QStringLiteral("vert"), includePaths, /*scaffold=*/false);
         }
     }
 

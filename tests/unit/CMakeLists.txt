@@ -2455,13 +2455,14 @@ add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
 # in shadervalidate/packvalidatortesthelpers.h (header-only).
 #
 # glslang: the validator bakes EVERY animation pack's fragment for the
-# compositor through glslang, and the pointer arm does the same. Both QSKIP
-# without the tool (REQUIRE_ANIMATION_FIXTURE, REQUIRE_POINTER_FIXTURE), which
-# also link the bundled shared/ helpers into the fixture root, so the targets
-# stay runnable on a machine that has neither the tool nor an install. That is the opposite
-# of the shader_validate_animations and shader_validate_pointer gates, which
-# fail instead: the gates are what must never silently lose coverage, while
-# these targets are also a developer's inner-loop tests.
+# compositor through glslang, and the surface and pointer arms do the same. All
+# three QSKIP without the tool (REQUIRE_ANIMATION_FIXTURE,
+# REQUIRE_SURFACE_FIXTURE, REQUIRE_POINTER_FIXTURE), which also link the bundled
+# shared/ helpers into the fixture root, so the targets stay runnable on a
+# machine that has neither the tool nor an install. That is the opposite of the
+# shader_validate_animations, shader_validate_surface and shader_validate_pointer
+# gates, which fail instead: the gates are what must never silently lose
+# coverage, while these targets are also a developer's inner-loop tests.
 set(_pack_validator_arms
     ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_overlay.cpp
     ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_animation.cpp

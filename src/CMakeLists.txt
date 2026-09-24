@@ -1148,16 +1148,17 @@ install(TARGETS plasmazones-shader-validate DESTINATION ${KDE_INSTALL_BINDIR})
 # they pin each test to one model regardless of what a tree grows later.)
 #
 # REQUIRES `glslangValidator` (or the newer `glslang` spelling, either name is
-# accepted) on PATH for shader_validate_animations and shader_validate_pointer.
-# Every animation pack's fragment and declared vertex, and every pointer pack's
-# stages, are compiled for the compositor's classic-GL branch (default-block
-# uniforms, which QShaderBaker's SPIR-V target rejects by design), so they go
-# out of process through glslang's default GLSL-semantics mode. Those two
-# invocations FAIL rather than skip when the binary is absent: the compositor
-# branch is compiled nowhere else in a headless run (the GPU bake test QSKIPs
-# without a desktop GL 4.5 context), so a silent skip would put the gate back
-# to lints-only. The overlay and surface invocations bake through QShaderBaker
-# alone and need no such tool.
+# accepted) on PATH for shader_validate_animations, shader_validate_surface and
+# shader_validate_pointer. Every animation pack's fragment and declared vertex,
+# every surface pack's fragment, buffer passes and own declared vertex, and
+# every pointer pack's stages, are compiled for the compositor's classic-GL
+# branch (default-block uniforms, which QShaderBaker's SPIR-V target rejects by
+# design), so they go out of process through glslang's default GLSL-semantics
+# mode. Those three invocations FAIL rather than skip when the binary is
+# absent: the compositor branch is compiled nowhere else in a headless run (the
+# GPU bake test QSKIPs without a desktop GL 4.5 context), so a silent skip would
+# put the gate back to lints-only. The overlay invocation bakes through
+# QShaderBaker alone and needs no such tool.
 if(BUILD_TESTING)
     add_test(NAME shader_validate_bundled
              COMMAND plasmazones-shader-validate --overlay ${PROJECT_SOURCE_DIR}/data/overlays)
