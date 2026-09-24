@@ -85,7 +85,7 @@ vec4 pSurface(vec2 uv) {
 
     vec4 pane;
     if (uHasBackdrop >= 0.5) {
-        vec4 raw = texture(iChannel6, uv);
+        vec4 raw = surfaceBlurTexel(uv);
         vec4 blurred = surfaceBackdropGrade(raw, p_brightness, p_contrast, p_saturation, p_vibrancy,
                                             p_vibrancyDarkness);
 

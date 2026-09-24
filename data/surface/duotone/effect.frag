@@ -34,7 +34,7 @@ vec4 pSurface(vec2 uv) {
 
     vec4 pane;
     if (uHasBackdrop >= 0.5) {
-        vec4 blurred = texture(iChannel6, uv);
+        vec4 blurred = surfaceBlurTexel(uv);
         // Un-premultiply before taking luminance so a translucent backdrop
         // region doesn't read darker than it is, then re-weight the mapped
         // colour by the capture's own alpha to stay premultiplied.

@@ -154,7 +154,7 @@ vec4 pSurface(vec2 uv) {
         // Clamped to the canvas, or folded back inside the frame when the
         // pack's Edge mirror switch is on.
         vec2 sampleUv = p_edgeMirror >= 0.5 ? frameMirrorUv(bent) : clamp(bent, 0.0, 1.0);
-        vec4 fog = surfaceBackdropGrade(texture(iChannel6, sampleUv), p_brightness, p_contrast, p_saturation,
+        vec4 fog = surfaceBackdropGrade(surfaceBlurTexel(sampleUv), p_brightness, p_contrast, p_saturation,
                                         p_vibrancy, p_vibrancyDarkness);
         // Top-light: a small highlight on each droplet's upper edge (the
         // offset points down toward the centre there, so +y in px space).

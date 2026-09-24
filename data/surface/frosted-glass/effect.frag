@@ -112,7 +112,7 @@ vec4 pSurface(vec2 uv) {
     if (uHasBackdrop >= 0.5) {
         // Real frosting: blurred backdrop tinted by the turning gradient,
         // grained, vignetted.
-        vec4 blurred = surfaceBackdropGrade(texture(iChannel6, uv), p_brightness, p_contrast, p_saturation,
+        vec4 blurred = surfaceBackdropGrade(surfaceBlurTexel(uv), p_brightness, p_contrast, p_saturation,
                                             p_vibrancy, p_vibrancyDarkness);
         vec3 color = mix(blurred.rgb, grad * blurred.a, gradStrength);
         color = clamp(color + vec3(variation) * blurred.a, 0.0, max(blurred.a, 0.0001));

@@ -500,14 +500,23 @@ void ShaderEffect::setBufferScales(const QVariantList& scales)
                                 << scales.size() << "entries past the" << kMaxBufferPasses << "pass budget";
     }
     QVariantList clamped;
-    for (int i = 0; i < scales.size() && i < kMaxBufferPasses; ++i) {
+    // qsizetype, matching what size() answers, rather than an int compared
+    // against it on every iteration.
+    for (qsizetype i = 0; i < scales.size() && i < kMaxBufferPasses; ++i) {
         // Parse with `ok`, the way every other extractor in this file does, and
-        // fall back to the pack-wide scale rather than to a bound. toDouble
-        // answers 0 for a non-numeric entry, which qBound turns into the
-        // MINIMUM: a typo like "0.5" in quotes silently rendered the pass at
-        // 1/128 of the canvas instead of at half, which looks like a broken
-        // shader rather than a bad metadata value. A non-finite entry is worse,
-        // because qBound on a NaN is unspecified.
+        // fall back to the pack-wide scale rather than to a bound.
+        //
+        // BOTH bad inputs land on the MINIMUM, which is why neither can be left
+        // to qBound. A non-numeric entry answers 0 from toDouble and clamps up
+        // to the floor, so a typo like "0.5" in quotes rendered the pass at
+        // 1/128 of the canvas instead of at half. A NaN gets there by a
+        // different route and is NOT unspecified, as this comment used to say:
+        // qBound(min, v, max) is qMax(min, qMin(max, v)), qMin returns NaN
+        // because `max < NaN` is false, and qMax then returns min because
+        // `min < NaN` is false. Checked against Qt's own qminmax.h and run.
+        //
+        // So a quoted number and a NaN are indistinguishable in the result, and
+        // both look like a broken shader rather than a bad metadata value.
         bool ok = false;
         const double raw = scales.at(i).toDouble(&ok);
         if (!ok || !std::isfinite(raw)) {

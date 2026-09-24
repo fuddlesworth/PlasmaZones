@@ -115,8 +115,13 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
 
     // iChannelResolution — resolved node-side (needs live RHI textures).
     const bool multiBufferMode = m_bufferPaths.size() > 1;
-    const int numChannels = multiBufferMode ? qMin(m_bufferPaths.size(), static_cast<qsizetype>(kMaxBufferPasses))
-                                            : (m_bufferShaderReady && m_bufferTexture ? 1 : 0);
+    // The cast is explicit because the qMin answers a qsizetype and this is an
+    // int. It cannot lose anything, since the same qMin bounds it by
+    // kMaxBufferPasses, but an implicit narrowing here is indistinguishable at a
+    // glance from one that can.
+    const int numChannels = multiBufferMode
+        ? static_cast<int>(qMin(m_bufferPaths.size(), static_cast<qsizetype>(kMaxBufferPasses)))
+        : (m_bufferShaderReady && m_bufferTexture ? 1 : 0);
     for (int i = 0; i < PhosphorShaders::Bindings::kChannelResolutionSlots; ++i) {
         if (i < numChannels) {
             if (multiBufferMode && m_multiBufferTextures[i]) {

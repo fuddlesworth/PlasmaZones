@@ -115,11 +115,11 @@ vec4 pSurface(vec2 uv) {
             vec2 fB = 0.5 + f * (1.0 - shrink * (1.0 - fringe));
             vec2 topLeft = uSurfaceFrameTopLeft;
             vec2 size = uSurfaceFrameSize;
-            vec4 g = texture(iChannel6, glassCoord(surfaceUvFromPixel(topLeft + fG * size)));
+            vec4 g = surfaceBlurTexel(glassCoord(surfaceUvFromPixel(topLeft + fG * size)));
             lit = g.rgb;
             if (fringe > 0.001) {
-                lit.r = texture(iChannel6, glassCoord(surfaceUvFromPixel(topLeft + fR * size))).r;
-                lit.b = texture(iChannel6, glassCoord(surfaceUvFromPixel(topLeft + fB * size))).b;
+                lit.r = surfaceBlurTexel(glassCoord(surfaceUvFromPixel(topLeft + fR * size))).r;
+                lit.b = surfaceBlurTexel(glassCoord(surfaceUvFromPixel(topLeft + fB * size))).b;
             }
             pane.a = g.a;
         } else if (p_physicallyBased >= 0.5) {
@@ -162,13 +162,13 @@ vec4 pSurface(vec2 uv) {
             vec2 dirPx = length(refractG.xy) > 0.001 ? normalize(refractG.xy) : vec2(0.0);
             float magnitude = lensMagnitude * strength;
             vec2 shiftG = pxToUv(dirPx * magnitude) + lensShift;
-            vec4 g = texture(iChannel6, glassCoord(uv + shiftG));
+            vec4 g = surfaceBlurTexel(glassCoord(uv + shiftG));
             lit = g.rgb;
             if (fringe > 0.001) {
                 vec2 shiftR = pxToUv(dirPx * (magnitude * (1.0 + fringe))) + lensShift;
                 vec2 shiftB = pxToUv(dirPx * (magnitude * (1.0 - fringe))) + lensShift;
-                lit.r = texture(iChannel6, glassCoord(uv + shiftR)).r;
-                lit.b = texture(iChannel6, glassCoord(uv + shiftB)).b;
+                lit.r = surfaceBlurTexel(glassCoord(uv + shiftR)).r;
+                lit.b = surfaceBlurTexel(glassCoord(uv + shiftB)).b;
             }
             pane.a = g.a;
         } else {
@@ -186,7 +186,7 @@ vec4 pSurface(vec2 uv) {
             // second copy that only tracked the compositor. The frame/canvas
             // ratio stays: this offset is expressed relative to the frame.
             vec2 dirUv = pxToUv(inward * strengthUv * uSurfaceFrameSize);
-            vec4 g = texture(iChannel6, glassCoord(uv + dirUv));
+            vec4 g = surfaceBlurTexel(glassCoord(uv + dirUv));
             lit = g.rgb;
             // Gated the way the concave and Snell arms already gate theirs. Run
             // unconditionally these cost two dependent fetches per fragment that
@@ -196,8 +196,8 @@ vec4 pSurface(vec2 uv) {
             // strengthUv and dirUv are zero and all three fetches hit one texel.
             // That second case covers most of the pane at the shipped defaults.
             if (fringe > 0.001 && strengthUv > 0.0) {
-                lit.r = texture(iChannel6, glassCoord(uv + dirUv * (1.0 + fringe))).r;
-                lit.b = texture(iChannel6, glassCoord(uv + dirUv * (1.0 - fringe))).b;
+                lit.r = surfaceBlurTexel(glassCoord(uv + dirUv * (1.0 + fringe))).r;
+                lit.b = surfaceBlurTexel(glassCoord(uv + dirUv * (1.0 - fringe))).b;
             }
             pane.a = g.a;
         }

@@ -281,22 +281,4 @@ vec4 surfaceKawaseUp(sampler2D src, vec2 uv, float offset) {
     return sum / 12.0;
 }
 
-// The chain's result, for a main pass: the last UP pass, at the base level.
-//
-// TRANSPARENT IS A LEGITIMATE ANSWER HERE AND uHasBackdrop DOES NOT PREDICT
-// IT. When a pack's buffer allocation fails, the compositor logs that the pack
-// renders single-pass, clears the buffers, and the main pass then binds the
-// 1x1 transparent fallback to every declared channel, deliberately, so that an
-// unbound sampler2D cannot read the running composite. uHasBackdrop is
-// unaffected and still reads 1.0, because the backdrop CAPTURE succeeded; only
-// the chain that consumes it did not run. A pack that branches on
-// uHasBackdrop >= 0.5 and then samples the chain with no second gate therefore
-// draws a fully transparent pane instead of reaching its own no-backdrop
-// fallback. Every bundled blur-family pack is written that way today. A pack
-// that wants to be robust should treat a fully transparent chain result as the
-// no-backdrop case too, rather than trusting the flag alone.
-vec4 surfaceBlurTexel(vec2 uv) {
-    return texture(iChannel6, uv);
-}
-
 #endif // PLASMAZONES_SURFACE_BLUR_GLSL

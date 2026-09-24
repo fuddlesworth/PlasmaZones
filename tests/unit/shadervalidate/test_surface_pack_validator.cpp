@@ -798,6 +798,45 @@ private Q_SLOTS:
         QCOMPARE(r.errors, 0);
     }
 
+    /// The builtin gaussian pair is compiled by NOTHING in the tree. No bundled
+    /// pack declares builtin:gaussian-h or -v, so neither shader_validate_surface
+    /// nor any other gate ever bakes them, and the only other in-tree references
+    /// (in the registry and decoration-preview tests) exercise TOKEN RESOLUTION
+    /// and stop there. They are kept for third-party packs that declare them, so
+    /// a pack outside this repo is currently the first thing to compile them.
+    ///
+    /// Declaring them from a fixture pack is what puts the REAL shared files
+    /// through both bakes. The kawase chain is baked by the bufferScales slot
+    /// below for the same reason, which is why only the gaussian pair needs its
+    /// own slot here.
+    void theBuiltinGaussianPairStillBakesOnBothHosts()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(
+            QStringLiteral("sf-gauss"),
+            QJsonArray{surfaceParam(QStringLiteral("blurRadius"), QStringLiteral("float"), 24.0, 2.0, 256.0)});
+        obj.insert(QStringLiteral("multipass"), true);
+        obj.insert(QStringLiteral("bufferShaders"),
+                   QJsonArray{QStringLiteral("builtin:gaussian-h"), QStringLiteral("builtin:gaussian-v")});
+        const PackResult r =
+            validateSurface(tmp, QStringLiteral("sf-gauss"), obj, surfaceBodyReading({QStringLiteral("blurRadius")}));
+
+        // Both stages, on both hosts. reportLineHas rather than a bare contains,
+        // because the fragment's own OK lines are in the same report and would
+        // satisfy a whole-report match whether or not these stages ran at all.
+        QVERIFY2(reportLineHas(r.report, QStringLiteral("gaussian_h.frag"), QStringLiteral("OK")),
+                 qPrintable(r.report));
+        QVERIFY2(reportLineHas(r.report, QStringLiteral("gaussian_h.frag"), QStringLiteral("OK (compositor)")),
+                 qPrintable(r.report));
+        QVERIFY2(reportLineHas(r.report, QStringLiteral("gaussian_v.frag"), QStringLiteral("OK")),
+                 qPrintable(r.report));
+        QVERIFY2(reportLineHas(r.report, QStringLiteral("gaussian_v.frag"), QStringLiteral("OK (compositor)")),
+                 qPrintable(r.report));
+        QCOMPARE(r.errors, 0);
+    }
+
     /// bufferScales is the field this whole change introduced and NOTHING
     /// asserted any of its lints. Each of the four arms answers a different
     /// load-time behaviour, and the messages are not interchangeable because

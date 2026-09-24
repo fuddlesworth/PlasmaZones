@@ -116,7 +116,7 @@ vec4 pSurface(vec2 uv) {
         vec2 dispPx = grad / max(length(grad), 1.0) * clamp(p_refractionStrength, 0.0, 40.0) * uSurfaceScale;
         vec2 shift = pxToUv(dispPx);
         float fringe = clamp(p_fringing, 0.0, 1.0) * 0.3;
-        vec4 g = texture(iChannel6, rippleCoord(uv + shift));
+        vec4 g = surfaceBlurTexel(rippleCoord(uv + shift));
         vec3 lit = g.rgb;
         // The shift has to be non-zero too, not just the fringe amount. At
         // Refraction strength 0, which is the DECLARED MINIMUM rather than an
@@ -125,8 +125,8 @@ vec4 pSurface(vec2 uv) {
         // fringe alone let the default fringing of 0.25 pay for two dependent
         // full-canvas fetches that could not change the result.
         if (fringe > 0.001 && dot(shift, shift) > 0.0) {
-            lit.r = texture(iChannel6, rippleCoord(uv + shift * (1.0 + fringe))).r;
-            lit.b = texture(iChannel6, rippleCoord(uv + shift * (1.0 - fringe))).b;
+            lit.r = surfaceBlurTexel(rippleCoord(uv + shift * (1.0 + fringe))).r;
+            lit.b = surfaceBlurTexel(rippleCoord(uv + shift * (1.0 - fringe))).b;
         }
 
         // Soft directional highlight, lit where the height GRADIENT points

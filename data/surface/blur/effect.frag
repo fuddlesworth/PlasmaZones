@@ -50,7 +50,7 @@ vec4 pSurface(vec2 uv) {
         // and it is applied last so it dithers the tinted result rather than
         // being crushed by the contrast step. Re-premultiplied by the
         // capture's own alpha, as an opaque slab under the window.
-        vec4 blurred = texture(iChannel6, uv);
+        vec4 blurred = surfaceBlurTexel(uv);
         vec3 col = blurred.a > 0.001 ? blurred.rgb / blurred.a : vec3(0.0);
         col = surfaceColorAdjust(col, p_brightness, p_contrast, p_saturation);
         col = surfaceVibrancy(col, p_vibrancy, p_vibrancyDarkness);
