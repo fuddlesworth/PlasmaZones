@@ -99,8 +99,9 @@ from idle ones; the user's brief determines how that state is expressed.
 Required `id`, `name`, `fragmentShader`, `parameters` (may be `[]`). Top level is
 `additionalProperties: false`, so only these keys: `description`, `author`, `version`,
 `category`, `preview`, `vertexShader`, `animated`, `audio`, `providesBorder`,
-`providesOpacityTint`, `needsBackdrop`, `interiorOpaque`, `multipass`, `bufferShaders` (max 4),
-`bufferScale` (0.125..1.0), `bufferFeedback`, `bufferWrap(s)`, `bufferFilter(s)`, `depthBuffer`,
+`providesOpacityTint`, `needsBackdrop`, `interiorOpaque`, `multipass`, `bufferShaders` (max 8),
+`bufferScale` (0.0078125..1.0), `bufferScales` (per-pass, same bounds, one entry per
+`bufferShaders` entry, surface-only), `bufferFeedback`, `bufferWrap(s)`, `bufferFilter(s)`, `depthBuffer`,
 `halfFloatBuffers`, `paddingParam`, `textures` (max 3), and the legacy `handlesOpacity`
 (accepted, ignored; do not write it). Max 48 params. No `slot` field (auto-slot by
 declaration order). Param keys, and ONLY these, because the schema is
@@ -130,13 +131,28 @@ Contract flags (declare honestly, the hosts key behaviour on them):
   them from the plain border setting.
 - `providesOpacityTint`: declare `opacity`, `tintStrength`, `tintColor`.
 - `audio`: includes `<surface_audio.glsl>`.
-- Blur, and multipass in general: declare `"multipass": true`, `"bufferScale": 0.25`,
-  `"bufferShaders": ["builtin:gaussian-h", "builtin:gaussian-v"]`. The builtin tokens resolve
-  to the shared passes in `data/surface/shared/` (`gaussian_h.frag` samples `backdropTexel()`
-  at the pack's bufferScale, `gaussian_v.frag` samples that result as `iChannel0`); an unknown
-  token, or any missing pack-local pass, disables multipass for the whole pack and it renders
-  single-pass. The main pass includes `<surface_multipass.glsl>` and reads the finished blur as
-  `texture(iChannel1, uv)`; `iChannelResolution[N].xy` gives each buffer's pixel size. Both
+- Blur, and multipass in general: declare THREE keys, not one. `"multipass": true` is what
+  makes the chain run at all (`bufferShaders` alone is cleared at load and the pack renders
+  single-pass, silently), `"needsBackdrop": true` is what gives the first pass a source, and
+  `"bufferShaders"` is the chain.
+- The chain every bundled blur-family pack runs is the DUAL KAWASE PYRAMID, seven passes with
+  a per-pass scale list:
+
+  ```json
+  "bufferShaders": ["builtin:kawase-down-0", "builtin:kawase-down-1",
+                    "builtin:kawase-down-2", "builtin:kawase-down-3",
+                    "builtin:kawase-up-0",   "builtin:kawase-up-1",
+                    "builtin:kawase-up-2"],
+  "bufferScales":  [0.25, 0.125, 0.0625, 0.03125, 0.0625, 0.125, 0.25]
+  ```
+
+  The main pass includes `<surface_multipass.glsl>` and reads the finished blur as
+  `surfaceBlurTexel(uv)`, which is `iChannel6`, the last UP pass. The older
+  `builtin:gaussian-h` / `builtin:gaussian-v` pair still resolves and still reads back as
+  `iChannel1`, for a third-party pack that declares it. An unknown token, or any missing
+  pack-local pass, disables multipass for the whole pack and it renders single-pass.
+  `iChannelResolution[N].xy` gives the pixel size of the FIRST FOUR channels only; a pass
+  reading iChannel4..7 sizes it with `textureSize()`, which is what the Kawase passes do. Both
   runtimes run the buffer passes: the daemon through the shared ShaderEffect node and the
   compositor through its own composite fold (`surfacelayers.cpp`). The compositor only falls
   back to single-pass when a buffer pass fails to load or compile, in which case the iChannel samplers
@@ -152,7 +168,7 @@ Contract flags (declare honestly, the hosts key behaviour on them):
   the same rule: `#include <surface_uniforms.glsl>` (plus the backdrop/multipass modules it
   needs) and index `customParams` directly. On the compositor a buffer pass receives only
   `uTexture0`, `iTime`, `uSurfaceSize`, `uSurfaceScale`, `uBackdrop`, `uBackdropRect`,
-  `uHasBackdrop`, the audio pair, `iChannel0..3`, `iChannelResolution[]`, `customParams[]` and
+  `uHasBackdrop`, the audio pair, `iChannel0..7`, `iChannelResolution[]` (first four only), `customParams[]` and
   `customColors[]`; `uSurfaceFrameTopLeft`, `uSurfaceFrameSize`, `uSurfaceFocused` and `iMouse`
   are not pushed to buffer passes there and read zero, so keep frame-relative and pointer
   logic in the main pass.

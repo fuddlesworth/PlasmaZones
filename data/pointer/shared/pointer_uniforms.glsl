@@ -189,7 +189,8 @@ layout(binding = 12) uniform sampler2D uTexture1;
 layout(binding = 13) uniform sampler2D uTexture2;
 layout(binding = 14) uniform sampler2D uTexture3;
 
-// The multipass iChannel sampler bindings (2-9) live in pointer_multipass.glsl,
+// The multipass iChannel sampler bindings (2-5 here, the first four of the
+// shared table's eight-wide block) live in pointer_multipass.glsl,
 // which a multipass pack includes.
 
 #endif // PLASMAZONES_KWIN

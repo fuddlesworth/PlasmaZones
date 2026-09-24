@@ -34,10 +34,10 @@ SurfaceShaderEffect::ParameterInfo floatParam(const QString& id, double defaultV
 
 } // namespace
 
-/// Covers the two helpers the daemon overlay host, the kwin-effect
-/// compositor path, and the settings decoration preview share. The padding
-/// resolution had been copy-pasted into two of those and had already drifted
-/// in type; these pin the behaviour all three now depend on.
+/// Covers the two helpers the daemon overlay host, the kwin-effect compositor
+/// path, the settings decoration preview and the shell chrome share. The
+/// padding resolution had been copy-pasted into two of those and had already
+/// drifted in type; these pin the behaviour all four now depend on.
 class TestSurfaceChainCompose : public QObject
 {
     Q_OBJECT
@@ -107,6 +107,55 @@ private Q_SLOTS:
         QCOMPARE(paddingRequest(e, overrides), 0.0);
     }
 
+    /// A padding override of the wrong TYPE must not suppress the declared
+    /// default. QVariant::toDouble() answers 0.0 for anything it cannot
+    /// convert, so gating on presence alone silently collapsed a pack's
+    /// margin to zero whenever a stored profile held a non-numeric value.
+    void paddingRequest_ignores_a_non_numeric_override()
+    {
+        SurfaceShaderEffect e = basePack();
+        e.paddingParam = QStringLiteral("glowSize");
+        e.parameters.append(floatParam(QStringLiteral("glowSize"), 16.0));
+
+        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), QStringLiteral("not a number")}}), 16.0);
+        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), QVariant()}}), 16.0);
+        // A numeric string is a legitimate override and still wins.
+        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), QStringLiteral("24")}}), 24.0);
+    }
+
+    /// A non-finite padding must not escape into a caller's clamp.
+    ///
+    /// NaN and infinity convert cleanly, so the type check above lets them
+    /// through; only the explicit isfinite() test stops them. This matters
+    /// past the aesthetics: the compositor bounds the result and then narrows
+    /// it to an int for the capture canvas, and narrowing a NaN or an
+    /// infinity to an integer is undefined behaviour. A qBound() around the
+    /// value does not save it either, since every comparison against NaN is
+    /// false.
+    void paddingRequest_rejects_a_non_finite_override()
+    {
+        SurfaceShaderEffect e = basePack();
+        e.paddingParam = QStringLiteral("glowSize");
+        e.parameters.append(floatParam(QStringLiteral("glowSize"), 16.0));
+
+        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), qQNaN()}}), 16.0);
+        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), qInf()}}), 16.0);
+        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), -qInf()}}), 16.0);
+    }
+
+    /// The same guard on the DECLARED side, which has its own conversion.
+    ///
+    /// A pack whose own default is non-finite has nothing to fall back to, so
+    /// the request has to come out as no padding at all rather than as a
+    /// value no caller can clamp.
+    void paddingRequest_rejects_a_non_finite_declared_default()
+    {
+        SurfaceShaderEffect e = basePack();
+        e.paddingParam = QStringLiteral("glowSize");
+        e.parameters.append(floatParam(QStringLiteral("glowSize"), qQNaN()));
+
+        QCOMPARE(paddingRequest(e, {}), 0.0);
+    }
     // ── composeStageMap ──────────────────────────────────────────────
 
     void composeStageMap_emits_the_host_contract_keys()
@@ -285,56 +334,6 @@ private Q_SLOTS:
         noId.id.clear();
         QVERIFY(!noId.isValid());
         QVERIFY(composeStageMap(noId, {}).isEmpty());
-    }
-
-    /// A padding override of the wrong TYPE must not suppress the declared
-    /// default. QVariant::toDouble() answers 0.0 for anything it cannot
-    /// convert, so gating on presence alone silently collapsed a pack's
-    /// margin to zero whenever a stored profile held a non-numeric value.
-    void paddingRequest_ignores_a_non_numeric_override()
-    {
-        SurfaceShaderEffect e = basePack();
-        e.paddingParam = QStringLiteral("glowSize");
-        e.parameters.append(floatParam(QStringLiteral("glowSize"), 16.0));
-
-        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), QStringLiteral("not a number")}}), 16.0);
-        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), QVariant()}}), 16.0);
-        // A numeric string is a legitimate override and still wins.
-        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), QStringLiteral("24")}}), 24.0);
-    }
-
-    /// A non-finite padding must not escape into a caller's clamp.
-    ///
-    /// NaN and infinity convert cleanly, so the type check above lets them
-    /// through; only the explicit isfinite() test stops them. This matters
-    /// past the aesthetics: the compositor bounds the result and then narrows
-    /// it to an int for the capture canvas, and narrowing a NaN or an
-    /// infinity to an integer is undefined behaviour. A qBound() around the
-    /// value does not save it either, since every comparison against NaN is
-    /// false.
-    void paddingRequest_rejects_a_non_finite_override()
-    {
-        SurfaceShaderEffect e = basePack();
-        e.paddingParam = QStringLiteral("glowSize");
-        e.parameters.append(floatParam(QStringLiteral("glowSize"), 16.0));
-
-        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), qQNaN()}}), 16.0);
-        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), qInf()}}), 16.0);
-        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), -qInf()}}), 16.0);
-    }
-
-    /// The same guard on the DECLARED side, which has its own conversion.
-    ///
-    /// A pack whose own default is non-finite has nothing to fall back to, so
-    /// the request has to come out as no padding at all rather than as a
-    /// value no caller can clamp.
-    void paddingRequest_rejects_a_non_finite_declared_default()
-    {
-        SurfaceShaderEffect e = basePack();
-        e.paddingParam = QStringLiteral("glowSize");
-        e.parameters.append(floatParam(QStringLiteral("glowSize"), qQNaN()));
-
-        QCOMPARE(paddingRequest(e, {}), 0.0);
     }
 };
 

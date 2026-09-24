@@ -448,6 +448,8 @@ private Q_SLOTS:
         QCOMPARE(SurfaceShaderEffect::fromJson(obj).bufferScales.size(), SurfaceShaderEffect::kMaxBufferPasses);
     }
 
+    // ── parseEffect scan + builtin-buffer helpers ────────────────────────
+
     void parseEffect_clears_orphan_buffer_overrides_on_single_pass_pack()
     {
         // A pack that declares per-buffer wrap/filter overrides WITHOUT
@@ -727,6 +729,45 @@ private Q_SLOTS:
         QVERIFY(SurfaceShaderRegistry::translateSurfaceParams(e, QVariantMap{}).isEmpty());
     }
 
+    /// A parameter id declared twice keeps the FIRST entry and drops the rest.
+    ///
+    /// Not a tidiness rule. buildParamPreamble emits one `#define p_<id> …` per
+    /// parameter, so two entries sharing an id redefine the same macro with a
+    /// different replacement list, which is a GLSL compile error that takes the
+    /// whole pack down to a black surface. Losing the second editor row is the
+    /// far smaller loss, and it is the first entry that must survive because
+    /// lanes are assigned in declaration order.
+    void duplicate_parameter_ids_are_dropped()
+    {
+        QJsonObject meta;
+        meta.insert(QLatin1String("id"), QStringLiteral("dupes"));
+        meta.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+
+        const auto floatParam = [](const QString& id, double def) {
+            QJsonObject p;
+            p.insert(QLatin1String("id"), id);
+            p.insert(QLatin1String("name"), id);
+            p.insert(QLatin1String("type"), QStringLiteral("float"));
+            p.insert(QLatin1String("default"), def);
+            return p;
+        };
+
+        QJsonArray params;
+        params.append(floatParam(QStringLiteral("radius"), 1.0));
+        params.append(floatParam(QStringLiteral("radius"), 2.0)); // duplicate
+        params.append(floatParam(QStringLiteral("spread"), 3.0));
+        meta.insert(QLatin1String("parameters"), params);
+
+        const SurfaceShaderEffect e = SurfaceShaderEffect::fromJson(meta);
+        QCOMPARE(e.parameters.size(), 2);
+        // The FIRST radius survives, with its own default.
+        QCOMPARE(e.parameters.at(0).id, QStringLiteral("radius"));
+        QCOMPARE(e.parameters.at(0).defaultValue.toDouble(), 1.0);
+        // And the parameter after the duplicate keeps its position, so the
+        // lane it is assigned does not shift.
+        QCOMPARE(e.parameters.at(1).id, QStringLiteral("spread"));
+        QCOMPARE(e.parameters.at(1).defaultValue.toDouble(), 3.0);
+    }
     // ── Path traversal guard ─────────────────────────────────────────────
 
     void traversal_texture_path_is_rejected_valid_slot_survives()
@@ -788,46 +829,6 @@ private Q_SLOTS:
         friendly.insert(QStringLiteral("uTexture1"), QStringLiteral("../../../etc/passwd"));
         const QVariantMap out = registry.translateSurfaceParams(QStringLiteral("anchored"), friendly);
         QVERIFY(!out.contains(QStringLiteral("uTexture1")));
-    }
-
-    /// A parameter id declared twice keeps the FIRST entry and drops the rest.
-    ///
-    /// Not a tidiness rule. buildParamPreamble emits one `#define p_<id> …` per
-    /// parameter, so two entries sharing an id redefine the same macro with a
-    /// different replacement list, which is a GLSL compile error that takes the
-    /// whole pack down to a black surface. Losing the second editor row is the
-    /// far smaller loss, and it is the first entry that must survive because
-    /// lanes are assigned in declaration order.
-    void duplicate_parameter_ids_are_dropped()
-    {
-        QJsonObject meta;
-        meta.insert(QLatin1String("id"), QStringLiteral("dupes"));
-        meta.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
-
-        const auto floatParam = [](const QString& id, double def) {
-            QJsonObject p;
-            p.insert(QLatin1String("id"), id);
-            p.insert(QLatin1String("name"), id);
-            p.insert(QLatin1String("type"), QStringLiteral("float"));
-            p.insert(QLatin1String("default"), def);
-            return p;
-        };
-
-        QJsonArray params;
-        params.append(floatParam(QStringLiteral("radius"), 1.0));
-        params.append(floatParam(QStringLiteral("radius"), 2.0)); // duplicate
-        params.append(floatParam(QStringLiteral("spread"), 3.0));
-        meta.insert(QLatin1String("parameters"), params);
-
-        const SurfaceShaderEffect e = SurfaceShaderEffect::fromJson(meta);
-        QCOMPARE(e.parameters.size(), 2);
-        // The FIRST radius survives, with its own default.
-        QCOMPARE(e.parameters.at(0).id, QStringLiteral("radius"));
-        QCOMPARE(e.parameters.at(0).defaultValue.toDouble(), 1.0);
-        // And the parameter after the duplicate keeps its position, so the
-        // lane it is assigned does not shift.
-        QCOMPARE(e.parameters.at(1).id, QStringLiteral("spread"));
-        QCOMPARE(e.parameters.at(1).defaultValue.toDouble(), 3.0);
     }
 };
 

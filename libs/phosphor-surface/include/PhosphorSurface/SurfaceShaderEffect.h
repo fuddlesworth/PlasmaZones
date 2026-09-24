@@ -73,11 +73,12 @@ namespace PhosphorSurfaceShaders {
  *
  * ## Trimmed vs AnimationShaderEffect
  *
- * This struct mirrors the multipass / buffer fields that
- * `AnimationShaderEffect` carries, but still OMITS the wallpaper / depth-
- * extent-style event and `fboExtent` fields that only make sense for a
- * finite-duration transition, while keeping the identical identity,
- * shader-path, preview, parameter, and texture-slot shape.
+ * Neither struct is a subset of the other. This one OMITS the event-class and
+ * `fboExtent` fields that only make sense for a finite-duration transition,
+ * and ADDS two buffer fields the animation twin does not carry: `bufferScales`
+ * (per-pass render scales, which is what lets a pyramid diverge its levels)
+ * and `halfFloatBuffers` (animation buffers are pinned RGBA16F). The identity,
+ * shader-path, preview, parameter and texture-slot shape are identical.
  */
 struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
 {
@@ -306,6 +307,10 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     /// the fold binds exactly that many `iChannelN` samplers and a pass samples
     /// only the passes before it, so a buffer past the cap is structurally
     /// unreadable — allocated, cleared, drawn, and sampled by nothing.
+    ///
+    /// PER PACK, not per window. A decoration CHAIN runs several packs, each
+    /// with its own budget, so a window's worst case is this cap times the
+    /// number of multipass packs in its chain. The bundled chains hold one.
     static constexpr int kMaxBufferPasses = PhosphorShaders::kMaxBufferPasses;
 
     /// Declared shader inputs beyond the standard surface set
