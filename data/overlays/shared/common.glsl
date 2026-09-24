@@ -3,8 +3,12 @@
 //
 // PlasmaZones shared shader helpers (GLSL #version 450).
 // Include from effect.frag or zone.vert with:
-//   #include <common.glsl>   (from global shaders dir)
-//   #include "common.glsl"   (from current shader dir if copied locally)
+//   #include <common.glsl>
+//
+// The ANGLE form only. A quoted include resolves against the shader's own
+// directory, which the include-root rule rejects for a shared header: a pack
+// that copied one locally would compile against its copy and drift from the
+// contract the runtime and the validator both check it against.
 //
 // Bindings 0-1: UBO and labels. Channels (2-9) in multipass.glsl.
 
@@ -21,7 +25,9 @@ layout(std140, binding = 0) uniform ZoneUniforms {
     vec2 iResolution;
     int zoneCount;
     int highlightedCount;
-    vec4 iMouse;        // xy = pixels, zw = normalized (0-1), Qt Y-down (Y=0 at top)
+    vec4 iMouse;        // xy = pixels, zw = the same point over the zone extent,
+                        // UNCLAMPED: negative for the off-region sentinel and past
+                        // 1 on another screen. Qt Y-down (Y=0 at top)
     vec4 iDate;         // xyzw = year, month, day, seconds since midnight
     vec4 customParams[8];
     vec4 customColors[16];
@@ -87,7 +93,7 @@ const float TAU = 6.28318530718;
 // iTime wraps at K_TIME_WRAP seconds to preserve float32 precision. For usage
 // patterns like `fbm(pos + time * speed)` or `fract(time * speed)` the wrap is
 // visible once per period but harmless — just use iTime directly. For sin/cos
-// phase animations that must not discontinuity, use the timeSin/timeCos
+// phase animations that must not jump at the wrap, use the timeSin/timeCos
 // helpers below: they compose phase from (iTimeHi, iTime) via angle-addition,
 // with the large-phase term reduced mod TAU so float32 quantization of
 // `speed * iTimeHi` never leaks into the result.
@@ -116,15 +122,24 @@ float timeCos(float speed, float offset) {
     return cos(phaseHiMod) * cos(phaseLo) - sin(phaseHiMod) * sin(phaseLo);
 }
 
-// Resolution-independent pixel scale factor. Normalizes pixel-space values
-// (border width, glow radius, chromatic aberration, etc.) so they occupy the
-// same fraction of the screen at any resolution. Reference: 1080p.
-// Usage: multiply hardcoded pixel thresholds by pxScale().
+// Resolution-independent pixel scale factor, relative to 1080p. Use it for a
+// length that is genuinely SCREEN-relative, so that it covers the same fraction
+// of the display at any resolution. neon-city's gaussian halo reach is the
+// shape of thing it is for.
+//
+// NOT for a length measured against a ZONE. Border widths, corner radii, glow
+// insets and edge bands are all zone-relative and go through zoneLen() below,
+// which scales by uZoneScale. This doc used to say the opposite, naming border
+// width and glow radius as pxScale material, and the packs have been carrying
+// "zoneLen(), not pxScale()" comments against it ever since.
 float pxScale() { return max(iResolution.y, 1.0) / 1080.0; }
 
 // Compute fragment coordinates from texture coords.
-// Y is always flipped: both OpenGL (Y-up FBO) and Vulkan (negative-height viewport)
-// store buffer data requiring a Y-flip when sampling. iFlipBufferY is always 1.
+//
+// The Y flip here is the TEXCOORD convention, not the buffer-sampling one: the
+// incoming uv is Y-up and fragment coordinates are Y-down. This function samples
+// nothing and never reads iFlipBufferY; the buffer-sampling rationale belongs to
+// channelUv, from which it was copied verbatim.
 vec2 fragCoordFromTexCoord(vec2 uv) {
     return vec2(uv.x, 1.0 - uv.y) * iResolution;
 }
@@ -388,7 +403,10 @@ vec2 labelsUv(vec2 fragCoord) {
     return fragCoord / res;
 }
 
-// Premultiplied alpha over blend: result = src over dst
+// STRAIGHT-alpha "over": both inputs carry un-premultiplied rgb, and the result
+// does too. The body multiplies each side by its own alpha and divides the sum
+// back out by the composited alpha, which is the straight-alpha form. A
+// premultiplied over would be src + dst * (1 - src.a) with no divide.
 vec4 blendOver(vec4 dst, vec4 src) {
     float srcA = src.a;
     float dstA = dst.a;
@@ -398,7 +416,8 @@ vec4 blendOver(vec4 dst, vec4 src) {
     return vec4(outRgb, outA);
 }
 
-// Soft border factor from SDF distance d (0 at edge, 1 inside border)
+// Soft border factor from SDF distance d: 1 ON the edge, falling to 0 at
+// borderWidth away from it. (The doc had this backwards.)
 float softBorder(float d, float borderWidth) {
     // A width of 0 means the user turned the border off, and it has to be
     // handled before the smoothstep rather than inside it. GLSL leaves
@@ -503,9 +522,13 @@ float fbm(vec2 uv, int octaves, float rotAngle) {
 // Tri-stop hue cycle: three colors around a loop; fract(t) picks the position.
 vec3 triStopPalette(float t, vec3 primary, vec3 secondary, vec3 accent) {
     t = fract(t);
-    if (t < 0.33)      return mix(primary, secondary, t * 3.0);
-    else if (t < 0.66) return mix(secondary, accent, (t - 0.33) * 3.0);
-    else               return mix(accent, primary, (t - 0.66) * 3.0);
+    // Exact thirds, matching the 3.0 scale. Testing 0.33 and 0.66 against a
+    // third of the way each left a 1% jump at both seams, because the branch
+    // ended at 0.99 of its mix and the next one restarted at 0.
+    const float kThird = 1.0 / 3.0;
+    if (t < kThird)           return mix(primary, secondary, t * 3.0);
+    else if (t < 2.0 * kThird) return mix(secondary, accent, (t - kThird) * 3.0);
+    else                       return mix(accent, primary, (t - 2.0 * kThird) * 3.0);
 }
 
 // Inigo Quilez cosine palette: a + b * cos(TAU * (c * t + d)).
@@ -522,7 +545,9 @@ float zoneVitality(bool isHighlighted) {
     return isHighlighted ? 1.0 : 0.3;
 }
 
-// Desaturate toward grayscale proportional to dormancy (1=full color, 0=gray).
+// Desaturate toward grayscale proportional to dormancy. 1 is full colour and 0
+// keeps 40% of it, deliberately: the mix floor is 0.4, so a dormant zone reads
+// as muted rather than grey.
 vec3 vitalityDesaturate(vec3 col, float vitality) {
     float lum = luminance(col);
     return mix(vec3(lum), col, 0.4 + 0.6 * vitality);

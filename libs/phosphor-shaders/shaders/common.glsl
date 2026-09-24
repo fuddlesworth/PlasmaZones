@@ -25,7 +25,9 @@ layout(std140, binding = 0) uniform ShaderUniforms {
     vec2 iResolution;
     int appField0;          // consumer-defined (e.g. Phosphor: zoneCount)
     int appField1;          // consumer-defined (e.g. Phosphor: highlightedCount)
-    vec4 iMouse;        // xy = pixels, zw = normalized (0-1), Qt Y-down (Y=0 at top)
+    vec4 iMouse;        // xy = pixels, zw = the same point over the zone extent,
+                        // UNCLAMPED: negative for the off-region sentinel and past
+                        // 1 on another screen. Qt Y-down (Y=0 at top)
     vec4 iDate;         // xyzw = year, month, day, seconds since midnight
     vec4 customParams[8];
     vec4 customColors[16];
@@ -50,7 +52,7 @@ const float TAU = 6.28318530718;
 // iTime wraps at K_TIME_WRAP seconds to preserve float32 precision. For usage
 // patterns like `fbm(pos + time * speed)` or `fract(time * speed)` the wrap is
 // visible once per period but harmless — just use iTime directly. For sin/cos
-// phase animations that must not discontinuity, use the timeSin/timeCos
+// phase animations that must not jump at the wrap, use the timeSin/timeCos
 // helpers below: they compose phase from (iTimeHi, iTime) via angle-addition,
 // with the large-phase term reduced mod TAU so float32 quantization of
 // `speed * iTimeHi` never leaks into the result.
@@ -147,7 +149,10 @@ vec2 hash22(vec2 p) {
     return vec2(float(h1 >> 16u), float(h2 >> 16u)) / 65535.0;
 }
 
-// Premultiplied alpha over blend: result = src over dst
+// STRAIGHT-alpha "over": both inputs carry un-premultiplied rgb, and the result
+// does too. The body multiplies each side by its own alpha and divides the sum
+// back out by the composited alpha, which is the straight-alpha form. A
+// premultiplied over would be src + dst * (1 - src.a) with no divide.
 vec4 blendOver(vec4 dst, vec4 src) {
     float srcA = src.a;
     float dstA = dst.a;
@@ -157,7 +162,8 @@ vec4 blendOver(vec4 dst, vec4 src) {
     return vec4(outRgb, outA);
 }
 
-// Soft border factor from SDF distance d (0 at edge, 1 inside border)
+// Soft border factor from SDF distance d: 1 ON the edge, falling to 0 at
+// borderWidth away from it. (The doc had this backwards.)
 float softBorder(float d, float borderWidth) {
     float borderDist = abs(d);
     return 1.0 - smoothstep(0.0, borderWidth, borderDist);
