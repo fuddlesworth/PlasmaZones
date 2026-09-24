@@ -71,6 +71,11 @@ constexpr int kFirstFreeConsumerBinding =
 /// and no upstream guarantee is being quoted. Going higher risks
 /// pipeline-creation failure on conservative drivers.
 constexpr int kMaxConsumerBinding = PhosphorShaders::Bindings::kMaxBinding;
+// An exported MIRROR of Bindings::kChannelBase, not a value this library tests
+// against: the consumer-binding predicate forwards to
+// PhosphorShaders::isConsumerBinding, and the setExtraBinding rejection reads
+// kFirstFreeConsumerBinding, kReservedBindingRangeEnd and kMaxConsumerBinding.
+// Kept for an out-of-tree consumer describing the same range.
 constexpr int kReservedBindingRangeStart =
     PhosphorShaders::Bindings::kChannelBase; ///< First library-managed binding above 0
 constexpr int kReservedBindingRangeEnd = PhosphorShaders::Bindings::kReservedEnd; ///< Last library-managed binding

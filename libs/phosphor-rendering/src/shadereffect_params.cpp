@@ -549,10 +549,20 @@ void ShaderEffect::setBufferWrap(const QString& wrap)
 
 void ShaderEffect::setBufferWraps(const QStringList& wraps)
 {
-    if (m_bufferWraps == wraps) {
+    // Normalize-then-guard, like setBufferWrap below and setUserTextureWrap
+    // above. Comparing the RAW list let two spellings that normalize
+    // identically ("" and "clamp") defeat the guard and fire a spurious
+    // update() per push, and stored a token the node would normalize again
+    // on every use.
+    QStringList use;
+    use.reserve(wraps.size());
+    for (const QString& w : wraps) {
+        use.append(ShaderNodeRhi::normalizeWrapMode(w));
+    }
+    if (m_bufferWraps == use) {
         return;
     }
-    m_bufferWraps = wraps;
+    m_bufferWraps = std::move(use);
     Q_EMIT bufferWrapsChanged();
     update();
 }
@@ -570,10 +580,16 @@ void ShaderEffect::setBufferFilter(const QString& filter)
 
 void ShaderEffect::setBufferFilters(const QStringList& filters)
 {
-    if (m_bufferFilters == filters) {
+    // Normalize-then-guard, for the same reason as setBufferWraps above.
+    QStringList use;
+    use.reserve(filters.size());
+    for (const QString& f : filters) {
+        use.append(ShaderNodeRhi::normalizeFilterMode(f));
+    }
+    if (m_bufferFilters == use) {
         return;
     }
-    m_bufferFilters = filters;
+    m_bufferFilters = std::move(use);
     Q_EMIT bufferFiltersChanged();
     update();
 }

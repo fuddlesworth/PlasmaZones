@@ -58,10 +58,11 @@ inline constexpr int kDefaultUserTextureSvgSize = 1024;
 /// referencing one).
 ///
 /// Returns the PEELED variant only — it deliberately does not convert to a
-/// payload type, because the two call sites that need it want different
-/// terminal conversions (`ShaderEffect::setWallpaperTextureVariant` wants a
-/// QImage, `ZoneShaderItem::setLabelsTextureVariant` wants a
-/// `ZoneLabelTexture` through a registered converter). Each caller keeps its
+/// payload type, because each call site wants a different terminal
+/// conversion. There are THREE: `ShaderEffect::setAudioSpectrumVariant` walks
+/// a QVariantList into a QVector<float>, `ShaderEffect::setWallpaperTextureVariant`
+/// wants a QImage, and `ZoneShaderItem::setLabelsTextureVariant` wants a
+/// `ZoneLabelTexture` through a registered converter. Each caller keeps its
 /// own conversion and its own handling of an invalid or unconvertible result.
 PHOSPHORRENDERING_EXPORT QVariant peelQmlVariant(const QVariant& value);
 
@@ -97,8 +98,8 @@ class PHOSPHORRENDERING_EXPORT ShaderEffect : public QQuickItem
     /// QML callers — no FrameAnimation / Timer plumbing required.
     ///
     /// When false (default) the iTime/iTimeDelta/iFrame Q_PROPERTYs stay
-    /// fully under the caller's control. This is what kwin-effect's
-    /// SurfaceAnimator and phosphor-animation's transition shaders use:
+    /// fully under the caller's control. This is what the daemon's
+    /// SurfaceAnimator (phosphor-animation) and its transition shaders use:
     /// they drive iTime by hand to map the animation curve through the
     /// shader without committing to wall-clock pacing.
     ///

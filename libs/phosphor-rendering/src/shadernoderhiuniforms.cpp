@@ -171,6 +171,22 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
             state.textureResolution[i][1] = 1.0f;
         }
     }
+    // SLOT 0 FOLLOWS ITS BINDING, which the loop above cannot see. When a
+    // source-texture provider is set, appendUserTextureBindings binds
+    // m_lastSourceRhiTexture at uTexture0 and never consults
+    // m_userTextureImages[0], so the loop wrote the (1, 1) fallback for a slot
+    // that is sampling a live surface. On the daemon animation path the
+    // override is always in play and the registry maps a pack's declared
+    // textures to uTexture<slot+1>, so [0] was the fallback on every frame.
+    // Read the size off the bound texture instead, and keep the fallback only
+    // for the transient where the provider has nothing resolved yet.
+    if (m_sourceTextureProvider && m_lastSourceRhiTexture) {
+        const QSize sourceSize = m_lastSourceRhiTexture->pixelSize();
+        if (!sourceSize.isEmpty()) {
+            state.textureResolution[0][0] = static_cast<float>(sourceSize.width());
+            state.textureResolution[0][1] = static_cast<float>(sourceSize.height());
+        }
+    }
 
     m_uboProfile->fill(state);
 }
