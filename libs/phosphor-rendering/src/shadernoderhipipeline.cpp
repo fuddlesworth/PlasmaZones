@@ -112,6 +112,17 @@ bool ShaderNodeRhi::ensureBufferTarget()
                 // the TEXTURE's state, so a latched failed sampler would never
                 // be re-created yet still pass appendDepthBinding's null check.
                 m_depthSampler.reset();
+                // Drop the freshly created TEXTURE too, and not only for
+                // symmetry. This whole block is gated on the texture's
+                // existence and pixelSize, both of which the new texture now
+                // satisfies, so leaving it installed means the next frame
+                // skips the block entirely and the sampler is never retried.
+                // The node would then run on with a depth texture and no
+                // sampler, which appendDepthBinding cannot bind, producing a
+                // resource layout that does not match a depth pack's own
+                // SPIR-V. Resetting it makes the next frame re-enter and try
+                // again.
+                m_depthTexture.reset();
                 // The depth TEXTURE was already replaced above, so the SRBs
                 // still installed reference the one it displaced. Same
                 // freed-object draw as the texture failure path.
@@ -163,17 +174,57 @@ bool ShaderNodeRhi::ensureBufferTarget()
     // integrated GPUs — but the format is a per-pack contract, because a
     // buffer can legitimately store HDR radiance, signed data, or a feedback
     // accumulator whose decay quantises to a standstill at 8 bits.
-    const QRhiTexture::Format bufferFormat = m_halfFloatBuffers ? QRhiTexture::RGBA16F : QRhiTexture::RGBA8;
+    //
+    // RGBA8 is documented as always supported; RGBA16F is not, and asking for
+    // an unsupported format does not fail gracefully — create() returns false
+    // and the pack goes black with a per-frame warning naming only the size.
+    // Ask the backend first and degrade to RGBA8, which is what the pack would
+    // have had before it declared the preference, saying so once.
+    QRhiTexture::Format bufferFormat = m_halfFloatBuffers ? QRhiTexture::RGBA16F : QRhiTexture::RGBA8;
+    if (bufferFormat == QRhiTexture::RGBA16F
+        && !rhi->isTextureFormatSupported(QRhiTexture::RGBA16F, QRhiTexture::RenderTarget)) {
+        bufferFormat = QRhiTexture::RGBA8;
+        if (!m_halfFloatUnsupportedWarned) {
+            m_halfFloatUnsupportedWarned = true;
+            qCWarning(lcShaderNode) << "RGBA16F buffer textures are not supported as render targets on this backend"
+                                    << "— falling back to RGBA8; a pack storing HDR radiance, signed data or a slow"
+                                    << "feedback decay will band or clamp";
+        }
+    }
     // A pass whose filter is "mipmap" needs a texture that HAS a mip chain and
     // may have one generated into it. Without these two flags the token did
     // nothing at all: ensureBufferSampler set the sampler's mip filter, nothing
     // allocated the levels, and nothing generated them, so a pack asking for
     // mipmap sampled level 0 exactly as "linear" does.
-    auto createTextureAndRT = [rhi, bufferFormat, this](std::unique_ptr<QRhiTexture>& tex,
-                                                        std::unique_ptr<QRhiTextureRenderTarget>& rt,
-                                                        std::unique_ptr<QRhiRenderPassDescriptor>& rpd,
-                                                        const QSize& size, bool wantMips) -> bool {
-        const QRhiTexture::Flags baseFlags = QRhiTexture::RenderTarget | QRhiTexture::UsedWithLoadStore;
+    // ONE latched warning for the whole family of buffer-target create
+    // failures, naming the size and format that failed. ensureBufferTarget is
+    // re-entered from prepare() on every frame while it returns false, so the
+    // six call sites below used to emit a warning per frame per failing pass
+    // for as long as the condition lasted, which on a persistent failure fills
+    // the journal at frame cadence. Those call sites are qCDebug now: they say
+    // WHICH buffer, this says WHY, and only the "why" is worth a warning.
+    const auto warnCreateFailed = [this, bufferFormat](const QString& what, const QSize& size, bool wantMips) {
+        if (m_bufferTargetCreateWarned) {
+            return;
+        }
+        m_bufferTargetCreateWarned = true;
+        qCWarning(lcShaderNode) << "Buffer" << what << "create failed at" << size
+                                << "format=" << (bufferFormat == QRhiTexture::RGBA16F ? "RGBA16F" : "RGBA8")
+                                << "mipmapped=" << wantMips << "— multipass is disabled while this persists";
+    };
+    auto createTextureAndRT = [rhi, bufferFormat, warnCreateFailed,
+                               this](std::unique_ptr<QRhiTexture>& tex, std::unique_ptr<QRhiTextureRenderTarget>& rt,
+                                     std::unique_ptr<QRhiRenderPassDescriptor>& rpd, const QSize& size,
+                                     bool wantMips) -> bool {
+        // RenderTarget alone. UsedWithLoadStore declares that the texture will
+        // be used with image load/store, which is a compute-shader facility
+        // this library has no compute pipelines to use. Declaring it anyway is
+        // not free: a backend honours the declaration by requesting storage
+        // usage on the native image, and storage support is a separate format
+        // capability, so the flag can turn a perfectly renderable RGBA16F
+        // target into a create() failure on a driver that does not advertise
+        // storage for it.
+        const QRhiTexture::Flags baseFlags = QRhiTexture::RenderTarget;
         const QRhiTexture::Flags mipFlags = QRhiTexture::MipMapped | QRhiTexture::UsedWithGenerateMips;
         tex.reset(rhi->newTexture(bufferFormat, size, 1, wantMips ? (baseFlags | mipFlags) : baseFlags));
         // A backend that will not give us a mipmapped render target for this
@@ -193,6 +244,7 @@ bool ShaderNodeRhi::ensureBufferTarget()
         // against an uncreated texture and render target.
         if (!tex->create()) {
             tex.reset();
+            warnCreateFailed(QStringLiteral("texture"), size, wantMips);
             // The caller's old texture is already gone (the reset above
             // replaced it before create() was attempted), and any SRB or
             // pipeline built against it is still installed holding a raw
@@ -218,11 +270,15 @@ bool ShaderNodeRhi::ensureBufferTarget()
             tex.reset();
             rt.reset();
             rpd.reset();
+            warnCreateFailed(QStringLiteral("render target"), size, wantMips);
             // Same as the texture failure above: the old texture and render
             // target are gone, the installed bindings still point at them.
             resetAllBindingsAndPipelines();
             return false;
         }
+        // A success clears the latch, so a failure that recurs after a genuine
+        // recovery is reported again rather than swallowed for the session.
+        m_bufferTargetCreateWarned = false;
         // A new or resized target changes iChannelResolution, which is resolved
         // node-side from the LIVE textures during the UBO upload and is gated on
         // m_uniformsDirty. Without re-arming here, a pass that resized carried on
@@ -239,7 +295,7 @@ bool ShaderNodeRhi::ensureBufferTarget()
     };
 
     if (multiBufferMode) {
-        const int n = qMin(m_bufferPaths.size(), kMaxBufferPasses);
+        const int n = static_cast<int>(qMin(m_bufferPaths.size(), static_cast<qsizetype>(kMaxBufferPasses)));
         bool needCreate = false;
         for (int i = 0; i < n; ++i) {
             if (!m_multiBufferTextures[i] || m_multiBufferTextures[i]->pixelSize() != passSize(i)) {
@@ -248,13 +304,24 @@ bool ShaderNodeRhi::ensureBufferTarget()
             }
         }
         if (needCreate) {
+            // Per-pass sizes, not just the single scale. A pack declaring
+            // bufferScales renders each pass at its own resolution (a Kawase
+            // pyramid is the whole point of the feature), so a log naming only
+            // m_bufferScale describes a pass count it does not have and makes
+            // a mis-scaled pyramid impossible to read off the journal.
+            QStringList passSizes;
+            passSizes.reserve(n);
+            for (int i = 0; i < n; ++i) {
+                const QSize s = passSize(i);
+                passSizes.append(QStringLiteral("%1:%2x%3").arg(i).arg(s.width()).arg(s.height()));
+            }
             qCInfo(lcShaderNode) << "Creating multi-buffer textures:"
-                                 << "bufferSize=" << bufferSize << "m_width=" << m_width << "m_height=" << m_height
-                                 << "bufferScale=" << m_bufferScale << "passes=" << n;
+                                 << "m_width=" << m_width << "m_height=" << m_height << "bufferScale=" << m_bufferScale
+                                 << "passes=" << n << "sizes=" << passSizes.join(QLatin1Char(' '));
             for (int i = 0; i < n; ++i) {
                 if (!createTextureAndRT(m_multiBufferTextures[i], m_multiBufferRenderTargets[i],
                                         m_multiBufferRenderPassDescriptors[i], passSize(i), wantsMips(i))) {
-                    qCWarning(lcShaderNode) << "Failed to create multi-buffer texture" << i;
+                    qCDebug(lcShaderNode) << "Failed to create multi-buffer texture" << i << "at" << passSize(i);
                     return false;
                 }
             }
@@ -285,16 +352,19 @@ bool ShaderNodeRhi::ensureBufferTarget()
     if (!m_bufferTexture) {
         if (!createTextureAndRT(m_bufferTexture, m_bufferRenderTarget, m_bufferRenderPassDescriptor, singleSize,
                                 wantsMips(0))) {
-            qCWarning(lcShaderNode) << "Failed to create buffer texture";
+            qCDebug(lcShaderNode) << "Failed to create buffer texture";
             return false;
         }
         if (!ensureBufferSampler(rhi, 0)) {
             return false;
         }
+        // Re-arm BEFORE B is attempted, not after both succeed. See the resize
+        // branch below for why the ordering is the whole fix.
+        m_bufferFeedbackCleared = false;
         if (m_bufferFeedback
             && !createTextureAndRT(m_bufferTextureB, m_bufferRenderTargetB, m_bufferRenderPassDescriptorB, singleSize,
                                    wantsMips(0))) {
-            qCWarning(lcShaderNode) << "Failed to create buffer texture B (ping-pong)";
+            qCDebug(lcShaderNode) << "Failed to create buffer texture B (ping-pong)";
             return false;
         }
         m_srb.reset();
@@ -304,13 +374,21 @@ bool ShaderNodeRhi::ensureBufferTarget()
     if (m_bufferTexture->pixelSize() != singleSize) {
         if (!createTextureAndRT(m_bufferTexture, m_bufferRenderTarget, m_bufferRenderPassDescriptor, singleSize,
                                 wantsMips(0))) {
-            qCWarning(lcShaderNode) << "Failed to resize buffer texture";
+            qCDebug(lcShaderNode) << "Failed to resize buffer texture";
             return false;
         }
+        // Re-armed HERE, immediately after A is replaced, rather than at the
+        // bottom of the branch. A is now a brand-new texture with undefined
+        // contents. If the B create below fails we return early, and next frame
+        // A is already the right size so this branch is skipped entirely and
+        // the B-only branch below runs instead — which used to leave the flag
+        // on whatever it was. A feedback pack would then accumulate from
+        // whatever the driver handed back rather than from cleared targets.
+        m_bufferFeedbackCleared = false;
         if (m_bufferFeedback
             && !createTextureAndRT(m_bufferTextureB, m_bufferRenderTargetB, m_bufferRenderPassDescriptorB, singleSize,
                                    wantsMips(0))) {
-            qCWarning(lcShaderNode) << "Failed to resize buffer texture B";
+            qCDebug(lcShaderNode) << "Failed to resize buffer texture B";
             return false;
         }
         m_bufferPipeline.reset();
@@ -318,17 +396,19 @@ bool ShaderNodeRhi::ensureBufferTarget()
         m_bufferSrbB.reset();
         m_srb.reset();
         m_srbB.reset();
-        m_bufferFeedbackCleared = false; // New textures need clearing
     } else if (m_bufferFeedback && !m_bufferTextureB) {
         if (!createTextureAndRT(m_bufferTextureB, m_bufferRenderTargetB, m_bufferRenderPassDescriptorB, singleSize,
                                 wantsMips(0))) {
-            qCWarning(lcShaderNode) << "Failed to create buffer texture B (ping-pong)";
+            qCDebug(lcShaderNode) << "Failed to create buffer texture B (ping-pong)";
             return false;
         }
         m_bufferPipeline.reset();
         m_bufferSrb.reset();
         m_srb.reset();
         m_srbB.reset();
+        // A fresh B is half of an uncleared ping-pong pair, whichever branch
+        // created A. Same reason as above.
+        m_bufferFeedbackCleared = false;
     }
     if (m_bufferTexture && !m_bufferSamplers[0]) {
         if (!ensureBufferSampler(rhi, 0)) {
@@ -348,12 +428,23 @@ bool ShaderNodeRhi::ensureBufferTarget()
 
 bool ShaderNodeRhi::ensureDummyChannelResources(QRhi* rhi)
 {
+    // Both arms below log. This is the hardest failure in the file: ensurePipeline
+    // treats a false here as fail-closed, prepare() then bails, and the node paints
+    // nothing for the rest of its life if the condition persists. Every sibling
+    // ensure* already names its failure, and this one used to be the silent
+    // exception, so the symptom was a blank pack with an empty journal.
     if (!m_dummyChannelTexture) {
         m_dummyChannelTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
         if (m_dummyChannelTexture->create()) {
             m_dummyChannelTextureNeedsUpload = true;
         } else {
             m_dummyChannelTexture.reset();
+            if (!m_dummyChannelWarned) {
+                m_dummyChannelWarned = true;
+                qCWarning(lcShaderNode) << "Failed to create the 1x1 dummy channel texture"
+                                        << "— every unbound channel, user-texture, wallpaper and depth slot "
+                                           "substitutes it, so nothing can be drawn";
+            }
             return false;
         }
     }
@@ -362,10 +453,45 @@ bool ShaderNodeRhi::ensureDummyChannelResources(QRhi* rhi)
                                                     QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
         if (!m_dummyChannelSampler->create()) {
             m_dummyChannelSampler.reset();
+            if (!m_dummyChannelWarned) {
+                m_dummyChannelWarned = true;
+                qCWarning(lcShaderNode) << "Failed to create the dummy channel sampler"
+                                        << "— every unbound channel, user-texture, wallpaper and depth slot "
+                                           "substitutes it, so nothing can be drawn";
+            }
             return false;
         }
     }
     return true;
+}
+
+// ============================================================================
+// uploadDummyChannelTexture
+// ============================================================================
+
+// The dummy 1x1 texture is CREATED inside ensurePipeline, which prepare() runs
+// AFTER uploadDirtyTextures. Its transparent-black texel would therefore not
+// reach the GPU until the following frame, while the SRBs built in that same
+// ensurePipeline already bind it — so on the creating frame every unsupplied
+// channel or user-texture slot sampled whatever the driver left in a fresh
+// allocation instead of the documented transparent black. prepare() calls this
+// again after ensurePipeline for that reason; uploadDirtyTextures still calls it
+// first so the common case costs nothing.
+void ShaderNodeRhi::uploadDummyChannelTexture(QRhi* rhi, QRhiCommandBuffer* cb)
+{
+    if (!m_dummyChannelTextureNeedsUpload || !m_dummyChannelTexture) {
+        return;
+    }
+    QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
+    if (!batch) {
+        // Batch pool exhausted mid-record. Ask for the frame that retries,
+        // the way the grid upload in prepare() does.
+        requestAnotherFrame();
+        return;
+    }
+    batch->uploadTexture(m_dummyChannelTexture.get(), m_transparentFallbackImage);
+    cb->resourceUpdate(batch);
+    m_dummyChannelTextureNeedsUpload = false;
 }
 
 // ============================================================================
@@ -418,7 +544,7 @@ bool ShaderNodeRhi::ensureBufferPipeline()
         if (!ensureDummyChannelResources(rhi)) {
             return false;
         }
-        const int n = qMin(m_bufferPaths.size(), kMaxBufferPasses);
+        const int n = static_cast<int>(qMin(m_bufferPaths.size(), static_cast<qsizetype>(kMaxBufferPasses)));
         for (int i = 0; i < n; ++i) {
             QRhiRenderPassDescriptor* rpDesc = m_multiBufferRenderPassDescriptors[i]
                 ? m_multiBufferRenderPassDescriptors[i].get()
@@ -590,7 +716,7 @@ bool ShaderNodeRhi::ensurePipeline()
         std::unique_ptr<QRhiShaderResourceBindings> srb(rhi->newShaderResourceBindings());
         QVector<QRhiShaderResourceBinding> bindings;
         appendUboAndExtraBindings(bindings);
-        const int n = qMin(m_bufferPaths.size(), kMaxBufferPasses);
+        const int n = static_cast<int>(qMin(m_bufferPaths.size(), static_cast<qsizetype>(kMaxBufferPasses)));
         QRhiTexture* dummyTex = m_dummyChannelTexture.get();
         QRhiSampler* dummySam = m_dummyChannelSampler.get();
         for (int i = 0; i < kMaxBufferPasses; ++i) {
@@ -815,6 +941,18 @@ void ShaderNodeRhi::appendDepthBinding(QVector<QRhiShaderResourceBinding>& bindi
     QRhiTexture* tex = (writes || !haveDepth) ? m_dummyChannelTexture.get() : m_depthTexture.get();
     QRhiSampler* sam = (writes || !haveDepth) ? m_dummyChannelSampler.get() : m_depthSampler.get();
     if (!tex || !sam) {
+        // Same argument as appendWallpaperBinding's: unreachable in practice
+        // because ensurePipeline and ensureBufferPipeline both fail closed
+        // when the dummy resources are missing, and omitting the binding here
+        // would produce the exact layout mismatch the substitution exists to
+        // prevent. Say it once rather than leaving a pipeline-create failure
+        // to be diagnosed with nothing naming the cause.
+        if (!m_warnedDepthBindingOmitted) {
+            m_warnedDepthBindingOmitted = true;
+            qCWarning(lcShaderNode) << "Depth binding omitted: no depth resources and no dummy substitute"
+                                    << "(texture:" << static_cast<bool>(tex) << "sampler:" << static_cast<bool>(sam)
+                                    << ") — a pack including depth.glsl will fail its pipeline";
+        }
         return;
     }
     bindings.append(QRhiShaderResourceBinding::sampledTexture(PhosphorShaders::Bindings::kDepth,

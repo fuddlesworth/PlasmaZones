@@ -718,6 +718,13 @@ void ShaderNodeRhi::prepare()
         return;
     }
 
+    // ensurePipeline is where the 1x1 dummy channel texture is created, and the
+    // uploadDirtyTextures call above already ran. Without this second attempt
+    // the SRBs ensurePipeline just built bind a texture whose transparent-black
+    // texel does not reach the GPU until the next frame. Still ahead of every
+    // beginPass below, so the ordering is valid.
+    uploadDummyChannelTexture(rhi, cb);
+
     // ========================================================================
     // Multipass buffer passes recorded in prepare()
     // ========================================================================

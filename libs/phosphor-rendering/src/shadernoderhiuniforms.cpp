@@ -360,14 +360,7 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             cb->resourceUpdate(batch);
     }
 
-    if (m_dummyChannelTextureNeedsUpload && m_dummyChannelTexture) {
-        QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
-        if (batch) {
-            batch->uploadTexture(m_dummyChannelTexture.get(), m_transparentFallbackImage);
-            cb->resourceUpdate(batch);
-            m_dummyChannelTextureNeedsUpload = false;
-        }
-    }
+    uploadDummyChannelTexture(rhi, cb);
 
     if (m_dummyChannelTextureNeedsUpload)
         return;
@@ -725,6 +718,10 @@ void ShaderNodeRhi::releaseRhiResources()
     m_warnedAudioTruncated = false;
     m_warnedAudioCreateFailed = false;
     m_warnedWallpaperBindingOmitted = false;
+    m_warnedDepthBindingOmitted = false;
+    m_dummyChannelWarned = false;
+    m_halfFloatUnsupportedWarned = false;
+    m_bufferTargetCreateWarned = false;
     m_userTextureSamplerWarned.fill(false);
     m_transparentFallbackWarned = false;
     m_depthMultiBufferWarned = false;

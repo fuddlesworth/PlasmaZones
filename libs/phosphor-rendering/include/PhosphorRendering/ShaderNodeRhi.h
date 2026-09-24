@@ -482,6 +482,10 @@ private:
     bool ensureBufferPipeline();
     bool ensureBufferTarget();
     bool ensureDummyChannelResources(QRhi* rhi);
+    /// Upload the 1x1 dummy channel texel if it is pending. Called from
+    /// uploadDirtyTextures AND again from prepare() after ensurePipeline,
+    /// because that is where the texture is created. See the definition.
+    void uploadDummyChannelTexture(QRhi* rhi, QRhiCommandBuffer* cb);
     bool ensureBufferSampler(QRhi* rhi, int index);
     /// Drop every buffer-pass target and everything compiled against it
     /// (render targets, pass descriptors, pipelines, SRBs). Shared by
@@ -891,12 +895,26 @@ private:
     /// to build the binding list, and this is a diagnostic latch, not state the
     /// binding depends on.
     mutable bool m_warnedWallpaperBindingOmitted = false;
+    /// One-shot twin of the above for the depth binding, mutable for the same
+    /// reason (appendDepthBinding() is const).
+    mutable bool m_warnedDepthBindingOmitted = false;
     /// One-shot latches for the audio-spectrum diagnostics. Both conditions
     /// persist across frames by design (an oversized vector stays oversized;
     /// the create() retry is per-frame), so without a latch each would log at
     /// spectrum cadence. Cleared in releaseRhiResources() beside the RHI latch.
     bool m_warnedAudioTruncated = false;
     bool m_warnedAudioCreateFailed = false;
+    /// One-shot: the dummy 1x1 texture or its sampler would not create. Both
+    /// arms of ensureDummyChannelResources share the latch because either one
+    /// has the same consequence (the node draws nothing) and the same cure.
+    bool m_dummyChannelWarned = false;
+    /// One-shot: the backend does not support RGBA16F as a render target, so
+    /// a pack that asked for half-float buffers got RGBA8 instead.
+    bool m_halfFloatUnsupportedWarned = false;
+    /// Latch for the buffer texture / render-target create failures. Cleared on
+    /// the next successful create, so a failure that recurs after a genuine
+    /// recovery is reported again instead of being swallowed for the session.
+    bool m_bufferTargetCreateWarned = false;
     /// 1×1 transparent fallback texture used when a source provider is set
     /// but has not yet produced a usable QRhiTexture (or its texture lives
     /// on a foreign QRhi). Bound at slot 0 instead of falling through to

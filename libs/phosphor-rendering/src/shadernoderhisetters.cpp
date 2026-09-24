@@ -498,7 +498,7 @@ void ShaderNodeRhi::setBufferShaderPath(const QString& path)
 void ShaderNodeRhi::setBufferShaderPaths(const QStringList& paths)
 {
     QStringList trimmed;
-    for (int i = 0; i < qMin(paths.size(), kMaxBufferPasses); ++i) {
+    for (int i = 0; i < qMin(paths.size(), static_cast<qsizetype>(kMaxBufferPasses)); ++i) {
         trimmed.append(paths.at(i));
     }
     // Drop only TRAILING empties (the common pad-to-kMaxBufferPasses case). An
