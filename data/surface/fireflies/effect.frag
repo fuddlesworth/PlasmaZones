@@ -63,7 +63,27 @@ vec4 pSurface(vec2 uv) {
         glow += col.rgb * body * blink * col.a;
         alpha += body * blink * col.a;
     }
+    // CANVAS-EDGE FEATHER, the same one haloFalloff gives glow and shadow. A
+    // spark centre sits up to 0.85 of the reach beyond the frame edge and its
+    // gaussian body extends further still, so on a host that grants less margin
+    // than the reach the swarm was cut off in a hard rectangle at the capture
+    // boundary. That is precisely the failure the glow pack's header says the
+    // shared halo exists to prevent, and this was the one padded-margin pack
+    // without it. Same profile and the same 12-logical-px cap as the shared
+    // helper, so the two fade alike.
+    float edgeDist = min(min(px.x, px.y), min(uSurfaceSize.x - px.x, uSurfaceSize.y - px.y));
+    float feather = max(min(0.35 * reach, 12.0 * max(uSurfaceScale, 0.001)), 1e-3);
+    float edgeFade = smoothstep(0.0, feather, edgeDist);
+    glow *= edgeFade;
+    alpha *= edgeFade;
+
+    // BOTH sides of the premultiplied pair. glow and alpha are accumulated as a
+    // matched pair above and every colour channel is at most 1, so glow <= alpha
+    // holds through the loop; clamping alpha alone breaks it at the first spark
+    // overlap that pushes the sum past 1, leaving rgb > a. Same fault and same
+    // cure as the phosphor-motes sibling.
     alpha = clamp(alpha, 0.0, 1.0);
+    glow = min(glow, vec3(alpha));
 
     // Focus cue: the swarm dims on unfocused surfaces, like the border family.
     float dim = focusDim(0.55);

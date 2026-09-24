@@ -268,8 +268,15 @@ vec4 pSurface(vec2 uv) {
     glow += microDust(px, t, clamp(p_dustAmount, 0.0, 1.0), reachPx, dustA);
     alpha += dustA;
 
+    // BOTH sides of the premultiplied pair, not just alpha. glow and alpha are
+    // accumulated together above (glow += col * contrib beside alpha += contrib,
+    // and every fluxGradient channel is <= 1, so glow <= alpha holds through the
+    // accumulation). Clamping only alpha and scaling glow bare breaks that at the
+    // first mote overlap where the sum passes 1: alpha saturates while glow keeps
+    // climbing, and the pack ships rgb > a. Clamp glow to the clamped alpha, which
+    // preserves hue where nothing overflowed and only binds where it did.
     alpha = clamp(alpha * intensity, 0.0, 1.0);
-    glow *= intensity;
+    glow = min(glow * intensity, vec3(alpha));
 
     // Focus cue: the dust dims on unfocused surfaces, like the border family.
     float dim = focusDim(0.55);

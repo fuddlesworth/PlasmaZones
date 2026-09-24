@@ -58,8 +58,17 @@ vec4 pSurface(vec2 uv) {
 
     // Crystalline frost variation, centered around zero (both directions —
     // one-sided clamping made the grain read as dark speckles only).
-    float frost = frostedTexture(fuv * p_grainScale, iTime * p_grainSpeed);
-    float variation = (frost - 0.5) * p_grainAmount;
+    //
+    // Gated on the amount, which DECLARES a minimum of 0. frostedTexture is two
+    // voronoi lookups plus a vnoise, and voronoi alone is a 3x3 loop with two
+    // hash13 per cell, so the call is about forty hash13 per fragment — the
+    // single most expensive thing in this shader. Ungated, a user who turns the
+    // grain off paid all of it to multiply the result by zero.
+    float variation = 0.0;
+    if (p_grainAmount > 0.0) {
+        float frost = frostedTexture(fuv * p_grainScale, iTime * p_grainSpeed);
+        variation = (frost - 0.5) * p_grainAmount;
+    }
 
     // Vignette darkens edges, multiplicative so it never brightens.
     float vignette = clamp(1.0 - length((fuv - 0.5) * vec2(0.3, 1.0)) * p_vignetteStrength, 0.0, 1.0);

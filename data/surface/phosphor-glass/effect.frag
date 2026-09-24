@@ -80,7 +80,13 @@ vec4 pSurface(vec2 uv) {
         // ── Phosphor excitation: bright backdrop charges the glass. The
         // response breathes slowly (persistence), and the sweep both boosts
         // charged regions and faintly lights dim ones as it passes. ──
-        float excite = pow(smoothstep(clamp(p_exciteThreshold, 0.0, 1.0), 1.0, lumN), 1.5);
+        // The upper edge is held strictly above the lower one. exciteThreshold
+        // DECLARES a max of 1.0, and at that value edge0 == edge1, which the GLSL
+        // spec leaves undefined for smoothstep: drivers answer 0, 1 or NaN, so the
+        // pack's own top-of-range setting rendered differently per driver. The
+        // 1e-4 floor keeps the curve's shape everywhere else identical.
+        float exciteLo = clamp(p_exciteThreshold, 0.0, 1.0);
+        float excite = pow(smoothstep(exciteLo, max(exciteLo + 1e-4, 1.0), lumN), 1.5);
         float persist = 0.75 + 0.25 * sin(iTime * 1.3 + lumN * 6.0 + diag * 4.0);
         float response = excite * persist * (1.0 + sweep * 0.8) + sweep * 0.06;
 
