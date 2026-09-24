@@ -20,11 +20,16 @@
 //
 // On top of either: rim glow, optional edge lighting (the backdrop's own
 // light re-added along the bevel), the 2..3 px thickness glint, a
-// luminance-adaptive tint, OKLab saturation, and a procedural grain that
-// masks banding (the reference tiles a pre-rendered noise texture; a hash
-// is visually equivalent here and needs no texture slot). The reference's
-// final colorMatrix is KWin output colour management, which our pipeline
-// applies at the present/KWin layer — nothing to port shader-side.
+// luminance-adaptive tint, OKLab saturation, brightness, contrast and vibrancy,
+// and a procedural grain that masks banding (the reference tiles a pre-rendered
+// noise texture; a hash is visually equivalent here and needs no texture slot).
+//
+// The reference's final colorMatrix is NOT purely output colour management: it
+// is built from saturation, contrast and brightness and applied after the OKLab
+// saturation step, which is the same grade this pack applies below. What our
+// pipeline handles at the present layer is the output transform alone. The
+// deviation worth knowing is the ORDER: this pack tints before grading, where
+// the reference grades and then tints.
 //
 // Content dimming: the window sample is dimmed by the pack's own
 // p_contentOpacity parameter, so the pane stays solid and translucency
@@ -95,7 +100,8 @@ vec4 pSurface(vec2 uv) {
             // Scale the whole backdrop toward the pane's centre by the bevel
             // profile, so the edges show a shrunken copy of the interior, the
             // way a thick concave slab reads. Per channel for the fringing.
-            // 0.2 of the pane at full strength, the reference's ceiling.
+            // 0.2 of the pane per unit of strength, so 0.4 at the declared
+            // maximum of 2.0. (The reference's own ceiling is the 0.2 factor.)
             vec2 f = frameUv(px) - 0.5;
             float shrink = 0.2 * concave * strength;
             vec2 fG = 0.5 + f * (1.0 - shrink);
@@ -155,7 +161,10 @@ vec4 pSurface(vec2 uv) {
             vec2 grad = vec2(sdRoundedBox(pos + vec2(h, 0.0), halfSz, rr) - sdRoundedBox(pos - vec2(h, 0.0), halfSz, rr),
                              sdRoundedBox(pos + vec2(0.0, h), halfSz, rr) - sdRoundedBox(pos - vec2(0.0, h), halfSz, rr));
             vec2 inward = length(grad) > 0.001 ? -normalize(grad) : vec2(0.0, 1.0);
-            float strengthUv = min(0.4 * concave * strength, 1.0);
+            // No min() here: concave is at most 1 and strength at most 2, so the
+            // product peaks at 0.8 and the 1.0 ceiling could never bind. It read
+            // as though cheap mode might displace by a whole pane.
+            float strengthUv = 0.4 * concave * strength;
             // Same px -> uv conversion the Snell branch gets from pxToUv, so
             // the two modes share one Y convention instead of hand-rolling a
             // second copy that only tracked the compositor. The frame/canvas
@@ -194,20 +203,47 @@ vec4 pSurface(vec2 uv) {
             glow += lit * concave;
         }
 
-        // Thickness glint: a 2..3 px band inside the rim mixed toward
-        // white, weighted by position across the pane.
+        // Thickness glint: a 2..3 LOGICAL px band inside the rim mixed toward
+        // white at the two diagonal ends of the pane.
+        //
+        // Every smoothstep here is written low-edge-first. Several were
+        // smoothstep(hi, lo, x), which the GLSL spec leaves UNDEFINED for
+        // edge0 > edge1 even though every driver in practice evaluates it as the
+        // mirror; `1.0 - smoothstep(lo, hi, x)` is the defined spelling of the
+        // same curve.
         if (rimStrength > 0.0) {
-            float edgeMask = smoothstep(0.0, -2.0, d);
-            float borderInner = smoothstep(-1.0, -3.0, d);
+            // Scaled like every other length in this pack. In raw device px the
+            // band stayed 2..3 device px, so it thinned to a hairline at 200%.
+            float bandPx = max(uSurfaceScale, 0.001);
+            float edgeMask = 1.0 - smoothstep(-2.0 * bandPx, 0.0, d);
+            float borderInner = 1.0 - smoothstep(-3.0 * bandPx, -1.0 * bandPx, d);
             float edgeProfile = pow(max(edgeMask - borderInner, 0.0), 0.9);
-            float shadowMask = smoothstep(halfSz.y * 1.4, -halfSz.y * 1.4, pos.y)
-                * smoothstep(halfSz.x * 1.4, -halfSz.x * 1.4, pos.x);
-            float highlightMask = smoothstep(-halfSz.y * 1.4, halfSz.y * 1.4, pos.y)
+            // Two DIAGONAL position weights, not a shadow and a highlight: both
+            // mix toward white, one peaking at the top-left of the pane and one
+            // at the bottom-right. The names said otherwise and nothing here
+            // darkens anything.
+            float glintTopLeft = (1.0 - smoothstep(-halfSz.y * 1.4, halfSz.y * 1.4, pos.y))
+                * (1.0 - smoothstep(-halfSz.x * 1.4, halfSz.x * 1.4, pos.x));
+            float glintBottomRight = smoothstep(-halfSz.y * 1.4, halfSz.y * 1.4, pos.y)
                 * smoothstep(-halfSz.x * 1.4, halfSz.x * 1.4, pos.x);
-            glow = mix(glow, vec3(1.0), edgeProfile * shadowMask);
-            glow = mix(glow, vec3(1.0), edgeProfile * highlightMask);
+            // The glint is part of the rim treatment, so it follows the Rim light
+            // slider and the focus dim (both already folded into rimStrength).
+            // It used to be GATED on that slider and then ignore it, so a rim of
+            // 0.01 still produced a full-strength glint and an unfocused window
+            // kept a glint its rim had lost. Normalised on the default exactly as
+            // rimMask above is, so the shipped look is unchanged, and clamped
+            // because a mix weight past 1 would overshoot white and break the
+            // premultiplied invariant.
+            float glintScale = rimStrength / kRimDefaultStrength;
+            glow = mix(glow, vec3(1.0), clamp(edgeProfile * glintTopLeft * glintScale, 0.0, 1.0));
+            glow = mix(glow, vec3(1.0), clamp(edgeProfile * glintBottomRight * glintScale, 0.0, 1.0));
         }
-        lit = concave < 1.0 ? glow : lit;
+        // Unconditionally: `concave < 1.0 ? glow : lit` was inert in the taken
+        // arm and destructive in the other. concave reaches 1.0 only where
+        // eased == 1.0, which is d == 0 exactly, and that is precisely where the
+        // rim mix and the edge-lighting add are at their strongest, so the one
+        // case the ternary treated specially was the one it threw away.
+        lit = glow;
 
         // Luminance-adaptive tint (reference adjustedTintStrength), then
         // OKLab saturation, then grain — the reference's pass order.

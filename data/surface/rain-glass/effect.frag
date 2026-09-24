@@ -63,12 +63,14 @@ vec3 dropLayer(vec2 st, float t) {
     // Droplet body — distances back in st units so drops stay round.
     vec2 toDrop = (f - vec2(x, dropY)) * cellDim;
     float dropR = 0.10 * (0.75 + 0.5 * n.y);
-    float drop = smoothstep(dropR, dropR * 0.5, length(toDrop));
+    // Low edge first: smoothstep with edge0 > edge1 is spec-undefined, and
+    // 1.0 - smoothstep(lo, hi, x) is the defined spelling of the same curve.
+    float drop = 1.0 - smoothstep(dropR * 0.5, dropR, length(toDrop));
 
     // Trail: a chain of beads strictly ABOVE the drop (smaller y), fading
     // with distance above it and drying out late in the fall.
     vec2 toBead = vec2(f.x - x, (fract(f.y * 12.0) - 0.5) / 12.0) * cellDim;
-    float beads = smoothstep(0.055, 0.03, length(toBead));
+    float beads = 1.0 - smoothstep(0.03, 0.055, length(toBead));
     float above = step(f.y, dropY) * smoothstep(dropY - 0.55, dropY, f.y);
     float trail = beads * above * (1.0 - 0.5 * fall);
 
@@ -104,7 +106,7 @@ vec4 pSurface(vec2 uv) {
     vec3 mn = hash23(microId);
     vec2 microF = fract(st * 6.0) - 0.5;
     vec2 toMicro = microF - (mn.xy - 0.5) * 0.7;
-    float micro = smoothstep(0.06, 0.035, length(toMicro)) * step(mn.z, 0.35 * amount);
+    float micro = (1.0 - smoothstep(0.035, 0.06, length(toMicro))) * step(mn.z, 0.35 * amount);
 
     // Combined refraction offset in device px. layer1/layer2 offsets are in st
     // units, so ×cellPx maps them to px. toMicro lives in the 6×-denser micro-bead
