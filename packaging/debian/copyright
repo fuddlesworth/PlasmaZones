@@ -14,6 +14,107 @@ Files: libs/phosphor-*/*
 Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: LGPL-2.1-or-later
 
+# The bundled animation, pointer and surface shader packs ship as LGPL for the
+# same reason the libraries do: a third-party pack or tool can build on them.
+# The GPL exceptions below are the packs that incorporate upstream copyleft,
+# plus the surface tree's own un-normalised GPL headers.
+Files: data/animations/*
+       data/pointer/*
+       data/surface/*
+Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+License: LGPL-2.1-or-later
+
+# Ports of Burn-My-Windows, which is GPL-3. PlasmaZones does not hold the
+# copyright in those bodies and cannot relicense them, so the license follows
+# the incorporated content.
+Files: data/animations/broken-glass/effect.frag
+       data/animations/fire/effect.frag
+       data/animations/glide/effect.frag
+       data/animations/incinerate/effect.frag
+       data/animations/paint-brush/effect.frag
+       data/animations/shared/bmw_compat.glsl
+       data/animations/tv-glitch/effect.frag
+       data/animations/wisps/effect.frag
+Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+           2021-2024 Simon Schneegans (Burn-My-Windows)
+License: GPL-3.0-or-later
+
+Files: data/animations/matrix/effect.frag
+Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+           2021 Simon Schneegans (Burn-My-Windows)
+License: GPL-3.0-or-later
+
+Files: data/animations/focus/effect.frag
+Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+           2021-2024 Simon Schneegans (Burn-My-Windows)
+           2021-2024 Justin Garza
+License: GPL-3.0-or-later
+
+Files: data/animations/honeycomb/effect.frag
+Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+           2025 arch-disciple (niri-shader-collection)
+License: GPL-3.0-or-later
+
+# data/surface has not been license-normalised; these seven carry GPL headers
+# of their own, so the stanza follows the headers rather than the tree.
+Files: data/surface/blur/effect.frag
+       data/surface/duotone/effect.frag
+       data/surface/frosted-glass/effect.frag
+       data/surface/glass/effect.frag
+       data/surface/mosaic/effect.frag
+       data/surface/rain-glass/effect.frag
+       data/surface/rippled-glass/effect.frag
+Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+License: GPL-3.0-or-later
+
+Files: data/overlays/neon-city/*
+Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+           2026 nikitamashchenko (https://www.shadertoy.com/)
+License: GPL-3.0-or-later
+
+# Ports of gl-transitions, whose MIT terms permit the LGPL the surrounding
+# packs use. Upstream is credited rather than relicensed away.
+Files: data/animations/desktop-crosszoom/effect.frag
+       data/animations/desktop-cube/effect.frag
+       data/animations/desktop-pixelate/effect.frag
+       data/animations/desktop-slide/effect.frag
+Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+           gl-transitions contributors
+License: LGPL-2.1-or-later
+
+# Build-system modules that belong to the LGPL libraries' own test scaffolding
+# carry the libraries' license, not the application's.
+Files: cmake/PhosphorLibTesting.cmake
+       cmake/PhosphorTestIsolation.cmake
+       cmake/test-session-bus.conf
+Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+License: LGPL-2.1-or-later
+
+# This one carries a GPL-3 header with no "or later", unlike its siblings.
+# Recorded as it stands; a packaging file describes licenses, it does not
+# widen them.
+Files: cmake/format-qml.cmake
+Copyright: 2026 PlasmaZones contributors
+License: GPL-3.0
+
+# AppStream metadata is CC0 so distributions and app stores can reuse it.
+Files: src/editor/org.plasmazones.editor.metainfo.xml
+       src/settings/org.plasmazones.settings.metainfo.xml
+Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+License: CC0-1.0
+
+Files: kwin-effect/plasmazoneseffect/mesh_sim.cpp
+       kwin-effect/plasmazoneseffect/mesh_sim.h
+Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+           2008 Cédric Borgese <cedric.borgese@gmail.com>
+License: GPL-3.0-or-later
+
+Files: packaging/local-install/install.sh
+       packaging/local-install/uninstall.sh
+       packaging/local-install/web-install.sh
+Copyright: 2026 abirkel <abirkel@users.noreply.github.com>
+License: GPL-3.0-or-later
+
 Files: debian/*
 Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: GPL-3.0-or-later
@@ -26,6 +127,27 @@ License: LGPL-2.1-or-later
  .
  On Debian systems, the full text of the GNU Lesser General Public License
  version 2.1 can be found in the file '/usr/share/common-licenses/LGPL-2.1'.
+
+License: GPL-3.0
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of version 3 of the GNU General Public License as
+ published by the Free Software Foundation.
+ .
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ .
+ On Debian systems, the full text of the GNU General Public License
+ version 3 can be found in the file '/usr/share/common-licenses/GPL-3'.
+
+License: CC0-1.0
+ To the extent possible under law, the author(s) have dedicated all copyright
+ and related and neighbouring rights to this metadata to the public domain
+ worldwide. It is distributed without any warranty.
+ .
+ The full text of the CC0 1.0 Universal Public Domain Dedication is at
+ https://creativecommons.org/publicdomain/zero/1.0/legalcode
 
 License: GPL-3.0-or-later
  This program is free software: you can redistribute it and/or modify

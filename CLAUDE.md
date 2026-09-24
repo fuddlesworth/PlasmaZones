@@ -207,7 +207,9 @@ ctest --test-dir build --output-on-failure
 # inspection: SPDX headers, the GPL-3 app / LGPL-2.1 libs split, the file-size
 # ceiling (growth-only, baselined in scripts/oversize-baseline.json),
 # PhosphorI18n::tr() over i18n() in C++, ConfigDefaults:: accessors over inline
-# config paths, and the plain-prose rules on user-facing strings. Stdlib only.
+# config paths, the plain-prose rules on user-facing strings, and that
+# packaging/debian/copyright still declares every file's real license and
+# copyright holders. Stdlib only.
 # Also runs on pre-commit (staged files) and in CI (whole tree).
 python3 scripts/check-conventions.py
 python3 scripts/check-conventions.py --list-rules
