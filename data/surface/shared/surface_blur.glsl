@@ -1,16 +1,23 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// Separable-Gaussian buffer-pass helpers shared by every multipass surface
-// pack whose buffer passes blur the backdrop (blur / duotone / frosted-glass /
-// glass / rain-glass / rippled-glass). The two halves of a 9-tap separable
-// Gaussian (sigma ~ radius/3), previously copy-pasted into each pack's
-// buffer0.frag / buffer1.frag, live here once and are called by the shared
-// gaussian_h.frag / gaussian_v.frag standard passes (builtin:gaussian-h/-v).
+// Buffer-pass blur helpers shared by every multipass surface pack whose buffer
+// passes blur the backdrop: blur, duotone, frosted-glass, glass, phosphor-glass,
+// rain-glass and rippled-glass. All SEVEN declare the dual Kawase chain further
+// down, which is what the blur family runs today.
+//
+// The separable-Gaussian pair immediately below is the older helper set, kept
+// because the builtin:gaussian-h and builtin:gaussian-v passes call it and a
+// third-party pack may still declare those. It is 9 taps spread over a 4-tap
+// reach, so the outermost tap sits at the full radius and the effective sigma is
+// roughly 0.45 of the radius, not the radius/3 this file used to claim.
 //
 // BUFFER-PASS CONVENTION: buffer shaders compile WITHOUT the generated p_<id>
-// parameter preamble (bakeBufferShaders), so parameters are read by their RAW
-// contract slot. `blurRadius` is the first scalar parameter of every blur-family
+// parameter preamble, so parameters are read by their RAW contract slot. THREE
+// compile paths have to agree on that, not one: bakeBufferShaders on the daemon,
+// the compositor's own buffer compile, and validateSurfacePack in the offline
+// validator. Each skips the preamble deliberately, and a pack that referenced a
+// p_<id> from a buffer pass would fail on every path it ships on. `blurRadius` is the first scalar parameter of every blur-family
 // pack, so it lives in customParams[0].x (declaration-order auto-slotting; see
 // buildParamPreamble). Offsets step in canvas UV: the logical-px radius is
 // scaled to device px by uSurfaceScale, normalized by the canvas extent
@@ -26,7 +33,8 @@
 #include <surface_backdrop.glsl>
 #include <surface_multipass.glsl>
 
-// 9-tap Gaussian weights (sigma ~ radius/3), summing to ~1.
+// 9-tap Gaussian weights, summing to ~1. See the header for why the effective
+// sigma is about 0.45 of the radius rather than a third of it.
 const float kSurfaceGaussW0 = 0.227027;
 const float kSurfaceGaussW1 = 0.1945946;
 const float kSurfaceGaussW2 = 0.1216216;
@@ -71,8 +79,9 @@ vec4 surfaceGaussianChannelV(vec2 uv) {
 // ── Dual Kawase pyramid ─────────────────────────────────────────────────────
 //
 // The blur family's standard chain since the eight-channel budget: four DOWN
-// passes that halve the resolution each step from a quarter-res base, then
-// three UP passes back to quarter res, declared in a pack as
+// passes, the first PRODUCING the quarter-res base from the full-res backdrop
+// and the other three halving from there, then three UP passes back to quarter
+// res, declared in a pack as
 //
 //   "bufferShaders": ["builtin:kawase-down-0", "builtin:kawase-down-1",
 //                     "builtin:kawase-down-2", "builtin:kawase-down-3",
@@ -81,25 +90,35 @@ vec4 surfaceGaussianChannelV(vec2 uv) {
 //   "bufferScales":  [0.25, 0.125, 0.0625, 0.03125, 0.0625, 0.125, 0.25]
 //
 // and read by the main pass as iChannel6 (surfaceBlurTexel). Reach comes from
-// pyramid DEPTH, not tap spacing: each level's taps sit a texel or so apart,
+// pyramid DEPTH, not tap spacing: a level's taps sit between half a texel and
+// four texels apart depending on where the radius falls in that level's band,
 // and a level's texel is twice the size of the one above, so four levels cover
-// a 256 px radius at offsets that never show Kawase's square ghosting. The
+// the 256 px radius every blur-family pack declares as its blurRadius maximum,
+// at offsets that never show Kawase's square ghosting. The
 // radius picks how many levels are USED (surfaceKawaseDepth): the down passes
 // always run (they are cheap, each a quarter the area of the last), and each
 // up pass reads either the deeper up pass or the down level the pyramid
 // bottoms out at, so a small radius is a shallow pyramid rather than a deep
 // one with tiny offsets, which would blur far past the radius asked for.
 //
-// Every pass sizes its input with textureSize(), which is why the chain can
-// run past the four iChannelResolution slots the UBO carries, and why it
-// works at any global blur-scale multiplier. The one nominal constant is the
-// base level's texel size, used only by the first pass: it reads the backdrop,
-// whose size on the daemon is the whole wallpaper rather than this surface's
-// slice, so its tap spacing cannot be derived from the sampler.
+// Every pass but the first sizes its input with textureSize(), which is why the
+// chain can run past the four iChannelResolution slots the UBO carries, and why
+// it still COMPOSES at any global blur-scale multiplier. It does not blur the
+// same amount at every multiplier: a texel-relative offset over a texture the
+// multiplier made larger or smaller covers proportionally more or less canvas,
+// so lowering the multiplier softens and widens the result as well as making it
+// cheaper. That is the setting's declared contract, not a defect.
 
 // Canvas px per texel of the chain's declared base level (bufferScales[0] =
-// 0.25). Nominal: the global blur-scale multiplier moves the real density,
-// which only widens or narrows the first pass's taps by that factor.
+// 0.25).
+//
+// NOMINAL, and it is the ONE pass the blur-scale multiplier does not move. The
+// first DOWN pass reads the backdrop, whose size on the daemon is the whole
+// wallpaper rather than this surface's slice, so its tap spacing cannot come
+// from textureSize() and is derived from this constant instead. Every OTHER
+// pass sizes itself from its real input and therefore does follow the
+// multiplier. (This comment used to say the opposite, naming the first pass as
+// the only one the multiplier widens.)
 const float kSurfaceKawaseBaseTexel = 4.0;
 
 // How many pyramid levels the radius asks for (1..4), and the tap offset that
@@ -128,7 +147,18 @@ const float kSurfaceKawaseBaseTexel = 4.0;
 // Hyprland's blur was checked too: it keeps one screen-space tap at every
 // level (size x passes), which reaches further per pass but shows the
 // square Kawase footprint sooner, so KWin's banded model is the one used.
-// The reaches sit at three quarters of KWin's per-level figures. Measured on
+//
+// Two places where the correspondence is not exact, both deliberate:
+//   • Depth 1's band is 1.0 .. 3.0, where the KWin iteration with the same 4 px
+//     texel runs 2.0 .. 3.0. The floor is dropped so a small radius can still
+//     reach below KWin's shortest offset instead of jumping straight to it.
+//   • The bands and reaches here describe the DOWN passes. surfaceKawaseUp runs
+//     at half this spacing (the extra 0.5 factor in its `d`), which is the
+//     standard dual-Kawase asymmetry rather than a second calibration.
+//
+// The reaches sit at three quarters of KWin's figure for the first band and four
+// fifths for the two after it (15 against 20, 40 against 50, 120 against 150,
+// comparing each depth with the KWin iteration of the same texel size). Measured on
 // the compositor against 40 px stripes, KWin's own values left a 24 px radius
 // at 94% of the unblurred contrast and 48 px at 68%, where a Gaussian of
 // sigma = radius / 3 gives 82% and 45%; the shorter reaches move each depth's
@@ -162,10 +192,18 @@ int surfaceKawaseDepth() {
     if (radiusPx <= kSurfaceKawaseReach.z) return 3;
     return 4;
 }
+// @p depth is ONE-BASED (1..4), matching surfaceKawaseDepth's return value, while
+// the passes around it are named with zero-based indices (kawase_down_0..3,
+// kawase_up_0..2). Passing a pass index straight in is therefore off by one, and
+// the clamp below hides it rather than reporting it, so a caller that means
+// "pass i" must pass i + 1.
 float surfaceKawaseOffset(int depth) {
     float radiusPx = max(customParams[0].x * uSurfaceScale, 0.0);
     int i = clamp(depth, 1, 4) - 1;
-    float lo = i == 0 ? 0.0 : kSurfaceKawaseReach[i - 1];
+    // max(i - 1, 0) rather than i - 1: the ternary makes the -1 index unreachable
+    // in principle, but a negative constant-folded index is exactly the kind of
+    // thing a driver compiler is free to reject while folding both arms.
+    float lo = i == 0 ? 0.0 : kSurfaceKawaseReach[max(i - 1, 0)];
     float hi = kSurfaceKawaseReach[i];
     float t = clamp((radiusPx - lo) / max(hi - lo, 1.0), 0.0, 1.0);
     float kwinOffset = mix(kSurfaceKawaseOffsetMin[i], kSurfaceKawaseOffsetMax[i], t);
@@ -188,8 +226,10 @@ vec4 surfaceKawaseDown(sampler2D src, vec2 uv, float offset) {
 // The first DOWN pass reads the backdrop capture through backdropTexel(),
 // which clamps into the capture's valid rect on the compositor and into this
 // surface's slice of the wallpaper on the daemon. Its offsets are in canvas
-// space at the nominal base texel, since the backdrop's own size is not the
-// canvas's.
+// space at HALF the nominal base texel, since it reads the full-res backdrop to
+// produce the quarter-res base and therefore steps in the half-res level a
+// quarter-res pass reads. The backdrop's own size is not the canvas's, which is
+// why this spacing cannot come from textureSize().
 vec4 surfaceKawaseDownBackdrop(vec2 uv, float offset) {
     vec2 d = (offset + 0.5) * kSurfaceKawaseBaseTexel * 0.5 / max(uSurfaceSize, vec2(1.0));
     vec4 sum = backdropTexel(uv) * 4.0;
