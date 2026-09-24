@@ -85,11 +85,17 @@ Item {
 
     /// C++-resolved surface pack CHAIN, written by OverlayService::
     /// applyDecoration:
-    ///   • decorationChain — ordered stage list, one entry per resolved pack:
+    ///   • decorationChain — ordered stage list, one entry per resolved pack.
+    ///     composeStageMap emits SIXTEEN keys. Six on every stage:
     ///     { source (file:// url of effect.frag), vertexSource (url or ""),
     ///       preamble (generated `#define p_<id> …`), params (translated
     ///       `customParamsN_*` / `customColorN` slot map), animated (bool,
-    ///       gates that stage's per-frame iTime tick) }. Empty list = no
+    ///       gates that stage's per-frame iTime tick), multipass (bool) }.
+    ///     Ten more ONLY when multipass is true, all of which the delegate
+    ///     below reads: { bufferShaderPaths, bufferFeedback, bufferScale,
+    ///       bufferScales, bufferWrap, bufferWraps, bufferFilter,
+    ///       bufferFilters, useDepthBuffer, halfFloatBuffers }.
+    ///     Empty list = no
     ///     decoration; the component stays inert. Stages fold left-to-right:
     ///     stage 0 samples the card snapshot, each later stage samples the
     ///     previous stage's output — the QML analogue of the compositor's
@@ -618,6 +624,18 @@ Item {
                     // the mapping, so their moves re-run this to the same
                     // point — a scroll costs a no-op remap per live card,
                     // which is nothing next to the chains those cards run.
+                    //
+                    // POSITION ONLY. mapToItem also accounts for each
+                    // ancestor's scale, rotation and transform, and this walk
+                    // touches none of them, nor root.x / root.y. A future host
+                    // that animates a scale or rotation on an item BETWEEN the
+                    // anchor and this root would move the mapped origin without
+                    // re-running this binding. No in-tree host does: the only
+                    // one that scales puts the scale on a common ancestor of
+                    // both the anchor and this root, where it cancels out of
+                    // the mapping, and every daemon host anchors.fill its slot
+                    // with nothing transformed in between. Widen the walk if
+                    // that stops being true.
                     for (let a = root.shaderAnchorItem; a; a = a.parent)
                         void (a.x + a.y);
                     return root.shaderAnchorItem.mapToItem(root, 0, 0);
@@ -726,9 +744,15 @@ Item {
                 shaderSource: stage.stageData.source !== undefined ? stage.stageData.source : ""
 
                 // Multipass buffer passes, forwarded from the composer's stage
-                // map. Inherited wholesale from ShaderEffect — a surface pack's
-                // buffer passes need no surface-specific handling, only these
-                // bindings. `multipass` is false for every single-pass pack, so
+                // map VERBATIM. Inherited wholesale from ShaderEffect, and that
+                // is a real difference from the compositor rather than a shared
+                // design: the compositor folds the user's decoration
+                // blur-scale multiplier into every declared scale
+                // (clampedBufferScale, applied to the per-pass array too),
+                // and nothing on this path reads that setting at all. So a
+                // daemon-hosted decoration and a window decoration render the
+                // same pack at different buffer densities whenever the
+                // multiplier is not 1. `multipass` is false for every single-pass pack, so
                 // the empty-list / default arms below keep those stages on the
                 // classic single-pass path.
                 bufferShaderPaths: stage.stageData.multipass === true && stage.stageData.bufferShaderPaths !== undefined ? Array.from(stage.stageData.bufferShaderPaths) : []

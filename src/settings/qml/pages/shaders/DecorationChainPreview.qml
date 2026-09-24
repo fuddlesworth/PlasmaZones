@@ -216,9 +216,12 @@ Item {
     /// and no amount of parameter scaling closes the gap, because the things
     /// that differ are not parameters:
     ///
-    ///   - a multipass pack's blur runs in a buffer of `itemPx * bufferScale`
-    ///     texels (ShaderNodeRhi), so the browser card blurred in a ~61-texel
-    ///     buffer and the detail pane in a ~96-texel one;
+    ///   - a multipass pack's blur runs in buffers sized from the item, so the
+    ///     browser card blurs in a smaller pyramid than the detail pane does.
+    ///     (The two texel figures that used to sit here were computed from a
+    ///     single `bufferScale` key that no chain pack declares any more; each
+    ///     declares a seven-entry per-pass list instead, and the absent key
+    ///     reads as 1.0.);
     ///   - PopupFrame reserves a capture margin of
     ///     `ceil(Kirigami.Units.gridUnit * 1.25)` (23px at the default gridUnit
     ///     of 18) whatever size the preview is, so the decorated frame occupied

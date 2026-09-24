@@ -46,7 +46,7 @@ enum class PackModel {
 /// carries no marker.
 ///
 /// Detected from the pack's SIBLING `shared/` directory rather than from
-/// metadata.json, because the three schemas are not distinguishable: all four
+/// metadata.json, because the four schemas are not distinguishable: all four
 /// carry id / name / fragmentShader, and the only animation-exclusive field
 /// (`appliesTo`) is optional, so a universal animation pack that omits it looks
 /// exactly like an overlay pack. The shared directory is unambiguous, since
@@ -96,8 +96,8 @@ QStringList packSharedRoots(const QString& packDir);
 std::optional<QString> confinedPackPath(const QString& packDir, const QString& rel);
 
 // The report column for a stage label: labels shorter than the column are
-// padded to it, longer ones (`effect.frag (Qt-RHI preview)`) get one space so
-// the OK/ERROR word never runs into the label.
+// padded to it, longer ones (`kawase_down_0.frag`) get one space so the
+// OK/ERROR word never runs into the label.
 QString padLabel(const QString& label);
 
 // In-place confinement: rewrites @p path to its confined absolute form and
@@ -136,21 +136,6 @@ QStringList declaredParamNames(const QList<PhosphorAnimationShaders::AnimationSh
 QStringList declaredParamNames(const QList<PhosphorSurfaceShaders::SurfaceShaderEffect::ParameterInfo>& params);
 QStringList declaredParamNames(const QList<PhosphorPointerShaders::PointerShaderEffect::ParameterInfo>& params);
 
-// ── compositor (KWin classic-GL) bake ──────────────────────────────────────
-// Packs whose appliesTo makes them compositor-only are never loaded by the
-// daemon, and their source is classic-GL (default-block uniforms, unbound
-// samplers) that QShaderBaker's strict SPIR-V target rejects by design. That
-// left 35 of the 94 bundled animation packs with metadata lints and NO stage
-// compile anywhere in a headless run — the GPU bake test that does cover them
-// QSKIPs without a desktop GL 4.5 context, which is exactly the CI case.
-//
-// glslang's DEFAULT mode (no -V / -G, so no SPIR-V target) validates plain
-// OpenGL-dialect GLSL and accepts that source, so the coverage is reachable
-// offline through the `glslangValidator` binary. Out of process rather than
-// linked: Qt vendors glslang inside ShaderTools without exposing it, and a
-// direct libglslang dependency for one code path is a heavier build cost than
-// a tool the GLSL toolchain already ships.
-
 /// One declared parameter, reduced to what a preset lint needs: its id, its
 /// type token, and whatever range it declares. The four families spell their
 /// ParameterInfo differently (slot vs step, image vs no image), so the lint
@@ -163,30 +148,6 @@ struct PresetLintParam
     QVariant maxValue;
 };
 
-/// Lint a pack's `presets` block against what the pack declares.
-///
-/// Checks everything decidable without rendering: every preset key is usable as a
-/// picker label, every key names a declared parameter, every value matches that
-/// parameter's declared type, a numeric value sits inside any declared range AND
-/// inside its own type's range, and an image-typed value names a file the pack ships.
-/// Containment is deliberately NOT among them — see the implementation, where the
-/// parse has already refused an escaping path before this lint can see it.
-///
-/// Collects its findings and prints them under a `presets ERROR` header, then
-/// returns the number of problems found. Emitting straight to the stream as each
-/// problem was found meant a pack whose only fault was a bad preset printed an
-/// unindented error line and then `metadata OK` directly below it, while still
-/// returning a non-zero error count.
-///
-/// @p packDir is the pack's directory, used to check that an image-typed preset
-/// value names a file the pack actually ships. NOT a containment check: the parse
-/// has already dropped an escaping path, so there is nothing left here to refuse
-/// (see the implementation). Every arm passes a real directory today; an empty one
-/// skips the existence check.
-///
-/// Deliberately NOT an error for a preset to omit parameters: a preset is a
-/// partial tuning by design, and the ones it says nothing about fall back to
-/// their defaults.
 /// Lint a preset value set on an IMAGE-typed parameter, for the two families that cannot
 /// keep one.
 ///
@@ -209,6 +170,25 @@ QStringList imageParamPresetLints(const QJsonObject& root);
 /// already-truncated map and so is blind to all of them.
 QStringList rawPresetLints(const QJsonObject& root);
 
+/// Lint a pack's `presets` block against what the pack declares.
+///
+/// Checks everything decidable without rendering: every preset key is usable as a
+/// picker label, every key names a declared parameter, every value matches that
+/// parameter's declared type, and a numeric value sits inside any declared range
+/// AND inside its own type's range. Containment is deliberately NOT among them —
+/// see the implementation, where the parse has already refused an escaping path
+/// before this lint can see it.
+///
+/// @p packDir is the pack's directory, used to check that an image-typed preset
+/// value names a file the pack actually ships. Every arm passes a real directory
+/// today; an empty one skips the existence check.
+///
+/// Deliberately NOT an error for a preset to omit parameters: a preset is a
+/// partial tuning by design, and the ones it says nothing about fall back to
+/// their defaults.
+///
+/// RETURNS its lints rather than printing them. `reportPresetLints` is what
+/// prints, under one shared header — see there for why.
 QStringList presetLints(const QString& packDir, const QMap<QString, QVariantMap>& presets,
                         const QList<PresetLintParam>& declared);
 
@@ -229,6 +209,21 @@ QStringList presetLints(const QString& packDir, const QMap<QString, QVariantMap>
 /// return the count, so a caller still does `errors += ...`. Prints nothing when @p lints
 /// is empty, which is what keeps a clean pack's report free of an empty section.
 int reportPresetLints(QTextStream& out, const QStringList& lints);
+
+// ── compositor (KWin classic-GL) bake ──────────────────────────────────────
+// Packs whose appliesTo makes them compositor-only are never loaded by the
+// daemon, and their source is classic-GL (default-block uniforms, unbound
+// samplers) that QShaderBaker's strict SPIR-V target rejects by design. That
+// left 35 of the 94 bundled animation packs with metadata lints and NO stage
+// compile anywhere in a headless run — the GPU bake test that does cover them
+// QSKIPs without a desktop GL 4.5 context, which is exactly the CI case.
+//
+// glslang's DEFAULT mode (no -V / -G, so no SPIR-V target) validates plain
+// OpenGL-dialect GLSL and accepts that source, so the coverage is reachable
+// offline through the `glslangValidator` binary. Out of process rather than
+// linked: Qt vendors glslang inside ShaderTools without exposing it, and a
+// direct libglslang dependency for one code path is a heavier build cost than
+// a tool the GLSL toolchain already ships.
 
 /// Absolute path to a usable glslang binary (`glslangValidator`, else the
 /// `glslang` the project renamed it to), or an empty string when neither is on
