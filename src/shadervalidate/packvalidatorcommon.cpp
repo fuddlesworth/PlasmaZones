@@ -19,6 +19,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QLatin1String>
 #include <QProcess>
 #include <QRegularExpression>
@@ -340,13 +341,16 @@ QString padLabel(const QString& label)
     return label.size() < kColumn ? label.leftJustified(kColumn) : label + QLatin1Char(' ');
 }
 
-// Report a compiled stage's outcome: "OK", or "ERROR" with the glslang
-// diagnostics mapped to the author's file/line (T1.3 #line) plus the
-// did-you-mean hint. @p declared is the list of generated `p_<id>` names.
-// Returns 1 on failure, 0 on success. Shared by all four validators.
 // The descriptor-binding lint every Qt-RHI bake passes through: reflect the
-// baked stage and check each sampler and uniform block against the ONE binding
-// table (PhosphorShaders::Bindings). A contract sampler (iChannelN, uTextureN,
+// baked stage and check every resource it declares against the ONE binding
+// table (PhosphorShaders::Bindings).
+//
+// SCOPE, because the word "every" is doing less work than it looks: reflection
+// reports what the compiled stage actually READS. A sampler declared and never
+// sampled is optimised out before it reaches here, so this cannot lint a
+// declaration the shader does not use. That is the right behaviour, since an
+// unread declaration binds nothing either, but it does mean a clean report is
+// a statement about the stage's live resources rather than about its text. A contract sampler (iChannelN, uTextureN,
 // uAudioSpectrum, uWallpaper / uBackdrop, uDepthBuffer, uCursorSprite,
 // uZoneLabels) must sit at its table slot, and a pack may declare NO OTHER
 // sampler at all. The runtime builds its SRB from the same table, so a header
@@ -365,20 +369,39 @@ QStringList bindingLayoutProblems(const QShader& shader)
 {
     QStringList problems;
     const QShaderDescription desc = shader.description();
+
+    // Which resource already claimed each binding, so two of them landing on one
+    // slot is reported rather than left for the pipeline. The SRB takes one entry
+    // per binding, so a collision means one of the two silently wins.
+    QHash<int, QString> claimed;
+    const auto claim = [&claimed, &problems](int binding, const QString& what) {
+        const auto it = claimed.constFind(binding);
+        if (it != claimed.constEnd()) {
+            problems << QStringLiteral("%1 and %2 both declare binding %3, so only one of them reaches the SRB")
+                            .arg(*it, what)
+                            .arg(binding);
+            return;
+        }
+        claimed.insert(binding, what);
+    };
+
     for (const QShaderDescription::UniformBlock& block : desc.uniformBlocks()) {
+        const QString name = QString::fromUtf8(block.blockName);
+        claim(block.binding, QStringLiteral("uniform block ") + name);
         if (block.binding != PhosphorShaders::Bindings::kUniformBlock) {
-            problems << QStringLiteral("uniform block %1 declared at binding %2, the contract puts it at %3")
-                            .arg(QString::fromUtf8(block.blockName))
+            problems << QStringLiteral("uniform block %1 declared at binding %2, but the contract puts it at %3")
+                            .arg(name)
                             .arg(block.binding)
                             .arg(PhosphorShaders::Bindings::kUniformBlock);
         }
     }
     for (const QShaderDescription::InOutVariable& sampler : desc.combinedImageSamplers()) {
         const QString name = QString::fromUtf8(sampler.name);
+        claim(sampler.binding, QStringLiteral("sampler ") + name);
         const int expected = PhosphorShaders::Bindings::expectedSamplerBinding(name);
         if (expected >= 0) {
             if (sampler.binding != expected) {
-                problems << QStringLiteral("sampler %1 declared at binding %2, the contract puts it at %3")
+                problems << QStringLiteral("sampler %1 declared at binding %2, but the contract puts it at %3")
                                 .arg(name)
                                 .arg(sampler.binding)
                                 .arg(expected);
@@ -394,9 +417,45 @@ QStringList bindingLayoutProblems(const QShader& shader)
                             .arg(sampler.binding);
         }
     }
+
+    // The resource kinds the SRB builders do not handle AT ALL. ShaderNodeRhi
+    // assembles its bindings from the one uniform block and combined image
+    // samplers, so anything below reaches no binding and takes the pipeline down
+    // at creation, with the failure surfacing far from the shader that caused it.
+    // Reflecting only combinedImageSamplers let all four kinds through.
+    const auto refuseKind = [&problems, &claim](const QList<QShaderDescription::InOutVariable>& vars,
+                                                const QString& kind) {
+        for (const QShaderDescription::InOutVariable& v : vars) {
+            const QString name = QString::fromUtf8(v.name);
+            claim(v.binding, kind + QLatin1Char(' ') + name);
+            problems << QStringLiteral(
+                            "%1 %2 declared at binding %3, and the runtime builds its SRB from combined "
+                            "image samplers and the one uniform block only, so it reaches no binding and "
+                            "fails pipeline creation")
+                            .arg(kind, name)
+                            .arg(v.binding);
+        }
+    };
+    refuseKind(desc.separateImages(), QStringLiteral("separate image"));
+    refuseKind(desc.separateSamplers(), QStringLiteral("separate sampler"));
+    refuseKind(desc.storageImages(), QStringLiteral("storage image"));
+    for (const QShaderDescription::StorageBlock& block : desc.storageBlocks()) {
+        const QString name = QString::fromUtf8(block.blockName);
+        claim(block.binding, QStringLiteral("storage block ") + name);
+        problems << QStringLiteral(
+                        "storage block %1 declared at binding %2, and the runtime builds its SRB from "
+                        "combined image samplers and the one uniform block only, so it reaches no binding "
+                        "and fails pipeline creation")
+                        .arg(name)
+                        .arg(block.binding);
+    }
     return problems;
 }
 
+// Report a compiled stage's outcome: "OK", or "ERROR" with the glslang
+// diagnostics mapped to the author's file/line (T1.3 #line) plus the
+// did-you-mean hint. @p declared is the list of generated `p_<id>` names.
+// Returns 1 on failure, 0 on success. Shared by all four validators.
 int reportCompile(QTextStream& out, const QString& label, const ShaderCompiler::Result& result,
                   const QStringList& declared)
 {

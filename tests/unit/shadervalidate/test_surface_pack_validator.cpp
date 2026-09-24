@@ -333,9 +333,9 @@ private Q_SLOTS:
             + QStringLiteral("vec4 pSurface(vec2 uv)\n{\n    return texture(uBackdrop, uv);\n}\n");
 
         const PackResult r = validateSurface(tmp, QStringLiteral("sf-binding-drift"), obj, body);
-        QVERIFY2(
-            r.report.contains(QStringLiteral("sampler uBackdrop declared at binding 20, the contract puts it at 15")),
-            qPrintable(r.report));
+        QVERIFY2(r.report.contains(
+                     QStringLiteral("sampler uBackdrop declared at binding 20, but the contract puts it at 15")),
+                 qPrintable(r.report));
         QVERIFY(r.errors > 0);
     }
 
