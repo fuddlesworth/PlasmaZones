@@ -274,6 +274,29 @@ private Q_SLOTS:
         QVERIFY(r.errors > 0);
     }
 
+    /// bufferShaders is a LIST, so its escape report has to say which entries.
+    /// Bailing on the first one printed neither the path nor the index and
+    /// suppressed the rest of the report, so an author with two bad entries
+    /// fixed one and got the same anonymous line back.
+    void everyEscapingBufferPathIsNamed()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(QStringLiteral("sf-buf-escape"), QJsonArray{});
+        obj.insert(QStringLiteral("multipass"), true);
+        obj.insert(QStringLiteral("bufferShaders"),
+                   QJsonArray{QStringLiteral("../../../etc/passwd"), QStringLiteral("builtin:gaussian-h"),
+                              QStringLiteral("../../../etc/shadow")});
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-buf-escape"), obj, surfaceBodyReading({}));
+        QVERIFY2(r.report.contains(QStringLiteral("escapes the pack directory")), qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("bufferShaders[0]: ../../../etc/passwd")), qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("bufferShaders[2]: ../../../etc/shadow")), qPrintable(r.report));
+        // The builtin between them resolves and is not implicated.
+        QVERIFY2(!r.report.contains(QStringLiteral("bufferShaders[1]")), qPrintable(r.report));
+        QCOMPARE(r.errors, 2);
+    }
+
     /// A texture `wrap` outside {clamp,repeat,mirror} is silently cleared to
     /// clamp at load, so the author never learns their token was wrong. Linted
     /// off the RAW metadata for exactly that reason.

@@ -45,6 +45,11 @@ namespace PlasmaZones::ShaderValidate {
 
 namespace {
 
+/// The declared-name list for a stage that takes NO generated preamble. Passed to
+/// reportCompile so its did-you-mean hint stays silent rather than suggesting a
+/// p_<id> the stage could not have referenced.
+const QStringList kNoDeclaredParams;
+
 // Bake one stage on the COMPOSITOR dialect (`#define PLASMAZONES_KWIN`,
 // default-block uniforms), which QShaderBaker cannot compile — it wants
 // Vulkan-dialect GLSL — so this shells out to glslang the way the animation and
@@ -139,13 +144,15 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
 
     QFile metaFile(QDir(packDir).filePath(QStringLiteral("metadata.json")));
     if (!metaFile.open(QIODevice::ReadOnly)) {
-        out << name << "\n  metadata       ERROR\n    cannot read metadata.json\n  → 1 error\n\n";
+        out << name << "\n  " << padLabel(QStringLiteral("metadata"))
+            << "ERROR\n    cannot read metadata.json\n  → 1 error\n\n";
         return 1;
     }
     QJsonParseError perr{};
     const QJsonDocument doc = QJsonDocument::fromJson(metaFile.readAll(), &perr);
     if (doc.isNull() || !doc.isObject()) {
-        out << name << "\n  metadata       ERROR\n    invalid JSON: " << perr.errorString() << "\n  → 1 error\n\n";
+        out << name << "\n  " << padLabel(QStringLiteral("metadata"))
+            << "ERROR\n    invalid JSON: " << perr.errorString() << "\n  → 1 error\n\n";
         return 1;
     }
 
@@ -160,12 +167,22 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
         return confinePackPathInPlace(packDir, path);
     };
     if (!confineToPack(eff.fragmentShaderPath)) {
-        out << name
-            << "\n  metadata       ERROR\n    fragmentShader path escapes the pack directory (path traversal "
+        out << name << "\n  " << padLabel(QStringLiteral("metadata"))
+            << "ERROR\n    fragmentShader path escapes the pack directory (path traversal "
                "rejected)\n  → 1 error\n\n";
         return 1;
     }
-    for (QString& b : eff.bufferShaderPaths) {
+    // Every offender named, not just the first. The fragment and vertex exits
+    // above each cover ONE key, so naming it adds nothing; bufferShaders is a
+    // list, and bailing on the first escape printed neither the path nor the
+    // index while suppressing the whole rest of the report. An author with two
+    // bad entries then fixed one and got the same anonymous line again. The lint
+    // further down that DOES name a path re-derives confinement over the RAW
+    // array, so it can only ever fire for an entry past the pass cap, which
+    // fromJson already dropped and which therefore never reaches this loop.
+    QStringList escapingBuffers;
+    for (qsizetype i = 0; i < eff.bufferShaderPaths.size(); ++i) {
+        QString& b = eff.bufferShaderPaths[i];
         // `builtin:` tokens resolve against the surface shared/ dir (fixed
         // whitelist, same resolver as the runtime registry) rather than the
         // pack dir; an unknown token resolves empty and is linted below as a
@@ -174,22 +191,30 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             b = SurfaceShaderRegistry::resolveBuiltinBufferShader(b, QDir(packDir).absolutePath());
             continue;
         }
+        const QString declared = b;
         if (!confineToPack(b)) {
-            out << name
-                << "\n  metadata       ERROR\n    bufferShaders path escapes the pack directory (path traversal "
-                   "rejected)\n  → 1 error\n\n";
-            return 1;
+            escapingBuffers << QStringLiteral("bufferShaders[%1]: %2").arg(QString::number(i), declared);
         }
     }
+    if (!escapingBuffers.isEmpty()) {
+        out << name << "\n  " << padLabel(QStringLiteral("metadata"))
+            << "ERROR\n    bufferShaders path escapes the pack directory (path traversal rejected)\n";
+        for (const QString& e : escapingBuffers) {
+            out << "      " << e << "\n";
+        }
+        out << "  → " << escapingBuffers.size() << (escapingBuffers.size() == 1 ? " error" : " errors") << "\n\n";
+        return static_cast<int>(escapingBuffers.size());
+    }
     if (!confineToPack(eff.vertexShaderPath)) {
-        out << name
-            << "\n  metadata       ERROR\n    vertexShader path escapes the pack directory (path traversal rejected)\n "
+        out << name << "\n  " << padLabel(QStringLiteral("metadata"))
+            << "ERROR\n    vertexShader path escapes the pack directory (path traversal rejected)\n "
                " "
                "→ 1 error\n\n";
         return 1;
     }
     if (!eff.isValid()) {
-        out << name << "\n  metadata       ERROR\n    missing required field (id / fragmentShader)\n  → 1 error\n\n";
+        out << name << "\n  " << padLabel(QStringLiteral("metadata"))
+            << "ERROR\n    missing required field (id / fragmentShader)\n  → 1 error\n\n";
         return 1;
     }
     const QString fragLabel = QFileInfo(eff.fragmentShaderPath).fileName();
@@ -237,15 +262,13 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             lints << QStringLiteral(
                          "too many scalar params: %1 declared, budget is %2 (the surplus get no p_<id> "
                          "and are dropped at load)")
-                         .arg(scalarParams)
-                         .arg(scalarBudget);
+                         .arg(QString::number(scalarParams), QString::number(scalarBudget));
         }
         if (colorParams > colorBudget) {
             lints << QStringLiteral(
                          "too many color params: %1 declared, budget is %2 (the surplus get no p_<id> "
                          "and are dropped at load)")
-                         .arg(colorParams)
-                         .arg(colorBudget);
+                         .arg(QString::number(colorParams), QString::number(colorBudget));
         }
     }
     // A declared default / min / max is never checked against the parameter's own
@@ -525,13 +548,16 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
         for (const QJsonValue& v : declaredBuffers) {
             const QString bufName = v.toString();
             if (bufName.isEmpty()) {
-                // fromJson SKIPS an empty entry while bufferWraps and
-                // bufferFilters keep every entry in place, and those arrays are
-                // positionally aligned with this one — so one empty entry shifts
-                // every later pass's wrap and filter override by one, silently.
+                // fromJson appends an empty entry IN PLACE rather than skipping
+                // it, deliberately, so the positional alignment with bufferWraps
+                // and bufferFilters holds (surfaceshadereffect.cpp says why: a
+                // dropped empty broke that alignment on the very next load, since
+                // toJson re-emits empties). What an empty entry costs is the whole
+                // chain: it fails the registry's existence check at scan time and
+                // fails the pack closed to single-pass.
                 lints << QStringLiteral(
-                    "empty bufferShaders entry (dropped at load, which shifts the bufferWraps and bufferFilters "
-                    "alignment for every later pass)");
+                    "empty bufferShaders entry (kept in place, but it fails the scan-time existence check and "
+                    "drops the WHOLE pack to single-pass)");
                 continue;
             }
             if (SurfaceShaderRegistry::isBuiltinBufferShader(bufName)) {
@@ -696,6 +722,22 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
                                     + presetLints(packDir, eff.presets, eff.parameters));
 
     // ── stage compile (reproduce the daemon runtime fragment assembly) ──
+    //
+    // ONE include-root list for every stage below (fragment, buffer passes,
+    // vertex) and for both dialects. It was rebuilt identically three times,
+    // which is three chances for one of them to drift from the other two while
+    // the report keeps claiming all three reproduce the runtime.
+    //
+    // Match the runtime SurfaceShaderItem::surfaceIncludePaths(): each surface
+    // data dir contributes its `shared` subdir AND the dir itself, so a shader
+    // that resolves an include from the packs-root (not just `shared/`) bakes
+    // identically here and cannot false-fail the gate. The sibling zone
+    // validator uses the same {root/shared, root} pair. Sibling `shared/` first,
+    // then the family's XDG roots, so an INSTALLED pack (whose helpers live in
+    // the system prefix, not beside it) resolves its includes the way the
+    // runtime does.
+    const QString surfacePacksRoot = QFileInfo(packDir).absolutePath();
+    const QStringList includePaths = QStringList(packSharedRoots(packDir)) << surfacePacksRoot;
     if (QFile::exists(eff.fragmentShaderPath)) {
         QFile frag(eff.fragmentShaderPath);
         if (!frag.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -703,17 +745,6 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             ++errors;
         } else {
             const QString raw = QString::fromUtf8(frag.readAll());
-            const QString surfacePacksRoot = QFileInfo(packDir).absolutePath();
-            // Match the runtime SurfaceShaderItem::surfaceIncludePaths(): each
-            // surface data dir contributes its `shared` subdir AND the dir
-            // itself, so a shader that resolves an include from the packs-root
-            // (not just `shared/`) bakes identically here and can't false-fail
-            // the gate. The sibling zone validator uses the same
-            // {root/shared, root} pair.
-            // Sibling shared/ first, then the family's XDG roots, so an
-            // INSTALLED pack (whose helpers live in the system prefix, not
-            // beside it) resolves its includes the way the runtime does.
-            const QStringList includePaths = QStringList(packSharedRoots(packDir)) << surfacePacksRoot;
             QString err;
             // Assemble an entry-only pack (a `vec4 pSurface(vec2 uv)` body, no
             // main()) into a full TU before expansion, identical to the daemon /
@@ -748,16 +779,6 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     // and bake on the daemon Qt-RHI path, same as overlay packs. The compositor
     // runtime executes them via the GL-FBO chain; both share this source.
     if (eff.isMultipass) {
-        const QString surfacePacksRoot = QFileInfo(packDir).absolutePath();
-        // Match the runtime SurfaceShaderItem::surfaceIncludePaths(): each surface
-        // data dir contributes its `shared` subdir AND the dir itself, so a shader
-        // that resolves an include from the packs-root (not just `shared/`) bakes
-        // identically here and can't false-fail the gate. The sibling zone
-        // validator uses the same {root/shared, root} pair.
-        // Sibling shared/ first, then the family's XDG roots, so an
-        // INSTALLED pack (whose helpers live in the system prefix, not
-        // beside it) resolves its includes the way the runtime does.
-        const QStringList includePaths = QStringList(packSharedRoots(packDir)) << surfacePacksRoot;
         for (const QString& buf : eff.bufferShaderPaths) {
             if (!QFile::exists(buf)) {
                 continue; // missing buffers already linted above
@@ -786,7 +807,12 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             } else {
                 const ShaderCompiler::Result result =
                     ShaderCompiler::compile(expanded.toUtf8(), QShader::FragmentStage);
-                errors += reportCompile(out, label, result, declaredParamNames(eff.parameters));
+                // NO declared names: a buffer pass gets no p_<id> preamble, so it
+                // cannot reference one and a did-you-mean hint could only point at
+                // a symbol that does not exist in this stage. The pointer arm and
+                // the shared compileStage helper pass an empty list for the same
+                // reason.
+                errors += reportCompile(out, label, result, kNoDeclaredParams);
             }
             // The COMPOSITOR branch of the same buffer pass. scaffold=false: a
             // buffer ships its own main() and reads its parameters by raw contract
@@ -806,16 +832,6 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     // daemon — the sibling zone path (validatePack) already bakes the vertex
     // stage, so surface validation must too.
     {
-        const QString surfacePacksRoot = QFileInfo(packDir).absolutePath();
-        // Match the runtime SurfaceShaderItem::surfaceIncludePaths(): each surface
-        // data dir contributes its `shared` subdir AND the dir itself, so a shader
-        // that resolves an include from the packs-root (not just `shared/`) bakes
-        // identically here and can't false-fail the gate. The sibling zone
-        // validator uses the same {root/shared, root} pair.
-        // Sibling shared/ first, then the family's XDG roots, so an
-        // INSTALLED pack (whose helpers live in the system prefix, not
-        // beside it) resolves its includes the way the runtime does.
-        const QStringList includePaths = QStringList(packSharedRoots(packDir)) << surfacePacksRoot;
         QString vertPath = eff.vertexShaderPath;
         if (vertPath.isEmpty()) {
             // Beside the FRAGMENT (matching the daemon runtime and the comment
@@ -852,7 +868,9 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
                 } else {
                     const ShaderCompiler::Result result =
                         ShaderCompiler::compile(expanded.toUtf8(), QShader::VertexStage);
-                    errors += reportCompile(out, label, result, declaredParamNames(eff.parameters));
+                    // Empty for the same reason as the buffer passes above: the
+                    // vertex stage takes no generated preamble either.
+                    errors += reportCompile(out, label, result, kNoDeclaredParams);
                 }
             }
         }
