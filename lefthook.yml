@@ -67,6 +67,7 @@ pre-commit:
         - "*.desktop*"
         - "*.metainfo.xml*"
         - "packaging/**"
+        - "CHANGELOG.md"
       run: python3 scripts/check-conventions.py {staged_files}
     shader-validate:
       glob: "data/overlays/**/*.{frag,vert,glsl,json}"
