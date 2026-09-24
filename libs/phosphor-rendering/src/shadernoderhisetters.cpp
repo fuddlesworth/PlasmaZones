@@ -588,15 +588,15 @@ void ShaderNodeRhi::setBufferFeedback(bool enable)
 void ShaderNodeRhi::setBufferScale(qreal scale)
 {
     const qreal clamped = qBound(PhosphorShaders::kMinBufferScale, scale, PhosphorShaders::kMaxBufferScale);
-    // The single-value scale seeds every per-pass slot; setBufferScales runs
-    // after it in the sync order (ShaderEffect::updatePaintNode) and diverges
-    // the slots it names. Compare the slots too, so a pack that flips from
-    // per-pass scales back to one value reallocates.
-    bool changed = !qFuzzyCompare(m_bufferScale, clamped);
-    for (qreal s : m_bufferScales) {
-        changed = changed || !qFuzzyCompare(s, clamped);
-    }
-    if (!changed) {
+    // Compare the SINGLE value only, never the per-pass slots. This runs before
+    // setBufferScales in the sync order (ShaderEffect::updatePaintNode), and that
+    // call re-diverges the slots this one seeds, so comparing the slots here sees
+    // its own seed undone every frame and reallocates every buffer target twice
+    // per frame for any pack that declares `bufferScales`.
+    // A pack that DROPS its per-pass scales still re-flattens: setBufferScales is
+    // pushed unconditionally with an empty list, and its past-the-end fallback for
+    // every slot is m_bufferScale.
+    if (qFuzzyCompare(m_bufferScale, clamped)) {
         return;
     }
     m_bufferScale = clamped;
