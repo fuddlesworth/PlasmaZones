@@ -2430,8 +2430,11 @@ add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # shadervalidate/ - Offline Pack Validator Tests
-#   test_pack_validators:      metadata lints for the animation and overlay
-#                              authoring models
+#   test_pack_validators:      pack, parameter, token and buffer lints for the
+#                              animation and overlay authoring models
+#   test_pack_validator_presets: the PRESET lints for those models, split out
+#                              when the file above passed the size ceiling, at
+#                              the concern seam it had already drawn
 #   test_pointer_pack_validator: the same for the pointer model, split out when
 #                              the shared file passed the size ceiling
 #   test_surface_pack_validator: the same for the surface model, which had NO
@@ -2469,8 +2472,8 @@ set(_pack_validator_arms
     ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_surface.cpp
     ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_pointer.cpp
     ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidatorcommon.cpp)
-foreach(_pv_test IN ITEMS test_pack_validators test_pointer_pack_validator test_surface_pack_validator
-                          test_animation_pack_bakes test_pack_model_detection)
+foreach(_pv_test IN ITEMS test_pack_validators test_pack_validator_presets test_pointer_pack_validator
+                          test_surface_pack_validator test_animation_pack_bakes test_pack_model_detection)
     add_executable(${_pv_test} shadervalidate/${_pv_test}.cpp
                    shadervalidate/packvalidatortesthelpers.h
                    ${_pack_validator_arms})

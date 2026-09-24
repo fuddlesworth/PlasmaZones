@@ -296,6 +296,18 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
         if (!PhosphorShaders::isValidParamId(p.id)) {
             lints
                 << QStringLiteral("invalid parameter id '%1' (not a GLSL identifier; skipped, no p_ define)").arg(p.id);
+        } else if (PhosphorShaders::isReservedAnimationParamId(p.id)) {
+            // A LEGAL identifier that collides with a define the shared header
+            // owns. The generated preamble would emit `#define p_<id> <slot>`
+            // over animation_uniforms.glsl's own `#define p_<id> ...`, and GLSL
+            // makes a redefinition with a different replacement list an error —
+            // so the pack fails to compile pointing at the shared header, which
+            // is the wrong place to send an author looking for their mistake.
+            lints << QStringLiteral(
+                         "parameter id '%1' collides with a define the shared animation header already owns "
+                         "(p_%1). The generated preamble would redefine it, which GLSL rejects. Rename the "
+                         "parameter")
+                         .arg(p.id);
         }
         // The same split translateAnimationParams makes: colour or scalar,
         // nothing else, so an unknown type still consumes a scalar lane.
