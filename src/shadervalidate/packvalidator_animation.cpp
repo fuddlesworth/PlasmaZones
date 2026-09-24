@@ -672,12 +672,12 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
 
     // Preset lint: every preset key must name a declared parameter, and every
     // value must match that parameter's declared type and range.
-    errors += reportRawPresetProblems(out, doc.object());
     // The image-parameter gap: this arm parses presets before sourceDir is stamped, so an
     // image-typed preset value is refused fail-closed and vanishes before the shared lint
     // runs. Report the declaration instead.
-    errors += reportImageParamPresets(out, doc.object());
-    errors += reportPresetProblems(out, packDir, eff.presets, eff.parameters);
+    errors += reportPresetLints(out,
+                                rawPresetLints(doc.object()) + imageParamPresetLints(doc.object())
+                                    + presetLints(packDir, eff.presets, eff.parameters));
 
     // ── fragment stage ──
     // Read once for both arms; an unreadable or empty fragment is one error

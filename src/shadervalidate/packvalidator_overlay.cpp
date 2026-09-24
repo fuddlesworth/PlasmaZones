@@ -390,8 +390,7 @@ int validatePack(const QString& packDir, QTextStream& out)
     // must match that parameter's declared type and range. AFTER the metadata block,
     // matching the other three arms. Run before it, this printed `presets ERROR`
     // above `metadata OK`.
-    errors += reportRawPresetProblems(out, rawRoot);
-    errors += reportPresetProblems(out, packDir, info.presets, info.parameters);
+    errors += reportPresetLints(out, rawPresetLints(rawRoot) + presetLints(packDir, info.presets, info.parameters));
 
     // ── stage compiles (reproduce the runtime assembly) ──
     const QString packsRoot = QFileInfo(packDir).absolutePath();

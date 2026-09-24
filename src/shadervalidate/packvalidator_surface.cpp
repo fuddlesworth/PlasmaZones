@@ -690,10 +690,10 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     // matching the animation and pointer arms. Run before it, this printed
     // `presets ERROR` above `metadata OK`, which is the self-contradicting shape the
     // collected-then-printed design was introduced to avoid.
-    errors += reportRawPresetProblems(out, doc.object());
     // Same gap as the animation arm, same reason: presets parse before sourceDir.
-    errors += reportImageParamPresets(out, doc.object());
-    errors += reportPresetProblems(out, packDir, eff.presets, eff.parameters);
+    errors += reportPresetLints(out,
+                                rawPresetLints(doc.object()) + imageParamPresetLints(doc.object())
+                                    + presetLints(packDir, eff.presets, eff.parameters));
 
     // ── stage compile (reproduce the daemon runtime fragment assembly) ──
     if (QFile::exists(eff.fragmentShaderPath)) {

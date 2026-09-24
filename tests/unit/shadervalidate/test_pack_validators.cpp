@@ -820,7 +820,11 @@ private Q_SLOTS:
         obj.insert(QStringLiteral("presets"), presets);
 
         const PackResult r = validate(tmp, QStringLiteral("preset-branches"), obj);
-        QVERIFY2(r.report.contains(QStringLiteral("has an unusable id")), qPrintable(r.report));
+        // The 200-character key trips the LENGTH arm, which is a separate message
+        // from the unusable-id one: the registry truncates the rendered name but
+        // keeps the full key as the id, so the fault is a collision risk rather
+        // than an unreadable row.
+        QVERIFY2(r.report.contains(QStringLiteral("has a 200-character id")), qPrintable(r.report));
         QVERIFY2(r.report.contains(QStringLiteral("does not fit in an int parameter")), qPrintable(r.report));
         QVERIFY2(r.report.contains(QStringLiteral("to a non-color value")), qPrintable(r.report));
         // EXACTLY three, not "at least": the count is knowable, and `>=` is satisfied
@@ -847,13 +851,14 @@ private Q_SLOTS:
         presets.insert(QString(cap, QLatin1Char('n')), QJsonObject{{QStringLiteral("speed"), 1.5}});
         obj.insert(QStringLiteral("presets"), presets);
         const PackResult atCap = validate(tmp, QStringLiteral("preset-idcap"), obj);
+        QVERIFY2(!atCap.report.contains(QStringLiteral("-character id")), qPrintable(atCap.report));
         QVERIFY2(!atCap.report.contains(QStringLiteral("has an unusable id")), qPrintable(atCap.report));
 
         QJsonObject over;
         over.insert(QString(cap + 1, QLatin1Char('n')), QJsonObject{{QStringLiteral("speed"), 1.5}});
         obj.insert(QStringLiteral("presets"), over);
         const PackResult overCap = validate(tmp, QStringLiteral("preset-idcap"), obj);
-        QVERIFY2(overCap.report.contains(QStringLiteral("has an unusable id")), qPrintable(overCap.report));
+        QVERIFY2(overCap.report.contains(QStringLiteral("-character id")), qPrintable(overCap.report));
     }
 
     void anUnusableIdStillGetsItsValuesChecked()
@@ -872,9 +877,92 @@ private Q_SLOTS:
         obj.insert(QStringLiteral("presets"), presets);
 
         const PackResult r = validate(tmp, QStringLiteral("preset-both"), obj);
-        QVERIFY2(r.report.contains(QStringLiteral("has an unusable id")), qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("has a 200-character id")), qPrintable(r.report));
         QVERIFY2(r.report.contains(QStringLiteral("truncates to 1")), qPrintable(r.report));
         QCOMPARE(r.errors, 2);
+    }
+
+    void theRawPresetLintsCountTheWayTheLoaderCounts()
+    {
+        // The caps exist to say what the loader will DROP, so counting anything the
+        // loader does not count makes the lint assert a drop that never happens.
+        // parsePackPresets increments its preset budget only after the object-shape
+        // check, and its per-preset budget tests the map it is building, which a JSON
+        // null never enters.
+        QTemporaryDir tmp;
+        REQUIRE_ANIMATION_FIXTURE(tmp);
+
+        QJsonObject obj = basePack(QStringLiteral("preset-counting"));
+        obj.insert(QStringLiteral("parameters"),
+                   QJsonArray{animationParam(QStringLiteral("speed"), QStringLiteral("float"), 1.0)});
+
+        // 64 usable presets plus one non-object body. The loader keeps all 64 and
+        // drops nothing, so the cap lint must stay silent — but the malformed body
+        // is now named, which nothing reported before.
+        QJsonObject presets;
+        for (int i = 0; i < 64; ++i) {
+            presets.insert(QStringLiteral("p%1").arg(i), QJsonObject{{QStringLiteral("speed"), 1.5}});
+        }
+        presets.insert(QStringLiteral("Bad"), QJsonValue(7));
+        obj.insert(QStringLiteral("presets"), presets);
+        PackResult r = validate(tmp, QStringLiteral("preset-counting"), obj);
+        QVERIFY2(!r.report.contains(QStringLiteral("only the first 64 are loaded and the rest are dropped")),
+                 qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("preset 'Bad' is not an object")), qPrintable(r.report));
+
+        // Same one level down: 64 real values beside a null. The null costs no slot,
+        // so nothing is dropped, and the null itself is what gets reported.
+        QJsonObject fat;
+        for (int i = 0; i < 64; ++i) {
+            fat.insert(QStringLiteral("v%1").arg(i), 1.0);
+        }
+        fat.insert(QStringLiteral("nulled"), QJsonValue());
+        obj.insert(QStringLiteral("presets"), QJsonObject{{QStringLiteral("Fat"), fat}});
+        r = validate(tmp, QStringLiteral("preset-counting"), obj);
+        QVERIFY2(!r.report.contains(QStringLiteral("values; only the first")), qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("sets 'nulled' to null")), qPrintable(r.report));
+    }
+
+    void aPercentInAPresetKeyDoesNotRewriteTheMessage()
+    {
+        // The preset key is author-controlled and lands in %1. A CHAINED .arg
+        // substitutes it and then searches the RESULT, so a key carrying its own
+        // marker had that marker replaced by the next argument, renaming the preset
+        // the author has to go and fix.
+        QTemporaryDir tmp;
+        REQUIRE_ANIMATION_FIXTURE(tmp);
+
+        QJsonObject obj = basePack(QStringLiteral("preset-percent"));
+        obj.insert(QStringLiteral("parameters"),
+                   QJsonArray{animationParam(QStringLiteral("speed"), QStringLiteral("float"), 1.0)});
+        QJsonObject fat;
+        for (int i = 0; i < 65; ++i) {
+            fat.insert(QStringLiteral("v%1").arg(i), 1.0);
+        }
+        obj.insert(QStringLiteral("presets"), QJsonObject{{QStringLiteral("%3 mode"), fat}});
+        const PackResult r = validate(tmp, QStringLiteral("preset-percent"), obj);
+        QVERIFY2(r.report.contains(QStringLiteral("preset '%3 mode' sets 65 values")), qPrintable(r.report));
+    }
+
+    void thePresetsHeaderIsPrintedOnce()
+    {
+        // The three collectors used to print their own header, so a pack tripping two
+        // of them announced "presets ERROR" twice in one report.
+        QTemporaryDir tmp;
+        REQUIRE_ANIMATION_FIXTURE(tmp);
+
+        QJsonObject obj = basePack(QStringLiteral("preset-onehdr"));
+        obj.insert(QStringLiteral("parameters"),
+                   QJsonArray{animationParam(QStringLiteral("speed"), QStringLiteral("float"), 1.0)});
+        // A raw-block fault and a parsed-map fault together.
+        QJsonObject presets;
+        presets.insert(QStringLiteral("NotAnObject"), QJsonValue(7));
+        presets.insert(QStringLiteral("Undeclared"), QJsonObject{{QStringLiteral("nope"), 1.0}});
+        obj.insert(QStringLiteral("presets"), presets);
+        const PackResult r = validate(tmp, QStringLiteral("preset-onehdr"), obj);
+        QVERIFY2(r.report.contains(QStringLiteral("is not an object, so it is dropped")), qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("which the pack does not declare")), qPrintable(r.report));
+        QCOMPARE(r.report.count(QStringLiteral("presets        ERROR")), 1);
     }
 
     void theRawPresetsBlockIsLintedForWhatTheParseHides()

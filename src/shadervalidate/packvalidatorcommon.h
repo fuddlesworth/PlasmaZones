@@ -194,33 +194,41 @@ struct PresetLintParam
 /// so `parsePackPresets` refuses every image-typed preset value fail-closed and the value
 /// is gone before any other lint sees it. Reads the RAW `presets` block for the keys a
 /// pack sets, because the parsed map is exactly where they have already been dropped.
-int reportImageParamPresets(QTextStream& out, const QJsonObject& root);
+/// Returns its lints rather than printing, so the three preset reporters share ONE
+/// `presets ERROR` header. Each used to print its own, and a pack tripping two of them
+/// (an image param plus an out-of-range float, say) printed the header twice in one
+/// report. See `reportPresetLints`.
+QStringList imageParamPresetLints(const QJsonObject& root);
 
 /// Lint the RAW `presets` value from @p root, for the faults the parsed map cannot show.
 ///
-/// Three of them, each costing the author presets with only a log line: a
-/// present-but-non-object `presets` (the loader ignores it wholesale), more presets than
-/// the loader keeps, and a preset with more values than it keeps. `reportPresetProblems`
-/// below receives the already-parsed, already-truncated map and so is blind to all three.
-///
-/// Returns the number of problems found and prints them under the same `presets` header.
-int reportRawPresetProblems(QTextStream& out, const QJsonObject& root);
+/// Each of them costs the author presets or values with only a log line: a
+/// present-but-non-object `presets` (the loader ignores it wholesale), a non-object preset
+/// BODY, a null preset value, more presets than the loader keeps, and a preset with more
+/// values than it keeps. `collectPresetLints` below receives the already-parsed,
+/// already-truncated map and so is blind to all of them.
+QStringList rawPresetLints(const QJsonObject& root);
 
-int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
-                         const QList<PresetLintParam>& declared);
+QStringList presetLints(const QString& packDir, const QMap<QString, QVariantMap>& presets,
+                        const QList<PresetLintParam>& declared);
 
 /// Per-family overloads, so each validator arm is one call rather than its own
 /// projection loop. The four ParameterInfo types spell themselves differently
 /// (slot vs step, image vs no image), which is why the lint takes the reduced
 /// PresetLintParam and these do the reducing.
-int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
-                         const QList<PhosphorShaders::ShaderRegistry::ParameterInfo>& declared);
-int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
-                         const QList<PhosphorAnimationShaders::AnimationShaderEffect::ParameterInfo>& declared);
-int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
-                         const QList<PhosphorSurfaceShaders::SurfaceShaderEffect::ParameterInfo>& declared);
-int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
-                         const QList<PhosphorPointerShaders::PointerShaderEffect::ParameterInfo>& declared);
+QStringList presetLints(const QString& packDir, const QMap<QString, QVariantMap>& presets,
+                        const QList<PhosphorShaders::ShaderRegistry::ParameterInfo>& declared);
+QStringList presetLints(const QString& packDir, const QMap<QString, QVariantMap>& presets,
+                        const QList<PhosphorAnimationShaders::AnimationShaderEffect::ParameterInfo>& declared);
+QStringList presetLints(const QString& packDir, const QMap<QString, QVariantMap>& presets,
+                        const QList<PhosphorSurfaceShaders::SurfaceShaderEffect::ParameterInfo>& declared);
+QStringList presetLints(const QString& packDir, const QMap<QString, QVariantMap>& presets,
+                        const QList<PhosphorPointerShaders::PointerShaderEffect::ParameterInfo>& declared);
+
+/// Print everything the three collectors gathered under ONE `presets ERROR` header and
+/// return the count, so a caller still does `errors += ...`. Prints nothing when @p lints
+/// is empty, which is what keeps a clean pack's report free of an empty section.
+int reportPresetLints(QTextStream& out, const QStringList& lints);
 
 /// Absolute path to a usable glslang binary (`glslangValidator`, else the
 /// `glslang` the project renamed it to), or an empty string when neither is on
