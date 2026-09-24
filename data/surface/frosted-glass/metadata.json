@@ -116,7 +116,7 @@
             "min": 0.0,
             "max": 360.0,
             "group": "Gradient",
-            "description": "Base direction of the gradient (degrees)"
+            "description": "Starting direction of the gradient in degrees. It holds as a fixed direction only when Gradient speed is 0, since any other speed keeps turning it"
         },
         {
             "id": "vignetteStrength",
@@ -126,7 +126,7 @@
             "min": 0.0,
             "max": 0.5,
             "group": "Shape",
-            "description": "How much the pane darkens toward its edges"
+            "description": "How much the pane darkens toward its top and bottom edges"
         },
         {
             "id": "colorA",

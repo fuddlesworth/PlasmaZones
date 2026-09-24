@@ -31,7 +31,16 @@ vec3 gradientColor(vec2 panelUv) {
     float rotatedAngle = radians(p_gradientAngle) + iTime * speed;
     vec2 dir = vec2(cos(rotatedAngle), sin(rotatedAngle));
     float t = dot(panelUv - 0.5, dir) + 0.5;
-    t += sin(iTime * speed * 2.7) * 0.55 + sin(iTime * speed * 1.7 + 1.57) * 0.35;
+    // Gated on the speed so 0 really freezes, which is what the parameter
+    // DECLARES ("where 0 freezes it") and what its declared minimum of 0 makes
+    // reachable. The second sine carries a +1.57 phase offset, so at speed 0 it
+    // did not vanish with the first: it settled on sin(1.57) * 0.35, a constant
+    // +0.35 bias that pushed the mix factor to [0.282, 1.0] at the default angle.
+    // The first colour never rendered and the trailing third of the pane was
+    // flat second colour. Every non-zero speed is byte-identical to before.
+    if (speed > 0.0) {
+        t += sin(iTime * speed * 2.7) * 0.55 + sin(iTime * speed * 1.7 + 1.57) * 0.35;
+    }
     t = smoothstep(0.0, 1.0, t);
     return mix(p_colorA.rgb, p_colorB.rgb, t);
 }
@@ -71,6 +80,15 @@ vec4 pSurface(vec2 uv) {
     }
 
     // Vignette darkens edges, multiplicative so it never brightens.
+    //
+    // The vec2(0.3, 1.0) weight is ASYMMETRIC and comes verbatim from the shell
+    // panel shader this pack ports, which was written for one wide, short
+    // TopPanel. It makes the vertical falloff 3.3x the horizontal, so at the
+    // declared max of 0.5 the mid-left and mid-right edges darken about 7.5%
+    // against 25% at top and bottom: this reads as a vertical gradient, not a
+    // vignette. Kept, because changing it would restyle every pane that ships
+    // with the pack; the parameter's description says top and bottom rather
+    // than "edges" so the control does not promise the symmetric thing.
     float vignette = clamp(1.0 - length((fuv - 0.5) * vec2(0.3, 1.0)) * p_vignetteStrength, 0.0, 1.0);
 
     vec3 grad = gradientColor(fuv);
