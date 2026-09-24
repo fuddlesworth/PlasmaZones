@@ -7,12 +7,6 @@
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
-#include <opengl/glshader.h>
-#include <opengl/glshadermanager.h>
-#include <opengl/gltexture.h>
-#include <window.h>
-
-#include <epoxy/gl.h>
 
 #include "tilinghandler/tilinghandler.h"
 #include "handlers/snaphandler.h"
@@ -251,7 +245,8 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // out to be undecoratable, the kept state is an orphan and the kept redirect is a
     // window left shaded with nothing to shade it with.
     const auto undecorate = [&] {
-        // The SAME resolver removeWindowDecoration uses, three lines above. Not the
+        // The SAME resolver removeWindowDecoration uses (decoration_teardown.cpp).
+        // Not the
         // caller's `w` handed straight through: releaseSurfaceState's live-transition
         // guard is `if (target && findTransition(target))`, so a null target sails past
         // it and erases the composite an animation is still sampling, while

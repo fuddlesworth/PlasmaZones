@@ -149,14 +149,13 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
         // `translateAnimationParams`. iTimeDelta / iFrame / iDate /
         // iMouse mirror the daemon's SurfaceAnimator semantics so a
         // single shader source observes equivalent state on either
-        // runtime. Audio / multipass / texture uniforms are still
-        // unpopulated on the kwin ANIMATION-transition path (window
-        // open/close/move/…) — those need C++ wiring (CAVA subscription,
-        // FBO chain, texture cache) that is out of scope here. NB: the
-        // surface DECORATION path (persistent border packs) DOES wire audio
-        // now via the effect's own CavaSpectrumProvider — see
-        // bindSurfaceAudio in surfacelayers.cpp; this comment is only about
-        // the transition shaders driven from this function.
+        // runtime. MULTIPASS is the one thing still unpopulated on the kwin
+        // ANIMATION-transition path (window open/close/move/…): it needs an
+        // FBO chain this path does not build. Audio and the user textures ARE
+        // wired, in THIS function: the audio bind reuses the effect's own
+        // CavaSpectrumProvider through bindSurfaceAudio, and the user-texture
+        // loop binds the declared slots and their iTextureResolution entries
+        // below.
         //
         // setUniform must run with the shader bound: KWin's
         // `GLShader::setUniform` calls `glUniform*` directly, which

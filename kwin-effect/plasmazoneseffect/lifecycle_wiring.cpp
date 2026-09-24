@@ -326,6 +326,7 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
         m_packBufferScaleCache.clear(); // caches the multiplier-folded product; rides the compile cache's lifetime
         m_anyCompiledPackReadsCursor = false; // re-derived as packs recompile
         m_opacityTintFallbackWarned = false; // re-arm the capture-fallback warning with the fresh compiles
+        m_backdropAllocWarned = false; // and the backdrop-allocation one, for the same reason
         m_surfaceMultipass.clear();
         // Repaint whenever there is a compositor, NOT only when the context went current: a
         // repaint is not GL work. Gating it on the make-current result meant a transient

@@ -234,11 +234,16 @@ float PlasmaZonesEffect::advanceFocusFade(const QString& windowId, bool focused)
     // focus change fades rather than snaps. Called from pushBorderUniforms
     // only for a pack that reads focus, with @p windowId threaded from the
     // fold so getWindowId(w) is not recomputed per pack.
-    // Uses the PINNED per-frame clock: a second call within the same frame (a
-    // chain with several focus-reading packs) reads now == lastMs and is an
-    // exact no-op, so the ramp advances at most once per frame and the step
-    // can never partially double-advance (the live wall clock could straddle a
-    // millisecond boundary mid-frame).
+    // Uses the PINNED clock, which is pinned per OUTPUT PASS rather than per
+    // frame: a second call within the same pass (a chain with several
+    // focus-reading packs) reads now == lastMs and is an exact no-op, so the
+    // ramp cannot partially double-advance the way the live wall clock could by
+    // straddling a millisecond boundary mid-pass. On a multi-output desktop a
+    // window straddling two outputs reaches this twice per refresh with two
+    // pins microseconds apart; the clock is integer milliseconds, so they
+    // usually share a value and the second call is still a no-op, and when they
+    // straddle a millisecond the ramp advances by one extra millisecond out of
+    // the configured fade duration.
     FocusFadeState& fs = m_focusFade[windowId];
     const float target = focused ? 1.0f : 0.0f;
     qint64 now = m_shaderManager.currentFrameClockMs();

@@ -311,6 +311,15 @@ bool PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMulti
         KWin::RenderTarget renderTarget(&fbo);
         KWin::RenderViewport viewport(logicalGeometry, captureScale, renderTarget, QPoint());
         KWin::GLFramebuffer::pushFramebuffer(&fbo);
+        // Guard the FRAMEBUFFER STACK across the same nested draw the flag above
+        // is guarded across, and for a worse consequence: an unbalanced stack
+        // leaves every LATER frame in the session rendering into this window's
+        // capture FBO, and ScopedGlState does not cover the framebuffer binding,
+        // so nothing else recovers it. Same idiom the pointer pass uses around
+        // its own buffer stages.
+        const auto popCaptureTarget = qScopeGuard([] {
+            KWin::GLFramebuffer::popFramebuffer();
+        });
         glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         KWin::ItemEffect keepRenderable(w->windowItem());
@@ -324,7 +333,6 @@ bool PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMulti
         const int captureMask = PAINT_WINDOW_TRANSFORMED | PAINT_WINDOW_TRANSLUCENT;
         drawn = KWinCompat::drawWindowChecked(renderTarget, viewport, w, captureMask, KWin::Region::infinite(),
                                               captureData);
-        KWin::GLFramebuffer::popFramebuffer();
     }
     resetCapture.dismiss();
     m_capturingSnapshot = false;

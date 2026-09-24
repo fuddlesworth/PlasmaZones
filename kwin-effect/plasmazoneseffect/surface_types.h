@@ -685,15 +685,21 @@ struct WindowDecoration
     /// window's surface path) or the user's own pack chain, e.g. {"glow",
     /// "border-sweep"} (custom mode — any user pack suppresses the plain
     /// border outright, see updateWindowDecoration). The idle present path
-    /// composites the FULL chain (renderSurfaceChainComposite folds
-    /// chain[1..] over the base); only the animation surface-layer path
-    /// renders chain[0] (basePackId) alone.
+    /// composites the FULL chain, and so does the animation surface-layer
+    /// path: renderSurfaceChain folds every pack. No path renders chain[0]
+    /// alone any more.
     QStringList chain;
 
-    /// The base pack id to render — chain.value(0), defaulting to "border".
-    /// The render path (drawWindow / pushBorderUniforms / renderSurfaceChainComposite)
-    /// looks this up in m_compiledPacks to get the CompiledSurfacePack instead
-    /// of the old single global border shader.
+    /// chain.value(0), defaulting to "border". NO RENDER PATH READS THIS. It
+    /// used to be what drawWindow and pushBorderUniforms looked up in
+    /// m_compiledPacks, back when one base pack rendered and the rest were
+    /// composited over it; the fold walks the chain itself now.
+    ///
+    /// It is kept for ONE reason, and it is the reason FoldInputs states: the
+    /// fold-input comparison includes fields DERIVED from the chain rather
+    /// than trusting the derivation to keep holding elsewhere. Removing it
+    /// would take a compared field out of that comparison, which is the thing
+    /// that struct's own comment warns against.
     QString basePackId;
 
     /// True when the window resolved onto a `shell.*` surface path (a

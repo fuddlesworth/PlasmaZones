@@ -1892,11 +1892,11 @@ private:
     /// registry hot-reload (effectsChanged) so a fixed pack that breaks again
     /// warns again.
     bool m_opacityTintFallbackWarned = false;
-    /// Once-latched journal warning for a backdrop texture or framebuffer
-    /// that failed to allocate (captureWindowBackdrop). The capture retries
-    /// every paint and the pane is absent meanwhile, so an unlatched
-    /// warning would spam at vsync rate. Never reset: an allocation that
-    /// fails is a VRAM state, not a pack state, and the first line says it.
+    /// Once-latched journal warning for a backdrop texture or framebuffer that
+    /// failed to allocate (captureWindowBackdrop). The capture retries every
+    /// paint, so an unlatched warning would spam at vsync rate. Re-armed at every
+    /// compile-cache clear, like its two neighbours: session-permanent meant one
+    /// transient failure silenced every later one.
     bool m_backdropAllocWarned = false;
 
     /// Reusable staging buffer for updateShellContentRect's glReadPixels — the
@@ -2056,18 +2056,18 @@ private:
     /// param values, the main-pass iChannel locations, and the multipass buffer
     /// passes for that one pack). Populated on first use by compiledPack();
     /// cleared wholesale on a SurfaceShaderRegistry hot-reload (effectsChanged)
-    /// and on teardown. A window's render path looks up its resolved base pack id
-    /// (WindowDecoration::basePackId) here.
+    /// and on teardown. A window's render path looks up EVERY pack in its chain
+    /// here, not a base pack (WindowDecoration::basePackId has no render reader).
     std::unordered_map<QString, CompiledSurfacePack> m_compiledPacks;
 
-    /// Per-pack CLAMPED bufferScale (clampedBufferScale() — the user's global
-    /// multiplier already folded in), cached off the registry's by-value
-    /// SurfaceShaderEffect lookup for the per-frame backdrop-density resolve
-    /// (chainBackdropScale in surface_capture.cpp). Metadata only — the
-    /// linked-uniform verdicts are compile state and deliberately NOT cached
-    /// here (see that lambda's comment for the two bugs a raw probe caused).
-    /// Cleared wherever m_compiledPacks clears (a registry hot-reload can
-    /// change the metadata too) AND when m_decorationBlurScaleMultiplier
+    /// Per-pack clamped scale of the pack's FIRST BACKDROP-LINKED BUFFER PASS, NOT
+    /// the pack-wide `bufferScale`, which the chain packs leave at 1.0 while this
+    /// holds 0.25. clampedBufferScale() folds the global multiplier in. Cached off
+    /// the registry's by-value SurfaceShaderEffect lookup for the per-frame
+    /// backdrop-density resolve (chainBackdropScale in surface_capture.cpp).
+    /// Metadata only — the linked-uniform verdicts are compile state and NOT cached
+    /// here (see that lambda's comment for the two bugs a raw probe caused). Cleared
+    /// wherever m_compiledPacks clears, and when m_decorationBlurScaleMultiplier
     /// changes, since the cached product bakes the multiplier in.
     std::unordered_map<QString, qreal> m_packBufferScaleCache;
 

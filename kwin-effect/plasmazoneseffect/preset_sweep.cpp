@@ -128,6 +128,7 @@ void PlasmaZonesEffect::applySurfacePresetSweep()
     // same reason.
     m_anyCompiledPackReadsCursor = false;
     m_opacityTintFallbackWarned = false;
+    m_backdropAllocWarned = false;
     if (KWin::effects) {
         KWin::effects->addRepaintFull();
     }
