@@ -3,6 +3,8 @@
 
 #include <PhosphorShaders/BaseUniformProfile.h>
 
+#include <PhosphorShaders/ShaderBindings.h>
+
 #include <QDateTime>
 
 #include <cstring>
@@ -103,7 +105,7 @@ void BaseUniformProfile::fill(const UboFrameState& state)
 
     // iChannelResolution — the node resolves live channel sizes (multipass /
     // single-buffer / unset → 1.0) into state.channelResolution[i].xy.
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < PhosphorShaders::Bindings::kChannelResolutionSlots; ++i) {
         m_u.iChannelResolution[i][0] = state.channelResolution[i][0];
         m_u.iChannelResolution[i][1] = state.channelResolution[i][1];
         m_u.iChannelResolution[i][2] = 0.0f;
@@ -117,7 +119,7 @@ void BaseUniformProfile::fill(const UboFrameState& state)
     m_u._pad_after_audioSpectrum[1] = 0;
 
     // User texture resolutions (bindings 11-14) — node resolves live.
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < PhosphorShaders::Bindings::kUserTextureCount; ++i) {
         m_u.iTextureResolution[i][0] = state.textureResolution[i][0];
         m_u.iTextureResolution[i][1] = state.textureResolution[i][1];
         m_u.iTextureResolution[i][2] = 0.0f;

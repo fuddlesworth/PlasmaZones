@@ -153,7 +153,7 @@ namespace {
 /// Factored out because two callers need the identical placement and only
 /// differ in what they do with it — one cuts an image out of it, the other maps
 /// it across a quad. Two copies of this would be two chances to disagree with
-/// shaders/wallpaper.glsl::wallpaperUv, which both of them mirror.
+/// data/overlays/shared/wallpaper.glsl::wallpaperUv, which both of them mirror.
 struct WallpaperCover
 {
     qreal x = 0.0;
@@ -231,7 +231,7 @@ QRect ShaderRegistry::computeWallpaperCropRect(QSize wpSize, const QRect& physGe
     }
 
     // "Cover" placement of the wallpaper on the physical screen: aspect-correct
-    // fill centered, overflow cropped. Mirrors shaders/wallpaper.glsl::wallpaperUv
+    // fill centered, overflow cropped. Mirrors data/overlays/shared/wallpaper.glsl::wallpaperUv
     // so the cropped image sampled with aspect == subGeom reproduces the same
     // portion of the wallpaper that would appear inside subGeom if the whole
     // physical screen were drawn with the full wallpaper.

@@ -352,12 +352,11 @@ QStringList shaderIncludePaths()
     // XDG_DATA_DIRS list, which includes it on a normal system.
     // No libs/phosphor-*/shaders entry. There used to be one naming
     // "libs/phosphor-rendering/shaders", which has never existed, so it
-    // resolved nothing in any invocation. Repointing it at the real
-    // libs/phosphor-shaders/shaders would be worse than deleting it: that
-    // directory holds the BASE common.glsl (a different file from the
-    // overlay one), and the daemon's expandShaderIncludePaths carries no
-    // such entry, so adding it here would make the preview search a path
-    // the runtime does not.
+    // resolved nothing in any invocation. libs/phosphor-shaders/shaders was
+    // the only real candidate and it is gone: nothing could #include it, and
+    // adding it here would have made the preview search a path the runtime
+    // does not, against a BASE common.glsl that is a different file from the
+    // overlay one.
     return paths;
 }
 

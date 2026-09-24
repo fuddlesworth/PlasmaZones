@@ -10,8 +10,9 @@
 # top of the headers here, and phosphor-wayland (the Wayland integration)
 # does not depend on it.
 #
-# Depends on Qt6 Core+Gui (Gui for QImage in the wallpaper cache) and
-# PhosphorFsLoader for WatchedDirectorySet. No QML facade today —
+# Depends on Qt6 Core+Gui (Gui for QImage in the wallpaper cache),
+# PhosphorFsLoader for WatchedDirectorySet, and PhosphorRegistry for the
+# Registry<T> storage the pack scan is built on. No QML facade today —
 # downstream Phosphor code exposes ShaderRegistry to QML via
 # context properties, so this lib stays C++-only. A `Phosphor.Shaders`
 # QML module can be added (alongside `QML_ELEMENT` annotations on the
@@ -75,6 +76,7 @@ set(phosphorshaders_public_HDRS
     include/PhosphorShaders/IUniformExtension.h
     include/PhosphorShaders/IWallpaperProvider.h
     include/PhosphorShaders/PixelUnits.h
+    include/PhosphorShaders/ShaderBindings.h
     include/PhosphorShaders/ShaderEntryPoint.h
     include/PhosphorShaders/ShaderIncludeResolver.h
     include/PhosphorShaders/ShaderPackPaths.h
@@ -83,7 +85,6 @@ set(phosphorshaders_public_HDRS
     include/PhosphorShaders/ShaderPresetParse.h
     include/PhosphorShaders/ShaderPresetRegistry.h
     include/PhosphorShaders/ShaderPresetStore.h
-    include/PhosphorShaders/ShaderBindings.h
     include/PhosphorShaders/ShaderRegistry.h
 )
 
@@ -96,9 +97,9 @@ set(phosphorshaders_camelcase_HDRS
     include/PhosphorShaders/IUniformExtension
     include/PhosphorShaders/IWallpaperProvider
     include/PhosphorShaders/PixelUnits
+    include/PhosphorShaders/ShaderBindings
     include/PhosphorShaders/ShaderEntryPoint
     include/PhosphorShaders/ShaderIncludeResolver
-    include/PhosphorShaders/ShaderBindings
     include/PhosphorShaders/ShaderPackPaths
     include/PhosphorShaders/ShaderParamPreamble
     include/PhosphorShaders/ShaderPreset
@@ -251,16 +252,6 @@ install(FILES ${phosphorshaders_camelcase_HDRS}
 
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/PhosphorShaders/phosphorshaders_export.h
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorShaders
-)
-
-# GLSL include library (consumed by user shaders via #include).
-if(NOT DEFINED KDE_INSTALL_DATADIR)
-    include(GNUInstallDirs)
-    set(KDE_INSTALL_DATADIR ${CMAKE_INSTALL_DATADIR})
-endif()
-install(DIRECTORY shaders/
-    DESTINATION ${KDE_INSTALL_DATADIR}/phosphorshaders/shaders
-    FILES_MATCHING PATTERN "*.glsl"
 )
 
 install(EXPORT PhosphorShadersTargets
