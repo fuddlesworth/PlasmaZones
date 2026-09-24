@@ -244,7 +244,7 @@
             "default": 1.0,
             "min": 0.25,
             "max": 4.0,
-            "description": "Shape of the bevel falloff. 1.0 is the rounded bevel, lower values push the bend out to the rim, higher values spread it inward",
+            "description": "Shape of the bevel falloff. 1.0 is the rounded bevel. Lower values carry the bend further inward and higher values keep it close to the rim",
             "group": "Refraction"
         },
         {

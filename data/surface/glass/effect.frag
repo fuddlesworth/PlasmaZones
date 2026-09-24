@@ -72,8 +72,10 @@ vec4 pSurface(vec2 uv) {
         float edgeFactor = 1.0 - clamp(abs(d) / edgePx, 0.0, 1.0);
         float eased = smoothstep(0.0, 1.0, edgeFactor);
         // Edge curve: an exponent on the bevel ramp before the circular
-        // profile (Better Blur's "normal power"). 1 is the reference bevel;
-        // below 1 pushes the bend out to the rim, above 1 spreads it inward.
+        // profile (Better Blur's "normal power"). 1 is the reference bevel.
+        // eased is ~1 at the rim and falls to 0 toward the interior, so an
+        // exponent below 1 RAISES the ramp and carries the bend further
+        // inward, and one above 1 lowers it and confines the bend to the rim.
         eased = pow(eased, clamp(p_edgeCurve, 0.05, 8.0));
         float concave = 1.0 - sqrt(max(1.0 - eased * eased, 0.0));
 
