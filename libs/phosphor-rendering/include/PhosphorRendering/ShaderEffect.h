@@ -40,7 +40,7 @@ namespace PhosphorRendering {
 
 class ShaderNodeRhi;
 
-/// Public mirror of `ShaderNodeRhi::kMaxUserTextures` (4 user-texture slots at
+/// Public mirror of `PhosphorRendering::kMaxUserTextures` (4 user-texture slots at
 /// SRB bindings 11..14), read straight from the binding table. ShaderBindings.h
 /// is a Qt-strings-only header, so this costs nothing; what this header avoids
 /// is ShaderNodeRhi.h, whose rhi/qrhi.h transitive chain is the heavy one. The

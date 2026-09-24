@@ -368,6 +368,10 @@ public:
     ///
     /// Must be pushed AFTER setBufferScale — see its note.
     void setBufferScales(const QList<qreal>& scales);
+    /// Overload for the QVariantList the item already holds, so a per-frame sync
+    /// does not materialise a QList<qreal> just to read it once. Same clamping
+    /// and the same ordering contract as the overload above.
+    void setBufferScales(const QVariantList& scales);
     /// Buffer-pass texel format: RGBA16F when true (the default — safe for HDR,
     /// signed-data, and feedback buffers), RGBA8 when a pack's metadata declares
     /// its buffers hold plain clamped colour (`"halfFloatBuffers": false`).

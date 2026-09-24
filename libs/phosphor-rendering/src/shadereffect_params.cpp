@@ -20,9 +20,9 @@ namespace PhosphorRendering {
 // producer can emit or read past what the arrays hold. Same form and reason as
 // the kMaxUserTextureSlots assert in shadereffect.cpp.
 static_assert(kMaxCustomParams == PhosphorShaders::CustomParams::kVecCount,
-              "ShaderNodeRhi::kMaxCustomParams must equal PhosphorShaders::CustomParams::kVecCount");
+              "PhosphorRendering::kMaxCustomParams must equal PhosphorShaders::CustomParams::kVecCount");
 static_assert(kMaxCustomColors == PhosphorShaders::CustomColors::kColorCount,
-              "ShaderNodeRhi::kMaxCustomColors must equal PhosphorShaders::CustomColors::kColorCount");
+              "PhosphorRendering::kMaxCustomColors must equal PhosphorShaders::CustomColors::kColorCount");
 
 QVariant peelQmlVariant(const QVariant& value)
 {

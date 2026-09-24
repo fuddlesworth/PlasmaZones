@@ -601,19 +601,44 @@ void ShaderNodeRhi::setBufferScale(qreal scale)
     resetBufferTargets();
 }
 
-void ShaderNodeRhi::setBufferScales(const QList<qreal>& scales)
+// Shared body for both setBufferScales overloads, templated on how a value is
+// read out of the caller's container. Named distinctively rather than given a
+// generic name because this TU takes part in a unity build.
+template<typename Accessor>
+static bool assignBufferPassScales(std::array<qreal, kMaxBufferPasses>& slots, qreal fallback, qsizetype count,
+                                   Accessor valueAt)
 {
     bool changed = false;
     for (int i = 0; i < kMaxBufferPasses; ++i) {
-        const qreal use = i < scales.size()
-            ? qBound(PhosphorShaders::kMinBufferScale, scales.at(i), PhosphorShaders::kMaxBufferScale)
-            : m_bufferScale;
-        if (!qFuzzyCompare(m_bufferScales[static_cast<size_t>(i)], use)) {
-            m_bufferScales[static_cast<size_t>(i)] = use;
+        const qreal use = i < count
+            ? qBound(PhosphorShaders::kMinBufferScale, valueAt(i), PhosphorShaders::kMaxBufferScale)
+            : fallback;
+        if (!qFuzzyCompare(slots[static_cast<size_t>(i)], use)) {
+            slots[static_cast<size_t>(i)] = use;
             changed = true;
         }
     }
-    if (changed) {
+    return changed;
+}
+
+void ShaderNodeRhi::setBufferScales(const QList<qreal>& scales)
+{
+    if (assignBufferPassScales(m_bufferScales, m_bufferScale, scales.size(), [&scales](qsizetype i) {
+            return scales.at(i);
+        })) {
+        resetBufferTargets();
+    }
+}
+
+void ShaderNodeRhi::setBufferScales(const QVariantList& scales)
+{
+    // The item holds its per-pass scales as a QVariantList and pushes them on
+    // EVERY sync. Converting to QList<qreal> at the call site allocated a fresh
+    // list per frame per shader item purely to be read once and discarded, so
+    // read the variants in place instead.
+    if (assignBufferPassScales(m_bufferScales, m_bufferScale, scales.size(), [&scales](qsizetype i) {
+            return scales.at(i).toDouble();
+        })) {
         resetBufferTargets();
     }
 }
