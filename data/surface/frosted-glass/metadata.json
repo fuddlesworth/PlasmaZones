@@ -209,7 +209,7 @@
             "default": 0.0,
             "min": 0.0,
             "max": 1.0,
-            "description": "How far the vibrancy boost reaches into darker colours",
+            "description": "How far the vibrancy boost reaches into darker colours. Does nothing while Vibrancy is 0, which is where it starts",
             "group": "Colour"
         }
     ]

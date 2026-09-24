@@ -63,8 +63,15 @@ layout(binding = 15) uniform sampler2D uBackdrop;
 // the wallpaper's own border the sampler is ClampToEdge anyway.
 //
 // The two also guarantee the transparent-when-unbound result in different
-// places: the daemon branch tests uHasBackdrop here, while the compositor
-// relies on its host binding a 1x1 transparent fallback to the sampler.
+// places. The daemon branch tests uHasBackdrop here. The compositor binds a
+// 1x1 transparent fallback to the sampler instead, and it decides to do so by
+// UNIFORM INTROSPECTION, not by the metadata flag: the fold checks whether the
+// linker kept uBackdrop (its resolved location) and binds the fallback
+// whenever it did and no capture is available. That is stronger than a
+// metadata guarantee in the case that matters here, because a third-party pack
+// that includes this module and calls backdropTexel() WITHOUT declaring
+// "needsBackdrop": true still gets transparent black rather than whatever
+// texture unit 0 holds.
 vec4 backdropTexel(vec2 uv) {
 #ifdef PLASMAZONES_KWIN
     vec2 td = vec2(uv.x, 1.0 - uv.y); // top-down normalized, like surfacePixel

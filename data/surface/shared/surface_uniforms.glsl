@@ -130,9 +130,14 @@ uniform float uSurfaceOpacity;
 // padded canvas's top-left), (-1, -1) when the cursor is outside the canvas.
 // .zw is .xy normalized by uSurfaceSize (negative while .xy carries the
 // sentinel), so `iMouse.x < 0.0` is the canonical off-surface test on both
-// runtimes. A pack that reads iMouse should also declare `"animated": true`
-// in its metadata — the host repaints on its vsync loop while a pack
-// animates, and there is no per-cursor-move damage path for static packs.
+// runtimes. A pack that reads iMouse does NOT need `"animated": true`, and is
+// better off without it: there IS a per-cursor-move damage path, and the
+// compositor drives it from the introspected iMouse uniform rather than from
+// any metadata flag, comparing the cursor its fold keyed on so the repaints
+// stop as soon as the pointer does. Declaring `animated` asks instead for a
+// repaint every vsync for as long as the window is up. On a daemon host no
+// hover source is wired at all, so iMouse holds the off-surface sentinel
+// there and a hover pack simply reads "not hovered".
 uniform vec4 iMouse;
 
 // User-declared image textures (metadata `textures` — logo, mask, pattern).

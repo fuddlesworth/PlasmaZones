@@ -40,9 +40,11 @@ uniform sampler2D iChannel5;
 uniform sampler2D iChannel6;
 uniform sampler2D iChannel7;
 #else
-// Bindings 2..9, the channel block of the shared binding table every RHI
-// family declares (overlay multipass.glsl, pointer_multipass.glsl), so the
-// daemon binds one layout for all of them.
+// Bindings 2..9, the channel block of the shared binding table. The overlay
+// family (multipass.glsl) declares the same eight; the pointer family
+// (pointer_multipass.glsl) declares the first FOUR of the same block, because
+// its contract keeps its own cap of two passes. Every declaration comes from
+// the one table, so the daemon binds one layout for all of them.
 layout(binding = 2) uniform sampler2D iChannel0;
 layout(binding = 3) uniform sampler2D iChannel1;
 layout(binding = 4) uniform sampler2D iChannel2;

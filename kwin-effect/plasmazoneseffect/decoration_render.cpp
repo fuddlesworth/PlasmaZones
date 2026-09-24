@@ -413,8 +413,11 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     // normalized by the canvas size (negative alongside the sentinel),
     // matching the daemon branch's convention. Uses the per-frame cached
     // cursor from prePaintScreen — same rationale as the animation path.
-    // Hover packs declare `animated: true` so the vsync repaint loop keeps
-    // this fresh; there is no per-cursor-move damage path.
+    // A hover pack needs no `animated: true`. There IS a per-cursor-move
+    // damage path and it is right here in this effect: the driver in
+    // surface_gating.cpp keys on `pack->iMouseLoc >= 0`, the INTROSPECTED
+    // uniform, never the metadata flag, and compares the cursor the fold keyed
+    // on so it self-terminates when the pointer stops.
     if (pack.iMouseLoc >= 0) {
         // The cursor the FOLD resolved, not a re-derivation from a live cache. This used to
         // be derived from an `animating` flag that a live transition WIDENS (the

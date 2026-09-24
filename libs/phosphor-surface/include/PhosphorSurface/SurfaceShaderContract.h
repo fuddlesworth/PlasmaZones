@@ -228,10 +228,15 @@ inline constexpr const char* kUHasBackdrop = "uHasBackdrop";
 /// hover source (SurfaceShaderItem seeds it). `.zw` is `.xy` normalized
 /// by `uSurfaceSize`, negative alongside the sentinel, so `iMouse.x < 0.0`
 /// is the canonical off-surface test on both runtimes; do not test
-/// `iMouse.x == -1.0` exactly. A pack that reads
-/// iMouse should also declare `"animated": true`: the host repaints on its
-/// vsync loop while a pack animates, and there is no per-cursor-move damage
-/// path for static packs.
+/// `iMouse.x == -1.0` exactly.
+///
+/// A pack that reads iMouse does NOT need `"animated": true`, and is better
+/// off without it. There IS a per-cursor-move damage path, and the compositor
+/// drives it from the INTROSPECTED iMouse uniform rather than from any
+/// metadata flag, comparing the cursor its fold keyed on so the repaints stop
+/// as soon as the pointer does. Declaring `animated` asks instead for a
+/// repaint every vsync for as long as the window is up. No daemon host wires
+/// a hover source, so iMouse holds the off-surface sentinel there.
 inline constexpr const char* kIMouse = "iMouse";
 
 /// `sampler2D uTexture1..3` — user-declared image textures (metadata

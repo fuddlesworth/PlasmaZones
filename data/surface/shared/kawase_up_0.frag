@@ -15,5 +15,13 @@ layout(location = 0) out vec4 fragColor;
 void main() {
     int depth = surfaceKawaseDepth();
     float o = surfaceKawaseOffset(depth);
-    fragColor = depth >= 4 ? surfaceKawaseUp(iChannel3, vTexCoord, o) : texture(iChannel2, vTexCoord);
+    // if/else rather than a ternary, to match up_1 and up_2. Purely for
+    // consistency: GLSL evaluates only one arm of ?:, and `depth` derives from
+    // uniforms alone, so the condition is uniform across the draw and both
+    // spellings compile to the same thing.
+    if (depth >= 4) {
+        fragColor = surfaceKawaseUp(iChannel3, vTexCoord, o);
+    } else {
+        fragColor = texture(iChannel2, vTexCoord);
+    }
 }

@@ -79,9 +79,21 @@ vec3 oklabSaturate(vec3 srgb, float saturation) {
 
 // Brightness / contrast / saturation on an UN-premultiplied sRGB colour, the
 // three knobs a blur-behind pane exposes. Identity at (1, 1, 1). Brightness is
-// a plain gain, contrast pivots on mid-grey, and saturation is perceptual
-// (OKLab) so pushing it does not shift hue. A premultiplied caller divides by
-// alpha first and re-multiplies after.
+// a plain gain, contrast pivots on mid-grey, and saturation runs in OKLab. A
+// premultiplied caller divides by alpha first and re-multiplies after.
+//
+// "Perceptual, so it does not shift hue" is true of the OKLab step and NOT of
+// the result, which is worth knowing before tuning a preset against it.
+// oklabSaturate scales lab.gb, which does hold OKLab hue, but it then clamps
+// PER CHANNEL back into sRGB rather than reducing chroma toward the gamut
+// boundary, so any saturation above 1 that pushes a colour out of sRGB rotates
+// its hue. Computed with the same matrices: sRGB (1.0, 0.5, 0.0) at saturation
+// 1.5 lands 13.3 degrees off its OKLab hue target and at 2.0 lands 23.5 off,
+// and (0.23, 0.49, 0.78) at 2.0 goes the other way by 6.1. That is reachable
+// on shipped settings, since the blur pack declares saturation up to 2.0 and
+// its "Better Blur" preset sets 1.5. The per-channel clamp stays: gamut
+// mapping would change every pack's tuned look for a hue error nobody has
+// reported seeing.
 vec3 surfaceColorAdjust(vec3 c, float brightness, float contrast, float saturation) {
     c = clamp(c * max(brightness, 0.0), 0.0, 1.0);
     c = clamp((c - 0.5) * max(contrast, 0.0) + 0.5, 0.0, 1.0);
@@ -135,10 +147,22 @@ vec3 surfaceRgb2hsl(vec3 col) {
     return vec3(hue, sat, lum);
 }
 
+// HSL -> RGB. Public, and the lightness-aware counterpart to hsv2rgb above.
+//
+// The hue is WRAPPED, like hsv2rgb's, and the branch output is clamped at both
+// ends rather than only at the top. Without the wrap the three-way branch
+// below extrapolates past its band and the min(xt, 1.0) has no matching lower
+// bound, so an out-of-range hue produced NEGATIVE channels: at s = 1, l = 0.5,
+// hue 1.05 gave (1.000, 0.000, -0.300) and hue -0.10 gave (1.000, -0.600,
+// 0.000). That input is not exotic. It is what a pack writes for the obvious
+// HSL hue-rotate, surfaceHsl2rgb(vec3(surfaceRgb2hsl(c).x + p_hueShift, s, l)),
+// where any shift can carry a hue past 1. Its sibling hsv2rgb has always
+// wrapped via fract(), so the two are now safe on the same inputs instead of
+// only one of them being.
 vec3 surfaceHsl2rgb(vec3 col) {
     const float onethird = 1.0 / 3.0;
     const float twothird = 2.0 / 3.0;
-    float hue = col.x;
+    float hue = fract(col.x);
     float sat = col.y;
     float lum = col.z;
     vec3 xt;
@@ -149,7 +173,7 @@ vec3 surfaceHsl2rgb(vec3 col) {
     } else {
         xt = vec3(6.0 * (hue - twothird), 0.0, 6.0 * (1.0 - hue));
     }
-    xt = min(xt, 1.0);
+    xt = clamp(xt, 0.0, 1.0);
     vec3 ct = (2.0 * sat * xt) + (1.0 - sat);
     if (lum >= 0.5) {
         return ((1.0 - lum) * ct) + (2.0 * lum - 1.0);
@@ -167,8 +191,14 @@ vec3 surfaceVibrancy(vec3 color, float vibrancy, float darkness) {
     const float b = 0.11;
     const float c = 0.66;
     float darkness1 = 1.0 - clamp(darkness, 0.0, 1.0);
-    vec3 hsl = surfaceRgb2hsl(clamp(color, 0.0, 1.0));
-    float perceived = surfaceDoubleCircleSigmoid(sqrt(dot(color * color, kSurfaceVibrancyHsp)), 0.8 * darkness1);
+    // Clamp ONCE and use the clamped value for both terms. The HSP brightness
+    // below used to read the raw `color` while the HSL conversion beside it
+    // read the clamped one, so an out-of-gamut sample (a wide-gamut or HDR
+    // backdrop, or an earlier grade stage pushing past 1) gated the boost on a
+    // brightness the saturation term could not see.
+    vec3 base = clamp(color, 0.0, 1.0);
+    vec3 hsl = surfaceRgb2hsl(base);
+    float perceived = surfaceDoubleCircleSigmoid(sqrt(dot(base * base, kSurfaceVibrancyHsp)), 0.8 * darkness1);
     float b1 = b * darkness1;
     float gate = 1.0 - (pow(1.0 - hsl.y * cos(a), 2.0) + pow(1.0 - perceived * sin(a), 2.0));
     float boostBase = hsl.y > 0.0 ? smoothstep(b1 - c * 0.5, b1 + c * 0.5, gate) : 0.0;
@@ -182,7 +212,11 @@ vec3 surfaceVibrancy(vec3 color, float vibrancy, float darkness) {
 // (1, 1, 1, 0, *).
 vec4 surfaceBackdropGrade(vec4 premul, float brightness, float contrast, float saturation, float vibrancy,
                           float vibrancyDarkness) {
-    if (premul.a <= 0.001) {
+    // One RGBA8 quantum, not an arbitrary epsilon. At 0.001 the guard sat
+    // BELOW the smallest alpha an 8-bit backdrop can carry (1/255 is about
+    // 0.0039), so the one representable near-zero alpha fell through it and
+    // divided the colour by that alpha, scaling it by 255.
+    if (premul.a <= 1.0 / 255.0) {
         return premul;
     }
     vec3 c = premul.rgb / premul.a;

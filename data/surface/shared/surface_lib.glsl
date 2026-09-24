@@ -92,6 +92,12 @@ FrameSDF frameSdfSplit(vec2 p, float topRadiusPx, float bottomRadiusPx) {
 
 // Slab AA coverage from an SDF distance (±1 px feather). Border packs use a
 // tighter ±0.7 band and pass their own width, so this is the slab form only.
+//
+// The one-arg form is the third-party convenience overload and is retained for
+// that reason, the way surfaceSlabOpen's two-arg form below is: no bundled
+// pack calls it (they all pass their own feather), but this is an LGPL library
+// header and removing it would be a source break whose failure mode is a
+// swallowed compile error and a flat grey decoration.
 float frameMask(float d) {
     return 1.0 - smoothstep(-1.0, 1.0, d);
 }
