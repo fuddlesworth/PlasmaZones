@@ -10,8 +10,9 @@ pragma ComponentBehavior: Bound
 // (qmlRegisterType<SurfaceShaderItem>), not by a QML module, so a host that
 // instantiates this type must do that registration first or every stage
 // fails with "SurfaceShaderItem is not a type". The daemon and the settings
-// app both do; the editor registers only ZoneShaderItem and the KCM neither,
-// so either would need it before using this. See src/settings/main.cpp.
+// app both do, as does the shell (src/shell/main.cpp). The editor and the KCM
+// register NEITHER item type, so either would need this registration before
+// using this component. See src/settings/main.cpp for the shape of it.
 import PlasmaZones 1.0
 import QtQuick
 import QtQuick.Window
@@ -44,8 +45,7 @@ import QtQuick.Window
  * Some content (snap-assist) has no PopupFrame: its CONTENT ROOT itself carries
  * only `property bool shaderAnchor: true` (no objectName, no shaderContentRect).
  * The anchor finder below matches EITHER a truthy `shaderAnchor` property OR
- * objectName === "shaderAnchor" (mirroring SurfaceAnimator's
- * findShaderAnchorRecursive), and checks the content root itself — not just its
+ * objectName === "shaderAnchor", and checks the content root itself, not just its
  * descendants — so snap-assist's root-as-anchor resolves. The
  * `shaderContentRect !== undefined` guard below then falls back to full-anchor
  * geometry when no PopupFrame publishes that rect.
@@ -65,8 +65,11 @@ import QtQuick.Window
  *
  * ## Lifecycle
  *
- * The host slot (PassiveOverlayShell.osdSlot / snapAssistSlot / layoutPickerSlot
- * / zoneSelectorSlot) passes the loaded content root as `contentItem` and the
+ * The host slot passes the loaded content root as `contentItem` and the
+ * C++-resolved decoration props. FIVE slots declare a decorationChain, across
+ * two files: osdSlot and zoneSelectorSlot in PassiveOverlayShell.qml, and
+ * snapAssistSlot, layoutPickerSlot and cheatsheetSlot in
+ * PassiveOverlayModalSlots.qml. They pass
  * C++-resolved decoration props. When `decorationChain` is empty (no pack
  * resolves for this surface path) the component is inert: the capture/shader
  * items don't activate and the card draws normally with its native
@@ -339,10 +342,9 @@ Item {
 
     onDecorationActiveChanged: root._applyAnchorRouting()
 
-    // Depth-first search for the shaderAnchor. Mirrors SurfaceAnimator's
-    // findShaderAnchorRecursive (libs/phosphor-animation): matches EITHER a
-    // truthy `shaderAnchor` property OR objectName === "shaderAnchor", and
-    // checks the node ITSELF before its descendants — snap-assist's anchor IS
+    // Depth-first search for the shaderAnchor: matches EITHER a truthy
+    // `shaderAnchor` property OR objectName === "shaderAnchor", and checks the
+    // node ITSELF before its descendants — snap-assist's anchor IS
     // the content root passed in as contentItem (only a `shaderAnchor: true`
     // property, no objectName, no nested PopupFrame). QML has no built-in
     // recursive findChild for visual items.
@@ -412,8 +414,10 @@ Item {
         height: (root.shaderAnchorItem ? root.shaderAnchorItem.height : 0) + root.outerPad * 2
         x: offscreenCoord
         y: offscreenCoord
-        // MUST stay visible: SurfaceAnimator's rationale (surfaceanimator.cpp
-        // ~640) is that visible:false (and opacity:0) suppress updatePaintNode
+        // MUST stay visible: SurfaceAnimator's rationale
+        // (surfaceanimator_shaderattach.cpp:389-393, not surfaceanimator.cpp,
+        // which is only 484 lines long) is that visible:false (and opacity:0)
+        // suppress updatePaintNode
         // and therefore the FBO render — starving the shader's uTexture0. The
         // off-screen park above is what hides it; Qt keeps processing it there.
         // When no pack resolves, sourceItem is null + hideSource false, so this
@@ -556,7 +560,7 @@ Item {
                 audioSpectrum: root.audioSpectrum
 
                 // Backdrop for a needsBackdrop pack. Both properties are
-                // inherited from ShaderEffect and reach binding 11, the same
+                // inherited from ShaderEffect and reach binding 15, the same
                 // sampler the overlay category fills with the wallpaper —
                 // useWallpaper is what makes the node bind the real texture
                 // instead of its dummy, and the node raises uHasBackdrop off
@@ -697,8 +701,9 @@ Item {
                 // the frame's anchor-local rect has to be shifted by it too or
                 // the pack rounds its corners to a rectangle outerPad up-left
                 // of the visible card. Third member of the placement set (with
-                // the capture origin and the stage's x/y). The (0,0) fallback
-                // is for root-as-anchor content that publishes no
+                // the capture origin and the stage's x/y). The fallback below
+                // is (outerPad, outerPad), which is (0,0) only when there is no
+                // outer padding. It is for root-as-anchor content that publishes no
                 // shaderContentRect, where the frame IS the whole anchor.
                 surfaceFrameTopLeft: (root.shaderAnchorItem && root.shaderAnchorItem.shaderContentRect !== undefined) ? Qt.point((root.shaderAnchorItem.shaderContentRect.x + root.outerPad) * root.surfaceScale, (root.shaderAnchorItem.shaderContentRect.y + root.outerPad) * root.surfaceScale) : Qt.point(root.outerPad * root.surfaceScale, root.outerPad * root.surfaceScale)
                 // No published shaderContentRect (root-as-anchor content like
@@ -809,8 +814,12 @@ Item {
                 // ever layered (see layer.enabled above); an intermediate
                 // stage is captured by the next stage's `tap` and has no layer
                 // for a mip chain to belong to.
-                layer.mipmap: root.layeredStages && stage.isLast
-                layer.smooth: root.layeredStages && stage.isLast
+                // Same three terms as layer.enabled above, decorationActive
+                // included. Inert either way, since mipmap and smooth do nothing
+                // on a disabled layer, but the three are one set and reading as
+                // one set is the point.
+                layer.mipmap: root.layeredStages && stage.isLast && root.decorationActive
+                layer.smooth: root.layeredStages && stage.isLast && root.decorationActive
                 // iTime driver: only a stage whose pack declares "animated"
                 // subscribes to the per-frame tick — static packs (the border)
                 // leave iTime at its default and pay nothing. Gated on
