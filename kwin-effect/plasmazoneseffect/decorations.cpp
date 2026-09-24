@@ -67,13 +67,24 @@ struct FoldInputs
     QString basePackId;
     int outerPadding = 0;
     bool needsBackdrop = false;
+    // These two were omitted, and the omission was defended by exactly the
+    // derivation the paragraph above warns against. The fold reads BOTH:
+    // isShellSurface gates the shell content-rect rescan (surfacelayers.cpp) and
+    // pins the focus uniform high (surface_capture.cpp, decoration_render.cpp),
+    // and chainBakesOpacity gates the folded-opacity comparison in the same two
+    // files. So a refresh that changed either while chain, params, basePackId,
+    // padding and needsBackdrop all stayed put compared EQUAL, kept the cached
+    // fold, and drew a composite baked for the other case.
+    bool isShellSurface = false;
+    bool chainBakesOpacity = false;
 
     bool operator==(const FoldInputs&) const = default;
 };
 
 inline FoldInputs foldInputsOf(const WindowDecoration& wb)
 {
-    return FoldInputs{wb.chain, wb.packParamValues, wb.basePackId, wb.outerPadding, wb.needsBackdrop};
+    return FoldInputs{wb.chain,         wb.packParamValues, wb.basePackId,       wb.outerPadding,
+                      wb.needsBackdrop, wb.isShellSurface,  wb.chainBakesOpacity};
 }
 
 } // namespace

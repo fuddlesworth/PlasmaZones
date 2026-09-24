@@ -585,6 +585,13 @@ void ShaderNodeRhi::setBufferFeedback(bool enable)
     m_bufferSrbB.reset();
     m_srb.reset();
     m_srbB.reset();
+    // The MAIN pipeline goes with the main SRB it was built against, which this
+    // used to leave standing. Not a crash: Qt's contract binds the two at
+    // create() time and does not require the bindings object to outlive the
+    // pipeline. It is dropped for the same reason resetAllBindingsAndPipelines
+    // drops it, so a pipeline never outlives the bindings it names, and a reader
+    // is never left deciding whether this one case is the exception.
+    m_pipeline.reset();
     m_bufferTextureB.reset();
     m_bufferRenderTargetB.reset();
     m_bufferRenderPassDescriptorB.reset();

@@ -892,13 +892,23 @@ void PlasmaZonesEffect::loadCachedSettings()
         // transition, and only re-resolves windows on the current desktop — so a
         // decorated window that is both would keep compositeValid/prefixValid set and
         // its next fold would early-return a composite baked with the OLD shader.
-        // Invalidate the folds directly. The textures stay (they are keyed on size and
-        // chain, neither of which a recompile changes) and so does the capture, which
-        // is window content and has nothing to do with the pack source.
+        // Invalidate the folds directly. The COMPOSITE textures stay, being keyed on
+        // size, and so does the capture, which is window content and has nothing to do
+        // with the pack source.
+        //
+        // chainKey goes, though, which this used to keep on the grounds that a
+        // recompile changes neither size nor chain. True of the composite pair and
+        // FALSE of the per-pack buffer targets: those are allocated only inside
+        // `if (state.chainKey != chain)`, their COUNT is the recompiled pack's
+        // bufferPasses.size() and their SIZES come from its declared bufferScales.
+        // An edited pack that adds a pass, drops one, or changes a scale therefore
+        // kept targets sized from the compile it just replaced, and nothing else
+        // would ever resize them because the chain string had not moved.
         for (auto& [id, surfaceState] : m_surfaceMultipass) {
             surfaceState.compositeValid = false;
             surfaceState.prefixValid = false;
             surfaceState.prefixChainEnd = -1;
+            surfaceState.chainKey.clear();
         }
         m_opacityTintFallbackWarned = false; // re-arm the capture-fallback warning with the fresh compiles
         m_backdropAllocWarned = false; // and the backdrop-allocation one, for the same reason

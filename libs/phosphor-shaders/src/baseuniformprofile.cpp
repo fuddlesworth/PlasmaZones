@@ -69,9 +69,17 @@ void BaseUniformProfile::fill(const UboFrameState& state)
     // interaction. Guard with a 1-second cached timestamp — iDate still
     // refreshes during idle (sceneDataDirty remains set for the first frame
     // of each redraw cycle), but we skip ~60 redundant calls per second.
+    //
+    // THE GATE OPENS ON A BACKWARDS CLOCK STEP TOO, which it used not to. The
+    // stamp and the interval are both wall clock, so an NTP correction or a
+    // manual clock set that rewinds by N seconds made the difference NEGATIVE for
+    // N seconds. A test for `>= 1000` alone cannot open on a negative, so iDate
+    // froze for the whole skew, and the `== 0` escape only covers the first call
+    // ever. A negative difference is not a reason to wait: it means the clock
+    // just moved, which is precisely when the time of day on screen is wrong.
+    const qint64 sinceDateRefresh = QDateTime::currentMSecsSinceEpoch() - m_lastDateRefreshMs;
     if (!state.didFullUploadOnce
-        || (state.sceneDataDirty
-            && (m_lastDateRefreshMs == 0 || (QDateTime::currentMSecsSinceEpoch() - m_lastDateRefreshMs) >= 1000))) {
+        || (state.sceneDataDirty && (m_lastDateRefreshMs == 0 || sinceDateRefresh >= 1000 || sinceDateRefresh < 0))) {
         const QDateTime now = QDateTime::currentDateTime();
         m_lastDateRefreshMs = now.toMSecsSinceEpoch();
         m_u.iDate[0] = static_cast<float>(now.date().year());

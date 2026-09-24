@@ -123,6 +123,12 @@ void PlasmaZonesEffect::applySurfacePresetSweep()
         // here would be accepted by a future reader that consults the index without
         // the flag. Every other reset site in the repo writes -1.
         state.prefixChainEnd = -1;
+        // And the chain key, for the reason the decoration-tree loader gives: the
+        // per-pack buffer targets are allocated only when this differs from the
+        // chain, and their count and sizes come from the COMPILE, not from the
+        // chain string. Clearing m_compiledPacks without this leaves a window's
+        // buffers sized from the compile that was just dropped.
+        state.chainKey.clear();
     }
     // These two are stale-TRUE only, and the sibling clear sites reset them for the
     // same reason.
