@@ -906,6 +906,9 @@ private:
     // ── Depth buffer (binding 16) ──────────────────────────────────────
     bool m_useDepthBuffer = false;
     bool m_depthMultiBufferWarned = false;
+    /// Latch for the once-per-node warning that a depth pack's declared per-pass
+    /// bufferScales are discarded. Cleared with the rest on a device reset.
+    bool m_depthScalesWarned = false;
     std::unique_ptr<QRhiTexture> m_depthTexture;
     std::unique_ptr<QRhiSampler> m_depthSampler;
 

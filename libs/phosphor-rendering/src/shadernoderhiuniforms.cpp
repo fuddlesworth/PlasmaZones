@@ -708,6 +708,7 @@ void ShaderNodeRhi::releaseRhiResources()
     m_warnedAudioCreateFailed = false;
     m_warnedWallpaperBindingOmitted = false;
     m_depthMultiBufferWarned = false;
+    m_depthScalesWarned = false;
     m_transparentFallbackTexture.reset();
     m_transparentFallbackTextureNeedsUpload = false;
 

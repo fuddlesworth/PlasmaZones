@@ -138,6 +138,23 @@ bool ShaderNodeRhi::ensureBufferTarget()
                 << "Depth buffer with" << m_bufferPaths.size()
                 << "buffer passes: only the last pass's depth output will be available in the image pass";
         }
+        // A depth pack pins EVERY pass to the single scale (see passSize above),
+        // because the passes share one depth attachment and a render target's
+        // colour and depth attachments must agree in size. Silently discarding a
+        // pack's declared per-pass scales is the kind of thing an author spends
+        // an afternoon on, so say it once. The offline validator lints the same
+        // combination; this covers a pack that reaches the node another way.
+        if (!m_depthScalesWarned) {
+            bool diverged = false;
+            for (int i = 0; i < kMaxBufferPasses && !diverged; ++i) {
+                diverged = !qFuzzyCompare(m_bufferScales[static_cast<size_t>(i)], m_bufferScale);
+            }
+            if (diverged) {
+                m_depthScalesWarned = true;
+                qCWarning(lcShaderNode) << "Depth buffer with per-pass bufferScales: every pass is pinned to"
+                                        << m_bufferScale << "because the passes share one depth attachment";
+            }
+        }
     }
     // Buffer texel format: RGBA16F unless the pack's metadata declares its
     // buffers hold plain clamped [0,1] colour ("halfFloatBuffers": false).
