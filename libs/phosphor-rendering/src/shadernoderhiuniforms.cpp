@@ -232,7 +232,12 @@ void ShaderNodeRhi::uploadExtensionToUbo(QRhiResourceUpdateBatch* batch)
 //                        (setSurfaceOpacity, setSurfaceScale, setSurfaceFocused,
 //                        setSurfaceSize, setSurfaceFrameTopLeft,
 //                        setSurfaceFrameSize)
-//   m_appFieldsDirty  ← setAppField0, setAppField1
+//   m_appFieldsDirty  ← setAppField0, setAppField1, invalidateUniforms,
+//                        releaseRhiResources. EVERY writer gates on
+//                        m_uboProfile->hasAppFields(): a profile without the
+//                        slots must never see this dirty, or its dirtyRegions()
+//                        could emit a K_APP_FIELDS region past the end of a
+//                        leaner UBO. The last two used to write it ungated.
 //   extension dirty   ← tracked via m_uniformExtension->isDirty() (set by the
 //                        extension's own updateFromX() methods)
 //   m_uniformsDirty   ← mirror of the FOUR NODE-SIDE flags above. NOT the
@@ -477,13 +482,15 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             m_userTextureSamplerWarned[static_cast<size_t>(i)] = false;
             resetAllBindingsAndPipelines();
         }
-        // Sampler is the only hard prerequisite. m_userTextures[i] is null
-        // before the slot's first successful allocation (and after
-        // releaseRhiResources), and the size-mismatch branch below is what
-        // allocates it — so gating on the texture here would make the very
-        // first upload unreachable. Defensive beyond that: since the local-
-        // swap rework no path in this file leaves the slot null after a
-        // failed create.
+        // Sampler is the only hard prerequisite, and the texture deliberately
+        // is not. Initialisation pre-allocates all four slots with a 1x1 dummy
+        // (shadernoderhicore.cpp), so m_userTextures[i] is normally non-null
+        // well before a real image arrives; the size-mismatch branch below is
+        // what REPLACES that dummy with a correctly-sized texture. The slot is
+        // null only after releaseRhiResources, or after a failed create in the
+        // init loop, which tears every slot back down. Gating on the texture
+        // here would therefore add nothing in the normal case and would make
+        // the post-release re-upload unreachable in the abnormal one.
         if (!m_userTextureDirty[i] || !m_userTextureSamplers[i]) {
             continue;
         }
@@ -781,7 +788,11 @@ void ShaderNodeRhi::releaseRhiResources()
     m_timeDirty = true;
     m_timeHiDirty = true;
     m_sceneDataDirty = true;
-    m_appFieldsDirty = true;
+    // Gated, like the setters and invalidateUniforms: a profile without the
+    // app-field slots must never see them dirty. See setAppField0.
+    if (m_uboProfile->hasAppFields()) {
+        m_appFieldsDirty = true;
+    }
     m_audioSpectrumDirty = true;
 }
 

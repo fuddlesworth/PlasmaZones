@@ -100,7 +100,6 @@ constexpr bool isConsumerBinding(int binding) noexcept
  * Uses QRhi and QShaderBaker (runtime SPIR-V + GLSL 330 bake). The APIs it
  * needs (commandBuffer(), renderTarget()) arrived in Qt 6.6; the project
  * builds against QT_MIN_VERSION, which is 6.10.
- * (commandBuffer(), renderTarget()).
  *
  * @par Threading contract
  * Setters on **this class** (ShaderNodeRhi — setTime, setResolution, setCustomParams,
@@ -492,8 +491,9 @@ private:
     void uploadDummyChannelTexture(QRhi* rhi, QRhiCommandBuffer* cb);
     bool ensureBufferSampler(QRhi* rhi, int index);
     /// Drop every buffer-pass target and everything compiled against it
-    /// (render targets, pass descriptors, pipelines, SRBs). Shared by
-    /// setBufferScale and setHalfFloatBuffers; ensureBufferTarget rebuilds.
+    /// (render targets, pass descriptors, pipelines, SRBs). Shared by every
+    /// setter that invalidates a target: setBufferScale, setBufferScales,
+    /// setHalfFloatBuffers and setUseDepthBuffer. ensureBufferTarget rebuilds.
     void resetBufferTargets();
     /// Snapshot the node's live members into a UboFrameState and hand it to the
     /// installed UBO profile's fill(). @p rhi supplies the NDC Y-orientation

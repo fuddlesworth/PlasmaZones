@@ -732,7 +732,7 @@ int Renderer::render(const RenderOptions& opts)
         pointerDriver = std::make_unique<PointerDriver>(opts.pointer, physicalSize, dpr);
         pointerDriver->applyPackContract(parsed);
         if (pointerDriver->needsCursor()) {
-            // SRB binding 7 is uTexture0 for the other families and
+            // SRB binding 11 is uTexture0 for the other families and
             // uCursorSprite for this one, so slot 0 is where the sprite goes.
             // Bound only for a pack that asked for it, because the contract ties
             // uPointerFlags.x to the sampler actually being bound.

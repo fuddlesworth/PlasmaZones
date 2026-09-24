@@ -382,10 +382,18 @@ void ShaderNodeRhi::setUserTextureWrap(int slot, const QString& wrap)
     resetAllBindingsAndPipelines();
     // Schedule the frame that rebuilds them. Dropping the sampler and the
     // bindings changes what the next paint would produce but does not by
-    // itself ask for a next paint, so on a static pack (a plain border, a
-    // non-animated glass config) the new wrap mode would not appear until some
-    // unrelated repaint happened to come along. setUseWallpaper and
-    // setUseDepthBuffer mark dirty for exactly this reason.
+    // itself ask for a next paint.
+    //
+    // For every IN-TREE host this is a harmless duplicate, not a fix: all
+    // three updatePaintNode implementations (ShaderEffect, SurfaceShaderItem,
+    // ZoneShaderItem) end with an unconditional markDirty(DirtyMaterial), and
+    // ShaderNodeRhi's threading contract confines these setters to the sync
+    // phase, so every one of them already runs inside a sync that dirties at
+    // the end, and the item-side setters call update() besides. It is kept
+    // because this is an LGPL library and the only thing protecting an
+    // out-of-tree host that forgets that trailing markDirty. The lambda that
+    // fires from QSGTextureProvider::textureChanged is the genuine case, since
+    // that one arrives outside sync.
     markDirty(QSGNode::DirtyMaterial);
 }
 
@@ -506,8 +514,11 @@ void ShaderNodeRhi::setBufferShaderPaths(const QStringList& paths)
     // indexed positionally against this list, so compacting an interior gap
     // (the old behaviour) shifted every later buffer onto the wrong wrap and
     // filter — the exact misalignment the metadata parsers keep every entry in
-    // place to prevent. An interior empty is a malformed pack whose bake then
-    // fails-close per slot, which is the right outcome.
+    // place to prevent. An interior empty is a malformed pack, and the bake
+    // then fails CLOSED FOR THE WHOLE CHAIN rather than per slot:
+    // bakeBufferShaders clears allOk and breaks on the first empty source, so
+    // the multi-buffer bake fails, retries once and gives up. That is the
+    // right outcome, and it is a louder one than "per slot" suggested.
     while (!trimmed.isEmpty() && trimmed.constLast().isEmpty()) {
         trimmed.removeLast();
     }
@@ -533,7 +544,10 @@ void ShaderNodeRhi::setBufferShaderPaths(const QStringList& paths)
     // Single-buffer mode is loaded lazily inside bakeBufferShaders() during
     // prepare(); the multi-buffer branch already does so. Loading shader
     // source synchronously from this setter would do disk I/O on whatever
-    // thread called us (typically the GUI thread via updatePaintNode sync),
+    // thread called us (the RENDER thread, during sync: under the threaded
+    // render loop, which is the Wayland default, updatePaintNode runs there
+    // with the GUI thread blocked — see the threading contract at the top of
+    // ShaderNodeRhi.h),
     // and the work is duplicated by bakeBufferShaders' single-path branch
     // anyway. m_bufferShaderDirty=true above is enough to trigger the
     // deferred load on the next prepare().
@@ -655,11 +669,12 @@ void ShaderNodeRhi::setHalfFloatBuffers(bool enable)
     resetBufferTargets();
 }
 
-// Shared teardown for any change that invalidates the buffer-pass targets
-// (size via setBufferScale, texel format via setHalfFloatBuffers): textures,
-// render targets, pass descriptors, the pipelines compiled against them, and
-// every SRB that references a buffer texture. ensureBufferTarget rebuilds
-// lazily on the next frame.
+// Shared teardown for any change that invalidates the buffer-pass targets:
+// size via setBufferScale or setBufferScales, texel format via
+// setHalfFloatBuffers, and the depth attachment via setUseDepthBuffer. Drops
+// textures, render targets, pass descriptors, the pipelines compiled against
+// them, and every SRB that references a buffer texture. ensureBufferTarget
+// rebuilds lazily on the next frame.
 void ShaderNodeRhi::resetBufferTargets()
 {
     m_bufferTexture.reset();
@@ -913,7 +928,16 @@ void ShaderNodeRhi::invalidateUniforms()
     m_timeDirty = true;
     m_timeHiDirty = true;
     m_sceneDataDirty = true;
-    m_appFieldsDirty = true;
+    // Gated like setAppField0/1, and for the same reason: a profile that does
+    // not own the app-field slots must never see them dirty, or its
+    // dirtyRegions() could emit a K_APP_FIELDS region past the end of a leaner
+    // UBO. No in-tree profile does today (SurfaceUniformProfile ignores the
+    // flag outright), so this changes no behaviour; it keeps the flag's one
+    // stated invariant true at every writer instead of at most of them, which
+    // is what a future profile would rely on.
+    if (m_uboProfile->hasAppFields()) {
+        m_appFieldsDirty = true;
+    }
 }
 
 // ============================================================================

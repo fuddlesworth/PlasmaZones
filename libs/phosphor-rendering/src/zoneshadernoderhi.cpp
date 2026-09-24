@@ -3,6 +3,8 @@
 
 #include <PhosphorRendering/ZoneShaderNodeRhi.h>
 
+#include <PhosphorShaders/ShaderBindings.h>
+
 #include <QImage>
 #include <QList>
 #include <QLoggingCategory>
@@ -58,7 +60,7 @@ ZoneShaderNodeRhi::~ZoneShaderNodeRhi()
     // Call removeExtraBinding() now so the invariant "entries in
     // m_extraBindings always point to live resources" holds for the entire
     // teardown sequence.
-    removeExtraBinding(1);
+    removeExtraBinding(PhosphorShaders::Bindings::kConsumer);
 }
 
 void ZoneShaderNodeRhi::setZoneCounts(int total, int highlighted)
@@ -142,7 +144,7 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
         m_labelsSampler = std::move(sam);
         m_labelsInitialized = true;
         m_labelsInitFailureCount = 0;
-        setExtraBinding(1, m_labelsTexture.get(), m_labelsSampler.get());
+        setExtraBinding(PhosphorShaders::Bindings::kConsumer, m_labelsTexture.get(), m_labelsSampler.get());
         m_labelsNeedFullClear = true;
     } else if (m_labelsTexture->pixelSize() != targetSize) {
         std::unique_ptr<QRhiTexture> resized(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
@@ -165,7 +167,7 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
         // resets the SRB (in resetAllBindingsAndPipelines), so the SRB never
         // transiently holds a binding to the freed old QRhiTexture pointer.
         QRhiTexture* newPtr = resized.get();
-        setExtraBinding(1, newPtr, m_labelsSampler.get());
+        setExtraBinding(PhosphorShaders::Bindings::kConsumer, newPtr, m_labelsSampler.get());
         m_labelsTexture = std::move(resized);
         m_labelsNeedFullClear = true;
     }
@@ -315,7 +317,7 @@ void ZoneShaderNodeRhi::releaseResources()
     // The texture is gone; the next upload re-creates and fully clears it, so
     // drop the stale vacated-rect tracking from the old texture.
     m_prevTileRects.clear();
-    removeExtraBinding(1);
+    removeExtraBinding(PhosphorShaders::Bindings::kConsumer);
 
     ShaderNodeRhi::releaseResources();
 }

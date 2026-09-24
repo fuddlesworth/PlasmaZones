@@ -187,8 +187,8 @@ struct UboFrameState
 /// surface-decoration runtime is the uniform buffer: its struct, byte size,
 /// per-frame fill, and dirty-upload region dispatch. This interface abstracts
 /// exactly that seam — bindings stay unabstracted because the surface binding
-/// map (UBO@0, iChannel0-3@2-5, uTexture0@7) is a strict subset of the overlay
-/// map.
+/// map (UBO@0, iChannel0-7@2-9, uTexture0@11) is a strict subset of the
+/// overlay map. Numbers from PhosphorShaders::Bindings (ShaderBindings.h).
 ///
 /// Implementations hold their concrete UBO POD struct and expose its bytes via
 /// data()/mutableData() so the node can drive updateDynamicBuffer directly.

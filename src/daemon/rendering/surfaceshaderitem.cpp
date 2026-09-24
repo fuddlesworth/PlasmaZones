@@ -260,7 +260,7 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
     // texture, zone counts, or extension.
     syncBasePropertiesToNode(node);
 
-    // ── Sync source texture provider (slot 0 / binding 7, uTexture0) ──
+    // ── Sync source texture provider (slot 0 / binding 11, uTexture0) ──
     // The base ShaderEffect binds this in ITS updatePaintNode, NOT in
     // syncBasePropertiesToNode — so a subclass that fully reimplements
     // updatePaintNode (like this one) must replicate it or sourceItem()
@@ -292,7 +292,7 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
     // on that image as much as on the two rects.
     syncBackdropRect(node);
 
-    // NB: the audio spectrum (CAVA, binding 6 + the UBO's iAudioSpectrumSize) is
+    // NB: the audio spectrum (CAVA, binding 10 + the UBO's iAudioSpectrumSize) is
     // pushed by syncBasePropertiesToNode above — the daemon writes the inherited
     // audioSpectrum Q_PROPERTY via OverlayService, and a pack reads it through
     // surface_audio.glsl. The base ShaderEffect's own setAudioSpectrum /

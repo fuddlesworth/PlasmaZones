@@ -653,7 +653,7 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
     //
     // Slot offset: the canonical animation contract reserves
     // `uTexture0` for the redirected window/surface. `effect.textures[0]`
-    // therefore maps to `uTexture1` (runtime slot 1 / SRB binding 8) and
+    // therefore maps to `uTexture1` (runtime slot 1 / SRB binding 12) and
     // so on. friendlyParams may use the GLSL slot name (`uTexture1` ..
     // `uTexture3`) verbatim — that's the same convention overlay zones
     // use, which keeps the override format identical across categories.

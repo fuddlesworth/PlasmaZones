@@ -275,9 +275,13 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
     // QLatin1String, so we bind it to a local `QString` once per slot per key,
     // and we probe with a single `constFind` whose iterator carries the value
     // — one hash lookup per key instead of the contains+value pair, matching
-    // the float / colour extractors above. Tables sized to `kMaxUserTextures`, which
-    // is also the loop bound (pinned equal to the contract's
-    // kMaxUserTextureSlots by the static_assert in shadereffect.cpp).
+    // the float / colour extractors above. The tables are declared with
+    // `PhosphorRendering::kMaxUserTextureSlots` (itself
+    // `Bindings::kUserTextureCount`, so the binding table is the one source),
+    // and the loop bound is `kMaxUserTextures`; the static_assert in
+    // shadereffect.cpp pins those two to each other. Neither is the ANIMATION
+    // contract's kMaxUserTextureSlots, which is 3, because that one counts a
+    // pack's declarable slots while these count the samplers the node binds.
     for (int i = 0; i < kMaxUserTextures; ++i) {
         const QString sizeKey(kUserTextureSvgSizeKeys[i]);
         bool svgSizeChanged = false;
