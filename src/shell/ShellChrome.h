@@ -52,6 +52,16 @@ class ShellChrome : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(int revision READ revision NOTIFY revisionChanged)
+    /// Monotonic tick bumped ONLY when the surface registry recommits a rescan. The
+    /// chrome's SurfaceDecoration forwards it to its stages, which reloadShader() when
+    /// it moves.
+    ///
+    /// SEPARATE from `revision`, which also moves on a tree or palette change where a
+    /// re-bake of every stage would be waste. It exists at all because recomposing the
+    /// chain does not cover an IN-PLACE edit of a pack's shader source: the composition
+    /// is then byte-identical, so every stage rebinds the same URL and nothing re-bakes.
+    /// The daemon's slots and the settings preview carry the same pair.
+    Q_PROPERTY(int decorationReloadGeneration READ decorationReloadGeneration NOTIFY decorationReloadGenerationChanged)
     Q_PROPERTY(QObject* decorationComponent READ decorationComponent WRITE setDecorationComponent NOTIFY
                    decorationComponentChanged)
 
@@ -68,6 +78,10 @@ public:
     void setPalette(PhosphorTheme::PaletteStore* palette);
 
     [[nodiscard]] int revision() const;
+    [[nodiscard]] int decorationReloadGeneration() const
+    {
+        return m_decorationReloadGeneration;
+    }
     [[nodiscard]] QObject* decorationComponent() const;
     void setDecorationComponent(QObject* component);
 
@@ -98,6 +112,7 @@ public:
 
 Q_SIGNALS:
     void revisionChanged();
+    void decorationReloadGenerationChanged();
     void decorationComponentChanged();
 
 private Q_SLOTS:
@@ -134,6 +149,9 @@ private:
     QPointer<PhosphorTheme::PaletteStore> m_palette;
     QPointer<QObject> m_decorationComponent;
     int m_revision = 0;
+    /// Never reset, like its two twins: the QML side guards on a non-zero value so a
+    /// freshly created stage does not re-bake on its initial 0.
+    int m_decorationReloadGeneration = 0;
     /// The blur-quality tier composeStageMap folds into every declared buffer scale.
     /// 1.0 until the daemon answers, which is the identity, so a shell that starts
     /// before the daemon composes at the pack's declared density and recomposes when

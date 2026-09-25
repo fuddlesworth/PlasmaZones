@@ -245,6 +245,14 @@ void ShellChrome::subscribeToDaemon()
     // The registry watches its directories; a pack installed while the
     // shell runs re-resolves too.
     connect(m_registry.get(), &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this, &ShellChrome::bump);
+    // The second tick, and deliberately not folded into bump(): that one also fires on
+    // a tree or palette change, where re-baking every stage would be waste. Only a
+    // committed rescan can have changed a pack's shader SOURCE, which is the case
+    // recomposing the chain misses because the composition comes out identical.
+    connect(m_registry.get(), &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this, [this]() {
+        ++m_decorationReloadGeneration;
+        Q_EMIT decorationReloadGenerationChanged();
+    });
 }
 
 void ShellChrome::fetchTree()

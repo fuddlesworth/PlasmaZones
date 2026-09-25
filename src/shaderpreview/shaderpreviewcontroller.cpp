@@ -199,10 +199,20 @@ QVariantList ShaderPreviewController::zonesForShaderPreview(int width, int heigh
                                           .toReal()
                                     : static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderRadius),
                           ConfigDefaults::borderRadiusMax());
-        const qreal borderWidth = useCustom
-            ? zone.value(::PhosphorZones::ZoneJsonKeys::BorderWidth, ::PhosphorZones::ZoneDefaults::BorderWidth)
-                  .toReal()
-            : static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderWidth);
+        // BOUNDED TOO, for the same reason and from the same source. The comment
+        // above says "bounded the way the daemon bounds it", and the daemon bounds
+        // BOTH: overlay_data.cpp qBounds borderWidth to ConfigDefaults::borderWidthMax()
+        // on the line directly above the radius one, and again on the shader path. Only
+        // the radius was bounded here, so a hand-edited or legacy-wide WIDTH still drew
+        // thicker in the preview than the live overlay ever will, which is the one place
+        // a user compares the two.
+        const qreal borderWidth =
+            qBound<qreal>(0,
+                          useCustom ? zone.value(::PhosphorZones::ZoneJsonKeys::BorderWidth,
+                                                 ::PhosphorZones::ZoneDefaults::BorderWidth)
+                                          .toReal()
+                                    : static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderWidth),
+                          ConfigDefaults::borderWidthMax());
 
         // Border width and radius are px on the SCREEN, and the zone rects
         // above have just been scaled into a preview a fraction of its size.
