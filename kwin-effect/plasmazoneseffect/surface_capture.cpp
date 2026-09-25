@@ -183,8 +183,10 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
     // with the user's global multiplier folded in either way. Per PASS, not per
     // pack: a pyramid pack renders each level at its own resolution, which is
     // the whole point of the per-pass scales. A pack that fails to compile (or
-    // has no buffers) leaves an empty inner vector and renders single-pass in
-    // the fold.
+    // declares no buffers at all) leaves an empty inner vector and renders
+    // single-pass in the fold. A pack that DECLARED passes and lost them to an
+    // allocation failure is different, and is handled below: for the blur family
+    // there is no single-pass path to fall back to, so it would render invisible.
     if (state.chainKey != chain) {
         // Framebuffers before textures, for the reason given at the composite realloc above.
         state.chainBufferFbo.clear();
@@ -199,6 +201,7 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
             const PhosphorSurfaceShaders::SurfaceShaderEffect eff = m_surfaceShaderRegistry.effect(chain.at(k));
             auto& bufs = state.chainBufferTex[k];
             auto& fbos = state.chainBufferFbo[k];
+            bool lostDeclaredPasses = false;
             bufs.reserve(pk->bufferPasses.size());
             fbos.reserve(pk->bufferPasses.size());
             for (size_t i = 0; i < pk->bufferPasses.size(); ++i) {
@@ -223,6 +226,7 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
                     // composite.
                     bufs.clear();
                     fbos.clear(); // the framebuffers pooled beside them go too
+                    lostDeclaredPasses = true;
                     break;
                 }
                 bt->setFilter(GL_LINEAR);
@@ -239,10 +243,41 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
                                         << windowId;
                     bufs.clear();
                     fbos.clear();
+                    lostDeclaredPasses = true;
                     break;
                 }
                 bufs.push_back(std::move(bt));
                 fbos.push_back(std::move(bfbo));
+            }
+            // A PACK THAT LOST ITS DECLARED PASSES AND SAMPLES A CHANNEL CANNOT DRAW.
+            // The fold binds the transparent fallback to every channel it declares,
+            // which stops it reading the running composite, but a pack whose main pass
+            // IS a channel read then samples 0 and composites to nothing. All seven
+            // blur-family packs are that shape: their main pass is surfaceBlurTexel,
+            // which is texture(iChannel6, uv). The result is an invisible decoration,
+            // and the composite-allocation path above already settled what to do about
+            // that in its own words, that undecorated beats invisible. So fail the
+            // whole ensure and let that same teardown run, rather than keeping a
+            // decoration the user cannot see.
+            //
+            // Narrow on purpose. A pack that declares channels it never samples, or
+            // that has a real single-pass path, keeps the old quiet degrade.
+            if (lostDeclaredPasses) {
+                bool samplesAChannel = false;
+                for (int ch = 0; ch < ShaderInternal::kSurfaceChannelCount; ++ch) {
+                    if (pk->iChannelLoc[static_cast<size_t>(ch)] >= 0) {
+                        samplesAChannel = true;
+                        break;
+                    }
+                }
+                if (samplesAChannel) {
+                    qCWarning(lcEffect)
+                        << "Surface pack" << chain.at(k)
+                        << "lost its declared buffer passes and samples an iChannel, so it would render invisible;"
+                        << "dropping this window's decoration instead for" << windowId;
+                    m_surfaceMultipass.erase(windowId);
+                    return false;
+                }
             }
             // Debug-level, once per (re)allocation: the pass count and sizes a
             // pyramid pack actually got, which is the per-pass scale plumbing's
