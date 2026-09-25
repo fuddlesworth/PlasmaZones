@@ -37,7 +37,7 @@
             "min": 2,
             "max": 256,
             "group": "Blur",
-            "description": "How strongly the scene behind the surface is blurred (px)"
+            "description": "How strongly the scene behind the surface is blurred (px). Past a display scale of 125% the top of the range stops adding blur, and the lowest setting is already a soft blur rather than none"
         },
         {
             "id": "cornerRadius",

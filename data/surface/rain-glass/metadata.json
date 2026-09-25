@@ -36,7 +36,7 @@
             "default": 20,
             "min": 2,
             "max": 256,
-            "description": "How strongly the scene fogs behind the glass (px)",
+            "description": "How strongly the scene fogs behind the glass (px). Past a display scale of 125% the top of the range stops adding blur, and the lowest setting is already a soft blur rather than none",
             "group": "Blur"
         },
         {

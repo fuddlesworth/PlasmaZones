@@ -36,7 +36,7 @@
             "default": 24,
             "min": 2,
             "max": 256,
-            "description": "Strength of the backdrop blur (px)",
+            "description": "Strength of the backdrop blur (px). Past a display scale of 125% the top of the range stops adding blur, and the lowest setting is already a soft blur rather than none",
             "group": "Blur"
         },
         {

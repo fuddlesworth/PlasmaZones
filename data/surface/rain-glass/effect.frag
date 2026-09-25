@@ -142,6 +142,21 @@ vec4 pSurface(vec2 uv) {
     // that exaggerated push, gated to a subtle secondary lens by the *0.3, is what
     // makes the tiny fixed beads catch the light. Do not "correct" the scale
     // without checking the look.
+    //
+    // LAYER 2 IS OVER-SCALED 1.6× TOO, and that one was NOT documented. dropLayer
+    // returns its offset in whatever st units it was handed, and layer2 is called
+    // with `st * 1.6 + 4.3`, so its unit is cellPx / 1.6 px while this line
+    // multiplies both layers by the same cellPx. Layer 2's drops are 1/1.6 the
+    // size of layer 1's and bend the backdrop 1.6× HARDER, which is backwards for
+    // a lens: a smaller droplet is a shorter focal length in the picture and a
+    // weaker push here.
+    //
+    // LEFT AS IS, like the micro-bead scale above and for the same reason. Whether
+    // it reads as depth or as an error is a look question, this pack has not been
+    // rendered against the correction, and the author demonstrably documents the
+    // over-scales they intend. Dividing layer2.xy by 1.6 is the fix if the answer
+    // is that it was unintended. What is no longer true is that the comment names
+    // one over-scale and stays silent about the other.
     vec2 offsetPx = (layer1.xy + layer2.xy - toMicro * micro * 0.3) * cellPx;
     float wet = clamp(layer1.z + layer2.z + micro, 0.0, 1.0);
 
