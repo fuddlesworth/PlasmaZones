@@ -171,18 +171,31 @@ uniform vec2 iAnchorSize;
 // consumes it.
 uniform vec2 iAnchorPosInFbo;
 
-// Window's effective rule-resolved opacity in [0, 1] — compositor path
-// only. A `SetOpacity` rule must dim the window for the whole
-// transition, but the custom transition shader is compiled without the
-// `Modulate` trait, so KWin never applies `data.opacity()` to it.
-// `surfaceColor()` below multiplies the
-// premultiplied surface sample by this uniform so the dim holds across
-// the animation instead of snapping in only after it ends. The
-// kwin-effect pushes 1.0 for windows with no matching rule, so the
-// multiply is a no-op in the common case. Daemon-only animations have no
-// window-rule opacity, so the UBO branch supplies it as a `#define` of 1.0
-// rather than a block member: a pack that reads it still compiles on both
-// branches, which is the parity promise this header makes.
+// The window's effective opacity in [0, 1] — compositor path only. A dim must
+// hold for the whole transition, but the custom transition shader is compiled
+// without the `Modulate` trait, so KWin never applies `data.opacity()` to it.
+// `surfaceColor()` below multiplies the premultiplied surface sample by this
+// uniform so the dim holds across the animation instead of snapping in only
+// after it ends.
+//
+// TWO CORRECTIONS to what this used to say. It is not rule-only: the value is
+// the window's RESOLVED opacity, which is the config default with a
+// `SetOpacity` rule winning where one matches, so a config-only dim reaches
+// here with no rule loaded at all.
+//
+// And "1.0 for windows with no matching rule" understates how often it is 1.0.
+// The effect pushes a non-1.0 value ONLY on the bare-uTexture0 fallback of an
+// opacity-baking chain. Everywhere else it is 1.0 outright: an undecorated
+// window, a custom chain (which never honours the setting), and — the case
+// worth naming — a window whose chain DID composite a surface layer, because
+// the plain opacity-tint layer already folded the opacity into its pack param
+// and the composite the transition samples carries the dim baked in. Applying
+// it again here would dim twice.
+//
+// Daemon-only animations have no window-rule opacity, so the UBO branch
+// supplies it as a `#define` of 1.0 rather than a block member: a pack that
+// reads it still compiles on both branches, which is the parity promise this
+// header makes.
 uniform float iWindowOpacity;
 
 // Card's UV sub-rect within `uTexture0`, as (x, y, width, height) in
@@ -498,15 +511,18 @@ vec4 surfaceColor(vec2 uv) {
     vec2 t = iAnchorRectInTexture.xy + uv * iAnchorRectInTexture.zw;
 #ifdef PLASMAZONES_KWIN
     // KWin's FBO is bottom-origin (Y-up) — flip last. Then scale by the
-    // window-rule opacity: uTexture0 is premultiplied, so multiplying the
+    // window's resolved opacity: uTexture0 is premultiplied, so multiplying the
     // whole sample by the [0, 1] `iWindowOpacity` is the correct
-    // premultiplied-alpha dim. This is what makes a `SetOpacity` rule hold
-    // throughout a transition (with no `Modulate` trait the shader can't see
-    // `data.opacity()`); the effect feeds 1.0 when no rule matches, so the
-    // common case is unchanged. Every window-content shader reads the
+    // premultiplied-alpha dim. This is what makes a dim hold throughout a
+    // transition (with no `Modulate` trait the shader can't see
+    // `data.opacity()`). Every window-content shader reads the
     // surface through this helper (directly or via bmw_compat's
     // `getInputColor`), so the dim propagates uniformly without per-shader
     // edits.
+    //
+    // The uniform is 1.0 in every case but one, so the multiply is a no-op
+    // almost always — see its declaration for which case, and for why a window
+    // that HAS a live SetOpacity rule is usually one of the 1.0 ones.
     vec2 fc = vec2(t.x, 1.0 - t.y);
     // Surface-layer redirect: when the window has an active surface-layer stack
     // (border / rounded corners, ...), sample the pre-composited layered surface

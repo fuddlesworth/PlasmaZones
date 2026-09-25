@@ -530,13 +530,30 @@ struct SurfaceMultipassState
     /// Backdrop capture for needsBackdrop chains: the scene behind the
     /// window blitted from the live render target over the SAME padded
     /// canvas as the composite — canvas-aligned in normalized uv, so a pack
-    /// samples both with one uv; the capture's texel DENSITY may be lower
-    /// than the composite's (chainBackdropScale caps it at the densest
-    /// linked reader's bufferScale). Reallocated on size change; freed with
+    /// samples both with one uv. Reallocated on size change; freed with
     /// the rest of this state in
     /// removeWindowDecoration, and NEVER sampled on the deleted/close path (the
     /// fold doesn't run there; the frozen composite carries the last-alive
     /// frost baked in).
+    ///
+    /// DENSITY. This used to say the capture "may be lower than the composite's
+    /// (chainBackdropScale caps it at the densest linked reader's bufferScale)".
+    /// That describes an intent, not the code, and it is wrong in two separate
+    /// ways today. Corrected here rather than deleted, because the plumbing to
+    /// make it true exists and the sentence is the only place the intent is
+    /// written down.
+    ///
+    /// FIRST, IT IS 1.0 FOR EVERY BUNDLED BACKDROP PACK, so no reduction happens
+    /// at all. chainBackdropScale's first per-pack test returns 1.0 when the main
+    /// pass links backdrop uniforms, and the predicate is an OR over three
+    /// locations, one of which is the SCALAR GATE that samples no texels. Every
+    /// bundled backdrop pack references that gate in its main fragment, so the
+    /// early return fires for all of them.
+    ///
+    /// SECOND, where it does reach the buffer-pass loop it takes the FIRST linked
+    /// pass's scale and stops, not the densest. That was exact while a pack's
+    /// passes shared one bufferScale and stopped being exact when per-pass scales
+    /// landed.
     std::unique_ptr<KWin::GLTexture> backdropTex;
     /// Framebuffer over backdropTex, cached for the texture's lifetime — the
     /// capture blit runs every frame for a needsBackdrop chain, so building it
