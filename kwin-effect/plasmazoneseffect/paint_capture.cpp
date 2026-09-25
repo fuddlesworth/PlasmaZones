@@ -813,10 +813,15 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     if (st && !st->surfaceExtent && !quads.isEmpty() && !m_windowDecorations.isEmpty()) {
         const auto bit = m_windowDecorations.find(frozenWindowId);
         if (bit != m_windowDecorations.end() && bit->outerPadding > 0) {
-            QRectF textureGeo = window->expandedGeometry();
-            if (textureGeo.isEmpty()) {
-                textureGeo = window->frameGeometry();
-            }
+            // Through surfaceWindowRect, for the reason the padded-present branch
+            // above gives: a raw expandedGeometry() read can transiently answer for
+            // the PREVIOUS frame rect mid-resize, and ow/oh and the texcoord
+            // extension are both derived from this, so one stale value mis-sizes the
+            // padded quad AND its texcoords for the whole animation. The helper
+            // already falls back to the raw expanded rect, then the frame, when it
+            // has no margins cached, so nothing is lost on a window it does not
+            // cover.
+            const QRectF textureGeo = surfaceWindowRect(window);
             if (textureGeo.isEmpty() || textureGeo.width() <= 0 || textureGeo.height() <= 0) {
                 return;
             }
