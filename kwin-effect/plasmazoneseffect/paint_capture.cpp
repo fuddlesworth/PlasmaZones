@@ -896,10 +896,11 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     // rect) so the output quad lands where KWin placed the texture.
     // expandedGeometry can be empty for a window with no decoration or
     // shadow extents; fall back to the frame there.
-    QRectF textureGeo = window->expandedGeometry();
-    if (textureGeo.isEmpty()) {
-        textureGeo = window->frameGeometry();
-    }
+    // surfaceWindowRect, like the padded-present and anchor-extent branches above
+    // and for the reason the first of them gives: it pairs the rect with the quad
+    // this draw was handed. This was the one of the three sites left on the raw
+    // accessor. It already applies the same empty-expanded fallback internally.
+    QRectF textureGeo = surfaceWindowRect(window);
     const QRect outputGeo = output->geometry();
     if (textureGeo.isEmpty() || outputGeo.isEmpty()) {
         return;

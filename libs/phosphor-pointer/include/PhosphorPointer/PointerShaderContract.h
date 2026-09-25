@@ -140,7 +140,11 @@ inline constexpr const char* kUCursorSprite = "uCursorSprite";
 
 /// `sampler2D uTexture1..3` — user-declared image textures (metadata
 /// `textures`). Slot N of the metadata list feeds `uTexture<N+1>` (bindings
-/// 12-14 on the UBO runtime) and `iTextureResolution[N].xy` carries its size.
+/// 12-14 on the UBO runtime) and `iTextureResolution[N+1].xy` carries its size.
+/// The array is indexed by GLSL slot, as in every family: `iTextureResolution[i]`
+/// is the size of `uTexture<i>`. This family has no `uTexture0`, because binding
+/// 11 carries `uCursorSprite`, so index 0 is unused here rather than being the
+/// first declared texture.
 /// An undeclared slot is unbound and reads texture unit 0 on the compositor
 /// (see `kUCursorSprite`).
 inline constexpr const char* kUTexture1 = "uTexture1";

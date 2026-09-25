@@ -1,10 +1,17 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-//
+
+.pragma library
+
+// .pragma library directly under the SPDX header: qt6_target_qml_sources only
+// reads the first 128 bytes when it decides whether the script is shared. Below
+// the description block it did not see it, and the configure warned that this
+// file would be re-evaluated in the context of every document importing
+// Phosphor.Lock. The three sibling .js files in QML modules each sit this way.
+
 // The largest empty region of a placement map (A3 §6 b): where the lock
 // screen puts its clock, date and auth field. Pure geometry, no QML, so it
 // is unit-testable and reusable by any surface that wants free space.
-.pragma library
 
 var Epsilon = 1e-6;
 

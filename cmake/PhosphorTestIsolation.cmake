@@ -41,7 +41,8 @@ find_program(_phosphor_dbus_run_session dbus-run-session)
 # `${CMAKE_CURRENT_LIST_DIR}/../../../cmake/PhosphorTestIsolation.cmake`. That
 # resolves from the repo root in-tree AND from a standalone configure of the
 # library, and the guard covers a genuine extracted subtree where the repo-root
-# module is not present at all. Each of those falls back to a no-op stand-in, which
+# module is not present at all. Each of those falls back to a stand-in that no-ops
+# the isolation helper and reproduces the environment helper verbatim, which
 # UN-ISOLATES rather than breaks: the real function sets only TEST_LAUNCHER and the
 # per-target XDG environment.
 #

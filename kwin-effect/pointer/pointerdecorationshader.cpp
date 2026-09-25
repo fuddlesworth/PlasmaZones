@@ -14,6 +14,7 @@
 #include "plasmazoneseffect/shader_internal.h"
 #include "compositor/effectlogging.h"
 
+#include <PhosphorShaders/ShaderBindings.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
@@ -77,9 +78,18 @@ constexpr std::array<const char*, 4> kIChannelResNames = {
     {"iChannelResolution[0]", "iChannelResolution[1]", "iChannelResolution[2]", "iChannelResolution[3]"}};
 constexpr std::array<const char*, PSC::kMaxUserTextureSlots> kUserTextureNames = {
     {PSC::kUTexture1, PSC::kUTexture2, PSC::kUTexture3}};
-constexpr std::array<const char*, PSC::kMaxUserTextureSlots> kTextureResNames = {
-    {"iTextureResolution[0]", "iTextureResolution[1]", "iTextureResolution[2]"}};
+// GLSL-SLOT indexed, not pack indexed, and therefore one entry LONGER than the
+// sampler table beside it. iTextureResolution[i] is the size of uTexture<i> in
+// every family; this one simply has no uTexture0, because binding 11 carries
+// uCursorSprite instead, so index 0 is unused here and a pack's slot N is at
+// index N+1. Indexing it by pack slot put every size one element low and
+// disagreed with the RHI host, which fills by GLSL slot.
+constexpr std::array<const char*, PhosphorShaders::Bindings::kUserTextureCount> kTextureResNames = {
+    {"iTextureResolution[0]", "iTextureResolution[1]", "iTextureResolution[2]", "iTextureResolution[3]"}};
 static_assert(PSC::kMaxUserTextureSlots == 3, "pointer user-texture name arrays must grow with the slot budget");
+static_assert(kTextureResNames.size() == kUserTextureNames.size() + 1,
+              "iTextureResolution is GLSL-slot indexed and the sampler table pack-slot indexed, so the resolution "
+              "table carries exactly one more entry: index 0, which the pointer family has no uTexture0 for");
 
 // uPointerTrail[0..31]. KWin::GLShader exposes no array upload, so each
 // element needs its own location and its own setUniform; a pack that never
@@ -195,7 +205,7 @@ void PointerDecorationPass::cacheUniformLocations(KWin::GLShader* shader, const 
     for (int slot = 0; slot < PSC::kMaxUserTextureSlots; ++slot) {
         out.userTextures[static_cast<size_t>(slot)] =
             shader->uniformLocation(kUserTextureNames[static_cast<size_t>(slot)]);
-        out.iTextureResolution[static_cast<size_t>(slot)] =
+        out.iTextureResolution[static_cast<size_t>(slot) + 1] =
             shader->uniformLocation(kTextureResNames[static_cast<size_t>(slot)]);
     }
     for (int i = 0; i < 4; ++i) {

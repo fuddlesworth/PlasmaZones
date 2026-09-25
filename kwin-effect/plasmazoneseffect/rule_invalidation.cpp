@@ -10,6 +10,7 @@
 // sweep it schedules, and the whole-world invalidation used when the ground moves.
 
 #include "plasmazoneseffect.h"
+#include "desktopvisibility.h"
 
 // plasmazoneseffect.h only forward-declares DragTracker; the drag gate below
 // calls isDragging(), and unity batching must not be what supplies the type.

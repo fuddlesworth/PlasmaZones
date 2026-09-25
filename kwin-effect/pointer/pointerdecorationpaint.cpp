@@ -201,9 +201,11 @@ int PointerDecorationPass::bindPackTextures(KWin::GLShader* shader, const Pointe
     for (int slot = 0; slot < PSC::kMaxUserTextureSlots; ++slot) {
         const auto& tex = pack.userTextures[static_cast<size_t>(slot)];
         const int samplerLoc = loc.userTextures[static_cast<size_t>(slot)];
-        if (loc.iTextureResolution[static_cast<size_t>(slot)] >= 0) {
+        // slot + 1: the array is indexed by GLSL slot, and this family's pack slot N
+        // feeds uTexture<N+1>. See kTextureResNames.
+        if (loc.iTextureResolution[static_cast<size_t>(slot) + 1] >= 0) {
             const QSize size = tex ? tex->size() : QSize(0, 0);
-            shader->setUniform(loc.iTextureResolution[static_cast<size_t>(slot)],
+            shader->setUniform(loc.iTextureResolution[static_cast<size_t>(slot) + 1],
                                QVector4D(float(size.width()), float(size.height()), 0.0f, 0.0f));
         }
         if (samplerLoc < 0 || !tex) {

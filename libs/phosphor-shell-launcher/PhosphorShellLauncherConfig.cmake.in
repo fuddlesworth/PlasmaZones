@@ -10,7 +10,7 @@ include(CMakeFindDependencyMacro)
 # PhosphorRegistry types (ILauncherProvider and friends), so PhosphorRegistry
 # is a PUBLIC link dependency consumers need transitively. Qt6::Gui is a
 # PRIVATE dependency of the library and is deliberately absent here.
-find_dependency(Qt6 6.6 COMPONENTS Core)
+find_dependency(Qt6 @PHOSPHORSHELLLAUNCHER_QT_MIN@ COMPONENTS Core)
 if(NOT TARGET PhosphorRegistry::PhosphorRegistry)
     find_dependency(PhosphorRegistry)
 endif()

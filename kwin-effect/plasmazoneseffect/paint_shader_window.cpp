@@ -306,11 +306,10 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
             if (cached->iResolutionLoc >= 0) {
                 shader->setUniform(cached->iResolutionLoc, anchorUniforms.resolution);
             }
-            // iTextureResolution[0] is uTexture0's PIXEL size, which the daemon
-            // publishes and the compositor did not. expandedGeo, NOT
-            // anchorUniforms.resolution: that is textureGeo's size, which the block
-            // above spells out is the whole OUTPUT on a surface-extent leg. Times the
-            // scale, since these are logical px and the contract is device px.
+            // iTextureResolution[0] is uTexture0's PIXEL size, which the daemon publishes
+            // and the compositor did not. expandedGeo, NOT anchorUniforms.resolution: that
+            // is textureGeo's size, which the block above spells out is the whole OUTPUT on
+            // a surface-extent leg. Times the scale, since these are logical px.
             if (cached->iTextureResolutionLoc[0] >= 0) {
                 const qreal texScale = w->screen() ? w->screen()->scale() : 1.0;
                 shader->setUniform(cached->iTextureResolutionLoc[0],

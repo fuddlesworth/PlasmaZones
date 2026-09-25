@@ -82,6 +82,8 @@ public:
 
     explicit SnapAssistThumbnailCapture(QObject* parent = nullptr);
 
+    ~SnapAssistThumbnailCapture() override;
+
     /// Called immediately before each out-of-band capture draw, and its return
     /// value invoked immediately after.
     ///
@@ -107,7 +109,6 @@ public:
     {
         m_captureDrawGuard = std::move(guard);
     }
-    ~SnapAssistThumbnailCapture() override;
 
     /// Default thumbnail bounding box. The captured window is fit within this
     /// box (aspect ratio preserved) by @ref grabWindowImage. Used as the

@@ -91,8 +91,14 @@ uniform vec4 customColors[16];
 // pointer_multipass.glsl module.
 uniform vec4 iChannelResolution[4];
 
-// User-declared image textures (metadata `textures`): slot N feeds
-// uTexture<N+1>, iTextureResolution[N].xy carries its pixel size.
+// User-declared image textures (metadata `textures`): slot N feeds uTexture<N+1>,
+// and iTextureResolution[N+1].xy carries its pixel size.
+//
+// INDEX ORIGIN, the trap: this array is indexed by GLSL slot, so
+// iTextureResolution[i] is the size of uTexture<i>. This family has no uTexture0
+// (binding 11 carries uCursorSprite instead), so index 0 is unused rather than
+// being your first declared texture. The sampler names are one-based over the
+// metadata list and this array is zero-based over the texture slots.
 uniform vec4 iTextureResolution[4];
 
 // ── Pointer tail ────────────────────────────────────────────────────────────

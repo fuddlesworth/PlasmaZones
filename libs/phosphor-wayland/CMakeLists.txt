@@ -17,6 +17,18 @@ cmake_minimum_required(VERSION 3.16)
 # built standalone.
 set(PHOSPHORWAYLAND_VERSION "0.1.0")
 
+# The Qt floor this library requires AND advertises in its generated
+# PhosphorWaylandConfig.cmake. Taken from the top-level QT_MIN_VERSION when built
+# in-tree so the two cannot drift, with its own value for a STANDALONE build, where
+# that variable does not exist. The fallback is not optional: the config below
+# substitutes this, and an undefined variable expands to nothing and ships a config
+# whose find_dependency(Qt6 ...) carries no version floor at all.
+if(DEFINED QT_MIN_VERSION)
+    set(PHOSPHORWAYLAND_QT_MIN ${QT_MIN_VERSION})
+else()
+    set(PHOSPHORWAYLAND_QT_MIN "6.10.0")
+endif()
+
 # When built as a subdirectory, inherit the parent project's settings.
 # When standalone, set our own.
 if(NOT PROJECT_VERSION)
@@ -343,7 +355,7 @@ include(CMakePackageConfigHelpers)
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/PhosphorWaylandConfig.cmake.in"
 "@PACKAGE_INIT@\n"
 "include(CMakeFindDependencyMacro)\n"
-"find_dependency(Qt6 6.10 COMPONENTS Core Gui)\n"
+"find_dependency(Qt6 ${PHOSPHORWAYLAND_QT_MIN} COMPONENTS Core Gui)\n"
 "include(\"\${CMAKE_CURRENT_LIST_DIR}/PhosphorWaylandTargets.cmake\")\n"
 "check_required_components(PhosphorWayland)\n"
 )

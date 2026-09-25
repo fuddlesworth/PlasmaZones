@@ -18,7 +18,6 @@
 #include <PhosphorProtocol/Registration.h>
 
 #include <effect/effecthandler.h>
-#include <opengl/glshader.h>
 #include <core/output.h>
 #include <virtualdesktops.h>
 #include <workspace.h>

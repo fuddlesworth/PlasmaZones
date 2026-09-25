@@ -810,23 +810,34 @@ SELFTEST_PROSE_BAD = [
 ]
 
 SELFTEST_PROSE_OK = [
-    # A genuine comma-bearing list, which the carve-out exists for. Three items, so
-    # the final one carries no comma of its own; flagging that was the false positive
-    # the per-item comma test introduced before the enumeration signal was added.
+    # A genuine list. THREE items means two semicolons, which is the enumeration
+    # signal the rule returns early on. Pins that early return: without it the final
+    # item, which carries no comma of its own, reads as a clause and is flagged.
     "Sets the width, in pixels; the radius, in pixels; and the colour",
+    # A two-item list, which has only ONE semicolon and so gets no enumeration
+    # signal. It survives on the three-word clause floor instead, and that is what
+    # this entry pins: drop the floor and a two-word pair reads as a splice. There is
+    # deliberately no comma carve-out left on the single-semicolon path, since a list
+    # needs three items to be one.
     "Left, top; right, bottom",
+    # A "#"-led line is a shell comment in pasteable terminal text, which CLAUDE.md
+    # puts out of scope along with the rest of the code. Pins the skip.
+    "Run it like this:\n# plasmazones --rules a - b\nThen restart.",
     # A literal separator between two nouns, which CLAUDE.md allows.
     "%1 — %2",
-    # A settings breadcrumb.
-    "Settings → Snapping",
-    # A real field label, not a dramatic colon.
-    "Radius: 24",
     # Semicolons inside backticked code.
     "Run `a = 1; b = 2` first.",
     # A spaced hyphen inside backticked code.
     "Pass `--rules a - b` to narrow it.",
     # Two sentences, which is the prescribed rewrite.
     "Blurs the pane. It also lifts saturation.",
+    # FORWARD GUARDS, not coverage. CLAUDE.md also forbids a dramatic "Label: payload"
+    # colon, and allows a settings breadcrumb, but prose_problems implements neither a
+    # colon rule nor an arrow rule, so neither of these can fail under any mutation of
+    # what is implemented. They are here so that a colon rule added later has its two
+    # legitimate shapes already pinned.
+    "Settings → Snapping",
+    "Radius: 24",
 ]
 
 SELFTEST_JSON = json.dumps(

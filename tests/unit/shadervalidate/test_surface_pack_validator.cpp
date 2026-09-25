@@ -635,6 +635,14 @@ private Q_SLOTS:
         const PackResult r =
             validateSurface(tmp, QStringLiteral("sf-vert"), obj, surfaceBodyReading({}),
                             packVertexBody(QStringLiteral("    gl_Position = vec4(position, 0.0, 1.0);\n")));
+        // BOTH branches, which is what the slot name claims. The daemon line is
+        // asserted with the compositor marker excluded, for the nesting reason the
+        // buffer-pass siblings below spell out: "OK (compositor)" contains "OK", so a
+        // plain match is satisfied by the compositor line alone and the Qt-RHI half
+        // goes untested. errors == 0 would hold with the daemon vertex bake deleted.
+        QVERIFY2(reportLineHasWithout(r.report, QStringLiteral("probe.vert"), QStringLiteral("OK"),
+                                      QStringLiteral("(compositor)")),
+                 qPrintable(QStringLiteral("probe.vert has no daemon OK line\n") + r.report));
         QVERIFY2(reportLineHas(r.report, QStringLiteral("probe.vert"), QStringLiteral("OK (compositor)")),
                  qPrintable(r.report));
         QCOMPARE(r.errors, 0);

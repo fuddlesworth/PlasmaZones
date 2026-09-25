@@ -18,7 +18,6 @@
 #include <PhosphorSurface/DecorationSupportedPaths.h>
 
 #include <effect/effecthandler.h>
-#include <opengl/glshader.h>
 
 #include <QColor>
 #include <QJsonDocument>

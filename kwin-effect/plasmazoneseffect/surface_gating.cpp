@@ -12,6 +12,8 @@
 
 #include "plasmazoneseffect.h"
 
+#include "desktopvisibility.h"
+
 #include "shader_internal.h"
 #include "surface_fold.h"
 #include "types.h"
@@ -19,6 +21,7 @@
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 
+#include <QPointer>
 #include <QRectF>
 
 #include <optional>
@@ -70,8 +73,11 @@ void PlasmaZonesEffect::repaintAllDecorations()
         // Same exact-id / deleted / on-desktop discipline as the per-frame driver in
         // postPaintScreen: findWindowById's fuzzy appId fallback can resolve a
         // same-app sibling for a stale id, and an off-desktop window has nothing to
-        // wake.
-        if (!sw || getWindowId(sw) != it.key() || sw->isDeleted() || !sw->isOnCurrentDesktop()) {
+        // wake. PER-OUTPUT, because this decides whether to drive a DECORATION and
+        // that is the line desktopvisibility.h draws. A gate that opens and does not
+        // wake a window visible on its own output leaves it frozen on its last
+        // composite until something incidental damages it.
+        if (!sw || getWindowId(sw) != it.key() || sw->isDeleted() || !isOnOwnOutputCurrentDesktop(sw)) {
             continue;
         }
         sw->addRepaintFull();
@@ -146,7 +152,9 @@ void PlasmaZonesEffect::repaintHoverDecorations(const QPointF& cursor)
             continue;
         }
         KWin::EffectWindow* const sw = findWindowByIdExact(it.key());
-        if (!sw || getWindowId(sw) != it.key() || sw->isDeleted() || !sw->isOnCurrentDesktop()) {
+        // Per-output, same reason as repaintAllDecorations above: a hover pack on a
+        // window visible on its own output has to re-fold.
+        if (!sw || getWindowId(sw) != it.key() || sw->isDeleted() || !isOnOwnOutputCurrentDesktop(sw)) {
             continue;
         }
         // A PAUSED chain pins its cursor to the sentinel and cannot change, so waking it
@@ -507,8 +515,14 @@ std::function<void()> PlasmaZonesEffect::neutralisePresentForOutOfBandDraw(KWin:
     // Restores the PRESENT shader specifically, not reconcileDecorationShader,
     // matching paint_capture.cpp's note: that call's live-transition arm cedes the
     // slot for a window that does carry a leg, which would be the wrong answer here.
-    return [this, w]() {
-        setShader(w, surfacePresentShader());
+    // QPointer, matching every other deferred site in this tree. The window cannot
+    // plausibly die inside the synchronous effects->drawWindow the guard brackets, so
+    // this is house style rather than a live fix, and it costs nothing.
+    QPointer<KWin::EffectWindow> safeW(w);
+    return [this, safeW]() {
+        if (safeW) {
+            setShader(safeW, surfacePresentShader());
+        }
     };
 }
 

@@ -291,21 +291,25 @@ private Q_SLOTS:
         e.bufferScale = 1.0;
         e.bufferScales = QList<qreal>{1.0};
 
-        const QVariantMap huge = composeStageMap(e, {}, 1000.0);
+        // A HALF-density pack throughout, deliberately. With a pack at 1.0 the
+        // identity answer and the clamped answer are both kMaxBufferScale, so an
+        // assertion holds whether or not the multiplier is applied at all. That
+        // vacuity was real twice over: it left the `huge` case passing with the
+        // multiplier dropped entirely, and the infinity row passing with
+        // std::isfinite deleted.
+        SurfaceShaderEffect half = e;
+        half.bufferScale = 0.5;
+        half.bufferScales = QList<qreal>{0.5};
+
+        const QVariantMap huge = composeStageMap(half, {}, 1000.0);
         QCOMPARE(huge.value(QStringLiteral("bufferScale")).toDouble(), SurfaceShaderEffect::kMaxBufferScale);
         QCOMPARE(huge.value(QStringLiteral("bufferScales")).toList().at(0).toDouble(),
                  SurfaceShaderEffect::kMaxBufferScale);
 
-        const QVariantMap tiny = composeStageMap(e, {}, 1.0e-9);
+        const QVariantMap tiny = composeStageMap(half, {}, 1.0e-9);
         QCOMPARE(tiny.value(QStringLiteral("bufferScale")).toDouble(), SurfaceShaderEffect::kMinBufferScale);
-
-        // A HALF-density pack for the unusable cases, deliberately. With a pack at
-        // 1.0 the identity answer and the clamped-infinity answer are both
-        // kMaxBufferScale, so the assertion holds whether or not the guard is
-        // there. That vacuity was real: dropping std::isfinite left this passing.
-        SurfaceShaderEffect half = e;
-        half.bufferScale = 0.5;
-        half.bufferScales = QList<qreal>{0.5};
+        QCOMPARE(tiny.value(QStringLiteral("bufferScales")).toList().at(0).toDouble(),
+                 SurfaceShaderEffect::kMinBufferScale);
         const qreal unusable[] = {0.0, -1.0, std::numeric_limits<qreal>::quiet_NaN(),
                                   std::numeric_limits<qreal>::infinity()};
         for (const qreal m : unusable) {

@@ -26,9 +26,14 @@ endif()
 # header exposes Registry<AnimationPack> + MetadataPackLoader<AnimationPack>, and
 # CurveRegistry composes Registry<CurveFactoryEntry> — so the exported target
 # references PhosphorRegistry::PhosphorRegistry and a standalone find_package
-# consumer must resolve it. (find_dependency(PhosphorRegistry) transitively pulls
-# PhosphorFsLoader via PhosphorRegistry's own Config.)
+# consumer must resolve it.
 find_dependency(PhosphorRegistry 0.1.0)
+
+# PhosphorFsLoader is also a PUBLIC link dependency. PhosphorRegistry's Config does
+# re-export it, so this is not a breakage being fixed, but the sibling
+# PhosphorSurfaceConfig argues in as many words for declaring it explicitly rather
+# than leaning on that, and a convention only one of two Configs follows is not one.
+find_dependency(PhosphorFsLoader 0.1.0)
 
 # The rest of the PUBLIC link set. Each is referenced by the exported targets
 # file, so a consumer that cannot resolve it gets a hard find_package failure
