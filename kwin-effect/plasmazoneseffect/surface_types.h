@@ -66,6 +66,25 @@ struct CompiledSurfaceBufferPass
     /// signal that this buffer pass reacts to audio.
     int iAudioSpectrumSizeLoc = -1;
     int uAudioSpectrumLoc = -1;
+    /// User-declared image textures (metadata `textures`), PACK-indexed: entry t is
+    /// uTexture<t+1>. Resolved for a buffer pass, not just the main one, because an
+    /// unset classic default-block sampler reads unit 0, and unit 0 in the fold holds
+    /// the RUNNING COMPOSITE. A pass that references one without these would sample
+    /// the window back into its own blur. Same hazard the uBackdrop fallback above
+    /// exists for, and the shared header declares these samplers unconditionally, so
+    /// nothing warns a pack author off them.
+    std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots> userTextureLoc = []() {
+        std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots> a;
+        a.fill(-1);
+        return a;
+    }();
+    /// GLSL-TEXTURE-SLOT-indexed, like its main-pass twin: iTextureResolution[i] is
+    /// the size of uTexture<i>, so index 0 is the surface and pack slot N is N+1.
+    std::array<int, PhosphorShaders::Bindings::kUserTextureCount> iTextureResolutionLoc = []() {
+        std::array<int, PhosphorShaders::Bindings::kUserTextureCount> a;
+        a.fill(-1);
+        return a;
+    }();
     /// iChannel0..7 sampler locations — prior buffer outputs feeding this pass.
     std::array<int, PhosphorShaders::kMaxBufferPasses> iChannelLoc = []() {
         std::array<int, PhosphorShaders::kMaxBufferPasses> a;

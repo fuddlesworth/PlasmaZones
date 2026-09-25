@@ -672,6 +672,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             const bool passHasBackdrop = pass.uBackdropLoc >= 0 && backdropAvailable;
             bool passBackdropUnitBound = false; ///< the transparent fallback went to the backdrop unit
             bool passAudioBound = false;
+            bool passUserTexturesBound = false; ///< at least one user-texture unit holds something
             {
                 KWin::ShaderBinder binder(pass.shader.get());
                 glActiveTexture(GL_TEXTURE0);
@@ -825,6 +826,44 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 // reads surface_audio.glsl — same contract as the main pass.
                 passAudioBound =
                     bindSurfaceAudio(pass.shader.get(), pass.iAudioSpectrumSizeLoc, pass.uAudioSpectrumLoc, mayAnimate);
+                // The pack's own textures, on the same units and by the same rule as
+                // the main pass below. EVERY slot the pass references gets a bind, a
+                // real texture or the shared 1x1 transparent fallback, because an
+                // unset classic sampler reads unit 0 and unit 0 here is the running
+                // composite: without this a pass sampling a mask would sample the
+                // window back into its own blur.
+                if (pass.iTextureResolutionLoc[0] >= 0) {
+                    pass.shader->setUniform(pass.iTextureResolutionLoc[0],
+                                            QVector4D(static_cast<float>(state.compositeSize.width()),
+                                                      static_cast<float>(state.compositeSize.height()), 0.0f, 0.0f));
+                }
+                for (int t = 0; t < PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots; ++t) {
+                    if (pass.userTextureLoc[t] < 0) {
+                        continue;
+                    }
+                    KWin::GLTexture* userTex = pk->userTextures[t].get();
+                    if (!userTex) {
+                        // Park the destination unit before the lazy upload, same hazard
+                        // and same reason as the main pass: GLTexture::upload binds on
+                        // the CURRENTLY ACTIVE unit, which is 0 here.
+                        glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceUserTextureBaseUnit + t);
+                        userTex = transparentFallbackTexture();
+                        glActiveTexture(GL_TEXTURE0);
+                        if (!userTex) {
+                            continue;
+                        }
+                    } else if (pass.iTextureResolutionLoc[t + 1] >= 0) {
+                        pass.shader->setUniform(pass.iTextureResolutionLoc[t + 1],
+                                                QVector4D(static_cast<float>(userTex->width()),
+                                                          static_cast<float>(userTex->height()), 0.0f, 0.0f));
+                    }
+                    const int unit = ShaderInternal::kSurfaceUserTextureBaseUnit + t;
+                    pass.shader->setUniform(pass.userTextureLoc[t], unit);
+                    glActiveTexture(GL_TEXTURE0 + unit);
+                    userTex->bind();
+                    glActiveTexture(GL_TEXTURE0);
+                    passUserTexturesBound = true;
+                }
                 drawFullscreenQuad();
             }
             // Unbind every channel unit, not just the prior-buffer ones: the loop
@@ -842,6 +881,16 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             if (passAudioBound) {
                 glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceAudioUnit);
                 glBindTexture(GL_TEXTURE_2D, 0);
+            }
+            if (passUserTexturesBound) {
+                // Every slot, not only the ones this pass bound: the next pass in the
+                // chain may reference a different subset, and a unit left bound leaks
+                // this pass's texture into it. Same discipline as the channel units.
+                for (int t = 0; t < PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots; ++t) {
+                    glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceUserTextureBaseUnit + t);
+                    glBindTexture(GL_TEXTURE_2D, 0);
+                }
+                glActiveTexture(GL_TEXTURE0);
             }
             glActiveTexture(GL_TEXTURE0);
             KWin::GLFramebuffer::popFramebuffer();

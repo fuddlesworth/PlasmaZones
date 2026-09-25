@@ -589,6 +589,15 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
             // uniforms), exactly like the main pass above.
             pass.iAudioSpectrumSizeLoc = bufShader->uniformLocation(SC::kIAudioSpectrumSize);
             pass.uAudioSpectrumLoc = bufShader->uniformLocation(SC::kUAudioSpectrum);
+            // The pack's own textures, for the reason CompiledSurfaceBufferPass spells
+            // out: without the location the fold cannot bind anything, and an unset
+            // sampler reads the running composite on unit 0.
+            for (int slot = 0; slot < SC::kMaxUserTextureSlots; ++slot) {
+                pass.userTextureLoc[slot] = bufShader->uniformLocation(kSurfaceUserTextureNames[slot]);
+            }
+            for (int glslSlot = 0; glslSlot < PhosphorShaders::Bindings::kUserTextureCount; ++glslSlot) {
+                pass.iTextureResolutionLoc[glslSlot] = bufShader->uniformLocation(kITextureResolutionKeys[glslSlot]);
+            }
             for (size_t i = 0; i < kIChannelNames.size(); ++i) {
                 pass.iChannelLoc[i] = bufShader->uniformLocation(kIChannelNames[i]);
             }

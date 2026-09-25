@@ -53,12 +53,26 @@ QVariantMap clampToDeclaredRanges(const PhosphorSurfaceShaders::SurfaceShaderEff
             continue;
         }
         const QMetaType::Type type = static_cast<QMetaType::Type>(it.value().typeId());
-        const bool numeric = type == QMetaType::Int || type == QMetaType::UInt || type == QMetaType::LongLong
+        const bool numericType = type == QMetaType::Int || type == QMetaType::UInt || type == QMetaType::LongLong
             || type == QMetaType::ULongLong || type == QMetaType::Double || type == QMetaType::Float;
-        if (!numeric) {
+        double value = 0.0;
+        if (numericType) {
+            value = it.value().toDouble();
+        } else if (type == QMetaType::QString) {
+            // A NUMBER CAN ARRIVE AS A STRING, and a type whitelist alone let those
+            // past the clamp entirely. The profile tree round-trips through JSON and
+            // a hand-edited config can hold "24" for a float param, which is exactly
+            // the typo'd-or-hostile case this clamp exists for. Parsed rather than
+            // assumed, so a colour ("#ff0000") or an enum token still falls through
+            // untouched, and Bool stays excluded as before.
+            bool ok = false;
+            value = it.value().toString().toDouble(&ok);
+            if (!ok) {
+                continue;
+            }
+        } else {
             continue;
         }
-        double value = it.value().toDouble();
         // An inverted declared range is left alone rather than applied, the same
         // decision clampToBounds makes: applying both ends of a backwards pair moves
         // the value outside both of them.
