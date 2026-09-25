@@ -550,10 +550,10 @@ struct SurfaceMultipassState
     /// bundled backdrop pack references that gate in its main fragment, so the
     /// early return fires for all of them.
     ///
-    /// SECOND, where it does reach the buffer-pass loop it takes the FIRST linked
-    /// pass's scale and stops, not the densest. That was exact while a pack's
-    /// passes shared one bufferScale and stopped being exact when per-pass scales
-    /// landed.
+    /// SECOND is now closed: where it does reach the buffer-pass loop it takes the
+    /// max over every linked pass. It used to take the first and stop, which was
+    /// exact while a pack's passes shared one bufferScale and stopped being exact
+    /// when per-pass scales landed.
     std::unique_ptr<KWin::GLTexture> backdropTex;
     /// Framebuffer over backdropTex, cached for the texture's lifetime — the
     /// capture blit runs every frame for a needsBackdrop chain, so building it

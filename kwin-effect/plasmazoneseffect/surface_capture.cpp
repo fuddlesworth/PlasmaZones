@@ -932,41 +932,39 @@ qreal PlasmaZonesEffect::chainBackdropScale(const WindowDecoration& deco, const 
         if (linksBackdropUniforms(pk->uBackdropLoc, pk->uHasBackdropLoc, pk->uBackdropRectLoc)) {
             return 1.0; // a sharp main-pass read caps every other answer
         }
-        for (size_t bpIndex = 0; bpIndex < pk->bufferPasses.size(); ++bpIndex) {
-            const CompiledSurfaceBufferPass& bp = pk->bufferPasses[bpIndex];
-            if (linksBackdropUniforms(bp.uBackdropLoc, bp.uHasBackdropLoc, bp.uBackdropRectLoc)) {
-                // Same clamp ensureSurfaceTargets applies when sizing
-                // the buffer targets themselves, so capture density
-                // and sampler density agree by construction. The
-                // clamped value is cached per pack: bufferScale is
-                // pack METADATA (unlike the linked-uniform probes
-                // above, which are compile state and MUST resolve
-                // through the lazy compile — see the comment above
-                // this function), and the registry lookup copies a
-                // whole SurfaceShaderEffect by value, which this
-                // per-frame path must not pay per pack. The cached
-                // value is the multiplier-folded PRODUCT, so it is
-                // invalidated by EVERY m_compiledPacks clear (a
-                // registry hot-reload or a preset retune can change
-                // what it folds) plus the blur-scale-multiplier loader
-                // in daemon_settings.cpp. No count is quoted: the set
-                // of clear sites grows.
-                // The cached value is THIS pass's scale (the first pass that
-                // reads the backdrop), which under per-pass `bufferScales` is
-                // the densest read the backdrop gets: a pyramid's later passes
-                // read earlier passes, never the capture.
-                qreal packScale = 0.0;
-                if (const auto bsIt = m_packBufferScaleCache.find(packId); bsIt != m_packBufferScaleCache.end()) {
-                    packScale = bsIt->second;
-                } else {
-                    packScale = clampedBufferScale(
-                        passBufferScaleFor(m_surfaceShaderRegistry.effect(packId), static_cast<int>(bpIndex)));
-                    m_packBufferScaleCache.emplace(packId, packScale);
+        // The DENSEST linked buffer pass, not the first. Under per-pass
+        // `bufferScales` a pack may read the backdrop from more than one pass at
+        // different densities, and capturing at the sparser one leaves the denser
+        // reader sampling texels that were never blitted. Taking the max can only
+        // over-capture, which costs; taking the first can under-sample, which is a
+        // defect. A pyramid whose later passes read earlier passes rather than the
+        // capture has exactly one linked pass, so it is unaffected either way.
+        //
+        // Clamped with the clamp ensureSurfaceTargets applies when sizing the
+        // buffer targets themselves, so capture density and sampler density agree
+        // by construction. Cached per pack, because the registry lookup copies a
+        // whole SurfaceShaderEffect by value and this is a per-frame path. The
+        // cached value folds the multiplier AND the pack's linkage, so it is
+        // invalidated by EVERY m_compiledPacks clear (a registry hot-reload or a
+        // preset retune can change either) plus the blur-scale-multiplier loader
+        // in daemon_settings.cpp. No count is quoted: the set of clear sites grows.
+        // 0.0 for a pack whose buffer passes link nothing is a real answer and is
+        // cached as one, so a chain of such packs stops re-walking them per frame.
+        qreal packScale = 0.0;
+        if (const auto bsIt = m_packBufferScaleCache.find(packId); bsIt != m_packBufferScaleCache.end()) {
+            packScale = bsIt->second;
+        } else {
+            const PhosphorSurfaceShaders::SurfaceShaderEffect regEff = m_surfaceShaderRegistry.effect(packId);
+            for (size_t bpIndex = 0; bpIndex < pk->bufferPasses.size(); ++bpIndex) {
+                const CompiledSurfaceBufferPass& bp = pk->bufferPasses[bpIndex];
+                if (linksBackdropUniforms(bp.uBackdropLoc, bp.uHasBackdropLoc, bp.uBackdropRectLoc)) {
+                    packScale =
+                        qMax(packScale, clampedBufferScale(passBufferScaleFor(regEff, static_cast<int>(bpIndex))));
                 }
-                scale = qMax(scale, packScale);
-                break; // one linked buffer pass answers for the pack
             }
+            m_packBufferScaleCache.emplace(packId, packScale);
         }
+        scale = qMax(scale, packScale);
         // A buffer pass at the ceiling is already the maximum
         // possible answer (the main-pass branch above returns the
         // same value), so stop walking the chain — restores the
