@@ -111,6 +111,20 @@ inline bool linkSurfaceSharedIncludes(const QTemporaryDir& tmp)
     return linkSharedInto(tmp, target);
 }
 
+/// The overlay twin, for a fixture whose stage `#include`s one of the overlay
+/// shared headers rather than standing alone.
+///
+/// Most overlay slots here test METADATA lints and never need this: the fixture
+/// writes a bare `pZone` body, the scaffold supplies what it needs, and nothing is
+/// included. It exists for the slots that have to compile a shared header the
+/// bundled packs do not reach, which is the only way those headers get baked at
+/// all.
+inline bool linkOverlaySharedIncludes(const QTemporaryDir& tmp)
+{
+    const QString target = QStringLiteral(P_SOURCE_DIR "/data/overlays/shared");
+    return linkSharedInto(tmp, target);
+}
+
 /// Write @p body to @p file inside the pack directory @p dir. Returns false
 /// when the write fails or is short, for the caller to QVERIFY: a QVERIFY
 /// inside a lambda only returns from the lambda, so a failed fixture write

@@ -634,6 +634,79 @@ private Q_SLOTS:
         }
     }
 
+    /// data/overlays/shared/textures.glsl is compiled by NOTHING. A repo-wide
+    /// grep finds its only mention is itself: no bundled overlay pack includes
+    /// it, so the four user-texture samplers it declares at bindings 11 to 14
+    /// are never baked and never reflected against the shared binding table.
+    /// Those four slots are the least-exercised block in the table, and the one
+    /// most likely to drift, since no shipped pack would notice.
+    ///
+    /// A fixture pack is the only way to reach them: it has to declare image
+    /// parameters, include the header and SAMPLE all four, or the linker drops
+    /// the samplers and the bake reflects nothing.
+    void theOverlayUserTextureSlotsBakeAtTheirContractBindings()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        if (!PackValidatorTest::linkOverlaySharedIncludes(tmp)) {
+            QSKIP("data/overlays/shared not found — running outside source tree");
+        }
+
+        // One image parameter per slot: the header documents that the registry
+        // binds them in DECLARATION ORDER, so four declarations claim uTexture0
+        // through uTexture3. No bundled pack of any family declares an
+        // image-typed parameter, which is the other half of why these four slots
+        // have no coverage.
+        QJsonArray params;
+        for (int i = 0; i < 4; ++i) {
+            QJsonObject param;
+            param.insert(QStringLiteral("id"), QStringLiteral("tex%1").arg(i));
+            param.insert(QStringLiteral("name"), QStringLiteral("Texture %1").arg(i));
+            param.insert(QStringLiteral("type"), QStringLiteral("image"));
+            param.insert(QStringLiteral("default"), QStringLiteral("tex%1.png").arg(i));
+            params.append(param);
+        }
+        QJsonObject obj = overlayPack(QStringLiteral("ov-textures"));
+        obj.insert(QStringLiteral("parameters"), params);
+        // overlayPack declares multipass for the buffer-lint slots, and this one
+        // writes its own stage rather than going through validateOverlay's
+        // writeStage loop, so nothing would create the buffer pass it implies.
+        // The texture slots have nothing to do with multipass either way.
+        obj.remove(QStringLiteral("multipass"));
+
+        const QString dir = tmp.filePath(QStringLiteral("ov-textures"));
+        QVERIFY(writePackFile(dir, QStringLiteral("metadata.json"), QJsonDocument(obj).toJson()));
+        // pImage, not pZone: this needs no per-zone context and the whole-canvas
+        // entry keeps the body to the thing under test. Every one of the four is
+        // SAMPLED, because a declared-but-unsampled sampler is optimised out at
+        // link and the bake would then reflect an empty set.
+        QVERIFY(writePackFile(dir, QStringLiteral("zone.frag"),
+                              "#include <textures.glsl>\n"
+                              "vec4 pImage(vec2 fragCoord) {\n"
+                              "    vec2 uv = fragCoord / max(iResolution, vec2(1.0));\n"
+                              "    return texture(uTexture0, uv) + texture(uTexture1, uv)\n"
+                              "         + texture(uTexture2, uv) + texture(uTexture3, uv);\n"
+                              "}\n"));
+        // Four 1x1 PNGs, so a missing-image lint is not what fails.
+        for (int i = 0; i < 4; ++i) {
+            QImage px(1, 1, QImage::Format_RGBA8888);
+            px.fill(Qt::transparent);
+            QVERIFY(px.save(QDir(dir).filePath(QStringLiteral("tex%1.png").arg(i))));
+        }
+
+        QString report;
+        QTextStream stream(&report);
+        const int errors = PlasmaZones::ShaderValidate::validatePack(dir, stream);
+        stream.flush();
+
+        // The binding lint is what this is really for: it reflects every baked
+        // sampler against the table, so a clean bake here means all four
+        // resolved at 11 to 14. A wrong slot in the header would name the
+        // sampler in a "binding layout:" diagnostic.
+        QVERIFY2(!report.contains(QStringLiteral("binding layout:")), qPrintable(report));
+        QVERIFY2(errors == 0, qPrintable(report));
+    }
+
     // bindingLayoutProblems is declared "Exposed so the tests can pin the rule
     // without going through a whole pack", and until this slot nothing called
     // it directly: every exercise of it came through a pack bake, where a pack
