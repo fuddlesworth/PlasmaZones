@@ -72,6 +72,16 @@ Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
            2026 nikitamashchenko (https://www.shadertoy.com/)
 License: GPL-3.0-or-later
 
+# The vibrancy helper in this shared header is a port of Hyprland's blur1.glsl,
+# whose BSD-3 terms permit the LGPL the file ships under. BSD-3 requires the
+# upstream notice be retained in a source redistribution, and shader sources are
+# shipped as source, so upstream is credited here and in the file's own header
+# rather than relicensed away.
+Files: data/surface/shared/surface_color.glsl
+Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+           Hyprland contributors
+License: LGPL-2.1-or-later
+
 # Ports of gl-transitions, whose MIT terms permit the LGPL the surrounding
 # packs use. Upstream is credited rather than relicensed away.
 Files: data/animations/desktop-crosszoom/effect.frag
