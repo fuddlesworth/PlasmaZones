@@ -4,18 +4,17 @@
 #include "plasmazoneseffect.h"
 #include "compositor/effectlogging.h"
 #include "desktopvisibility.h"
-
-#include <effect/effecthandler.h>
-#include <effect/effectwindow.h>
-
-#include "tilinghandler/tilinghandler.h"
 #include "handlers/snaphandler.h"
 #include "shader_internal.h"
-#include "surface_fold.h"
 #include "shader_resolve.h"
+#include "surface_fold.h"
+#include "tilinghandler/tilinghandler.h"
 
 #include <PhosphorCompositor/DecorationDefaults.h>
 #include <PhosphorRules/RuleAction.h>
+
+#include <effect/effecthandler.h>
+#include <effect/effectwindow.h>
 
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
@@ -83,8 +82,18 @@ struct FoldInputs
 
 inline FoldInputs foldInputsOf(const WindowDecoration& wb)
 {
-    return FoldInputs{wb.chain,         wb.packParamValues, wb.basePackId,       wb.outerPadding,
-                      wb.needsBackdrop, wb.isShellSurface,  wb.chainBakesOpacity};
+    // DESIGNATED initialisers, not positional. Three of these are adjacent bools, so a
+    // positional list lets any two of them be swapped with no compile error, and the
+    // result is precisely the stale-fold class the struct's own comment above records as
+    // having already shipped once. (The int/bool pair is protected only by accident,
+    // since that narrowing would fail to compile.)
+    return FoldInputs{.chain = wb.chain,
+                      .packParamValues = wb.packParamValues,
+                      .basePackId = wb.basePackId,
+                      .outerPadding = wb.outerPadding,
+                      .needsBackdrop = wb.needsBackdrop,
+                      .isShellSurface = wb.isShellSurface,
+                      .chainBakesOpacity = wb.chainBakesOpacity};
 }
 
 } // namespace
@@ -565,6 +574,12 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         // stale "border" entry the tree profile still carries from a time the
         // user had the pack picked. Pick it again and we are in custom mode,
         // this branch does not run, and the tree's params win instead.
+        // This REPLACES the whole "border" entry, so any stored roundBottomCorners on that
+        // pack is dropped before chainRoundBottomCorners runs below and the chain falls to
+        // the pack's declared default. Deliberate and harmless here: easy mode exposes no
+        // per-pack parameter editor, its chain is at most {border, opacity-tint}, and
+        // opacity-tint does not declare the control, so there is nothing for the two to
+        // disagree about. The resolved appearance owns this layer's params outright.
         QVariantMap borderParams;
         borderParams.insert(QStringLiteral("borderWidth"),
                             appearance->borderWidth.value_or(PhosphorCompositor::DecorationDefaults::BorderWidth));
@@ -1040,12 +1055,12 @@ QString PlasmaZonesEffect::resolveSurfacePathFor(const QString& windowId, KWin::
     // gate. Autotile-first precedence; falls back to window.floating for an
     // unmanaged window.
     if (m_tilingHandler->isTiledWindow(windowId)) {
-        return QStringLiteral("window.tiled");
+        return PhosphorSurfaceShaders::decorationWindowTiledPath();
     }
     if (m_snapHandler->isTiledWindow(windowId)) {
-        return QStringLiteral("window.snapped");
+        return PhosphorSurfaceShaders::decorationWindowSnappedPath();
     }
-    return QStringLiteral("window.floating");
+    return PhosphorSurfaceShaders::decorationWindowFloatingPath();
 }
 
 void PlasmaZonesEffect::seedDecorationTreeBaseline()

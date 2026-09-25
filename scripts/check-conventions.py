@@ -704,6 +704,16 @@ def rule_prose(files: list[str]) -> list[Violation]:
         # lead-in is an explicitly allowed colon, headings are structure rather
         # than prose, and the trailing ([#nnnn](url)) reference is markup whose
         # URL would otherwise read as prose punctuation.
+        #
+        # THREE THINGS THIS ARM DOES NOT CATCH, so a reviewer still has to read:
+        #   1. the entry's bold TITLE, since the split below discards everything
+        #      up to and including the lead-in;
+        #   2. the dramatic "Label: payload" colon, the rule-of-three triad and
+        #      "not just X, but Y" — prose_problems tests none of them;
+        #   3. a clause-splicing semicolon built from past-tense prose, because
+        #      the verb list the semicolon arm matches on holds no past-tense
+        #      lexical verbs ("The pane is one shape; each pack decided it alone."
+        #      passes).
         if Path(f).name == "CHANGELOG.md":
             text = read(f)
             for n, ln in enumerate(text.splitlines(), 1):

@@ -392,6 +392,13 @@ private Q_SLOTS:
         // vacuity was real twice over: it left the `huge` case passing with the
         // multiplier dropped entirely, and the infinity row passing with
         // std::isfinite deleted.
+        // The bounds pinned NUMERICALLY once, because every other assertion here
+        // compares against the same two symbols the code under test uses, so both
+        // sides move together and nothing would catch the band itself changing.
+        // CHANGELOG entries quote the floor as "a hundred and twenty-eighth".
+        QCOMPARE(SurfaceShaderEffect::kMinBufferScale, 1.0 / 128.0);
+        QCOMPARE(SurfaceShaderEffect::kMaxBufferScale, 1.0);
+
         SurfaceShaderEffect half = e;
         half.bufferScale = 0.5;
         half.bufferScales = QList<qreal>{0.5};

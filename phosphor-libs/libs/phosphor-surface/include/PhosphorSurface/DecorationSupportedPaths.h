@@ -29,6 +29,33 @@ inline QString decorationShellAppletPopupPath()
     return QStringLiteral("shell.appletPopup");
 }
 
+/// XDG data subdirectory holding installed surface-shader packs, relative to a
+/// GenericDataLocation root. Lives here because BOTH application tiers scan it and
+/// neither may link the other: the daemon's warm-bake and the Phosphor shell's own
+/// chrome each built the same two paths from their own copy of the literal, so a
+/// rename would have moved one and left the other looking in the old place.
+inline QString surfacePackDataSubdir()
+{
+    return QStringLiteral("plasmazones/surface");
+}
+
+/// The three per-placement window decoration paths. Accessors for the same reason
+/// as the leaves below, and because these three had been spelled independently in
+/// three places: this header's own supported-paths list, the compositor's
+/// resolveSurfacePathFor, and the settings page that edits them.
+inline QString decorationWindowTiledPath()
+{
+    return QStringLiteral("window.tiled");
+}
+inline QString decorationWindowSnappedPath()
+{
+    return QStringLiteral("window.snapped");
+}
+inline QString decorationWindowFloatingPath()
+{
+    return QStringLiteral("window.floating");
+}
+
 /// The OSD surface and the three transient overlays invoked by user action.
 /// Accessors rather than literals because the seed tree in
 /// configdefaults_shaders.h writes overrides at these exact paths, and a
@@ -124,9 +151,9 @@ inline QStringList decorationLeafSurfacePaths()
     return QStringList{
                // window.* — per-placement window decoration (border / corners /
                // titlebar appearance + surface-pack chain) for each placement state.
-               QStringLiteral("window.tiled"),
-               QStringLiteral("window.snapped"),
-               QStringLiteral("window.floating"),
+               decorationWindowTiledPath(),
+               decorationWindowSnappedPath(),
+               decorationWindowFloatingPath(),
                // osd — the notification surface.
                decorationOsdPath(),
                // popup.* — the four transient overlays invoked by user action.

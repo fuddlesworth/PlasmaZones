@@ -1516,13 +1516,13 @@ private:
     std::optional<PreparedLayoutOsdWindow> prepareLayoutOsdWindow(const QString& screenId = QString());
 
     /**
-     * @brief Shared show tail for every OSD path (layout, template, disabled,
-     * navigation): size to the screen, map the surface, animate the slot in
-     * and kick the auto-dismiss timer. Callers write their content
-     * properties and the mode string first.
+     * @brief Shared show tail for every OSD path: hide any zone selector on the
+     * screen, size to it, map the surface, animate the slot in and kick the
+     * auto-dismiss timer. Callers write their content properties and the mode
+     * string first. The hide is here, after their bails, not in the prepare step.
      */
     void finishOsdShow(QQuickWindow* window, PhosphorLayer::Surface* surface, QQuickItem* osdSlot,
-                       const QRect& screenGeom);
+                       const QRect& screenGeom, const QString& effectiveScreenId);
 
     /// Parameters for @ref createLayerSurface. Defined in
     /// overlayservice_types.h; aliased here so existing nested-name

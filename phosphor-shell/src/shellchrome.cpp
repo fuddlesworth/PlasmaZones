@@ -4,6 +4,7 @@
 
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorSurface/DecorationProfile.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorSurface/SurfaceChainCompose.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 #include <PhosphorSurface/SurfaceThemeResolve.h>
@@ -124,8 +125,11 @@ void ShellChrome::setPalette(PhosphorTheme::PaletteStore* palette)
     if (m_palette == palette) {
         return;
     }
+    // Named signal rather than a blanket disconnect(sender, nullptr, this, nullptr):
+    // paletteChanged below is the only connection today, so the two are equivalent, but
+    // the blanket form would silently sever any second one a later change adds.
     if (m_palette) {
-        disconnect(m_palette, nullptr, this, nullptr);
+        disconnect(m_palette, &PhosphorTheme::PaletteStore::paletteChanged, this, &ShellChrome::bump);
     }
     m_palette = palette;
     if (m_palette) {
@@ -160,11 +164,12 @@ QStringList ShellChrome::defaultPackSearchPaths()
     // The daemon's setupSurfaceShaderEffects, verbatim: system dirs lowest
     // priority first, the user dir last and materialised so the loader can
     // watch it.
-    QStringList dirs = QStandardPaths::locateAll(
-        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/surface"), QStandardPaths::LocateDirectory);
+    const QString packSubdir = PhosphorSurfaceShaders::surfacePackDataSubdir();
+    QStringList dirs =
+        QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, packSubdir, QStandardPaths::LocateDirectory);
     std::reverse(dirs.begin(), dirs.end());
     const QString userDir =
-        QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/plasmazones/surface");
+        QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/') + packSubdir;
     if (!dirs.contains(userDir)) {
         dirs.append(userDir);
     }
@@ -179,6 +184,14 @@ const PhosphorSurfaceShaders::DecorationProfileTree& ShellChrome::tree() const
 
 bool ShellChrome::setTreeJson(const QString& json)
 {
+    // An EMPTY payload is the expected answer from a daemon that does not know this
+    // key (see the getSetting comment below), so it is a debug line rather than a
+    // warning. Warning on it fired on every settingsChanged against an older daemon,
+    // while the blur-multiplier twin handled the same case silently.
+    if (json.trimmed().isEmpty()) {
+        qCDebug(lcShellChrome) << "decorationProfileTree is empty; keeping the current tree";
+        return false;
+    }
     const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
     if (!doc.isObject()) {
         qCWarning(lcShellChrome) << "decorationProfileTree is not a JSON object; keeping the current tree";
@@ -351,6 +364,10 @@ const PhosphorSurfaceShaders::DecorationProfile& ShellChrome::resolvedProfile(co
     // not apply presets and `effectiveParameters()` is the post-flatten read, so an
     // unflattened profile renders without the preset's values and without the
     // declared-range clamp `resolveParams` applies.
+    //
+    // The returned reference lives in m_resolvedCache, a QHash, so it is invalidated by
+    // the next insert. Callers must finish with it before resolving a DIFFERENT surface
+    // path; chainFor and outerPaddingFor each take one profile and never re-enter.
     return *m_resolvedCache.insert(surfacePath,
                                    PhosphorSurfaceShaders::withPresetsResolved(m_tree.resolve(surfacePath),
                                                                                m_presetStore->registry(),

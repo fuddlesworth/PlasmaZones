@@ -20,6 +20,7 @@
 #include <PhosphorShaders/ShaderEntryPoint.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
+#include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/SurfaceShaderContract.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
@@ -34,6 +35,8 @@
 #include <QString>
 #include <QStringList>
 #include <QTextStream>
+
+#include <algorithm>
 
 #include <rhi/qshader.h>
 
@@ -462,6 +465,20 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             for (const SurfaceShaderEffect::ParameterInfo& p : eff.parameters) {
                 if (p.id == paddingParam && (p.type == QLatin1String("float") || p.type == QLatin1String("int"))) {
                     resolves = true;
+                    // The host bounds the request into [0, kMaxDecorationOuterPaddingPx],
+                    // so a declared max above that ceiling has a dead top end: the slider
+                    // moves and the margin stops. Every bundled pack sits at or under it.
+                    bool okMax = false;
+                    const double declaredMax = p.maxValue.toDouble(&okMax);
+                    if (okMax
+                        && declaredMax > static_cast<double>(PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx)) {
+                        lints << QStringLiteral(
+                                     "paddingParam '%1' declares a max of %2, above the host's "
+                                     "%3 px ceiling, so the top of its range is unreachable")
+                                     .arg(paddingParam)
+                                     .arg(declaredMax)
+                                     .arg(PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx);
+                    }
                     break;
                 }
             }
@@ -472,6 +489,19 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
                              .arg(paddingParam);
             }
         }
+    }
+    // The silhouette is resolved once per CHAIN and injected into every pack declaring
+    // roundBottomCorners, so a pack that rounds its corners and omits it cannot follow a
+    // chain that squares them. The two move together in all 20 bundled declarers.
+    const auto declaresParam = [&eff](QLatin1String id) {
+        return std::any_of(eff.parameters.cbegin(), eff.parameters.cend(), [id](const auto& p) {
+            return p.id == id;
+        });
+    };
+    if (declaresParam(QLatin1String("cornerRadius")) && !declaresParam(QLatin1String("roundBottomCorners"))) {
+        lints << QStringLiteral(
+            "declares cornerRadius but not roundBottomCorners, so it cannot follow a "
+            "chain that squares its bottom corners");
     }
     // preview is the pack's thumbnail. The registry clears one that escapes the
     // pack directory with a journal warning only, and accepts a name whose file

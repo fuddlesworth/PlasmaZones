@@ -48,7 +48,11 @@ vec4 pSurface(vec2 uv) {
     vec4 outlineColor = mix(p_inactiveColor, p_activeColor, clamp(uSurfaceFocused, 0.0, 1.0));
 
     // Clip content to the inner rounded rect; lay the band over transparency,
-    // premultiplied. width <= 0 (no border in the chain's params) leaves the
-    // content rounded with no band.
+    // premultiplied. At width <= 0 (no border in the chain's params) the helper
+    // returns edge = 0, and borderComposite clips content by (1 - edge), so the
+    // capture passes through UNCHANGED — square corners and no band, not rounded
+    // corners with no band. Rounding without a band would need a composite arm
+    // that this signature cannot express, so it is an API question rather than
+    // something to patch here.
     return borderComposite(tex, outlineColor, bb.edge, bb.insideMask);
 }

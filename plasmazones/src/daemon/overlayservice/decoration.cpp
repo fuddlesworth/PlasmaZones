@@ -50,9 +50,14 @@ void OverlayService::setSurfaceShaderRegistry(PhosphorSurfaceShaders::SurfaceSha
     // Disconnect from the outgoing registry before the borrow is overwritten,
     // or a re-set would leave a second connection behind. Daemon::stop() nulls
     // this borrow before resetting the registry, so the old pointer is still
-    // alive here.
+    // alive here. Named signal and slot rather than a blanket
+    // disconnect(sender, nullptr, this, nullptr): today effectsChanged below is the
+    // only connection from a registry to this object, so the blanket form happened to
+    // be equivalent, but it would silently sever any second one a later change adds.
+    // setPresetRegistry keeps a QMetaObject::Connection handle for the same reason.
     if (m_surfaceShaderRegistry) {
-        disconnect(m_surfaceShaderRegistry, nullptr, this, nullptr);
+        disconnect(m_surfaceShaderRegistry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
+                   nullptr);
     }
     m_surfaceShaderRegistry = registry;
     // Re-arm the refusal warnings: the pack set has changed, so a pack that
@@ -135,8 +140,12 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     // Helper to leave the slot undecorated: clear the chain so the QML
     // SurfaceDecoration stays inert and the card draws its native chrome.
     const auto clearDecoration = [this, slot]() {
-        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::DecorationChain), QVariant::fromValue(QVariantList()));
+        // Padding before the chain, matching the write order applyDecoration
+        // documents below: the chain write is the load trigger, so everything a
+        // stage reads goes first. Inconsequential here (no stage survives an empty
+        // chain) but the two halves of one pair should not state opposite orders.
         writeQmlProperty(slot, QString(OverlayQmlPropertyNames::DecorationOuterPadding), 0.0);
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::DecorationChain), QVariant::fromValue(QVariantList()));
         // Drop the backdrop with the chain: an undecorated slot has nothing to
         // sample it, and holding the image would keep a wallpaper-sized texture
         // uploaded for a surface that draws none of it.
@@ -230,7 +239,12 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
             // branches are mutually exclusive within one iteration but not
             // over time, so a bare pack id would let "uninstalled" swallow the
             // later, different "reinstalled but broken" warning for good.
-            const QString missingKey = packId + QLatin1String("|missing");
+            // Keyed with the SURFACE PATH too, because the message names it. Without
+            // it the first surface to hit a missing pack owned the only log line and
+            // the other four skipped silently, so a user whose zone selector lost its
+            // border read a warning that named the OSD. Bounded: the paths are a fixed
+            // five-entry whitelist.
+            const QString missingKey = surfacePath + QLatin1Char('|') + packId + QLatin1String("|missing");
             if (!m_warnedDecorationPacks.contains(missingKey)) {
                 m_warnedDecorationPacks.insert(missingKey);
                 qCWarning(lcOverlay) << "Surface decoration (" << surfacePath << "): resolved pack id" << packId
@@ -245,7 +259,7 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
             // installed pack whose fragment shader will not resolve stays
             // broken until the user reinstalls it. Same per-reason keying as
             // the missing branch above.
-            const QString invalidKey = packId + QLatin1String("|invalid");
+            const QString invalidKey = surfacePath + QLatin1Char('|') + packId + QLatin1String("|invalid");
             if (!m_warnedDecorationPacks.contains(invalidKey)) {
                 m_warnedDecorationPacks.insert(invalidKey);
                 qCWarning(lcOverlay) << "Surface decoration (" << surfacePath << "): pack" << packId

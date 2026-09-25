@@ -258,9 +258,10 @@ public:
     /// a proper drop shadow (offset, edge-feathered so it never cuts off in a
     /// hard rectangle), tinted with the theme background (useThemeTint,
     /// PopupFrame's original glow colour) so the halo tracks light and dark too.
+
     /// The SCHEMA default for the stored decoration tree, which is the empty tree.
-    /// The seeds above are overlaid on read and never persisted, so a fresh config
-    /// stores nothing. Here rather than inline in the KeyDef so the schema reads
+    /// A fresh config stores nothing, because the seed tree below is overlaid on read
+    /// and never persisted. Here rather than inline in the KeyDef so the schema reads
     /// through an accessor like every other key, and so the empty-tree spelling has
     /// one home if the tree's JSON shape ever gains a field.
     static QVariantMap decorationProfileTreeStoredDefault()
@@ -268,6 +269,8 @@ public:
         return ::PhosphorSurfaceShaders::DecorationProfileTree().toJson().toVariantMap();
     }
 
+    /// The SEED tree: the baked-in decoration profiles described at length above,
+    /// overlaid at lowest precedence on every read of the stored tree.
     static ::PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree()
     {
         // One shared card decoration for every PopupFrame surface — the OSD and

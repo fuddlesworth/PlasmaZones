@@ -52,7 +52,7 @@
             "default": 8,
             "min": 0,
             "max": 64,
-            "description": "Corner rounding the shadow follows (px, match the Border pack)"
+            "description": "Corner rounding the shadow follows (px). Match the Border pack's corner radius, not its outer edge, which sits a band width further out"
         },
         {
             "id": "roundBottomCorners",
