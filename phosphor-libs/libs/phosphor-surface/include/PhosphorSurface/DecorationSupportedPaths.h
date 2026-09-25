@@ -39,10 +39,11 @@ inline QString surfacePackDataSubdir()
     return QStringLiteral("plasmazones/surface");
 }
 
-/// The three per-placement window decoration paths. Accessors for the same reason
-/// as the leaves below, and because these three had been spelled independently in
-/// three places: this header's own supported-paths list, the compositor's
-/// resolveSurfacePathFor, and the settings page that edits them.
+/// The three per-placement window decoration paths. Accessors for the same reason as
+/// the leaves below, and because this header's own supported-paths list and the
+/// compositor's resolveSurfacePathFor each spelled them independently. Both now read
+/// from here. The settings page that EDITS them is QML and still carries its own
+/// literals, with no C++ bridge to reach these.
 inline QString decorationWindowTiledPath()
 {
     return QStringLiteral("window.tiled");

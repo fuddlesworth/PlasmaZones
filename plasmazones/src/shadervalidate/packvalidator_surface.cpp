@@ -489,18 +489,18 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             }
         }
     }
-    // The silhouette is resolved once per CHAIN and injected into every pack declaring
-    // roundBottomCorners, so a pack that rounds its corners and omits it cannot follow a
-    // chain that squares them. The two move together in all 20 bundled declarers.
+    // A NOTE, not a lint: cornerRadius is not reserved, so a pack may declare it for an
+    // inner badge and still be correct. But the silhouette reaches only packs declaring
+    // roundBottomCorners, so one omitting it cannot follow a squared chain. All 20 declare both.
     const auto declaresParam = [&eff](QLatin1String id) {
         return std::any_of(eff.parameters.cbegin(), eff.parameters.cend(), [id](const auto& p) {
             return p.id == id;
         });
     };
     if (declaresParam(QLatin1String("cornerRadius")) && !declaresParam(QLatin1String("roundBottomCorners"))) {
-        lints << QStringLiteral(
-            "declares cornerRadius but not roundBottomCorners, so it cannot follow a "
-            "chain that squares its bottom corners");
+        out << "  " << padLabel(QStringLiteral("note"))
+            << "declares cornerRadius but not roundBottomCorners, so it cannot follow a chain that "
+               "squares its bottom corners\n";
     }
     // preview is the pack's thumbnail. The registry clears one that escapes the
     // pack directory with a journal warning only, and accepts a name whose file

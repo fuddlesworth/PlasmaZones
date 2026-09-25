@@ -641,7 +641,7 @@ target_link_libraries(plasmazonesd
         PhosphorShortcuts::PhosphorShortcuts  # ShortcutManager / Registry / backends
         PhosphorAudio::PhosphorAudio  # audio spectrum provider (CAVA)
         PhosphorSurfaces::PhosphorSurfaces  # managed surface lifecycle (engine, keep-alive)
-        # Named directly, not left to plasmazones_core's PUBLIC edge: seven daemon TUs
+        # Named directly, not left to plasmazones_core's PUBLIC edge: eleven daemon TUs
         # include <PhosphorSurface/...> and daemon/overlayservice/decoration.cpp calls its
         # exported chain-compose helpers, so a future demotion of that edge to PRIVATE
         # would break them. The other two chain hosts (kwin-effect, phosphor-shell) both

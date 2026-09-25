@@ -201,9 +201,10 @@ void PlasmaZonesEffect::releaseDecorationGl(KWin::EffectWindow* w, int outerPadd
     // AFTER the early-out, not before: the guard above costs a hash lookup and the context
     // switch does not, and a decoration sweep over a screenful of windows hits this on every
     // one of them.
-    // Result deliberately discarded, unlike the two sites that branch on it. The only
-    // false case is !KWin::effects, i.e. compositor teardown, where the driver reclaims
-    // these objects anyway — the same argument lifecycle_wiring.cpp makes for its own
+    // Result deliberately discarded, unlike the two sites that branch on it. It is false
+    // when KWin::effects is gone (compositor teardown) or when makeOpenGLContextCurrent
+    // fails (a non-GL backend); either way the driver or the backend owns these objects
+    // and reclaims them — the same argument lifecycle_wiring.cpp makes for its own
     // unchecked call. Branching here would skip the bookkeeping below for no gain.
     ensureGlContextCurrent();
     setShader(w, nullptr);

@@ -7,6 +7,7 @@
 #include <PhosphorRendering/ShaderNodeRhi.h>
 
 #include <PhosphorShaders/ShaderRegistry.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 #include <PhosphorSurface/SurfaceUniformProfile.h>
@@ -85,8 +86,9 @@ QStringList SurfaceShaderItem::surfaceIncludePaths()
     // CMakeLists), the third pack category beside `plasmazones/overlays` and
     // `plasmazones/animations`. The plasmazones daemon warm-bake calls this
     // same function — see the header doc for why the two must not diverge.
-    const QStringList allSurfaceDirs = QStandardPaths::locateAll(
-        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/surface"), QStandardPaths::LocateDirectory);
+    const QStringList allSurfaceDirs =
+        QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, PhosphorSurfaceShaders::surfacePackDataSubdir(),
+                                  QStandardPaths::LocateDirectory);
     QStringList includePaths;
     for (const QString& dir : allSurfaceDirs) {
         const QString sharedDir = dir + QStringLiteral("/shared");

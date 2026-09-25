@@ -1347,10 +1347,10 @@ private:
     /// the slot's decorationChain (and decorationOuterPadding) when no pack
     /// resolves so a stale decoration never renders.
     void applyDecoration(QObject* slot, const QString& surfacePath);
-    /// Re-apply the decoration chain to every decorated slot currently up, a visible OSD
-    /// included: each arm keys on that slot's visibility, so a short-lived OSD is simply
-    /// not up when this runs. A chain is resolved at show time, so a retune (a tree edit,
-    /// a preset change, a pack reload) has to reach the slots already on screen.
+    /// Re-apply the decoration chain to every decorated slot currently up, the OSD
+    /// included: the four popups key on their service flag, the OSD on the item's own
+    /// visibility since it has no flag. A chain is resolved at show time, so a retune (a
+    /// tree edit, a preset change, a pack reload) has to reach the slots already up.
     void reapplyVisiblePopupDecorations();
 
     void destroyIfTypeMismatch(const QString& screenId);

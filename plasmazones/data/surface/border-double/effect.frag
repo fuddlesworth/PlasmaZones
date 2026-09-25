@@ -55,9 +55,7 @@ vec4 pSurface(vec2 uv) {
     // every level set is a sharp inset rect, so the stack comes out as concentric
     // mitred lines with a square gap and a square content clip.
     float radius = p_cornerRadius > 0.0 ? p_cornerRadius * uSurfaceScale + total : 0.0;
-    float bottomRadius = (p_roundBottomCorners >= 0.5 && p_cornerRadius > 0.0)
-                             ? p_cornerRadius * uSurfaceScale + total
-                             : 0.0;
+    float bottomRadius = surfaceBottomRadius(radius, p_roundBottomCorners);
 
     FrameSDF fs = frameSdfSplit(p, radius, bottomRadius);
     float d = fs.d;

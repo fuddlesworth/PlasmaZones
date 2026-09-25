@@ -627,9 +627,10 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // Shared window preparation (screen resolve, passive shell, geometry).
     // Runs BEFORE the dedup check because it is the source of effectiveId;
     // that is safe — on the duplicate path the first show already created
-    // the shell and hid the zone selector, so the helper's side effects are
-    // no-ops there. The bundle's aspect ratio is unused: the nav card is
-    // text-sized, not preview-sized.
+    // the shell, so the helper's side effects are no-ops there, and the
+    // zone-selector hide now lives in finishOsdShow past every bail. The
+    // bundle's aspect ratio is unused: the nav card is text-sized, not
+    // preview-sized.
     const auto prep = prepareLayoutOsdWindow(screenId);
     if (!prep) {
         return;
@@ -736,8 +737,8 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     }
 
     // The passive shell, window, surface and slot all came from
-    // prepareLayoutOsdWindow above (which also hid any fading zone
-    // selector on this screen). The shell is kept mapped across hides
+    // prepareLayoutOsdWindow above; finishOsdShow below is what hides any
+    // fading zone selector on this screen. The shell is kept mapped across hides
     // while shaders or animations are enabled (effects-gated
     // keepMappedOnHide); per-show the SurfaceAnimator's beginShow replays
     // the fade-in and restartDismissTimer extends the auto-hide.

@@ -695,6 +695,32 @@ private Q_SLOTS:
         QCOMPARE(chainRoundBottomCorners(registry, chain, allParams).toBool(), true);
     }
 
+    /// An unusable stored value falls through to THAT pack's declared default, and the
+    /// scan then CONTINUES — so a genuine stored value on a later pack still outranks the
+    /// fallback. This is the outcome most likely to be misread: "falls through to the
+    /// declared default" does not mean "returns it", and turning the fall-through into a
+    /// return would break exactly this case.
+    void chainRoundBottomCorners_a_later_stored_value_outranks_a_fallback_default()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("backdrop"), true));
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("border"), true));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+        QVERIFY(registry.hasEffect(QStringLiteral("backdrop")));
+        QVERIFY(registry.hasEffect(QStringLiteral("border")));
+
+        // backdrop's stored value is null, so it contributes only its declared true as a
+        // fallback; border's stored false is a real choice and must win.
+        const QVariantMap allParams{{QStringLiteral("backdrop"),
+                                     QVariantMap{{QStringLiteral("roundBottomCorners"), QVariant::fromValue(nullptr)}}},
+                                    {QStringLiteral("border"), storedValue(false)}};
+        const QStringList chain{QStringLiteral("backdrop"), QStringLiteral("border")};
+        QCOMPARE(chainRoundBottomCorners(registry, chain, allParams).toBool(), false);
+    }
+
     /// A pack the registry KNOWS but cannot use gets no vote either. The loader keeps a
     /// pack whose fragmentShader escapes its own directory but clears the path, so
     /// hasEffect() is true while isValid() is false — the one shape that distinguishes

@@ -12,15 +12,14 @@
 
 #include <PhosphorCompositor/DecorationDefaults.h>
 #include <PhosphorRules/RuleAction.h>
-
-#include <effect/effecthandler.h>
-#include <effect/effectwindow.h>
-
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 #include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorSurface/SurfaceChainCompose.h>
 #include <PhosphorSurface/SurfaceThemeResolve.h>
+
+#include <effect/effecthandler.h>
+#include <effect/effectwindow.h>
 
 #include <QColor>
 #include <QGuiApplication>

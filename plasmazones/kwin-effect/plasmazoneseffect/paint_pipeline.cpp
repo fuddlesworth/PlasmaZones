@@ -1431,16 +1431,16 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     //                    a supported feature, not an edge case.
     //   standardBorderBandSplit  the smoothstep feather leaves the outermost ring of
     //                    the frame partially transparent at every radius, so the band
-    //                    thins frame texels unconditionally. (This argument used to
-    //                    lean first on the outer radius being cornerRadius + width;
-    //                    a zero radius is no longer dilated, so a squared corner now
-    //                    stays square and the feather leg is what carries it.)
+    //                    thins frame texels unconditionally. (A zero radius is no longer
+    //                    dilated, so the feather leg alone is what carries this now.)
     //
     // So every border-family chain thins frame texels and must stay translucent. But
-    // the margin-only packs (shadow, glow) provably do NOT: their halo is gated on
-    // `1 - base.a` (haloFalloff) and composited additively over the transparent
-    // margin (marginComposite), so the interior passes through byte-for-byte and
-    // the client's own opaque region stays truthful. That is exactly the metadata
+    // the four interiorOpaque packs provably do NOT. shadow and glow gate their halo on
+    // `1 - base.a` (haloFalloff) and add it over the transparent margin
+    // (marginComposite); fireflies and phosphor-motes return either the capture untouched
+    // or slabComposite(window, pane) = window + pane * (1 - window.a), which cannot lower
+    // an alpha. Either way the interior passes through byte-for-byte where the client is
+    // already opaque, so its opaque region stays truthful. That is exactly the metadata
     // contract an earlier attempt at this flag lacked: packs now declare
     // `interiorOpaque` (SurfaceShaderEffect), the chain sweep in
     // updateWindowDecoration ANDs it into WindowDecoration::chainInteriorOpaque,
@@ -1453,8 +1453,8 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // PADDED chain (outerPadding > 0) is marked PAINT_WINDOW_TRANSFORMED
     // above, and the transformed flag independently excludes the window from
     // BOTH culling halves — so skipping setTranslucent() recovers nothing for
-    // it. The two bundled interiorOpaque declarers (shadow, glow) are both
-    // padded, which means the skip below is live only for an unpadded
+    // it. All four bundled interiorOpaque declarers are padded, which means
+    // the skip below is live only for an unpadded
     // interiorOpaque chain: a third-party contract today, not a bundled win.
     // Keeping the flag is still correct (it is the necessary half of the
     // recovery; the transformed presentation is the other), and the sweep's

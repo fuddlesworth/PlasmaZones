@@ -231,10 +231,11 @@ ctest --test-dir build --output-on-failure
 # .desktop, AppStream, packaging, .github/workflows/*.yml (through the pkgdesc
 # arm), algorithm .luau, and CHANGELOG.md entry BODIES (the text after the
 # `**Term**:` lead-in; the bold lead-in itself and the trailing reference link
-# are skipped). Three things stay review-only even where it does reach: an
-# entry's bold title, the dramatic "Label: payload" colon, and the rule-of-three
-# triad and "not just X, but Y" constructions, none of which it tests. Nor does
-# it reach icon SVG <desc>.
+# are skipped). Four things stay review-only even where it does reach: an entry's
+# bold title; the dramatic "Label: payload" colon; the rule-of-three triad and
+# "not just X, but Y", none of which it tests; and a clause-splicing semicolon
+# built from PAST-tense prose, because the verb list its semicolon arm matches on
+# carries no past-tense lexical verbs. Nor does it reach icon SVG <desc>.
 # Also runs on pre-commit (staged files) and in CI (whole tree).
 python3 scripts/check-conventions.py
 python3 scripts/check-conventions.py --list-rules
