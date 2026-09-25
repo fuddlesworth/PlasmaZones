@@ -1205,6 +1205,12 @@ public:
         return m_compositorBridge.get();
     }
 
+    /// Neutralise a decorated window's present shader for one OUT-OF-BAND draw when
+    /// its composite does not exist, and hand back the action that restores it.
+    /// Empty when there is nothing to do. Defined in surface_gating.cpp, which
+    /// carries the reasoning and the rest of the "a fold may not have run" logic.
+    std::function<void()> neutralisePresentForOutOfBandDraw(KWin::EffectWindow* w);
+
     /// Clear the EDID-based screen ID cache (call on screen add/remove/reconfigure)
     void clearScreenIdCache()
     {
@@ -1603,10 +1609,9 @@ private:
     ///     erases the half-built state it just failed to allocate and returns false;
     ///     its caller abandons the fold immediately, so a transition loses its layer
     ///     for one frame rather than sampling a freed texture.
-    /// Nothing else may. In particular the two hot-reload handlers do NOT erase: each
-    /// walks the map and invalidates every entry in place (compositeValid, prefixValid,
-    /// prefixChainEnd, chainKey), because a DELETED window's entry is the frame its
-    /// close leg needs and erasing it left a closing window undecorated for the rest of it.
+    /// Nothing else may. The two hot-reload handlers INVALIDATE per entry and erase
+    /// nothing, for the reason their own sites give: a corpse's entry is the frame its
+    /// close leg needs.
     void releaseSurfaceState(const QString& windowId, KWin::EffectWindow* target);
 
     /// The EXACT window a decoration belongs to: an exact-id live match, else the frozen
@@ -1756,13 +1761,11 @@ private:
                                               const QList<KWin::EffectWindow*>& windows,
                                               const std::function<void(KWin::EffectWindow*)>& afterWindow = {});
 
-    /// How densely the backdrop must be captured for @p deco's chain: 0.0 when no
-    /// compiled pack links a backdrop uniform at all, 1.0 when a MAIN pass SAMPLES
-    /// it, otherwise twice the largest bufferScale among the buffer passes that
-    /// sample it, capped at 1.0. SAMPLES, not links, and TWICE, not equal. The
-    /// reasons for both, and the two defects that used to sit on them, are on
-    /// SurfaceMultipassState::backdropTex, which is where the density contract is
-    /// written up. A pack that links without sampling gets kMinBufferScale, not 0.0.
+    /// How densely the backdrop must be captured for @p deco's chain. 0.0 when no
+    /// compiled pack links a backdrop uniform, 1.0 when a MAIN pass SAMPLES it, else
+    /// twice the largest SAMPLING buffer pass's bufferScale capped at 1.0, and
+    /// kMinBufferScale for a pack that links without sampling. SAMPLES not links and
+    /// TWICE not equal: both reasons are on SurfaceMultipassState::backdropTex.
     ///
     /// Resolves through the SAME lazy compile the fold uses, so the gate and the
     /// fold agree within one frame — needsBackdrop is metadata and over-reports
@@ -1836,12 +1839,9 @@ private:
     /// follows it (scaled into the rest-rect-sized canvas) so a frost/glass
     /// pane shows the scene behind the moving quad instead of behind the
     /// resting rect. Invalid = capture at the live geometry.
-    /// backdropScale: the capture RESOLUTION relative to the composite
-    /// canvas, from chainBackdropScale in paintWindow. 1.0 when some pack's main
-    /// pass samples the backdrop; twice the largest sampling bufferScale when only
-    /// buffer passes read it, so half density for the builtin pyramid, since texels
-    /// past a reduction pass's 2:1 source were captured, held (a full-canvas RGBA8
-    /// per window) and blitted every frame only to be averaged away. The
+    /// backdropScale: the capture RESOLUTION relative to the composite canvas, from
+    /// chainBackdropScale in paintWindow, which is half density for the builtin
+    /// pyramid. The
     /// texture stays canvas-ALIGNED (same padded rect, same normalized
     /// backdropRect space) at reduced density; only the blit's destination
     /// arithmetic scales.

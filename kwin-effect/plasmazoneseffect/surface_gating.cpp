@@ -457,4 +457,59 @@ bool PlasmaZonesEffect::windowSurfaceAnimates(const QString& windowId)
     return false;
 }
 
+// Neutralise a decorated window's present shader for ONE out-of-band draw when
+// its composite does not exist, handing back the action that restores it.
+//
+// WHY IT HAS TO EXIST. The snap-assist thumbnail capture draws candidates through
+// effects->drawWindow from a TIMER, outside any paint pass, with
+// m_capturingSnapshot deliberately false so the thumbnail keeps its decorations.
+// paintWindow, and therefore the decoration fold, is never entered; drawWindowImpl
+// is. And a candidate can genuinely have no surface state: KWin declines to paint a
+// window fully occluded by an opaque one, so the fold never runs for it, while the
+// redirect and the present shader are installed off the paint cycle by
+// reconcileDecorationShader. Nothing in the candidate filter excludes an occluded
+// window, and the capture holds a KWin::ItemEffect precisely so an obscured one is
+// still renderable. Such a window is redirected, carries the present shader, has
+// shaderApplied true, and has no composite for that shader to present.
+//
+// It lives HERE, in the gating TU, because this is where the rest of the "a fold may
+// not have run for this window" reasoning sits, and because both the fold and the
+// capture TUs are at the file-size ceiling.
+//
+// GATED ON THE COMPOSITE EXISTING, so a warm candidate is untouched and keeps its
+// decoration in the thumbnail, which is the whole point of not setting
+// m_capturingSnapshot at the capture. Deliberately NOT an else-arm on the present
+// bind: skipping only the bind leaves the present shader installed with a stale
+// uFinal, which is the same wrong output, and the tree already carries that warning
+// once. Mirrors paint_capture.cpp's reconstruct-and-restore, which is what every
+// other out-of-band draw site in the tree does.
+//
+// This was the ONLY such site that neither folded nor neutralised.
+std::function<void()> PlasmaZonesEffect::neutralisePresentForOutOfBandDraw(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return {};
+    }
+    const QString windowId = getWindowId(w);
+    const auto decoIt = m_windowDecorations.constFind(windowId);
+    if (decoIt == m_windowDecorations.constEnd() || !decoIt->shaderApplied) {
+        return {}; // not presenting a composite, so nothing to neutralise
+    }
+    // The same three-part test the present bind itself applies: an entry, the
+    // written flag, and the texture. Any one missing means there is no composite to
+    // present.
+    const auto stateIt = m_surfaceMultipass.find(windowId);
+    if (stateIt != m_surfaceMultipass.end() && stateIt->second.compositeWritten
+        && stateIt->second.compositeTex[static_cast<size_t>(stateIt->second.finalSlot)]) {
+        return {}; // warm: leave the decoration on, which is what a thumbnail wants
+    }
+    setShader(w, nullptr);
+    // Restores the PRESENT shader specifically, not reconcileDecorationShader,
+    // matching paint_capture.cpp's note: that call's live-transition arm cedes the
+    // slot for a window that does carry a leg, which would be the wrong answer here.
+    return [this, w]() {
+        setShader(w, surfacePresentShader());
+    };
+}
+
 } // namespace PlasmaZones

@@ -121,6 +121,15 @@ void SnapAssistHandler::asyncShow(const QString& excludeWindowId, const QString&
                 // shows.
                 if (!m_capture) {
                     m_capture = new SnapAssistThumbnailCapture(this);
+                    // The capture draws outside any paint pass, so the decoration
+                    // fold never runs for a candidate. See
+                    // SnapAssistThumbnailCapture::setCaptureDrawGuard and
+                    // PlasmaZonesEffect::neutralisePresentForOutOfBandDraw: a
+                    // candidate that gained its decoration while fully occluded has
+                    // the present shader and no composite to present.
+                    m_capture->setCaptureDrawGuard([this](KWin::EffectWindow* w) {
+                        return m_effect ? m_effect->neutralisePresentForOutOfBandDraw(w) : std::function<void()>();
+                    });
                 }
                 // Size the capture to what the largest empty zone will draw
                 // for this many candidates on this output, instead of a

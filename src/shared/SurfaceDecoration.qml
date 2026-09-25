@@ -743,12 +743,22 @@ Item {
                 width: (root.shaderAnchorItem ? root.shaderAnchorItem.width : 0) + root.outerPad * 2
                 height: (root.shaderAnchorItem ? root.shaderAnchorItem.height : 0) + root.outerPad * 2
 
-                // Stage 0 samples the card snapshot; stage k samples stage
-                // k-1's output tap. itemAt is NOT notifiable, so the binding
-                // reads stageRepeater.count first — count changes as the
-                // Repeater populates, forcing a re-evaluation once the
-                // previous delegate exists (creation is in index order, so
-                // by full population every hop resolves).
+                // Stage 0 samples the card snapshot; stage k samples stage k-1's
+                // output tap. itemAt is NOT notifiable, so the binding reads
+                // stageRepeater.count first to have any notifiable dependency at
+                // all, and what makes the hop resolve is that the Repeater creates
+                // its delegates in INDEX ORDER: by the time stage k is built,
+                // stage k-1 exists, and any count change re-runs this afterwards.
+                //
+                // The earlier wording rested on "count changes as the Repeater
+                // populates", which was never verified against Qt's own source and
+                // may well be false, since count can perfectly well report the
+                // MODEL count before the first delegate is built. Index order is
+                // the part that is certainly true, so the comment rests on that.
+                // The residual risk this leaves is narrow and worth naming: if
+                // delegate k-1's outputTap were ever REPLACED without the model
+                // count moving, stage k's sourceItem would stay stale, because
+                // nothing else here is notifiable.
                 sourceItem: {
                     if (stage.index === 0)
                         return cardSnapshot;
