@@ -798,6 +798,39 @@ private Q_SLOTS:
         QCOMPARE(r.errors, 0);
     }
 
+    /// An undeclared pack-local surface.vert is the worst shape a host
+    /// divergence can take: the pack looks fine and renders differently. The
+    /// daemon's vertex lookup falls through an undeclared `vertexShader` to a
+    /// sibling surface.vert and picks it up; the compositor never looks there.
+    /// So the author sees their stage in the settings preview and not on a real
+    /// window, with nothing to point at.
+    void anUndeclaredSiblingVertexStageIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        const QJsonObject obj = surfacePack(QStringLiteral("sf-orphan-vert"), QJsonArray{});
+        const QString dir = tmp.filePath(QStringLiteral("sf-orphan-vert"));
+        // Written directly rather than through validateSurface's vertBody arm,
+        // which requires the metadata to declare the name. Undeclared is the
+        // whole point of the case.
+        QVERIFY(
+            writePackFile(dir, QStringLiteral("surface.vert"),
+                          packVertexBody(QStringLiteral("    gl_Position = vec4(position, 0.0, 1.0);\n")).toUtf8()));
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-orphan-vert"), obj, surfaceBodyReading({}));
+        QVERIFY2(r.report.contains(QStringLiteral("surface.vert sits beside the fragment")), qPrintable(r.report));
+
+        // DECLARING it is the supported way to ship one, so the lint must go
+        // quiet. Without this the lint could be firing on the file's presence
+        // rather than on the declaration gap, and would nag every correct pack.
+        QJsonObject declared = obj;
+        declared.insert(QStringLiteral("vertexShader"), QStringLiteral("surface.vert"));
+        const PackResult ok =
+            validateSurface(tmp, QStringLiteral("sf-orphan-vert"), declared, surfaceBodyReading({}),
+                            packVertexBody(QStringLiteral("    gl_Position = vec4(position, 0.0, 1.0);\n")));
+        QVERIFY2(!ok.report.contains(QStringLiteral("surface.vert sits beside the fragment")), qPrintable(ok.report));
+    }
+
     /// The builtin gaussian pair is compiled by NOTHING in the tree. No bundled
     /// pack declares builtin:gaussian-h or -v, so neither shader_validate_surface
     /// nor any other gate ever bakes them, and the only other in-tree references

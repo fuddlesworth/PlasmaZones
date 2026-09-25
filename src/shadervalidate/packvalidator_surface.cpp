@@ -858,6 +858,27 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     if (!eff.vertexShaderPath.isEmpty() && !QFile::exists(eff.vertexShaderPath)) {
         lints << QStringLiteral("vertex shader missing: %1").arg(QFileInfo(eff.vertexShaderPath).fileName());
     }
+    // A PACK-LOCAL surface.vert THAT THE METADATA DOES NOT DECLARE runs on one
+    // host and not the other, which is the worst shape a divergence can take: the
+    // pack looks fine and renders differently.
+    //
+    // The daemon's vertex lookup falls through an undeclared `vertexShader` to a
+    // `surface.vert` sitting beside the fragment, so it picks the file up. The
+    // compositor does not look there at all and uses its default vertex stage. So
+    // an author who drops the file in without declaring it sees their stage in the
+    // settings preview and not on a real window.
+    //
+    // Lints the UNDECLARED case only. Declaring the file is the supported way to
+    // ship a per-pack vertex stage and is handled above.
+    if (eff.vertexShaderPath.isEmpty()) {
+        const QString siblingVert = QFileInfo(eff.fragmentShaderPath).absolutePath() + QStringLiteral("/surface.vert");
+        if (QFile::exists(siblingVert)) {
+            lints << QStringLiteral(
+                "surface.vert sits beside the fragment but `vertexShader` does not name it. The daemon picks up an "
+                "undeclared sibling and the compositor does not, so this stage runs in the settings preview and not "
+                "on a real window. Declare it in metadata.json");
+        }
+    }
 
     if (lints.isEmpty()) {
         out << "  " << padLabel(QStringLiteral("metadata")) << "OK\n";
