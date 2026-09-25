@@ -261,7 +261,7 @@
             "name": "Mirror at the edge",
             "type": "bool",
             "default": false,
-            "description": "Where the bend reaches past the pane's edge, fold the backdrop back inside. In practice only the concave lens mode reaches that far. Left off, the bend stretches the pane's edge pixel instead",
+            "description": "Where the bend reaches past what was captured behind the window, fold the backdrop back inside. In practice only the concave lens mode reaches that far, and only on a window with no shadow around it, since the capture already extends into that shadow. Left off, the bend stretches the edge pixel instead",
             "group": "Refraction"
         }
     ]

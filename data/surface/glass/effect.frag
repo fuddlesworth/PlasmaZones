@@ -142,14 +142,19 @@ vec4 pSurface(vec2 uv) {
             // 0.4 at the declared maximum of 2.0. (The reference's own ceiling is
             // the 0.2 factor.)
             //
-            // A shrunken copy of the backdrop THE CANVAS HOLDS, which is not the
-            // same as the pane. This pack adds no padding of its own, but the canvas
-            // is the window's EXPANDED geometry with the frame rect sitting inside
-            // it, so a window whose decoration carries a shadow already brings a
-            // margin the rim samples can land in, and a borderless one does not.
-            // Where the mapped coordinate runs past what the canvas holds, glassCoord
-            // decides: Edge mirror folds it back, and off it clamps, which is the
-            // reference behaviour that switch's description names.
+            // A shrunken copy of the backdrop THE CANVAS HOLDS, which on most windows
+            // is genuinely wider than the pane. This pack adds no padding of its own,
+            // but the canvas is the window's EXPANDED geometry with the frame rect
+            // inset inside it (decoration_render.cpp pushes uSurfaceFrameTopLeft as
+            // that inset), and captureWindowBackdrop blits the scene over the WHOLE
+            // canvas. So on any window whose decoration carries a shadow the rim
+            // samples land on real surroundings and the mode does what its name says.
+            //
+            // A window with no margin at all — borderless, no decoration shadow — is
+            // the case where the canvas IS the frame. There the rim's mapped
+            // coordinate runs past what the canvas holds, and glassCoord decides:
+            // Edge mirror folds it back, and off it clamps the edge texel into a flat
+            // band, which is the reference behaviour that switch's description names.
             //
             // (1 + shrink), NOT (1 - shrink). Sampling inward is what MAGNIFIES:
             // output(f) = input(0.5 + f*(1 - shrink)) spreads the centre content

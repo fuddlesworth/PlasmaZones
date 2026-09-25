@@ -443,6 +443,34 @@ PROSE_STRING_KEYS = {
 }
 
 
+# Finite-verb forms, for "does this segment read as a CLAUSE rather than a list
+# item". Auxiliaries and copulas, plus the third-person-singular lexical verbs this
+# project's prose actually uses.
+#
+# A LONGER LIST CANNOT CREATE A FALSE POSITIVE HERE, which is why it can afford to
+# grow: the semicolon rule requires a finite verb on BOTH sides, and a genuine
+# comma-bearing list item is a noun phrase with no verb at all, so one verbless side
+# is enough to exempt the whole construction. The list only affects how many real
+# splices get caught. It is still a heuristic and still under-catches — a splice
+# built from verbs not named here reads as a list and is missed, which review has to
+# catch — but it errs toward silence rather than toward blocking a legitimate
+# sentence, which is the right way round for a pre-commit gate.
+_FINITE_VERBS = frozenset(
+    """is are was were am be been being has have had do does did
+       can cannot could will would shall should may might must
+       isn't aren't wasn't weren't hasn't haven't doesn't don't didn't
+       can't won't wouldn't shouldn't
+       keeps drops sets reads writes runs takes gives makes shows uses needs holds
+       adds stops starts applies returns means covers carries leaves gets goes comes
+       sits lands falls picks sends pushes pulls draws paints binds clears""".split()
+)
+
+
+def _has_finite_verb(segment: str) -> bool:
+    """Whether `segment` reads as a CLAUSE rather than a list item."""
+    return any(w.strip(".,:;!?()[]\"'").lower() in _FINITE_VERBS for w in segment.split())
+
+
 def prose_problems(s: str) -> list[str]:
     problems = []
     # A "#"-led line inside a translatable string is a shell comment in
@@ -461,36 +489,31 @@ def prose_problems(s: str) -> list[str]:
             problems.append("em-dash splice; write two sentences or join with a plain word")
     if " - " in without_code:
         problems.append("spaced hyphen used as a dash; rewrite the sentence")
-    # Clause-splicing semicolon: only when both sides look like independent
-    # clauses. Semicolons separating genuine comma-bearing list items are
-    # legitimate, so those are excluded too.
-    # TWO OR MORE semicolons reads as an enumeration rather than a splice, and
-    # CLAUDE.md's carve-out leans permissive for lists. A clause splice is
-    # characteristically ONE semicolon joining two independent clauses. Without this,
-    # a three-item comma-bearing list ("the width, in pixels; the radius, in pixels;
-    # and the colour") was flagged on its LAST semicolon, where the final item
-    # carries no comma of its own. The cost is that a three-clause splice is missed,
-    # which is the side to err on given the carve-out.
-    if without_code.count(";") >= 2:
-        return problems
+    # CLAUSE-SPLICING SEMICOLON. CLAUDE.md forbids one joining two independent
+    # clauses and permits one "separating genuine comma-bearing list items", naming
+    # no minimum item count, so the test has to tell those two shapes apart directly.
+    #
+    # It keys on a FINITE VERB, present on BOTH sides. A clause has one; a list item
+    # is a noun phrase and has none, which is why "Sets the width, in pixels; the
+    # radius, in logical pixels" is a list — its second item carries no verb at all.
+    #
+    # Two heuristics used to stand in for this and both had to go. A COMMA test
+    # cannot tell a list item from a clause with a parenthetical in it: "The pane,
+    # when focused, is blurred; the border is not." has a comma on each side and is a
+    # textbook splice, and so did a real description that shipped. A SEMICOLON-COUNT
+    # short-circuit, exempting anything with two or more, bought a three-item list its
+    # exemption at the price of never seeing a three-CLAUSE splice. A WORD-COUNT floor
+    # guarded against a short fragment reading as a clause, which the verb test now
+    # does directly at any length.
+    #
+    # The verb list is a heuristic and it under-catches: a splice built from verbs it
+    # does not name reads as a list and is missed, for review to catch. It cannot
+    # over-catch, because one verbless side exempts the whole construction and a
+    # genuine list item has no verb — which is what lets the list grow safely.
     for part in re.finditer(r";\s+(\w+)", without_code):
         before = without_code[: part.start()]
         after = without_code[part.start() + 1 :]
-        # THE COMMA TEST IS PER-SEGMENT, not whole-string. CLAUDE.md's carve-out is
-        # for "semicolons separating genuine comma-bearing LIST ITEMS", and testing
-        # the whole string meant a comma ANYWHERE suppressed the check: "The pane,
-        # when focused, is blurred; the border is not." went unreported, which is a
-        # textbook splice with a parenthetical in the first clause.
-        #
-        # There is NO comma carve-out left on this path, and there should not be. A
-        # list needs three items to be one, which is two semicolons, and that case
-        # returned early above. So a lone semicolon with commas either side can only
-        # be a two-item enumeration, which reads as a splice and is better written
-        # with "and". Keeping a per-item comma test here let a real violation
-        # through: "...so it is larger on a larger window; with it, the bend is
-        # confined to the bevel width" has a comma on each side and is a textbook
-        # splice.
-        if len(before.split()) >= 3 and len(after.split()) >= 3:
+        if _has_finite_verb(before) and _has_finite_verb(after):
             problems.append("clause-splicing semicolon; split into sentences or use \"and\"")
             break
     return problems
@@ -814,6 +837,17 @@ SELFTEST_PROSE_BAD = [
     # entry and only this direction is pinned by a BAD one.
     ("It scales with the frame, so it is larger on a larger window; with it, the bend is confined to the bevel",
      "semicolon with a comma on each side"),
+    # A SPLICE WHOSE SECOND CLAUSE IS A NOUN PHRASE PLUS A COPULA, the shape the
+    # finite-verb test has to keep catching now that it lets verbless items through.
+    ("The captured pane is blurred at half density; the border pack is drawn over it",
+     "semicolon between two copular clauses"),
+    # A THREE-CLAUSE splice, which the removed semicolon-count short-circuit made
+    # permanently invisible. Pins that the count heuristic stays gone.
+    ("The pane is blurred; the border is not; the shadow stays.", "three-clause splice"),
+    # A splice built from LEXICAL verbs rather than auxiliaries. This exact shape
+    # shipped in five schema descriptions, so the verb list has to reach past the
+    # copulas far enough to see it.
+    ("so it keeps the pack's default; the loader drops the entry", "semicolon between two lexical-verb clauses"),
 ]
 
 SELFTEST_PROSE_OK = [
@@ -822,11 +856,15 @@ SELFTEST_PROSE_OK = [
     # item, which carries no comma of its own, reads as a clause and is flagged.
     "Sets the width, in pixels; the radius, in pixels; and the colour",
     # A two-item list, which has only ONE semicolon and so gets no enumeration
-    # signal. It survives on the three-word clause floor instead, and that is what
-    # this entry pins: drop the floor and a two-word pair reads as a splice. There is
-    # deliberately no comma carve-out left on the single-semicolon path, since a list
-    # needs three items to be one.
+    # signal. It survives on the three-word clause floor, and that is what this entry
+    # pins: drop the floor and a two-word pair reads as a splice.
     "Left, top; right, bottom",
+    # TWO-ITEM LISTS LONG ENOUGH TO CLEAR THE WORD FLOOR, which CLAUDE.md permits
+    # without naming a minimum count and which only the finite-verb test lets
+    # through. Neither item carries a verb; both carry the internal comma the
+    # carve-out is written for. Drop the verb test and both are flagged.
+    "Sets the width, in pixels; the radius, in logical pixels",
+    "Radius, in logical pixels; Strength, a unitless multiplier",
     # A "#"-led line is a shell comment in pasteable terminal text, which CLAUDE.md
     # puts out of scope along with the rest of the code. Pins the skip.
     "Run it like this:\n# plasmazones --rules a - b\nThen restart.",
