@@ -29,6 +29,19 @@ cmake_minimum_required(VERSION 3.16)
 
 set(PHOSPHORSURFACE_VERSION "0.1.0")
 
+# The Qt floor this library requires AND advertises in its generated
+# PhosphorSurfaceConfig.cmake. Taken from the top-level QT_MIN_VERSION when built in-tree
+# so the two can never drift, with its own value for a STANDALONE build, where
+# that variable does not exist. The fallback is not optional: the Config template
+# substitutes this, and an undefined variable expands to nothing and ships a
+# config whose find_dependency(Qt6 ...) carries no version floor at all. Same
+# shape as phosphor-rendering.
+if(DEFINED QT_MIN_VERSION)
+    set(PHOSPHORSURFACE_QT_MIN ${QT_MIN_VERSION})
+else()
+    set(PHOSPHORSURFACE_QT_MIN "6.10.0")
+endif()
+
 if(NOT PROJECT_VERSION)
     project(PhosphorSurface VERSION ${PHOSPHORSURFACE_VERSION} LANGUAGES CXX)
     set(CMAKE_CXX_STANDARD 20)

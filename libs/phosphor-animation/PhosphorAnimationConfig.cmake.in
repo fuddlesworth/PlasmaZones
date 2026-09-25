@@ -5,11 +5,22 @@
 
 include(CMakeFindDependencyMacro)
 
-# Core library — always needed. Pin Qt to match the library's build
-# minimum; without the version guard a consumer on Qt 6.5 resolves
-# find_package(PhosphorAnimation) cleanly and then fails later with a
-# cryptic missing-symbol at link time.
-find_dependency(Qt6 6.10 COMPONENTS Core Gui)
+# EVERY Qt component the exported target names, not just the ones the library's
+# own sources reach for. PhosphorAnimationTargets.cmake carries Qt6::Quick,
+# Qt6::QuickPrivate and Qt6::Qml in its INTERFACE_LINK_LIBRARIES because they are
+# PUBLIC here, so a Config that found only Core and Gui left a downstream
+# find_package(PhosphorAnimation) failing at GENERATE time with "links to target
+# Qt6::Quick but the target was not found". Pin the version to match the
+# library's build minimum too; without the floor a consumer on an older Qt
+# resolves cleanly and then fails with a cryptic missing symbol at link time.
+find_dependency(Qt6 @PHOSPHORANIMATION_QT_MIN@ COMPONENTS Core Gui Quick Qml)
+# QuickPrivate is split across distros the way GuiPrivate is: some ship a
+# standalone Qt6QuickPrivateConfig.cmake, some define the target inside
+# Qt6QuickConfig.cmake. Guard it the way PhosphorRenderingConfig guards
+# GuiPrivate so this is portable across both.
+if(NOT TARGET Qt6::QuickPrivate)
+    find_dependency(Qt6QuickPrivate @PHOSPHORANIMATION_QT_MIN@)
+endif()
 
 # PhosphorRegistry is a PUBLIC link dependency — AnimationShaderRegistry's public
 # header exposes Registry<AnimationPack> + MetadataPackLoader<AnimationPack>, and
