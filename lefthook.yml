@@ -69,6 +69,11 @@ pre-commit:
         - "packaging/**"
         - "CHANGELOG.md"
       run: python3 scripts/check-conventions.py {staged_files}
+    conventions-selftest:
+      # Only when the gate itself is edited. A rule that narrows reports a clean
+      # tree, so the whole-tree run above cannot catch its own blind spots.
+      glob: "scripts/check-conventions.py"
+      run: python3 scripts/check-conventions.py --selftest
     shader-validate:
       glob: "data/overlays/**/*.{frag,vert,glsl,json}"
       # When any bundled zone-shader file is staged, validate the whole pack set

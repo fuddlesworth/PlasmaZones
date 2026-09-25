@@ -34,6 +34,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -428,7 +429,18 @@ def is_title_separator(s: str) -> bool:
             return False
     return True
 
-PROSE_STRING_KEYS = {"name", "description", "title", "summary", "comment", "genericname", "text", "highlight", "label"}
+PROSE_STRING_KEYS = {
+    "name",
+    "description",
+    "title",
+    "summary",
+    "comment",
+    "genericname",
+    "text",
+    "highlight",
+    "highlights",
+    "label",
+}
 
 
 def prose_problems(s: str) -> list[str]:
@@ -484,7 +496,14 @@ def iter_json_prose(path: str):
             for i, v in enumerate(node):
                 yield from walk(v, f"{trail}/{i}")
         elif isinstance(node, str):
-            key = trail.rsplit("/", 1)[-1]
+            # The last NON-INDEX segment, so a prose string sitting as a bare element
+            # of an array is judged by the ARRAY's key rather than by its position.
+            # data/whatsnew.json's highlights are exactly that shape, and keying on
+            # "0" meant every release highlight this project has shipped went through
+            # the gate unread -- the same class of hole the CHANGELOG.md arm below
+            # exists to close, found by mutation-testing each rule against a shape
+            # CLAUDE.md names rather than against one the rule obviously catches.
+            key = next((seg for seg in reversed(trail.split("/")) if seg and not seg.isdigit()), "")
             if key.lower() in PROSE_STRING_KEYS:
                 yield trail, node
 
@@ -737,13 +756,103 @@ RULES = {
 }
 
 
+# --------------------------------------------------------------------------
+# Self-test
+# --------------------------------------------------------------------------
+#
+# WHY THIS EXISTS. The prose rule shipped unable to see data/whatsnew.json's
+# highlights, which CLAUDE.md names explicitly. The detector was fine; the JSON
+# walker never handed it those strings, because they are bare elements of an array
+# and it keyed on the array INDEX. Nothing pinned either half, so the gate printed
+# a clean result over unread text and would have gone on doing so.
+#
+# Both halves are pure functions, so they are pinned here rather than in a fake
+# repo tree: the detector's positive and negative shapes, and the walker's key
+# resolution. A rule that narrows now fails instead of going quiet.
+#
+# This does NOT replace exercising a rule end to end against a planted violation,
+# which is still the right way to check a new rule. It closes the part that can rot
+# without anyone touching the rule at all.
+
+SELFTEST_PROSE_BAD = [
+    ("Blurs the pane — and lifts saturation.", "em-dash"),
+    ("The pane is blurred; the border is not.", "semicolon"),
+    ("Blur radius - in logical pixels.", "spaced hyphen"),
+]
+
+SELFTEST_PROSE_OK = [
+    # A literal separator between two nouns, which CLAUDE.md allows.
+    "%1 — %2",
+    # A settings breadcrumb.
+    "Settings → Snapping",
+    # A real field label, not a dramatic colon.
+    "Radius: 24",
+    # Semicolons inside backticked code.
+    "Run `a = 1; b = 2` first.",
+    # A spaced hyphen inside backticked code.
+    "Pass `--rules a - b` to narrow it.",
+    # Two sentences, which is the prescribed rewrite.
+    "Blurs the pane. It also lifts saturation.",
+]
+
+SELFTEST_JSON = json.dumps(
+    {
+        "releases": [{"version": "1.0", "highlights": ["Fixed: the pane blurs — and the border follows."]}],
+        "description": "A description field.",
+        "presets": {"Plasma": {}},
+        "nested": {"notprose": ["ignored — not a prose key"]},
+    }
+)
+
+
+def selftest() -> int:
+    failures = []
+
+    for text, shape in SELFTEST_PROSE_BAD:
+        if not prose_problems(text):
+            failures.append(f"prose_problems missed the {shape} shape: {text!r}")
+    for text in SELFTEST_PROSE_OK:
+        found = prose_problems(text)
+        if found:
+            failures.append(f"prose_problems false-positived on {text!r}: {found}")
+
+    with tempfile.TemporaryDirectory() as d:
+        probe = Path(d) / "probe.json"
+        probe.write_text(SELFTEST_JSON, encoding="utf-8")
+        seen = {trail: s for trail, s in iter_json_prose(str(probe))}
+        # The shape the rule used to miss: a bare string inside an array whose KEY
+        # is a prose key. Keyed on the index, this never arrived.
+        if "/releases/0/highlights/0" not in seen:
+            failures.append("iter_json_prose skips a prose string held as an array element (the whatsnew shape)")
+        if "/description" not in seen:
+            failures.append("iter_json_prose skips a plain prose field")
+        # A preset's key is its label.
+        if not any(v == "Plasma" for v in seen.values()):
+            failures.append("iter_json_prose skips a preset name, which the picker shows verbatim")
+        # And it must NOT widen to every string in the document.
+        if any("notprose" in trail for trail in seen):
+            failures.append("iter_json_prose yields strings under a non-prose key")
+
+    for line in failures:
+        print(f"selftest: {line}", file=sys.stderr)
+    if failures:
+        print(f"\n{len(failures)} selftest failure(s)", file=sys.stderr)
+        return 1
+    print("selftest: ok")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("files", nargs="*", help="limit the check to these paths (default: the whole tree)")
     ap.add_argument("--rules", help="comma-separated subset of rules to run")
     ap.add_argument("--list-rules", action="store_true")
+    ap.add_argument("--selftest", action="store_true", help="check the rules can still see what they are meant to")
     ap.add_argument("--update-baseline", action="store_true", help="re-record the oversize-file baseline")
     args = ap.parse_args()
+
+    if args.selftest:
+        return selftest()
 
     if args.list_rules:
         for name, (_, desc) in RULES.items():

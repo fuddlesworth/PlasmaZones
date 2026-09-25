@@ -518,6 +518,12 @@ jobs:
         with:
           python-version: "3.x"
 
+      # BEFORE the whole-tree run, because a rule that has stopped being able to
+      # see what it governs reports a CLEAN tree. The prose rule shipped unable to
+      # read data/whatsnew.json's highlights and this job passed the whole time.
+      - name: Check the convention rules can still see what they govern
+        run: python3 scripts/check-conventions.py --selftest
+
       - name: Check CLAUDE.md conventions
         run: python3 scripts/check-conventions.py
 
