@@ -94,8 +94,8 @@ private:
 /// Splice `#define PLASMAZONES_KWIN` (plus the ARB explicit-location
 /// extension enables) after the shader's `#version` directive, selecting the
 /// classic-GL default-block branch of the shared uniform headers that
-/// KWin::GLShader requires. Called from every family's compile path (nine
-/// files today, animation through pointer) and defined in
+/// KWin::GLShader requires. Called from every family's compile path (animation
+/// through pointer; no file count, it drifts) and defined in
 /// shader_transitions.cpp; it has external linkage here rather than an
 /// anonymous-namespace copy per TU because the kwin-effect builds as a Unity
 /// (jumbo) target, where duplicate anonymous-namespace definitions collide.
@@ -115,14 +115,17 @@ QByteArray injectKwinDefineAfterVersion(const QString& source);
 const QString& kwinFinalizeColorBlock();
 
 /// Load a user-texture file into a QImage in `Format_RGBA8888` for GL upload:
-/// PNG/JPG/etc. decode via `QImage`, `.svg` / `.svgz` rasterise via
-/// `QSvgRenderer` at @p svgMaxDim max-axis. Returns a null QImage on any
-/// failure. Three callers: the async pre-warm in shader_textures.cpp, the
-/// animation compile path's synchronous cold-install fallback in
-/// shader_transitions.cpp, and the surface pack compile in surface_compile.cpp.
-/// External linkage rather than an
-/// anonymous-namespace copy per TU because the kwin-effect builds as a Unity
-/// (jumbo) target. Defined in shader_textures.cpp.
+/// PNG/JPG/etc. decode via `QImageReader`, `.svg` / `.svgz` rasterise via
+/// `QSvgRenderer` at @p svgMaxDim max-axis. Both branches are held to a 16 MiB
+/// byte budget (RGBA8 at 2048 squared), the raster one during decode via
+/// setScaledSize so an oversized file never materialises at full resolution
+/// inside the compositor process, the SVG one after the per-axis cap, which on
+/// its own does not bound a near-square doc. Same two budgets and the same value
+/// as the daemon's ShaderEffect::loadUserTextureFile, so a pack texture resolves
+/// to the same pixels on both runtimes. Returns a null QImage on any failure. Three callers: the async pre-warm in
+/// shader_textures.cpp, the animation compile path's synchronous cold-install fallback in shader_transitions.cpp, and
+/// the surface pack compile in surface_compile.cpp. External linkage rather than an anonymous-namespace copy per TU
+/// because the kwin-effect builds as a Unity (jumbo) target. Defined in shader_textures.cpp.
 QImage loadUserTextureImage(const QString& path, int svgMaxDim = 1024);
 
 } // namespace PlasmaZones::ShaderInternal
@@ -271,10 +274,11 @@ inline int resolveTransitionLifetimeMs(int nominalMs, const PhosphorAnimation::C
 /// Every other curve is clamped to [0, 1], where an out-of-range value is a bug
 /// rather than the intent.
 ///
-/// EVERY progress source must route through this, and there are now seven call
-/// sites across four consumers: `easeProgress` here, `paintWindow`'s
-/// animator-driven branch, the held-move release and re-grab ramps, and the
-/// desktop transition manager. It is one policy in one place because when it
+/// EVERY progress source must route through this, across four consumers:
+/// `easeProgress` here, `paintWindow`'s animator-driven branch, the held-move
+/// release and re-grab ramps, and the desktop transition manager. No exact call
+/// count here on purpose, for the reason surface_fold.h gives: it drifts every
+/// time a caller is added. It is one policy in one place because when it
 /// lived in two only one of them got updated — the animator branch kept
 /// clamping, which flattened the bounce for exactly the `window.movement.*`
 /// events whose geometry visibly bounces.

@@ -477,6 +477,31 @@ QStringList AnimationShaderRegistry::searchPaths() const
     return m_loader->searchPaths();
 }
 
+QStringList AnimationShaderRegistry::sharedIncludePaths() const
+{
+    QStringList roots = m_loader->searchPaths();
+    std::reverse(roots.begin(), roots.end());
+    QStringList out;
+    for (const QString& root : roots) {
+        const QString sharedDir = root + QStringLiteral("/shared");
+        if (QDir(sharedDir).exists() && !out.contains(sharedDir)) {
+            out.append(sharedDir);
+        }
+    }
+    return out;
+}
+
+QString AnimationShaderRegistry::defaultVertexShaderPath() const
+{
+    for (const QString& sharedDir : sharedIncludePaths()) {
+        const QString vert = sharedDir + QStringLiteral("/animation.vert");
+        if (QFile::exists(vert)) {
+            return vert;
+        }
+    }
+    return {};
+}
+
 void AnimationShaderRegistry::setUserPath(const QString& path)
 {
     m_loader->setUserPath(path);

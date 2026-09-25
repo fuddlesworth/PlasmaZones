@@ -19,13 +19,10 @@
 #include <opengl/glshader.h>
 #include <opengl/glshadermanager.h>
 
-#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QLoggingCategory>
 #include <QStringList>
-
-#include <algorithm>
 
 #include <memory>
 
@@ -91,23 +88,11 @@ StripTransitionManager::CompiledStripShader* StripTransitionManager::compiledSha
         return &compiled;
     }
 
-    QStringList animIncludePaths;
-    // HIGHEST priority FIRST. The registry registers its roots lowest-priority
-    // first (system, then the user dir) and hands the list back in that order,
-    // so walking it verbatim resolved every shared header from the SYSTEM
-    // prefix even for a pack the user directory had won: the pack's body came
-    // from one tree and its contract headers from another. Since the contract
-    // headers carry the sampler BINDING table, a split pair is a binding
-    // mismatch rather than cosmetic drift. Reverse a local copy, exactly as the
-    // surface compile path does.
-    QStringList animSearchPaths = mgr.shaderRegistry().searchPaths();
-    std::reverse(animSearchPaths.begin(), animSearchPaths.end());
-    for (const QString& sp : animSearchPaths) {
-        const QString sharedDir = sp + QStringLiteral("/shared");
-        if (QDir(sharedDir).exists()) {
-            animIncludePaths.append(sharedDir);
-        }
-    }
+    // Highest priority first, and through the registry's own helper so this
+    // runtime resolves a shared header from the same tree the daemon does.
+    // searchPaths() is registration order, which is the reverse of what include
+    // resolution wants; sharedIncludePaths() is the one place that is handled.
+    const QStringList animIncludePaths = mgr.shaderRegistry().sharedIncludePaths();
 
     // Reuse the exact per-window assembly: entry-point scaffold -> include
     // expansion -> named-param preamble -> KWin default-block define.

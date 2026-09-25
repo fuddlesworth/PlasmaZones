@@ -17,10 +17,10 @@
 #include <opengl/gltexture.h>
 
 #include <QByteArray>
-#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QImage>
+#include <QImageReader>
 #include <QLoggingCategory>
 #include <QPainter>
 #include <QPointer>
@@ -31,8 +31,7 @@
 #include <QSvgRenderer>
 #include <QThreadPool>
 
-#include <algorithm>
-
+#include <cmath>
 #include <limits>
 #include <memory>
 #include <unordered_set>
@@ -68,6 +67,20 @@ QImage ShaderInternal::loadUserTextureImage(const QString& path, int svgMaxDim)
     if (path.isEmpty()) {
         return {};
     }
+    // Mirrors ShaderEffect::kMaxSvgPixelBytes (RGBA8 at 2048 squared). Spelled out
+    // here rather than shared, because the effect does not link PhosphorRendering
+    // and must not start doing so for one constant. The two are held together by
+    // the parity claim in this function's doc, not by the compiler.
+    constexpr qint64 kMaxTexturePixelBytes = 16LL * 1024 * 1024;
+    const auto budgetedSize = [](QSize size) {
+        const qint64 bytes = static_cast<qint64>(size.width()) * size.height() * 4;
+        if (bytes <= kMaxTexturePixelBytes) {
+            return size;
+        }
+        const double factor = std::sqrt(static_cast<double>(kMaxTexturePixelBytes) / static_cast<double>(bytes));
+        return QSize(qMax(1, static_cast<int>(size.width() * factor)),
+                     qMax(1, static_cast<int>(size.height() * factor)));
+    };
     const bool isSvg = path.endsWith(QLatin1String(".svg"), Qt::CaseInsensitive)
         || path.endsWith(QLatin1String(".svgz"), Qt::CaseInsensitive);
     if (isSvg) {
@@ -81,6 +94,14 @@ QImage ShaderInternal::loadUserTextureImage(const QString& path, int svgMaxDim)
         } else {
             size = QSize(svgMaxDim, svgMaxDim);
         }
+        // The per-axis cap alone does not bound the allocation: a near-square doc
+        // at svgMaxDim on both axes is svgMaxDim squared times 4 bytes.
+        const QSize budgetedSvg = budgetedSize(size);
+        if (budgetedSvg != size) {
+            qCWarning(lcEffect) << "Pack texture SVG rasterise size" << size << "exceeds the byte budget"
+                                << kMaxTexturePixelBytes << "B, downscaling to" << budgetedSvg << "for" << path;
+            size = budgetedSvg;
+        }
         QImage rasterised(size, QImage::Format_ARGB32_Premultiplied);
         rasterised.fill(Qt::transparent);
         QPainter painter(&rasterised);
@@ -88,7 +109,24 @@ QImage ShaderInternal::loadUserTextureImage(const QString& path, int svgMaxDim)
         painter.end();
         return rasterised.convertToFormat(QImage::Format_RGBA8888);
     }
-    return QImage(path).convertToFormat(QImage::Format_RGBA8888);
+    // Budget applied during DECODE. setScaledSize means an oversized file never
+    // materialises at full resolution, where a post-hoc QImage::scaled() would
+    // need the whole allocation first. A reader that cannot report size() up
+    // front answers an invalid QSize; decode unscaled then rather than guess.
+    // Deliberately NO setAutoTransform, matching the daemon: QImage(path) never
+    // applied EXIF orientation, and enabling it would silently rotate existing
+    // pack textures that carry an orientation tag.
+    QImageReader reader(path);
+    const QSize rasterSize = reader.size();
+    if (rasterSize.isValid() && !rasterSize.isEmpty()) {
+        const QSize budgetedRaster = budgetedSize(rasterSize);
+        if (budgetedRaster != rasterSize) {
+            qCWarning(lcEffect) << "Pack texture raster size" << rasterSize << "exceeds the byte budget"
+                                << kMaxTexturePixelBytes << "B, downscaling to" << budgetedRaster << "for" << path;
+            reader.setScaledSize(budgetedRaster);
+        }
+    }
+    return reader.read().convertToFormat(QImage::Format_RGBA8888);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -418,23 +456,12 @@ PlasmaZonesEffect::compileOrLoadAnimationShader(const QString& effectId,
             qCWarning(lcEffect) << "Shader file is empty" << eff.fragmentShaderPath;
             return nullptr;
         }
-        QStringList animIncludePaths;
-        // HIGHEST priority FIRST. The registry registers its roots lowest-priority
-        // first (system, then the user dir) and hands the list back in that order,
-        // so walking it verbatim resolved every shared header from the SYSTEM
-        // prefix even for a pack the user directory had won: the pack's body came
-        // from one tree and its contract headers from another. Since the contract
-        // headers carry the sampler BINDING table, a split pair is a binding
-        // mismatch rather than cosmetic drift. Reverse a local copy, exactly as the
-        // surface compile path does.
-        QStringList animSearchPaths = m_shaderManager.m_animationShaderRegistry.searchPaths();
-        std::reverse(animSearchPaths.begin(), animSearchPaths.end());
-        for (const QString& sp : animSearchPaths) {
-            const QString sharedDir = sp + QStringLiteral("/shared");
-            if (QDir(sharedDir).exists()) {
-                animIncludePaths.append(sharedDir);
-            }
-        }
+        // Highest priority first, and through the registry's own helper so this
+        // runtime resolves a shared header from the same tree the daemon does.
+        // searchPaths() is registration order, which is the reverse of what
+        // include resolution wants; sharedIncludePaths() is the one place that
+        // is handled.
+        const QStringList animIncludePaths = m_shaderManager.m_animationShaderRegistry.sharedIncludePaths();
         QString includeError;
         const QString currentDir = QFileInfo(eff.fragmentShaderPath).absolutePath();
         // T1.5: assemble an entry-only animation pack (pTransition / pIn+pOut,
