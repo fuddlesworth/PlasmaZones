@@ -742,16 +742,16 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
                 if (!vertLoaded) {
                     node->setVertexShaderSource(kDefaultVertexShaderSource);
                 }
-                // The BUFFER passes too. Their sources are re-armed only by
-                // setBufferShaderPaths, which returns early when the path list is
-                // unchanged, and an in-place edit of a pass's source does not change
-                // it — so a reload used to re-bake the main stages and leave every
-                // buffer pass on its old bake. Here rather than in reloadShader()
-                // because that runs on the GUI thread and node state belongs to the
-                // render thread; the re-read stays lazy, in prepare()'s
-                // bakeBufferShaders.
-                node->invalidateBufferShaders();
                 if (node->loadFragmentShader(fragPath)) {
+                    // The BUFFER passes too. Their sources are re-armed only by
+                    // setBufferShaderPaths, which returns early when the path list is
+                    // unchanged, and an in-place edit of a pass's source leaves it
+                    // unchanged. In the SUCCESS branch, so a failed reload does not
+                    // discard buffer bakes it cannot replace. The re-read itself stays
+                    // lazy, in prepare()'s bakeBufferShaders.
+                    // Here rather than in reloadShader(), because that runs on the
+                    // GUI thread and node state belongs to the render thread.
+                    node->invalidateBufferShaders();
                     node->invalidateShader();
                     setStatus(Status::Ready);
                     loadSucceededThisSync = true;

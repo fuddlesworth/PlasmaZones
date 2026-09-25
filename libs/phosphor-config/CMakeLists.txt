@@ -39,7 +39,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui)
+find_package(Qt6 ${PHOSPHORCONFIG_QT_MIN} REQUIRED COMPONENTS Core Gui)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Library

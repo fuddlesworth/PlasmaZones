@@ -45,7 +45,7 @@ include(GenerateExportHeader)
 # QGuiApplication, keeping CLI consumers free of the GUI stack. PhosphorDBus
 # is PRIVATE: only the .cpp uses PhosphorDBus::Client / ::ObjectManager; the
 # public headers stay free of it.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml DBus)
+find_package(Qt6 ${PHOSPHORSERVICEBLUETOOTH_QT_MIN} REQUIRED COMPONENTS Core Qml DBus)
 
 # Sibling Phosphor libraries this one links. Each lookup is GUARDED rather than
 # unconditional: in-tree the parent add_subdirectory()s the sibling before this

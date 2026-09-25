@@ -235,12 +235,11 @@ public:
     /// back to: the first one that exists walking sharedIncludePaths(), so a
     /// user copy wins over the bundled one. Empty when no root ships one.
     ///
-    /// Same ordering hazard as sharedIncludePaths(). The old hand-rolled walks took
-    /// the FIRST hit in registration order, so on a multi-root install they picked the
-    /// LOWEST-priority vertex stage, consistently with the headers those same walks
-    /// resolved. Nothing was ever mismatched against anything; both were simply the
-    /// wrong end of the list, and moving to user-wins is a deliberate behaviour change
-    /// rather than a repair of a split pair.
+    /// Same ordering hazard as sharedIncludePaths(): resolve the vertex stage the
+    /// way the compositor and the live daemon leg do, so a warm bake cannot key
+    /// itself on a different file from the one that runs. The hand-rolled walks this
+    /// replaced are deleted, so no claim is made here about exactly which end of the
+    /// list each of them picked.
     [[nodiscard]] QString defaultVertexShaderPath() const;
 
 Q_SIGNALS:

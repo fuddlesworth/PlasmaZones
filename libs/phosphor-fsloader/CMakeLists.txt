@@ -52,7 +52,7 @@ endif()
 
 include(GenerateExportHeader)
 
-find_package(Qt6 6.10 REQUIRED COMPONENTS Core)
+find_package(Qt6 ${PHOSPHORFSLOADER_QT_MIN} REQUIRED COMPONENTS Core)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # valijson acquisition — header-only JSON Schema (Draft 7) validator.

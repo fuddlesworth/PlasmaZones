@@ -50,7 +50,7 @@ endif()
 
 include(GenerateExportHeader)
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core)
+find_package(Qt6 ${PHOSPHORSCRIPTING_QT_MIN} REQUIRED COMPONENTS Core)
 find_package(Threads REQUIRED)
 
 # ═══════════════════════════════════════════════════════════════════════════════

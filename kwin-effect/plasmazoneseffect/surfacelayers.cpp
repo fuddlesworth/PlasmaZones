@@ -706,19 +706,17 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                     // the pack.
                     pass.shader->setUniform(pass.uBackdropLoc, ShaderInternal::kSurfaceBackdropUnit);
                     // Set the uniform EVEN IF the fallback texture is null. An explicitly set sampler
-                    // pointing at an unbound unit reads black, which is the safe answer; an UNSET one
-                    // reads unit 0, the running composite. The lazy 1x1 upload can fail (OOM, context
-                    // loss), and every other consumer of this texture null-checks it — these two were
-                    // the only ones dereferencing it blind, which is a segfault in the compositor.
-                    // Park the destination unit BEFORE the call, the way every
-                    // other fallback site in this fold does and for the reason
-                    // surface_audio.cpp spells out: transparentFallbackTexture()
-                    // creates the 1x1 lazily on first use, and GLTexture::upload
-                    // binds the new texture to whatever unit is ACTIVE. Active
-                    // here is TEXTURE0, holding the running composite, so the
-                    // first such call of the session rebound unit 0 to a 1x1
-                    // transparent texture and this pass sampled the window as
-                    // transparent black: one frame of a vanished window.
+                    // pointing at an unbound unit reads black, the safe answer; an UNSET one reads
+                    // unit 0, the running composite. The lazy 1x1 upload can fail (OOM, context loss)
+                    // and every other consumer null-checks it, so a blind dereference here segfaults.
+                    // Park the destination unit BEFORE the call, the way every other
+                    // fallback site in this fold does and for the reason
+                    // surface_audio.cpp spells out: transparentFallbackTexture() creates
+                    // the 1x1 lazily, and GLTexture::upload binds it to whatever unit is
+                    // ACTIVE. Active here is TEXTURE0, holding the running composite, so
+                    // the first such call of the session rebound unit 0 to a 1x1
+                    // transparent texture and this pass sampled the window as transparent
+                    // black: one frame of a vanished window.
                     glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceBackdropUnit);
                     if (KWin::GLTexture* const fallback = transparentFallbackTexture()) {
                         fallback->bind();
@@ -843,10 +841,9 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                         userTex = transparentFallbackTexture();
                         glActiveTexture(GL_TEXTURE0);
                         if (!userTex) {
-                            // Set the uniform EVEN with nothing to bind, for the backdrop
-                            // arm's reason: unset sends the sampler to unit 0, which here
-                            // is the running composite. An empty unit reads black, wrong
-                            // but bounded, against folding the window into its own blur.
+                            // Set it even with nothing to bind, for the backdrop arm's
+                            // reason: unset sends the sampler to unit 0, the running
+                            // composite, so an omit folds the window into its own blur.
                             pass.shader->setUniform(pass.userTextureLoc[t],
                                                     ShaderInternal::kSurfaceUserTextureBaseUnit + t);
                             if (!fallbackUnavailableWarned) {
@@ -1002,13 +999,8 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 // Declared with nothing behind it — the transparent fallback, for the reason
                 // given on the buffer-pass sibling above. Unit 0 is the running composite.
                 pk->shader->setUniform(pk->uBackdropLoc, ShaderInternal::kSurfaceBackdropUnit);
-                // Set the uniform EVEN IF the fallback texture is null. An explicitly set sampler
-                // pointing at an unbound unit reads black, which is the safe answer; an UNSET one
-                // reads unit 0, the running composite. The lazy 1x1 upload can fail (OOM, context
-                // loss), and every other consumer of this texture null-checks it — these two were
-                // the only ones dereferencing it blind, which is a segfault in the compositor.
-                // Park first, same hazard and same reason as the buffer-pass
-                // sibling above.
+                // Set the uniform even if the fallback is null, and park first: both
+                // for the reasons the buffer-pass sibling above spells out.
                 glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceBackdropUnit);
                 if (KWin::GLTexture* const fallback = transparentFallbackTexture()) {
                     fallback->bind();
@@ -1067,7 +1059,15 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                     userTex = transparentFallbackTexture();
                     glActiveTexture(GL_TEXTURE0);
                     if (!userTex) {
-                        continue; // allocation failed — keep the old omit behaviour
+                        // Set it even with nothing to bind, same as the buffer-pass
+                        // arm above and for the same reason.
+                        pk->shader->setUniform(pk->userTextureLoc[t], ShaderInternal::kSurfaceUserTextureBaseUnit + t);
+                        if (!fallbackUnavailableWarned) {
+                            fallbackUnavailableWarned = true;
+                            qCWarning(lcEffect) << "Surface fold: no fallback texture for a main-pass user"
+                                                << "texture slot; its sampler points at an empty unit";
+                        }
+                        continue;
                     }
                 } else if (pk->iTextureResolutionLoc[t + 1] >= 0) {
                     // t + 1: pack slot t is uTexture<t+1>, and iTextureResolution is

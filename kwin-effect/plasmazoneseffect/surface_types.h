@@ -309,10 +309,6 @@ struct SurfaceFoldPlan
     QPointF foldCursor = kCursorOutside;
 };
 
-/// One output's membership in the backdrop accumulation generation (see
-/// SurfaceMultipassState::backdropGenerationOutputs): the output, keyed by
-/// its logical render rect, and the texture-px destination of the last FULL
-/// canvas slice it blitted, carried across a restart another output starts.
 /// WHETHER a chain needs a backdrop capture, and AT WHAT DENSITY. Two questions,
 /// so two fields. They shared one number, with the caller reading any positive
 /// value as the gate, which forced the "links a backdrop uniform but samples no
@@ -338,6 +334,10 @@ struct BackdropCapture
     static constexpr qreal kGateOnlyDensity = 0.125;
 };
 
+/// One output's membership in the backdrop accumulation generation (see
+/// SurfaceMultipassState::backdropGenerationOutputs): the output, keyed by
+/// its logical render rect, and the texture-px destination of the last FULL
+/// canvas slice it blitted, carried across a restart another output starts.
 struct BackdropGenerationMember
 {
     QRectF outputRect;

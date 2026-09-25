@@ -413,6 +413,7 @@ void ShaderNodeRhi::setSourceTextureProvider(QSGTextureProvider* provider)
     // thread is the stock QSGRhiShaderEffectNode pattern. Disconnected here
     // on swap and in the destructor; provider destruction auto-disconnects.
     QObject::disconnect(m_sourceTextureChangedConn);
+    const bool providerCleared = m_sourceTextureProvider != nullptr && provider == nullptr;
     m_sourceTextureProvider = provider;
     if (provider) {
         m_sourceTextureChangedConn = QObject::connect(provider, &QSGTextureProvider::textureChanged, [this]() {
@@ -429,15 +430,30 @@ void ShaderNodeRhi::setSourceTextureProvider(QSGTextureProvider* provider)
     // correct; the double-rebuild concern is one frame of extra pipeline work.
     m_lastSourceRhiTexture = nullptr;
     resetAllBindingsAndPipelines();
-    // NO DIRTY FLAGS HERE, deliberately, and it is worth saying why because raising
-    // them here looks like the obvious fix and is worse than doing nothing.
-    // iTextureResolution[0] comes from m_lastSourceRhiTexture->pixelSize(), which the
-    // line above just nulled, and uploadDirtyTextures runs syncBaseUniforms BEFORE it
-    // resolves the new provider's texture. So flags raised here make the next upload
-    // publish the (1, 1) fallback rather than the new size, where leaving them alone
-    // keeps the previous provider's size until the real one is known. The re-arm
-    // belongs where the value becomes knowable, and it is there, in
-    // uploadDirtyTextures' identity-change branch.
+    // NO DIRTY FLAGS ON THE WAY IN, deliberately, and it is worth saying why because
+    // raising them for every call looks like the obvious fix and is worse than doing
+    // nothing. iTextureResolution[0] comes from m_lastSourceRhiTexture->pixelSize(),
+    // which the line above just nulled, and uploadDirtyTextures runs syncBaseUniforms
+    // BEFORE it resolves the new provider's texture. So flags raised for a
+    // null->provider or provider->provider call make the next upload publish the
+    // (1, 1) fallback rather than the new size, where leaving them alone keeps the
+    // previous size until the real one is known. That re-arm belongs where the value
+    // becomes knowable, and it is there, in uploadDirtyTextures' identity-change
+    // branch.
+    //
+    // ON THE WAY OUT is the opposite case and does belong here. That identity-change
+    // branch sits inside `if (m_sourceTextureProvider)`, so it never runs once the
+    // provider is gone: appendUserTextureBindings falls back to the QImage slot while
+    // iTextureResolution[0] goes on reporting the departed provider's size, which is
+    // the same trailing-size defect in the other direction and is permanent on a
+    // non-animated stage. Here the correct value IS knowable, because it is whatever
+    // the QImage loop writes. Both shadereffect.cpp and surfaceshaderitem.cpp push a
+    // null provider every paint once sourceItem is gone, so this is a real path.
+    if (providerCleared) {
+        m_uniformsDirty = true;
+        m_sceneDataDirty = true;
+        requestAnotherFrame();
+    }
 }
 
 void ShaderNodeRhi::setWallpaperTexture(const QImage& image)

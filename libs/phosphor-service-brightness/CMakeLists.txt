@@ -42,7 +42,7 @@ include(GenerateExportHeader)
 # (connection, service) ctor exposes QDBusConnection in the public header, so
 # DBus is PUBLIC. Qt::Gui is deliberately NOT linked. PhosphorDBus is PRIVATE:
 # only the .cpp uses PhosphorDBus::Client for the logind SetBrightness call.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml DBus)
+find_package(Qt6 ${PHOSPHORSERVICEBRIGHTNESS_QT_MIN} REQUIRED COMPONENTS Core Qml DBus)
 
 # Sibling Phosphor libraries this one links. Each lookup is GUARDED rather than
 # unconditional: in-tree the parent add_subdirectory()s the sibling before this

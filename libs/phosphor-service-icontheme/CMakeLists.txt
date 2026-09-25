@@ -38,7 +38,7 @@ include(GenerateExportHeader)
 # resolver walks the local filesystem only; tray icons that arrive
 # over D-Bus are decoded with the in-class decodePixmaps helper, no
 # bus call.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick)
+find_package(Qt6 ${PHOSPHORSERVICEICONTHEME_QT_MIN} REQUIRED COMPONENTS Core Gui Qml Quick)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 

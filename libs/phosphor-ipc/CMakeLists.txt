@@ -57,7 +57,7 @@ include(GenerateExportHeader)
 # transitively wants it). Keeping the find_package list aligned with
 # PhosphorIpcConfig.cmake.in's downstream find_dependency block so the
 # build-side dependency set doesn't drift from the install-side one.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml Network)
+find_package(Qt6 ${PHOSPHORIPC_QT_MIN} REQUIRED COMPONENTS Core Qml Network)
 
 # Qt 6.5+ resource-prefix policy. NEW = use `:/qt/qml/` as the QML
 # module resource prefix. Without this, qt_add_qml_module emits
@@ -157,7 +157,7 @@ set_target_properties(PhosphorIpc PROPERTIES
 # called find_package(Qt6 ... Gui) this is a no-op; when this lib
 # is consumed standalone via add_subdirectory, the call ensures
 # Qt6::Gui is found before the qt_add_qml_module below.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Gui)
+find_package(Qt6 ${PHOSPHORIPC_QT_MIN} REQUIRED COMPONENTS Gui)
 
 # Directory-scope suppression of -Wmissing-include-dirs for the targets
 # qt_add_qml_module generates here: Qt adds <target>_autogen/include to each

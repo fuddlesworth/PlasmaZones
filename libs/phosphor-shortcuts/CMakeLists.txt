@@ -50,7 +50,7 @@ option(PHOSPHORSHORTCUTS_USE_KGLOBALACCEL
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui DBus)
+find_package(Qt6 ${PHOSPHORSHORTCUTS_QT_MIN} REQUIRED COMPONENTS Core Gui DBus)
 
 set(_phosphorshortcuts_have_kglobalaccel OFF)
 if(PHOSPHORSHORTCUTS_USE_KGLOBALACCEL)

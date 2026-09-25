@@ -757,7 +757,7 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
             // texture KWin's OffscreenData::paint binds during
             // drawWindow. Push the matching sampler uniform so the
             // shader knows which unit to read; populate
-            // iTextureResolution[slot] so shaders that key on texture
+            // iTextureResolution[slot + 1] so shaders that key on texture
             // size (e.g. tile-grid shaders like Matrix's glyph atlas)
             // can compute their own UV math without authors hard-
             // coding bitmap dimensions.
@@ -806,7 +806,7 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
                 }
                 KWin::GLTexture* tex = entry->texture.get();
                 // The declared size goes up whether or not the SAMPLER survived
-                // the link: a pack may read iTextureResolution[slot] without ever
+                // the link: a pack may read iTextureResolution[slot + 1] without ever
                 // sampling the texture, and this cached program persists uniform
                 // state across transitions, so skipping the push would leave a
                 // prior leg's stale size standing — the same reason the fallback

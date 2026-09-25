@@ -44,7 +44,7 @@ include(GenerateExportHeader)
 # PRIVATE because the data-control client (ClipboardDevice) is used inside the
 # .cpp and never appears in the public headers, so consumers neither include nor
 # link phosphor-wayland.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml)
+find_package(Qt6 ${PHOSPHORSERVICECLIPBOARD_QT_MIN} REQUIRED COMPONENTS Core Qml)
 
 # phosphor-wayland is an in-tree sibling under BUILD_PHOSPHOR_SHELL; only
 # find_package it when building this lib stand-alone.

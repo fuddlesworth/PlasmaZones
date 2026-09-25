@@ -33,7 +33,7 @@ endif()
 
 include(GenerateExportHeader)
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml DBus)
+find_package(Qt6 ${PHOSPHORSERVICEMPRIS_QT_MIN} REQUIRED COMPONENTS Core Qml DBus)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 

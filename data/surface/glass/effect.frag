@@ -69,8 +69,7 @@
 // along -surfaceNormal and along refract()'s xy, which for eta < 1 is the outward
 // normal times a NEGATIVE scalar, since sqrt(1 - eta^2 + eta^2*nz^2) exceeds
 // eta*nz for every nz whenever eta < 1. Both are inward at every fragment, and
-// this pack declares no paddingParam, so its frame IS its canvas and there is no
-// margin band outside for a sample to land in.
+// this pack declares no paddingParam, so it adds no margin of its own.
 //
 // Inward bounds the DIRECTION, not the magnitude. The cheap mode genuinely cannot
 // escape, since 0.4 * concave * strength caps its offset at 0.8 of the pane's
@@ -143,13 +142,14 @@ vec4 pSurface(vec2 uv) {
             // 0.4 at the declared maximum of 2.0. (The reference's own ceiling is
             // the 0.2 factor.)
             //
-            // A shrunken copy of THE PANE'S OWN BACKDROP SLICE, not of the
-            // surroundings: this pack declares no paddingParam, so the blur pyramid
-            // covers the frame and nothing beyond it. The rim fragments whose mapped
-            // coordinate passes 1 therefore have no real content to show, and
-            // glassCoord decides what they get instead. With Edge mirror off they
-            // clamp, which stretches the edge texel into a flat band a few px wide,
-            // and that is the reference behaviour the switch's description names.
+            // A shrunken copy of the backdrop THE CANVAS HOLDS, which is not the
+            // same as the pane. This pack adds no padding of its own, but the canvas
+            // is the window's EXPANDED geometry with the frame rect sitting inside
+            // it, so a window whose decoration carries a shadow already brings a
+            // margin the rim samples can land in, and a borderless one does not.
+            // Where the mapped coordinate runs past what the canvas holds, glassCoord
+            // decides: Edge mirror folds it back, and off it clamps, which is the
+            // reference behaviour that switch's description names.
             //
             // (1 + shrink), NOT (1 - shrink). Sampling inward is what MAGNIFIES:
             // output(f) = input(0.5 + f*(1 - shrink)) spreads the centre content

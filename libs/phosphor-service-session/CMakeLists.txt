@@ -46,7 +46,7 @@ include(GenerateExportHeader)
 # DBus is PUBLIC. Qt::Gui is deliberately NOT linked (session actions are
 # non-visual). PhosphorDBus is PRIVATE: only the .cpp uses PhosphorDBus::Client
 # for the logind calls.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml DBus)
+find_package(Qt6 ${PHOSPHORSERVICESESSION_QT_MIN} REQUIRED COMPONENTS Core Qml DBus)
 
 # Sibling Phosphor libraries this one links. Each lookup is GUARDED rather than
 # unconditional: in-tree the parent add_subdirectory()s the sibling before this

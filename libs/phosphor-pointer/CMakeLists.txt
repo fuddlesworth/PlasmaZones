@@ -49,7 +49,7 @@ include(GenerateExportHeader)
 # ===============================================================================
 
 # Pin to 6.10 to match phosphor-shaders, whose headers this library consumes.
-find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui)
+find_package(Qt6 ${PHOSPHORPOINTER_QT_MIN} REQUIRED COMPONENTS Core Gui)
 
 if(NOT TARGET PhosphorFsLoader::PhosphorFsLoader)
     find_package(PhosphorFsLoader 0.1.0 REQUIRED)

@@ -435,6 +435,17 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
             }
 
             if (loaded) {
+                // The BUFFER passes too. Their sources are re-armed only by
+                // setBufferShaderPaths, which returns early when the path list is
+                // unchanged, and an in-place edit of a pass's source leaves it
+                // unchanged. In the SUCCESS branch, so a failed reload does not
+                // discard buffer bakes it cannot replace. The re-read itself stays
+                // lazy, in prepare()'s bakeBufferShaders.
+                // THIS override is the one the decoration chain reaches:
+                // SurfaceDecoration.qml instantiates SurfaceShaderItem and calls
+                // reloadShader() on it, and this class does not delegate to
+                // ShaderEffect::updatePaintNode, so the call there does not cover it.
+                node->invalidateBufferShaders();
                 node->invalidateShader(); // Ensure node re-bakes
                 setStatus(Status::Ready);
             } else {

@@ -45,7 +45,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.10 REQUIRED COMPONENTS Core)
+find_package(Qt6 ${PHOSPHORLAYOUTAPI_QT_MIN} REQUIRED COMPONENTS Core)
 
 # PhosphorRegistry — ILayoutSourceFactory derives IFactoryBase and
 # LayoutSourceBundle keeps its factory catalogue in a Registry<ILayoutSourceFactory>,

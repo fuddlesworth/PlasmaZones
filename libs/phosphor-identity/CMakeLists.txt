@@ -50,7 +50,7 @@ endif()
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.10 REQUIRED COMPONENTS Core)
+find_package(Qt6 ${PHOSPHORIDENTITY_QT_MIN} REQUIRED COMPONENTS Core)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Library

@@ -394,9 +394,9 @@ void OverlayService::updateZonesForAllWindows()
             }
         }
 
-        writeQmlProperty(slot, QStringLiteral("zones"), patched);
-        writeQmlProperty(slot, QStringLiteral("zoneCount"), patched.size());
-        writeQmlProperty(slot, QStringLiteral("highlightedCount"), highlightedCount);
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::Zones), patched);
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::ZoneCount), patched.size());
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedCount), highlightedCount);
 
         if (useShaderForScreen(screenId)) {
             PhosphorZones::Layout* screenLayout = resolveScreenLayout(screenId);

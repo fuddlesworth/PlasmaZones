@@ -47,7 +47,7 @@ include(GenerateExportHeader)
 
 # Core only — no Gui. Keeping the effect's transitive link cost low is a
 # deliberate constraint (see the design doc).
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core)
+find_package(Qt6 ${PHOSPHORRULES_QT_MIN} REQUIRED COMPONENTS Core)
 
 # PhosphorProtocol::Types provides WindowTypeEnum.h, which WindowQuery includes
 # and surfaces through its public API. PUBLIC because the type leaks through

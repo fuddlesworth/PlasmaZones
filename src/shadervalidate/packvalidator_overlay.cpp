@@ -269,13 +269,14 @@ int validatePack(const QString& packDir, QTextStream& out)
             }
         }
 
-        // The runtime caps buffer passes at 4 (parseShaderMetadata's qMin) and
-        // drops the surplus with only a journal warning — exactly the
-        // "runtime hid the author error" class this block lints for.
-        // Compare the RAW declared array against the cap, not the non-empty
-        // subset: parseShaderMetadata iterates qMin(rawSize, kMaxBufferPasses)
-        // and only then skips empties, so ["", "a", "b", "c", "d"] silently
-        // loses "d".
+        // The runtime caps buffer passes at kMaxBufferPasses and drops the surplus
+        // with only a journal warning — exactly the "runtime hid the author error"
+        // class this block lints for. No figure is quoted, because the constant has
+        // moved once already and the worked example that quoted it went stale with it.
+        // Compare the RAW declared array against the cap, not the non-empty subset:
+        // parseShaderMetadata iterates qMin(rawSize, kMaxBufferPasses) and only then
+        // skips empties, so a list whose surplus entries are empty strings still
+        // silently loses a real one past the cap.
         if (declared.size() > PhosphorShaders::kMaxBufferPasses) {
             lints << QStringLiteral("too many buffer shaders: %1 declared, cap is %2 (surplus dropped at load)")
                          .arg(static_cast<int>(declared.size()))

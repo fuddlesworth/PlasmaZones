@@ -54,7 +54,7 @@ include(GenerateExportHeader)
 # Core only — no Gui. The resolver is consumed by the daemon (which already
 # links Qt6::Gui) but should never force a transitively-Gui link on future
 # headless consumers (CLI tooling, daemon-side preview rendering).
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core)
+find_package(Qt6 ${PHOSPHORCONTEXTRESOLVER_QT_MIN} REQUIRED COMPONENTS Core)
 
 # PhosphorZones supplies AssignmentEntry::Mode which the resolver's public
 # headers surface (every gate query takes a Mode). PUBLIC because the type

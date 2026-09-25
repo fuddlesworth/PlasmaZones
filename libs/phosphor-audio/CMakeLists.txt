@@ -47,7 +47,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.10 REQUIRED COMPONENTS Core)
+find_package(Qt6 ${PHOSPHORAUDIO_QT_MIN} REQUIRED COMPONENTS Core)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PhosphorAudio Library

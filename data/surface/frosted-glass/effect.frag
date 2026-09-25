@@ -113,7 +113,14 @@ vec4 pSurface(vec2 uv) {
         // still disagreed by a factor of four at the same setting.
         float grainShort = max(min(uSurfaceFrameSize.x, uSurfaceFrameSize.y), 1.0);
         vec2 grainAspect = uSurfaceFrameSize / grainShort;
-        float frost = frostedTexture(fuv * grainAspect * p_grainScale, iTime * p_grainSpeed);
+        // FLOORED AT TWO DEVICE PX PER CELL. Keying the scale to the short side is
+        // what makes the setting mean the same thing on any pane, but it also means
+        // a narrow one divides by a small number: a 100 px wide pane at the declared
+        // maximum grainScale of 120 asks for a 0.83 px cell, where the voronoi
+        // lattice degenerates into per-pixel noise and shimmers on iTime. The old
+        // per-height form only reached that on a pane short in the OTHER axis.
+        float grainScale = min(p_grainScale, grainShort * 0.5);
+        float frost = frostedTexture(fuv * grainAspect * grainScale, iTime * p_grainSpeed);
         variation = (frost - 0.5) * p_grainAmount;
     }
 

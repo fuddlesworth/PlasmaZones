@@ -39,7 +39,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick)
+find_package(Qt6 ${PHOSPHORPOPOUT_QT_MIN} REQUIRED COMPONENTS Core Gui Qml Quick)
 # PopoutHost.qml imports Phosphor.Theme for Motion timing tokens. The
 # QML import scanner (qmllint, qmlcachegen) needs the registered theme
 # module visible at build time, and consumers need the runtime plugin

@@ -188,20 +188,24 @@ void PlasmaZonesEffect::loadCachedSettings()
         }
     });
     // Multiplier on each pack's declared buffer-pass bufferScale — the blur
-    // pyramid density. On change every derived artifact that baked the old
-    // density is stale: the per-pack clamped-scale cache stores the PRODUCT
-    // (clampedBufferScale), and each window's buffer targets were allocated at
-    // the old size. Clearing chainKey makes the next fold's ensureSurfaceTargets
-    // reallocate them (with the GL context current there, where the FBO
-    // deletion is safe), and the fold invalidation forces that next fold — a
-    // static chain would otherwise early-return its cached composite forever
-    // and never notice. The BACKDROP capture density self-heals with no help from
-    // this loader: chainBackdropScale answers twice the densest sampling pass's
-    // scale, which folds this multiplier, and it re-resolves through the (now
-    // cleared) cache on the next paint while captureWindowBackdrop reallocates on
-    // the resulting size change (surface_backdrop.cpp). The window capture
-    // itself is unaffected — captureScale is the output scale, not a pack
-    // density, so it never sees this multiplier.
+    // pyramid density. On change each window's BUFFER TARGETS are stale, because
+    // they were allocated at the old size. Clearing chainKey makes the next fold's
+    // ensureSurfaceTargets reallocate them (with the GL context current there,
+    // where the FBO deletion is safe), and the fold invalidation forces that next
+    // fold — a static chain would otherwise early-return its cached composite
+    // forever and never notice.
+    //
+    // The BACKDROP capture is deliberately NOT touched, and neither is the per-pack
+    // cache that holds its density. That density comes from the pack's NOMINAL
+    // declared scale and does not fold this multiplier at all, because the pyramid's
+    // first pass steps in fixed canvas px: tying the capture to the tier put all
+    // five of its taps inside one texel at the low end. So the capture stays at half
+    // density whatever the tier, which is a real cost the tier no longer reduces —
+    // on a 4K canvas that is roughly 9 MB rather than the 2 MB the 0.25 tier used to
+    // allocate. The trade is deliberate; see m_packBufferScaleCache.
+    //
+    // The window capture itself is unaffected — captureScale is the output scale,
+    // not a pack density, so it never sees this multiplier.
     loadSettingAsync(QString(PhosphorProtocol::Service::SettingProperty::DecorationBlurScaleMultiplier),
                      [this](const QVariant& v) {
                          // Numeric-or-bust guard, same rationale as the bool loaders above: an

@@ -47,7 +47,7 @@ include(GenerateExportHeader)
 # application infrastructure. Keeping the lib Gui-free lets CLI
 # consumers (phosphorctl-style demos) link it without inheriting the
 # full GUI stack.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml DBus)
+find_package(Qt6 ${PHOSPHORSERVICEUPOWER_QT_MIN} REQUIRED COMPONENTS Core Qml DBus)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 

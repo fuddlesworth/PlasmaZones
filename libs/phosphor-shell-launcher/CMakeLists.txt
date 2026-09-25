@@ -45,7 +45,7 @@ include(GenerateExportHeader)
 # the other providers) is Core, and every provider degrades to a refusal
 # rather than a crash under a plain QCoreApplication, so the tests run
 # headless. No Quick / Qml: the surface is a separate module.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui)
+find_package(Qt6 ${PHOSPHORSHELLLAUNCHER_QT_MIN} REQUIRED COMPONENTS Core Gui)
 
 # The provider contract (ILauncherProvider / ILauncherProviderFactory) lives
 # in phosphor-registry.
@@ -188,7 +188,7 @@ install(FILES
 # host can link the core (providers, model) without the UI, and so the
 # core stays free of Quick.
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Qml Quick QuickShapes)
+find_package(Qt6 ${PHOSPHORSHELLLAUNCHER_QT_MIN} REQUIRED COMPONENTS Qml Quick QuickShapes)
 
 # Kirigami.Icon resolves freedesktop icon names through QIcon::fromTheme
 # for the result rows. REQUIRED, not QUIET, for the same reason the bar,

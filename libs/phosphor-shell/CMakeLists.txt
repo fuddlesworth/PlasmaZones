@@ -35,7 +35,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui Quick Qml WaylandClient)
+find_package(Qt6 ${PHOSPHORSHELL_QT_MIN} REQUIRED COMPONENTS Core Gui Quick Qml WaylandClient)
 
 # Qt 6.5+ resource-prefix policy. NEW = use `:/qt/qml/` as the QML
 # module resource prefix. Mirrors the same opt-in phosphor-theme's

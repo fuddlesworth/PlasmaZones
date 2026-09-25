@@ -40,7 +40,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui)
+find_package(Qt6 ${PHOSPHORSHELLPATTERNS_QT_MIN} REQUIRED COMPONENTS Core Gui)
 
 # Sibling Phosphor libraries this one links. Each lookup is GUARDED rather than
 # unconditional: in-tree the parent add_subdirectory()s the sibling before this

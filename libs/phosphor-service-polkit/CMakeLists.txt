@@ -45,7 +45,7 @@ include(GenerateExportHeader)
 # PolkitQt6-1::Agent does not pull Qt6::Gui transitively, so Gui is not a
 # dependency. The polkit-qt6 GUI action-button widgets (PolkitQt6-1::Gui) are a
 # Phase 3/4 UI concern and are NOT linked.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml)
+find_package(Qt6 ${PHOSPHORSERVICEPOLKIT_QT_MIN} REQUIRED COMPONENTS Core Qml)
 find_package(PolkitQt6-1 REQUIRED)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)

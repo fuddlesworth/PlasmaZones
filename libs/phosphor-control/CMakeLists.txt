@@ -68,7 +68,7 @@ endif()
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core DBus Gui Qml Quick)
+find_package(Qt6 ${PHOSPHORCONTROL_QT_MIN} REQUIRED COMPONENTS Core DBus Gui Qml Quick)
 
 # phosphor-animation -- PhosphorControlQml links the QML plugin so the
 # chrome's org.phosphor.animation imports resolve for consumers. In the

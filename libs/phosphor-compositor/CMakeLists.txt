@@ -37,7 +37,7 @@ endif()
 # consumers, so enforce the same minimum when building. The sibling
 # phosphor libs are resolved via find_package only when a parent scope has
 # not already defined their targets (i.e. genuine standalone configure).
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui DBus)
+find_package(Qt6 ${PHOSPHORCOMPOSITOR_QT_MIN} REQUIRED COMPONENTS Core Gui DBus)
 if(NOT TARGET PhosphorProtocol::PhosphorProtocol)
     find_package(PhosphorProtocol REQUIRED)
 endif()

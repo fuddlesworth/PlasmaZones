@@ -57,7 +57,7 @@ include(GenerateExportHeader)
 
 # Pin to 6.10 to match phosphor-shaders, whose headers this library consumes
 # (a lower floor here would be fiction — the dependency already demands 6.10).
-find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui)
+find_package(Qt6 ${PHOSPHORSURFACE_QT_MIN} REQUIRED COMPONENTS Core Gui)
 
 # phosphor-fsloader -- filesystem-backed loader scaffolding (LiveReload /
 # RegistrationOrder enums + MetadataPackLoader machinery via PhosphorRegistry).

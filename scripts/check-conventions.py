@@ -807,6 +807,13 @@ SELFTEST_PROSE_BAD = [
     ("The pane, when focused, is blurred; the border is not.", "semicolon past a comma"),
     # An appositive long enough not to read as a label.
     ("Blurs the scene behind the pane — a soft look that lifts saturation.", "em-dash appositive"),
+    # A SPLICE WITH A COMMA ON EACH SIDE, which is what the per-item comma carve-out
+    # used to exempt and is the exact shape that got a real violation into a shipped
+    # pack description. Without this entry the carve-out can be put back and the
+    # selftest still passes, since every other guard in the rule is pinned by an OK
+    # entry and only this direction is pinned by a BAD one.
+    ("It scales with the frame, so it is larger on a larger window; with it, the bend is confined to the bevel",
+     "semicolon with a comma on each side"),
 ]
 
 SELFTEST_PROSE_OK = [

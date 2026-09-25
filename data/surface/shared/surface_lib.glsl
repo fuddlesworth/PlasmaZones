@@ -321,12 +321,22 @@ float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float stre
     // exists for. For an opaque window baseAlpha is 1 and the halo was already 0.
     //
     // It gates on `edgePx`, NOT on `d`, and that distinction is the whole point.
-    // The shadow pack evaluates d against a frame DISPLACED by its cast offset, so
-    // every fragment in its margin band below the window reads as offsetY deep
-    // inside that displaced rect even though it sits OUTSIDE the real one. Gating on
-    // d erased the band outright whenever the offset exceeded the shadow size: at
-    // size 4 with offset 12 the band lands at depth 8..12 against a 4 px reach, so
-    // the gate was 0 across all of it and the drop shadow vanished.
+    // The shadow pack evaluates d against a frame DISPLACED by its cast offset, so a
+    // fragment h px below the window reads as (offsetY - h) deep inside that
+    // displaced rect even though it sits OUTSIDE the real one: deepest right at the
+    // frame edge, back to zero by h = offsetY. Gating on d therefore cut into the
+    // band from the edge outwards, and zeroed a strip of it wherever the depth
+    // passed two reaches, which needs offsetY > 2 * shadowSize. Both are legal:
+    // shadowSize declares a minimum of 4 and offsetY a maximum of 12. How much the
+    // user sees depends on how wide the margin is — on a window carrying its own
+    // decoration-shadow margin the loss reads as the shadow detaching from the
+    // frame, and on a borderless one, whose canvas is the frame plus the pack's own
+    // padding, as the shadow going altogether.
+    //
+    // MAIN PASS ONLY, because of these two uniforms: the compositor gives a BUFFER
+    // pass uSurfaceSize and uSurfaceScale but not the frame rect, so a third-party
+    // pack calling this from a buffer pass reads a zero frame there and a real one
+    // on the daemon. focusDim below has the same shape.
     //
     // Square corners on purpose. This function is not handed the pack's corner
     // radius, and the square reading is the conservative one. The cost is that the

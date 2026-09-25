@@ -80,6 +80,12 @@ QImage ShaderInternal::loadUserTextureImage(const QString& path, int svgMaxDim)
         // under the budget and skip the downscale. The read would then fail its own
         // allocation limit and return null, so nothing bad reached the GPU, but the
         // arithmetic itself was the defect.
+        // The upper bound is the real guard; the lower one only turns a degenerate
+        // axis into 1 so the product below cannot be zero. That does mean a very
+        // elongated SVG whose aspect-preserving scale rounds an axis to 0 comes back
+        // CHANGED without having exceeded any budget, so the caller's
+        // changed-means-downscaled log reads oddly for it. Harmless, and preferable
+        // to rasterising at zero.
         size = QSize(qBound(1, size.width(), 1 << 20), qBound(1, size.height(), 1 << 20));
         const qint64 bytes = static_cast<qint64>(size.width()) * size.height() * 4;
         if (bytes <= kMaxTexturePixelBytes) {

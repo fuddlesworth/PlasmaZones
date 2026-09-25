@@ -205,8 +205,17 @@ void PointerDecorationPass::cacheUniformLocations(KWin::GLShader* shader, const 
     for (int slot = 0; slot < PSC::kMaxUserTextureSlots; ++slot) {
         out.userTextures[static_cast<size_t>(slot)] =
             shader->uniformLocation(kUserTextureNames[static_cast<size_t>(slot)]);
-        out.iTextureResolution[static_cast<size_t>(slot) + 1] =
-            shader->uniformLocation(kTextureResNames[static_cast<size_t>(slot)]);
+    }
+    // SEPARATE LOOP, because iTextureResolution is indexed by GLSL texture slot and
+    // the sampler table by pack slot. Sharing the loop above and offsetting only the
+    // DESTINATION was inert: it read kTextureResNames[slot], the name of GLSL element
+    // `slot`, and stored it at destination slot+1, so the paint site's matching +1
+    // read it straight back out and pack slot N's size still went to element N. It
+    // also never resolved element 3 at all. Same shape as the surface family's
+    // resolve in plasmazoneseffect/shader_textures.cpp.
+    for (int glslSlot = 0; glslSlot < PhosphorShaders::Bindings::kUserTextureCount; ++glslSlot) {
+        out.iTextureResolution[static_cast<size_t>(glslSlot)] =
+            shader->uniformLocation(kTextureResNames[static_cast<size_t>(glslSlot)]);
     }
     for (int i = 0; i < 4; ++i) {
         out.iChannel[static_cast<size_t>(i)] = shader->uniformLocation(kIChannelNames[static_cast<size_t>(i)]);

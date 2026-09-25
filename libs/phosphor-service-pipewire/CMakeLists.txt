@@ -50,7 +50,7 @@ include(GenerateExportHeader)
 # baseline). All libpipewire types live in src/ behind the pimpl; the
 # public headers stay libpipewire-free so consumers don't need to find
 # it transitively.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml)
+find_package(Qt6 ${PHOSPHORSERVICEPIPEWIRE_QT_MIN} REQUIRED COMPONENTS Core Qml)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PIPEWIRE REQUIRED IMPORTED_TARGET libpipewire-0.3>=1.0.0)
 

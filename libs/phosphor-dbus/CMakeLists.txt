@@ -43,7 +43,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.10 REQUIRED COMPONENTS Core DBus)
+find_package(Qt6 ${PHOSPHORDBUS_QT_MIN} REQUIRED COMPONENTS Core DBus)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PhosphorDBus Library

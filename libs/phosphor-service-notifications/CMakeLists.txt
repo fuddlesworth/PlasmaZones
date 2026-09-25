@@ -50,7 +50,7 @@ include(GenerateExportHeader)
 # is PRIVATE: only the .cpp uses it (image-path-as-icon-name resolution). The
 # (iiibiiay) image struct is demarshalled inline via QDBusArgument, so PhosphorDBus
 # is not needed here.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml DBus Gui)
+find_package(Qt6 ${PHOSPHORSERVICENOTIFICATIONS_QT_MIN} REQUIRED COMPONENTS Core Qml DBus Gui)
 
 # PhosphorServiceIconTheme provides the XDG icon resolver used for the
 # image-path-as-icon-name fallback. The root CMakeLists.txt configures it before

@@ -17,32 +17,27 @@
         "preview": { "type": "string" },
         "fboExtent": {
             "type": "string",
-            "enum": ["anchor", "surface"],
-            "description": "Which rect the effect's FBO spans. \"anchor\" is the captured window, and is what an absent key means. \"surface\" is the whole surface, which a pack needs when it draws outside the window's own bounds. The loader matches these case-insensitively and warns on anything else, so the enum here is the strict spelling rather than the accepted one."
+            "description": "Which rect the effect's FBO spans. \"anchor\" is the captured window, and is what an absent key means. \"surface\" is the whole surface, which a pack needs when it draws outside the window's own bounds. Type-checked only, deliberately: the loader matches both spellings case-insensitively, treats an empty string as absent, and warns and falls back on anything else, so an enum here would drop a pack the loader would have run."
         },
         "textures": {
             "type": "array",
-            "maxItems": 3,
             "items": {
                 "type": "object",
-                "required": ["path"],
-                "additionalProperties": false,
                 "properties": {
-                    "path": { "type": "string", "minLength": 1 },
-                    "wrap": { "type": "string", "enum": ["clamp", "repeat", "mirror"] }
+                    "path": { "type": "string" },
+                    "wrap": { "type": "string" }
                 }
             },
-            "description": "Image textures the pack declares. Slot N feeds uTexture<N+1>, because uTexture0 is the window's own content, and that slot's pixel size arrives at iTextureResolution[N+1]. Paths are pack-relative and are containment-checked at load."
+            "description": "Image textures the pack declares. Slot N feeds uTexture<N+1>, because uTexture0 is the window's own content, and that slot's pixel size arrives at iTextureResolution[N+1]. Paths are pack-relative and are containment-checked at load. Type-checked only, deliberately: the loader caps the list, drops an entry with an empty path and ignores a key it does not know, warning about each, so a cap or a required-path rule here would drop a pack the loader would have run with a journal entry."
         },
         "appliesTo": {
             "type": "array",
-            "items": { "type": "string", "enum": ["geometry", "appearance", "desktop", "move", "strip", "tab"] },
-            "description": "Event classes this pack offers itself for. An absent key, or one that validates down to empty, means universal, which is everywhere except the four opt-in classes desktop, move, strip and tab. The loader drops an unknown token with a warning rather than failing the pack, so this enum is what catches the typo at the gate."
+            "items": { "type": "string" },
+            "description": "Event classes this pack offers itself for: geometry, appearance, desktop, move, strip or tab. An absent key, or one that validates down to empty, means universal, which is everywhere except the four opt-in classes desktop, move, strip and tab. Type-checked only, deliberately: the loader drops an unknown token with a warning and keeps the pack, so an enum here would drop the pack instead."
         },
         "geometryGrid": {
             "type": "integer",
-            "minimum": 1,
-            "description": "Vertex-grid subdivisions, for a pack whose vertex stage displaces geometry. Absent or zero means the pack is drawn on a plain quad."
+            "description": "Vertex-grid subdivisions, for a pack whose vertex stage displaces geometry. Absent or zero means the pack is drawn on a plain quad. No minimum, deliberately: the loader clamps with qBound(0, value, max), so an explicit 0 is the documented way to say no grid and a schema floor would drop a pack for writing it."
         },
         "audio": {
             "type": "boolean",

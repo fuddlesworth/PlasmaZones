@@ -35,7 +35,7 @@ endif()
 
 include(GenerateExportHeader)
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml DBus)
+find_package(Qt6 ${PHOSPHORSERVICESNI_QT_MIN} REQUIRED COMPONENTS Core Gui Qml DBus)
 
 # The icon-theme resolver + image provider live in their own library
 # post Phase 2.0. SNI hands raw IconPixmap blobs to the image

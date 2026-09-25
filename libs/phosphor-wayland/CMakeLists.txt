@@ -45,12 +45,12 @@ include(GenerateExportHeader)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # These are likely already found by the parent project when built in-tree.
-find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui)
+find_package(Qt6 ${PHOSPHORWAYLAND_QT_MIN} REQUIRED COMPONENTS Core Gui)
 
 if(NOT TARGET Qt6::GuiPrivate)
     find_package(Qt6GuiPrivate CONFIG REQUIRED)
 endif()
-find_package(Qt6 6.10 REQUIRED COMPONENTS WaylandClient)
+find_package(Qt6 ${PHOSPHORWAYLAND_QT_MIN} REQUIRED COMPONENTS WaylandClient)
 if(NOT TARGET Qt6::WaylandClientPrivate)
     find_package(Qt6WaylandClientPrivate REQUIRED)
 endif()

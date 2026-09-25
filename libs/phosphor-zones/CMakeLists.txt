@@ -55,7 +55,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui)
+find_package(Qt6 ${PHOSPHORZONES_QT_MIN} REQUIRED COMPONENTS Core Gui)
 
 # PhosphorLayoutApi provides the LayoutPreview / ILayoutSource contract that
 # this library implements via ZonesLayoutSource (see src/zoneslayoutsource.cpp).

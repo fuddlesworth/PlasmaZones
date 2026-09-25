@@ -45,7 +45,7 @@ include(GenerateExportHeader)
 # because the foundation SessionLock client is used inside the .cpp and never
 # appears in the public headers, so consumers neither include nor link
 # phosphor-wayland. Concurrent and PAM are likewise private.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml Concurrent)
+find_package(Qt6 ${PHOSPHORSERVICELOCK_QT_MIN} REQUIRED COMPONENTS Core Qml Concurrent)
 
 # phosphor-wayland is an in-tree sibling under BUILD_PHOSPHOR_SHELL; only
 # find_package it when building this lib stand-alone.
