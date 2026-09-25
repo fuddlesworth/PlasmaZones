@@ -114,7 +114,12 @@ void PlasmaZonesEffect::setupDecorationManager()
                 // keyed under the dead id against the sibling would linger
                 // until the next full rebuild.
                 KWin::EffectWindow* w = findWindowById(windowId);
-                if (w && getWindowId(w) == windowId && w->isOnCurrentDesktop()) {
+                // Per-output reading, like every other gate that decides whether to
+                // DECORATE (see desktopvisibility.h). On the global one a window whose
+                // own output shows its desktop took the remove branch while plainly
+                // visible, and the updateAllDecorations rebuild this comment relies on
+                // skipped it for the same reason, so nothing brought it back.
+                if (w && getWindowId(w) == windowId && isOnOwnOutputCurrentDesktop(w)) {
                     updateWindowDecoration(windowId, w);
                 } else {
                     removeWindowDecoration(windowId);
@@ -909,7 +914,13 @@ void PlasmaZonesEffect::updateAllDecorations()
         // reconcile it below for ALL windows the appearance may hide — otherwise
         // a hide (rule or config default) applying to a window on another
         // virtual desktop would not take effect until next activation.
-        if (w->isOnCurrentDesktop()) {
+        // Per-output, not global: desktopvisibility.h's rule is that a gate deciding
+        // whether to DECORATE belongs to the monitor the window is on. This one is
+        // also the rebuild that windowDecorationRestored and the two rule-invalidation
+        // gates lean on, so on the global reading a window whose own output showed its
+        // desktop was dropped by them and then skipped by this, losing its decoration
+        // until something incidental re-resolved it.
+        if (isOnOwnOutputCurrentDesktop(w)) {
             revisited.insert(wid);
             updateWindowDecoration(wid, w);
         }
