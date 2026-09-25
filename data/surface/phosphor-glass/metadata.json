@@ -26,6 +26,7 @@
         0.125,
         0.25
     ],
+    "halfFloatBuffers": false,
     "fragmentShader": "effect.frag",
     "parameters": [
         {

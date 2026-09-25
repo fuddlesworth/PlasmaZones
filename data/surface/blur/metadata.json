@@ -26,6 +26,7 @@
         0.125,
         0.25
     ],
+    "halfFloatBuffers": false,
     "presets": {
         "Plasma": {
             "blurRadius": 48,

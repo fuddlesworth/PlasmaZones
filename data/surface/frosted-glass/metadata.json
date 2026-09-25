@@ -27,6 +27,7 @@
         0.125,
         0.25
     ],
+    "halfFloatBuffers": false,
     "parameters": [
         {
             "id": "blurRadius",
