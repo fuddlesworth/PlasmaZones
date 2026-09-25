@@ -416,8 +416,17 @@ void effectContentSignature(QCryptographicHash& hasher, const AnimationShaderEff
         }
         const QFileInfo fi(path);
         hasher.addData(path.toUtf8());
-        hasher.addData(QByteArray::number(fi.size()));
-        hasher.addData(QByteArray::number(fi.lastModified().toMSecsSinceEpoch()));
+        if (fi.exists()) {
+            hasher.addData(QByteArray::number(fi.size()));
+            hasher.addData(QByteArray::number(fi.lastModified().toMSecsSinceEpoch()));
+        } else {
+            // Stable sentinel for absent files: lastModified() on an invalid
+            // datetime is implementation-defined, and feeding that through
+            // toMSecsSinceEpoch() makes the signature of a pack with a missing
+            // declared texture depend on it. The surface and pointer twins both
+            // guard this; the animation one was the outlier.
+            hasher.addData(QByteArrayView("missing"));
+        }
     };
     if (!e.sourceDir.isEmpty()) {
         mixFile(e.sourceDir + QStringLiteral("/metadata.json"));
@@ -722,6 +731,18 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
         if (slot < effect.textures.size()) {
             path = effect.textures[slot].path;
             wrap = effect.textures[slot].wrap;
+            // On-disk packs had their defaults resolved and traversal-checked at
+            // parseEffect scan time, but an IN-MEMORY pack's defaults arrive
+            // unvetted, so apply the same guard the override branch below does,
+            // both-or-neither on rejection. Reaches test fixtures and the scripted
+            // hooks this file's own comment anticipates. The surface and pointer
+            // twins both carry this; the animation one was the outlier.
+            if (effect.sourceDir.isEmpty() && !path.isEmpty() && !pathHasNoTraversalSegments(path)) {
+                qCWarning(lcRegistry).noquote() << "Animation effect" << effect.id << "in-memory default texture path"
+                                                << path << "rejected (path traversal guard)";
+                path.clear();
+                wrap.clear();
+            }
         }
         const auto pathOverride = friendlyParams.constFind(pathKey);
         if (pathOverride != friendlyParams.constEnd()) {

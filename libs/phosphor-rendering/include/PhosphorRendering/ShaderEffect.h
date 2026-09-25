@@ -1029,12 +1029,12 @@ private:
     // ── Textures ─────────────────────────────────────────────────────
     QVector<float> m_audioSpectrum;
     std::array<QImage, kMaxUserTextureSlots> m_userTextureImages;
-    // Spelled out rather than default-constructed, matching the node's array of
-    // the same name. setShaderParams string-compares against these to decide
-    // whether a wrap actually changed, so a null default made the first
-    // assignment of the effective default ("clamp") look like a change.
-    std::array<QString, kMaxUserTextureSlots> m_userTextureWraps = {QStringLiteral("clamp"), QStringLiteral("clamp"),
-                                                                    QStringLiteral("clamp"), QStringLiteral("clamp")};
+    // Filled with "clamp" by the constructor rather than a brace list, exactly like
+    // m_userTextureSvgSizes below and for the same reason: the count is the binding
+    // table's, so a literal list stops covering the array the moment the table
+    // grows a slot. Filled at all because setShaderParams string-compares these,
+    // so a null default reads as a change and fires a spurious update().
+    std::array<QString, kMaxUserTextureSlots> m_userTextureWraps;
     /// Last-resolved file path per user-texture slot. Tracked here so
     /// `setShaderParams` can detect path changes (load on transition,
     /// not re-load on every params write) and so the SVG rasterise size

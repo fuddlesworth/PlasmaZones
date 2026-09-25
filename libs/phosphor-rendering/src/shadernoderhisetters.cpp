@@ -419,7 +419,7 @@ void ShaderNodeRhi::setSourceTextureProvider(QSGTextureProvider* provider)
             markDirty(QSGNode::DirtyMaterial);
         });
     }
-    // Clear the cached binding-7 texture pointer so the SRB build sees
+    // Clear the cached binding-11 texture pointer so the SRB build sees
     // a "different texture" on the next prepare() and rebuilds bindings.
     // The asymmetric "only on provider→null" reset that lived here briefly
     // missed the null→provider-A→null→provider-B sequence: B's m_sourceSampler
@@ -429,6 +429,16 @@ void ShaderNodeRhi::setSourceTextureProvider(QSGTextureProvider* provider)
     // correct; the double-rebuild concern is one frame of extra pipeline work.
     m_lastSourceRhiTexture = nullptr;
     resetAllBindingsAndPipelines();
+    // iTextureResolution[0] is derived from the source texture's pixelSize, and
+    // resetAllBindingsAndPipelines republishes no uniforms, so the binding would
+    // be refreshed while the published SIZE stayed on the previous provider's.
+    // It self-heals today, because a source resize always arrives alongside
+    // setResolution or setSurfaceSize and both mark sceneData, and an animating
+    // pack marks time every frame regardless. That is an accident of the callers
+    // rather than an invariant this setter holds, so hold it here. Offset 592 is
+    // inside the scene region of both profiles, so this is safe in each.
+    m_uniformsDirty = true;
+    m_sceneDataDirty = true;
 }
 
 void ShaderNodeRhi::setWallpaperTexture(const QImage& image)
@@ -750,34 +760,62 @@ void ShaderNodeRhi::setBufferWraps(const QStringList& wraps)
     }
 }
 
+// A FILTER FLIP INTO OR OUT OF "mipmap" HAS TO DROP THE TEXTURES, not just the
+// samplers. Mip-ness is a texture FLAG (UsedWithGenerateMips) and a level count,
+// both fixed at creation, and ensureBufferTarget's create gate tests only
+// null-or-size-mismatch. resetAllBindingsAndPipelines touches SRBs and pipelines
+// and nothing else, so on unchanged paths the old single-level texture survived
+// while ensureBufferSampler rebuilt asking for mip filtering: "mipmap" then
+// sampled the base level and behaved as "linear", silently, and the post-pass
+// generateMips was skipped too because it is guarded on the texture's own flag.
+// Gated on mip-ness rather than on any filter change, so a nearest-to-linear flip
+// stays cheap. Reachable through a same-paths metadata edit, which is the
+// live-reload flow; no bundled pack declares "mipmap" today.
+static bool wantsMipmapFilter(const QString& filter)
+{
+    return filter == QLatin1String("mipmap");
+}
+
 void ShaderNodeRhi::setBufferFilter(const QString& filter)
 {
     const QString use = normalizeFilterMode(filter);
     if (m_bufferFilterDefault == use) {
         return;
     }
+    bool mipChanged = false;
     m_bufferFilterDefault = use;
     for (int i = 0; i < kMaxBufferPasses; ++i) {
+        mipChanged = mipChanged || wantsMipmapFilter(m_bufferFilters[i]) != wantsMipmapFilter(use);
         m_bufferFilters[i] = use;
         m_bufferSamplers[i].reset();
     }
-    resetAllBindingsAndPipelines();
+    if (mipChanged) {
+        resetBufferTargets();
+    } else {
+        resetAllBindingsAndPipelines();
+    }
     markDirty(QSGNode::DirtyMaterial);
 }
 
 void ShaderNodeRhi::setBufferFilters(const QStringList& filters)
 {
     bool changed = false;
+    bool mipChanged = false;
     for (int i = 0; i < kMaxBufferPasses; ++i) {
         const QString use = (i < filters.size()) ? normalizeFilterMode(filters.at(i)) : m_bufferFilterDefault;
         if (m_bufferFilters[i] != use) {
+            mipChanged = mipChanged || wantsMipmapFilter(m_bufferFilters[i]) != wantsMipmapFilter(use);
             m_bufferFilters[i] = use;
             m_bufferSamplers[i].reset();
             changed = true;
         }
     }
-    if (changed) {
+    if (mipChanged) {
+        resetBufferTargets();
+    } else if (changed) {
         resetAllBindingsAndPipelines();
+    }
+    if (changed) {
         markDirty(QSGNode::DirtyMaterial);
     }
 }

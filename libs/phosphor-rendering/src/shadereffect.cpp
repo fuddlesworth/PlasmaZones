@@ -166,6 +166,9 @@ ShaderEffect::ShaderEffect(QQuickItem* parent)
     setFlag(ItemHasContents, true);
 
     m_userTextureSvgSizes.fill(kDefaultUserTextureSvgSize);
+    // See the member's declaration: setShaderParams compares against these, so the
+    // effective default has to be in place before the first push, not a null.
+    m_userTextureWraps.fill(QStringLiteral("clamp"));
 
     // When the scene graph is invalidated (e.g. window hide on Vulkan destroys
     // the QRhi), release GPU resources from the render node and mark shader

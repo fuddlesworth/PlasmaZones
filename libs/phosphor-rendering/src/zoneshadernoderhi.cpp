@@ -289,12 +289,14 @@ void ZoneShaderNodeRhi::prepare()
     // Upload labels texture BEFORE parent's prepare(). The parent's
     // ensurePipeline() will include our extra binding (labels at 1) in its
     // SRB creation via appendExtraBindings().
+    // Through safeRhi(), which is what its own doc tells subclasses overriding
+    // prepare() to do: it carries the post-invalidateItem() liveness check, where
+    // commandBuffer()->rhi() has none. Without it this did GPU work for an
+    // invalidated item, ahead of the base prepare() that would have bailed.
+    QRhi* rhi = safeRhi();
     QRhiCommandBuffer* cb = commandBuffer();
-    if (cb) {
-        QRhi* rhi = cb->rhi();
-        if (rhi) {
-            uploadLabelsTexture(rhi, cb);
-        }
+    if (rhi && cb) {
+        uploadLabelsTexture(rhi, cb);
     }
 
     // Delegate to parent for all base rendering.
