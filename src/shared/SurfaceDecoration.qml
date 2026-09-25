@@ -215,19 +215,35 @@ Item {
     /// value lives on QQuickWindow, whose `devicePixelRatio` property is Qt
     /// 6.11 and so out of reach at this project's 6.10 floor.
     ///
-    /// That is survivable here, and deliberately left alone, because the value
-    /// CANCELS. It sets `uSurfaceSize` (which `surfacePixel` multiplies uv by,
-    /// defining the px space) and `uSurfaceScale` (which packs multiply their
-    /// logical-px widths and radii by), so every geometric ratio a pack
-    /// computes is scale-free — the border lands in the same place at any
-    /// value. Only the AA feather, held in "device px" on purpose so it stays
-    /// constant across scales, is off by the ratio between this and the true
-    /// one: about 0.4 real device px instead of 0.7 at scale 1.15, which is
-    /// a marginally crisper edge and nothing more.
+    /// IT CANCELS FOR GEOMETRY AND NOT FOR THE BLUR CHAIN, and this comment used
+    /// to claim the cancellation without that exception.
     ///
-    /// So do not "fix" this to a real per-surface ratio in isolation. Both
-    /// uniforms have to move together or the packs' geometry breaks, and the
-    /// only thing gained is a sub-pixel feather width.
+    /// The cancellation is real where it applies. The value sets `uSurfaceSize`
+    /// (which `surfacePixel` multiplies uv by, defining the px space) and
+    /// `uSurfaceScale` (which packs multiply their logical-px widths and radii
+    /// by), so every geometric RATIO a pack computes is scale-free and the border
+    /// lands in the same place at any value. The AA feather, held in "device px"
+    /// on purpose so it stays constant across scales, is off by the ratio between
+    /// this and the true one: about 0.4 real device px instead of 0.7 at scale
+    /// 1.15, a marginally crisper edge and nothing more.
+    ///
+    /// WHAT DOES NOT CANCEL is any use of `uSurfaceScale` against an ABSOLUTE
+    /// threshold, and the dual Kawase chain has two. `surfaceKawaseDepth()`
+    /// compares `customParams[0].x * uSurfaceScale` against a fixed reach table
+    /// of 15 / 40 / 120 / 320, so a wrong scale picks a different pyramid DEPTH,
+    /// not a proportionally different blur. And `kSurfaceKawaseBaseTexel` is a
+    /// hardcoded 4 canvas px per texel. KWin reporting 2 for a 1.15 output is a
+    /// 74% overstatement, which is easily enough to cross a band boundary: the
+    /// preview then blurs at a different depth from the live decoration it is
+    /// previewing. Neither existed when this comment was written.
+    ///
+    /// STILL NOT FIXABLE IN ISOLATION, for the reason the old text gave: both
+    /// uniforms have to move together or the packs' geometry breaks. The real
+    /// per-surface value is reachable from C++ (`window()->devicePixelRatio()`,
+    /// long predating the 6.11 property this comment cites) and would have to be
+    /// exposed from the item and bound here. It is left for a pass that can check
+    /// it on a real fractionally-scaled output, because moving it changes which
+    /// depth the blur family runs at and that is a look change, not a refactor.
     readonly property real surfaceScale: Screen.devicePixelRatio
 
     /// The area the bound `backdropTexture` covers, in this item's coordinates.
