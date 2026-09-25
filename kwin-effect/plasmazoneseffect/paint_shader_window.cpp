@@ -221,15 +221,13 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
         // uses those to convert vTexCoord into anchor [0,1] space
         // (anchorRemap).
         //
-        // iAnchorRectInTexture is a SEPARATE uniform: it tells
-        // surfaceColor() where the anchor sits inside uTexture0.
-        // Surface-extent shaders sample with anchor-space [0,1]
-        // coordinates, but uTexture0 spans the shadow-padded expanded
-        // rect — sampling it at anchor [0,1] without this remap
-        // stretches frame+shadow into the frame's screen region and
-        // the window content animates smaller than it lands. Anchor-
-        // extent shaders sample uTexture0 directly, so they get the
-        // (0,0,1,1) identity.
+        // iAnchorRectInTexture is a SEPARATE uniform: it tells surfaceColor()
+        // where the anchor sits inside uTexture0. Surface-extent shaders sample
+        // with anchor-space [0,1] coordinates, but uTexture0 spans the
+        // shadow-padded expanded rect — sampling it at anchor [0,1] without this
+        // remap stretches frame+shadow into the frame's screen region and the
+        // window content animates smaller than it lands. Anchor-extent shaders
+        // sample uTexture0 directly, so they get the (0,0,1,1) identity.
         //
         // expandedGeometry is empty for a window with no decoration
         // or shadow extents; fall back to the frame there.
@@ -308,8 +306,10 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
             }
             // iTextureResolution[0] is uTexture0's PIXEL size, which the daemon publishes
             // and the compositor did not. expandedGeo, NOT anchorUniforms.resolution: that
-            // is textureGeo's size, which the block above spells out is the whole OUTPUT on
-            // a surface-extent leg. Times the scale, since these are logical px.
+            // is textureGeo's size, the whole OUTPUT on a surface-extent leg per the block
+            // above. Times the scale, these being logical px. WHICH scale is unsettled: the
+            // window's own output, or the render target's on a mixed-DPI straddle (the case
+            // windowSurfaceScale() exists for). No bundled pack reads this uniform.
             if (cached->iTextureResolutionLoc[0] >= 0) {
                 const qreal texScale = w->screen() ? w->screen()->scale() : 1.0;
                 shader->setUniform(cached->iTextureResolutionLoc[0],
