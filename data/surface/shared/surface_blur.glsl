@@ -263,11 +263,15 @@ vec4 surfaceKawaseDown(sampler2D src, vec2 uv, float offset) {
 
 // The first DOWN pass reads the backdrop capture through backdropTexel(),
 // which clamps into the capture's valid rect on the compositor and into this
-// surface's slice of the wallpaper on the daemon. Its offsets are in canvas
-// space at HALF the nominal base texel, since it reads the full-res backdrop to
-// produce the quarter-res base and therefore steps in the half-res level a
-// quarter-res pass reads. The backdrop's own size is not the canvas's, which is
-// why this spacing cannot come from textureSize().
+// surface's slice of the wallpaper on the daemon. Its offsets are in CANVAS
+// space at half the nominal base texel, which is the half-res level's texel:
+// this pass writes the quarter-res base, so like every other DOWN pass it steps
+// in the level above its own. The spacing cannot come from textureSize(),
+// because the backdrop's own size is not the canvas's. The compositor sizes the
+// capture at half density for exactly this reason, so one step there is one
+// source texel and these five taps are a clean 2:1 reduction. The daemon hands
+// over a slice of the desktop wallpaper at whatever size that is, so the step
+// lands on whatever fraction of a texel it works out to.
 vec4 surfaceKawaseDownBackdrop(vec2 uv, float offset) {
     vec2 d = (offset + 0.5) * kSurfaceKawaseBaseTexel * 0.5 / max(uSurfaceSize, vec2(1.0));
     return surfaceKawaseDownCombine(backdropTexel(uv), backdropTexel(uv - d), backdropTexel(uv + d),

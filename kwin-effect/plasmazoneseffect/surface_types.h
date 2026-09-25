@@ -536,24 +536,20 @@ struct SurfaceMultipassState
     /// fold doesn't run there; the frozen composite carries the last-alive
     /// frost baked in).
     ///
-    /// DENSITY. This used to say the capture "may be lower than the composite's
-    /// (chainBackdropScale caps it at the densest linked reader's bufferScale)".
-    /// That describes an intent, not the code, and it is wrong in two separate
-    /// ways today. Corrected here rather than deleted, because the plumbing to
-    /// make it true exists and the sentence is the only place the intent is
-    /// written down.
+    /// DENSITY. The capture may be lower than the composite's: chainBackdropScale
+    /// answers twice the densest SAMPLING pass's bufferScale, capped at full
+    /// density, which is half density for the seven packs that run the builtin
+    /// pyramid and full density for mosaic, whose main pass samples directly.
     ///
-    /// FIRST, IT IS 1.0 FOR EVERY BUNDLED BACKDROP PACK, so no reduction happens
-    /// at all. chainBackdropScale's first per-pack test returns 1.0 when the main
-    /// pass links backdrop uniforms, and the predicate is an OR over three
-    /// locations, one of which is the SCALAR GATE that samples no texels. Every
-    /// bundled backdrop pack references that gate in its main fragment, so the
-    /// early return fires for all of them.
-    ///
-    /// SECOND is now closed: where it does reach the buffer-pass loop it takes the
-    /// max over every linked pass. It used to take the first and stop, which was
-    /// exact while a pack's passes shared one bufferScale and stopped being exact
-    /// when per-pass scales landed.
+    /// Two separate defects kept that from being true until recently, and both are
+    /// worth knowing about because both are easy to reintroduce. The resolver's
+    /// first per-pack test used the linked-uniform predicate, which is an OR that
+    /// includes the SCALAR GATE, and every bundled backdrop pack reads that gate in
+    /// its main fragment, so the early return fired for all eight and no reduction
+    /// happened at all. And where it did reach the buffer-pass loop it took the
+    /// FIRST sampling pass and stopped rather than the densest, which was exact
+    /// while a pack's passes shared one bufferScale and stopped being exact when
+    /// per-pass scales landed.
     std::unique_ptr<KWin::GLTexture> backdropTex;
     /// Framebuffer over backdropTex, cached for the texture's lifetime — the
     /// capture blit runs every frame for a needsBackdrop chain, so building it

@@ -1814,13 +1814,13 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
         // absent) and answered false for a frame after every registry reload
         // cleared the cache while a pre-reload backdropRect still claimed
         // validity.
-        // 0.0 = no compiled pack reads the backdrop (skip the capture);
-        // 1.0 = some MAIN pass samples it sharp (full-density capture);
-        // otherwise the largest bufferScale among the buffer passes that link
-        // it — a blur pyramid reads the capture at bufferScale resolution
-        // through normalized uvs, so capturing past that density stores and
-        // re-blits texels the samplers stride over. Max, not min: a chain
-        // with two blur packs must satisfy the denser reader.
+        // 0.0 = no compiled pack links a backdrop uniform (skip the capture);
+        // 1.0 = some MAIN pass samples it (full-density capture); otherwise twice
+        // the largest bufferScale among the buffer passes that SAMPLE it, capped
+        // at 1.0, which is half density for the builtin pyramid. Twice, because a
+        // reduction pass spaces its taps in the density it expects its source to
+        // have. Max, not min: a chain with two blur packs must satisfy the denser
+        // reader. A pack that links without sampling gets the floor, not zero.
         qreal backdropScale = 0.0;
         if (backIt != m_windowDecorations.constEnd() && backIt->needsBackdrop
             && (backIt->shaderApplied || m_shaderManager.findTransition(w)) && !isWithheldThisFrame()

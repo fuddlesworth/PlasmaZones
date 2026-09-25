@@ -910,6 +910,7 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
 qreal PlasmaZonesEffect::chainBackdropScale(const WindowDecoration& deco, const QString& decoWindowId,
                                             KWin::EffectWindow* w)
 {
+    using SE = PhosphorSurfaceShaders::SurfaceShaderEffect;
     std::optional<PhosphorSurfaceShaders::DecorationProfile> profile;
     qreal scale = 0.0;
     for (const QString& packId : deco.chain) {
@@ -929,27 +930,60 @@ qreal PlasmaZonesEffect::chainBackdropScale(const WindowDecoration& deco, const 
         if (!pk || !pk->shader) {
             continue;
         }
-        if (linksBackdropUniforms(pk->uBackdropLoc, pk->uHasBackdropLoc, pk->uBackdropRectLoc)) {
-            return 1.0; // a sharp main-pass read caps every other answer
-        }
-        // The DENSEST linked buffer pass, not the first. Under per-pass
-        // `bufferScales` a pack may read the backdrop from more than one pass at
-        // different densities, and capturing at the sparser one leaves the denser
-        // reader sampling texels that were never blitted. Taking the max can only
-        // over-capture, which costs; taking the first can under-sample, which is a
-        // defect. A pyramid whose later passes read earlier passes rather than the
-        // capture has exactly one linked pass, so it is unaffected either way.
+        // WHETHER a capture is needed and AT WHAT DENSITY are two questions, and
+        // this resolver answers both because the one caller uses a positive answer
+        // as the capture gate. They must not share a predicate.
         //
-        // Clamped with the clamp ensureSurfaceTargets applies when sizing the
-        // buffer targets themselves, so capture density and sampler density agree
-        // by construction. Cached per pack, because the registry lookup copies a
-        // whole SurfaceShaderEffect by value and this is a per-frame path. The
-        // cached value folds the multiplier AND the pack's linkage, so it is
-        // invalidated by EVERY m_compiledPacks clear (a registry hot-reload or a
-        // preset retune can change either) plus the blur-scale-multiplier loader
-        // in daemon_settings.cpp. No count is quoted: the set of clear sites grows.
-        // 0.0 for a pack whose buffer passes link nothing is a real answer and is
+        // The SAMPLER alone sets density. linksBackdropUniforms is an OR over all
+        // three locations and one of them is uHasBackdrop, the scalar gate, which
+        // samples no texels: every one of the eight bundled needsBackdrop packs
+        // reads that gate in its own fragment, so testing it here answered full
+        // density for all of them and the reduced capture this pipeline exists to
+        // enable never once engaged. Only mosaic's main pass genuinely samples.
+        if (pk->uBackdropLoc >= 0) {
+            return SE::kMaxBufferScale; // a sharp main-pass read caps every other answer
+        }
+        // Linked but not sampling: the gate, or the rect without the sampler to use
+        // it with. Such a pack still needs a capture to EXIST, because the fold
+        // pushes the gate from whether one is available, so answer the floor rather
+        // than zero. Zero would skip the capture and flip the pack onto its
+        // no-backdrop fallback. No bundled pack is in this shape; a third-party one
+        // can be, and the inverse cannot happen, since a pass is never missed here
+        // for being sampler-only.
+        if (pk->uHasBackdropLoc >= 0 || pk->uBackdropRectLoc >= 0) {
+            scale = qMax(scale, SE::kMinBufferScale);
+        }
+        // TWICE the densest SAMPLING buffer pass, capped at full density.
+        //
+        // Twice, not equal: a pass that samples the capture and writes at scale s
+        // is performing a reduction, and its taps are spaced in the density it
+        // expects its source to have. Capturing at exactly s puts every tap inside
+        // one source texel, which averages a single texel into an output texel
+        // covering four of them. The builtin pyramid is the live case. Only
+        // kawase_down_0 samples the backdrop, at bufferScales[0] = 0.25, and
+        // surfaceKawaseDownBackdrop steps at kSurfaceKawaseBaseTexel * 0.5, which
+        // is 2 CANVAS px. At half density that step is exactly one source texel and
+        // the five taps are the textbook 2:1 Kawase reduction. At full density each
+        // tap averaged one canvas pixel into a base texel covering sixteen, which
+        // shimmers on backdrop motion rather than looking wrong when still.
+        //
+        // DENSEST, not first: under per-pass `bufferScales` a pack may sample from
+        // more than one pass at different densities, and sizing for the sparser one
+        // leaves the denser reader sampling texels that were never blitted. The max
+        // can only over-capture, which costs; the first can under-sample, which is a
+        // defect. A pyramid whose later passes read earlier passes rather than the
+        // capture has exactly one sampling pass and is unaffected either way.
+        //
+        // Cached per pack, because the registry lookup copies a whole
+        // SurfaceShaderEffect by value and this is a per-frame path. The cached
+        // value folds the multiplier AND the pack's linkage, so it is invalidated by
+        // EVERY m_compiledPacks clear (a registry hot-reload or a preset retune can
+        // change either) plus the blur-scale-multiplier loader in
+        // daemon_settings.cpp. No count is quoted: the set of clear sites grows.
+        // 0.0 for a pack whose buffer passes sample nothing is a real answer and is
         // cached as one, so a chain of such packs stops re-walking them per frame.
+        // The gate-only floor above is deliberately NOT folded into the cache: it is
+        // a property of the main pass, which this cache does not cover.
         qreal packScale = 0.0;
         if (const auto bsIt = m_packBufferScaleCache.find(packId); bsIt != m_packBufferScaleCache.end()) {
             packScale = bsIt->second;
@@ -957,20 +991,22 @@ qreal PlasmaZonesEffect::chainBackdropScale(const WindowDecoration& deco, const 
             const PhosphorSurfaceShaders::SurfaceShaderEffect regEff = m_surfaceShaderRegistry.effect(packId);
             for (size_t bpIndex = 0; bpIndex < pk->bufferPasses.size(); ++bpIndex) {
                 const CompiledSurfaceBufferPass& bp = pk->bufferPasses[bpIndex];
-                if (linksBackdropUniforms(bp.uBackdropLoc, bp.uHasBackdropLoc, bp.uBackdropRectLoc)) {
-                    packScale =
-                        qMax(packScale, clampedBufferScale(passBufferScaleFor(regEff, static_cast<int>(bpIndex))));
+                if (bp.uBackdropLoc < 0) {
+                    if (bp.uHasBackdropLoc >= 0 || bp.uBackdropRectLoc >= 0) {
+                        packScale = qMax(packScale, SE::kMinBufferScale);
+                    }
+                    continue;
                 }
+                const qreal passScale = clampedBufferScale(passBufferScaleFor(regEff, static_cast<int>(bpIndex)));
+                packScale = qMax(packScale, qMin(SE::kMaxBufferScale, passScale * 2.0));
             }
             m_packBufferScaleCache.emplace(packId, packScale);
         }
         scale = qMax(scale, packScale);
-        // A buffer pass at the ceiling is already the maximum
-        // possible answer (the main-pass branch above returns the
-        // same value), so stop walking the chain — restores the
-        // short-circuit the pre-scale code had for every pack.
-        if (scale >= PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferScale) {
-            return PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferScale;
+        // A pass at the ceiling is already the maximum possible answer (the
+        // main-pass branch above returns the same value), so stop walking the chain.
+        if (scale >= SE::kMaxBufferScale) {
+            return SE::kMaxBufferScale;
         }
     }
     return scale;

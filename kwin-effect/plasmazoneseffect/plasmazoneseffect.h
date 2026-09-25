@@ -1757,11 +1757,12 @@ private:
                                               const std::function<void(KWin::EffectWindow*)>& afterWindow = {});
 
     /// How densely the backdrop must be captured for @p deco's chain: 0.0 when no
-    /// compiled pack reads the backdrop, 1.0 when a MAIN pass samples it sharp,
-    /// otherwise the largest bufferScale among the buffer passes that link it (a
-    /// blur pyramid reads through normalized uvs, so capturing past its density
-    /// stores texels the samplers stride over; max rather than min, because a
-    /// chain with two blur packs must satisfy the denser reader).
+    /// compiled pack links a backdrop uniform at all, 1.0 when a MAIN pass SAMPLES
+    /// it, otherwise twice the largest bufferScale among the buffer passes that
+    /// sample it, capped at 1.0. SAMPLES, not links, and TWICE, not equal. The
+    /// reasons for both, and the two defects that used to sit on them, are on
+    /// SurfaceMultipassState::backdropTex, which is where the density contract is
+    /// written up. A pack that links without sampling gets kMinBufferScale, not 0.0.
     ///
     /// Resolves through the SAME lazy compile the fold uses, so the gate and the
     /// fold agree within one frame — needsBackdrop is metadata and over-reports
@@ -1836,12 +1837,11 @@ private:
     /// pane shows the scene behind the moving quad instead of behind the
     /// resting rect. Invalid = capture at the live geometry.
     /// backdropScale: the capture RESOLUTION relative to the composite
-    /// canvas, from chainBackdropScale in paintWindow. 1.0 when some pack's
-    /// main pass samples the backdrop sharp; the largest linked bufferScale
-    /// when only buffer passes read it — a blur pyramid samples the capture
-    /// at bufferScale resolution through normalized uvs, so texels past that
-    /// density were captured, held (a full-canvas RGBA8 per window) and
-    /// blitted every frame only to be skipped over by the sampler. The
+    /// canvas, from chainBackdropScale in paintWindow. 1.0 when some pack's main
+    /// pass samples the backdrop; twice the largest sampling bufferScale when only
+    /// buffer passes read it, so half density for the builtin pyramid, since texels
+    /// past a reduction pass's 2:1 source were captured, held (a full-canvas RGBA8
+    /// per window) and blitted every frame only to be averaged away. The
     /// texture stays canvas-ALIGNED (same padded rect, same normalized
     /// backdropRect space) at reduced density; only the blit's destination
     /// arithmetic scales.
