@@ -105,8 +105,10 @@ uniform vec4 customColors[16];
 // then sample them, and the validator says so rather than leaving it silent.
 // Anyone adding the channel block here needs the sibling headers too, and
 // should note that they disagree on the TYPE: animation, pointer and surface
-// declare `vec4 iChannelResolution[4]` while overlay and the phosphor-shaders
-// copy declare `vec2[4]`. The std140 byte layout is identical (a vec2 array
+// declare `vec4 iChannelResolution[4]` while the overlay header
+// (data/overlays/shared/common.glsl) declares `vec2[4]`. There is no third
+// spelling: phosphor-shaders ships no GLSL at all, and its C++ BaseUniforms
+// mirror declares the vec4 form. The std140 byte layout is identical (a vec2 array
 // pads to 16 bytes per element), so a shared helper must read `.xy` rather
 // than assume either spelling. Adding a
 // default-block declaration would compile and silently read ZERO at runtime

@@ -183,7 +183,9 @@ BorderBand standardBorderBand(vec2 p, float borderWidth, float cornerRadius, flo
     // rather than misrendering.
     float feather = max(aa, 1e-3);
     // A width of ZERO is the declared minimum on eight controls across seven
-    // packs, and it has to mean NO LINE. Without this guard it does not: width
+    // packs, and it has to mean NO LINE. Six of those eight come through this
+    // helper; border-double builds its own band from frameSdf and is not one of
+    // them. For the six, without this guard it does not mean no line: width
     // collapses to 0, the edge term becomes smoothstep(-feather, +feather, d),
     // and that paints a band about two feathers wide straddling the frame edge
     // at up to a quarter of the colour's alpha. The user turns the border off
@@ -379,7 +381,7 @@ vec2 pxToUv(vec2 v) {
 #endif
 }
 
-// Normalised perimeter angle in [-0.5, 0.5) around the frame centre,
+// Normalised perimeter angle in [-0.5, 0.5] around the frame centre,
 // aspect-corrected by dividing through the half-extents.
 //
 // That correction equalises the dash COUNT per side, not the dash SIZE, and

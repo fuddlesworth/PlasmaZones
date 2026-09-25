@@ -111,9 +111,17 @@ vec4 surfaceGaussianChannelV(vec2 uv) {
 // and read by the main pass as iChannel6 (surfaceBlurTexel). Reach comes from
 // pyramid DEPTH, not tap spacing: a level's taps sit between half a texel and
 // four texels apart depending on where the radius falls in that level's band,
-// and a level's texel is twice the size of the one above, so four levels cover
-// the 256 px radius every blur-family pack declares as its blurRadius maximum,
-// at offsets that never show Kawase's square ghosting. The
+// and a level's texel is twice the size of the one above.
+//
+// THE BAND IS IN DEVICE px, which bounds how much of the slider is live. The
+// depth-4 band interpolates over radiusPx 120..320 and radiusPx is the logical
+// value times uSurfaceScale, so the 256 px maximum every blur-family pack
+// declares stays inside the band only up to a scale of 1.25 (256 x 1.25 = 320).
+// At 1.5 it saturates at logical 213 and at 2.0 at logical 160, so the top of the
+// slider stops adding blur. The packs' own descriptions say this. Raising
+// kSurfaceKawaseReach.w would fix it and would also restretch the whole depth-4
+// band, changing the blur at every radius past 120 device px, so it is a look
+// change and not a blind edit. The
 // radius picks how many levels are USED (surfaceKawaseDepth): the down passes
 // always run (they are cheap, each a quarter the area of the last), and each
 // up pass reads either the deeper up pass or the down level the pyramid

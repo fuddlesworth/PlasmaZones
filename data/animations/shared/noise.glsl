@@ -118,10 +118,10 @@ float classicHash(vec2 p) {
 }
 
 // niri-style bilinear value noise on niriHash (smooth-step interp
-// at integer lattice corners). Used by the 3 niri ports that need
-// procedural noise — soft-warp-fade, ink-splash,
-// smoke. Identical body across all three; lifting deduplicates ~10
-// lines per shader. Perlin's perlin_noise stays local because it
+// at integer lattice corners). Used by soft-warp-fade, ink-splash and
+// smoke, the niri ports that need procedural noise, and by
+// phosphor-peek, which is not a port. Identical body across all four;
+// lifting deduplicates ~10 lines per shader. Perlin's perlin_noise stays local because it
 // uses an alternative bilinear formulation tied to perlin_random's
 // non-shareable hash.
 float niriNoise(vec2 p) {

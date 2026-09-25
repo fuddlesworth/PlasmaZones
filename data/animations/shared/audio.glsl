@@ -99,8 +99,13 @@ float audioBarMono(int i) {
 // fragment, and a pack calling more than one of them paid it more than once.
 //
 // The band is sampled at a bounded number of evenly spaced taps instead. Each
-// tap is one audioBarMono, which is two fetches in stereo, so a band costs at
-// most about 2 * kAudioBandTaps fetches whatever the bar count.
+// tap is one audioBarMono, which is two fetches in stereo.
+//
+// THE BOUND IS FEWER THAN 2 * kAudioBandTaps TAPS, not kAudioBandTaps. The stride
+// is integer `max(n / taps, 1)`, so just under twice the budget it is still 1 and
+// the loop walks every bar: the worst case is 15 taps at n = 15. So a band costs
+// under 4 * kAudioBandTaps fetches in stereo. Still bounded, and still independent
+// of the bar count once n is past the budget, which is the property that matters.
 //
 // AT SMALL BAR COUNTS NOTHING CHANGES. The stride is max(n / taps, 1), so a band
 // narrower than the tap budget still walks every bar and returns the exact mean
@@ -109,8 +114,9 @@ float audioBarMono(int i) {
 // exist to give.
 const int kAudioBandTaps = 8;
 
-// Mean of the FOLDED spectrum over [lo, hi), at no more than kAudioBandTaps
-// evenly spaced taps.
+// Mean of the FOLDED spectrum over [lo, hi), at fewer than 2 * kAudioBandTaps
+// evenly spaced taps (see the budget note above for why it is not exactly the
+// budget).
 float audioBandMean(int lo, int hi) {
     int n = hi - lo;
     if (n <= 0)
@@ -152,7 +158,8 @@ float getTreble() {
 // Strided over the RAW vector, not the folded one: a full mean is correct at
 // either channel layout, so there is nothing to fold. Twice a single band's tap
 // budget, since this covers the whole spectrum and each tap is a single fetch
-// rather than a folded pair.
+// rather than a folded pair. Same integer-stride slack as the bands: the worst
+// case is 31 taps, at a bar count of 31.
 float getOverall() {
     if (iAudioSpectrumSize <= 0)
         return 0.0;
