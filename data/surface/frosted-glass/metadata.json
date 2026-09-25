@@ -77,7 +77,7 @@
             "min": 5.0,
             "max": 120.0,
             "group": "Frost",
-            "description": "Density of the frost crystals"
+            "description": "Density of the frost crystals. A wider window gets proportionally more of them rather than wider ones"
         },
         {
             "id": "grainSpeed",
@@ -117,7 +117,7 @@
             "min": 0.0,
             "max": 359.0,
             "group": "Gradient",
-            "description": "Starting direction of the gradient in degrees. It holds as a fixed direction only when Gradient speed is 0, since any other speed keeps turning it"
+            "description": "Starting direction of the gradient in degrees, measured across the pane rather than on screen, so 45 runs corner to corner whatever shape the window is. It holds as a fixed direction only when Gradient speed is 0, since any other speed keeps turning it"
         },
         {
             "id": "vignetteStrength",

@@ -33,6 +33,15 @@
 // computeGradient(): the direction turns continuously with time and the
 // gradient position drifts on two out-of-phase sines, so the colours sweep
 // across the pane rather than sitting still.
+//
+// THE ANGLE IS PANE-RELATIVE, not a screen angle, and that is the upstream
+// behaviour rather than a slip. `dir` is dotted against panelUv, which is
+// normalised per axis, so the iso-lines are x/W*cos(a) + y/H*sin(a) and the
+// device-px gradient direction is (cos(a)/W, sin(a)/H). On a 1600x400 pane a
+// declared 45 degrees renders at about 76. Left as the port has it, because a
+// pane-relative direction is a coherent meaning for the control (45 degrees is
+// corner to corner whatever the window's shape) and aspect-correcting `dir` would
+// change how every non-square window looks. The parameter says so now.
 vec3 gradientColor(vec2 panelUv) {
     float speed = max(p_gradientSpeed, 0.0);
     float rotatedAngle = radians(p_gradientAngle) + iTime * speed;
@@ -90,7 +99,16 @@ vec4 pSurface(vec2 uv) {
     // as one control.
     float variation = 0.0;
     if (p_grainAmount > 0.0) {
-        float frost = frostedTexture(fuv * p_grainScale, iTime * p_grainSpeed);
+        // ASPECT-CORRECTED, because voronoi works on an isotropic unit lattice and
+        // fuv is frameUv, which normalises each axis SEPARATELY. Feeding it a
+        // scalar scale made the cell lattice inherit the pane's aspect, so on a
+        // 1600x400 pane the "crystals" rendered as 4:1 ellipses, which no reading
+        // of "Density of the frost crystals" describes. The same normalisation also
+        // tied crystal SIZE to window size, so one setting looked different on
+        // every window; the short axis now sets the scale and the long axis gets
+        // proportionally more cells, which is what a density means.
+        vec2 grainAspect = vec2(uSurfaceFrameSize.x / max(uSurfaceFrameSize.y, 1.0), 1.0);
+        float frost = frostedTexture(fuv * grainAspect * p_grainScale, iTime * p_grainSpeed);
         variation = (frost - 0.5) * p_grainAmount;
     }
 
