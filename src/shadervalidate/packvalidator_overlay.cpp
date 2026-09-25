@@ -131,6 +131,14 @@ int validatePack(const QString& packDir, QTextStream& out)
     QStringList lints;
     QHash<QString, QString> claimedLane; // "pool#slot" → first param id, for collision detection
     for (const ShaderRegistry::ParameterInfo& p : info.parameters) {
+        // UNREACHABLE TODAY, and kept as the backstop it is. kValidParamTypes holds
+        // exactly the five tokens data/schemas/shader-metadata.schema.json enumerates
+        // for a parameter's type, and parsePackMetadata runs that schema first, so a
+        // pack with a mistyped type is rejected as a schema error and never arrives
+        // here. Probed, not assumed: a pack whose only fault is "flaot" reports the
+        // schema failure and nothing else. It stays because the schema is not treated
+        // as an absolute gate anywhere else in this file either (it accepts unknown
+        // top-level keys by design), so a relaxation there must not silently open this.
         if (!kValidParamTypes.contains(p.type)) {
             lints << QStringLiteral("unknown param type '%1' for '%2'").arg(p.type, p.id);
         }

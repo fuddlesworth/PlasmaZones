@@ -25,13 +25,6 @@
 namespace PlasmaZones {
 namespace OverlayQmlPropertyNames {
 
-/// Marks a window as a shader-effect overlay rather than a plain
-/// drawing overlay. Set on overlay creation; read by the shader-
-/// settings hot-reload path to know whether to apply shader-only
-/// settings, and by overlay teardown / shader-toggle to recreate the
-/// window when the user flips the shader-enabled global.
-inline constexpr QLatin1String IsShaderOverlay{"isShaderOverlay"};
-
 /// True when the overlay should be hidden during a drag-pause
 /// (autotile drag-from-floating sequence). The QML root toggles
 /// opacity / visibility off this property.
@@ -84,7 +77,8 @@ inline constexpr QLatin1String CardCornerRadius{"cardCornerRadius"};
 
 /// Monotonic tick the daemon bumps on every committed shader-registry rescan.
 /// Each decorated slot forwards it to its SurfaceDecoration, whose stages call
-/// reloadShader() when it moves. That is the only thing that re-bakes after an
+/// reloadShader() when it moves. That re-bakes the main stage and every buffer
+/// pass, and is the only thing that does so after an
 /// IN-PLACE edit of a pack's shader source, because the recomposed chain is then
 /// byte-identical and the stage rebinds the same URL.
 ///

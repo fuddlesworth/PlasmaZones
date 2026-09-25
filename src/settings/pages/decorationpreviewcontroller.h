@@ -74,7 +74,10 @@ class DecorationPreviewController : public QObject
 
     /// Monotonic tick bumped ONLY when the surface registry recommits a rescan.
     /// The preview's SurfaceDecoration forwards it to its stages, which call
-    /// reloadShader() when it moves.
+    /// reloadShader() when it moves, which re-bakes the main stage and every
+    /// buffer pass from disk. Declared user-texture IMAGES are not re-read: that
+    /// would be synchronous file I/O with no lazy stage to defer it to, and a
+    /// changed texture path re-reads on its own.
     ///
     /// SEPARATE from previewRevision even though both ride effectsChanged, because
     /// previewRevision also bumps on a palette or colour change and this must not:

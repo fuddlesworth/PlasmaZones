@@ -163,7 +163,7 @@ void OverlayService::updateLabelsTextureForWindow(QQuickItem* slot, const QVaria
     const PhosphorRendering::ZoneLabelTexture labels = ZoneLabelTextureBuilder::build(
         patched, size, dpr, lfs.fontColor, showNumbers, lfs.backgroundColor, lfs.fontFamily, lfs.fontSizeScale,
         lfs.fontWeight, lfs.fontItalic, lfs.fontUnderline, lfs.fontStrikeout);
-    slot->setProperty("labelsTexture", QVariant::fromValue(labels));
+    writeQmlProperty(slot, QString(OverlayQmlPropertyNames::LabelsTexture), QVariant::fromValue(labels));
     if (state) {
         state->labelsTextureHash = newHash;
     }

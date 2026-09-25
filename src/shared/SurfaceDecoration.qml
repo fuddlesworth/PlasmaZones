@@ -66,11 +66,11 @@ import QtQuick.Window
  * ## Lifecycle
  *
  * The host slot passes the loaded content root as `contentItem` and the
- * C++-resolved decoration props. FIVE slots declare a decorationChain, across
- * two files: osdSlot and zoneSelectorSlot in PassiveOverlayShell.qml, and
- * snapAssistSlot, layoutPickerSlot and cheatsheetSlot in
- * PassiveOverlayModalSlots.qml. They pass
- * C++-resolved decoration props. When `decorationChain` is empty (no pack
+ * C++-resolved decoration props. The slots that declare a decorationChain live in
+ * PassiveOverlayShell.qml and PassiveOverlayModalSlots.qml, with two further hosts
+ * outside the overlay shell: the settings app's DecorationChainPreview and the
+ * example shell's chrome. No count is quoted, because it drifts. When
+ * `decorationChain` is empty (no pack
  * resolves for this surface path) the component is inert: the capture/shader
  * items don't activate and the card draws normally with its native
  * square-cornered chrome.

@@ -54,7 +54,7 @@ class ShellChrome : public QObject
     Q_PROPERTY(int revision READ revision NOTIFY revisionChanged)
     /// Monotonic tick bumped ONLY when the surface registry recommits a rescan. The
     /// chrome's SurfaceDecoration forwards it to its stages, which reloadShader() when
-    /// it moves.
+    /// it moves, re-baking the main stage and every buffer pass from disk.
     ///
     /// SEPARATE from `revision`, which also moves on a tree or palette change where a
     /// re-bake of every stage would be waste. It exists at all because recomposing the

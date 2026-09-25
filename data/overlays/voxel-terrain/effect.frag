@@ -59,6 +59,13 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         // Sample the 3D scene from the buffer pass at screen coordinates.
         // channelUv handles Y-flip for the correct backend.
         vec2 sceneUv = channelUv(0, fragCoord);
+        // ONE fetch of this fragment's depth, for the two readers below. The DOF
+        // block's circle-of-confusion term and the volumetric-glow alpha further
+        // down both wanted it and both fetched it, which is two dependent texture
+        // reads per fragment on a full-canvas overlay pass for one value. The
+        // glow reader is unconditional, so hoisting out of the DOF branch costs
+        // nothing when DOF is off.
+        float pixelDepth = readDepth(sceneUv);
 
         // ── Depth-of-field blur ─────────────────────────────
         // Sample a 3x3 grid around screen center and focus on the nearest
@@ -80,7 +87,6 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             // If all samples miss sky, use mid-range focus
             focalDepth = min(focalDepth, 0.5);
 
-            float pixelDepth = readDepth(sceneUv);
             float coc = abs(pixelDepth - focalDepth) * 2.0 * dofStrength;
 
             // 3x3 box blur weighted by circle of confusion
@@ -121,9 +127,8 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         // Buffer pass writes oDepth = hit.t / 60.0 (0=near, 1=far/miss).
         // Single-pass used: hit ? 0.5 * smoothstep(5.0, 40.0, hit.t) : 0.4
         // Reconstruct hit.t from depth, then apply the same formula.
-        float pixDepth = readDepth(sceneUv);
-        float hitT = pixDepth * 60.0;  // undo normalization
-        float volG = (pixDepth >= 1.0)
+        float hitT = pixelDepth * 60.0;  // undo normalization
+        float volG = (pixelDepth >= 1.0)
             ? 0.4  // miss — same as single-pass
             : min(0.5 * smoothstep(5.0, 40.0, hitT), 3.0);
         float volMul;

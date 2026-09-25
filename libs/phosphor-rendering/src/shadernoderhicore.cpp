@@ -198,15 +198,9 @@ ShaderNodeRhi::ShaderNodeRhi(QQuickItem* item, std::unique_ptr<PhosphorShaders::
     // The UBO profile's ctor seeds an identity qt_Matrix + qt_Opacity=1.0 (the
     // init that used to live here, moved into BaseUniformProfile so the
     // surface profile gets the same lead-in for free).
-    // Initialize all customParams to -1.0 (the "unset" sentinel).
-    // Shaders use `>= 0.0` checks to distinguish set values from defaults.
-    for (int i = 0; i < kMaxCustomParams; ++i) {
-        m_customParams[i] = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
-    }
-    // Initialize all customColors to white
-    for (int i = 0; i < kMaxCustomColors; ++i) {
-        m_customColors[i] = Qt::white;
-    }
+    // customParams and customColors are seeded at their declarations, beside
+    // m_userTextureWraps, so this constructor is not the only thing standing
+    // between them and a default-constructed value.
 
     // 1x1 transparent fallback for when textures are disabled
     m_transparentFallbackImage = QImage(1, 1, QImage::Format_RGBA8888);

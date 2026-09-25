@@ -503,26 +503,45 @@ std::function<void()> PlasmaZonesEffect::neutralisePresentForOutOfBandDraw(KWin:
     if (decoIt == m_windowDecorations.constEnd() || !decoIt->shaderApplied) {
         return {}; // not presenting a composite, so nothing to neutralise
     }
+    // PARK WHAT THE DECORATION BELIEVES IT LAST PAINTED, whatever else this
+    // function decides below. drawWindowImpl's padded-present branch records
+    // lastForeignBand / lastForeignOpacity from the WindowPaintData it is handed,
+    // and the next real frame's changed-test is their only reader. This draw is
+    // handed a DEFAULT one, no translation and opacity 1.0, so for a padded window
+    // under a foreign transform it writes "no band" over the real values and the
+    // next real frame then answers unchanged, issues no damage, and leaves the halo
+    // band neither recomposited nor cleared. The branch's own ForeignBandUndo does
+    // not cover this: it restores only when the draw FAILED, and this one succeeds.
+    QPointer<KWin::EffectWindow> parkW(w);
+    const QRectF parkedBand = decoIt->lastForeignBand;
+    const qreal parkedOpacity = decoIt->lastForeignOpacity;
+    const auto restoreBand = [this, windowId, parkedBand, parkedOpacity]() {
+        const auto it = m_windowDecorations.find(windowId);
+        if (it != m_windowDecorations.end()) {
+            it->lastForeignBand = parkedBand;
+            it->lastForeignOpacity = parkedOpacity;
+        }
+    };
     // The same three-part test the present bind itself applies: an entry, the
     // written flag, and the texture. Any one missing means there is no composite to
     // present.
     const auto stateIt = m_surfaceMultipass.find(windowId);
     if (stateIt != m_surfaceMultipass.end() && stateIt->second.compositeWritten
         && stateIt->second.compositeTex[static_cast<size_t>(stateIt->second.finalSlot)]) {
-        return {}; // warm: leave the decoration on, which is what a thumbnail wants
+        // Warm: leave the decoration on, which is what a thumbnail wants. The band
+        // park still applies, because a warm window is exactly the one that takes
+        // the padded-present branch and gets its record overwritten.
+        return restoreBand;
     }
     setShader(w, nullptr);
     // Restores the PRESENT shader specifically, not reconcileDecorationShader,
     // matching paint_capture.cpp's note: that call's live-transition arm cedes the
     // slot for a window that does carry a leg, which would be the wrong answer here.
-    // QPointer, matching every other deferred site in this tree. The window cannot
-    // plausibly die inside the synchronous effects->drawWindow the guard brackets, so
-    // this is house style rather than a live fix, and it costs nothing.
-    QPointer<KWin::EffectWindow> safeW(w);
-    return [this, safeW]() {
-        if (safeW) {
-            setShader(safeW, surfacePresentShader());
+    return [this, parkW, restoreBand]() {
+        if (parkW) {
+            setShader(parkW, surfacePresentShader());
         }
+        restoreBand();
     };
 }
 

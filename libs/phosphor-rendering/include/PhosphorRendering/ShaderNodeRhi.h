@@ -357,6 +357,22 @@ public:
     // ── Multi-pass Buffers ─────────────────────────────────────────────
     void setBufferShaderPath(const QString& path);
     void setBufferShaderPaths(const QStringList& paths);
+
+    /// Force every buffer pass to re-read its source and re-bake, with the path
+    /// list unchanged.
+    ///
+    /// setBufferShaderPaths is the only other thing that arms those flags and it
+    /// returns early when the list matches, which is exactly the case an in-place
+    /// edit of a pass's source presents. Without this, a reload re-baked the main
+    /// fragment and vertex stages from disk and left every buffer pass on the bake
+    /// it already had.
+    ///
+    /// Only re-arms the flags and drops the cached sources. The re-read itself
+    /// happens lazily in bakeBufferShaders during prepare(), for the reason
+    /// setBufferShaderPaths gives: this can be called from the sync phase, which
+    /// under the threaded render loop runs on the render thread with the GUI thread
+    /// blocked, and disk I/O does not belong there.
+    void invalidateBufferShaders();
     void setBufferFeedback(bool enable);
     /// The single-value scale, and the seed for every per-pass slot: this writes
     /// @p scale into ALL of them.
@@ -822,8 +838,19 @@ private:
     float m_surfaceFrameSize[2] = {0.0f, 0.0f};
 
     // ── Custom Parameters (indexed) ────────────────────────────────────
-    std::array<QVector4D, kMaxCustomParams> m_customParams;
-    std::array<QColor, kMaxCustomColors> m_customColors;
+    /// Seeded at the DECLARATION, like m_userTextureWraps below and for the same
+    /// reason: a second constructor cannot then forget them. -1 is the "unset"
+    /// sentinel every shader tests with `>= 0.0`.
+    std::array<QVector4D, kMaxCustomParams> m_customParams = []() {
+        std::array<QVector4D, kMaxCustomParams> a;
+        a.fill(QVector4D(-1.0f, -1.0f, -1.0f, -1.0f));
+        return a;
+    }();
+    std::array<QColor, kMaxCustomColors> m_customColors = []() {
+        std::array<QColor, kMaxCustomColors> a;
+        a.fill(QColor(Qt::white));
+        return a;
+    }();
 
     // ── Extra Bindings (consumer-managed) ──────────────────────────────
     struct ExtraBinding

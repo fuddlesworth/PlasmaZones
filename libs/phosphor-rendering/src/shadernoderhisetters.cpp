@@ -507,6 +507,23 @@ void ShaderNodeRhi::setUseDepthBuffer(bool use)
 // Buffer Shader Path / Feedback / Scale / Wrap / Filter
 // ============================================================================
 
+void ShaderNodeRhi::invalidateBufferShaders()
+{
+    m_bufferShaderDirty = true;
+    m_bufferShaderReady = false;
+    m_bufferShaderRetries = 0;
+    m_bufferFragmentShaderSource.clear();
+    m_multiBufferShadersReady = false;
+    m_multiBufferShaderDirty = true;
+    m_multiBufferShaderRetries = 0;
+    for (int i = 0; i < kMaxBufferPasses; ++i) {
+        m_multiBufferFragmentShaders[i] = QShader();
+    }
+    // The retry counters go back to zero with the rest. A pass that exhausted its
+    // budget against a source that has since been fixed on disk has to get the
+    // budget back, or the reload it was the point of cannot recover it.
+}
+
 void ShaderNodeRhi::setBufferShaderPath(const QString& path)
 {
     setBufferShaderPaths(path.isEmpty() ? QStringList() : QStringList{path});

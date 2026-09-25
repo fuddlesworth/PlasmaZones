@@ -447,7 +447,18 @@ void Daemon::setupShaderWarmBakes()
     // because stop() resets both (lifecycle.cpp), and a caller reaching this
     // function outside that ordering must skip rather than crash.
     if (m_animationShaderRegistry) {
-        auto scheduleWarmForAnimEffect = [this, shouldScheduleBake, bakeFingerprint,
+        // Through the registry's helper, so the warm bake compiles against the same
+        // headers the compositor and the live daemon leg pick. A hand-rolled walk over
+        // searchPaths() gets the priority order backwards, and the include fingerprint
+        // above is over the dir SET rather than the ordered list, so such a divergence
+        // would not even invalidate the entry.
+        //
+        // Resolved ONCE, here, and captured. It reverses the search paths and
+        // existence-checks each `/shared` subdirectory, so calling it inside the
+        // per-effect lambda put a filesystem walk on every one of them for a value
+        // that cannot change within a single warm-up sweep.
+        const QStringList animIncludePaths = m_animationShaderRegistry->sharedIncludePaths();
+        auto scheduleWarmForAnimEffect = [this, shouldScheduleBake, bakeFingerprint, animIncludePaths,
                                           registryPtr = QPointer<PhosphorAnimationShaders::AnimationShaderRegistry>(
                                               m_animationShaderRegistry.get())](
                                              const PhosphorAnimationShaders::AnimationShaderEffect& info,
@@ -469,13 +480,6 @@ void Daemon::setupShaderWarmBakes()
                 return;
             }
             QString vertPath = info.vertexShaderPath;
-            // Through the registry's helper, so the warm bake compiles against
-            // the same headers and the same default vertex stage the compositor
-            // and the live daemon leg pick. A hand-rolled walk over
-            // searchPaths() gets the priority order backwards, and the include
-            // fingerprint above is over the dir SET rather than the ordered
-            // list, so such a divergence would not even invalidate the entry.
-            const QStringList includePaths = reg->sharedIncludePaths();
             if (vertPath.isEmpty()) {
                 vertPath = reg->defaultVertexShaderPath();
             }
@@ -511,11 +515,11 @@ void Daemon::setupShaderWarmBakes()
                         watcher->deleteLater();
                     });
             watcher->setFuture(QtConcurrent::run(&m_shaderBakePool,
-                                                 [vertPath, fragPath = info.fragmentShaderPath, includePaths,
+                                                 [vertPath, fragPath = info.fragmentShaderPath, animIncludePaths,
                                                   paramPreamble, entryPrologue, entryCandidates]() {
                                                      return PhosphorRendering::warmShaderBakeCacheForPaths(
-                                                         vertPath, fragPath, includePaths, paramPreamble, entryPrologue,
-                                                         entryCandidates);
+                                                         vertPath, fragPath, animIncludePaths, paramPreamble,
+                                                         entryPrologue, entryCandidates);
                                                  }));
         };
         connect(m_animationShaderRegistry.get(), &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged,
