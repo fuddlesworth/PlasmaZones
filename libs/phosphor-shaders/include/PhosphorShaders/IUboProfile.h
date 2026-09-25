@@ -236,6 +236,26 @@ public:
     virtual void setAppField1(int /*value*/)
     {
     }
+
+    /// Whether the last `fill()` wrote a field the caller's own dirty flags do
+    /// not know about, and so needs the SCENE-HEADER region uploaded even though
+    /// nothing node-side changed. Consumes the flag: a second call answers false.
+    ///
+    /// EXISTS BECAUSE fill() HAD NO WAY TO SAY SO. It writes into the profile's
+    /// own buffer, while what actually reaches the GPU is chosen separately by
+    /// `dirtyRegions()` from the CALLER's flags, with no channel back. So a field
+    /// the profile refreshes on its own schedule was written to memory nobody
+    /// uploaded. `iDate` is the one such field: it advances once a second on a
+    /// clock of its own, not on any node-side event.
+    ///
+    /// Defaults to false, which is exactly the behaviour every implementation had
+    /// before this existed, so a profile with no self-scheduled field ignores it.
+    /// Appended at the end of the interface deliberately: this is an installed
+    /// header, and new virtuals go last.
+    virtual bool consumeSelfRefreshedSceneHeader()
+    {
+        return false;
+    }
 };
 
 } // namespace PhosphorShaders

@@ -59,6 +59,16 @@ public:
         m_u.appField1 = value;
     }
 
+    /// iDate is this profile's one self-scheduled field, so this is where the
+    /// interface's hook earns its keep. See fill() for why the flag is needed at
+    /// all: without it the refreshed value sat in the buffer unuploaded.
+    bool consumeSelfRefreshedSceneHeader() override
+    {
+        const bool refreshed = m_sceneHeaderSelfRefreshed;
+        m_sceneHeaderSelfRefreshed = false;
+        return refreshed;
+    }
+
 private:
     BaseUniforms m_u = {};
 
@@ -67,6 +77,11 @@ private:
     /// scene-header churn (iDate only advances at 1 Hz anyway). Owned by the
     /// profile now that the iDate fill lives here.
     qint64 m_lastDateRefreshMs = 0;
+
+    /// Set by fill() when it advanced iDate, cleared by
+    /// consumeSelfRefreshedSceneHeader(). Appended after the member above, as
+    /// installed headers require.
+    bool m_sceneHeaderSelfRefreshed = false;
 };
 
 } // namespace PhosphorShaders

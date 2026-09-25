@@ -63,12 +63,24 @@ void BaseUniformProfile::fill(const UboFrameState& state)
     m_u.iMouse[2] = state.width > 0 ? state.mouseX / state.width : 0.0f;
     m_u.iMouse[3] = state.height > 0 ? state.mouseY / state.height : 0.0f;
     m_u.iIsReversed = state.isReversed ? 1 : 0;
-    // iDate only advances once per second. m_sceneDataDirty is set by every
-    // mouse-move/resize event, so naïvely recomputing iDate whenever it's
-    // true would hit QDateTime::currentDateTime() at 60+ Hz during
-    // interaction. Guard with a 1-second cached timestamp — iDate still
-    // refreshes during idle (sceneDataDirty remains set for the first frame
-    // of each redraw cycle), but we skip ~60 redundant calls per second.
+    // iDate only advances once per second, so the recompute is throttled to that
+    // rather than run at frame rate: QDateTime::currentDateTime() is not free and
+    // the answer cannot have changed.
+    //
+    // IT NO LONGER WAITS FOR sceneDataDirty, which is what kept it frozen. That
+    // flag is set by a mouse move, a resize or a param change, and NO per-frame
+    // path sets it, so a playing pack with a still cursor never re-read the time
+    // of day at all: the field advanced once at startup and then held whatever the
+    // last interaction left. The parenthetical this comment used to carry, that
+    // "sceneDataDirty remains set for the first frame of each redraw cycle", is
+    // not true of the node's flag.
+    //
+    // Refreshing here is only half of it, and the other half is why this needed a
+    // hook rather than an edit. fill() writes into m_u; what actually reaches the
+    // GPU is chosen SEPARATELY by dirtyRegions() from the NODE's flags. So writing
+    // a fresh iDate with no scene-header upload requested put it in memory nobody
+    // sent. m_sceneHeaderSelfRefreshed is that request, and the node ORs it into
+    // the flags after fill().
     //
     // THE GATE OPENS ON A BACKWARDS CLOCK STEP TOO, which it used not to. The
     // stamp and the interval are both wall clock, so an NTP correction or a
@@ -78,10 +90,16 @@ void BaseUniformProfile::fill(const UboFrameState& state)
     // ever. A negative difference is not a reason to wait: it means the clock
     // just moved, which is precisely when the time of day on screen is wrong.
     const qint64 sinceDateRefresh = QDateTime::currentMSecsSinceEpoch() - m_lastDateRefreshMs;
-    if (!state.didFullUploadOnce
-        || (state.sceneDataDirty && (m_lastDateRefreshMs == 0 || sinceDateRefresh >= 1000 || sinceDateRefresh < 0))) {
+    const bool dateDue = m_lastDateRefreshMs == 0 || sinceDateRefresh >= 1000 || sinceDateRefresh < 0;
+    if (!state.didFullUploadOnce || dateDue) {
         const QDateTime now = QDateTime::currentDateTime();
         m_lastDateRefreshMs = now.toMSecsSinceEpoch();
+        // Only on the throttled path: the first fill is part of the full upload,
+        // which sends the whole block anyway, so requesting a scene-header region
+        // there would be redundant.
+        if (state.didFullUploadOnce) {
+            m_sceneHeaderSelfRefreshed = true;
+        }
         m_u.iDate[0] = static_cast<float>(now.date().year());
         m_u.iDate[1] = static_cast<float>(now.date().month());
         m_u.iDate[2] = static_cast<float>(now.date().day());

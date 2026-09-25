@@ -315,8 +315,16 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 // dirty-region dispatch (which reproduces the exact legacy
                 // K_TIME_BLOCK / K_TIME_HI / K_SCENE_HEADER / K_APP_FIELDS
                 // broader-subsumes-narrower behaviour).
-                const PhosphorShaders::UboDirtyFlags flags{m_timeDirty, m_timeHiDirty, m_sceneDataDirty,
-                                                           m_appFieldsDirty};
+                // The profile gets a say in the SCENE-HEADER flag, because it owns
+                // one field the node has no event for: iDate advances on a clock
+                // of its own, once a second, and nothing node-side marks that.
+                // Without this the refreshed value sat in the profile's buffer and
+                // was never uploaded, so a playing pack with a still cursor showed
+                // a frozen time of day. Consumed, so it requests one upload rather
+                // than latching the region dirty forever.
+                const bool profileWantsSceneHeader = m_uboProfile->consumeSelfRefreshedSceneHeader();
+                const PhosphorShaders::UboDirtyFlags flags{
+                    m_timeDirty, m_timeHiDirty, m_sceneDataDirty || profileWantsSceneHeader, m_appFieldsDirty};
                 const auto dirtyRegions = m_uboProfile->dirtyRegions(flags);
                 for (const auto& r : dirtyRegions) {
                     batch->updateDynamicBuffer(m_ubo.get(), r.offset, r.size,
