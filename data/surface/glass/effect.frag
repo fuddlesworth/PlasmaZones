@@ -44,11 +44,25 @@
 #include <surface_noise.glsl>
 #include <surface_color.glsl>
 
-// Where a bent sample coordinate lands: clamped to the canvas (the reference
-// behaviour, an edge pixel stretched), or mirrored back inside the frame when
-// the pack's Edge mirror switch is on.
+// Where a bent sample coordinate lands: clamped to the canvas.
+//
+// NO EDGE-MIRROR SWITCH HERE, unlike rippled-glass and rain-glass, because on
+// this pack it could never do anything. All three of this pack's refraction
+// modes displace INWARD, so a coordinate that starts inside the pane stays
+// inside it and both arms of surfaceBendUv are then the identity:
+//
+//   • the concave lens scales frameUv toward 0.5 by at most 0.4, and the
+//     per-channel fringing cannot invert that because `fringing` is capped at 1;
+//   • the cheap mode offsets along `inward`, the negated SDF gradient;
+//   • the Snell mode offsets along -surfaceNormal and along refract()'s xy,
+//     which for eta < 1 is always the outward normal times a NEGATIVE scalar:
+//     sqrt(1 - eta^2 + eta^2*nz^2) exceeds eta*nz for every nz whenever eta < 1.
+//
+// The pack also declares no paddingParam, so its frame IS its canvas and there
+// is no margin band for a sample to land in either. Restore the switch, and the
+// metadata parameter with it, if a mode ever displaces outward.
 vec2 glassCoord(vec2 c) {
-    return surfaceBendUv(c, p_edgeMirror >= 0.5);
+    return clamp(c, 0.0, 1.0);
 }
 
 vec4 pSurface(vec2 uv) {
