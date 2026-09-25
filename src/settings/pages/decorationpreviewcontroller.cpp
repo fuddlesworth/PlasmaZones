@@ -99,6 +99,12 @@ DecorationPreviewController::DecorationPreviewController(PhosphorSurfaceShaders:
     if (m_registry) {
         connect(m_registry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
                 &DecorationPreviewController::bumpPreviewRevision);
+        // The second tick, and deliberately not folded into bumpPreviewRevision:
+        // that one also fires on a palette or colour change, where re-baking every
+        // stage would be pure waste. Only a committed rescan can have changed a
+        // pack's shader SOURCE, which is the case recomposing the chain misses.
+        connect(m_registry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
+                &DecorationPreviewController::bumpDecorationReloadGeneration);
     }
     if (auto* app = qGuiApp) {
         // The palette is the fallback for both colours AND the source of the
@@ -163,6 +169,12 @@ void DecorationPreviewController::bumpPreviewRevision()
 {
     ++m_previewRevision;
     Q_EMIT previewRevisionChanged();
+}
+
+void DecorationPreviewController::bumpDecorationReloadGeneration()
+{
+    ++m_decorationReloadGeneration;
+    Q_EMIT decorationReloadGenerationChanged();
 }
 
 QVariantList DecorationPreviewController::previewChain(const QString& packId, const QVariantMap& friendlyParams) const

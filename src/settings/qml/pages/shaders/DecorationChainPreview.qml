@@ -386,6 +386,10 @@ Item {
             anchors.fill: parent
             contentItem: card
             decorationChain: root._chain
+            // Re-bake on a registry recommit. A recomposed chain does not cover an
+            // in-place edit of a pack's shader source, because the composition is
+            // then byte-identical and every stage rebinds the same URL.
+            decorationReloadGeneration: previewController ? previewController.decorationReloadGeneration : 0
             decorationOuterPadding: root._outerPad
             audioSpectrum: root.audioSpectrum
             // The only thing the focus toggle moves. The host used to pin this
