@@ -132,8 +132,9 @@ void OverlayService::setSettings(ISettings* settings)
             // next show. Connected to the specific signal (not the settingsChanged
             // catch-all) so unrelated edits don't re-bake decoration; each
             // applyDecoration is null-safe per slot, so screens without a wired
-            // slot are skipped. OSDs are intentionally omitted — they auto-dismiss
-            // sub-second, so a live re-decorate has no observable effect.
+            // slot are skipped. A visible OSD is included: the sweep keys on each
+            // item's own visibility, so a short-lived OSD is simply not up when this
+            // runs, and one that is gets re-decorated like any other slot.
             connect(m_settings, &ISettings::decorationProfileTreeChanged, this,
                     &OverlayService::reapplyVisiblePopupDecorations);
             // The blur-quality tier is folded into every composed stage map, so a live

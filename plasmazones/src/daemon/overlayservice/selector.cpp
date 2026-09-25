@@ -5,7 +5,9 @@
 #include "daemon/overlayservice.h"
 #include "core/platform/logging.h"
 #include "phosphor_slot_keys.h"
+#include "qml_property_names.h"
 #include <PhosphorOverlay/ShellHost.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorSurfaces/SurfaceManager.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -134,7 +136,7 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
         // Stage d: resolve + push the zone-selector surface-shader decoration
         // (same SurfaceDecoration host the OSD uses, retargeted to the
         // "popup.zoneSelector" surface path). Empty source = no decoration.
-        applyDecoration(slot, QStringLiteral("popup.zoneSelector"));
+        applyDecoration(slot, PhosphorSurfaceShaders::decorationPopupZoneSelectorPath());
         // OSD-style content lifecycle: toggle `loaded` false→true so the
         // Loader re-instantiates ZoneSelectorContent fresh per show.
         writeQmlProperty(slot, QStringLiteral("loaded"), false);
@@ -760,7 +762,7 @@ void OverlayService::onZoneSelectorSlotHideCompleted(const QString& effectiveId)
     // Release the backdrop stand-in, matching onOsdSlotHideCompleted: a hidden
     // slot draws none of it, the image is wallpaper-sized, and every show runs
     // applyDecoration again, which rewrites it.
-    writeQmlProperty(it->zoneSelectorSlot(), QStringLiteral("backdropTexture"), QVariant());
+    writeQmlProperty(it->zoneSelectorSlot(), QString(OverlayQmlPropertyNames::BackdropTexture), QVariant());
     syncPassiveShellSurfaceState(effectiveId);
 }
 

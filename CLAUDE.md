@@ -229,9 +229,12 @@ ctest --test-dir build --output-on-failure
 #
 # The prose rule reaches data JSON, tr()/i18n(), settings-schema descriptions,
 # .desktop, AppStream, packaging, .github/workflows/*.yml (through the pkgdesc
-# arm) and algorithm .luau. It does NOT reach
-# CHANGELOG.md entries or icon SVG <desc>, which are in the rule below but
-# stay review-only.
+# arm), algorithm .luau, and CHANGELOG.md entry BODIES (the text after the
+# `**Term**:` lead-in; the bold lead-in itself and the trailing reference link
+# are skipped). Three things stay review-only even where it does reach: an
+# entry's bold title, the dramatic "Label: payload" colon, and the rule-of-three
+# triad and "not just X, but Y" constructions, none of which it tests. Nor does
+# it reach icon SVG <desc>.
 # Also runs on pre-commit (staged files) and in CI (whole tree).
 python3 scripts/check-conventions.py
 python3 scripts/check-conventions.py --list-rules

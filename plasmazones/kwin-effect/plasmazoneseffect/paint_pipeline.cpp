@@ -1429,12 +1429,12 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     //   borderComposite  ba = edge * insideMask * col.a — the band's output alpha IS
     //                    the border colour's alpha, and a translucent border colour is
     //                    a supported feature, not an edge case.
-    //   standardBorderBand  radius = (cornerRadius + borderWidth) * uSurfaceScale —
-    //                    the OUTER radius includes the border width, so even a zero
-    //                    corner radius arcs the window's outer corners away whenever
-    //                    the border has any width. And the smoothstep feather leaves
-    //                    the outermost ring of the frame partially transparent
-    //                    regardless.
+    //   standardBorderBandSplit  the smoothstep feather leaves the outermost ring of
+    //                    the frame partially transparent at every radius, so the band
+    //                    thins frame texels unconditionally. (This argument used to
+    //                    lean first on the outer radius being cornerRadius + width;
+    //                    a zero radius is no longer dilated, so a squared corner now
+    //                    stays square and the feather leg is what carries it.)
     //
     // So every border-family chain thins frame texels and must stay translucent. But
     // the margin-only packs (shadow, glow) provably do NOT: their halo is gated on

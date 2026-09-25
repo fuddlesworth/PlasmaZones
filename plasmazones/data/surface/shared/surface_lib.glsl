@@ -52,6 +52,11 @@ bool surfaceFrameDegenerate() {
 // replaces the centre / half-size / radius-clamp / SDF idiom every decoration
 // pack repeated. Always clamps the radius (blur previously did not — a
 // pathological radius on a tiny frame is now clamped like every sibling).
+//
+// No bundled pack calls this any more: they all take frameSdfSplit below, since
+// every outline pack now follows the chain's bottom-corner answer. Retained as a
+// third-party convenience overload, the way frameMask's one-arg form and
+// surfaceSlabOpen's two-arg form are.
 struct FrameSDF {
     vec2 center;
     vec2 halfSize;
@@ -90,8 +95,8 @@ FrameSDF frameSdfSplit(vec2 p, float topRadiusPx, float bottomRadiusPx) {
     return fs;
 }
 
-// Slab AA coverage from an SDF distance (±1 px feather). Border packs use a
-// tighter ±0.7 band and pass their own width, so this is the slab form only.
+// Slab AA coverage from an SDF distance (±1 px feather). Border packs pass their
+// own feather, defaulting to a tighter 0.7, so this is the slab form only.
 //
 // The one-arg form is the third-party convenience overload and is retained for
 // that reason, the way surfaceSlabOpen's two-arg form below is: no bundled
@@ -104,7 +109,7 @@ float frameMask(float d) {
 
 // Slab AA coverage with a caller-chosen feather (device px, ± around the
 // edge). Floored at a hair so a zero feather cannot collapse smoothstep's two
-// edges together (undefined in GLSL), the same guard standardBorderBand uses.
+// edges together (undefined in GLSL), the same guard standardBorderBandSplit uses.
 float frameMask(float d, float aa) {
     float feather = max(aa, 1e-3);
     return 1.0 - smoothstep(-feather, feather, d);
@@ -165,12 +170,15 @@ vec4 marginComposite(vec4 base, vec3 col, float a) {
 // passed in). Packs whose band geometry differs (border-double's three-width
 // stack) build their own.
 //
+// `bottomRadius` is the bottom pair's own logical-px radius, scaled internally
+// like `cornerRadius`. Zero means square, and a caller squaring the bottom
+// passes 0 there while leaving `cornerRadius` alone.
+//
 // The `aa` feather is the SDF edge softness in DEVICE px (kept unscaled so the
 // anti-alias width stays ~constant across output scales). The historical
-// family value is 0.7 px — a soft, sub-pixel band. The three-arg form keeps
-// that default so every existing caller (window border included) is unchanged;
-// the four-arg form lets a pack expose it as a parameter and pass a smaller
-// value (~0.5) for a crisper, more grid-hinted 1px hairline.
+// family value is 0.7 px, a soft sub-pixel band, and every bundled outline pack
+// now exposes it as its own `edgeSoftness` parameter defaulting to that. The
+// three-arg and four-arg forms below are third-party compatibility only.
 struct BorderBand {
     FrameSDF fs;
     float insideMask;
@@ -178,11 +186,14 @@ struct BorderBand {
 };
 // THE PANE'S SILHOUETTE IS A PROPERTY OF THE CHAIN, not of one pack. A backdrop
 // pack can square its bottom corners (surfaceSlabOpen takes a separate bottom
-// radius), and until this function existed no border pack could follow it: they
-// all resolved through frameSdf, which takes one radius for all four corners. A
+// radius), and until this function existed no border pack could follow it: every
+// one resolved through frameSdf, which takes one radius for all four corners. A
 // chain holding both then drew a rounded border tracing empty space over a
-// square backdrop corner. The host propagates the chain's answer to every pack
-// that declares the control, the way it already does for cornerRadius.
+// square backdrop corner. The host now resolves one answer for the chain and
+// injects it into every pack that declares the control. Note it does NOT do the
+// same for cornerRadius: the daemon overlay path injects its card radius, and the
+// compositor's easy mode writes one into the built-in border pack, but a custom
+// window chain still carries whatever radius each pack was given.
 BorderBand standardBorderBandSplit(vec2 p, float borderWidth, float cornerRadius, float bottomRadius, float aa) {
     // A zero feather makes both smoothstep() edges equal, which is undefined in
     // GLSL (NaN / garbage on the boundary fragment). Floor it at a hair so an
@@ -192,7 +203,7 @@ BorderBand standardBorderBandSplit(vec2 p, float borderWidth, float cornerRadius
     // A width of ZERO is the declared minimum on eight controls across seven
     // packs, and it has to mean NO LINE. Six of those eight come through this
     // helper. The other two are border-double's, which builds its bands from
-    // frameSdf directly and so carries its own copy of this test, added after the
+    // frameSdfSplit directly and so carries its own copy of this test, added after the
     // same phantom line was found live there. For the six, without this guard zero
     // does not mean no line: width
     // collapses to 0, the edge term becomes smoothstep(-feather, +feather, d),
@@ -217,20 +228,37 @@ BorderBand standardBorderBandSplit(vec2 p, float borderWidth, float cornerRadius
     float width = min(borderWidth * uSurfaceScale, max(0.9 * min(halfSize.x, halfSize.y), 0.1));
     // Radius derives from the CLAMPED width, so the content corner still ends
     // at the requested cornerRadius rather than drifting in the clamped case.
-    // Both ends add the SAME width: the band lies `width` inside the outer
+    // A NON-ZERO end adds the width: the band lies `width` inside the outer
     // boundary, so the outer radius leaving a content corner at radius r is
-    // r + width. That holds at r = 0 too, where dilating a square corner by
-    // width gives an outer quarter-circle of exactly that radius, which is why
-    // a squared bottom still gets a correctly mitred band rather than a notch.
+    // r + width.
+    //
+    // A ZERO end adds NOTHING, and that asymmetry is the point. Dilating a
+    // square corner by width gives an outer quarter-circle of that radius, so
+    // "0 for square" used to come out arced by the border's own width — the
+    // silhouette's SHAPE depended on the band's thickness, which no caller
+    // predicts and no other family does. The backdrop-slab packs pass their
+    // radius to surfaceSlabOpen undilated, so a squared slab under a squared
+    // border disagreed at every corner. Leaving a zero radius alone makes the
+    // -width level set a sharp inset rect, i.e. a true mitre: `width` thick
+    // perpendicular to each edge and width*sqrt(2) across the corner diagonal,
+    // which is what a square pane wants and what CSS and QPen MiterJoin draw.
+    // The test is on the LOGICAL radius, like the zero-width guard above.
     BorderBand b;
-    b.fs = frameSdfSplit(p, cornerRadius * uSurfaceScale + width, bottomRadius * uSurfaceScale + width);
+    float outerTop = cornerRadius > 0.0 ? cornerRadius * uSurfaceScale + width : 0.0;
+    float outerBottom = bottomRadius > 0.0 ? bottomRadius * uSurfaceScale + width : 0.0;
+    b.fs = frameSdfSplit(p, outerTop, outerBottom);
     b.insideMask = 1.0 - smoothstep(-feather, feather, b.fs.d);
     b.edge = smoothstep(-width - feather, -width + feather, b.fs.d);
     return b;
 }
 // Uniform-radius forms, kept so a third-party pack written against the old
-// signatures still compiles and renders exactly as before. Both ends take the
-// same radius, which is what every caller meant before the split existed.
+// signatures still compiles. Both ends take the same radius, which is what every
+// caller meant before the split existed. Rendering is unchanged except at a
+// cornerRadius of exactly 0, where the zero-radius guard in the Split
+// implementation above now yields the square corner the control has always
+// promised instead of an arc of the border's own width. The guard deliberately
+// lives in the one implementation: splitting it would let these two forms
+// disagree with standardBorderBandSplit(p, w, r, r, aa).
 BorderBand standardBorderBand(vec2 p, float borderWidth, float cornerRadius, float aa) {
     return standardBorderBandSplit(p, borderWidth, cornerRadius, cornerRadius, aa);
 }

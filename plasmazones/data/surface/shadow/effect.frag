@@ -44,9 +44,12 @@ vec4 pSurface(vec2 uv) {
     // a hard rectangle. Held to the margin and the band within two reaches inside
     // the frame, and only mildly
     // focus-softened (a real shadow persists unfocused) — the shared halo.
-    // Top radius for the depth gate at both ends, as in the glow pack: the gate
-    // bounds how far in the veil may reach, and the wider radius is the one that
-    // keeps rather than clips. fs carries the visible outline.
+    // Top radius for the depth gate at both ends, as in the glow pack, and the same
+    // known limitation: fs carries the split outline, the gate does not, so at a
+    // squared bottom corner the gate over-KEEPS instead of holding the veil to two
+    // reaches inside the frame. Only reachable when cornerRadius > 3.41 * shadowSize
+    // on a translucent body, so never at the bundled defaults. See glow/effect.frag
+    // for why splitting it is not a drive-by.
     float reach = max(p_shadowSize * uSurfaceScale, 1.0);
     float body = haloFalloff(fs.d, reach, realPx, base.a, p_shadowStrength, 0.65, cornerPx);
 

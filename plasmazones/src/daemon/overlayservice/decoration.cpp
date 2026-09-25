@@ -21,6 +21,7 @@
 #include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorSurface/SurfaceChainCompose.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
@@ -79,17 +80,31 @@ void OverlayService::reapplyVisiblePopupDecorations()
 {
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
         const auto& state = it.value();
+        // The zone selector is genuinely MULTI-screen: showZoneSelector loops every
+        // eligible screen, so its flag alone is the right gate and there is no
+        // companion screen id to compare against.
         if (m_zoneSelectorVisible) {
-            applyDecoration(state.zoneSelectorSlot(), QStringLiteral("popup.zoneSelector"));
+            applyDecoration(state.zoneSelectorSlot(), PhosphorSurfaceShaders::decorationPopupZoneSelectorPath());
         }
-        if (m_snapAssistVisible) {
-            applyDecoration(state.snapAssistSlot(), QStringLiteral("popup.snapAssist"));
+        // The next three are singletons across all screens (see their declarations),
+        // so each carries a screen id beside its flag and only that screen hosts it.
+        // Gating on the flag alone re-resolved and recomposed the chain on EVERY
+        // screen's slot, and each of those costs a full decoration-tree parse, since
+        // the settings getter carries no parse cache.
+        //
+        // Deliberately NOT gated on the slot's own visibility, which is what the OSD
+        // arm below uses: for the zone selector that predicate is documented as wrong
+        // (a slot hidden under a modal is still logically up, and the restore path
+        // re-shows it without re-decorating), and using it here would invite the same
+        // mistake by symmetry.
+        if (m_snapAssistVisible && it.key() == m_snapAssistScreenId) {
+            applyDecoration(state.snapAssistSlot(), PhosphorSurfaceShaders::decorationPopupSnapAssistPath());
         }
-        if (m_layoutPickerVisible) {
-            applyDecoration(state.layoutPickerSlot(), QStringLiteral("popup.layoutPicker"));
+        if (m_layoutPickerVisible && it.key() == m_layoutPickerScreenId) {
+            applyDecoration(state.layoutPickerSlot(), PhosphorSurfaceShaders::decorationPopupLayoutPickerPath());
         }
-        if (m_cheatsheetVisible) {
-            applyDecoration(state.cheatsheetSlot(), QStringLiteral("popup.cheatsheet"));
+        if (m_cheatsheetVisible && it.key() == m_cheatsheetScreenId) {
+            applyDecoration(state.cheatsheetSlot(), PhosphorSurfaceShaders::decorationPopupCheatsheetPath());
         }
         // THE OSD IS A DECORATED SURFACE TOO and had no arm here, so a pack
         // installed, removed or enabled while one was on screen re-resolved
@@ -106,7 +121,7 @@ void OverlayService::reapplyVisiblePopupDecorations()
         // and an in-place pack EDIT re-resolves to an identical chain anyway.
         // It bites on an install, an uninstall or an enable change.
         if (QQuickItem* const osd = state.osdSlot(); osd && osd->isVisible()) {
-            applyDecoration(osd, QStringLiteral("osd"));
+            applyDecoration(osd, PhosphorSurfaceShaders::decorationOsdPath());
         }
     }
 }
@@ -120,12 +135,12 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     // Helper to leave the slot undecorated: clear the chain so the QML
     // SurfaceDecoration stays inert and the card draws its native chrome.
     const auto clearDecoration = [this, slot]() {
-        writeQmlProperty(slot, QStringLiteral("decorationChain"), QVariant::fromValue(QVariantList()));
-        writeQmlProperty(slot, QStringLiteral("decorationOuterPadding"), 0.0);
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::DecorationChain), QVariant::fromValue(QVariantList()));
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::DecorationOuterPadding), 0.0);
         // Drop the backdrop with the chain: an undecorated slot has nothing to
         // sample it, and holding the image would keep a wallpaper-sized texture
         // uploaded for a surface that draws none of it.
-        writeQmlProperty(slot, QStringLiteral("backdropTexture"), QVariant());
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::BackdropTexture), QVariant());
         // No decoration -> no audio need on this slot; let CAVA wind down if it
         // was only kept alive for an audio decoration here.
         if (auto* item = qobject_cast<QQuickItem*>(slot)) {
@@ -309,7 +324,7 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     // so no stage ever bakes against a half-written sibling (the old
     // per-property protocol needed a clear-first + source-last dance for the
     // same guarantee).
-    writeQmlProperty(slot, QStringLiteral("decorationOuterPadding"), outerPadding);
+    writeQmlProperty(slot, QString(OverlayQmlPropertyNames::DecorationOuterPadding), outerPadding);
     // Backdrop BEFORE the chain, for the same reason as the padding: the chain
     // write is the load trigger, so everything a stage reads on its first bake
     // has to be in place first.
@@ -328,9 +343,9 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     // side, which gates on the property being null or undefined, so it would
     // flip useWallpaper true with no pixels behind it.
     const QImage backdrop = chainWantsBackdrop ? PhosphorShaders::ShaderRegistry::loadWallpaperImage() : QImage();
-    writeQmlProperty(slot, QStringLiteral("backdropTexture"),
+    writeQmlProperty(slot, QString(OverlayQmlPropertyNames::BackdropTexture),
                      backdrop.isNull() ? QVariant() : QVariant::fromValue(backdrop));
-    writeQmlProperty(slot, QStringLiteral("decorationChain"), QVariant::fromValue(stages));
+    writeQmlProperty(slot, QString(OverlayQmlPropertyNames::DecorationChain), QVariant::fromValue(stages));
     // Every apply, so a slot decorated after a commit starts at the current value.
     writeQmlProperty(slot, QString(OverlayQmlPropertyNames::DecorationReloadGeneration), s_decorationReloadGeneration);
 

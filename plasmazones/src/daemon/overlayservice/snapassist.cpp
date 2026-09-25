@@ -5,7 +5,9 @@
 #include "daemon/overlayservice.h"
 #include "core/platform/logging.h"
 #include "phosphor_slot_keys.h"
+#include "qml_property_names.h"
 #include <PhosphorOverlay/ShellHost.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorSurfaces/SurfaceManager.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
@@ -269,7 +271,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
     // Runs on the in-place refresh path too, so a shader/rule edit made
     // while snap-assist is up takes effect on the next continuation rather
     // than only on the next full show.
-    applyDecoration(slot, QStringLiteral("popup.snapAssist"));
+    applyDecoration(slot, PhosphorSurfaceShaders::decorationPopupSnapAssistPath());
 
     if (sameScreenRefresh) {
         // In-place refresh: the overlay is already up on this screen (a
@@ -690,7 +692,7 @@ void OverlayService::onSnapAssistSlotHideCompleted(const QString& effectiveId)
     // Release the backdrop stand-in, matching onOsdSlotHideCompleted: a hidden
     // slot draws none of it, the image is wallpaper-sized, and every show runs
     // applyDecoration again, which rewrites it.
-    writeQmlProperty(it->snapAssistSlot(), QStringLiteral("backdropTexture"), QVariant());
+    writeQmlProperty(it->snapAssistSlot(), QString(OverlayQmlPropertyNames::BackdropTexture), QVariant());
     // Symmetric restore: showSnapAssist hid the zone-selector slot on
     // this screen via hideZoneSelectorSlotOnScreen. Owns BOTH the
     // user-dismiss path (hideSnapAssist routes here) and the
@@ -861,7 +863,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     // Stage d: resolve + push the layout-picker surface-shader decoration (same
     // SurfaceDecoration host the OSD uses, retargeted to the "popup.layoutPicker"
     // surface path). Empty source = no decoration (card draws natively).
-    applyDecoration(slot, QStringLiteral("popup.layoutPicker"));
+    applyDecoration(slot, PhosphorSurfaceShaders::decorationPopupLayoutPickerPath());
 
     if (shellWindow) {
         assertWindowOnScreen(shellWindow, screen, screenGeom);
@@ -936,7 +938,7 @@ void OverlayService::onLayoutPickerSlotHideCompleted(const QString& effectiveId)
     // Release the backdrop stand-in, matching onOsdSlotHideCompleted: a hidden
     // slot draws none of it, the image is wallpaper-sized, and every show runs
     // applyDecoration again, which rewrites it.
-    writeQmlProperty(it->layoutPickerSlot(), QStringLiteral("backdropTexture"), QVariant());
+    writeQmlProperty(it->layoutPickerSlot(), QString(OverlayQmlPropertyNames::BackdropTexture), QVariant());
     // Symmetric restore - see onSnapAssistSlotHideCompleted /
     // onOsdSlotHideCompleted. The picker hid the zone-selector slot
     // on show; restore it once the picker has finished its hide.

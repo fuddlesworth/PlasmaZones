@@ -88,5 +88,23 @@ inline constexpr QLatin1String CardCornerRadius{"cardCornerRadius"};
 /// so nothing ever observed it.
 inline constexpr QLatin1String DecorationReloadGeneration{"decorationReloadGeneration"};
 
+/// The composed surface-decoration stage list (QVariantList of stage maps, one per
+/// resolved pack). Writing it is the LOAD TRIGGER on the QML side, so everything a
+/// stage reads on its first bake has to be in place before it.
+inline constexpr QLatin1String DecorationChain{"decorationChain"};
+
+/// Outer margin in logical px that the chain's largest paddingParam asks for. The
+/// QML host inflates the capture and shader items by it so an outer effect has real
+/// transparent room; 0 keeps the classic 1:1 geometry.
+inline constexpr QLatin1String DecorationOuterPadding{"decorationOuterPadding"};
+
+/// Desktop wallpaper stand-in for a needsBackdrop pack, which has no scene to sample
+/// on the daemon. Cleared on hide so a stale image cannot outlive the slot.
+///
+/// This is the name that PROVED this file's point: it was written with setProperty
+/// while no slot declared it, so it became a dead dynamic property and every
+/// needsBackdrop pack silently took its uHasBackdrop = 0 fallback.
+inline constexpr QLatin1String BackdropTexture{"backdropTexture"};
+
 } // namespace OverlayQmlPropertyNames
 } // namespace PlasmaZones

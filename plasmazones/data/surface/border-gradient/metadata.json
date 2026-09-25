@@ -1,7 +1,7 @@
 {
     "id": "border-gradient",
     "name": "Gradient Border",
-    "description": "Rounded corners and a window border coloured by a still two-colour gradient across the frame. The gradient direction is set in degrees, and the band dims when the surface loses focus. Width, corner radius, angle and the two colours are this pack's own parameters.",
+    "description": "Rounded corners and a window border coloured by a still two-colour gradient across the frame. The gradient direction is set in degrees, and the band dims when the surface loses focus.",
     "author": "PlasmaZones",
     "version": "1.1",
     "category": "Borders",
@@ -31,7 +31,7 @@
             "name": "Round bottom corners",
             "type": "bool",
             "default": true,
-            "description": "Round the bottom corners as well as the top. Turn off to round only the top two, for a pane that sits against a panel or the screen edge. Every pack in a chain follows the same answer, so the outline stays one shape."
+            "description": "Round the bottom corners as well as the top. Turn off to round only the top two, for a pane that sits against a panel or the screen edge. The whole chain follows one answer, taken from the first pack that carries the setting, so the bottom corners are all rounded or all square."
         },
         {
             "id": "edgeSoftness",
@@ -40,7 +40,7 @@
             "default": 0.7,
             "min": 0.1,
             "max": 2.0,
-            "description": "Anti-alias feather of the border edge, in device pixels, so it does not grow with display scaling. Lower is a crisper hairline. 0.7 is the soft default."
+            "description": "Anti-alias feather of the border and the pane edge, in device pixels, so it does not grow with display scaling. Lower is a crisper hairline."
         },
         {
             "id": "gradientAngle",

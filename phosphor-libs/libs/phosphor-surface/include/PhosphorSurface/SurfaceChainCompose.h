@@ -6,6 +6,7 @@
 #include <PhosphorSurface/phosphorsurface_export.h>
 
 #include <QStringList>
+#include <QVariant>
 #include <QVariantMap>
 
 namespace PhosphorSurfaceShaders {
@@ -64,9 +65,17 @@ PHOSPHORSURFACE_EXPORT double paddingRequest(const SurfaceShaderEffect& effect, 
  *
  * Used by the daemon overlay-decoration host, by the shell's own chrome, and by the
  * settings app's decoration preview, all three of which must compose a stage
- * identically or the preview stops predicting what the daemon draws. The kwin-effect compositor path
- * builds GL uniform value arrays instead of a stage map and shares only
- * paddingRequest() above.
+ * identically or the preview stops predicting what the daemon draws. One
+ * deliberate exception: the two live hosts inject the chain's bottom-corner answer
+ * into every stage's params before calling this, and the preview does not, because
+ * it composes ONE pack at a time and so has no chain to reconcile. It makes the
+ * same departure for the card corner radius, for the same reason. The consequence
+ * is worth knowing: previewing a pack that is not first in its chain shows that
+ * pack's own bottom-corner setting, while the real surface shows the chain's.
+ *
+ * The kwin-effect compositor path builds GL uniform value arrays instead of a
+ * stage map, so it never calls this builder; it shares paddingRequest() above and
+ * chainRoundBottomCorners() below.
  *
  * Returns an EMPTY map for an effect that is not `isValid()` (no id, or no
  * fragment shader — which is also what the path-traversal guard leaves behind
@@ -104,18 +113,27 @@ PHOSPHORSURFACE_EXPORT QVariantMap composeStageMap(const SurfaceShaderEffect& ef
  * stage, the way the daemon overlay path already injects its card corner radius.
  * In order:
  *
- *   1. the value stored against the FIRST pack in chain order that carries one.
- *      That is the pack the user actually set the control on.
+ *   1. the value stored against the FIRST pack in chain order that carries a
+ *      USABLE one. Where two packs both carry a stored value they disagree with
+ *      no right answer, and chain order is what keeps the result deterministic
+ *      rather than dependent on map iteration. An explicitly-null or absent
+ *      entry is not a choice, so it falls through to that pack's own default.
  *   2. otherwise the declared default of the first pack that declares the
- *      control, which is what settles a third-party pack shipping a different
- *      default from the bundled ones.
+ *      control WITH a default, which is what settles a third-party pack shipping
+ *      a different default from the bundled ones. A pack declaring the control
+ *      and no default abstains rather than voting false.
  *   3. otherwise an invalid QVariant, meaning no pack in this chain draws an
  *      outline at all and the host injects nothing.
  *
  * @p allPackParams is the post-flatten `effectiveParameters()` map, shaped
- * { packId -> { paramId -> value } }. It carries only what a user or a preset
- * actually set, which is what makes step 1 the user's own answer rather than one
- * pack's default outvoting another's.
+ * { packId -> { paramId -> value } }. It carries whatever a user or a preset set,
+ * so a pack with nothing set never outvotes one that has. Two caveats a caller
+ * should not have to discover: a PRESET's value is indistinguishable here from a
+ * value the user typed, so a preset on a late pack can decide the whole chain's
+ * outline; and a host that rewrites a pack's entry before calling — the
+ * compositor does, both for a matched rule override and for its easy-mode layers
+ * — hands that pack's vote to whatever it wrote, because the tree's value for it
+ * is gone by then.
  *
  * Injecting the result into a pack that does not declare the control is harmless.
  * translateSurfaceParams and resolveSurfaceParamValues emit a lane only for
@@ -124,6 +142,12 @@ PHOSPHORSURFACE_EXPORT QVariantMap composeStageMap(const SurfaceShaderEffect& ef
  *
  * Packs the registry cannot resolve are skipped rather than treated as declaring
  * nothing, so an uninstalled pack sitting in a stored chain does not get a vote.
+ *
+ * Only the bottom-corner SWITCH is resolved chain-wide. `edgeSoftness` is
+ * deliberately left per-pack: a band's anti-alias feather and a backdrop slab's
+ * are different quantities on different geometry, which is why the two families
+ * declare different ranges for it, and unifying them would soften one to match
+ * the other rather than making them agree about a shape.
  */
 PHOSPHORSURFACE_EXPORT QVariant chainRoundBottomCorners(const SurfaceShaderRegistry& registry, const QStringList& chain,
                                                         const QVariantMap& allPackParams);

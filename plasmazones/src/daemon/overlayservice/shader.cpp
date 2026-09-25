@@ -131,8 +131,8 @@ void OverlayService::setPresetRegistry(PhosphorShaders::ShaderPresetRegistry* re
                                                  // Mirror of the decorationProfileTreeChanged arm in
                                                  // setSettings: a visible popup's decoration chain is
                                                  // resolved at show time, so a retune has to be pushed into
-                                                 // the slots that are already up. OSDs are omitted for the
-                                                 // same reason they are there — they auto-dismiss sub-second.
+                                                 // the slots that are already up, a visible OSD included:
+                                                 // the sweep keys on each item's own visibility.
                                                  reapplyVisiblePopupDecorations();
                                                  break;
                                              case PhosphorShaders::ShaderFamily::Pointer:

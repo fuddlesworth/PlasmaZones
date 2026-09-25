@@ -47,10 +47,17 @@ vec4 pSurface(vec2 uv) {
     // gap sit inside it and the content corner ends at p_cornerRadius. Each end
     // of the frame gets its own, so squaring the bottom corners squares them for
     // both lines and the content clip together rather than for none of them.
-    // A bottom radius of 0 still dilates to `total` on the outside, which is the
-    // right outer shape: the stack has real width at a square corner too.
-    float radius = p_cornerRadius * uSurfaceScale + total;
-    float bottomRadius = (p_roundBottomCorners >= 0.5 ? p_cornerRadius * uSurfaceScale : 0.0) + total;
+    //
+    // A ZERO radius is left at zero rather than dilated to `total`, matching
+    // standardBorderBandSplit. Dilating it would arc a corner the user asked to
+    // be square by the whole stack width, which here is up to 52 logical px, and
+    // the backdrop pack underneath draws its own square corner undilated. At zero
+    // every level set is a sharp inset rect, so the stack comes out as concentric
+    // mitred lines with a square gap and a square content clip.
+    float radius = p_cornerRadius > 0.0 ? p_cornerRadius * uSurfaceScale + total : 0.0;
+    float bottomRadius = (p_roundBottomCorners >= 0.5 && p_cornerRadius > 0.0)
+                             ? p_cornerRadius * uSurfaceScale + total
+                             : 0.0;
 
     FrameSDF fs = frameSdfSplit(p, radius, bottomRadius);
     float d = fs.d;

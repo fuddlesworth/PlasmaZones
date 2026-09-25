@@ -47,7 +47,7 @@
             "min": 0,
             "max": 64,
             "group": "Shape",
-            "description": "Corner rounding of the pane (px)"
+            "description": "Corner rounding of the pane (px, match the Border pack)"
         },
         {
             "id": "contentOpacity",
@@ -120,16 +120,6 @@
             "description": "Starting direction of the gradient in degrees, measured across the pane rather than on screen, so 45 runs corner to corner whatever shape the window is. It holds as a fixed direction only when Gradient speed is 0, since any other speed keeps turning it"
         },
         {
-            "id": "vignetteStrength",
-            "name": "Vignette",
-            "type": "float",
-            "default": 0.15,
-            "min": 0.0,
-            "max": 0.5,
-            "group": "Shape",
-            "description": "How much the pane darkens toward its top and bottom edges"
-        },
-        {
             "id": "colorA",
             "name": "First colour",
             "type": "color",
@@ -151,7 +141,7 @@
             "type": "bool",
             "default": true,
             "group": "Shape",
-            "description": "Round the bottom corners as well as the top. Turn off to round only the top two, for a pane that sits against a panel or the screen edge. Every pack in a chain follows the same answer, so the outline stays one shape."
+            "description": "Round the bottom corners as well as the top. Turn off to round only the top two, for a pane that sits against a panel or the screen edge. The whole chain follows one answer, taken from the first pack that carries the setting, so the bottom corners are all rounded or all square."
         },
         {
             "id": "edgeSoftness",
@@ -161,7 +151,17 @@
             "min": 0.1,
             "max": 3.0,
             "group": "Shape",
-            "description": "Anti-alias feather of the pane edge, in device pixels, so it does not grow with display scaling. Lower is crisper"
+            "description": "Anti-alias feather of the pane edge, in device pixels, so it does not grow with display scaling. Lower is crisper."
+        },
+        {
+            "id": "vignetteStrength",
+            "name": "Vignette",
+            "type": "float",
+            "default": 0.15,
+            "min": 0.0,
+            "max": 0.5,
+            "group": "Shape",
+            "description": "How much the pane darkens toward its top and bottom edges"
         },
         {
             "id": "brightness",

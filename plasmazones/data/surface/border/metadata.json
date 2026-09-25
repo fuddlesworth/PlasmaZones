@@ -1,7 +1,7 @@
 {
     "id": "border",
     "name": "Border",
-    "description": "Rounded corners and a window border. Clips the surface to a rounded rectangle and lays a configurable border band over the desktop, so a translucent border blends with what is behind the surface rather than its own content. Width, corner radius and colour are this pack's own parameters.",
+    "description": "Rounded corners and a window border. Clips the surface to a rounded rectangle and lays a configurable border band over the desktop, so a translucent border blends with what is behind the surface rather than its own content.",
     "author": "PlasmaZones",
     "version": "1.2",
     "category": "Borders",
@@ -31,7 +31,7 @@
             "name": "Round bottom corners",
             "type": "bool",
             "default": true,
-            "description": "Round the bottom corners as well as the top. Turn off to round only the top two, for a pane that sits against a panel or the screen edge. Every pack in a chain follows the same answer, so the outline stays one shape."
+            "description": "Round the bottom corners as well as the top. Turn off to round only the top two, for a pane that sits against a panel or the screen edge. The whole chain follows one answer, taken from the first pack that carries the setting, so the bottom corners are all rounded or all square."
         },
         {
             "id": "edgeSoftness",
@@ -40,7 +40,7 @@
             "default": 0.7,
             "min": 0.1,
             "max": 2.0,
-            "description": "Anti-alias feather of the border edge, in device pixels, so it does not grow with display scaling. Lower is a crisper hairline. 0.7 is the soft default."
+            "description": "Anti-alias feather of the border and the pane edge, in device pixels, so it does not grow with display scaling. Lower is a crisper hairline."
         },
         {
             "id": "useSystemAccent",

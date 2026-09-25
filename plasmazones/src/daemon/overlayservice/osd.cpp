@@ -22,6 +22,7 @@
 #include "phosphor_roles.h"
 #include "phosphor_slot_keys.h"
 #include "qml_property_names.h"
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 #include <PhosphorAnimation/SurfaceAnimator.h>
@@ -465,7 +466,7 @@ void OverlayService::pushLayoutOsdContent(QObject* osdSlot, const LayoutOsdConte
     // (showLayoutOsdImpl / showLayoutOsd(string…) / showDisabledOsd) decorates
     // consistently; showNavigationOsd calls applyDecoration directly since it
     // does not route through pushLayoutOsdContent.
-    applyDecoration(osdSlot, QStringLiteral("osd"));
+    applyDecoration(osdSlot, PhosphorSurfaceShaders::decorationOsdPath());
 }
 
 void OverlayService::showDisabledOsd(const QString& reason, const QString& screenId)
@@ -594,7 +595,7 @@ void OverlayService::onOsdSlotHideCompleted(const QString& effectiveId)
     // show runs applyDecoration again, which rewrites this, so nothing is lost
     // by dropping it for the idle interval between shows. The chain itself is
     // left alone deliberately: it is rewritten per show and costs a list.
-    writeQmlProperty(it->osdSlot(), QStringLiteral("backdropTexture"), QVariant());
+    writeQmlProperty(it->osdSlot(), QString(OverlayQmlPropertyNames::BackdropTexture), QVariant());
     // Symmetric restore: layout/disabled/navigation OSD show paths
     // hid the zone-selector slot to keep it from peeking through the
     // OSD card. snap-assist's onSnapAssistSlotHideCompleted does the
@@ -790,7 +791,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // Stage d: resolve + push the OSD surface decoration. Navigation OSDs do
     // not route through pushLayoutOsdContent, so apply it explicitly here (same
     // decoration the layout-OSD paths get via pushLayoutOsdContent).
-    applyDecoration(osdSlot, QStringLiteral("osd"));
+    applyDecoration(osdSlot, PhosphorSurfaceShaders::decorationOsdPath());
 
     // Write mode AFTER data properties so the Loader-instantiated
     // NavigationOsdContent picks up correct values on first binding pass.

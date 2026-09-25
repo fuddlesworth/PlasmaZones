@@ -54,10 +54,17 @@ vec4 pSurface(vec2 uv) {
     // margin and the band within two reaches inside the frame, and focus-dimmed
     // like Oxygen's cue —
     // the shared glow/shadow halo.
-    // The gate takes the TOP radius for both ends on purpose. It only decides how
-    // deep inside the frame the halo is still allowed to tint a translucent body,
-    // and at a squared bottom corner the widest radius is the conservative choice,
-    // so the gate keeps rather than clips. The visible outline is fs above.
+    // The gate takes the TOP radius for BOTH ends, and that is a known limitation
+    // rather than a neutral choice. The visible outline is fs above, which is split;
+    // the gate is not, so with the bottom corners squared the two disagree there.
+    // The error direction is safe — a rounded gate reads a squared corner as further
+    // outside than it is, so it KEEPS halo rather than clipping it — but keeping is
+    // the thing the gate exists to stop: it is meant to hold the halo to two reaches
+    // inside the frame, and at a squared corner it stops doing that. Visible only
+    // when cornerRadius > 3.41 * glowSize on a translucent body, so never at the
+    // bundled defaults. Splitting the gate needs an eighth haloFalloff argument and
+    // GLSL has no default arguments, so a caller left un-updated would compile and
+    // silently keep the old behaviour; that is why it is recorded here instead.
     float reach = max(p_glowSize * uSurfaceScale, 1.0);
     float halo = haloFalloff(fs.d, reach, p, base.a, p_glowStrength, 0.30, cornerPx);
 

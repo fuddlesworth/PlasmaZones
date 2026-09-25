@@ -127,6 +127,31 @@ QString roundBottomCornersParamId()
     return QStringLiteral("roundBottomCorners");
 }
 
+/// A silhouette answer is usable only if the variant actually holds one.
+///
+/// This mirrors usablePadding's SHAPE above but not its rationale, and the
+/// difference matters. QVariant::toDouble() reports convertibility through an
+/// `ok` out-parameter, so usablePadding can reject a wrong-TYPED override.
+/// QVariant::toBool() has no such out-parameter and never reports failure, so
+/// this rejects only an ABSENT (invalid) or explicitly-null value and converts
+/// everything else — a stored string or container still gets an answer. That
+/// residual is deliberate: gating the chain vote on a declared `"bool"` type was
+/// considered and rejected, because the hosts inject into a pack without testing
+/// its declared type, so refusing such a pack a VOTE while still writing the
+/// chain's answer into it would be the asymmetry rather than the fix.
+///
+/// Both inputs cross the same trust boundary usablePadding describes: an
+/// installed pack's metadata.json for the declared default, and a stored
+/// per-surface profile for the override.
+static bool usableBool(const QVariant& value, bool* out)
+{
+    if (!value.isValid() || value.isNull()) {
+        return false;
+    }
+    *out = value.toBool();
+    return true;
+}
+
 QVariant chainRoundBottomCorners(const SurfaceShaderRegistry& registry, const QStringList& chain,
                                  const QVariantMap& allPackParams)
 {
@@ -136,9 +161,13 @@ QVariant chainRoundBottomCorners(const SurfaceShaderRegistry& registry, const QS
     // default, including one declared by an earlier pack.
     QVariant declaredFallback;
     for (const QString& packId : chain) {
-        if (!registry.hasEffect(packId)) {
-            continue;
-        }
+        // No hasEffect() pre-check: effect() answers a default-constructed
+        // SurfaceShaderEffect for an id the registry does not hold, and that has
+        // an empty id so isValid() is already false for it. Both calls perform the
+        // same factory lookup, so the probe was a second one for the same answer.
+        // NOTE this reasoning is local to the resolver. The hosts' own hasEffect
+        // probes are NOT redundant: they distinguish "not installed" from
+        // "installed but broken" for two separately-keyed warnings.
         const SurfaceShaderEffect effect = registry.effect(packId);
         if (!effect.isValid()) {
             continue;
@@ -154,12 +183,24 @@ QVariant chainRoundBottomCorners(const SurfaceShaderRegistry& registry, const QS
         // value().toMap() returns would leave the iterator dangling at the end
         // of the full expression.
         const QVariantMap packParams = allPackParams.value(packId).toMap();
+        bool value = false;
+        // An unusable stored value FALLS THROUGH to this pack's declared default
+        // rather than terminating the scan, the shape paddingRequest uses above.
+        // Skipping the pack outright would be wrong: the scan would go on to a
+        // later pack, and a null left in a hand-edited profile would silently
+        // hand the chain to someone else.
         const auto stored = packParams.constFind(key);
-        if (stored != packParams.constEnd()) {
-            return QVariant(stored->toBool());
+        if (stored != packParams.constEnd() && usableBool(*stored, &value)) {
+            return QVariant(value);
         }
-        if (!declaredFallback.isValid()) {
-            declaredFallback = QVariant(declared->defaultValue.toBool());
+        // A pack that declares the control WITHOUT a default has no opinion, so it
+        // abstains and a later pack's stated default decides. Without the usability
+        // test, defaultValue.toBool() on an absent default answered false, and
+        // because QVariant(false) is itself valid it latched here and blocked every
+        // later pack — silence outvoting a statement. The pair is the one
+        // translateSurfaceParams already applies to this same field.
+        if (!declaredFallback.isValid() && usableBool(declared->defaultValue, &value)) {
+            declaredFallback = QVariant(value);
         }
     }
     return declaredFallback;
