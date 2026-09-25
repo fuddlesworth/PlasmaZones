@@ -290,7 +290,8 @@ public:
      * the next prepare() (UB, typically a crash).
      *
      * @return true on success; false if `binding` collides with a library-
-     * managed slot (0, 2-12) or falls outside the supported range. A `true`
+     * managed slot (0, 2-16, the range this header spells out above) or falls
+     * outside the supported range. A `true`
      * return for an identical (binding, texture, sampler) triple is a no-op —
      * the SRB/pipeline is NOT rebuilt when nothing actually changed.
      */

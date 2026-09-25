@@ -757,7 +757,7 @@ void ShaderNodeRhi::prepare()
             }
         }
         if (multiBufferMode) {
-            const int n = qMin(m_bufferPaths.size(), kMaxBufferPasses);
+            const int n = static_cast<int>(qMin(m_bufferPaths.size(), static_cast<qsizetype>(kMaxBufferPasses)));
             for (int i = 0; i < n; ++i) {
                 if (!m_multiBufferTextures[i] || !m_multiBufferRenderTargets[i] || !m_multiBufferPipelines[i]
                     || !m_multiBufferSrbs[i]) {

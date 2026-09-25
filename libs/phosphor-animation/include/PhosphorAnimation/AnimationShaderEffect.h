@@ -262,7 +262,7 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     /// User texture slot. Each entry binds an asset file to one of the
     /// canonical samplers `uTexture1` / `uTexture2` / `uTexture3` (slots
     /// 0 / 1 / 2 here, which the runtimes map to texture-unit
-    /// allocations 1 / 2 / 3 — slot 0 of the binding-7+ region is the
+    /// allocations 1 / 2 / 3 — slot 0 of the binding-11+ region is the
     /// surface itself / `uTexture0`, never user-declared).
     ///
     /// `path` is resolved relative to the effect's `sourceDir`. Loading

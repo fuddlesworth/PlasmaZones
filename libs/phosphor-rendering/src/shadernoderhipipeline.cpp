@@ -925,7 +925,7 @@ void ShaderNodeRhi::appendDepthBinding(QVector<QRhiShaderResourceBinding>& bindi
 {
     // The depth binding stays POPULATED whether or not a depth buffer is in play,
     // the same discipline appendWallpaperBinding follows for the wallpaper binding and
-    // the user-texture slots follow for 7-10. data/overlays/shared/depth.glsl
+    // the user-texture slots follow for 11-14. data/overlays/shared/depth.glsl
     // declares the sampler unconditionally for any pack that includes it, so a
     // pack that includes it without also setting "depthBuffer": true would
     // otherwise present resource bindings that do not match its own SPIR-V —

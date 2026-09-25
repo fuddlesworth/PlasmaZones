@@ -385,8 +385,8 @@ PHOSPHORANIMATION_EXPORT QString eventClassForPath(const QString& path);
 /// state can reach it.
 ///
 /// The property this answers is narrow and mechanical: does the compositor
-/// reach this event holding the window it is for. Ten paths do — the four
-/// `window.appearance` leaves, the five `window.movement` leaves, and
+/// reach this event holding the window it is for. Nine paths do: the four
+/// `window.appearance` leaves, the four `window.movement` leaves, and
 /// `scrolling.tabSwitch`. No other path in the taxonomy is, either because its
 /// subject is not a window at all (a desktop switch, the scrolling strip
 /// itself, an OSD, a panel, the editor's own widgets) or because it is a
@@ -434,12 +434,13 @@ PHOSPHORANIMATION_EXPORT QString parentPath(const QString& path);
 ///
 /// SSOT for "what shader does this event animate with out of the box". Two
 /// families default to a shader:
-///   • Window GEOMETRY legs (snap in/out, layout-switch, maximize) →
-///     "window-morph" (geometry cross-fade), run by the kwin-effect. Maximize
-///     is in the set because the engines route their own column and monocle
-///     maximizes through it, and that default counts as pack ownership for
-///     the stock-effect suppression, so KWin's own maximize effect is
-///     unloaded by default. The interactive-drag leaf
+///   • Window GEOMETRY legs (placeIn, placeOut, layoutSwitch) →
+///     "window-morph" (geometry cross-fade), run by the kwin-effect. There is no
+///     separate maximize node, as this header says further up: the compositor's
+///     native maximize rides placeIn / placeOut, and the engines route their own
+///     column and monocle maximizes through them too. That default counts as pack
+///     ownership for the stock-effect suppression, so KWin's own maximize effect
+///     is unloaded by default. The interactive-drag leaf
 ///     (`window.movement.move`) carries NO default — a crossfade pack
 ///     cannot drive a held drag, and the move-class packs (wobble) stay
 ///     opt-in.

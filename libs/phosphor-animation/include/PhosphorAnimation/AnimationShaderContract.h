@@ -11,7 +11,7 @@ namespace PhosphorAnimationShaders {
 
 /// Cross-runtime named-uniform contract for **animation/transition shaders**.
 ///
-/// Phosphor has two distinct shader registries:
+/// Phosphor has four distinct shader registries:
 ///
 ///   1. **Animation/transition shaders** — `AnimationShaderRegistry`,
 ///      sourced from `data/animations/*/`. Short-lived transitions
@@ -24,6 +24,17 @@ namespace PhosphorAnimationShaders {
 ///      textures, etc.). Daemon-only, because the overlay family has no
 ///      compositor consumer at all — not because multipass is daemon-only,
 ///      which it stopped being when the compositor grew the surface fold.
+///
+///   3. **Surface shaders** — `PhosphorSurfaceShaders::SurfaceShaderRegistry`,
+///      sourced from `data/surface/*/`. Persistent per-window decoration
+///      layers. SurfaceShaderContract.h carries that contract.
+///
+///   4. **Pointer shaders** — `PhosphorPointer::PointerShaderRegistry`,
+///      sourced from `data/pointer/*/`. Cursor decoration packs,
+///      compositor-only, and the one family with its OWN buffer-pass cap of
+///      two rather than the shared eight, because its chain runs on every
+///      frame the pointer is live. `CustomParamsKey.h` is written against
+///      all four.
 ///
 /// This header documents the contract for the **first** category. It
 /// applies identically across both runtime execution sites:

@@ -9,8 +9,8 @@
 
 ## Responsibility
 
-Qt Quick's built-in `ShaderEffect` doesn't support multipass, compute
-shaders, custom UBO layouts, or shader-file `#include`. This library
+Qt Quick's built-in `ShaderEffect` doesn't support multipass, per-pass render
+targets, custom UBO layouts, or shader-file `#include`. This library
 replaces it with three cooperating pieces:
 
 - **`ShaderEffect`** — a `QQuickItem` subclass that owns one render node,
@@ -81,10 +81,13 @@ into the UBO tail.
 
 ## Design notes
 
-- **No texture ownership by the item.** Textures are loaded by
-  `ShaderNodeRhi` inside the render thread. The item just carries paths
-  and parameters. This avoids the GPU-resource-lifetime bugs that plague
-  naive `ShaderEffect` reimplementations.
+- **No GPU-texture ownership by the item.** `ShaderNodeRhi` owns every
+  `QRhiTexture` and does all uploads on the render thread, which avoids the
+  GPU-resource-lifetime bugs that plague naive `ShaderEffect`
+  reimplementations. The item does own decoded CPU-side images:
+  `setShaderParams` calls `loadUserTextureFile` synchronously on the CALLING
+  thread and keeps the results, and the wallpaper `QImage` lives on the item
+  behind its own mutex.
 - **Multipass is opt-in.** Single-pass shaders don't pay for the
   additional framebuffers. Setting `bufferShaderPaths` to a non-empty
   list enables the multipass path.

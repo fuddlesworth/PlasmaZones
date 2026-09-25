@@ -30,7 +30,12 @@ namespace {
 /// instance — the per-leg attach installs the extension via
 /// `ShaderEffect::setUniformExtension`, so a `dynamic_pointer_cast`
 /// here pulls back the typed pointer for setter calls.
-inline PhosphorAnimation::AnimationUniformExtension* animExtensionFor(PhosphorRendering::ShaderEffect* shaderItem)
+inline PhosphorAnimation:: // Returns a RAW pointer out of a temporary shared_ptr, which is safe only because
+                           // ShaderEffect::uniformExtension() hands back a COPY of the member it still holds,
+                           // so the refcount stays at least one after the temporary dies. Anyone
+                           // "optimising" that accessor into a move, or releasing the item's own reference,
+                           // breaks every caller here silently.
+    AnimationUniformExtension* animExtensionFor(PhosphorRendering::ShaderEffect* shaderItem)
 {
     if (!shaderItem) {
         return nullptr;
@@ -730,16 +735,13 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
 
     // Build the geometry-sync lambda + its dependencies.
     //
-    // The lambda re-runs the same parent-margin clamp the initial-attach
-    // block above does. Anchor x/y/w/h can change mid-leg (parent-layout
-    // reflow on sibling-hide; host's anchored layout re-evaluating on
-    // parent resize), and the clamp depends on the LIVE values. A
-    // fixed `pad` captured at attach time would let the shader item drift
-    // past the parent's bounds again whenever the anchor moves toward an
-    // edge, re-introducing the viewport-clipping vTexCoord shift the
-    // initial clamp avoids. The recomputed pad propagates into
-    // `iAnchorPosInFbo` via `syncShaderGeometryNow`, keeping the
-    // shader's UV remap consistent with the updated geometry.
+    // The lambda re-derives the extent-dependent geometry and the extension
+    // uniforms from the LIVE anchor rect, which is exactly why none of it can be
+    // computed once at attach time. Anchor x/y/w/h change mid-leg (parent-layout
+    // reflow on sibling-hide; the host's anchored layout re-evaluating on a parent
+    // resize), and `iAnchorPosInFbo` and the rest of the UV remap are all
+    // functions of those live values, so a captured copy leaves the shader's remap
+    // describing a rect the item no longer occupies for the rest of the leg.
     //
     // shaderSource is captured as QPointer so that any teardown path that
     // destroys it independently of shaderItem (scene-graph rebuild,
@@ -804,9 +806,9 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // mutates parent-layout-managed children synchronously, which can
     // emit xChanged/yChanged on the anchor as Row/ColumnLayout re-packs.
     // If the connects ran after the loop, the shader item would be stuck
-    // at the pre-reflow coordinates captured at lines 273-297 above —
-    // visible offset for the entire show leg until the next geometry
-    // signal happens to fire.
+    // at the pre-reflow coordinates the initial-attach geometry block above
+    // captured, a visible offset for the entire show leg until the next geometry
+    // signal happens to fire. No line numbers: they drift.
     QObject::connect(shaderAnchor, &QQuickItem::widthChanged, shaderItem, syncGeometry);
     QObject::connect(shaderAnchor, &QQuickItem::heightChanged, shaderItem, syncGeometry);
     QObject::connect(shaderAnchor, &QQuickItem::xChanged, shaderItem, syncGeometry);

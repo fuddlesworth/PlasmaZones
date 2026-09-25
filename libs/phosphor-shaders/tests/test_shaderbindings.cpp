@@ -106,7 +106,7 @@ private Q_SLOTS:
         QCOMPARE(bindingOf(u"UTexture0"), -1);
     }
 
-    /// The header calls the table CONTIGUOUS, and F604's portability note counts
+    /// The header calls the table CONTIGUOUS, and kMaxBinding's portability note counts
     /// on that: the contract claims bindings 1 through 16 and nothing else, which
     /// is exactly 16 combined image samplers, the per-shader limit Qt documents
     /// on QRhiShaderResourceBinding. A slot added without a matching binding

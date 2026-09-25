@@ -76,7 +76,7 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
     // from a host flag: a pack branches on uHasBackdrop to decide whether to
     // sample uBackdrop at all, so a gate that outran the binding would have it
     // sampling a texture nobody bound. appendWallpaperBinding() keeps binding
-    // 11 populated either way (a dummy when there is nothing to show), so this
+    // 15 populated either way (a dummy when there is nothing to show), so this
     // is the only thing standing between a real backdrop and the pack's
     // fallback appearance. Both sides read the same predicate so they cannot
     // drift: see wallpaperBindingLive().
@@ -242,7 +242,12 @@ void ShaderNodeRhi::uploadExtensionToUbo(QRhiResourceUpdateBatch* batch)
 // with no compiler error. The inline restoration is just a safety net for the
 // image pass; the full prepare() sequence does the real work.
 //
-// Dirty-flag invariants (who sets what):
+// Dirty-flag invariants (who sets what). The lists below name the SETTERS. Four
+// non-setter paths also raise m_sceneDataDirty, and a future setter author would
+// not think to look for them: resetBufferTargets(), ensureBufferTarget()'s
+// create-success path, the audio-spectrum resize re-arm inside uploadDirtyTextures
+// itself, and releaseRhiResources(). Each publishes iChannelResolution or
+// iAudioSpectrumSize from live textures:
 //   m_timeDirty       ← setTime, setTimeDelta, setFrame, setBufferFeedback
 //                        (toggle), prepare() on feedback-buffer clear
 //   m_timeHiDirty     ← setTime (wrap-offset crossing)
