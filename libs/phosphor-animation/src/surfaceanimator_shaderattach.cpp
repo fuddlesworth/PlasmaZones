@@ -687,45 +687,21 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // — gl_FragCoord is post-DPR pixel coords and would overshoot [0,1]
     // by a factor of DPR.
     //
-    // Initial-attach geometry mirrors syncShaderGeometryNow's two-mode
-    // logic (Anchor default vs Surface opt-in). Pre-seeding here keeps
-    // the first paint between attach and the next syncGeometry() call
-    // correctly sized; syncGeometry() refreshes on subsequent geometry
-    // events.
-    if (effect.fboExtentKind == PhosphorAnimationShaders::AnimationShaderEffect::FboExtentKind::Surface) {
-        QQuickItem* sceneRoot = nullptr;
-        if (QQuickWindow* win = shaderAnchor->window()) {
-            sceneRoot = win->contentItem();
-        }
-        QQuickItem* parent = shaderAnchor->parentItem();
-        if (sceneRoot && parent) {
-            const QPointF rootOriginInParent = parent->mapFromItem(sceneRoot, QPointF(0.0, 0.0));
-            shaderItem->setX(rootOriginInParent.x());
-            shaderItem->setY(rootOriginInParent.y());
-            shaderItem->setWidth(sceneRoot->width());
-            shaderItem->setHeight(sceneRoot->height());
-            shaderItem->setIResolution(QSizeF(sceneRoot->width(), sceneRoot->height()));
-        } else if (parent) {
-            shaderItem->setX(0.0);
-            shaderItem->setY(0.0);
-            shaderItem->setWidth(parent->width());
-            shaderItem->setHeight(parent->height());
-            shaderItem->setIResolution(QSizeF(parent->width(), parent->height()));
-        } else {
-            shaderItem->setX(shaderAnchor->x());
-            shaderItem->setY(shaderAnchor->y());
-            shaderItem->setWidth(shaderAnchor->width());
-            shaderItem->setHeight(shaderAnchor->height());
-            shaderItem->setIResolution(QSizeF(shaderAnchor->width(), shaderAnchor->height()));
-        }
-    } else {
-        // Anchor mode (default) — shader item exactly covers the anchor.
-        shaderItem->setX(shaderAnchor->x());
-        shaderItem->setY(shaderAnchor->y());
-        shaderItem->setWidth(shaderAnchor->width());
-        shaderItem->setHeight(shaderAnchor->height());
-        shaderItem->setIResolution(QSizeF(shaderAnchor->width(), shaderAnchor->height()));
-    }
+    // Initial-attach geometry IS syncShaderGeometryNow, called rather than
+    // reproduced. Pre-seeding here keeps the first paint between attach and the
+    // next syncGeometry() call correctly sized; syncGeometry() refreshes on
+    // subsequent geometry events, and it is the same call with the same
+    // arguments the lambda below makes.
+    //
+    // It used to be a hand-written copy of the two-mode branch, and the copy had
+    // drifted in the way a copy does. Its Anchor arm pushed the ANCHOR's size as
+    // iResolution where the real one pushes the CARD's, which differ on a
+    // PopupFrame, whose anchor wraps frame plus glow and publishes the card rect
+    // through shaderContentRect. Every frame before the first geometry event
+    // therefore told a shader doing pixel or aspect maths that the surface was
+    // bigger than it is. The copy also seeded none of iAnchorSize,
+    // iAnchorPosInFbo or the card's UV sub-rect.
+    syncShaderGeometryNow(shaderAnchor, shaderItem, shaderSource, effect.fboExtentKind);
 
     // No more customParams[7].x structural write: morph and broken-glass
     // (the only consumers) were ported to read the pad implicitly via
