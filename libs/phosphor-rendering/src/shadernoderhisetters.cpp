@@ -429,16 +429,15 @@ void ShaderNodeRhi::setSourceTextureProvider(QSGTextureProvider* provider)
     // correct; the double-rebuild concern is one frame of extra pipeline work.
     m_lastSourceRhiTexture = nullptr;
     resetAllBindingsAndPipelines();
-    // iTextureResolution[0] is derived from the source texture's pixelSize, and
-    // resetAllBindingsAndPipelines republishes no uniforms, so the binding would
-    // be refreshed while the published SIZE stayed on the previous provider's.
-    // It self-heals today, because a source resize always arrives alongside
-    // setResolution or setSurfaceSize and both mark sceneData, and an animating
-    // pack marks time every frame regardless. That is an accident of the callers
-    // rather than an invariant this setter holds, so hold it here. Offset 592 is
-    // inside the scene region of both profiles, so this is safe in each.
-    m_uniformsDirty = true;
-    m_sceneDataDirty = true;
+    // NO DIRTY FLAGS HERE, deliberately, and it is worth saying why because raising
+    // them here looks like the obvious fix and is worse than doing nothing.
+    // iTextureResolution[0] comes from m_lastSourceRhiTexture->pixelSize(), which the
+    // line above just nulled, and uploadDirtyTextures runs syncBaseUniforms BEFORE it
+    // resolves the new provider's texture. So flags raised here make the next upload
+    // publish the (1, 1) fallback rather than the new size, where leaving them alone
+    // keeps the previous provider's size until the real one is known. The re-arm
+    // belongs where the value becomes knowable, and it is there, in
+    // uploadDirtyTextures' identity-change branch.
 }
 
 void ShaderNodeRhi::setWallpaperTexture(const QImage& image)

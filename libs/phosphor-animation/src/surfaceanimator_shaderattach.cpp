@@ -30,12 +30,13 @@ namespace {
 /// instance — the per-leg attach installs the extension via
 /// `ShaderEffect::setUniformExtension`, so a `dynamic_pointer_cast`
 /// here pulls back the typed pointer for setter calls.
-inline PhosphorAnimation:: // Returns a RAW pointer out of a temporary shared_ptr, which is safe only because
-                           // ShaderEffect::uniformExtension() hands back a COPY of the member it still holds,
-                           // so the refcount stays at least one after the temporary dies. Anyone
-                           // "optimising" that accessor into a move, or releasing the item's own reference,
-                           // breaks every caller here silently.
-    AnimationUniformExtension* animExtensionFor(PhosphorRendering::ShaderEffect* shaderItem)
+///
+/// Returns a RAW pointer out of a temporary shared_ptr, which is safe only because
+/// `ShaderEffect::uniformExtension()` hands back a COPY of the member it still holds,
+/// so the refcount stays at least one after the temporary dies. Anyone "optimising"
+/// that accessor into a move, or releasing the item's own reference, breaks every
+/// caller here silently.
+inline PhosphorAnimation::AnimationUniformExtension* animExtensionFor(PhosphorRendering::ShaderEffect* shaderItem)
 {
     if (!shaderItem) {
         return nullptr;

@@ -636,6 +636,20 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         if (resolved != m_lastSourceRhiTexture) {
             m_lastSourceRhiTexture = resolved;
             resetAllBindingsAndPipelines();
+            // REPUBLISH iTextureResolution[0], which is derived from this texture's
+            // pixelSize and which syncBaseUniforms already read THIS frame, above,
+            // while the pointer still held the old value (or null, on a provider
+            // swap). Without this the published size trails the binding by one
+            // provider, and on a pack that marks nothing per frame it never catches
+            // up: setSourceTextureProvider cannot do it, because at that point the
+            // new size is not knowable yet.
+            //
+            // requestAnotherFrame() as well, not just the flags, for the same reason
+            // the buffer-target create path gives: this runs inside prepare() on the
+            // render thread, where setting a dirty flag schedules nothing by itself.
+            m_uniformsDirty = true;
+            m_sceneDataDirty = true;
+            requestAnotherFrame();
         }
     }
 

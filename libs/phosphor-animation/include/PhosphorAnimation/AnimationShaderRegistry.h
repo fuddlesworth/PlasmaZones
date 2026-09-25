@@ -212,6 +212,12 @@ public:
     /// order: the user directory first, then the system prefixes highest-first.
     /// Deduplicated.
     ///
+    /// That order holds for a registry populated in the CANONICAL shape, which every
+    /// in-tree caller builds: addSearchPaths normalises whatever RegistrationOrder it
+    /// is handed, but N successive singular addSearchPath calls store call order
+    /// verbatim, so a caller adding the user dir first would get the reversal exactly
+    /// backwards. Only single-path test fixtures use the singular form.
+    ///
     /// SINGLE SOURCE OF TRUTH for animation include resolution, and the reason
     /// it exists is that `searchPaths()` is in REGISTRATION order, which is
     /// lowest-priority FIRST. A caller that walks that verbatim resolves every
@@ -229,10 +235,12 @@ public:
     /// back to: the first one that exists walking sharedIncludePaths(), so a
     /// user copy wins over the bundled one. Empty when no root ships one.
     ///
-    /// Same ordering hazard as sharedIncludePaths(), and worse in effect: the
-    /// old hand-rolled walks took the FIRST hit in registration order, so on a
-    /// multi-root install they compiled the lowest-priority vertex stage against
-    /// the highest-priority headers.
+    /// Same ordering hazard as sharedIncludePaths(). The old hand-rolled walks took
+    /// the FIRST hit in registration order, so on a multi-root install they picked the
+    /// LOWEST-priority vertex stage, consistently with the headers those same walks
+    /// resolved. Nothing was ever mismatched against anything; both were simply the
+    /// wrong end of the list, and moving to user-wins is a deliberate behaviour change
+    /// rather than a repair of a split pair.
     [[nodiscard]] QString defaultVertexShaderPath() const;
 
 Q_SIGNALS:

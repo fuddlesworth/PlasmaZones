@@ -38,7 +38,7 @@ namespace PhosphorSurfaceShaders {
 ///      pack mixes its two colours on the contract's uSurfaceFocused
 ///      itself. See the appearance section below.
 ///
-///   4. **Pointer shaders** — `PhosphorPointer::PointerShaderRegistry`,
+///   4. **Pointer shaders** — `PhosphorPointerShaders::PointerShaderRegistry`,
 ///      sourced from `data/pointer/*/`. Cursor decoration packs,
 ///      compositor-only, and the one family with its OWN buffer-pass cap of
 ///      two rather than the shared eight, because its chain runs on every
