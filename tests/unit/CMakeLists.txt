@@ -2482,7 +2482,8 @@ set(_pack_validator_arms
     ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_pointer.cpp
     ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidatorcommon.cpp)
 foreach(_pv_test IN ITEMS test_pack_validators test_pack_validator_presets test_pointer_pack_validator
-                          test_surface_pack_validator test_animation_pack_bakes test_pack_model_detection)
+                          test_surface_pack_validator test_surface_pack_lints test_animation_pack_bakes
+                          test_pack_model_detection)
     add_executable(${_pv_test} shadervalidate/${_pv_test}.cpp
                    shadervalidate/packvalidatortesthelpers.h
                    ${_pack_validator_arms})

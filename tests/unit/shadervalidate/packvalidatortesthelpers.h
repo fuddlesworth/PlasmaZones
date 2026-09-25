@@ -194,6 +194,120 @@ inline QJsonArray toArray(const QStringList& values)
     return arr;
 }
 
+// ── surface fixture writers ─────────────────────────────────────────────
+// Shared by the surface validator's two test executables. They were file-local
+// to the first one until the second needed the same writers: a per-lint negative
+// slot is only cheap when the fixture is, and two copies of a fixture writer is
+// how two test files start disagreeing about what a valid pack looks like.
+
+/// The surface twin of `validate`. Writes the pack plus a `pSurface` entry body,
+/// which the validator assembles into a full TU exactly as the daemon and the
+/// compositor do.
+/// @p vertBody, when given, is written under the name @p metadata declares in
+/// `vertexShader`, so the fixture cannot drift from what the pack claims to ship.
+inline PackResult validateSurface(const QTemporaryDir& tmp, const QString& name, const QJsonObject& metadata,
+                                  const QString& body, const QString& vertBody = QString())
+{
+    const QString dir = tmp.filePath(name);
+    if (!writePackFile(dir, QStringLiteral("metadata.json"), QJsonDocument(metadata).toJson())) {
+        return fixtureFailure(QStringLiteral("failed to write metadata.json under ") + dir);
+    }
+    if (!writePackFile(dir, QStringLiteral("effect.frag"), body.toUtf8())) {
+        return fixtureFailure(QStringLiteral("failed to write effect.frag under ") + dir);
+    }
+    if (!vertBody.isEmpty()) {
+        const QString vertName = metadata.value(QLatin1String("vertexShader")).toString();
+        if (vertName.isEmpty()) {
+            return fixtureFailure(QStringLiteral("vertex body given but metadata declares no vertexShader"));
+        }
+        if (!writePackFile(dir, vertName, vertBody.toUtf8())) {
+            return fixtureFailure(QStringLiteral("failed to write ") + vertName + QStringLiteral(" under ") + dir);
+        }
+    }
+
+    PackResult result;
+    QTextStream stream(&result.report);
+    result.errors = PlasmaZones::ShaderValidate::validateSurfacePack(dir, stream);
+    stream.flush();
+    return result;
+}
+
+/// One surface parameter declaration.
+inline QJsonObject surfaceParam(const QString& id, const QString& type, const QJsonValue& def, double min, double max)
+{
+    QJsonObject param;
+    param.insert(QStringLiteral("id"), id);
+    param.insert(QStringLiteral("name"), id);
+    param.insert(QStringLiteral("type"), type);
+    param.insert(QStringLiteral("default"), def);
+    if (type != QLatin1String("color") && type != QLatin1String("bool")) {
+        param.insert(QStringLiteral("min"), min);
+        param.insert(QStringLiteral("max"), max);
+    }
+    return param;
+}
+
+inline QJsonObject surfacePack(const QString& id, const QJsonArray& params)
+{
+    QJsonObject obj;
+    obj.insert(QStringLiteral("id"), id);
+    obj.insert(QStringLiteral("name"), id);
+    obj.insert(QStringLiteral("fragmentShader"), QStringLiteral("effect.frag"));
+    obj.insert(QStringLiteral("parameters"), params);
+    return obj;
+}
+
+/// A `pSurface` body that READS every id in @p ids, so the declared-but-unread
+/// sweep stays quiet and the lint under test is the only thing in the report.
+inline QString surfaceBodyReading(const QStringList& ids)
+{
+    QString body = QStringLiteral("vec4 pSurface(vec2 uv)\n{\n    float acc = 0.0;\n");
+    for (const QString& id : ids) {
+        body += QStringLiteral("    acc += float(p_%1);\n").arg(id);
+    }
+    body += QStringLiteral("    return vec4(acc, 0.0, 0.0, 1.0);\n}\n");
+    return body;
+}
+
+/// A vertex stage a pack ships ITSELF, with @p assign spliced in as the
+/// gl_Position write. Deliberately free of `qt_Matrix`: that uniform is declared
+/// only in the daemon UBO branch of surface_uniforms.glsl, so a stage using it
+/// cannot bake for the compositor. The shared `surface.vert` fallback does use
+/// it, which is why the validator bakes the fallback on the Qt-RHI path alone.
+///
+/// Carries its own `#version`, unlike the fragment bodies above: the validator
+/// splices a generated preamble ahead of a fragment, so a `#version` there lands
+/// mid-file, while a vertex stage is passed through and must declare its own.
+inline QString packVertexBody(const QString& assign)
+{
+    return QStringLiteral(
+               "#version 450\n"
+               "#include <surface_uniforms.glsl>\n"
+               "layout(location = 0) in vec2 position;\n"
+               "layout(location = 1) in vec2 texCoord;\n"
+               "layout(location = 0) out vec2 vTexCoord;\n"
+               "void main()\n"
+               "{\n"
+               "    vTexCoord = texCoord;\n")
+        + assign + QStringLiteral("}\n");
+}
+
+/// True when some ONE line of @p report names both @p stage and @p marker.
+/// A bare `report.contains(...)` cannot express this: every slot's report also
+/// carries the fragment's own compile lines, so asserting on "OK (compositor)"
+/// across the whole report passes whether or not the stage under test was baked
+/// at all.
+inline bool reportLineHas(const QString& report, const QString& stage, const QString& marker)
+{
+    const QStringList lines = report.split(QLatin1Char('\n'));
+    for (const QString& line : lines) {
+        if (line.contains(stage) && line.contains(marker)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace PackValidatorTest
 
 /// The preconditions every slot that runs the ANIMATION validator shares. The
