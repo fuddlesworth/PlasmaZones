@@ -7,10 +7,16 @@
 // shadow and highlight colours. Same slab composite as the blur family:
 // the pane shows through wherever the window itself is translucent.
 //
-// SHARED BACKDROP STAGES, in order: the blurred sample runs through
-// surfaceBackdropGrade (brightness, contrast, OKLab saturation, vibrancy)
-// before the duotone remap, and a driver-stable grain goes on last so it
-// dithers the finished gradient rather than being crushed by the remap.
+// BACKDROP STAGES, in order: the blurred sample is collapsed to luma709, the
+// pack's own `contrast` shapes that as an EXPONENT, the result indexes the
+// two-colour gradient, and a driver-stable grain goes on last so it dithers the
+// finished gradient rather than being crushed by the remap.
+//
+// This pack does NOT call surfaceBackdropGrade, unlike its blur-family siblings,
+// and cannot: it declares no brightness, saturation or vibrancy parameters, and its
+// `contrast` is the luminance exponent above rather than the grade's contrast. A
+// grade before a duotone remap would also be largely wasted, since the remap
+// discards everything but luminance.
 //
 // Retired handlesOpacity contract: uSurfaceOpacity is a constant 1.0 now
 // (SetOpacity is layer-backed and custom chains own their alpha). The pack's

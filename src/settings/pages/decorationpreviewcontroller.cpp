@@ -132,6 +132,13 @@ DecorationPreviewController::DecorationPreviewController(PhosphorSurfaceShaders:
         app->installEventFilter(this);
     }
     if (m_settings) {
+        // The blur-quality tier is folded into the composed stage map, so moving that
+        // combo changes what the daemon will draw and has to move the preview with it.
+        // bumpPreviewRevision, NOT the reload generation: the tier changes the stage
+        // MAP and not the shader source, so a recompose is enough and a re-bake of
+        // every stage would be waste.
+        connect(m_settings, &ISettings::decorationBlurScaleMultiplierChanged, this,
+                &DecorationPreviewController::bumpPreviewRevision);
         connect(m_settings, &ISettings::highlightColorChanged, this, &DecorationPreviewController::bumpPreviewRevision);
         connect(m_settings, &ISettings::inactiveColorChanged, this, &DecorationPreviewController::bumpPreviewRevision);
         // Follow the setting for as long as a host wants capture. Without this

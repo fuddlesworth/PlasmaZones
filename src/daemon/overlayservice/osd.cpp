@@ -634,7 +634,8 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     // Theme colours for the pack flag resolver, read once for the whole chain.
     const QPalette pal = QGuiApplication::palette();
     // The blur-quality tier the composer folds into every declared buffer scale.
-    const qreal blurScale = m_settings ? m_settings->decorationBlurScaleMultiplier() : 1.0;
+    // m_settings is non-null here: this function early-returns above when it is.
+    const qreal blurScale = m_settings->decorationBlurScaleMultiplier();
     for (const QString& packId : chain) {
         if (!m_surfaceShaderRegistry->hasEffect(packId)) {
             // One warning per pack id per REASON, not one per show: a profile
@@ -759,7 +760,7 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
                      backdrop.isNull() ? QVariant() : QVariant::fromValue(backdrop));
     writeQmlProperty(slot, QStringLiteral("decorationChain"), QVariant::fromValue(stages));
     // Every apply, so a slot decorated after a commit starts at the current value.
-    writeQmlProperty(slot, OverlayQmlPropertyNames::DecorationReloadGeneration, s_decorationReloadGeneration);
+    writeQmlProperty(slot, QString(OverlayQmlPropertyNames::DecorationReloadGeneration), s_decorationReloadGeneration);
 
     // Record whether this slot now carries an audio-reactive pack, then reconcile
     // CAVA: a newly-decorated audio surface may need audio capture started, or a

@@ -114,11 +114,15 @@ inline bool linkSurfaceSharedIncludes(const QTemporaryDir& tmp)
 /// The overlay twin, for a fixture whose stage `#include`s one of the overlay
 /// shared headers rather than standing alone.
 ///
-/// Most overlay slots here test METADATA lints and never need this: the fixture
-/// writes a bare `pZone` body, the scaffold supplies what it needs, and nothing is
-/// included. It exists for the slots that have to compile a shared header the
-/// bundled packs do not reach, which is the only way those headers get baked at
-/// all.
+/// Most overlay slots here test METADATA lints, and they need this MORE than the
+/// wording used to suggest. The old note said such a fixture "stands alone" and that
+/// "nothing is included"; that is false. The overlay scaffold's own
+/// `zoneEntryPrologue()` emits `#include <common.glsl>`, so an UNLINKED overlay
+/// fixture fails include expansion before any stage compiles. A metadata-lint slot
+/// asserting only `errors > 0` is then satisfied by that include failure alone and
+/// never exercises the compile at all, which is a passing test that proves nothing.
+/// Link the headers even for a metadata slot unless the slot deliberately asserts on
+/// the include failure itself.
 inline bool linkOverlaySharedIncludes(const QTemporaryDir& tmp)
 {
     const QString target = QStringLiteral(P_SOURCE_DIR "/data/overlays/shared");

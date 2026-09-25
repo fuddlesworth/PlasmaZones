@@ -54,6 +54,13 @@ ShellChrome::ShellChrome(QObject* parent)
 {
     subscribeToDaemon();
     fetchTree();
+    // BESIDE fetchTree, and for the identical reason. The two subscribe triggers are
+    // the settingsChanged signal and WatchForRegistration, and neither fires in the
+    // normal startup order: the daemon already owns the name when the shell starts,
+    // so serviceRegistered does not fire, and settingsChanged only fires on a real
+    // edit. Without this the chrome composed at the 1.0 identity and ignored the
+    // user's configured blur tier until they happened to touch any setting.
+    fetchBlurScaleMultiplier();
 }
 
 ShellChrome::ShellChrome(const QStringList& packSearchPaths, QObject* parent)
@@ -293,8 +300,21 @@ void ShellChrome::fetchBlurScaleMultiplier()
         // would read as unusable and fall back to 1.0 anyway. Rejecting it here
         // keeps the stored value meaning what it says.
         bool ok = false;
-        const qreal m = unwrapDBusVariant(reply.value()).toReal(&ok);
-        if (!ok || !qIsFinite(m) || m <= 0.0 || qFuzzyCompare(m_blurScaleMultiplier + 1.0, m + 1.0)) {
+        const qreal raw = unwrapDBusVariant(reply.value()).toReal(&ok);
+        if (!ok || !qIsFinite(raw) || raw <= 0.0) {
+            return;
+        }
+        // NO BOUNDARY CLAMP HERE, and the claim that this matches the compositor's
+        // loader is dropped rather than made true. That loader additionally qBounds
+        // into DecorationDefaults' declared band, on the principle that a separate
+        // process's reply is not trusted with the range, but this file cannot reach
+        // that constant: the shell target does not link PhosphorCompositor, and
+        // pulling it in for one header-only constexpr costs more than it buys.
+        // composeStageMap bounds the PRODUCT into [kMinBufferScale, kMaxBufferScale]
+        // regardless, so an out-of-band reply saturates rather than misbehaving. What
+        // is lost is only that the stored member can hold a value outside the band.
+        const qreal m = raw;
+        if (qFuzzyCompare(m_blurScaleMultiplier + 1.0, m + 1.0)) {
             return;
         }
         m_blurScaleMultiplier = m;

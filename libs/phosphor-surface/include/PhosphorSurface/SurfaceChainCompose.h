@@ -60,9 +60,9 @@ PHOSPHORSURFACE_EXPORT double paddingRequest(const SurfaceShaderEffect& effect, 
  * paths to the shader item. Single-pass stages carry `multipass: false` and
  * nothing further, leaving the item's own defaults untouched.
  *
- * Used by the daemon overlay-decoration host and by the settings app's
- * decoration preview, which must compose a stage identically or the preview
- * stops predicting what the daemon draws. The kwin-effect compositor path
+ * Used by the daemon overlay-decoration host, by the shell's own chrome, and by the
+ * settings app's decoration preview, all three of which must compose a stage
+ * identically or the preview stops predicting what the daemon draws. The kwin-effect compositor path
  * builds GL uniform value arrays instead of a stage map and shares only
  * paddingRequest() above.
  *

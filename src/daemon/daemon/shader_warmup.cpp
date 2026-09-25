@@ -473,7 +473,7 @@ void Daemon::setupShaderWarmBakes()
             // the same headers and the same default vertex stage the compositor
             // and the live daemon leg pick. A hand-rolled walk over
             // searchPaths() gets the priority order backwards, and the include
-            // fingerprint below is over the dir SET rather than the ordered
+            // fingerprint above is over the dir SET rather than the ordered
             // list, so such a divergence would not even invalidate the entry.
             const QStringList includePaths = reg->sharedIncludePaths();
             if (vertPath.isEmpty()) {
