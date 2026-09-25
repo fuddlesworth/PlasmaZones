@@ -336,6 +336,48 @@ int main(int argc, char** argv)
         return 0;
     }
 
+    // CROSS-PACK, so it cannot live in a per-pack validator: two packs whose
+    // `category` differs only by case or surrounding whitespace land in TWO
+    // groups in the browser, because the grouping is on the exact string. The
+    // author sees "Decoration" and "decoration " as one category and the user
+    // sees two, one of them usually holding a single pack.
+    //
+    // A WARNING, not an error. Which spelling is the intended one is the author's
+    // call, a deliberate near-duplicate is conceivable, and this must not fail a
+    // release over presentation. It also runs for EVERY family rather than just
+    // the surface one it was reported against: the grouping is family-agnostic.
+    //
+    // Only meaningful with siblings to compare, so a single-pack run says nothing.
+    if (packs.size() > 1) {
+        // normalized spelling -> the distinct raw spellings seen for it.
+        QMap<QString, QStringList> categorySpellings;
+        for (const QString& pack : packs) {
+            QFile metaFile(QDir(pack).filePath(QStringLiteral("metadata.json")));
+            if (!metaFile.open(QIODevice::ReadOnly)) {
+                continue; // the per-pack validator reports an unreadable metadata.json
+            }
+            const QString category =
+                QJsonDocument::fromJson(metaFile.readAll()).object().value(QLatin1String("category")).toString();
+            if (category.isEmpty()) {
+                continue;
+            }
+            QStringList& seen = categorySpellings[category.trimmed().toCaseFolded()];
+            if (!seen.contains(category)) {
+                seen.append(category);
+            }
+        }
+        for (auto it = categorySpellings.constBegin(); it != categorySpellings.constEnd(); ++it) {
+            if (it.value().size() > 1) {
+                QStringList quoted;
+                for (const QString& s : it.value()) {
+                    quoted << QLatin1Char('"') + s + QLatin1Char('"');
+                }
+                errStream << "warning: these categories differ only by case or whitespace and group separately in "
+                          << "the browser: " << quoted.join(QLatin1String(", ")) << "\n";
+            }
+        }
+    }
+
     int totalErrors = 0;
     int failedPacks = 0;
     for (const QString& pack : packs) {

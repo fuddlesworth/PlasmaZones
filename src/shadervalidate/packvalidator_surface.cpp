@@ -583,6 +583,81 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
                              "[0..6] in the order %1")
                              .arg(kKawaseChain.join(QLatin1String(", ")));
             }
+            // THE RADIUS SLOT. kawase_down_0 and every pass after it read the
+            // blur radius as customParams[0].x, and slots are assigned by
+            // DECLARATION ORDER (buildParamPreamble), so the chain blurs by
+            // whatever the pack's first scalar parameter happens to be. Nothing
+            // enforced that: surface_blur.glsl's own header calls it out as "the
+            // part a pack author has to carry" and says no validator lint and no
+            // test covers it. Reorder the parameters array and the pack still
+            // compiles, still loads, and blurs by a corner radius.
+            //
+            // The first SCALAR, not the first parameter: colours and images live
+            // in their own pools, so a pack may lead with a colour and still have
+            // its radius in slot 0.
+            {
+                QString firstScalarId;
+                QString firstScalarType;
+                for (const QJsonValue& pv : parametersValue.toArray()) {
+                    const QString ptype = pv.toObject().value(QLatin1String("type")).toString();
+                    if (ptype == QLatin1String("float") || ptype == QLatin1String("int")) {
+                        firstScalarId = pv.toObject().value(QLatin1String("id")).toString();
+                        firstScalarType = ptype;
+                        break;
+                    }
+                }
+                if (firstScalarType.isEmpty()) {
+                    lints << QStringLiteral(
+                        "the builtin Kawase passes read the blur radius as customParams[0].x, but this pack declares "
+                        "no float or int parameter, so the chain blurs by 0");
+                } else if (firstScalarId != QLatin1String("blurRadius")) {
+                    // A name check, deliberately, and the message says why rather
+                    // than pretending the name itself is load-bearing: the SLOT is
+                    // what matters and the name is the only thing decidable here.
+                    lints << QStringLiteral(
+                                 "the builtin Kawase passes read the blur radius as customParams[0].x, which is the "
+                                 "FIRST scalar parameter declared, and that is '%1' here. Every bundled chain pack "
+                                 "declares 'blurRadius' first; if '%1' is not the radius the chain blurs by the wrong "
+                                 "control")
+                                 .arg(firstScalarId);
+                }
+            }
+            // THE BASE SCALE. surfaceKawaseDownBackdrop cannot size its taps from
+            // textureSize(), because it reads the backdrop capture whose size is
+            // not the canvas's, so it derives them from a HARDCODED
+            // kSurfaceKawaseBaseTexel of 4 canvas px per texel. That constant IS
+            // the 0.25 base, so a first scale of anything else silently mis-spaces
+            // the one pass that cannot detect it.
+            const QJsonArray kawaseScales = doc.object().value(QLatin1String("bufferScales")).toArray();
+            static const QList<double> kKawaseScales = {0.25, 0.125, 0.0625, 0.03125, 0.0625, 0.125, 0.25};
+            if (kawaseScales.isEmpty()) {
+                lints << QStringLiteral(
+                             "the builtin Kawase chain needs per-pass bufferScales %1; with none declared every pass "
+                             "renders at the pack-wide bufferScale and the pyramid is not a pyramid")
+                             .arg(QStringLiteral("[0.25, 0.125, 0.0625, 0.03125, 0.0625, 0.125, 0.25]"));
+            } else if (!kawaseScales.isEmpty() && !qFuzzyCompare(kawaseScales.at(0).toDouble(), kKawaseScales.at(0))) {
+                lints << QStringLiteral(
+                             "bufferScales[0] is %1, but the first Kawase DOWN pass derives its tap spacing from a "
+                             "hardcoded 4 canvas px per texel, which is the 0.25 base. Any other first scale "
+                             "mis-spaces that pass and nothing at runtime can detect it")
+                             .arg(kawaseScales.at(0).toDouble());
+            } else if (chainOk && kawaseScales.size() >= kKawaseScales.size()) {
+                // Only when the chain itself is the canonical seven: a pack that
+                // failed chainOk above is already being told the bigger thing, and
+                // comparing scales against a chain it does not have would be noise.
+                for (qsizetype i = 0; i < kKawaseScales.size(); ++i) {
+                    if (!qFuzzyCompare(kawaseScales.at(i).toDouble(), kKawaseScales.at(i))) {
+                        lints << QStringLiteral(
+                                     "bufferScales[%1] is %2 where the Kawase pyramid halves to %3; the up passes read "
+                                     "the level below by channel index, so an off-pyramid scale composes a level "
+                                     "against the wrong resolution")
+                                     .arg(i)
+                                     .arg(kawaseScales.at(i).toDouble())
+                                     .arg(kKawaseScales.at(i));
+                        break;
+                    }
+                }
+            }
         }
         for (const QJsonValue& v : declaredBuffers) {
             // A non-string entry reported as "empty", which says the author wrote
