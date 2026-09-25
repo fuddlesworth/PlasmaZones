@@ -82,5 +82,17 @@ inline constexpr QLatin1String LabelsTexture{"labelsTexture"};
 /// declares a cornerRadius so border and shadow corners coincide.
 inline constexpr QLatin1String CardCornerRadius{"cardCornerRadius"};
 
+/// Monotonic tick the daemon bumps on every committed shader-registry rescan.
+/// Each decorated slot forwards it to its SurfaceDecoration, whose stages call
+/// reloadShader() when it moves. That is the only thing that re-bakes after an
+/// IN-PLACE edit of a pack's shader source, because the recomposed chain is then
+/// byte-identical and the stage rebinds the same URL.
+///
+/// It first shipped written straight to the slot as a literal, which is exactly the
+/// failure this file exists to prevent: no slot declared the name, writeQmlProperty
+/// fell through to setProperty, and the dynamic property it created had no NOTIFY,
+/// so nothing ever observed it.
+inline constexpr QLatin1String DecorationReloadGeneration{"decorationReloadGeneration"};
+
 } // namespace OverlayQmlPropertyNames
 } // namespace PlasmaZones

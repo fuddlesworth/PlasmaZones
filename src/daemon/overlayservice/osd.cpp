@@ -760,7 +760,7 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
                      backdrop.isNull() ? QVariant() : QVariant::fromValue(backdrop));
     writeQmlProperty(slot, QStringLiteral("decorationChain"), QVariant::fromValue(stages));
     // Every apply, so a slot decorated after a commit starts at the current value.
-    writeQmlProperty(slot, QStringLiteral("decorationReloadGeneration"), s_decorationReloadGeneration);
+    writeQmlProperty(slot, OverlayQmlPropertyNames::DecorationReloadGeneration, s_decorationReloadGeneration);
 
     // Record whether this slot now carries an audio-reactive pack, then reconcile
     // CAVA: a newly-decorated audio surface may need audio capture started, or a

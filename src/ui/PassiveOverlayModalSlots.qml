@@ -70,6 +70,7 @@ Item {
         // undeclared name silently becomes a dynamic property no binding
         // observes — the decoration would never update.
         property var decorationChain: []
+        property int decorationReloadGeneration: 0
         property real decorationOuterPadding: 0
         // The desktop wallpaper, standing in for the scene a daemon surface has
         // no way to capture. Under the SAME declare-and-forward contract as
@@ -138,6 +139,7 @@ Item {
             anchors.fill: parent
             contentItem: snapAssistLoader.item
             decorationChain: snapAssistSlot.decorationChain
+            decorationReloadGeneration: snapAssistSlot.decorationReloadGeneration
             decorationOuterPadding: snapAssistSlot.decorationOuterPadding
             backdropTexture: snapAssistSlot.backdropTexture
             // Screen-spanning slot, so its rect is the area the wallpaper
@@ -193,6 +195,7 @@ Item {
         // undeclared name silently becomes a dynamic property no binding
         // observes — the decoration would never update.
         property var decorationChain: []
+        property int decorationReloadGeneration: 0
         property real decorationOuterPadding: 0
         // The desktop wallpaper, standing in for the scene a daemon surface has
         // no way to capture. Under the SAME declare-and-forward contract as
@@ -277,6 +280,7 @@ Item {
             anchors.fill: parent
             contentItem: layoutPickerLoader.item
             decorationChain: layoutPickerSlot.decorationChain
+            decorationReloadGeneration: layoutPickerSlot.decorationReloadGeneration
             decorationOuterPadding: layoutPickerSlot.decorationOuterPadding
             backdropTexture: layoutPickerSlot.backdropTexture
             backdropSourceArea: Qt.rect(0, 0, width, height)
@@ -326,6 +330,7 @@ Item {
         // contract as the picker slot: C++ writes these with setProperty,
         // an undeclared name silently becomes a dead dynamic property.
         property var decorationChain: []
+        property int decorationReloadGeneration: 0
         property real decorationOuterPadding: 0
         // The desktop wallpaper, standing in for the scene a daemon surface has
         // no way to capture. Under the SAME declare-and-forward contract as
@@ -378,6 +383,7 @@ Item {
             anchors.fill: parent
             contentItem: cheatsheetLoader.item
             decorationChain: cheatsheetSlot.decorationChain
+            decorationReloadGeneration: cheatsheetSlot.decorationReloadGeneration
             decorationOuterPadding: cheatsheetSlot.decorationOuterPadding
             backdropTexture: cheatsheetSlot.backdropTexture
             backdropSourceArea: Qt.rect(0, 0, width, height)
