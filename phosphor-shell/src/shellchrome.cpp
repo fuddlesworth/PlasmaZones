@@ -54,6 +54,13 @@ ShellChrome::ShellChrome(QObject* parent)
 {
     subscribeToDaemon();
     fetchTree();
+    // BESIDE fetchTree, and for the identical reason. The two subscribe triggers are
+    // the settingsChanged signal and WatchForRegistration, and neither fires in the
+    // normal startup order: the daemon already owns the name when the shell starts,
+    // so serviceRegistered does not fire, and settingsChanged only fires on a real
+    // edit. Without this the chrome composed at the 1.0 identity and ignored the
+    // user's configured blur tier until they happened to touch any setting.
+    fetchBlurScaleMultiplier();
 }
 
 ShellChrome::ShellChrome(const QStringList& packSearchPaths, QObject* parent)
@@ -92,6 +99,24 @@ ShellChrome::ShellChrome(const QStringList& packSearchPaths, QObject* parent)
                     bump();
                 }
             });
+
+    // HERE, not in subscribeToDaemon(). These are registry concerns, and that
+    // function is only called by the OTHER constructor, so a chrome built with
+    // explicit search paths had neither of them: a pack installed or edited under it
+    // re-resolved nothing. The default constructor delegates to this one, so moving
+    // them makes both reachable either way.
+    //
+    // The registry watches its directories; a pack installed while the shell runs
+    // re-resolves too.
+    connect(m_registry.get(), &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this, &ShellChrome::bump);
+    // The second tick, and deliberately not folded into bump(): that one also fires on
+    // a tree or palette change, where re-baking every stage would be waste. Only a
+    // committed rescan can have changed a pack's shader SOURCE, which is the case
+    // recomposing the chain misses because the composition comes out identical.
+    connect(m_registry.get(), &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this, [this]() {
+        ++m_decorationReloadGeneration;
+        Q_EMIT decorationReloadGenerationChanged();
+    });
 }
 
 void ShellChrome::setPalette(PhosphorTheme::PaletteStore* palette)
@@ -201,7 +226,7 @@ QVariantList ShellChrome::chainFor(const QString& surfacePath) const
         }
         QVariantMap params = allParams.value(packId).toMap();
         PhosphorSurfaceShaders::resolveThemeParamColors(effect, params, theme);
-        stages.append(PhosphorSurfaceShaders::composeStageMap(effect, params));
+        stages.append(PhosphorSurfaceShaders::composeStageMap(effect, params, m_blurScaleMultiplier));
     }
     return stages;
 }
@@ -237,12 +262,11 @@ void ShellChrome::subscribeToDaemon()
     // Any setting change refetches: the tree is one key and the signal
     // carries none, so this is the daemon's own contract for followers.
     bus.connect(service, path, settings, QStringLiteral("settingsChanged"), this, SLOT(fetchTree()));
+    bus.connect(service, path, settings, QStringLiteral("settingsChanged"), this, SLOT(fetchBlurScaleMultiplier()));
     // A daemon that (re)appears publishes a fresh tree.
     auto* watcher = new QDBusServiceWatcher(service, bus, QDBusServiceWatcher::WatchForRegistration, this);
     connect(watcher, &QDBusServiceWatcher::serviceRegistered, this, &ShellChrome::fetchTree);
-    // The registry watches its directories; a pack installed while the
-    // shell runs re-resolves too.
-    connect(m_registry.get(), &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this, &ShellChrome::bump);
+    connect(watcher, &QDBusServiceWatcher::serviceRegistered, this, &ShellChrome::fetchBlurScaleMultiplier);
 }
 
 void ShellChrome::fetchTree()
@@ -260,6 +284,50 @@ void ShellChrome::fetchTree()
             return;
         }
         setTreeJson(unwrapDBusVariant(reply.value()).toString());
+    });
+}
+
+void ShellChrome::fetchBlurScaleMultiplier()
+{
+    QDBusMessage call = QDBusMessage::createMethodCall(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::Settings), QStringLiteral("getSetting"));
+    call << QString(PhosphorProtocol::Service::SettingProperty::DecorationBlurScaleMultiplier);
+    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(call), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        const QDBusPendingReply<QVariant> reply = *w;
+        if (!reply.isValid()) {
+            qCDebug(lcShellChrome) << "decorationBlurScaleMultiplier unavailable:" << reply.error().message();
+            return;
+        }
+        // Numeric-or-bust, the same guard the compositor's loader applies and for
+        // the same reason: an older daemon answers an unknown key with a valid
+        // EMPTY reply, and QVariant("").toReal() is 0.0, which composeStageMap
+        // would read as unusable and fall back to 1.0 anyway. Rejecting it here
+        // keeps the stored value meaning what it says.
+        bool ok = false;
+        const qreal raw = unwrapDBusVariant(reply.value()).toReal(&ok);
+        if (!ok || !qIsFinite(raw) || raw <= 0.0) {
+            return;
+        }
+        // NO BOUNDARY CLAMP HERE, and the claim that this matches the compositor's
+        // loader is dropped rather than made true. That loader additionally qBounds
+        // into DecorationDefaults' declared band, on the principle that a separate
+        // process's reply is not trusted with the range, but this file cannot reach
+        // that constant: the shell target does not link PhosphorCompositor, and
+        // pulling it in for one header-only constexpr costs more than it buys.
+        // composeStageMap bounds the PRODUCT into [kMinBufferScale, kMaxBufferScale]
+        // regardless, so an out-of-band reply saturates rather than misbehaving. What
+        // is lost is only that the stored member can hold a value outside the band.
+        const qreal m = raw;
+        if (qFuzzyCompare(m_blurScaleMultiplier + 1.0, m + 1.0)) {
+            return;
+        }
+        m_blurScaleMultiplier = m;
+        // Recompose: the stage maps carry the folded scales, so a tier change has
+        // to rebuild them. bump() is the single invalidation point.
+        bump();
     });
 }
 

@@ -9,6 +9,7 @@
 
 #include <PhosphorFsLoader/PackPathGuard.h>
 
+#include <PhosphorShaders/ShaderBindings.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
 #include <PhosphorShaders/ShaderPreset.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
@@ -18,6 +19,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QLatin1String>
 #include <QProcess>
 #include <QRegularExpression>
@@ -113,7 +115,8 @@ int editDistance(const QString& a, const QString& b)
 
 // If the glslang diagnostic names an undeclared `p_<x>` and a declared param is
 // a near match, surface the suggestion — the friction T1.2 exists to remove.
-// @p declared is the list of generated `p_<id>` names (zone or animation).
+// @p declared is the list of generated `p_<id>` names. Reached by all four
+// families: reportCompile is its only caller, and every arm routes through that.
 void appendDidYouMean(QTextStream& out, const QString& diagnostic, const QStringList& declared)
 {
     static const QRegularExpression re(QStringLiteral("'(p_[A-Za-z0-9_]+)' : undeclared identifier"));
@@ -251,8 +254,50 @@ QString glslangValidatorPath()
     return path;
 }
 
+namespace {
+
+/// Replace the source-string ID a glslang diagnostic leads with by the name of
+/// the file it stands for.
+///
+/// glslang attributes a diagnostic to the source string the resolver's
+/// `#line <n> <i>` directives put it in: `ERROR: 3:12:` for an error inside the
+/// third included file, and an EMPTY id for the top-level source. @p sourcePaths
+/// is the resolver's legend, element i being the path of source string i.
+///
+/// BOTH reporters needed this and neither had it, which is why it is shared
+/// rather than written into one of them. The legend has been documented on
+/// expandIncludes since the resolver was written and had no production consumer
+/// at all, so every error a pack hit inside a shared header reached its author
+/// as a bare number. The author's natural reading of `3:12` is line 3 of their
+/// own file, the one place it cannot mean.
+///
+/// Leaves the line untouched when the legend does not cover the id, which is the
+/// behaviour every caller had before.
+QString nameDiagnosticSource(const QString& line, const QString& label, const QStringList& sourcePaths)
+{
+    static const QRegularExpression sourceIdRe(QStringLiteral("^(ERROR|WARNING): (\\d*):"));
+    const QRegularExpressionMatch match = sourceIdRe.match(line);
+    if (!match.hasMatch()) {
+        return line;
+    }
+    const QString id = match.captured(2);
+    // An empty id is source 0, the top-level stage, which @p label names. It is
+    // how glslang spells it, and "0" is accepted too rather than assumed absent.
+    const int index = id.isEmpty() ? 0 : id.toInt();
+    const QString named =
+        (index == 0) ? label : (index < sourcePaths.size() ? QFileInfo(sourcePaths.at(index)).fileName() : QString());
+    if (named.isEmpty()) {
+        return line;
+    }
+    QString shown = line;
+    shown.replace(match.capturedStart(2), match.capturedLength(2), named);
+    return shown;
+}
+
+} // namespace
+
 int reportCompositorCompile(QTextStream& out, const QString& label, const QString& stage, const QString& source,
-                            const QString& toolPath)
+                            const QString& toolPath, const QStringList& sourcePaths)
 {
     // glslang reads the stage from the file extension unless -S says otherwise;
     // -S is passed below, so the temp file name only has to be unique. A
@@ -260,14 +305,14 @@ int reportCompositorCompile(QTextStream& out, const QString& label, const QStrin
     // takes the file with it on scope exit.
     QTemporaryDir tmp;
     if (!tmp.isValid()) {
-        out << "  " << padLabel(label) << "ERROR\n    cannot create a temporary directory for the "
+        out << "  " << padLabel(label) << "ERROR (compositor)\n    cannot create a temporary directory for the "
             << "compositor bake\n";
         return 1;
     }
     const QString srcPath = tmp.filePath(QStringLiteral("kwin.") + stage);
     QFile srcFile(srcPath);
     if (!srcFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        out << "  " << padLabel(label) << "ERROR\n    cannot write " << srcPath << "\n";
+        out << "  " << padLabel(label) << "ERROR (compositor)\n    cannot write " << srcPath << "\n";
         return 1;
     }
     // Checked: a short write stages a TRUNCATED shader, and glslang would then
@@ -275,7 +320,7 @@ int reportCompositorCompile(QTextStream& out, const QString& label, const QStrin
     const QByteArray encoded = source.toUtf8();
     if (srcFile.write(encoded) != encoded.size()) {
         out << "  " << padLabel(label)
-            << "ERROR\n    could not stage the shader for compilation: " << srcFile.errorString() << "\n";
+            << "ERROR (compositor)\n    could not stage the shader for compilation: " << srcFile.errorString() << "\n";
         return 1;
     }
     srcFile.close();
@@ -295,13 +340,13 @@ int reportCompositorCompile(QTextStream& out, const QString& label, const QStrin
         // execute bit, the wrong ELF class) fails here too, and reporting
         // that as a timeout sends the reader after the wrong problem.
         if (proc.error() == QProcess::FailedToStart) {
-            out << "  " << padLabel(label) << "ERROR\n    could not run " << toolPath << ": " << proc.errorString()
-                << "\n";
+            out << "  " << padLabel(label) << "ERROR (compositor)\n    could not run " << toolPath << ": "
+                << proc.errorString() << "\n";
             return 1;
         }
         proc.kill();
         proc.waitForFinished(1000);
-        out << "  " << padLabel(label) << "ERROR\n    " << toolPath << " timed out\n";
+        out << "  " << padLabel(label) << "ERROR (compositor)\n    " << toolPath << " timed out\n";
         return 1;
     }
     const QString log =
@@ -328,7 +373,7 @@ int reportCompositorCompile(QTextStream& out, const QString& label, const QStrin
         if (trimmed.startsWith(QLatin1String("SPIR-V is not generated"))) {
             continue;
         }
-        out << "    " << trimmed << "\n";
+        out << "    " << nameDiagnosticSource(trimmed, label, sourcePaths) << "\n";
     }
     return 1;
 }
@@ -339,6 +384,117 @@ QString padLabel(const QString& label)
     return label.size() < kColumn ? label.leftJustified(kColumn) : label + QLatin1Char(' ');
 }
 
+// The descriptor-binding lint every Qt-RHI bake passes through: reflect the
+// baked stage and check every resource it declares against the ONE binding
+// table (PhosphorShaders::Bindings).
+//
+// SCOPE, because the word "every" is doing less work than it looks: reflection
+// reports what the compiled stage actually READS. A sampler declared and never
+// sampled is optimised out before it reaches here, so this cannot lint a
+// declaration the shader does not use. That is the right behaviour, since an
+// unread declaration binds nothing either, but it does mean a clean report is
+// a statement about the stage's live resources rather than about its text. A contract sampler (iChannelN, uTextureN,
+// uAudioSpectrum, uWallpaper / uBackdrop, uDepthBuffer, uCursorSprite,
+// uZoneLabels) must sit at its table slot, and a pack may declare NO OTHER
+// sampler at all. The runtime builds its SRB from the same table, so a header
+// that drifted would fail the pipeline with nothing naming the cause; here it
+// names the sampler and both numbers.
+//
+// WHY A PACK'S OWN SAMPLER IS REFUSED OUTRIGHT rather than checked against the
+// consumer range: the consumer range is reachable only through
+// ShaderNodeRhi::setExtraBinding, whose two callers in the tree both bind the
+// overlay zone-labels texture, and `uZoneLabels` is a CONTRACT name that never
+// reaches this branch. Nothing binds 17..31, so a pack sampler placed there
+// reads nothing on the daemon; the compositor binds by name and has no entry
+// for it either. Accepting it told the author their pack was clean and left it
+// broken at runtime, which is the one outcome this lint exists to prevent.
+QStringList bindingLayoutProblems(const QShader& shader)
+{
+    QStringList problems;
+    const QShaderDescription desc = shader.description();
+
+    // Which resource already claimed each binding, so two of them landing on one
+    // slot is reported rather than left for the pipeline. The SRB takes one entry
+    // per binding, so a collision means one of the two silently wins.
+    QHash<int, QString> claimed;
+    const auto claim = [&claimed, &problems](int binding, const QString& what) {
+        const auto it = claimed.constFind(binding);
+        if (it != claimed.constEnd()) {
+            problems << QStringLiteral("%1 and %2 both declare binding %3, so only one of them reaches the SRB")
+                            .arg(*it, what)
+                            .arg(binding);
+            return;
+        }
+        claimed.insert(binding, what);
+    };
+
+    for (const QShaderDescription::UniformBlock& block : desc.uniformBlocks()) {
+        const QString name = QString::fromUtf8(block.blockName);
+        claim(block.binding, QStringLiteral("uniform block ") + name);
+        if (block.binding != PhosphorShaders::Bindings::kUniformBlock) {
+            problems << QStringLiteral("uniform block %1 declared at binding %2, but the contract puts it at %3")
+                            .arg(name)
+                            .arg(block.binding)
+                            .arg(PhosphorShaders::Bindings::kUniformBlock);
+        }
+    }
+    for (const QShaderDescription::InOutVariable& sampler : desc.combinedImageSamplers()) {
+        const QString name = QString::fromUtf8(sampler.name);
+        claim(sampler.binding, QStringLiteral("sampler ") + name);
+        const int expected = PhosphorShaders::Bindings::expectedSamplerBinding(name);
+        if (expected >= 0) {
+            if (sampler.binding != expected) {
+                problems << QStringLiteral("sampler %1 declared at binding %2, but the contract puts it at %3")
+                                .arg(name)
+                                .arg(sampler.binding)
+                                .arg(expected);
+            }
+        } else {
+            // Deliberately says nothing about WHICH binding would be right,
+            // because none is. Naming a range here would send the author off to
+            // renumber a sampler that still reads nothing afterwards.
+            problems << QStringLiteral(
+                            "sampler %1 declared at binding %2, which nothing will bind. A pack may "
+                            "declare only the contract samplers, whatever slot it puts its own on")
+                            .arg(name)
+                            .arg(sampler.binding);
+        }
+    }
+
+    // The resource kinds the SRB builders do not handle AT ALL. ShaderNodeRhi
+    // assembles its bindings from the one uniform block and combined image
+    // samplers, so anything below reaches no binding and takes the pipeline down
+    // at creation, with the failure surfacing far from the shader that caused it.
+    // Reflecting only combinedImageSamplers let all four kinds through.
+    const auto refuseKind = [&problems, &claim](const QList<QShaderDescription::InOutVariable>& vars,
+                                                const QString& kind) {
+        for (const QShaderDescription::InOutVariable& v : vars) {
+            const QString name = QString::fromUtf8(v.name);
+            claim(v.binding, kind + QLatin1Char(' ') + name);
+            problems << QStringLiteral(
+                            "%1 %2 declared at binding %3, and the runtime builds its SRB from combined "
+                            "image samplers and the one uniform block only, so it reaches no binding and "
+                            "fails pipeline creation")
+                            .arg(kind, name)
+                            .arg(v.binding);
+        }
+    };
+    refuseKind(desc.separateImages(), QStringLiteral("separate image"));
+    refuseKind(desc.separateSamplers(), QStringLiteral("separate sampler"));
+    refuseKind(desc.storageImages(), QStringLiteral("storage image"));
+    for (const QShaderDescription::StorageBlock& block : desc.storageBlocks()) {
+        const QString name = QString::fromUtf8(block.blockName);
+        claim(block.binding, QStringLiteral("storage block ") + name);
+        problems << QStringLiteral(
+                        "storage block %1 declared at binding %2, and the runtime builds its SRB from "
+                        "combined image samplers and the one uniform block only, so it reaches no binding "
+                        "and fails pipeline creation")
+                        .arg(name)
+                        .arg(block.binding);
+    }
+    return problems;
+}
+
 // Report a compiled stage's outcome: "OK", or "ERROR" with the glslang
 // diagnostics mapped to the author's file/line (T1.3 #line) plus the
 // did-you-mean hint. @p declared is the list of generated `p_<id>` names.
@@ -347,33 +503,54 @@ int reportCompile(QTextStream& out, const QString& label, const ShaderCompiler::
                   const QStringList& declared)
 {
     if (result.success) {
-        out << "  " << padLabel(label) << "OK\n";
-        return 0;
+        const QStringList bindings = bindingLayoutProblems(result.shader);
+        if (bindings.isEmpty()) {
+            out << "  " << padLabel(label) << "OK\n";
+            return 0;
+        }
+        out << "  " << padLabel(label) << "ERROR\n";
+        for (const QString& problem : bindings) {
+            out << "    binding layout: " << problem << "\n";
+        }
+        return 1;
     }
     out << "  " << padLabel(label) << "ERROR\n";
+    // NO SOURCE-STRING LEGEND ON THIS ARM, and that is measured rather than an
+    // oversight. Putting a deliberate error at surface_lib.glsl:388 and running
+    // both arms: the compositor arm, which drives glslang directly, reported
+    // `1:388`, so its id is real and reportCompositorCompile resolves it to a
+    // filename. QShaderBaker reported `:388` for the same error, so it HONOURS
+    // the `#line` line number (388 is that header's own line, not a line in the
+    // flattened blob) and DROPS the source string. There is no id to resolve
+    // here, so passing the legend in would be plumbing that cannot fire.
+    //
+    // The consequence is that the substitution below names the top-level stage
+    // for an error that is really in a header: `effect.frag:388`, right line and
+    // wrong file, stated with no hedge. It is not fixable from the diagnostic,
+    // because the per-file line alone does not identify the file. The label is
+    // still named because it is correct for every error that really is in this
+    // stage, which is the ordinary case.
     const QStringList diagLines = result.error.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
     for (const QString& line : diagLines) {
-        // glslang names the root source (file id 0, via the T1.3 #line directives)
-        // with an empty filename — `ERROR: :58:`. Substitute the stage label so the
-        // author sees `effect.frag:58`. Include errors keep their numeric file id.
-        QString shown = line.trimmed();
-        shown.replace(QStringLiteral("ERROR: :"), QStringLiteral("ERROR: ") + label + QStringLiteral(":"));
-        shown.replace(QStringLiteral("WARNING: :"), QStringLiteral("WARNING: ") + label + QStringLiteral(":"));
-        out << "    " << shown << "\n";
+        out << "    " << nameDiagnosticSource(line.trimmed(), label, {}) << "\n";
     }
     appendDidYouMean(out, result.error, declared);
     return 1;
 }
 
-/// The two parse caps, mirrored from `parsePackPresets` so the lint can say what the
-/// loader will drop. Mirrored rather than shared because phosphor-shaders does not export
-/// them, and a validator that reported a different figure from the loader would be worse
-/// than one that reported none: if the loader's cap moves, this has to move with it.
+/// The per-pack preset cap, mirrored from `parsePackPresets`'s file-local
+/// `kMaxPresetsPerPack` so the lint can say what the loader will drop. Mirrored rather
+/// than shared because that one constant is not exported, and a validator that reported a
+/// different figure from the loader would be worse than one that reported none: if the
+/// loader's cap moves, this has to move with it.
 constexpr int kMaxPackPresets = 64;
-constexpr int kMaxPackPresetValues = 64;
+/// The per-preset VALUE cap is not mirrored, because the loader tests the exported
+/// `ShaderPreset::MaxParams` directly and so can this.
+constexpr int kMaxPackPresetValues = PhosphorShaders::ShaderPreset::MaxParams;
 
-int reportImageParamPresets(QTextStream& out, const QJsonObject& root)
+QStringList imageParamPresetLints(const QJsonObject& root)
 {
+    QStringList lints;
     // The ANIMATION and SURFACE arms parse a pack's presets before its sourceDir is
     // stamped, so parsePackPresets cannot resolve an image path and refuses every
     // image-typed preset value for the whole pack. The value is simply absent by the time
@@ -394,7 +571,6 @@ int reportImageParamPresets(QTextStream& out, const QJsonObject& root)
             presetValueKeys += it.value().toObject().keys();
         }
     }
-    QStringList lints;
     for (const QJsonValue& value : root.value(QLatin1String("parameters")).toArray()) {
         const QJsonObject param = value.toObject();
         if (param.value(QLatin1String("type")).toString() != QLatin1String("image")) {
@@ -410,67 +586,114 @@ int reportImageParamPresets(QTextStream& out, const QJsonObject& root)
                      "kept. Declare the texture in the top-level `textures` array instead")
                      .arg(id);
     }
-    if (!lints.isEmpty()) {
-        out << "  " << padLabel(QStringLiteral("presets")) << "ERROR\n";
-        for (const QString& l : lints) {
-            out << "    " << l << "\n";
-        }
-    }
-    return static_cast<int>(lints.size());
+    return lints;
 }
 
-int reportRawPresetProblems(QTextStream& out, const QJsonObject& root)
+/// A preset value for a message, never blank. `QVariant::toString()` answers empty for a
+/// container, and a lint that names no value leaves the author guessing which entry it
+/// meant, so fall back to the type name.
+static QString describeVariant(const QVariant& value)
 {
+    const QString shown = value.toString();
+    if (!shown.isEmpty()) {
+        return shown;
+    }
+    if (value.typeId() == QMetaType::QVariantMap) {
+        return QStringLiteral("a JSON object");
+    }
+    if (value.typeId() == QMetaType::QVariantList) {
+        return QStringLiteral("a JSON array");
+    }
+    if (!value.isValid()) {
+        return QStringLiteral("nothing");
+    }
+    return QStringLiteral("an empty string");
+}
+
+QStringList rawPresetLints(const QJsonObject& root)
+{
+    QStringList lints;
     // The faults that are invisible ONCE THE PARSE HAS RUN, so they cannot live in the
     // shared lint below: it receives the parsed map, which is already empty (a non-object
     // `presets`) or already truncated (both count caps). Each of these costs the author
     // every preset or several of them, with only a log line nobody reads.
     const QJsonValue presetsValue = root.value(QLatin1String("presets"));
     if (presetsValue.isUndefined() || presetsValue.isNull()) {
-        return 0;
+        return lints;
     }
-    QStringList lints;
     if (!presetsValue.isObject()) {
         lints << QStringLiteral("`presets` is not an object, so it is ignored at load and the pack ships none");
     } else {
         const QJsonObject presets = presetsValue.toObject();
-        if (presets.size() > kMaxPackPresets) {
+        // COUNT THE WAY THE LOADER COUNTS, which is the whole point of mirroring its
+        // caps. parsePackPresets increments its budget only AFTER the object-shape
+        // check and says so at the increment, so a non-object body costs nothing.
+        // Counting raw keys here made the lint assert a drop that never happens: 65
+        // keys with one non-object body loads all 64 usable presets and discards
+        // none, yet the report claimed the 65th was dropped.
+        int usablePresets = 0;
+        for (auto it = presets.constBegin(); it != presets.constEnd(); ++it) {
+            if (it.value().isObject()) {
+                ++usablePresets;
+            } else {
+                // The loader drops this with a log line no author reads, and the
+                // parsed-map lint below cannot see it either, because the whole
+                // preset is absent from the map by then.
+                lints << QStringLiteral("preset '%1' is not an object, so it is dropped at load").arg(it.key());
+            }
+        }
+        if (usablePresets > kMaxPackPresets) {
             lints << QStringLiteral("declares %1 presets; only the first %2 are loaded and the rest are dropped")
-                         .arg(presets.size())
-                         .arg(kMaxPackPresets);
+                         .arg(QString::number(usablePresets), QString::number(kMaxPackPresets));
         }
         for (auto it = presets.constBegin(); it != presets.constEnd(); ++it) {
             if (!it.value().isObject()) {
                 continue;
             }
-            const int valueCount = it.value().toObject().size();
-            if (valueCount > kMaxPackPresetValues) {
+            const QJsonObject values = it.value().toObject();
+            // Same discipline one level down. The loader's per-preset budget tests
+            // the map it is BUILDING, and a JSON null never enters that map, so a
+            // null value costs no slot. The one divergence left is an image value
+            // the loader refuses, which reportImageParamPresets lints on its own.
+            int usableValues = 0;
+            for (auto vit = values.constBegin(); vit != values.constEnd(); ++vit) {
+                if (vit.value().isNull()) {
+                    // Dropping the key is how the loader says "leave this at its
+                    // default", because carrying a null through would read as 0 and
+                    // PIN the parameter. Worth a line: the author wrote something.
+                    lints << QStringLiteral(
+                                 "preset '%1' sets '%2' to null, which is dropped at load; remove the "
+                                 "entry to leave the parameter at its default")
+                                 .arg(it.key(), vit.key());
+                    continue;
+                }
+                ++usableValues;
+            }
+            if (usableValues > kMaxPackPresetValues) {
+                // One multi-argument arg(), not a chain. The preset key is
+                // author-controlled, and a chained .arg substitutes it into %1 first
+                // and then searches the RESULT, so a preset named "%3 mode" would
+                // have its own name rewritten by the next argument. The multi-arg
+                // overload substitutes every placeholder against the original string
+                // in one pass.
                 lints << QStringLiteral("preset '%1' sets %2 values; only the first %3 are loaded")
-                             .arg(it.key())
-                             .arg(valueCount)
-                             .arg(kMaxPackPresetValues);
+                             .arg(it.key(), QString::number(usableValues), QString::number(kMaxPackPresetValues));
             }
         }
     }
-    if (!lints.isEmpty()) {
-        out << "  " << padLabel(QStringLiteral("presets")) << "ERROR\n";
-        for (const QString& l : lints) {
-            out << "    " << l << "\n";
-        }
-    }
-    return static_cast<int>(lints.size());
+    return lints;
 }
 
-int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
-                         const QList<PresetLintParam>& declared)
+QStringList presetLints(const QString& packDir, const QMap<QString, QVariantMap>& presets,
+                        const QList<PresetLintParam>& declared)
 {
-    if (presets.isEmpty()) {
-        return 0;
-    }
-    // Collected, then printed under its own header. Writing straight to the
-    // stream put an unindented error line above a "metadata OK" that
-    // contradicted it, while still returning a non-zero error count.
     QStringList lints;
+    if (presets.isEmpty()) {
+        return lints;
+    }
+    // Collected, then printed under the ONE shared header reportPresetLints emits.
+    // Writing straight to the stream put an unindented error line above a
+    // "metadata OK" that contradicted it, while still returning a non-zero count.
 
     QHash<QString, PresetLintParam> byId;
     byId.reserve(declared.size());
@@ -478,7 +701,6 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
         byId.insert(p.id, p);
     }
 
-    int problems = 0;
     for (auto it = presets.constBegin(); it != presets.constEnd(); ++it) {
         const QString& presetName = it.key();
         const QVariantMap& values = it.value();
@@ -503,31 +725,44 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
         // preset id also never becomes a filename — duplicating one mints a fresh
         // UUID — so there is nothing to refuse at runtime for safety's sake.
         //
-        // What the rule protects is the PICKER: `applyPackBucket` takes the key as
-        // both the id an assignment stores and the name rendered in every row, and
-        // MaxNameChars truncation only runs for user presets. A 250-character key or
-        // one carrying a bidi override mangles the row, unreported, for good.
+        // What the rule protects is the PICKER, and the two halves of it have
+        // DIFFERENT runtime consequences, so they are reported separately.
         //
-        // `isUsableId` covers the blank, control-character and separator cases;
-        // the length bound here is the stricter NAME one, not its own id bound.
-        if (!PhosphorShaders::ShaderPreset::isUsableId(presetName)
-            || presetName.size() > PhosphorShaders::ShaderPreset::MaxNameChars) {
-            // One multi-arg .arg, not a chain: a chained one substitutes into the
-            // result of the previous substitution, so a `%2` inside the KEY (reachable
-            // — `%` is neither a control character nor a separator, and this branch
-            // also runs for a merely over-long key) would be replaced by the count.
+        // `applyPackBucket` takes the key as both the id an assignment stores and
+        // the name every row renders. It DOES truncate the name at MaxNameChars
+        // (shaderpresetregistry.cpp), surrogate-safely, so an over-long key renders
+        // clipped rather than unbounded. What it never truncates is the id, which
+        // keeps the full key. So the length hazard is not an unreadable row: it is
+        // two presets agreeing in their first MaxNameChars rendering as the same
+        // row while storing different ids.
+        //
+        // The `isUsableId` half has no runtime screen at all. A blank key, one
+        // beginning with a dot, one carrying a control or formatting character (a
+        // bidi override, say), or one holding a path separator reaches the row
+        // exactly as written.
+        //
+        // Every message below uses ONE multi-arg .arg rather than a chain: a chained
+        // one substitutes into the result of the previous substitution, so a `%2`
+        // inside the KEY (reachable, since `%` is neither a control character nor a
+        // separator) would be replaced by the next argument.
+        if (!PhosphorShaders::ShaderPreset::isUsableId(presetName)) {
             lints << QStringLiteral(
                          "preset '%1' has an unusable id: it must be non-blank (and not only whitespace), "
-                         "must not begin with a dot, at most %2 characters, free of control or formatting "
-                         "characters, and free of path separators. The id is also the name the picker renders, "
-                         "and it is what an assignment stores. The runtime does not refuse this — the pack "
-                         "would ship and render with an unreadable preset row")
-                         .arg(presetName, QString::number(PhosphorShaders::ShaderPreset::MaxNameChars));
-            ++problems;
-            // NOT a `continue`: the values are independent of the key, so reporting
-            // them in the same run spares the author a second round of errors after
-            // they rename the preset.
+                         "must not begin with a dot, must be free of control and formatting characters, and "
+                         "must hold no path separators. The runtime does not refuse this, and nothing "
+                         "sanitises it either, so the picker renders the key exactly as written")
+                         .arg(presetName);
+        } else if (presetName.size() > PhosphorShaders::ShaderPreset::MaxNameChars) {
+            lints << QStringLiteral(
+                         "preset '%1' has a %2-character id; the picker truncates the NAME it renders at %3 "
+                         "characters while an assignment stores the full key, so two presets agreeing up to "
+                         "that point render as the same row and resolve differently")
+                         .arg(presetName, QString::number(presetName.size()),
+                              QString::number(PhosphorShaders::ShaderPreset::MaxNameChars));
         }
+        // Neither arm `continue`s: the values are independent of the key, so
+        // reporting them in the same run spares the author a second round of errors
+        // after they rename the preset.
         for (auto vit = values.constBegin(); vit != values.constEnd(); ++vit) {
             const auto found = byId.constFind(vit.key());
             if (found == byId.constEnd()) {
@@ -540,7 +775,6 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
                              "preset '%1' sets '%2', which the pack does not declare (or declared and "
                              "the loader dropped it; see the parameter lints above)")
                              .arg(presetName, vit.key());
-                ++problems;
                 continue;
             }
 
@@ -552,9 +786,13 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
                     // An AUTHORING rule, not a runtime break: every consumer reads this
                     // through QVariant::toBool, which accepts a number. Worded so it
                     // does not imply the pack would misbehave.
+                    // describeVariant, not toString(): a preset value may be a JSON
+                    // object or array, which parsePackPresets stores verbatim as a
+                    // QVariantMap or QVariantList, and QVariant::toString() returns
+                    // empty for both. The message then read "sets 'flag' to ; a bool
+                    // parameter wants true or false", naming no value at all.
                     lints << QStringLiteral("preset '%1' sets '%2' to %3; a bool parameter wants true or false")
-                                 .arg(presetName, vit.key(), value.toString());
-                    ++problems;
+                                 .arg(presetName, vit.key(), describeVariant(value));
                 }
                 continue;
             }
@@ -569,7 +807,6 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
                 // the parse rather than re-deriving them here.
                 if (param.type == QLatin1String("color") && value.typeId() != QMetaType::QString) {
                     lints << QStringLiteral("preset '%1' sets '%2' to a non-color value").arg(presetName, vit.key());
-                    ++problems;
                     continue;
                 }
                 // A colour-typed value is parsed with QColor at runtime, and an
@@ -582,7 +819,6 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
                 if (param.type == QLatin1String("color") && !QColor::isValidColorName(value.toString())) {
                     lints << QStringLiteral("preset '%1' sets '%2' to '%3', which is not a colour QColor can parse")
                                  .arg(presetName, vit.key(), value.toString());
-                    ++problems;
                     continue;
                 }
                 // An image-typed preset value is a PATH, and what this can and cannot
@@ -633,7 +869,6 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
                                      "preset '%1' sets '%2' to '%3', which names no file the pack ships "
                                      "(an image parameter's preset value is a pack-relative texture path)")
                                      .arg(presetName, vit.key(), QDir(packDir).relativeFilePath(declaredPath));
-                        ++problems;
                     }
                 }
                 continue;
@@ -649,7 +884,6 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
                              "preset '%1' sets '%2', whose declared type '%3' is not one this family "
                              "binds, so its value cannot be checked (see the parameter lints above)")
                              .arg(presetName, vit.key(), param.type);
-                ++problems;
                 continue;
             }
 
@@ -659,7 +893,6 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
             if (!value.canConvert<double>() || value.typeId() == QMetaType::QString
                 || value.typeId() == QMetaType::Bool) {
                 lints << QStringLiteral("preset '%1' sets '%2' to a non-numeric value").arg(presetName, vit.key());
-                ++problems;
                 continue;
             }
             const double v = value.toDouble();
@@ -682,7 +915,6 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
                              "preset '%1' sets '%2' to %3, but '%2' is an int parameter, so the value "
                              "truncates to %4 at runtime")
                              .arg(presetName, vit.key(), QString::number(v), QString::number(std::trunc(v)));
-                ++problems;
             }
             // And inside int's own range, independently of the pack's declared one.
             // The declared bounds are optional, so `{"count": 1e18}` under an int
@@ -693,32 +925,38 @@ int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QS
                 && (v < double(std::numeric_limits<int>::min()) || v > double(std::numeric_limits<int>::max()))) {
                 lints << QStringLiteral("preset '%1' sets '%2' to %3, which does not fit in an int parameter")
                              .arg(presetName, vit.key(), QString::number(v));
-                ++problems;
             }
             if (param.minValue.isValid() && v < param.minValue.toDouble()) {
                 lints << QStringLiteral("preset '%1' sets '%2' to %3, below its declared minimum %4")
                              .arg(presetName, vit.key(), QString::number(v),
                                   QString::number(param.minValue.toDouble()));
-                ++problems;
             }
             if (param.maxValue.isValid() && v > param.maxValue.toDouble()) {
                 lints << QStringLiteral("preset '%1' sets '%2' to %3, above its declared maximum %4")
                              .arg(presetName, vit.key(), QString::number(v),
                                   QString::number(param.maxValue.toDouble()));
-                ++problems;
             }
         }
     }
+    return lints;
+}
 
-    if (!lints.isEmpty()) {
-        // padLabel, not hand-counted spaces: every other header in this report goes
-        // through it, and a change to its column width has to move this one too.
-        out << "  " << padLabel(QStringLiteral("presets")) << "ERROR\n";
-        for (const QString& l : lints) {
-            out << "    " << l << "\n";
-        }
+int reportPresetLints(QTextStream& out, const QStringList& lints)
+{
+    if (lints.isEmpty()) {
+        return 0;
     }
-    return problems;
+    // padLabel, not hand-counted spaces: every other header in this report goes
+    // through it, and a change to its column width has to move this one too.
+    //
+    // ONE header for all three collectors. They used to print their own, so a pack
+    // tripping two of them (an image parameter's preset value plus a float out of
+    // its declared range, say) printed "presets ERROR" twice in a single report.
+    out << "  " << padLabel(QStringLiteral("presets")) << "ERROR\n";
+    for (const QString& l : lints) {
+        out << "    " << l << "\n";
+    }
+    return static_cast<int>(lints.size());
 }
 
 namespace {
@@ -737,28 +975,28 @@ QList<PresetLintParam> toLintParams(const QList<ParamInfo>& declared)
 }
 } // namespace
 
-int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
-                         const QList<ShaderRegistry::ParameterInfo>& declared)
+QStringList presetLints(const QString& packDir, const QMap<QString, QVariantMap>& presets,
+                        const QList<ShaderRegistry::ParameterInfo>& declared)
 {
-    return reportPresetProblems(out, packDir, presets, toLintParams(declared));
+    return presetLints(packDir, presets, toLintParams(declared));
 }
 
-int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
-                         const QList<AnimationShaderEffect::ParameterInfo>& declared)
+QStringList presetLints(const QString& packDir, const QMap<QString, QVariantMap>& presets,
+                        const QList<AnimationShaderEffect::ParameterInfo>& declared)
 {
-    return reportPresetProblems(out, packDir, presets, toLintParams(declared));
+    return presetLints(packDir, presets, toLintParams(declared));
 }
 
-int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
-                         const QList<SurfaceShaderEffect::ParameterInfo>& declared)
+QStringList presetLints(const QString& packDir, const QMap<QString, QVariantMap>& presets,
+                        const QList<SurfaceShaderEffect::ParameterInfo>& declared)
 {
-    return reportPresetProblems(out, packDir, presets, toLintParams(declared));
+    return presetLints(packDir, presets, toLintParams(declared));
 }
 
-int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
-                         const QList<PointerShaderEffect::ParameterInfo>& declared)
+QStringList presetLints(const QString& packDir, const QMap<QString, QVariantMap>& presets,
+                        const QList<PointerShaderEffect::ParameterInfo>& declared)
 {
-    return reportPresetProblems(out, packDir, presets, toLintParams(declared));
+    return presetLints(packDir, presets, toLintParams(declared));
 }
 
 // Build the `p_<id>` name list a pack declares, for the did-you-mean hint.

@@ -10,8 +10,9 @@
 # top of the headers here, and phosphor-wayland (the Wayland integration)
 # does not depend on it.
 #
-# Depends on Qt6 Core+Gui (Gui for QImage in the wallpaper cache) and
-# PhosphorFsLoader for WatchedDirectorySet. No QML facade today —
+# Depends on Qt6 Core+Gui (Gui for QImage in the wallpaper cache),
+# PhosphorFsLoader for WatchedDirectorySet, and PhosphorRegistry for the
+# Registry<T> storage the pack scan is built on. No QML facade today —
 # downstream Phosphor code exposes ShaderRegistry to QML via
 # context properties, so this lib stays C++-only. A `Phosphor.Shaders`
 # QML module can be added (alongside `QML_ELEMENT` annotations on the
@@ -21,6 +22,18 @@
 cmake_minimum_required(VERSION 3.16)
 
 set(PHOSPHORSHADERS_VERSION "0.1.0")
+
+# The Qt floor this library requires AND advertises in its generated
+# PhosphorShadersConfig.cmake. Taken from the top-level QT_MIN_VERSION when built in-tree so
+# the two cannot drift, with its own value for a STANDALONE build, where that
+# variable does not exist. The fallback is not optional: the Config template
+# substitutes this, and an undefined variable expands to nothing and ships a config
+# whose find_dependency(Qt6 ...) carries no version floor at all.
+if(DEFINED QT_MIN_VERSION)
+    set(PHOSPHORSHADERS_QT_MIN ${QT_MIN_VERSION})
+else()
+    set(PHOSPHORSHADERS_QT_MIN "6.10.0")
+endif()
 
 if(NOT PROJECT_VERSION)
     project(PhosphorShaders VERSION ${PHOSPHORSHADERS_VERSION} LANGUAGES CXX)
@@ -35,7 +48,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui)
+find_package(Qt6 ${PHOSPHORSHADERS_QT_MIN} REQUIRED COMPONENTS Core Gui)
 
 # PhosphorFsLoader — shared filesystem-loader scaffolding. The on-disk scan now
 # runs inside PhosphorRegistry's MetadataPackLoader<ShaderPack> (which wraps
@@ -75,6 +88,7 @@ set(phosphorshaders_public_HDRS
     include/PhosphorShaders/IUniformExtension.h
     include/PhosphorShaders/IWallpaperProvider.h
     include/PhosphorShaders/PixelUnits.h
+    include/PhosphorShaders/ShaderBindings.h
     include/PhosphorShaders/ShaderEntryPoint.h
     include/PhosphorShaders/ShaderIncludeResolver.h
     include/PhosphorShaders/ShaderPackPaths.h
@@ -95,6 +109,7 @@ set(phosphorshaders_camelcase_HDRS
     include/PhosphorShaders/IUniformExtension
     include/PhosphorShaders/IWallpaperProvider
     include/PhosphorShaders/PixelUnits
+    include/PhosphorShaders/ShaderBindings
     include/PhosphorShaders/ShaderEntryPoint
     include/PhosphorShaders/ShaderIncludeResolver
     include/PhosphorShaders/ShaderPackPaths
@@ -251,16 +266,6 @@ install(FILES ${phosphorshaders_camelcase_HDRS}
 
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/PhosphorShaders/phosphorshaders_export.h
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorShaders
-)
-
-# GLSL include library (consumed by user shaders via #include).
-if(NOT DEFINED KDE_INSTALL_DATADIR)
-    include(GNUInstallDirs)
-    set(KDE_INSTALL_DATADIR ${CMAKE_INSTALL_DATADIR})
-endif()
-install(DIRECTORY shaders/
-    DESTINATION ${KDE_INSTALL_DATADIR}/phosphorshaders/shaders
-    FILES_MATCHING PATTERN "*.glsl"
 )
 
 install(EXPORT PhosphorShadersTargets

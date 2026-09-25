@@ -187,11 +187,11 @@ On Linux (native):
 # reads like success. Pass it explicitly or the "always run tests" rule above
 # silently runs nothing. BUILD_TOOLS=ON adds shader-render and friends.
 #
-# TEST-TIME DEPENDENCY: the shader_validate_animations and
-# shader_validate_pointer gates shell out to `glslangValidator` (or the newer
-# `glslang`; either name works) to compile every animation and pointer pack for
-# the compositor's classic-GL branch, and HARD-FAIL when neither is on PATH
-# rather than skipping. Install your distro's glslang package before running
+# TEST-TIME DEPENDENCY: the shader_validate_animations, shader_validate_surface
+# and shader_validate_pointer gates shell out to `glslangValidator` (or the newer
+# `glslang`; either name works) to compile every animation, surface and pointer
+# pack for the compositor's classic-GL branch, and HARD-FAIL when neither is on
+# PATH rather than skipping. Install your distro's glslang package before running
 # ctest. Not needed to build, and not needed with BUILD_TESTING=OFF.
 #
 # SECOND TEST-TIME DEPENDENCY: `appstreamcli` (distro package `appstream`).
@@ -223,8 +223,9 @@ ctest --test-dir build --output-on-failure
 # ceiling (growth-only, baselined in scripts/oversize-baseline.json),
 # PhosphorI18n::tr() over i18n() in C++, ConfigDefaults:: accessors over inline
 # config paths, `.pragma library` inside Qt's 128-byte window in QML .js
-# libraries (see QML Style), and the plain-prose rules on the user-facing
-# strings it can reach. Stdlib only.
+# libraries (see QML Style), the plain-prose rules on the user-facing strings it
+# can reach, and that packaging/debian/copyright still declares every file's real
+# license and copyright holders. Stdlib only.
 #
 # The prose rule reaches data JSON, tr()/i18n(), settings-schema descriptions,
 # .desktop, AppStream, packaging, .github/workflows/*.yml (through the pkgdesc

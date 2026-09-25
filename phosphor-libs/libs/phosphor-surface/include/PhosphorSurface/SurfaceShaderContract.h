@@ -11,28 +11,39 @@ namespace PhosphorSurfaceShaders {
 
 /// Cross-runtime named-uniform contract for **surface shaders**.
 ///
-/// Phosphor has three distinct shader registries:
+/// Phosphor has four distinct shader registries:
 ///
 ///   1. **Animation/transition shaders** — `AnimationShaderRegistry`,
-///      sourced from `data/animations/*/`. Short-lived transitions
+///      sourced from `plasmazones/data/animations/*/`. Short-lived transitions
 ///      driven by a 0..1 timeline (open, close, snap, drag, etc.).
 ///
 ///   2. **Overlay/zone-background shaders** — `PhosphorShaders::ShaderRegistry`,
-///      sourced from `data/overlays/*/`. Long-lived ambient effects with
+///      sourced from `plasmazones/data/overlays/*/`. Long-lived ambient effects with
 ///      access to the rich `BaseUniforms` UBO (`iMouse`, `iDate`,
 ///      `customColors[16]`, audio-spectrum / wallpaper / multipass
-///      textures, etc.). Daemon-only (RHI/multipass infrastructure has
-///      no compositor-side equivalent).
+///      textures, etc.). Daemon-only, because the overlay family has no
+///      compositor consumer at all — not because multipass is daemon-only,
+///      which it stopped being when the compositor grew the surface fold.
 ///
 ///   3. **Surface shaders** — `SurfaceShaderRegistry` (this contract),
-///      sourced from `data/surface/*/`. Persistent per-window surface
+///      sourced from `plasmazones/data/surface/*/`. Persistent per-window surface
 ///      layers composited OVER (or as part of) the live window content:
 ///      the decoration band / border, rounded corners, focus tint, and
 ///      similar window-chrome effects. Unlike an animation shader these
 ///      do not run on a 0..1 timeline — they re-render every frame for
 ///      as long as the window is mapped and are parameterised by the
-///      window's frame geometry, outer radius, border thickness, and the
-///      host-resolved (focus-applied) border colour.
+///      window's frame geometry plus the pack's OWN declared parameters.
+///      Border width, corner radius and the active / inactive colours are
+///      pack parameters, not a host-defined decoration appearance: the
+///      pack mixes its two colours on the contract's uSurfaceFocused
+///      itself. See the appearance section below.
+///
+///   4. **Pointer shaders** — `PhosphorPointerShaders::PointerShaderRegistry`,
+///      sourced from `plasmazones/data/pointer/*/`. Cursor decoration packs,
+///      compositor-only, and the one family with its OWN buffer-pass cap of
+///      two rather than the shared eight, because its chain runs on every
+///      frame the pointer is live. `CustomParamsKey.h` is written against
+///      all four.
 ///
 /// This header documents the contract for the **third** category. Like
 /// the animation contract it is a **dual-runtime** contract — the same
@@ -99,10 +110,12 @@ namespace PhosphorSurfaceShaders {
 /// and scales `p_borderWidth`/`p_cornerRadius` by `uSurfaceScale`).
 namespace SurfaceShaderContract {
 
-/// `sampler2D uTexture0` — the live captured surface. Compositor path:
-/// KWin's `OffscreenEffect`-managed window snapshot (the EXPANDED window
-/// geometry — frame + decoration + shadow). Daemon path: the live FBO
-/// of the surface-layer anchor. Per-frame-dynamic: re-bound every paint
+/// `sampler2D uTexture0` — the live captured surface, and on the compositor
+/// it is NOT the same texture for every pack in a chain. The fold makes its
+/// own capture over the padded canvas and binds that to the FIRST pack; each
+/// pack after it reads the RUNNING COMPOSITE, so a later pack sees the
+/// earlier packs' output rather than the bare window. Daemon path: the live
+/// FBO of the surface-layer anchor. Per-frame-dynamic: re-bound every paint
 /// because the captured content changes continuously. The
 /// `uSurfaceFrameTopLeft` / `uSurfaceFrameSize` pair locates the
 /// content/frame rect within this texture.
@@ -144,15 +157,25 @@ inline constexpr const char* kUSurfaceFrameSize = "uSurfaceFrameSize";
 /// any per-window state-change bookkeeping.
 inline constexpr const char* kUSurfaceScale = "uSurfaceScale";
 
-/// `float uSurfaceFocused` — `1.0` when the window owning this surface
-/// is focused, `0.0` otherwise. A pack with active/inactive appearance
-/// (e.g. the border's `p_activeColor` / `p_inactiveColor`) mixes its own
-/// parameters on this flag rather than the host pre-resolving a single
+/// `float uSurfaceFocused` — how focused the window owning this surface
+/// is, from `0.0` to `1.0`. A pack with active/inactive appearance (e.g.
+/// the border's `p_activeColor` / `p_inactiveColor`) mixes its own
+/// parameters on this rather than the host pre-resolving a single
 /// focus-applied value. Per-frame-dynamic: focus toggles independently
-/// of window content, so this is re-pushed every paint. Authoring rule:
-/// treat any value `>= 0.5` as focused rather than testing `== 1.0`, so
-/// a future runtime that elects to ramp this for a focus-fade transition
-/// degrades gracefully.
+/// of window content, so this is re-pushed every paint.
+///
+/// THE TWO RUNTIMES DISAGREE ON THE VALUES BETWEEN THE ENDS, and a pack
+/// cannot tell which one it is running under. The compositor RAMPS it
+/// toward the 0-or-1 target over the focus-fade duration setting, so it
+/// takes every intermediate value on a real window. Daemon hosts (the
+/// settings preview pane, OSD and popup decorations) push a hard `0.0`
+/// or `1.0`, because the property behind it is a bool and there is no
+/// clock on that side to drive a ramp. So a pack that writes
+/// `mix(inactive, active, uSurfaceFocused)`, which the whole border
+/// family does, cross-fades on a window and snaps in the preview.
+///
+/// Authoring rule: treat any value `>= 0.5` as focused rather than
+/// testing `== 1.0`. That is a live rule, not future-proofing.
 inline constexpr const char* kUSurfaceFocused = "uSurfaceFocused";
 
 /// `float iTime` — continuously-increasing seconds for ANIMATED surface
@@ -175,13 +198,13 @@ inline constexpr const char* kITime = "iTime";
 /// `qt_Opacity`, not this, so a pack has no reason to sample it.
 inline constexpr const char* kUSurfaceOpacity = "uSurfaceOpacity";
 
-/// `sampler2D uBackdrop` — COMPOSITOR-ONLY. The scene BEHIND the window,
+/// `sampler2D uBackdrop` — BOTH RUNTIMES, with different content. The scene BEHIND the window,
 /// captured over the same (padded) canvas as `uTexture0` each frame for
 /// packs that declare `"needsBackdrop": true` (frost / glass). Texel-aligned
 /// with the composite canvas, so a pack samples both with the same uv (via
 /// the `backdropTexel()` helper). The two runtimes declare it differently:
 /// the compositor branch is a loose uniform with no binding, while the daemon
-/// branch is `layout(binding = 11)`, sharing that slot with the overlay
+/// branch is `layout(binding = 15)`, sharing that slot with the overlay
 /// category's wallpaper sampler. On the daemon a host may bind the desktop
 /// wallpaper into it as a stand-in. Packs MUST still sample through
 /// `backdropTexel()`, which returns transparent when nothing was bound.
@@ -218,19 +241,28 @@ inline constexpr const char* kUHasBackdrop = "uHasBackdrop";
 /// hover source (SurfaceShaderItem seeds it). `.zw` is `.xy` normalized
 /// by `uSurfaceSize`, negative alongside the sentinel, so `iMouse.x < 0.0`
 /// is the canonical off-surface test on both runtimes; do not test
-/// `iMouse.x == -1.0` exactly. A pack that reads
-/// iMouse should also declare `"animated": true`: the host repaints on its
-/// vsync loop while a pack animates, and there is no per-cursor-move damage
-/// path for static packs.
+/// `iMouse.x == -1.0` exactly.
+///
+/// A pack that reads iMouse does NOT need `"animated": true`, and is better
+/// off without it. There IS a per-cursor-move damage path, and the compositor
+/// drives it from the INTROSPECTED iMouse uniform rather than from any
+/// metadata flag, comparing the cursor its fold keyed on so the repaints stop
+/// as soon as the pointer does. Declaring `animated` asks instead for a
+/// repaint every vsync for as long as the window is up. No daemon host wires
+/// a hover source, so iMouse holds the off-surface sentinel there.
 inline constexpr const char* kIMouse = "iMouse";
 
 /// `sampler2D uTexture1..3` — user-declared image textures (metadata
 /// `textures`: logo, mask, pattern). Slot N of the metadata list feeds
-/// `uTexture<N+1>` (bindings 8-10 on the daemon; dedicated units on the
-/// compositor), and `iTextureResolution[N].xy` carries the bound texture's
-/// pixel size — the same slot layout as the animation contract, so the
-/// settings UI reuses the same editor components. A slot with no loadable
-/// file reads transparent black.
+/// `uTexture<N+1>` (bindings 12-14 on the daemon; dedicated units on the
+/// compositor). `iTextureResolution[i].xy` is the pixel size of `uTexture<i>`,
+/// so metadata slot N's size is at `iTextureResolution[N+1]`, and index 0
+/// belongs to `uTexture0`, the surface itself. Mind the two different
+/// indices: the sampler names are one-based over the metadata list and
+/// iTextureResolution is zero-based over the texture slots. Otherwise the
+/// same slot layout as the animation contract, so the settings UI reuses the
+/// same editor components. A slot with no loadable file reads transparent
+/// black.
 inline constexpr const char* kUTexture1 = "uTexture1";
 inline constexpr const char* kUTexture2 = "uTexture2";
 inline constexpr const char* kUTexture3 = "uTexture3";
@@ -245,7 +277,7 @@ inline constexpr const char* kUTexture3 = "uTexture3";
 inline constexpr const char* kIAudioSpectrumSize = "iAudioSpectrumSize";
 
 /// `sampler2D uAudioSpectrum` — the CAVA spectrum as a `bars×1` texture (R =
-/// bar value in 0..1). Lives in surface_audio.glsl, not the UBO: `binding = 6`
+/// bar value in 0..1). Lives in surface_audio.glsl, not the UBO: `binding = 10`
 /// on the daemon's RHI pipeline, a loose named sampler on the compositor's
 /// classic-GL pipeline (the `#ifdef PLASMAZONES_KWIN` branch). Only sampled
 /// while `iAudioSpectrumSize > 0`, so an unbound sampler is never read.
@@ -333,9 +365,9 @@ inline bool isValidFilterToken(const QString& filter)
 /// inside this contract namespace and consumers don't need to import the
 /// phosphor-shaders header directly. See
 /// `<PhosphorShaders/CustomParamsKey.h>` for the format, the rationale,
-/// and the full list of consumers. This (vec, comp) form is part of the
-/// public contract surface for parity with the canonical two-overload
-/// helper; in-tree call sites currently use only the flat-slot form below.
+/// and the full list of consumers. Both forms are live in-tree: the
+/// compositor's resolveSurfaceParamValues calls this (vec, comp) form, while
+/// translateSurfaceParams and the tests use the flat-slot form below.
 inline QString slotKey(int vec, char comp)
 {
     return PhosphorShaders::CustomParams::slotKey(vec, comp);

@@ -13,6 +13,7 @@
 /// PhosphorSurface — the seam is real, not cosmetic. types.h remains as an
 /// umbrella that includes both, so existing consumers are unaffected.
 
+#include <PhosphorShaders/ShaderBindings.h>
 #include <PhosphorSurface/SurfaceShaderContract.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 
@@ -21,7 +22,6 @@
 #include <opengl/glshader.h>
 #include <opengl/gltexture.h>
 
-#include <QColor>
 #include <QHash>
 #include <QPointF>
 #include <QRect>
@@ -35,7 +35,6 @@
 #include <vector>
 
 namespace KWin {
-class Item;
 }
 
 namespace PlasmaZones {
@@ -44,7 +43,7 @@ namespace PlasmaZones {
 /// composite fold). Each buffer.frag is a fullscreen-quad fragment that
 /// samples the captured window surface (uTexture0) plus any prior buffer outputs
 /// (iChannel0..N-1) and writes into its own FBO; the main effect.frag then
-/// samples the final buffer output(s) as iChannel0..3. Compiled in
+/// samples the buffer outputs as iChannel0..kMaxBufferPasses-1. Compiled in
 /// compiledPack() right after the main pack shader, cleared (fail-closed) if any
 /// buffer pass fails to compile so the pack degrades to single-pass. The vector
 /// of these is shared by every decorated window — the per-window FBO targets
@@ -68,13 +67,43 @@ struct CompiledSurfaceBufferPass
     /// signal that this buffer pass reacts to audio.
     int iAudioSpectrumSizeLoc = -1;
     int uAudioSpectrumLoc = -1;
-    /// iChannel0..3 sampler locations — prior buffer outputs feeding this pass.
-    /// Sized by the surface contract's buffer-pass budget, the same constant
-    /// surface_compile.cpp walks when it resolves them.
-    std::array<int, PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses> iChannelLoc{{-1, -1, -1, -1}};
-    /// iChannelResolution[0..3] element locations (the .xy pixel size of each).
-    std::array<int, PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses> iChannelResolutionLoc{
-        {-1, -1, -1, -1}};
+    /// User-declared image textures (metadata `textures`), PACK-indexed: entry t is
+    /// uTexture<t+1>. Resolved for a buffer pass, not just the main one, because an
+    /// unset classic default-block sampler reads unit 0, and unit 0 in the fold holds
+    /// the RUNNING COMPOSITE. A pass that references one without these would sample
+    /// the window back into its own blur. Same hazard the uBackdrop fallback above
+    /// exists for, and the shared header declares these samplers unconditionally, so
+    /// nothing warns a pack author off them.
+    std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots> userTextureLoc = []() {
+        std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots> a;
+        a.fill(-1);
+        return a;
+    }();
+    /// GLSL-TEXTURE-SLOT-indexed, like its main-pass twin: iTextureResolution[i] is
+    /// the size of uTexture<i>, so index 0 is the surface and pack slot N is N+1.
+    std::array<int, PhosphorShaders::Bindings::kUserTextureCount> iTextureResolutionLoc = []() {
+        std::array<int, PhosphorShaders::Bindings::kUserTextureCount> a;
+        a.fill(-1);
+        return a;
+    }();
+    /// iChannel0..7 sampler locations — prior buffer outputs feeding this pass.
+    std::array<int, PhosphorShaders::kMaxBufferPasses> iChannelLoc = []() {
+        std::array<int, PhosphorShaders::kMaxBufferPasses> a;
+        a.fill(-1);
+        return a;
+    }();
+    /// iChannelResolution[0..3] element locations (the .xy pixel size of each; the
+    /// contract declares four, a pass reading a later channel uses textureSize()).
+    /// fill(-1), not a brace literal: the array is SIZED by
+    /// kChannelResolutionSlots, so a bump would leave the surplus slots
+    /// value-initialised to 0 — and 0 is a valid uniform location, not a miss,
+    /// so the push would land on whatever uniform really lives there. Same
+    /// idiom as iChannelLoc above.
+    std::array<int, PhosphorShaders::Bindings::kChannelResolutionSlots> iChannelResolutionLoc = []() {
+        std::array<int, PhosphorShaders::Bindings::kChannelResolutionSlots> a;
+        a.fill(-1);
+        return a;
+    }();
     /// Pack-declared parameter slot locations (reuse the main pass's values).
     std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomParams> customParamsLoc = []() {
         std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomParams> a;
@@ -167,26 +196,45 @@ struct CompiledSurfacePack
     /// common case); pushBorderUniforms then skips the push entirely.
     int iMouseLoc = -1;
 
-    /// MAIN-pass iChannel0..3 sampler + iChannelResolution[0..3] element
-    /// locations. -1 when the linker dropped the uniform (single-pass pack).
-    std::array<int, PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses> iChannelLoc{{-1, -1, -1, -1}};
-    std::array<int, PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses> iChannelResolutionLoc{
-        {-1, -1, -1, -1}};
+    /// MAIN-pass iChannel sampler locations, one per buffer pass
+    /// (iChannel0..kMaxBufferPasses-1). The companion resolution array below
+    /// is shorter: the contract declares only kChannelResolutionSlots sizes,
+    /// and a pass reading a later channel uses textureSize(). -1 when the
+    /// linker dropped the uniform (single-pass pack).
+    std::array<int, PhosphorShaders::kMaxBufferPasses> iChannelLoc = []() {
+        std::array<int, PhosphorShaders::kMaxBufferPasses> a;
+        a.fill(-1);
+        return a;
+    }();
+    /// fill(-1), not a brace literal: the array is SIZED by
+    /// kChannelResolutionSlots, so a bump would leave the surplus slots
+    /// value-initialised to 0 — and 0 is a valid uniform location, not a miss,
+    /// so the push would land on whatever uniform really lives there. Same
+    /// idiom as iChannelLoc above.
+    std::array<int, PhosphorShaders::Bindings::kChannelResolutionSlots> iChannelResolutionLoc = []() {
+        std::array<int, PhosphorShaders::Bindings::kChannelResolutionSlots> a;
+        a.fill(-1);
+        return a;
+    }();
 
-    /// User-declared image textures (metadata `textures`): sampler +
-    /// iTextureResolution[N] element locations, plus the textures themselves,
-    /// loaded once at compile time (decorations are persistent, so the
-    /// pack-lifetime cache is the natural owner — freed with the shader on
-    /// cache clear, where the GL context discipline already applies). Slot N
-    /// feeds uTexture<N+1>. A slot with no loadable file stays null and the
-    /// fold skips its bind (the sampler then reads transparent black).
+    /// User-declared image textures (metadata `textures`): sampler locations plus
+    /// the textures themselves, loaded once at compile time (decorations are
+    /// persistent, so the pack-lifetime cache is the natural owner — freed with the
+    /// shader on cache clear, where the GL context discipline already applies).
+    /// PACK-indexed: slot N feeds uTexture<N+1>. A slot with no loadable file stays
+    /// null and the fold skips its bind (the sampler then reads transparent black).
     std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots> userTextureLoc = []() {
         std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots> a;
         a.fill(-1);
         return a;
     }();
-    std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots> iTextureResolutionLoc = []() {
-        std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots> a;
+    /// GLSL-TEXTURE-SLOT-indexed, unlike its neighbour above, because
+    /// `iTextureResolution[i]` is the size of `uTexture<i>`: index 0 is the
+    /// surface's own content and pack slot N is index N+1. Treating the two arrays
+    /// as parallel is what put a pack's first texture size on the surface's index
+    /// and disagreed with the daemon. See kITextureResolutionKeys.
+    std::array<int, PhosphorShaders::Bindings::kUserTextureCount> iTextureResolutionLoc = []() {
+        std::array<int, PhosphorShaders::Bindings::kUserTextureCount> a;
         a.fill(-1);
         return a;
     }();
@@ -224,8 +272,9 @@ struct CompiledSurfacePack
 /// The cursor, when it is not over a window's canvas. Far outside any real screen, so a
 /// never-folded state can never compare equal to a live pointer.
 ///
-/// ONE definition, shared by the two that must agree EXACTLY: the fold keys its cache on
-/// it and the repaint driver decides whether to drive on it. (The shader is handed its own
+/// ONE definition, shared by the three that must agree EXACTLY: the fold keys its cache
+/// on it, the repaint driver decides whether to drive on it, and pushBorderUniforms
+/// compares against it to map the sentinel for the shader. (The shader is handed its own
 /// (-1, -1) "cursor absent" sentinel instead — a canvas-relative value, not a global one —
 /// so it is deliberately not this constant.)
 inline constexpr QPointF kCursorOutside(-1.0e9, -1.0e9);
@@ -259,6 +308,31 @@ struct SurfaceFoldPlan
     float foldFocus = 0.0f;
     float foldOpacity = 1.0f;
     QPointF foldCursor = kCursorOutside;
+};
+
+/// WHETHER a chain needs a backdrop capture, and AT WHAT DENSITY. Two questions,
+/// so two fields. They shared one number, with the caller reading any positive
+/// value as the gate, which forced the "links a backdrop uniform but samples no
+/// texels" case to answer with the smallest non-zero density that reads as yes.
+/// That is kMinBufferScale, 1/128, at which a 4K canvas is 15x8 texels and every
+/// partial damage slice under ~128 device px rounds to a zero-extent destination
+/// and is skipped (surface_backdrop.cpp). Split, the floor can be chosen for
+/// whether the capture machinery works at it.
+struct BackdropCapture
+{
+    /// Does any compiled pack in the chain link a backdrop uniform at all.
+    bool needed = false;
+    /// Capture resolution relative to the composite canvas. Meaningless when
+    /// `needed` is false.
+    qreal density = 0.0;
+
+    /// For a chain linking only the scalar gate or the rect, never the sampler:
+    /// it reads no texels, so only the capture's EXISTENCE matters (the fold
+    /// pushes uHasBackdrop from whether one is available). Cheap, but not so
+    /// cheap the capture stops landing — at an eighth a four-device-px damage
+    /// slice still maps to a whole texel, against sixty-four at kMinBufferScale.
+    /// No bundled pack is this shape; a third-party one can be.
+    static constexpr qreal kGateOnlyDensity = 0.125;
 };
 
 /// One output's membership in the backdrop accumulation generation (see
@@ -319,6 +393,12 @@ struct SurfaceMultipassState
     /// iTime packs every frame over a capture taken once. A window that damages
     /// every frame (video, terminal) re-captures every frame exactly as before.
     std::unique_ptr<KWin::GLTexture> captureTex;
+    /// One warning per window per failure RUN for a failed window capture.
+    /// Cleared on the next capture that succeeds, so a later failure is reported
+    /// again rather than swallowed for the window's lifetime. Per-window rather
+    /// than per-effect on purpose: a global latch would let the first window to
+    /// fail silence every other one.
+    bool captureFailWarned = false;
     std::unique_ptr<KWin::GLFramebuffer> captureFbo;
     bool captureValid = false;
 
@@ -472,6 +552,22 @@ struct SurfaceMultipassState
     /// at the old scale.
     qreal captureScaleKey = 0.0;
     int finalSlot = 0; ///< which compositeTex slot holds the final fold
+    /// Whether `compositeTex[finalSlot]` has EVER been written by a completed fold.
+    ///
+    /// Deliberately distinct from `compositeValid`, which asks whether the last fold
+    /// is still REUSABLE. This asks whether there is any fold at all. The composites
+    /// are allocated with GLTexture::allocate() and never cleared, so a freshly built
+    /// pair holds undefined contents, and a reader that binds compositeTex[finalSlot]
+    /// presents exactly those: garbage on a driver that leaves fresh allocations
+    /// alone, an invisible window on one that zeroes them. Two states reach a reader
+    /// that way, a state folding for the FIRST time whose capture fails, and any
+    /// frame where the pair was reallocated and the capture then failed, since
+    /// finalSlot survives a realloc.
+    ///
+    /// Set beside `finalSlot` at the end of a successful fold, cleared wherever the
+    /// pair is reallocated (beside `captureValid` / `compositeValid`), and false by
+    /// construction on a new state.
+    bool compositeWritten = false;
     /// The logical rect the composite canvas covers (expanded geometry
     /// inflated by the chain's outer padding, captured when the fold ran).
     /// The layer-rect remap and the padded quads read THIS instead of
@@ -483,13 +579,26 @@ struct SurfaceMultipassState
     /// Backdrop capture for needsBackdrop chains: the scene behind the
     /// window blitted from the live render target over the SAME padded
     /// canvas as the composite — canvas-aligned in normalized uv, so a pack
-    /// samples both with one uv; the capture's texel DENSITY may be lower
-    /// than the composite's (chainBackdropScale caps it at the densest
-    /// linked reader's bufferScale). Reallocated on size change; freed with
+    /// samples both with one uv. Reallocated on size change; freed with
     /// the rest of this state in
     /// removeWindowDecoration, and NEVER sampled on the deleted/close path (the
     /// fold doesn't run there; the frozen composite carries the last-alive
     /// frost baked in).
+    ///
+    /// DENSITY. The capture may be lower than the composite's: chainBackdropScale
+    /// answers twice the densest SAMPLING pass's bufferScale, capped at full
+    /// density, which is half density for the seven packs that run the builtin
+    /// pyramid and full density for mosaic, whose main pass samples directly.
+    ///
+    /// Two separate defects kept that from being true until recently, and both are
+    /// worth knowing about because both are easy to reintroduce. The resolver's
+    /// first per-pack test used the linked-uniform predicate, which is an OR that
+    /// includes the SCALAR GATE, and every bundled backdrop pack reads that gate in
+    /// its main fragment, so the early return fired for all eight and no reduction
+    /// happened at all. And where it did reach the buffer-pass loop it took the
+    /// FIRST sampling pass and stopped rather than the densest, which was exact
+    /// while a pack's passes shared one bufferScale and stopped being exact when
+    /// per-pass scales landed.
     std::unique_ptr<KWin::GLTexture> backdropTex;
     /// Framebuffer over backdropTex, cached for the texture's lifetime — the
     /// capture blit runs every frame for a needsBackdrop chain, so building it
@@ -638,22 +747,30 @@ struct WindowDecoration
     /// window's surface path) or the user's own pack chain, e.g. {"glow",
     /// "border-sweep"} (custom mode — any user pack suppresses the plain
     /// border outright, see updateWindowDecoration). The idle present path
-    /// composites the FULL chain (renderSurfaceChainComposite folds
-    /// chain[1..] over the base); only the animation surface-layer path
-    /// renders chain[0] (basePackId) alone.
+    /// composites the FULL chain, and so does the animation surface-layer
+    /// path: renderSurfaceChain folds every pack. No path renders chain[0]
+    /// alone any more.
     QStringList chain;
 
-    /// The base pack id to render — chain.value(0), defaulting to "border".
-    /// The render path (drawWindow / pushBorderUniforms / renderSurfaceChainComposite)
-    /// looks this up in m_compiledPacks to get the CompiledSurfacePack instead
-    /// of the old single global border shader.
+    /// chain.value(0), defaulting to "border". NO RENDER PATH READS THIS. It
+    /// used to be what drawWindow and pushBorderUniforms looked up in
+    /// m_compiledPacks, back when one base pack rendered and the rest were
+    /// composited over it; the fold walks the chain itself now.
+    ///
+    /// It is kept for ONE reason, and it is the reason FoldInputs states: the
+    /// fold-input comparison includes fields DERIVED from the chain rather
+    /// than trusting the derivation to keep holding elsewhere. Removing it
+    /// would take a compared field out of that comparison, which is the thing
+    /// that struct's own comment warns against.
     QString basePackId;
 
     /// True when the window resolved onto a `shell.*` surface path (a
-    /// plasmashell panel or applet popup). Two consumers: the fold scans the
+    /// plasmashell panel or applet popup). Consumers: the fold scans the
     /// capture's visible-content bounds for these (updateShellContentRect),
-    /// and pushBorderUniforms substitutes those bounds for frameGeometry() so
-    /// packs hug what the user actually sees (a floating or Panel
+    /// pushBorderUniforms substitutes those bounds for frameGeometry() so
+    /// packs hug what the user actually sees, and both the present rebind and
+    /// the capture pin uSurfaceFocused high for a shell surface, which has no
+    /// focus of its own to track (a floating or Panel
     /// Colorizer-styled panel is a rounded body inset in a mostly transparent
     /// full-width window). Set by updateWindowDecoration from the same
     /// resolved surface path that selected chain-only resolution.
@@ -692,9 +809,11 @@ struct WindowDecoration
 
     /// True when the chain carries the plain opacity-tint layer, whose
     /// opacity param is the resolved config + SetOpacity fold — the chain
-    /// BAKES the window's opacity into its composite. Sole runtime consumer
-    /// is the transition iWindowOpacity push: 1.0 when the fold's composite
-    /// is what the transition samples, the foldedOpacity fallback otherwise
+    /// BAKES the window's opacity into its composite. Read by the transition
+    /// iWindowOpacity push (1.0 when the fold's composite is what the
+    /// transition samples, the foldedOpacity fallback otherwise), by the fold's
+    /// capture-opacity fail-safe gate, and by the re-capture-on-opacity-move
+    /// check
     /// (refined by the per-frame rule cache when one is populated).
     /// SetOpacity has no other application path: custom chains configure
     /// their own dimming through pack params (frost/glass contentOpacity).
@@ -702,13 +821,15 @@ struct WindowDecoration
 
     /// The effective opacity folded into the opacity-tint layer's `opacity`
     /// param (config default, SetOpacity rule winning); 1.0 when the layer is
-    /// off. Two direct consumers, both fallbacks for paths where the fold's
-    /// composite is not what reaches the screen: the fold's failed-compile
-    /// fallback (the opacity-tint pack has no compiled shader, so the window
-    /// CAPTURE dims by this value under KWin's default modulating shader),
-    /// and the transition iWindowOpacity push on the bare-uTexture0 fallback
-    /// of an opacity-baking chain (paintWindow). Single-apply holds on both —
-    /// they fire only when the pack that owns the value did not run. Every
+    /// off. Two direct FALLBACK consumers, for paths where the fold's composite
+    /// is not what reaches the screen: the fold's failed-compile fallback (the
+    /// opacity-tint pack has no compiled shader, so the window CAPTURE dims by
+    /// this value under KWin's default modulating shader), and the transition
+    /// iWindowOpacity push on the bare-uTexture0 fallback of an opacity-baking
+    /// chain (paintWindow). Single-apply holds on both — they fire only when
+    /// the pack that owns the value did not run. It is also read as the fold
+    /// cache key and as the setTranslucent-skip gate, which are not fallbacks
+    /// and are named further down this header. Every
     /// other path reads the value through packParamValues like any pack
     /// param.
     double foldedOpacity = 1.0;

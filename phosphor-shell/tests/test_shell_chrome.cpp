@@ -329,6 +329,64 @@ private Q_SLOTS:
         QCOMPARE(chrome.chainFor(decorationShellPhosphorBarPath()).size(), 1);
     }
 
+    /// decorationReloadGeneration is a SEPARATE tick from `revision`, and this pins
+    /// the separation in both directions.
+    ///
+    /// The counter exists because recomposing the chain does not cover an in-place
+    /// edit of a pack's shader SOURCE: the composition comes out byte-identical,
+    /// every stage rebinds the same URL, and nothing re-bakes. Folding it into
+    /// bump() would instead re-bake every stage on every tree and palette change.
+    ///
+    /// It also covers the wiring, which is what this slot was written chasing: both
+    /// registry connections used to live in subscribeToDaemon(), which only the
+    /// OTHER constructor calls, so a chrome built with explicit search paths had
+    /// neither and a live pack edit re-resolved nothing at all.
+    void aRegistryRescanRebakesButATreeEditDoesNot()
+    {
+        QTemporaryDir packs;
+        QVERIFY(packs.isValid());
+        // The pack exists BEFORE the chrome does, so the edit below is a change to a
+        // file the registry is already watching rather than a new subdirectory.
+        QVERIFY(writePackWithPreset(packs.path(), QStringLiteral("reload-glow"), QStringLiteral("Wide"), 24));
+        ShellChrome chrome({packs.path()}, nullptr);
+        QCOMPARE(chrome.decorationReloadGeneration(), 0);
+
+        QSignalSpy reloads(&chrome, &ShellChrome::decorationReloadGenerationChanged);
+        QSignalSpy revised(&chrome, &ShellChrome::revisionChanged);
+        QVERIFY(chrome.setTreeJson(treeJson(decorationShellPhosphorOsdPath(), {QStringLiteral("reload-glow")})));
+        QCOMPARE(chrome.chainFor(decorationShellPhosphorOsdPath()).size(), 1);
+
+        // The tree edit DID revise the chrome and did NOT ask for a re-bake. Both
+        // halves matter: without the first this passes on a chrome that noticed
+        // nothing, and without the second it passes with the two counters merged.
+        QVERIFY(revised.count() > 0);
+        QCOMPARE(chrome.decorationReloadGeneration(), 0);
+        QCOMPARE(reloads.count(), 0);
+
+        // A live edit of the pack's SHADER SOURCE does ask for one. Written as an
+        // atomic rename, which is how an editor saves and what the registry's
+        // per-entry watches are documented to cover, and at a DIFFERENT LENGTH:
+        // effectContentSignature mixes each watched file's size and its millisecond
+        // mtime, so a same-size rewrite inside the same millisecond hashes
+        // identically and the loader commits nothing.
+        const QString fragPath = packs.path() + QStringLiteral("/reload-glow/effect.frag");
+        {
+            QFile tmpFrag(fragPath + QStringLiteral(".new"));
+            QVERIFY(tmpFrag.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            QVERIFY(tmpFrag.write(QByteArrayLiteral("// edited in place by the test\n"
+                                                    "vec4 pSurface(vec2 uv)\n"
+                                                    "{\n"
+                                                    "    return vec4(0.0, float(p_glowSize), 0.0, 1.0);\n"
+                                                    "}\n"))
+                    > 0);
+            tmpFrag.close();
+            QVERIFY(QFile::remove(fragPath));
+            QVERIFY(QFile::rename(fragPath + QStringLiteral(".new"), fragPath));
+        }
+        QVERIFY2(reloads.wait(15000), "a live pack-source edit must bump the reload generation");
+        QVERIFY(chrome.decorationReloadGeneration() > 0);
+    }
+
     void decorationComponentIsPlainStorage()
     {
         ShellChrome chrome({QStringLiteral(PZ_BUNDLED_SURFACE_DIR)}, nullptr);

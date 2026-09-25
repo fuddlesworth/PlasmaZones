@@ -8,6 +8,8 @@
 #include <PhosphorPointer/PointerShaderEffect.h>
 #include <PhosphorPointer/PointerShaderRegistry.h>
 
+#include <PhosphorShaders/ShaderBindings.h>
+
 #include <PhosphorSurface/DecorationProfile.h>
 
 #include <QHash> // std::hash<QString> specialization for the unordered_map key below
@@ -322,8 +324,10 @@ private:
             makeUnsetLocations<PhosphorPointerShaders::PointerShaderContract::kMaxCustomColors>();
         std::array<int, PhosphorPointerShaders::PointerShaderContract::kMaxUserTextureSlots> userTextures =
             makeUnsetLocations<PhosphorPointerShaders::PointerShaderContract::kMaxUserTextureSlots>();
-        std::array<int, PhosphorPointerShaders::PointerShaderContract::kMaxUserTextureSlots> iTextureResolution =
-            makeUnsetLocations<PhosphorPointerShaders::PointerShaderContract::kMaxUserTextureSlots>();
+        /// GLSL-slot indexed, so one longer than the sampler table: pack slot N is at
+        /// index N+1, and index 0 (uTexture0) does not exist in this family.
+        std::array<int, PhosphorShaders::Bindings::kUserTextureCount> iTextureResolution =
+            makeUnsetLocations<PhosphorShaders::Bindings::kUserTextureCount>();
         std::array<int, 4> iChannel = makeUnsetLocations<4>();
         std::array<int, 4> iChannelResolution = makeUnsetLocations<4>();
     };

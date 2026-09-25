@@ -188,53 +188,63 @@ void PlasmaZonesEffect::loadCachedSettings()
         }
     });
     // Multiplier on each pack's declared buffer-pass bufferScale — the blur
-    // pyramid density. On change every derived artifact that baked the old
-    // density is stale: the per-pack clamped-scale cache stores the PRODUCT
-    // (clampedBufferScale), and each window's buffer targets were allocated at
-    // the old size. Clearing chainKey makes the next fold's ensureSurfaceTargets
-    // reallocate them (with the GL context current there, where the FBO
-    // deletion is safe), and the fold invalidation forces that next fold — a
-    // static chain would otherwise early-return its cached composite forever
-    // and never notice. The BACKDROP capture density self-heals with no help
-    // from this loader: chainBackdropScale re-resolves through the (now
-    // cleared) cache on the next paint and captureWindowBackdrop reallocates
-    // on the resulting size change (surface_backdrop.cpp). The window capture
-    // itself is unaffected — captureScale is the output scale, not a pack
-    // density, so it never sees this multiplier.
-    loadSettingAsync(QStringLiteral("decorationBlurScaleMultiplier"), [this](const QVariant& v) {
-        // Numeric-or-bust guard, same rationale as the bool loaders above: an
-        // older daemon answers unknown keys with a valid EMPTY reply, and
-        // QVariant("").toReal() is 0.0 — which would floor every buffer target
-        // to kMinBufferScale instead of leaving the default multiplier alone.
-        // qIsFinite rejects NaN explicitly (NaN passes an m <= 0.0 test and
-        // would silently degrade the product clamp to its floor).
-        bool ok = false;
-        namespace DD = PhosphorCompositor::DecorationDefaults;
-        const qreal raw = v.toReal(&ok);
-        if (!ok || !qIsFinite(raw) || raw <= 0.0) {
-            return;
-        }
-        // Boundary clamp against the shared SSOT, like every numeric loader in
-        // this file: the daemon's schema clamps to the same band, but a
-        // separate process's reply is not trusted with the range. The product
-        // clamp in clampedBufferScale() would saturate an out-of-range value
-        // anyway; this keeps the stored member inside its declared band.
-        const qreal m = qBound(DD::BlurScaleMultiplierMin, raw, DD::BlurScaleMultiplierMax);
-        if (!qFuzzyCompare(m_decorationBlurScaleMultiplier + 1.0, m + 1.0)) {
-            m_decorationBlurScaleMultiplier = m;
-            m_packBufferScaleCache.clear();
-            for (auto& [id, surfaceState] : m_surfaceMultipass) {
-                surfaceState.chainKey.clear();
-                surfaceState.compositeValid = false;
-                surfaceState.prefixValid = false;
-                // The cleared chainKey makes ensureSurfaceTargets reset this
-                // before planSurfaceFold reads it, so this reset is symmetry
-                // with the profile-tree loader below, not a live fix.
-                surfaceState.prefixChainEnd = -1;
-            }
-            repaintAllDecorations();
-        }
-    });
+    // pyramid density. On change each window's BUFFER TARGETS are stale, because
+    // they were allocated at the old size. Clearing chainKey makes the next fold's
+    // ensureSurfaceTargets reallocate them (with the GL context current there,
+    // where the FBO deletion is safe), and the fold invalidation forces that next
+    // fold — a static chain would otherwise early-return its cached composite
+    // forever and never notice.
+    //
+    // The BACKDROP capture is deliberately NOT touched, and neither is the per-pack
+    // cache that holds its density. That density comes from the pack's NOMINAL
+    // declared scale and does not fold this multiplier at all, because the pyramid's
+    // first pass steps in fixed canvas px: tying the capture to the tier put all
+    // five of its taps inside one texel at the low end. So the capture stays at half
+    // density whatever the tier, which is a real cost the tier no longer reduces —
+    // on a 4K canvas that is roughly 9 MB rather than the 2 MB the 0.25 tier used to
+    // allocate. The trade is deliberate; see m_packBufferScaleCache.
+    //
+    // The window capture itself is unaffected — captureScale is the output scale,
+    // not a pack density, so it never sees this multiplier.
+    loadSettingAsync(QString(PhosphorProtocol::Service::SettingProperty::DecorationBlurScaleMultiplier),
+                     [this](const QVariant& v) {
+                         // Numeric-or-bust guard, same rationale as the bool loaders above: an
+                         // older daemon answers unknown keys with a valid EMPTY reply, and
+                         // QVariant("").toReal() is 0.0 — which would floor every buffer target
+                         // to kMinBufferScale instead of leaving the default multiplier alone.
+                         // qIsFinite rejects NaN explicitly (NaN passes an m <= 0.0 test and
+                         // would silently degrade the product clamp to its floor).
+                         bool ok = false;
+                         namespace DD = PhosphorCompositor::DecorationDefaults;
+                         const qreal raw = v.toReal(&ok);
+                         if (!ok || !qIsFinite(raw) || raw <= 0.0) {
+                             return;
+                         }
+                         // Boundary clamp against the shared SSOT, like every numeric loader in
+                         // this file: the daemon's schema clamps to the same band, but a
+                         // separate process's reply is not trusted with the range. The product
+                         // clamp in clampedBufferScale() would saturate an out-of-range value
+                         // anyway; this keeps the stored member inside its declared band.
+                         const qreal m = qBound(DD::BlurScaleMultiplierMin, raw, DD::BlurScaleMultiplierMax);
+                         if (!qFuzzyCompare(m_decorationBlurScaleMultiplier + 1.0, m + 1.0)) {
+                             m_decorationBlurScaleMultiplier = m;
+                             // m_packBufferScaleCache is NOT cleared here: it holds the
+                             // backdrop CAPTURE density, which is derived from the nominal
+                             // declared scale precisely so this tier cannot move it. The
+                             // buffer TARGETS do move, and the cleared chainKey below is what
+                             // makes ensureSurfaceTargets reallocate them.
+                             for (auto& [id, surfaceState] : m_surfaceMultipass) {
+                                 surfaceState.chainKey.clear();
+                                 surfaceState.compositeValid = false;
+                                 surfaceState.prefixValid = false;
+                                 // The cleared chainKey makes ensureSurfaceTargets reset this
+                                 // before planSurfaceFold reads it, so this reset is symmetry
+                                 // with the profile-tree loader below, not a live fix.
+                                 surfaceState.prefixChainEnd = -1;
+                             }
+                             repaintAllDecorations();
+                         }
+                     });
 
     loadSettingAsync(QStringLiteral("showWindowBorder"), [this](const QVariant& v) {
         // Type-guard every bool loader in this file, not only the default-true
@@ -891,15 +901,26 @@ void PlasmaZonesEffect::loadCachedSettings()
         // transition, and only re-resolves windows on the current desktop — so a
         // decorated window that is both would keep compositeValid/prefixValid set and
         // its next fold would early-return a composite baked with the OLD shader.
-        // Invalidate the folds directly. The textures stay (they are keyed on size and
-        // chain, neither of which a recompile changes) and so does the capture, which
-        // is window content and has nothing to do with the pack source.
+        // Invalidate the folds directly. The COMPOSITE textures stay, being keyed on
+        // size, and so does the capture, which is window content and has nothing to do
+        // with the pack source.
+        //
+        // chainKey goes, though, which this used to keep on the grounds that a
+        // recompile changes neither size nor chain. True of the composite pair and
+        // FALSE of the per-pack buffer targets: those are allocated only inside
+        // `if (state.chainKey != chain)`, their COUNT is the recompiled pack's
+        // bufferPasses.size() and their SIZES come from its declared bufferScales.
+        // An edited pack that adds a pass, drops one, or changes a scale therefore
+        // kept targets sized from the compile it just replaced, and nothing else
+        // would ever resize them because the chain string had not moved.
         for (auto& [id, surfaceState] : m_surfaceMultipass) {
             surfaceState.compositeValid = false;
             surfaceState.prefixValid = false;
             surfaceState.prefixChainEnd = -1;
+            surfaceState.chainKey.clear();
         }
         m_opacityTintFallbackWarned = false; // re-arm the capture-fallback warning with the fresh compiles
+        m_backdropAllocWarned = false; // and the backdrop-allocation one, for the same reason
         // The pointer is a surface in this same tree (path `pointer`), so its
         // chain re-derives here rather than from a config domain of its own.
         // It is baseline-isolated, so a global window chain resolves onto it as

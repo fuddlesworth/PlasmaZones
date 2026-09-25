@@ -77,6 +77,10 @@ inline constexpr QLatin1String MotionProfileTree("motionProfileTree");
 inline constexpr QLatin1String AnimationShaderSearchPaths("animationShaderSearchPaths");
 inline constexpr QLatin1String DecorationProfileTree("decorationProfileTree");
 inline constexpr QLatin1String OverlayShaderTree("overlayShaderTree");
+/// The user's decoration blur-quality tier. Read by every host that composes a
+/// decoration chain, so that a pack renders at one density whether it decorates a
+/// window, an OSD or a shell surface. The compositor loads it under this same name.
+inline constexpr QLatin1String DecorationBlurScaleMultiplier("decorationBlurScaleMultiplier");
 }
 
 /// Keys for the extended-window-property QVariantMap (the trailing a{sv} argument

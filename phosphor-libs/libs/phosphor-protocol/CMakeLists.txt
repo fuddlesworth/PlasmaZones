@@ -19,6 +19,18 @@ cmake_minimum_required(VERSION 3.16)
 
 set(PHOSPHORPROTOCOL_VERSION "0.1.0")
 
+# The Qt floor this library requires AND advertises in its generated
+# PhosphorProtocolConfig.cmake. Taken from the top-level QT_MIN_VERSION when built in-tree so
+# the two cannot drift, with its own value for a STANDALONE build, where that
+# variable does not exist. The fallback is not optional: the Config template
+# substitutes this, and an undefined variable expands to nothing and ships a config
+# whose find_dependency(Qt6 ...) carries no version floor at all.
+if(DEFINED QT_MIN_VERSION)
+    set(PHOSPHORPROTOCOL_QT_MIN ${QT_MIN_VERSION})
+else()
+    set(PHOSPHORPROTOCOL_QT_MIN "6.10.0")
+endif()
+
 if(NOT PROJECT_VERSION)
     project(PhosphorProtocol VERSION ${PHOSPHORPROTOCOL_VERSION} LANGUAGES CXX)
     set(CMAKE_CXX_STANDARD 20)
@@ -32,7 +44,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.10 REQUIRED COMPONENTS Core DBus)
+find_package(Qt6 ${PHOSPHORPROTOCOL_QT_MIN} REQUIRED COMPONENTS Core DBus)
 
 # PhosphorDBus provides the generic D-Bus client / streaming utilities the
 # marshalling + client-helper layer is built on. Available as an in-tree
@@ -72,6 +84,12 @@ add_library(PhosphorProtocolTypes SHARED
 )
 
 add_library(PhosphorProtocol::Types ALIAS PhosphorProtocolTypes)
+# EXPORT_NAME so the INSTALLED package exports the same name the alias above
+# gives in-tree. install(EXPORT) namespaces the TARGET name, not the alias, so
+# without this the package shipped PhosphorProtocol::PhosphorProtocolTypes while every consumer
+# in the repo writes PhosphorProtocol::Types — a name an installed or standalone
+# consumer could not resolve at all.
+set_target_properties(PhosphorProtocolTypes PROPERTIES EXPORT_NAME Types)
 
 generate_export_header(PhosphorProtocolTypes
     BASE_NAME PhosphorProtocolTypes

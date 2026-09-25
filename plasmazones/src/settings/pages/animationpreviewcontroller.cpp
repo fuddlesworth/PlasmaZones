@@ -18,8 +18,6 @@
 #include <PhosphorRendering/ShaderEffect.h>
 #include <PhosphorShaders/ShaderRegistry.h>
 
-#include <QDir>
-#include <QFile>
 #include <QPainter>
 #include <QPalette>
 #include <QRectF>
@@ -146,12 +144,12 @@ QImage sceneGround()
     return ground;
 }
 
-/// Resolve @p packId to a previewable effect: registered and valid. Also
-/// fills @p includePaths with each search path's
-/// `shared/` dir and falls back to the shared `animation.vert` when the pack
-/// declares no vertex shader — the exact resolution SurfaceAnimator's runLeg
-/// performs before attaching a real leg, so the preview compiles against the
-/// same sources a daemon transition would.
+/// Resolve @p packId to a previewable effect: registered and valid. Also SETS
+/// @p includePaths to the registry's shared include dirs and falls back to the
+/// shared `animation.vert` when the pack declares no vertex shader. Both come
+/// from AnimationShaderRegistry, which is the same resolution SurfaceAnimator's
+/// runLeg performs before attaching a real leg, so the preview compiles against
+/// the sources a daemon transition would.
 bool resolvePreviewEffect(PhosphorAnimationShaders::AnimationShaderRegistry* registry, const QString& packId,
                           PhosphorAnimationShaders::AnimationShaderEffect& effect, QStringList& includePaths)
 {
@@ -162,18 +160,9 @@ bool resolvePreviewEffect(PhosphorAnimationShaders::AnimationShaderRegistry* reg
     if (!effect.isValid()) {
         return false;
     }
-    const QStringList searchPaths = registry->searchPaths();
-    for (const QString& sp : searchPaths) {
-        const QString sharedDir = sp + QStringLiteral("/shared");
-        if (QDir(sharedDir).exists()) {
-            includePaths.append(sharedDir);
-            if (effect.vertexShaderPath.isEmpty()) {
-                const QString sharedVert = sharedDir + QStringLiteral("/animation.vert");
-                if (QFile::exists(sharedVert)) {
-                    effect.vertexShaderPath = sharedVert;
-                }
-            }
-        }
+    includePaths = registry->sharedIncludePaths();
+    if (effect.vertexShaderPath.isEmpty()) {
+        effect.vertexShaderPath = registry->defaultVertexShaderPath();
     }
     return true;
 }

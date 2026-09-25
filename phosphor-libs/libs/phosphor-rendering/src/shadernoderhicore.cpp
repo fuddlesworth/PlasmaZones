@@ -198,15 +198,9 @@ ShaderNodeRhi::ShaderNodeRhi(QQuickItem* item, std::unique_ptr<PhosphorShaders::
     // The UBO profile's ctor seeds an identity qt_Matrix + qt_Opacity=1.0 (the
     // init that used to live here, moved into BaseUniformProfile so the
     // surface profile gets the same lead-in for free).
-    // Initialize all customParams to -1.0 (the "unset" sentinel).
-    // Shaders use `>= 0.0` checks to distinguish set values from defaults.
-    for (int i = 0; i < kMaxCustomParams; ++i) {
-        m_customParams[i] = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
-    }
-    // Initialize all customColors to white
-    for (int i = 0; i < kMaxCustomColors; ++i) {
-        m_customColors[i] = Qt::white;
-    }
+    // customParams and customColors are seeded at their declarations, beside
+    // m_userTextureWraps, so this constructor is not the only thing standing
+    // between them and a default-constructed value.
 
     // 1x1 transparent fallback for when textures are disabled
     m_transparentFallbackImage = QImage(1, 1, QImage::Format_RGBA8888);
@@ -429,7 +423,7 @@ void ShaderNodeRhi::prepare()
             m_ubo.reset();
             return;
         }
-        // Audio spectrum texture (binding 6): 1x1 dummy when disabled
+        // Audio spectrum texture (binding 10): 1x1 dummy when disabled
         m_audioSpectrumTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
         if (!m_audioSpectrumTexture->create()) {
             m_shaderError = QStringLiteral("Failed to create audio spectrum texture");
@@ -448,7 +442,7 @@ void ShaderNodeRhi::prepare()
             m_audioSpectrumSampler.reset();
             return;
         }
-        // User texture slots (bindings 7-10): 1x1 dummy textures
+        // User texture slots (bindings 11-14): 1x1 dummy textures
         bool userTexturesOk = true;
         for (int i = 0; i < kMaxUserTextures; ++i) {
             m_userTextures[i].reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
@@ -477,7 +471,7 @@ void ShaderNodeRhi::prepare()
             }
             return;
         }
-        // Desktop wallpaper texture (binding 11): 1x1 dummy
+        // Desktop wallpaper texture (binding 15): 1x1 dummy
         m_wallpaperTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
         if (!m_wallpaperTexture->create()) {
             m_shaderError = QStringLiteral("Failed to create wallpaper texture");
@@ -674,12 +668,15 @@ void ShaderNodeRhi::prepare()
     // Create buffer targets before the image pass SRB
     const bool multiBufferMode = m_bufferPaths.size() > 1;
     const bool bufferReady = multiBufferMode ? m_multiBufferShadersReady : m_bufferShaderReady;
-    if (!m_bufferPath.isEmpty() && bufferReady && !ensureBufferTarget()) {
+    // m_bufferPaths, not m_bufferPath: a leading empty entry leaves the latter
+    // empty while the list is multi-entry. See bakeBufferShaders for the whole
+    // failure this gate was half of.
+    if (!m_bufferPaths.isEmpty() && bufferReady && !ensureBufferTarget()) {
         return;
     }
 
     // Late pipeline recovery
-    if (!m_bufferPath.isEmpty() && bufferReady) {
+    if (!m_bufferPaths.isEmpty() && bufferReady) {
         if (!multiBufferMode && m_bufferRenderTarget && !m_bufferRenderPassDescriptor
             && !m_bufferRenderTarget->renderPassDescriptor()) {
             m_bufferPipeline.reset();
@@ -718,10 +715,17 @@ void ShaderNodeRhi::prepare()
         return;
     }
 
+    // ensurePipeline is where the 1x1 dummy channel texture is created, and the
+    // uploadDirtyTextures call above already ran. Without this second attempt
+    // the SRBs ensurePipeline just built bind a texture whose transparent-black
+    // texel does not reach the GPU until the next frame. Still ahead of every
+    // beginPass below, so the ordering is valid.
+    uploadDummyChannelTexture(rhi, cb);
+
     // ========================================================================
     // Multipass buffer passes recorded in prepare()
     // ========================================================================
-    const bool multipassSingle = !multiBufferMode && !m_bufferPath.isEmpty() && m_bufferShaderReady && m_bufferPipeline
+    const bool multipassSingle = !multiBufferMode && !m_bufferPaths.isEmpty() && m_bufferShaderReady && m_bufferPipeline
         && m_bufferSrb && m_bufferRenderTarget && m_bufferTexture;
     const bool multipassMulti =
         multiBufferMode && m_multiBufferShadersReady && m_multiBufferTextures[0] && m_multiBufferPipelines[0];
@@ -747,7 +751,7 @@ void ShaderNodeRhi::prepare()
             }
         }
         if (multiBufferMode) {
-            const int n = qMin(m_bufferPaths.size(), kMaxBufferPasses);
+            const int n = static_cast<int>(qMin(m_bufferPaths.size(), static_cast<qsizetype>(kMaxBufferPasses)));
             for (int i = 0; i < n; ++i) {
                 if (!m_multiBufferTextures[i] || !m_multiBufferRenderTargets[i] || !m_multiBufferPipelines[i]
                     || !m_multiBufferSrbs[i]) {
@@ -763,6 +767,20 @@ void ShaderNodeRhi::prepare()
                 cb->setVertexInput(0, 1, &vbufBinding);
                 cb->draw(4);
                 cb->endPass();
+
+                // A pass declared "mipmap" samples through a mip chain, and the
+                // chain only exists if something fills it. The sampler's mip
+                // filter alone selected between levels that were never written.
+                // Guarded on the texture actually having been allocated with the
+                // flags, since ensureBufferTarget falls back to a single level
+                // when a backend refuses a mipmapped target for this format.
+                if (m_bufferFilters[static_cast<size_t>(i)] == QLatin1String("mipmap")
+                    && m_multiBufferTextures[i]->flags().testFlag(QRhiTexture::UsedWithGenerateMips)) {
+                    if (QRhiResourceUpdateBatch* mips = rhi->nextResourceUpdateBatch()) {
+                        mips->generateMips(m_multiBufferTextures[i].get());
+                        cb->resourceUpdate(mips);
+                    }
+                }
 
                 if (i + 1 < n && m_ubo) {
                     // Inter-pass write→read barrier only: re-uploading 4 bytes at
@@ -813,6 +831,17 @@ void ShaderNodeRhi::prepare()
             cb->setVertexInput(0, 1, &vbufBinding);
             cb->draw(4);
             cb->endPass();
+
+            // The single-pass twin of the mip generation in the multi-buffer
+            // loop above. The texture written this frame is the ping-pong slot,
+            // not always slot A, so mip the one that was actually drawn into.
+            if (m_bufferFilters[0] == QLatin1String("mipmap") && writtenTexture
+                && writtenTexture->flags().testFlag(QRhiTexture::UsedWithGenerateMips)) {
+                if (QRhiResourceUpdateBatch* mips = rhi->nextResourceUpdateBatch()) {
+                    mips->generateMips(writtenTexture);
+                    cb->resourceUpdate(mips);
+                }
+            }
         }
 
         // Resource flush after buffer passes (Vulkan barrier hint). Doubles as
@@ -946,7 +975,7 @@ void ShaderNodeRhi::render(const RenderState* state)
     cb->setGraphicsPipeline(m_pipeline.get());
 
     const bool multiBufferMode = m_bufferPaths.size() > 1;
-    const bool multipassSingle = !multiBufferMode && !m_bufferPath.isEmpty() && m_bufferShaderReady && m_bufferPipeline
+    const bool multipassSingle = !multiBufferMode && !m_bufferPaths.isEmpty() && m_bufferShaderReady && m_bufferPipeline
         && m_bufferRenderTarget && m_bufferTexture;
     const int imageWriteIndex = multipassSingle && m_bufferFeedback ? (m_frame % 2) : 0;
     QRhiShaderResourceBindings* imageSrb =

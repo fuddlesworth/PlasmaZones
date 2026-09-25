@@ -136,6 +136,12 @@ void OverlayService::setSettings(ISettings* settings)
             // sub-second, so a live re-decorate has no observable effect.
             connect(m_settings, &ISettings::decorationProfileTreeChanged, this,
                     &OverlayService::reapplyVisiblePopupDecorations);
+            // The blur-quality tier is folded into every composed stage map, so a live
+            // retune has to reach the slots already up for the same reason the tree
+            // edit above does. The compositor self-heals on this same key; without
+            // this the daemon was the one surface host that kept the old density.
+            connect(m_settings, &ISettings::decorationBlurScaleMultiplierChanged, this,
+                    &OverlayService::reapplyVisiblePopupDecorations);
 
             // Zone-overlay shader tree: an assignment edit in the settings
             // app can flip a screen between rectangle and shader overlay

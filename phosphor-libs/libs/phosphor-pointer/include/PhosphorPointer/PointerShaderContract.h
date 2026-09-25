@@ -71,9 +71,16 @@ inline constexpr const char* kCustomParamsArray = "customParams";
 inline constexpr const char* kCustomColorsArray = "customColors";
 
 /// `vec4 iChannelResolution[4]` — multipass buffer sizes (`.xy`).
+///
+/// DOCUMENTATION ONLY, unlike every other name constant here. These two name
+/// ARRAYS, and a GL uniform lookup needs the per-element spelling
+/// (`iChannelResolution[0]`), so the compositor builds those from its own
+/// string-literal tables and never reads these. They are kept because the
+/// contract is the list of names a pack may use.
 inline constexpr const char* kIChannelResolution = "iChannelResolution";
 
-/// `vec4 iTextureResolution[4]` — user texture sizes (`.xy`).
+/// `vec4 iTextureResolution[4]` — user texture sizes (`.xy`). Documentation
+/// only, for the same reason as kIChannelResolution above.
 inline constexpr const char* kITextureResolution = "iTextureResolution";
 
 // ── Pointer tail (UBO offsets 672..1279, see PointerShaderUniforms.h) ────
@@ -120,7 +127,7 @@ inline constexpr const char* kUPointerTrail = "uPointerTrail";
 // ── Samplers ─────────────────────────────────────────────────────────────
 
 /// `sampler2D uCursorSprite` — the cursor image, bound only for packs that
-/// declare `needsCursor`. Loose sampler on KWin, binding 7 on the UBO
+/// declare `needsCursor`. Loose sampler on KWin, binding 11 on the UBO
 /// runtime. Gate every read on `uPointerFlags.x`.
 ///
 /// A shader that samples this without declaring `needsCursor` reads whatever
@@ -133,7 +140,11 @@ inline constexpr const char* kUCursorSprite = "uCursorSprite";
 
 /// `sampler2D uTexture1..3` — user-declared image textures (metadata
 /// `textures`). Slot N of the metadata list feeds `uTexture<N+1>` (bindings
-/// 8-10 on the UBO runtime) and `iTextureResolution[N].xy` carries its size.
+/// 12-14 on the UBO runtime) and `iTextureResolution[N+1].xy` carries its size.
+/// The array is indexed by GLSL slot, as in every family: `iTextureResolution[i]`
+/// is the size of `uTexture<i>`. This family has no `uTexture0`, because binding
+/// 11 carries `uCursorSprite`, so index 0 is unused here rather than being the
+/// first declared texture.
 /// An undeclared slot is unbound and reads texture unit 0 on the compositor
 /// (see `kUCursorSprite`).
 inline constexpr const char* kUTexture1 = "uTexture1";
@@ -141,7 +152,9 @@ inline constexpr const char* kUTexture2 = "uTexture2";
 inline constexpr const char* kUTexture3 = "uTexture3";
 
 /// `sampler2D iChannel0..3` — multipass buffers, declared by the opt-in
-/// `pointer_multipass.glsl` include (bindings 2-5 on the UBO runtime).
+/// `pointer_multipass.glsl` include (bindings 2-5 on the UBO runtime, the
+/// FIRST FOUR of the shared table's eight-wide channel block). Two of the four
+/// are headroom: this family caps a chain at kMaxBufferPasses, which is 2.
 inline constexpr const char* kIChannel0 = "iChannel0";
 inline constexpr const char* kIChannel1 = "iChannel1";
 inline constexpr const char* kIChannel2 = "iChannel2";
@@ -165,9 +178,9 @@ inline constexpr int kMaxParameterSlots = PhosphorShaders::CustomParams::kFlatSl
 /// Maximum number of user-declared textures per pointer effect.
 inline constexpr int kMaxUserTextureSlots = 3;
 
-/// Maximum number of buffer passes a pointer pack may declare. Two, not the
-/// surface family's four: a pointer chain runs on every output frame while
-/// live, and each pass costs a canvas-sized draw.
+/// Maximum number of buffer passes a pointer pack may declare. Two, against
+/// the eight the shared budget grants every other family: a pointer chain runs
+/// on every output frame while live, and each pass costs a canvas-sized draw.
 inline constexpr int kMaxBufferPasses = 2;
 
 /// Maximum number of declared parameters a pack may carry across both pools.

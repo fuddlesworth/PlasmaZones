@@ -6,9 +6,15 @@
 // separate host-defined "decoration appearance"): p_borderWidth / p_cornerRadius
 // (logical px, scaled to device px by uSurfaceScale) and p_activeColor /
 // p_inactiveColor, mixed on the contract's uSurfaceFocused so the focused vs
-// unfocused colour is the shader's job. (p_useSystemAccent is consumed host-side
-// — when set, the effect fills the active/inactive colour params from the system
-// scheme — so the shader just reads the colour params.)
+// unfocused colour is the shader's job.
+//
+// THREE of this pack's declared parameters are consumed HOST-SIDE and are
+// never read here, which is why the shader only ever reads the colour params.
+// p_useThemeNeutral fills active/inactive from a neutral line lerped between
+// the theme background and foreground, with p_frameContrast choosing how far
+// along that line. p_useSystemAccent fills them from the system accent
+// instead. useThemeNeutral WINS: the resolver tests it first and the accent
+// branch is its else, so a pack with both set never sees the accent.
 //
 // One analytic rounded-rect SDF over the content/frame rect both clips the
 // content to the inner rounded rect and lays the border band over the

@@ -97,6 +97,15 @@ Copyright: 2021-2024 Simon Schneegans (Burn-My-Windows)
            2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: GPL-3.0-or-later
 
+# matrix's own header credits 2021 alone, not the 2021-2024 range the other
+# Burn-My-Windows ports carry, and a stanza has to name the holder its files
+# actually name. Its own stanza, after the group above, so last-match-wins picks
+# this one for it.
+Files: plasmazones/data/animations/matrix/effect.frag
+Copyright: 2021 Simon Schneegans (Burn-My-Windows)
+           2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+License: GPL-3.0-or-later
+
 # focus is the only Burn-My-Windows port that also carries Justin Garza, so he
 # is named here and not on the nine above. Each Copyright field lists the
 # holders of the files in its own stanza, not the union across the pack set.
@@ -112,11 +121,10 @@ License: GPL-3.0-or-later
 # They sit in their own stanza after the LGPL data stanza so last-match-wins
 # still resolves them to GPL-3.
 #
-# glass/effect.frag describes itself as a port of kwin-effects-glass and
-# frosted-glass/effect.frag as a port of the phosphor-shell frosted panel
-# shader, but neither carries the second SPDX-FileCopyrightText that CLAUDE.md
-# requires of a port. That is a question about those headers, not about this
-# file, and it must not be answered by inventing a holder here.
+# frosted-glass/effect.frag describes itself as a port of the phosphor-shell
+# frosted panel shader but carries no second SPDX-FileCopyrightText, so no holder
+# is invented for it here: that is a question about its header, not about this
+# file. glass/effect.frag DOES carry one now, and takes its own stanza below.
 Files: plasmazones/data/surface/blur/effect.frag
        plasmazones/data/surface/duotone/effect.frag
        plasmazones/data/surface/frosted-glass/effect.frag
@@ -125,6 +133,14 @@ Files: plasmazones/data/surface/blur/effect.frag
        plasmazones/data/surface/rain-glass/effect.frag
        plasmazones/data/surface/rippled-glass/effect.frag
 Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+License: GPL-3.0-or-later
+
+# glass/effect.frag credits kwin-effects-glass in its own header, so the stanza
+# names that holder. After the seven-file stanza above, which does not, so
+# last-match-wins resolves glass to this one.
+Files: plasmazones/data/surface/glass/effect.frag
+Copyright: kwin-effects-glass contributors
+           2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: GPL-3.0-or-later
 
 Files: plasmazones/data/animations/honeycomb/effect.frag
@@ -143,6 +159,18 @@ Files: plasmazones/data/animations/desktop-crosszoom/effect.frag
        plasmazones/data/animations/desktop-slide/effect.frag
 Copyright: gl-transitions contributors
            2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+License: LGPL-2.1-or-later
+
+# The vibrancy helper in this shared header is a port of Hyprland's blur1.glsl,
+# whose BSD-3 terms permit the LGPL the file ships under. BSD-3 requires the
+# upstream notice be retained in a source redistribution, and shader sources are
+# shipped as source, so upstream is credited here and in the file's own header
+# rather than relicensed away. The retained notice is the BSD-3-Clause paragraph
+# at the foot of this file; the License field stays LGPL-2.1-or-later because
+# that is what the file ships under.
+Files: plasmazones/data/surface/shared/surface_color.glsl
+Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+           Hyprland contributors
 License: LGPL-2.1-or-later
 
 # Credits the Shadertoy author named in this file's own header. The file
@@ -246,3 +274,53 @@ License: CC0-1.0
  .
  On Debian systems the full text of the CC0 1.0 Universal license can be found
  in /usr/share/common-licenses/CC0-1.0.
+
+# Retained upstream notices. Neither paragraph is a Files stanza: the files that
+# incorporate this code ship under the licence their own stanza declares, and these
+# exist because BSD-3 clause 1 and the MIT licence each require their condition list
+# and disclaimer to travel with a source redistribution.
+
+License: BSD-3-Clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are met:
+ .
+ 1. Redistributions of source code must retain the above copyright notice, this
+    list of conditions and the following disclaimer.
+ .
+ 2. Redistributions in binary form must reproduce the above copyright notice,
+    this list of conditions and the following disclaimer in the documentation
+    and/or other materials provided with the distribution.
+ .
+ 3. Neither the name of the copyright holder nor the names of its contributors
+    may be used to endorse or promote products derived from this software
+    without specific prior written permission.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+License: Expat
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights
+ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ copies of the Software, and to permit persons to whom the Software is
+ furnished to do so, subject to the following conditions:
+ .
+ The above copyright notice and this permission notice shall be included in all
+ copies or substantial portions of the Software.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ SOFTWARE.

@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <PhosphorShaders/ShaderBindings.h>
+
 #include <cstddef>
 
 namespace PhosphorSurfaceShaders {
@@ -18,7 +20,7 @@ namespace PhosphorSurfaceShaders {
 /// (overlay/animation), not a smaller one — both are 672 bytes, and the
 /// members do not line up. Surface decoration needs only geometry +
 /// focus + time + the pack parameter slots, and it binds its samplers
-/// differently (uTexture0 at binding 7, iChannel0-3 at bindings 2-5 — none of
+/// differently (uTexture0 at binding 11, iChannel0-7 at bindings 2-9 — none of
 /// which are UBO members; only iChannelResolution sizes live here).
 ///
 /// The per-field std140 offset static_asserts below PIN the byte layout the
@@ -67,13 +69,21 @@ struct alignas(16) SurfaceUniforms
     float customColors[16][4]; // vec4[16]: 256 bytes at offset 240
 
     // Multipass: iChannelResolution[i] = buffer-pass output texture size (.xy).
+    //
+    // The FIRST FOUR channels only, while the pass budget is eight. Widening
+    // this would move every offset below it and break the 672-byte layout the
+    // GLSL branch pins, so a pass reading iChannel4..7 sizes it with
+    // textureSize() instead. The static_assert below ties the count to
+    // Bindings::kChannelResolutionSlots, which the offset asserts cannot: they
+    // catch a resize of THIS member and not the reverse drift, the constant
+    // being bumped while this mirror and surface_uniforms.glsl stay at four.
     float iChannelResolution[4][4]; // vec4[4]: 64 bytes at offset 496
 
     // Audio spectrum bar count (0 when audio is disabled). This UBO is the
     // DAEMON's layout: the daemon writes this member for every surface item when
     // CAVA is on. The KWin effect uses no UBO and pushes the same value as a
     // loose `iAudioSpectrumSize` uniform from its own CAVA provider. The
-    // uAudioSpectrum sampler (binding 6) lives in surface_audio.glsl, not the
+    // uAudioSpectrum sampler (binding 10) lives in surface_audio.glsl, not the
     // UBO; only the size is a UBO member. A pack reads it via surface_audio.glsl
     // (audioBar / getBass).
     int iAudioSpectrumSize; // int: 4 bytes at offset 560
@@ -86,9 +96,10 @@ struct alignas(16) SurfaceUniforms
     // off-surface sentinel rather than a phantom top-left hover.
     float iMouse[4]; // vec4: 16 bytes at offset 576
 
-    // User texture sizes: iTextureResolution[i].xy = the pixel size of the
-    // texture bound at slot i (slot N feeds uTexture<N+1>, bindings 8-10 on
-    // the daemon). The node resolves these live, same as the overlay UBO.
+    // User texture sizes: iTextureResolution[i].xy = the pixel size of
+    // uTexture<i>, bindings 11-14. Index 0 is the surface's own content, so a
+    // pack's metadata slot N, which feeds uTexture<N+1>, has its size at index
+    // N+1. The node resolves these live, same as the overlay UBO.
     float iTextureResolution[4][4]; // vec4[4]: 64 bytes at offset 592
 
     // The sub-rect of the bound backdrop this surface samples, in normalized
@@ -140,5 +151,15 @@ static_assert(offsetof(SurfaceUniforms, iTextureResolution) == 592,
               "SurfaceUniforms::iTextureResolution must remain at std140 offset 592");
 static_assert(offsetof(SurfaceUniforms, uBackdropRect) == 656,
               "SurfaceUniforms::uBackdropRect must remain at std140 offset 656");
+
+// The offset asserts above catch a resize of iChannelResolution. This catches
+// the drift in the other direction: the shared constant being raised while this
+// mirror and data/surface/shared/surface_uniforms.glsl stay at four, which is
+// the direction the channel work moves in. Raising the constant means moving
+// every offset below this member, so it has to be a deliberate edit here.
+static_assert(sizeof(SurfaceUniforms::iChannelResolution) / sizeof(SurfaceUniforms::iChannelResolution[0])
+                  == static_cast<std::size_t>(PhosphorShaders::Bindings::kChannelResolutionSlots),
+              "SurfaceUniforms::iChannelResolution must carry Bindings::kChannelResolutionSlots elements; "
+              "growing the constant means relaying this struct and the GLSL branch it mirrors");
 
 } // namespace PhosphorSurfaceShaders

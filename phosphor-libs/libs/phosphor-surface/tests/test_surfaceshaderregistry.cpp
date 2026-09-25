@@ -12,6 +12,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QtTest/QtTest>
@@ -412,6 +413,83 @@ private Q_SLOTS:
         QCOMPARE(scaleFor(0.5), 0.5);
     }
 
+    /// `bufferScales` is positionally aligned with bufferShaders like the wrap
+    /// and filter lists: every entry is kept in place, each is clamped like the
+    /// single-value scale, a non-number falls back to that scale rather than
+    /// being dropped (which would shift every later pass), and the list is
+    /// capped at the pass budget. It round-trips through toJson.
+    void fromJson_keeps_per_pass_buffer_scales_aligned_and_clamped()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("id"), QStringLiteral("s"));
+        obj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        obj.insert(QLatin1String("bufferScale"), 0.25);
+        QJsonArray scales;
+        scales.append(0.5);
+        scales.append(QStringLiteral("oops"));
+        scales.append(5.0);
+        scales.append(0.001);
+        obj.insert(QLatin1String("bufferScales"), scales);
+        const SurfaceShaderEffect e = SurfaceShaderEffect::fromJson(obj);
+        QCOMPARE(e.bufferScales.size(), 4);
+        QCOMPARE(e.bufferScales.at(0), 0.5);
+        QCOMPARE(e.bufferScales.at(1), 0.25); // the non-number slot follows bufferScale
+        QCOMPARE(e.bufferScales.at(2), SurfaceShaderEffect::kMaxBufferScale);
+        QCOMPARE(e.bufferScales.at(3), SurfaceShaderEffect::kMinBufferScale);
+
+        const SurfaceShaderEffect again = SurfaceShaderEffect::fromJson(e.toJson());
+        QVERIFY(again == e);
+        QCOMPARE(again.bufferScales, e.bufferScales);
+
+        QJsonArray surplus;
+        for (int i = 0; i < SurfaceShaderEffect::kMaxBufferPasses + 2; ++i) {
+            surplus.append(0.5);
+        }
+        obj.insert(QLatin1String("bufferScales"), surplus);
+        QCOMPARE(SurfaceShaderEffect::fromJson(obj).bufferScales.size(), SurfaceShaderEffect::kMaxBufferPasses);
+    }
+
+    /// The PATHS cap, which the per-pass scale case above does not cover. The
+    /// two arrays are capped by separate code and the scales one was the only
+    /// side with a test, so the cap that decides how many passes actually RUN
+    /// was unpinned.
+    ///
+    /// One past the budget rather than an arbitrary surplus: a cap that is off
+    /// by one is the plausible regression, and a ten-entry array would pass a
+    /// broken cap of nine.
+    void fromJson_caps_bufferShaders_at_the_pass_budget()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("id"), QStringLiteral("s"));
+        obj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        obj.insert(QLatin1String("multipass"), true);
+        QJsonArray buffers;
+        for (int i = 0; i < SurfaceShaderEffect::kMaxBufferPasses + 1; ++i) {
+            buffers.append(QStringLiteral("pass%1.frag").arg(i));
+        }
+        obj.insert(QLatin1String("bufferShaders"), buffers);
+
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("declares .* buffer passes")));
+        const SurfaceShaderEffect e = SurfaceShaderEffect::fromJson(obj);
+        QCOMPARE(e.bufferShaderPaths.size(), SurfaceShaderEffect::kMaxBufferPasses);
+        // The surplus is dropped from the END, so the kept entries are the
+        // first N in declaration order. That matters: the builtin chain is
+        // positional, so dropping from the front would reorder it.
+        QCOMPARE(e.bufferShaderPaths.first(), QStringLiteral("pass0.frag"));
+        QCOMPARE(e.bufferShaderPaths.last(),
+                 QStringLiteral("pass%1.frag").arg(SurfaceShaderEffect::kMaxBufferPasses - 1));
+
+        // Exactly at the budget is accepted whole and warns about nothing.
+        QJsonArray exact;
+        for (int i = 0; i < SurfaceShaderEffect::kMaxBufferPasses; ++i) {
+            exact.append(QStringLiteral("pass%1.frag").arg(i));
+        }
+        obj.insert(QLatin1String("bufferShaders"), exact);
+        QCOMPARE(SurfaceShaderEffect::fromJson(obj).bufferShaderPaths.size(), SurfaceShaderEffect::kMaxBufferPasses);
+    }
+
+    // ── parseEffect scan + builtin-buffer helpers ────────────────────────
+
     void parseEffect_clears_orphan_buffer_overrides_on_single_pass_pack()
     {
         // A pack that declares per-buffer wrap/filter overrides WITHOUT
@@ -433,6 +511,11 @@ private Q_SLOTS:
         QJsonArray filters;
         filters.append(QStringLiteral("nearest"));
         meta.insert(QLatin1String("bufferFilters"), filters);
+        // bufferScales is the third member of the positionally-aligned set and
+        // was the one the coherence block missed.
+        QJsonArray scales;
+        scales.append(0.5);
+        meta.insert(QLatin1String("bufferScales"), scales);
         QVERIFY(writePack(tmp.path(), QStringLiteral("orphan"), meta, {QStringLiteral("effect.frag")}));
 
         SurfaceShaderRegistry registry;
@@ -443,6 +526,7 @@ private Q_SLOTS:
         QVERIFY(!e.isMultipass);
         QVERIFY2(e.bufferWraps.isEmpty(), "single-pass pack must not carry orphan bufferWraps");
         QVERIFY2(e.bufferFilters.isEmpty(), "single-pass pack must not carry orphan bufferFilters");
+        QVERIFY2(e.bufferScales.isEmpty(), "single-pass pack must not carry orphan bufferScales");
     }
 
     void parseEffect_clears_bufferShaderPaths_when_multipass_flag_absent()
@@ -513,6 +597,16 @@ private Q_SLOTS:
         for (const QString& p : e.bufferShaderPaths) {
             QVERIFY2(QFileInfo(p).isAbsolute(), "builtin buffer paths must resolve to absolute files");
             QVERIFY(QFile::exists(p));
+            // The assertion this test is NAMED for. Without it the case cannot
+            // fail for its stated reason: if the sibling probe regressed, the
+            // QStandardPaths fallback would find the INSTALLED copy under
+            // /usr/share on any machine with the package on it and every
+            // assertion above would still pass. That is the dev-passes /
+            // CI-fails asymmetry, in the direction that hides a regression.
+            QVERIFY2(QFileInfo(p).canonicalFilePath().startsWith(QFileInfo(tmp.path()).canonicalFilePath()),
+                     qPrintable(QStringLiteral("resolved outside the temporary pack tree (%1), so the sibling probe "
+                                               "did not serve it: %2")
+                                    .arg(tmp.path(), p)));
         }
     }
 
@@ -675,6 +769,45 @@ private Q_SLOTS:
         QVERIFY(SurfaceShaderRegistry::translateSurfaceParams(e, QVariantMap{}).isEmpty());
     }
 
+    /// A parameter id declared twice keeps the FIRST entry and drops the rest.
+    ///
+    /// Not a tidiness rule. buildParamPreamble emits one `#define p_<id> …` per
+    /// parameter, so two entries sharing an id redefine the same macro with a
+    /// different replacement list, which is a GLSL compile error that takes the
+    /// whole pack down to a black surface. Losing the second editor row is the
+    /// far smaller loss, and it is the first entry that must survive because
+    /// lanes are assigned in declaration order.
+    void duplicate_parameter_ids_are_dropped()
+    {
+        QJsonObject meta;
+        meta.insert(QLatin1String("id"), QStringLiteral("dupes"));
+        meta.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+
+        const auto floatParam = [](const QString& id, double def) {
+            QJsonObject p;
+            p.insert(QLatin1String("id"), id);
+            p.insert(QLatin1String("name"), id);
+            p.insert(QLatin1String("type"), QStringLiteral("float"));
+            p.insert(QLatin1String("default"), def);
+            return p;
+        };
+
+        QJsonArray params;
+        params.append(floatParam(QStringLiteral("radius"), 1.0));
+        params.append(floatParam(QStringLiteral("radius"), 2.0)); // duplicate
+        params.append(floatParam(QStringLiteral("spread"), 3.0));
+        meta.insert(QLatin1String("parameters"), params);
+
+        const SurfaceShaderEffect e = SurfaceShaderEffect::fromJson(meta);
+        QCOMPARE(e.parameters.size(), 2);
+        // The FIRST radius survives, with its own default.
+        QCOMPARE(e.parameters.at(0).id, QStringLiteral("radius"));
+        QCOMPARE(e.parameters.at(0).defaultValue.toDouble(), 1.0);
+        // And the parameter after the duplicate keeps its position, so the
+        // lane it is assigned does not shift.
+        QCOMPARE(e.parameters.at(1).id, QStringLiteral("spread"));
+        QCOMPARE(e.parameters.at(1).defaultValue.toDouble(), 3.0);
+    }
     // ── Path traversal guard ─────────────────────────────────────────────
 
     void traversal_texture_path_is_rejected_valid_slot_survives()
@@ -738,44 +871,102 @@ private Q_SLOTS:
         QVERIFY(!out.contains(QStringLiteral("uTexture1")));
     }
 
-    /// A parameter id declared twice keeps the FIRST entry and drops the rest.
-    ///
-    /// Not a tidiness rule. buildParamPreamble emits one `#define p_<id> …` per
-    /// parameter, so two entries sharing an id redefine the same macro with a
-    /// different replacement list, which is a GLSL compile error that takes the
-    /// whole pack down to a black surface. Losing the second editor row is the
-    /// far smaller loss, and it is the first entry that must survive because
-    /// lanes are assigned in declaration order.
-    void duplicate_parameter_ids_are_dropped()
+    void parseEffect_resolves_every_builtin_kawase_token()
     {
+        // The gaussian pair had a slot and the SEVEN Kawase tokens had none,
+        // although they are the chain every blur-family pack now ships. The
+        // whitelist is a fixed table, so a token missing from it resolves to
+        // nothing and fails the pack closed to single-pass with no compile
+        // error anywhere. Naming all seven is what makes a one-entry typo or
+        // omission fail here rather than in a user's session.
+        //
+        // The ORDER is asserted too, because these passes are positional: each
+        // reads the level above it by channel index, so a chain that resolves
+        // the right seven files in the wrong order blurs wrongly while looking
+        // entirely well-formed.
+        const QStringList kTokens = {QStringLiteral("builtin:kawase-down-0"), QStringLiteral("builtin:kawase-down-1"),
+                                     QStringLiteral("builtin:kawase-down-2"), QStringLiteral("builtin:kawase-down-3"),
+                                     QStringLiteral("builtin:kawase-up-0"),   QStringLiteral("builtin:kawase-up-1"),
+                                     QStringLiteral("builtin:kawase-up-2")};
+        const QStringList kFiles = {QStringLiteral("kawase_down_0.frag"), QStringLiteral("kawase_down_1.frag"),
+                                    QStringLiteral("kawase_down_2.frag"), QStringLiteral("kawase_down_3.frag"),
+                                    QStringLiteral("kawase_up_0.frag"),   QStringLiteral("kawase_up_1.frag"),
+                                    QStringLiteral("kawase_up_2.frag")};
+
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        for (const QString& f : kFiles) {
+            QVERIFY(writeFile(tmp.path() + QStringLiteral("/shared/") + f, QByteArrayLiteral("// stub\n")));
+        }
+
         QJsonObject meta;
-        meta.insert(QLatin1String("id"), QStringLiteral("dupes"));
+        meta.insert(QLatin1String("id"), QStringLiteral("kawase-chain"));
+        meta.insert(QLatin1String("name"), QStringLiteral("Kawase Chain"));
+        meta.insert(QLatin1String("description"), QStringLiteral("Declares the full dual Kawase pyramid."));
+        meta.insert(QLatin1String("category"), QStringLiteral("Decoration"));
         meta.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        meta.insert(QLatin1String("multipass"), true);
+        QJsonArray buffers;
+        for (const QString& t : kTokens) {
+            buffers.append(t);
+        }
+        meta.insert(QLatin1String("bufferShaders"), buffers);
+        QVERIFY(writePack(tmp.path(), QStringLiteral("kawase-chain"), meta, {QStringLiteral("effect.frag")}));
 
-        const auto floatParam = [](const QString& id, double def) {
-            QJsonObject p;
-            p.insert(QLatin1String("id"), id);
-            p.insert(QLatin1String("name"), id);
-            p.insert(QLatin1String("type"), QStringLiteral("float"));
-            p.insert(QLatin1String("default"), def);
-            return p;
-        };
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
 
-        QJsonArray params;
-        params.append(floatParam(QStringLiteral("radius"), 1.0));
-        params.append(floatParam(QStringLiteral("radius"), 2.0)); // duplicate
-        params.append(floatParam(QStringLiteral("spread"), 3.0));
-        meta.insert(QLatin1String("parameters"), params);
+        const SurfaceShaderEffect e = registry.effect(QStringLiteral("kawase-chain"));
+        QVERIFY(e.isValid());
+        QVERIFY(e.isMultipass);
+        QCOMPARE(e.bufferShaderPaths.size(), kFiles.size());
+        for (qsizetype i = 0; i < kFiles.size(); ++i) {
+            QCOMPARE(QFileInfo(e.bufferShaderPaths.at(i)).fileName(), kFiles.at(i));
+            // Served by the SIBLING probe, not by an installed copy under
+            // /usr/share. Same reason the gaussian slot above asserts it: without
+            // this the case passes on any machine with the package installed
+            // even if the probe regressed.
+            QVERIFY2(QFileInfo(e.bufferShaderPaths.at(i))
+                         .canonicalFilePath()
+                         .startsWith(QFileInfo(tmp.path()).canonicalFilePath()),
+                     qPrintable(e.bufferShaderPaths.at(i)));
+        }
+    }
 
-        const SurfaceShaderEffect e = SurfaceShaderEffect::fromJson(meta);
-        QCOMPARE(e.parameters.size(), 2);
-        // The FIRST radius survives, with its own default.
-        QCOMPARE(e.parameters.at(0).id, QStringLiteral("radius"));
-        QCOMPARE(e.parameters.at(0).defaultValue.toDouble(), 1.0);
-        // And the parameter after the duplicate keeps its position, so the
-        // lane it is assigned does not shift.
-        QCOMPARE(e.parameters.at(1).id, QStringLiteral("spread"));
-        QCOMPARE(e.parameters.at(1).defaultValue.toDouble(), 3.0);
+    void parseEffect_carries_per_pass_bufferScales_through_a_multipass_scan()
+    {
+        // bufferScales is the per-pass resolution list the pyramid needs, and
+        // nothing asserted it survives a scan at all. It has to arrive in ORDER
+        // and it has to arrive COMPLETE: the entries are positional, so a list
+        // that lost one silently re-points every later pass at a neighbour's
+        // resolution, which renders as a blur of the wrong width rather than as
+        // any kind of error.
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writeFile(tmp.path() + QStringLiteral("/shared/kawase_down_0.frag"), QByteArrayLiteral("// stub\n")));
+        QVERIFY(writeFile(tmp.path() + QStringLiteral("/shared/kawase_up_2.frag"), QByteArrayLiteral("// stub\n")));
+
+        QJsonObject meta;
+        meta.insert(QLatin1String("id"), QStringLiteral("scaled-chain"));
+        meta.insert(QLatin1String("name"), QStringLiteral("Scaled Chain"));
+        meta.insert(QLatin1String("description"), QStringLiteral("Declares per-pass buffer scales."));
+        meta.insert(QLatin1String("category"), QStringLiteral("Decoration"));
+        meta.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        meta.insert(QLatin1String("multipass"), true);
+        meta.insert(QLatin1String("bufferShaders"),
+                    QJsonArray{QStringLiteral("builtin:kawase-down-0"), QStringLiteral("builtin:kawase-up-2")});
+        meta.insert(QLatin1String("bufferScales"), QJsonArray{0.25, 0.0625});
+        QVERIFY(writePack(tmp.path(), QStringLiteral("scaled-chain"), meta, {QStringLiteral("effect.frag")}));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+
+        const SurfaceShaderEffect e = registry.effect(QStringLiteral("scaled-chain"));
+        QVERIFY(e.isValid());
+        QVERIFY(e.isMultipass);
+        QCOMPARE(e.bufferScales.size(), 2);
+        QCOMPARE(e.bufferScales.at(0), 0.25);
+        QCOMPARE(e.bufferScales.at(1), 0.0625);
     }
 };
 

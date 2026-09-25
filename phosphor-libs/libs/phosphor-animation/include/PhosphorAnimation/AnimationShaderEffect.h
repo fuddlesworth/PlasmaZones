@@ -130,7 +130,7 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     bool bufferFeedback = false;
 
     /// Render-target scale relative to the surface size. Clamped to
-    /// `[0.125, 1.0]` at `fromJson` time. Daemon-only — the compositor
+    /// `[kMinBufferScale, kMaxBufferScale]` at `fromJson` time. Daemon-only — the compositor
     /// path doesn't allocate auxiliary FBOs.
     qreal bufferScale = 1.0;
 
@@ -164,6 +164,11 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     /// a spectrum), and the daemon's SurfaceAnimator feeds the spectrum
     /// unconditionally. Helpers read 0 (render static) when the visualizer
     /// is off or cava is unavailable.
+    ///
+    /// The daemon reads this flag nowhere, its own run-gate included: that
+    /// gate counts a displaying zone overlay or a visible audio-reactive
+    /// decoration and nothing else, so on a daemon-hosted surface the
+    /// provider behind the unconditional feed may never start.
     bool useAudio = false;
 
     /// How wide the shader effect's render target is — relative to its
@@ -210,8 +215,9 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
 
     /// Lower / upper bounds on `bufferScale` (multipass FBO downscale
     /// factor) — forwarders onto the cross-library canonical constants in
-    /// <PhosphorShaders/CustomParamsKey.h> (see there for the 0.125 cost-floor
-    /// rationale), matching how SurfaceShaderEffect forwards. Kept as names on
+    /// <PhosphorShaders/CustomParamsKey.h> (see there for why the floor sits
+    /// several steps below the deepest level any pack declares), matching how
+    /// SurfaceShaderEffect forwards. Kept as names on
     /// this class because `fromJson`'s clamp and the round-trip stability
     /// comment in `toJson` reference them.
     static constexpr qreal kMinBufferScale = PhosphorShaders::kMinBufferScale;
@@ -256,7 +262,7 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     /// User texture slot. Each entry binds an asset file to one of the
     /// canonical samplers `uTexture1` / `uTexture2` / `uTexture3` (slots
     /// 0 / 1 / 2 here, which the runtimes map to texture-unit
-    /// allocations 1 / 2 / 3 — slot 0 of the binding-7+ region is the
+    /// allocations 1 / 2 / 3 — slot 0 of the binding-11+ region is the
     /// surface itself / `uTexture0`, never user-declared).
     ///
     /// `path` is resolved relative to the effect's `sourceDir`. Loading

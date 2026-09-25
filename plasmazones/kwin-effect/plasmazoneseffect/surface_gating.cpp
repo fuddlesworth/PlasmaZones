@@ -12,6 +12,8 @@
 
 #include "plasmazoneseffect.h"
 
+#include "desktopvisibility.h"
+
 #include "shader_internal.h"
 #include "surface_fold.h"
 #include "types.h"
@@ -19,6 +21,7 @@
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 
+#include <QPointer>
 #include <QRectF>
 
 #include <optional>
@@ -70,8 +73,11 @@ void PlasmaZonesEffect::repaintAllDecorations()
         // Same exact-id / deleted / on-desktop discipline as the per-frame driver in
         // postPaintScreen: findWindowById's fuzzy appId fallback can resolve a
         // same-app sibling for a stale id, and an off-desktop window has nothing to
-        // wake.
-        if (!sw || getWindowId(sw) != it.key() || sw->isDeleted() || !sw->isOnCurrentDesktop()) {
+        // wake. PER-OUTPUT, because this decides whether to drive a DECORATION and
+        // that is the line desktopvisibility.h draws. A gate that opens and does not
+        // wake a window visible on its own output leaves it frozen on its last
+        // composite until something incidental damages it.
+        if (!sw || getWindowId(sw) != it.key() || sw->isDeleted() || !isOnOwnOutputCurrentDesktop(sw)) {
             continue;
         }
         sw->addRepaintFull();
@@ -146,7 +152,9 @@ void PlasmaZonesEffect::repaintHoverDecorations(const QPointF& cursor)
             continue;
         }
         KWin::EffectWindow* const sw = findWindowByIdExact(it.key());
-        if (!sw || getWindowId(sw) != it.key() || sw->isDeleted() || !sw->isOnCurrentDesktop()) {
+        // Per-output, same reason as repaintAllDecorations above: a hover pack on a
+        // window visible on its own output has to re-fold.
+        if (!sw || getWindowId(sw) != it.key() || sw->isDeleted() || !isOnOwnOutputCurrentDesktop(sw)) {
             continue;
         }
         // A PAUSED chain pins its cursor to the sentinel and cannot change, so waking it
@@ -455,6 +463,93 @@ bool PlasmaZonesEffect::windowSurfaceAnimates(const QString& windowId)
         }
     }
     return false;
+}
+
+// Neutralise a decorated window's present shader for ONE out-of-band draw when
+// its composite does not exist, handing back the action that restores it.
+//
+// WHY IT HAS TO EXIST. The snap-assist thumbnail capture draws candidates through
+// effects->drawWindow from a TIMER, outside any paint pass, with
+// m_capturingSnapshot deliberately false so the thumbnail keeps its decorations.
+// paintWindow, and therefore the decoration fold, is never entered; drawWindowImpl
+// is. And a candidate can genuinely have no surface state: KWin declines to paint a
+// window fully occluded by an opaque one, so the fold never runs for it, while the
+// redirect and the present shader are installed off the paint cycle by
+// reconcileDecorationShader. Nothing in the candidate filter excludes an occluded
+// window, and the capture holds a KWin::ItemEffect precisely so an obscured one is
+// still renderable. Such a window is redirected, carries the present shader, has
+// shaderApplied true, and has no composite for that shader to present.
+//
+// It lives HERE, in the gating TU, because this is where the rest of the "a fold may
+// not have run for this window" reasoning sits, and because both the fold and the
+// capture TUs are at the file-size ceiling.
+//
+// GATED ON THE COMPOSITE EXISTING, so a warm candidate is untouched and keeps its
+// decoration in the thumbnail, which is the whole point of not setting
+// m_capturingSnapshot at the capture. Deliberately NOT an else-arm on the present
+// bind: skipping only the bind leaves the present shader installed with a stale
+// uFinal, which is the same wrong output, and the tree already carries that warning
+// once. Mirrors paint_capture.cpp's reconstruct-and-restore, which is what every
+// other out-of-band draw site in the tree does.
+//
+// This was the ONLY such site that neither folded nor neutralised.
+std::function<void()> PlasmaZonesEffect::neutralisePresentForOutOfBandDraw(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return {};
+    }
+    const QString windowId = getWindowId(w);
+    const auto decoIt = m_windowDecorations.constFind(windowId);
+    if (decoIt == m_windowDecorations.constEnd() || !decoIt->shaderApplied) {
+        return {}; // not presenting a composite, so nothing to neutralise
+    }
+    // PARK WHAT THE DECORATION BELIEVES IT LAST PAINTED, whatever else this
+    // function decides below. drawWindowImpl's padded-present branch records
+    // lastForeignBand / lastForeignOpacity from the WindowPaintData it is handed, and
+    // the next real frame's changed-test is their only reader. This draw is handed a
+    // DEFAULT one, no translation and opacity 1.0, so for a padded window under a
+    // foreign transform it writes "no band" over the real values — a record of
+    // something no frame ever painted. The branch's own ForeignBandUndo does not
+    // cover it, restoring only when the draw FAILED, and this one succeeds.
+    //
+    // NOT a lost-damage fix, and an earlier version of this comment claimed it was.
+    // Trace it: the empty band differs from the non-empty record, so `changed` is
+    // TRUE, the out-of-band draw issues its damage, and the next real frame compares
+    // non-empty against the empty record and answers changed again. That is one
+    // redundant damage cycle, never a missing one. What the park buys is that the
+    // record keeps meaning "what a real frame put on screen", which is the only
+    // thing its reader can sensibly act on.
+    QPointer<KWin::EffectWindow> parkW(w);
+    const QRectF parkedBand = decoIt->lastForeignBand;
+    const qreal parkedOpacity = decoIt->lastForeignOpacity;
+    const auto restoreBand = [this, windowId, parkedBand, parkedOpacity]() {
+        const auto it = m_windowDecorations.find(windowId);
+        if (it != m_windowDecorations.end()) {
+            it->lastForeignBand = parkedBand;
+            it->lastForeignOpacity = parkedOpacity;
+        }
+    };
+    // The same three-part test the present bind itself applies: an entry, the
+    // written flag, and the texture. Any one missing means there is no composite to
+    // present.
+    const auto stateIt = m_surfaceMultipass.find(windowId);
+    if (stateIt != m_surfaceMultipass.end() && stateIt->second.compositeWritten
+        && stateIt->second.compositeTex[static_cast<size_t>(stateIt->second.finalSlot)]) {
+        // Warm: leave the decoration on, which is what a thumbnail wants. The band
+        // park still applies, because a warm window is exactly the one that takes
+        // the padded-present branch and gets its record overwritten.
+        return restoreBand;
+    }
+    setShader(w, nullptr);
+    // Restores the PRESENT shader specifically, not reconcileDecorationShader,
+    // matching paint_capture.cpp's note: that call's live-transition arm cedes the
+    // slot for a window that does carry a leg, which would be the wrong answer here.
+    return [this, parkW, restoreBand]() {
+        if (parkW) {
+            setShader(parkW, surfacePresentShader());
+        }
+        restoreBand();
+    };
 }
 
 } // namespace PlasmaZones

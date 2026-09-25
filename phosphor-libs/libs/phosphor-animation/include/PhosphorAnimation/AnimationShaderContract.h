@@ -11,18 +11,30 @@ namespace PhosphorAnimationShaders {
 
 /// Cross-runtime named-uniform contract for **animation/transition shaders**.
 ///
-/// Phosphor has two distinct shader registries:
+/// Phosphor has four distinct shader registries:
 ///
 ///   1. **Animation/transition shaders** — `AnimationShaderRegistry`,
-///      sourced from `data/animations/*/`. Short-lived transitions
+///      sourced from `plasmazones/data/animations/*/`. Short-lived transitions
 ///      driven by a 0..1 timeline (open, close, snap, drag, etc.).
 ///
 ///   2. **Overlay/zone-background shaders** — `PhosphorShaders::ShaderRegistry`,
-///      sourced from `data/overlays/*/`. Long-lived ambient effects with
+///      sourced from `plasmazones/data/overlays/*/`. Long-lived ambient effects with
 ///      access to the rich `BaseUniforms` UBO (`iMouse`, `iDate`,
 ///      `customColors[16]`, audio-spectrum / wallpaper / multipass
-///      textures, etc.). Daemon-only (RHI/multipass infrastructure has
-///      no compositor-side equivalent).
+///      textures, etc.). Daemon-only, because the overlay family has no
+///      compositor consumer at all — not because multipass is daemon-only,
+///      which it stopped being when the compositor grew the surface fold.
+///
+///   3. **Surface shaders** — `PhosphorSurfaceShaders::SurfaceShaderRegistry`,
+///      sourced from `plasmazones/data/surface/*/`. Persistent per-window decoration
+///      layers. SurfaceShaderContract.h carries that contract.
+///
+///   4. **Pointer shaders** — `PhosphorPointerShaders::PointerShaderRegistry`,
+///      sourced from `plasmazones/data/pointer/*/`. Cursor decoration packs,
+///      compositor-only, and the one family with its OWN buffer-pass cap of
+///      two rather than the shared eight, because its chain runs on every
+///      frame the pointer is live. `CustomParamsKey.h` is written against
+///      all four.
 ///
 /// This header documents the contract for the **first** category. It
 /// applies identically across both runtime execution sites:
@@ -132,6 +144,11 @@ namespace PhosphorAnimationShaders {
 ///     Daemon: node-resolved live. Kwin: pushed by paintWindow's
 ///     per-effect texture loop.
 ///
+/// Two buffer knobs the SURFACE family has are absent here, deliberately.
+/// There is no per-pass `bufferScales` list (one `bufferScale` covers the
+/// whole chain) and no `halfFloatBuffers` switch (animation buffers are
+/// pinned RGBA16F). Both are surface-only.
+///
 /// @par Audio spectrum (opt-in module, both runtimes)
 /// `iAudioSpectrumSize` + the `uAudioSpectrum` sampler are an opt-in
 /// module: a pack includes `data/animations/shared/audio.glsl` (after the
@@ -143,6 +160,13 @@ namespace PhosphorAnimationShaders {
 /// keys the kwin CAVA run-gate — an assigned audio pack keeps the
 /// provider warm so a transition's first frame already has a spectrum.
 /// The helpers read 0 (render static) while the visualizer is off.
+///
+/// The daemon does not read that flag anywhere. Its feed to attached
+/// shaders is unconditional, so a pack needs no flag to be fed, but its
+/// CAVA run-gate counts only a displaying zone overlay or a visible
+/// audio-reactive DECORATION slot. An audio animation pack on a
+/// daemon-hosted surface can therefore be fed a spectrum that was never
+/// started, which looks exactly like the visualizer being off.
 ///
 /// @par Daemon-only extensions
 /// Shaders that need these must run on the daemon overlay path until
@@ -410,8 +434,12 @@ inline constexpr const char* kIIconRect = "iIconRect";
 /// shader cross-fades this (alpha `1 - iTime`) against the live new
 /// content in `uTexture0` (alpha `iTime`), each mapped at native aspect,
 /// so an aspect-ratio-changing resize doesn't stretch the content. Bound
-/// to a dedicated texture unit on the kwin path; a transparent 1×1
-/// fallback is bound when no snapshot was captured. The sampler is NOT
+/// to a dedicated texture unit on the kwin path. When NO snapshot was
+/// captured the unit is NOT given a transparent fallback: it is aliased onto
+/// unit 0, the RAW undecorated window, so an ungated cross-fade from old
+/// content blanks every decoration pack. Gate on `iHasOldWindow`, which is
+/// what the shipped old_content.glsl helper does and what its sibling doc
+/// below says. The sampler is NOT
 /// declared by the canonical header — only the `iHasOldWindow` gate int
 /// is; packs that sample old content opt in via
 /// `data/animations/shared/old_content.glsl`, which declares the sampler
@@ -526,7 +554,7 @@ inline constexpr const char* kIWindowOpacity = "iWindowOpacity";
 ///
 /// Each declared texture binds to one of the canonical samplers
 /// `uTexture1` / `uTexture2` / `uTexture3`. The redirected surface
-/// itself (`uTexture0`, binding 7 on the daemon, TEXTURE0 on KWin) is
+/// itself (`uTexture0`, binding 11 on the daemon, TEXTURE0 on KWin) is
 /// not counted here — that's a separate runtime-managed slot. The
 /// daemon's `PhosphorRendering::kMaxUserTextures = 4` includes slot 0,
 /// hence the off-by-one in the budget. Pinned to the daemon constant
@@ -539,11 +567,13 @@ inline constexpr const char* kIWindowOpacity = "iWindowOpacity";
 inline constexpr int kMaxUserTextureSlots = 3;
 
 /// Multipass buffer-pass budget. Pinned to the runtime's binding budget
-/// (`PhosphorRendering::kMaxBufferPasses`, ShaderNodeRhi) and the GLSL
-/// contract's `vec4 iChannelResolution[4]`: the downstream setters read at
-/// most this many entries, so a pack declaring more would silently lose the
-/// tail — the parser caps (with a warning) at this bound instead.
-inline constexpr int kMaxBufferPasses = 4;
+/// (`PhosphorRendering::kMaxBufferPasses`, ShaderNodeRhi) through the
+/// cross-library `PhosphorShaders::kMaxBufferPasses`: the downstream setters
+/// read at most this many entries, so a pack declaring more would silently
+/// lose the tail — the parser caps (with a warning) at this bound instead.
+/// The GLSL contract's `vec4 iChannelResolution[4]` describes only the first
+/// four; a pass reading a later channel sizes it with `textureSize()`.
+inline constexpr int kMaxBufferPasses = PhosphorShaders::kMaxBufferPasses;
 
 /// `int iAudioSpectrumSize` — CAVA bar count, 0 while the audio visualizer
 /// is off or cava is unavailable. Daemon: BaseUniforms UBO member fed by
@@ -555,7 +585,7 @@ inline constexpr const char* kIAudioSpectrumSize = "iAudioSpectrumSize";
 
 /// `sampler2D uAudioSpectrum` — the CAVA spectrum texture (`bars×1`,
 /// R = bar value in 0..1). Declared by the opt-in audio.glsl module:
-/// binding 6 on the daemon (the overlay convention), a named sampler
+/// binding 10 on the daemon (the overlay convention), a named sampler
 /// bound to a dedicated unit at draw time on the kwin path. Never
 /// sampled while `iAudioSpectrumSize` is 0.
 inline constexpr const char* kUAudioSpectrum = "uAudioSpectrum";
@@ -566,8 +596,9 @@ inline constexpr const char* kUAudioSpectrum = "uAudioSpectrum";
 /// the daemon path); `(-1, -1)` when the cursor is outside the shader's
 /// surface. `.zw` on the kwin path carry the same cursor position
 /// normalised to the frame size ([0, 1] inside the window, negative
-/// when the off-surface sentinel applies) — phosphor-vortex reads them;
-/// the daemon overlay contract reserves `.zw` for click state.
+/// when the off-surface sentinel applies) — phosphor-vortex reads them. The
+/// DAEMON writes the same thing: normalised cursor coordinates, not click
+/// state.
 ///
 /// ONE EXCEPTION, the held-move leg (`move` class, kwin path): no
 /// sentinel is ever applied, and the position is clamped into the frame
@@ -664,35 +695,40 @@ inline QString colorKey(int slot)
     return PhosphorShaders::CustomColors::colorKey(slot);
 }
 
-/// @par Multipass limitation (compositor path)
-/// Animation shaders may declare multipass buffer shaders, wallpaper,
-/// and depth in their metadata. The daemon's SurfaceAnimator wires
-/// these through to PhosphorRendering::ShaderEffect which has full
-/// multipass support. However, the kwin-effect compositor path uses
-/// KWin::GLShader via OffscreenEffect, which is single-pass with no
-/// auxiliary FBOs. Multipass animation shaders degrade to single-pass
-/// on the compositor with a diagnostic log.
+// These two paragraphs document the CONTRACT rather than any one
+// declaration, so they are plain comments: a /// block followed by a blank
+// line attaches to nothing and Doxygen discards it. Every @par that does
+// belong to a declaration lives in the namespace doc at the top of this file.
+//
+// MULTIPASS LIMITATION (compositor path)
+// Animation shaders may declare multipass buffer shaders, wallpaper,
+// and depth in their metadata. The daemon's SurfaceAnimator wires
+// these through to PhosphorRendering::ShaderEffect which has full
+// multipass support. However, the kwin-effect compositor path uses
+// KWin::GLShader via OffscreenEffect, which is single-pass with no
+// auxiliary FBOs. Multipass animation shaders degrade to single-pass
+// on the compositor with a diagnostic log.
 
-/// @par Std140 offset contract
-/// The canonical `data/animations/shared/animation_uniforms.glsl` UBO
-/// declares its fields at the same byte offsets as
-/// `PhosphorShaders::BaseUniforms` (the daemon's `binding=0` upload
-/// struct). That alignment is what lets a single `effect.frag` source
-/// run on both runtimes without per-runtime overrides.
-///
-/// The C++ side of the contract is pinned by `static_assert(offsetof(...))`
-/// statements in `<PhosphorShaders/BaseUniforms.h>` for every BASE field
-/// declared in the GLSL UBO (through iIsReversed at byte 660); the anchor
-/// tail (iSurfaceScreenPos .. iMoveMesh, bytes 672-1343, 1344 total)
-/// is supplied by AnimationUniformExtension and pinned by the size
-/// static_asserts in `<PhosphorAnimation/AnimationUniformExtension.h>`.
-/// If anyone reorders `BaseUniforms`, those asserts fail at compile time
-/// and the canonical GLSL header has to be updated to match. The GLSL side
-/// is exercised at build time by
-/// `plasmazones/tests/unit/ui/shaders/test_animation_shader_bake.cpp`, which runs every
-/// built-in animation shader through `qsb` (which in turn computes
-/// std140 offsets) — a layout drift would surface there as a bake
-/// failure.
+// STD140 OFFSET CONTRACT
+// The canonical `plasmazones/data/animations/shared/animation_uniforms.glsl` UBO
+// declares its fields at the same byte offsets as
+// `PhosphorShaders::BaseUniforms` (the daemon's `binding=0` upload
+// struct). That alignment is what lets a single `effect.frag` source
+// run on both runtimes without per-runtime overrides.
+//
+// The C++ side of the contract is pinned by `static_assert(offsetof(...))`
+// statements in `<PhosphorShaders/BaseUniforms.h>` for every BASE field
+// declared in the GLSL UBO (through iIsReversed at byte 660); the anchor
+// tail (iSurfaceScreenPos .. iMoveMesh, bytes 672-1343, 1344 total)
+// is supplied by AnimationUniformExtension and pinned by the size
+// static_asserts in `<PhosphorAnimation/AnimationUniformExtension.h>`.
+// If anyone reorders `BaseUniforms`, those asserts fail at compile time
+// and the canonical GLSL header has to be updated to match. The GLSL side
+// is exercised at build time by
+// `plasmazones/tests/unit/ui/shaders/test_animation_shader_bake.cpp`, which runs every
+// built-in animation shader through `qsb` (which in turn computes
+// std140 offsets) — a layout drift would surface there as a bake
+// failure.
 
 /// The accepted texture `wrap` vocabulary, shared by every animation
 /// validation site (metadata parse in `AnimationShaderEffect::fromJson`, and
@@ -711,7 +747,7 @@ inline bool isValidWrapToken(const QString& wrap)
 {
     // Thin forwarder onto the cross-library canonical predicate in
     // <PhosphorShaders/CustomParamsKey.h> (already included above), so all
-    // three shader families share one wrap vocabulary rather than each
+    // FOUR shader families share one wrap vocabulary rather than each
     // hand-rolling its own token list that can drift.
     return PhosphorShaders::isValidWrapToken(wrap);
 }

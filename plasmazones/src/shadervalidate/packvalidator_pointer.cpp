@@ -315,8 +315,9 @@ int bakeCompositorStage(QTextStream& out, const PointerShaderEffect& eff, const 
                                               PointerShaderRegistry::pointerEntryCandidates())
         : raw;
     QString err;
+    QStringList sourcePaths;
     QString src = PhosphorShaders::ShaderIncludeResolver::expandIncludes(assembled, QFileInfo(path).absolutePath(),
-                                                                         includePaths, &err);
+                                                                         includePaths, &err, nullptr, &sourcePaths);
     if (src.isEmpty()) {
         // The resolver returns empty for any failure — a missing file, an
         // unreadable one, a malformed directive, a cycle. Naming the
@@ -334,7 +335,7 @@ int bakeCompositorStage(QTextStream& out, const PointerShaderEffect& eff, const 
         src = PhosphorShaders::spliceAfterVersion(src, PointerShaderRegistry::paramPreamble(eff));
     }
     src = PhosphorShaders::spliceAfterVersion(src, PhosphorShaders::kwinDefineBlock());
-    return reportCompositorCompile(out, label, stage, src, tool);
+    return reportCompositorCompile(out, label, stage, src, tool, sourcePaths);
 }
 
 } // namespace
@@ -1043,8 +1044,7 @@ int validatePointerPack(const QString& packDir, QTextStream& out)
     // plus the installed shared helpers.
     const QStringList includePaths = PointerShaderRegistry::includePathsFor(QDir(packDir).absolutePath());
     const QStringList paramNames = declaredParamNames(eff.parameters);
-    errors += reportRawPresetProblems(out, root);
-    errors += reportPresetProblems(out, packDir, eff.presets, eff.parameters);
+    errors += reportPresetLints(out, rawPresetLints(root) + presetLints(packDir, eff.presets, eff.parameters));
     // A stage with no p_<id> preamble cannot use any, so no did-you-mean hint.
     const QStringList noParams;
 

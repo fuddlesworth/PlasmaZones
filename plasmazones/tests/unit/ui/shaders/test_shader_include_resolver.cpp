@@ -186,6 +186,74 @@ private Q_SLOTS:
         QVERIFY2(err.isEmpty(), qPrintable(err));
         QVERIFY(out.contains(QStringLiteral("#line 1 1")));
     }
+
+    // WHICH copy of a header wins when more than one root has it. Nothing
+    // pinned this, and it is the property the whole shared-root design rests
+    // on: a user override of a shared header must shadow the system copy, and
+    // a pack's sibling shared/ must beat every later root. Search order is the
+    // only thing that decides it, so an accidental reorder or a dedup that
+    // sorted the list would silently swap which helpers a pack compiles
+    // against, with no diagnostic on either side.
+    void firstMatchingRootWinsOverEveryLaterOne()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        // Three roots holding the SAME header name with distinguishable bodies.
+        const QStringList roots = {QStringLiteral("first"), QStringLiteral("second"), QStringLiteral("third")};
+        for (const QString& r : roots) {
+            QVERIFY(QDir(tmp.path()).mkpath(r));
+            writeFile(QDir(tmp.filePath(r)).filePath(QStringLiteral("shared.glsl")),
+                      QStringLiteral("// from %1\n").arg(r));
+        }
+        const QString source = QStringLiteral("#version 450\n#include <shared.glsl>\n");
+
+        // currentFileDir is a directory with no copy, so the decision is made
+        // purely by the includePaths order rather than by the sibling rule.
+        QVERIFY(QDir(tmp.path()).mkpath(QStringLiteral("pack")));
+        const QString packDir = tmp.filePath(QStringLiteral("pack"));
+
+        QString err;
+        QStringList legend;
+        const QString out = PhosphorShaders::ShaderIncludeResolver::expandIncludes(
+            source, packDir,
+            {tmp.filePath(QStringLiteral("first")), tmp.filePath(QStringLiteral("second")),
+             tmp.filePath(QStringLiteral("third"))},
+            &err, nullptr, &legend);
+        QVERIFY2(err.isEmpty(), qPrintable(err));
+        QVERIFY2(out.contains(QStringLiteral("// from first")), qPrintable(out));
+        QVERIFY2(!out.contains(QStringLiteral("// from second")), qPrintable(out));
+        QVERIFY2(!out.contains(QStringLiteral("// from third")), qPrintable(out));
+        // The legend names the copy that actually won, not merely some copy.
+        QCOMPARE(legend.size(), 2);
+        QVERIFY2(legend.at(1).contains(QStringLiteral("/first/")), qPrintable(legend.at(1)));
+    }
+
+    // The sibling directory is searched BEFORE the listed roots, which is what
+    // lets a pack ship its own copy of a shared helper. Asserted separately
+    // from the ordering above because it is a different rule: currentFileDir is
+    // not a member of includePaths, it is prepended to them.
+    void theCurrentFileDirectoryBeatsEveryListedRoot()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(QDir(tmp.path()).mkpath(QStringLiteral("pack")));
+        QVERIFY(QDir(tmp.path()).mkpath(QStringLiteral("system")));
+        const QString packDir = tmp.filePath(QStringLiteral("pack"));
+        writeFile(QDir(packDir).filePath(QStringLiteral("shared.glsl")), QStringLiteral("// from pack\n"));
+        writeFile(QDir(tmp.filePath(QStringLiteral("system"))).filePath(QStringLiteral("shared.glsl")),
+                  QStringLiteral("// from system\n"));
+
+        // The QUOTED form, which is the one the compositor resolves against the
+        // pack's own directory. The angle form's policy differs per host and is
+        // the subject of its own lint, so it is deliberately not asserted here.
+        const QString source = QStringLiteral("#version 450\n#include \"shared.glsl\"\n");
+        QString err;
+        const QString out = PhosphorShaders::ShaderIncludeResolver::expandIncludes(
+            source, packDir, {tmp.filePath(QStringLiteral("system"))}, &err);
+        QVERIFY2(err.isEmpty(), qPrintable(err));
+        QVERIFY2(out.contains(QStringLiteral("// from pack")), qPrintable(out));
+        QVERIFY2(!out.contains(QStringLiteral("// from system")), qPrintable(out));
+    }
 };
 
 QTEST_MAIN(TestShaderIncludeResolver)

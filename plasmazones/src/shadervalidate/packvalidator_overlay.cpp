@@ -131,6 +131,14 @@ int validatePack(const QString& packDir, QTextStream& out)
     QStringList lints;
     QHash<QString, QString> claimedLane; // "pool#slot" → first param id, for collision detection
     for (const ShaderRegistry::ParameterInfo& p : info.parameters) {
+        // UNREACHABLE TODAY, and kept as the backstop it is. kValidParamTypes holds
+        // exactly the five tokens data/schemas/shader-metadata.schema.json enumerates
+        // for a parameter's type, and parsePackMetadata runs that schema first, so a
+        // pack with a mistyped type is rejected as a schema error and never arrives
+        // here. Probed, not assumed: a pack whose only fault is "flaot" reports the
+        // schema failure and nothing else. It stays because the schema is not treated
+        // as an absolute gate anywhere else in this file either (it accepts unknown
+        // top-level keys by design), so a relaxation there must not silently open this.
         if (!kValidParamTypes.contains(p.type)) {
             lints << QStringLiteral("unknown param type '%1' for '%2'").arg(p.type, p.id);
         }
@@ -200,7 +208,7 @@ int validatePack(const QString& packDir, QTextStream& out)
         flagPool(poolName(QStringLiteral("image")), imageCount, PhosphorShaders::kMaxImageSlots);
     }
     // Buffer-pass + bufferScale lints check the RAW metadata, not the parsed
-    // ShaderInfo: parseShaderMetadata clamps bufferScale into [0.125, 1.0] and
+    // ShaderInfo: parseShaderMetadata clamps bufferScale into [kMinBufferScale, 1.0] and
     // clears bufferShaderPaths when a declared buffer is missing, so a lint reading
     // the parsed values would silently pass an author error the runtime hid.
     //
@@ -261,13 +269,14 @@ int validatePack(const QString& packDir, QTextStream& out)
             }
         }
 
-        // The runtime caps buffer passes at 4 (parseShaderMetadata's qMin) and
-        // drops the surplus with only a journal warning — exactly the
-        // "runtime hid the author error" class this block lints for.
-        // Compare the RAW declared array against the cap, not the non-empty
-        // subset: parseShaderMetadata iterates qMin(rawSize, kMaxBufferPasses)
-        // and only then skips empties, so ["", "a", "b", "c", "d"] silently
-        // loses "d".
+        // The runtime caps buffer passes at kMaxBufferPasses and drops the surplus
+        // with only a journal warning — exactly the "runtime hid the author error"
+        // class this block lints for. No figure is quoted, because the constant has
+        // moved once already and the worked example that quoted it went stale with it.
+        // Compare the RAW declared array against the cap, not the non-empty subset:
+        // parseShaderMetadata iterates qMin(rawSize, kMaxBufferPasses) and only then
+        // skips empties, so a list whose surplus entries are empty strings still
+        // silently loses a real one past the cap.
         if (declared.size() > PhosphorShaders::kMaxBufferPasses) {
             lints << QStringLiteral("too many buffer shaders: %1 declared, cap is %2 (surplus dropped at load)")
                          .arg(static_cast<int>(declared.size()))
@@ -390,8 +399,7 @@ int validatePack(const QString& packDir, QTextStream& out)
     // must match that parameter's declared type and range. AFTER the metadata block,
     // matching the other three arms. Run before it, this printed `presets ERROR`
     // above `metadata OK`.
-    errors += reportRawPresetProblems(out, rawRoot);
-    errors += reportPresetProblems(out, packDir, info.presets, info.parameters);
+    errors += reportPresetLints(out, rawPresetLints(rawRoot) + presetLints(packDir, info.presets, info.parameters));
 
     // ── stage compiles (reproduce the runtime assembly) ──
     const QString packsRoot = QFileInfo(packDir).absolutePath();

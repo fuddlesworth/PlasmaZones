@@ -9,7 +9,7 @@ include(CMakeFindDependencyMacro)
 # (PhosphorRegistry::PhosphorRegistry). The header-only MetadataPackLoader<T>
 # template exposes PhosphorFsLoader types in its public interface, so
 # PhosphorFsLoader is a PUBLIC link dependency consumers need transitively.
-find_dependency(Qt6 6.6 COMPONENTS Core Qml)
+find_dependency(Qt6 @PHOSPHORREGISTRY_QT_MIN@ COMPONENTS Core Qml)
 if(NOT TARGET PhosphorFsLoader::PhosphorFsLoader)
     find_dependency(PhosphorFsLoader)
 endif()

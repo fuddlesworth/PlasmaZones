@@ -13,6 +13,8 @@
 
 #include "plasmazoneseffect.h"
 
+#include "desktopvisibility.h"
+
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <window.h>
@@ -219,10 +221,7 @@ bool PlasmaZonesEffect::keepFloatingAboveDefault(const QString& windowId, KWin::
     // otherwise be denied keep-above whenever the global current is
     // elsewhere. Falls back to the global reading when the window has no
     // output.
-    KWin::LogicalOutput* const out = w->screen();
-    KWin::VirtualDesktop* const shownHere = out ? KWin::effects->currentDesktop(out) : nullptr;
-    const bool desktopInView = shownHere ? w->isOnDesktop(shownHere) : w->isOnCurrentDesktop();
-    if (!desktopInView) {
+    if (!isOnOwnOutputCurrentDesktop(w)) {
         return false;
     }
     // Screen mode from the tiling handler's per-screen sets: a scrolling

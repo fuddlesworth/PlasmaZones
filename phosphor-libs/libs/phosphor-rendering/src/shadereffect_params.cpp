@@ -12,6 +12,8 @@
 #include <QMutexLocker>
 #include <QVariant>
 
+#include <cmath>
+
 namespace PhosphorRendering {
 
 // Keep the slot-array sizes in lock-step with the key producer's budgets. The
@@ -20,9 +22,9 @@ namespace PhosphorRendering {
 // producer can emit or read past what the arrays hold. Same form and reason as
 // the kMaxUserTextureSlots assert in shadereffect.cpp.
 static_assert(kMaxCustomParams == PhosphorShaders::CustomParams::kVecCount,
-              "ShaderNodeRhi::kMaxCustomParams must equal PhosphorShaders::CustomParams::kVecCount");
+              "PhosphorRendering::kMaxCustomParams must equal PhosphorShaders::CustomParams::kVecCount");
 static_assert(kMaxCustomColors == PhosphorShaders::CustomColors::kColorCount,
-              "ShaderNodeRhi::kMaxCustomColors must equal PhosphorShaders::CustomColors::kColorCount");
+              "PhosphorRendering::kMaxCustomColors must equal PhosphorShaders::CustomColors::kColorCount");
 
 QVariant peelQmlVariant(const QVariant& value)
 {
@@ -57,7 +59,7 @@ QVariant peelQmlVariant(const QVariant& value)
 // keys on every call regardless of whether the params map references
 // them is wasted heap traffic. Pre-bake the keys into static
 // `QLatin1String` lookup tables (constexpr-constructible since Qt 6.4;
-// project minimum is 6.6 — see top-level CMakeLists.txt) and index the
+// QT_MIN_VERSION is 6.10 — see top-level CMakeLists.txt) and index the
 // loop by slot. The keys are still rendered to the same QString lookup
 // path inside `QVariantMap::contains` / `value`, but we avoid the
 // per-call allocation when the map doesn't carry the key in the first
@@ -273,12 +275,23 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
     // QLatin1String, so we bind it to a local `QString` once per slot per key,
     // and we probe with a single `constFind` whose iterator carries the value
     // — one hash lookup per key instead of the contains+value pair, matching
-    // the float / colour extractors above. Tables sized to `kMaxUserTextures`, which
-    // is also the loop bound (pinned equal to the contract's
-    // kMaxUserTextureSlots by the static_assert in shadereffect.cpp).
+    // the float / colour extractors above. The tables are declared with
+    // `PhosphorRendering::kMaxUserTextureSlots` (itself
+    // `Bindings::kUserTextureCount`, so the binding table is the one source),
+    // and the loop bound is `kMaxUserTextures`; the static_assert in
+    // shadereffect.cpp pins those two to each other. Neither is the ANIMATION
+    // contract's kMaxUserTextureSlots, which is 3, because that one counts a
+    // pack's declarable slots while these count the samplers the node binds.
     for (int i = 0; i < kMaxUserTextures; ++i) {
         const QString sizeKey(kUserTextureSvgSizeKeys[i]);
         bool svgSizeChanged = false;
+        // STAGED, not committed. The size drives the re-rasterise below and is
+        // written back only once that has produced an image, for the same
+        // reason the path is: committing here and letting the failure arm fall
+        // through advanced the key past a rasterise that never happened, so
+        // needsReload never fired for that size again and the slot was pinned
+        // at the OLD resolution permanently.
+        int pendingSvgSize = m_userTextureSvgSizes[i];
         const auto sizeIt = params.constFind(sizeKey);
         if (sizeIt != params.constEnd()) {
             // Use the `bool ok` parse pattern (matches the float / colour
@@ -297,9 +310,8 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
             if (ok) {
                 const int clamped = qBound(kMinSvgDimension, v, kMaxSvgDimension);
                 if (m_userTextureSvgSizes[i] != clamped) {
-                    m_userTextureSvgSizes[i] = clamped;
+                    pendingSvgSize = clamped;
                     svgSizeChanged = true;
-                    anyMutation = true;
                 }
             }
         }
@@ -312,13 +324,19 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
         const bool pathChanged = hasTexKey && (m_userTexturePaths[i] != incomingPath);
         const bool needsReload = pathChanged || (svgSizeChanged && !m_userTexturePaths[i].isEmpty());
 
-        if (pathChanged) {
-            m_userTexturePaths[i] = incomingPath;
-            anyMutation = true;
-        }
-
         if (needsReload) {
-            const QString path = m_userTexturePaths[i];
+            // COMMIT THE PATH ONLY ON SUCCESS. It used to be written here, before
+            // the load below, and the failure arm only warns — so a slot whose
+            // file was missing kept the failed path, and the next identical push
+            // saw pathChanged false, needsReload false and never retried. With
+            // the identical-params early return at the top of this function that
+            // is permanent: the slot reads as resolved for the rest of the
+            // session while holding no image, so a slot that never had one stays
+            // on the 1x1 transparent fallback for good and a transient hiccup
+            // becomes a permanent loss rather than the temporary one the
+            // keep-prior-image branch below is written for. Same shape as
+            // loadVertexShader, which loads into a local and commits after.
+            const QString path = pathChanged ? incomingPath : m_userTexturePaths[i];
             // Drop the preceding `QFile::exists()` check: it's a TOCTOU
             // race against the load below (file can vanish between the
             // two calls), so it cannot serve as a true gate. The
@@ -328,7 +346,7 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
             // existing `m_userTextureImages[i]`) handles that case
             // correctly. The exists() call only added a redundant
             // stat() per setShaderParams call.
-            const int maxDim = qBound(kMinSvgDimension, m_userTextureSvgSizes[i], kMaxSvgDimension);
+            const int maxDim = qBound(kMinSvgDimension, pendingSvgSize, kMaxSvgDimension);
             QImage loaded = path.isEmpty() ? QImage() : loadUserTextureFile(path, maxDim);
             // Empty path → intentional clear (sampler reads transparent black).
             // Non-empty path that produced a null image → load failure (file
@@ -337,13 +355,25 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
             // file doesn't drop a previously-valid texture mid-session;
             // log a warning so the author notices.
             if (path.isEmpty() || !loaded.isNull()) {
+                if (pathChanged) {
+                    m_userTexturePaths[i] = path;
+                    anyMutation = true;
+                }
+                if (svgSizeChanged) {
+                    m_userTextureSvgSizes[i] = pendingSvgSize;
+                    anyMutation = true;
+                }
                 if (m_userTextureImages[i].cacheKey() != loaded.cacheKey()) {
                     m_userTextureImages[i] = loaded;
                     anyMutation = true;
                 }
             } else {
+                // NEITHER m_userTexturePaths[i] NOR m_userTextureSvgSizes[i] is
+                // advanced: leaving both at their prior values is what lets an
+                // identical re-push come back through pathChanged or
+                // svgSizeChanged and try again once the file is readable.
                 qCWarning(lcShaderNode) << "ShaderEffect: failed to load user texture slot" << i << "from" << path
-                                        << "— keeping previously-loaded image";
+                                        << "— keeping the previously-loaded image, and the slot will retry";
             }
         }
 
@@ -383,7 +413,14 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
 
 void ShaderEffect::setBufferShaderPath(const QString& path)
 {
-    if (m_bufferShaderPath == path) {
+    // The guard reads BOTH members, not just the singular one. This setter owns
+    // the plural member too (it collapses it to the one path below), so a guard
+    // on m_bufferShaderPath alone early-returned while the list still held a
+    // longer value: after setBufferShaderPaths({"a", "b"}), a setBufferShaderPath("a")
+    // is a real narrowing to a single pass and it did nothing at all.
+    const QStringList newPaths = path.isEmpty() ? QStringList() : QStringList{path};
+    const bool pathsChanged = (m_bufferShaderPaths != newPaths);
+    if (m_bufferShaderPath == path && !pathsChanged) {
         return;
     }
     m_bufferShaderPath = path;
@@ -391,8 +428,6 @@ void ShaderEffect::setBufferShaderPath(const QString& path)
     // signals once. Previously each setter emitted `...Changed` twice and
     // scheduled two scene-graph updates when a QML binding drove the other
     // property; a single update() pass is enough.
-    const QStringList newPaths = path.isEmpty() ? QStringList() : QStringList{path};
-    const bool pathsChanged = (m_bufferShaderPaths != newPaths);
     if (pathsChanged) {
         m_bufferShaderPaths = newPaths;
     }
@@ -409,6 +444,13 @@ void ShaderEffect::setBufferShaderPaths(const QStringList& paths)
 {
     if (m_bufferShaderPaths == paths) {
         return;
+    }
+    // Truncated to the pass budget in the node sync, with nothing said there
+    // because that runs per frame. Warn once at the setter instead, for the same
+    // reason setBufferScales does.
+    if (paths.size() > kMaxBufferPasses) {
+        qCWarning(lcShaderNode) << "setBufferShaderPaths: dropping" << (paths.size() - kMaxBufferPasses) << "of"
+                                << paths.size() << "passes past the" << kMaxBufferPasses << "pass budget";
     }
     m_bufferShaderPaths = paths;
     const QString newPath = paths.isEmpty() ? QString() : paths.constFirst();
@@ -445,6 +487,54 @@ void ShaderEffect::setBufferScale(qreal scale)
     update();
 }
 
+void ShaderEffect::setBufferScales(const QVariantList& scales)
+{
+    // Clamp and cap here so the stored list is what the node will use, and a
+    // QML binding that re-pushes the same values compares equal below.
+    //
+    // The cap is silent to the shader, which simply runs fewer passes than the
+    // pack asked for, so say it once here rather than leaving an author to work
+    // out why their deepest levels never render.
+    if (scales.size() > kMaxBufferPasses) {
+        qCWarning(lcShaderNode) << "setBufferScales: dropping" << (scales.size() - kMaxBufferPasses) << "of"
+                                << scales.size() << "entries past the" << kMaxBufferPasses << "pass budget";
+    }
+    QVariantList clamped;
+    // qsizetype, matching what size() answers, rather than an int compared
+    // against it on every iteration.
+    for (qsizetype i = 0; i < scales.size() && i < kMaxBufferPasses; ++i) {
+        // Parse with `ok`, the way every other extractor in this file does, and
+        // fall back to the pack-wide scale rather than to a bound.
+        //
+        // BOTH bad inputs land on the MINIMUM, which is why neither can be left
+        // to qBound. A non-numeric entry answers 0 from toDouble and clamps up
+        // to the floor, so a typo like "0.5" in quotes rendered the pass at
+        // 1/128 of the canvas instead of at half. A NaN gets there by a
+        // different route and is NOT unspecified, as this comment used to say:
+        // qBound(min, v, max) is qMax(min, qMin(max, v)), qMin returns NaN
+        // because `max < NaN` is false, and qMax then returns min because
+        // `min < NaN` is false. Checked against Qt's own qminmax.h and run.
+        //
+        // So a quoted number and a NaN are indistinguishable in the result, and
+        // both look like a broken shader rather than a bad metadata value.
+        bool ok = false;
+        const double raw = scales.at(i).toDouble(&ok);
+        if (!ok || !std::isfinite(raw)) {
+            qCWarning(lcShaderNode) << "setBufferScales: entry" << i << "is not a finite number (" << scales.at(i)
+                                    << "); using the pack-wide bufferScale" << m_bufferScale << "for that pass";
+            clamped.append(m_bufferScale);
+            continue;
+        }
+        clamped.append(qBound(PhosphorShaders::kMinBufferScale, raw, PhosphorShaders::kMaxBufferScale));
+    }
+    if (m_bufferScales == clamped) {
+        return;
+    }
+    m_bufferScales = clamped;
+    Q_EMIT bufferScalesChanged();
+    update();
+}
+
 void ShaderEffect::setHalfFloatBuffers(bool enable)
 {
     if (m_halfFloatBuffers == enable) {
@@ -468,10 +558,20 @@ void ShaderEffect::setBufferWrap(const QString& wrap)
 
 void ShaderEffect::setBufferWraps(const QStringList& wraps)
 {
-    if (m_bufferWraps == wraps) {
+    // Normalize-then-guard, like setBufferWrap below and setUserTextureWrap
+    // above. Comparing the RAW list let two spellings that normalize
+    // identically ("" and "clamp") defeat the guard and fire a spurious
+    // update() per push, and stored a token the node would normalize again
+    // on every use.
+    QStringList use;
+    use.reserve(wraps.size());
+    for (const QString& w : wraps) {
+        use.append(ShaderNodeRhi::normalizeWrapMode(w));
+    }
+    if (m_bufferWraps == use) {
         return;
     }
-    m_bufferWraps = wraps;
+    m_bufferWraps = std::move(use);
     Q_EMIT bufferWrapsChanged();
     update();
 }
@@ -489,10 +589,16 @@ void ShaderEffect::setBufferFilter(const QString& filter)
 
 void ShaderEffect::setBufferFilters(const QStringList& filters)
 {
-    if (m_bufferFilters == filters) {
+    // Normalize-then-guard, for the same reason as setBufferWraps above.
+    QStringList use;
+    use.reserve(filters.size());
+    for (const QString& f : filters) {
+        use.append(ShaderNodeRhi::normalizeFilterMode(f));
+    }
+    if (m_bufferFilters == use) {
         return;
     }
-    m_bufferFilters = filters;
+    m_bufferFilters = std::move(use);
     Q_EMIT bufferFiltersChanged();
     update();
 }
@@ -693,9 +799,12 @@ void ShaderEffect::setUserTextureWrap(int slot, const QString& wrap)
         return;
     }
     // Mirror ShaderNodeRhi::setUserTextureWrap's normalize-then-guard order so
-    // a capitalised "Repeat" stored here matches the lower-cased "repeat" the
-    // node holds; otherwise syncBasePropertiesToNode re-pushes every paint and
-    // ShaderNodeRhi's value-changed guard fails on the lexical mismatch.
+    // the value stored here is the one the node holds; otherwise
+    // syncBasePropertiesToNode re-pushes every paint and ShaderNodeRhi's
+    // value-changed guard fails on the lexical mismatch. NOT a case fold:
+    // normalizeWrapMode compares exactly, so a capitalised "Repeat" is not
+    // recognised and lands on the "clamp" default like any other unknown
+    // token. Both sides agreeing on that is the point.
     const QString normalized = ShaderNodeRhi::normalizeWrapMode(wrap);
     if (m_userTextureWraps[slot] == normalized) {
         return;

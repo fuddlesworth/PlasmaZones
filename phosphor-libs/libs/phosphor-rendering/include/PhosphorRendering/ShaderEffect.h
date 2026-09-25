@@ -6,6 +6,8 @@
 #include <PhosphorRendering/ShaderNodeLiveness.h>
 #include <PhosphorRendering/phosphorrendering_export.h>
 
+#include <PhosphorShaders/CustomParamsKey.h>
+#include <PhosphorShaders/ShaderBindings.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
 
 #include <QColor>
@@ -38,12 +40,12 @@ namespace PhosphorRendering {
 
 class ShaderNodeRhi;
 
-/// Public mirror of `ShaderNodeRhi::kMaxUserTextures` (4 user-texture slots
-/// at SRB bindings 7..10). Re-declared here so member-array sizes can use
-/// the named constant without pulling in the heavy rhi/qrhi.h transitive
-/// chain that ShaderNodeRhi.h carries. Kept in sync via a `static_assert`
-/// in shadereffect.cpp.
-inline constexpr int kMaxUserTextureSlots = 4;
+/// Public mirror of `PhosphorRendering::kMaxUserTextures` (4 user-texture slots at
+/// SRB bindings 11..14), read straight from the binding table. ShaderBindings.h
+/// is a Qt-strings-only header, so this costs nothing; what this header avoids
+/// is ShaderNodeRhi.h, whose rhi/qrhi.h transitive chain is the heavy one. The
+/// `static_assert` in shadereffect.cpp still guards the two against divergence.
+inline constexpr int kMaxUserTextureSlots = PhosphorShaders::Bindings::kUserTextureCount;
 
 /// Default per-axis rasterisation size for an SVG user texture, used until a
 /// slot's shader param overrides it.
@@ -56,11 +58,11 @@ inline constexpr int kDefaultUserTextureSvgSize = 1024;
 /// referencing one).
 ///
 /// Returns the PEELED variant only — it deliberately does not convert to a
-/// payload type, because the two call sites that need it want different
-/// terminal conversions (`ShaderEffect::setWallpaperTextureVariant` wants a
-/// QImage, `ZoneShaderItem::setLabelsTextureVariant` wants a
-/// `ZoneLabelTexture` through a registered converter). Each caller keeps its
-/// own conversion and its own handling of an invalid or unconvertible result.
+/// payload type, because each of the THREE call sites wants a different
+/// terminal conversion: `setAudioSpectrumVariant` a QVector<float> through a
+/// QVariantList walk, `setWallpaperTextureVariant` a QImage, and
+/// `ZoneShaderItem::setLabelsTextureVariant` a `ZoneLabelTexture` through a
+/// registered converter. Each keeps its own handling of an unconvertible one.
 PHOSPHORRENDERING_EXPORT QVariant peelQmlVariant(const QVariant& value);
 
 /**
@@ -95,8 +97,8 @@ class PHOSPHORRENDERING_EXPORT ShaderEffect : public QQuickItem
     /// QML callers — no FrameAnimation / Timer plumbing required.
     ///
     /// When false (default) the iTime/iTimeDelta/iFrame Q_PROPERTYs stay
-    /// fully under the caller's control. This is what kwin-effect's
-    /// SurfaceAnimator and phosphor-animation's transition shaders use:
+    /// fully under the caller's control. This is what the daemon's
+    /// SurfaceAnimator (phosphor-animation) and its transition shaders use:
     /// they drive iTime by hand to map the animation curve through the
     /// shader without committing to wall-clock pacing.
     ///
@@ -110,8 +112,8 @@ class PHOSPHORRENDERING_EXPORT ShaderEffect : public QQuickItem
     // ── Shader source ────────────────────────────────────────────────
     Q_PROPERTY(QUrl shaderSource READ shaderSource WRITE setShaderSource NOTIFY shaderSourceChanged FINAL)
     Q_PROPERTY(QUrl vertexShaderUrl READ vertexShaderUrl WRITE setVertexShaderUrl NOTIFY vertexShaderUrlChanged FINAL)
-    Q_PROPERTY(QVariantMap shaderParams READ shaderParams WRITE setShaderParams NOTIFY shaderParamsChanged)
-    Q_PROPERTY(QString paramPreamble READ paramPreamble WRITE setParamPreamble NOTIFY paramPreambleChanged)
+    Q_PROPERTY(QVariantMap shaderParams READ shaderParams WRITE setShaderParams NOTIFY shaderParamsChanged FINAL)
+    Q_PROPERTY(QString paramPreamble READ paramPreamble WRITE setParamPreamble NOTIFY paramPreambleChanged FINAL)
     Q_PROPERTY(QQuickItem* sourceItem READ sourceItem WRITE setSourceItem NOTIFY sourceItemChanged FINAL)
 
     // ── Multipass ────────────────────────────────────────────────────
@@ -121,6 +123,7 @@ class PHOSPHORRENDERING_EXPORT ShaderEffect : public QQuickItem
                    bufferShaderPathsChanged FINAL)
     Q_PROPERTY(bool bufferFeedback READ bufferFeedback WRITE setBufferFeedback NOTIFY bufferFeedbackChanged FINAL)
     Q_PROPERTY(qreal bufferScale READ bufferScale WRITE setBufferScale NOTIFY bufferScaleChanged FINAL)
+    Q_PROPERTY(QVariantList bufferScales READ bufferScales WRITE setBufferScales NOTIFY bufferScalesChanged FINAL)
     Q_PROPERTY(
         bool halfFloatBuffers READ halfFloatBuffers WRITE setHalfFloatBuffers NOTIFY halfFloatBuffersChanged FINAL)
     Q_PROPERTY(QString bufferWrap READ bufferWrap WRITE setBufferWrap NOTIFY bufferWrapChanged FINAL)
@@ -293,7 +296,7 @@ public:
     ///   • `customParams<N>_<x|y|z|w>` (1-based) — float vec4 sub-slots
     ///   • `customColor<N>` (1-based) — color vec4 slots
     ///   • `uTexture<N>` (0-based, 0..3) — file path for the user-texture
-    ///     sampler at SRB binding 7..10 / GLSL `uTexture<N>`
+    ///     sampler at SRB binding 11..14 / GLSL `uTexture<N>`
     ///   • `uTexture<N>_wrap` — wrap mode string ("clamp" / "repeat" /
     ///     "mirror"); ignored if no companion `uTexture<N>` resolves
     ///   • `uTexture<N>_svgSize` — SVG rasterise max-axis dimension
@@ -355,7 +358,7 @@ public:
     /// `setUserTexture(slot, image)` upload on the GUI thread.
     static QImage loadUserTextureFile(const QString& path, int svgMaxDim);
 
-    /// @brief Live texture-provider source bound to SRB binding 7
+    /// @brief Live texture-provider source bound to SRB binding 11
     ///        (`uTexture0`).
     ///
     /// When set to a non-null QQuickItem, the shader samples that item's
@@ -365,14 +368,14 @@ public:
     /// on the rendered surface — no async grab, no first-show gap, no
     /// stale snapshot.
     ///
-    /// The item is forced to `layer.enabled = true` on the QML side so
-    /// `QQuickItem::textureProvider()` returns the layer's provider; the
-    /// scene graph allocates an FBO and re-renders the item each frame
-    /// the consumer dirties it. The shader effect's parent must NOT be
-    /// the source item (or any of its descendants) — sampling within the
-    /// same layer creates a feedback loop where the shader's own output
-    /// is captured into the next frame's texture. Park the shader effect
-    /// as a sibling of the source item instead.
+    /// setSourceItem forces `layer.enabled = true` in C++, through the item's
+    /// QQuickItemLayer sub-object, so `QQuickItem::textureProvider()` returns
+    /// the layer's provider and the scene graph re-renders the item each frame
+    /// the consumer dirties it. Sampling an ANCESTOR is supported and
+    /// load-bearing: Qt's layer system uses a back buffer, so an ancestor read
+    /// returns last frame's content rather than recursing, and SurfaceAnimator
+    /// depends on exactly that. Only sampling `this` is refused, by the setter.
+    /// An earlier ancestor-walk guard here broke every shader leg.
     ///
     /// Setting the property to nullptr unbinds the texture; subsequent
     /// frames fall back to the user-texture-0 QImage path (or the
@@ -408,6 +411,17 @@ public:
         return m_bufferScale;
     }
     void setBufferScale(qreal scale);
+
+    /// Per-pass render-target scales, positionally aligned with
+    /// bufferShaderPaths (a pack's `bufferScales`), fed by surface packs alone
+    /// today. A pass past the list's end renders at bufferScale, as does every
+    /// pass when the list is empty. setBufferScales clamps each entry into
+    /// [kMinBufferScale, kMaxBufferScale] and drops anything past kMaxBufferPasses.
+    QVariantList bufferScales() const
+    {
+        return m_bufferScales;
+    }
+    void setBufferScales(const QVariantList& scales);
 
     bool halfFloatBuffers() const
     {
@@ -599,7 +613,7 @@ public:
     void setAudioSpectrum(const QVector<float>& spectrum);
 
     /**
-     * Set a user texture (slots 0-3, bindings 7-10) directly from a QImage,
+     * Set a user texture (slots 0-3, bindings 11-14) directly from a QImage,
      * bypassing the path-driven loader.
      *
      * Clears the per-slot cached path and resets the companion svgSize / wrap
@@ -709,7 +723,8 @@ public:
      *  fragment source defines no `main()`, the node prepends @p prologue and
      *  appends the generated `main()` of the first @p candidates entry function
      *  the source defines. Empty/empty (the default) disables assembly. Forces a
-     *  reload so the new scaffold takes; folded into the node's bake-cache key. */
+     *  reload so the new scaffold takes; folded into the node's bake-cache key.
+     *  NO GETTER, unlike its two neighbours: write-only, never read back. */
     void setEntryScaffold(const QString& prologue, const QList<PhosphorShaders::EntryCandidate>& candidates);
 
     // ── Status ───────────────────────────────────────────────────────
@@ -768,6 +783,7 @@ Q_SIGNALS:
     void bufferShaderPathsChanged();
     void bufferFeedbackChanged();
     void bufferScaleChanged();
+    void bufferScalesChanged();
     void halfFloatBuffersChanged();
     void bufferWrapChanged();
     void bufferWrapsChanged();
@@ -810,10 +826,10 @@ protected:
      *
      * 1.0 when the installed extension reports
      * `requiresPhysicalResolution() == false` (the animation path keeps
-     * iResolution logical), and 1.0 whenever the item has no window or the
-     * window has no screen. Otherwise the window's effective device-pixel
-     * ratio. See the extended rationale at the call site in
-     * syncBasePropertiesToNode().
+     * iResolution logical), and 1.0 when the item has no window. Otherwise the
+     * window's effectiveDevicePixelRatio(), which already carries the screen.
+     * There is deliberately NO screen() term: gating on one produced the
+     * edge-stripe bug the implementation's own comment names.
      *
      * Exposed because a subclass that puts its own lengths into the UBO has to
      * agree with iResolution or its geometry lands in a different space. That
@@ -827,8 +843,10 @@ protected:
      * @brief Sync base properties (time, params, colors, audio, multipass, depth, wallpaper,
      *        user textures, uniform extension) to a render node.
      *
-     * Does NOT sync shader source — that load is owned by updatePaintNode's
-     * needLoad branch (and differs between ShaderEffect and subclasses).
+     * Does NOT sync shader source (updatePaintNode's needLoad branch owns it,
+     * and it differs between ShaderEffect and subclasses), and does NOT push
+     * sourceItem's texture provider — the BASE updatePaintNode does. A subclass
+     * that REPLACES updatePaintNode must push it, or its sourceItem reads none.
      *
      * Called from updatePaintNode(); subclasses that override updatePaintNode should call
      * this instead of duplicating the property sync.
@@ -967,14 +985,17 @@ private:
     QStringList m_bufferShaderPaths;
     bool m_bufferFeedback = false;
     qreal m_bufferScale = 1.0;
+    QVariantList m_bufferScales;
     bool m_halfFloatBuffers = true;
     QString m_bufferWrap = QStringLiteral("clamp");
     QStringList m_bufferWraps;
     QString m_bufferFilter = QStringLiteral("linear");
     QStringList m_bufferFilters;
 
-    // ── Custom parameters (8 vec4s, initialized to -1.0 "unset" sentinel) ──
-    std::array<QVector4D, 8> m_customParams = {{
+    // ── Custom parameters (kVecCount vec4s, -1.0 "unset" sentinel) ─────────
+    // Sized from the shared budget, not a literal: the sync loop indexes these
+    // by the same constants, so a drifted literal would be an out-of-bounds write.
+    std::array<QVector4D, PhosphorShaders::CustomParams::kVecCount> m_customParams = {{
         QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
         QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
         QVector4D(-1.0f, -1.0f, -1.0f, -1.0f),
@@ -986,7 +1007,7 @@ private:
     }};
 
     // ── Custom colors (16 colors) ────────────────────────────────────
-    std::array<QColor, 16> m_customColors = {{
+    std::array<QColor, PhosphorShaders::CustomColors::kColorCount> m_customColors = {{
         QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
         QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
         QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
@@ -1008,12 +1029,12 @@ private:
     // ── Textures ─────────────────────────────────────────────────────
     QVector<float> m_audioSpectrum;
     std::array<QImage, kMaxUserTextureSlots> m_userTextureImages;
-    // Spelled out rather than default-constructed, matching the node's array of
-    // the same name. setShaderParams string-compares against these to decide
-    // whether a wrap actually changed, so a null default made the first
-    // assignment of the effective default ("clamp") look like a change.
-    std::array<QString, kMaxUserTextureSlots> m_userTextureWraps = {QStringLiteral("clamp"), QStringLiteral("clamp"),
-                                                                    QStringLiteral("clamp"), QStringLiteral("clamp")};
+    // Filled with "clamp" by the constructor rather than a brace list, exactly like
+    // m_userTextureSvgSizes below and for the same reason: the count is the binding
+    // table's, so a literal list stops covering the array the moment the table
+    // grows a slot. Filled at all because setShaderParams string-compares these,
+    // so a null default reads as a change and fires a spurious update().
+    std::array<QString, kMaxUserTextureSlots> m_userTextureWraps;
     /// Last-resolved file path per user-texture slot. Tracked here so
     /// `setShaderParams` can detect path changes (load on transition,
     /// not re-load on every params write) and so the SVG rasterise size
@@ -1024,7 +1045,7 @@ private:
     /// consulted on `.svg` / `.svgz` paths; bitmap formats ignore this.
     /// Default 1024 carries forward the pre-unification ZoneShaderItem
     /// behaviour — sized to be sharp at the typical zone-icon scale
-    /// without the 4× cost a 4096 default would impose on the common
+    /// without the 16× cost a 4096 default would impose on the common
     /// case (a 200×200 px logo doesn't need a 16 MP rasterisation).
     // Filled with kDefaultUserTextureSvgSize by the constructor rather than a
     // brace list, so bumping kMaxUserTextureSlots cannot silently zero-fill the

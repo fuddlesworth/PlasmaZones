@@ -72,6 +72,23 @@ class DecorationPreviewController : public QObject
     /// bindings is what puts them in the dependency set.
     Q_PROPERTY(int previewRevision READ previewRevision NOTIFY previewRevisionChanged)
 
+    /// Monotonic tick bumped ONLY when the surface registry recommits a rescan.
+    /// The preview's SurfaceDecoration forwards it to its stages, which call
+    /// reloadShader() when it moves, which re-bakes the main stage and every
+    /// buffer pass from disk. Declared user-texture IMAGES are not re-read: that
+    /// would be synchronous file I/O with no lazy stage to defer it to, and a
+    /// changed texture path re-reads on its own.
+    ///
+    /// SEPARATE from previewRevision even though both ride effectsChanged, because
+    /// previewRevision also bumps on a palette or colour change and this must not:
+    /// a re-bake of every stage in the chain is real work and a colour change needs
+    /// none of it. The daemon's twin has the same shape for the same reason.
+    ///
+    /// It exists at all because recomposing the chain does NOT cover an in-place
+    /// edit of a pack's shader source. The composed chain is then byte-identical,
+    /// so every stage rebinds the same URL and nothing re-bakes.
+    Q_PROPERTY(int decorationReloadGeneration READ decorationReloadGeneration NOTIFY decorationReloadGenerationChanged)
+
 public:
     explicit DecorationPreviewController(PhosphorSurfaceShaders::SurfaceShaderRegistry* registry = nullptr,
                                          ISettings* settings = nullptr, QObject* parent = nullptr);
@@ -133,6 +150,11 @@ public:
         return m_previewRevision;
     }
 
+    int decorationReloadGeneration() const
+    {
+        return m_decorationReloadGeneration;
+    }
+
     /// Watches the application for a colour-scheme change, which moves the
     /// palette every composed preview resolves against. Never consumes.
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -146,6 +168,7 @@ Q_SIGNALS:
     void audioSpectrumChanged();
     void audioVisualizerEnabledChanged();
     void previewRevisionChanged();
+    void decorationReloadGenerationChanged();
 
 private:
     /// Stop the provider without clearing the standing capture request.
@@ -168,6 +191,10 @@ private:
     /// cares that the value CHANGED, not what it is.
     int m_previewRevision = 0;
     void bumpPreviewRevision();
+    /// Backing counter for decorationReloadGeneration, same never-reset rule. The
+    /// QML side guards on a non-zero value, so the initial 0 must stay 0.
+    int m_decorationReloadGeneration = 0;
+    void bumpDecorationReloadGeneration();
     QVector<float> m_spectrum;
 };
 

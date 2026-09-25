@@ -294,7 +294,7 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
     // Surface shader pack hot-reload: when a data/surface pack changes on disk,
     // drop EVERY compiled surface pack so the next paint recompiles each
     // referenced pack against the new source, and repaint so decorated windows
-    // pick it up. Also drop the per-window multipass FBO state: a recompiled pack
+    // pick it up. Also clear each window's chainKey and fold flags: a recompiled pack
     // whose buffer-pass COUNT changed would otherwise under-render, because the
     // composite path's chainBufferTex realloc keys on the chain pack-id list (and
     // size), not on each pack's buffer-pass count — only clearing it here forces
@@ -322,10 +322,27 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
         // above uses the same helper.
         ensureGlContextCurrent();
         m_compiledPacks.clear();
-        m_packBufferScaleCache.clear(); // caches the multiplier-folded product; rides the compile cache's lifetime
+        m_packBufferScaleCache.clear(); // metadata cache rides the compile cache's lifetime
         m_anyCompiledPackReadsCursor = false; // re-derived as packs recompile
         m_opacityTintFallbackWarned = false; // re-arm the capture-fallback warning with the fresh compiles
-        m_surfaceMultipass.clear();
+        m_backdropAllocWarned = false; // and the backdrop-allocation one, for the same reason
+        // INVALIDATED per entry, not erased, which is what the two sibling clear
+        // sites already do and for a reason this one shares. A DELETED window's
+        // entry is the intended frame for its close leg, and the composite
+        // renderer refuses to re-capture a corpse, so erasing the map left a
+        // window that was closing while a pack was edited undecorated for the
+        // rest of its close animation with no path back. A live window recovers
+        // on its next fold either way.
+        //
+        // chainKey goes with the fold flags: the per-pack buffer targets are
+        // allocated only when it differs from the chain, and their count and
+        // sizes come from the compile that was just dropped two lines up.
+        for (auto& [id, surfaceState] : m_surfaceMultipass) {
+            surfaceState.compositeValid = false;
+            surfaceState.prefixValid = false;
+            surfaceState.prefixChainEnd = -1;
+            surfaceState.chainKey.clear();
+        }
         // Repaint whenever there is a compositor, NOT only when the context went current: a
         // repaint is not GL work. Gating it on the make-current result meant a transient
         // failure dropped the caches but never asked the screen to redraw, so the reloaded

@@ -186,6 +186,39 @@ private Q_SLOTS:
         QVERIFY(info.halfFloatBuffers);
     }
 
+    /// The buffer-pass cap on the OVERLAY parser, which moved from four to
+    /// eight with the shared budget and had nothing pinning it on this family.
+    /// The parser warns above the cap and then takes qMin against it, so a cap
+    /// that stopped tracking the contract constant would silently change how
+    /// many passes an installed pack runs.
+    ///
+    /// Every declared pass points at the one frag makePack writes, so the
+    /// resolve succeeds and the list survives to be counted; a missing file
+    /// would clear the whole list and hide the cap.
+    void testParsePackMetadataCapsBufferShadersAtThePassBudget()
+    {
+        QJsonObject meta = baseMeta();
+        meta.insert(QLatin1String("multipass"), true);
+        QJsonArray buffers;
+        for (int i = 0; i < PhosphorShaders::kMaxBufferPasses + 1; ++i) {
+            buffers.append(QStringLiteral("effect.frag"));
+        }
+        meta.insert(QLatin1String("bufferShaders"), buffers);
+        const QString overDir = makePack(meta, QStringLiteral("bufcapover"));
+        const auto over = ShaderRegistry::parsePackMetadata(overDir);
+        QCOMPARE(over.bufferShaderPaths.size(), PhosphorShaders::kMaxBufferPasses);
+
+        // Exactly at the budget is kept whole.
+        QJsonArray exact;
+        for (int i = 0; i < PhosphorShaders::kMaxBufferPasses; ++i) {
+            exact.append(QStringLiteral("effect.frag"));
+        }
+        meta.insert(QLatin1String("bufferShaders"), exact);
+        const QString exactDir = makePack(meta, QStringLiteral("bufcapexact"));
+        QCOMPARE(ShaderRegistry::parsePackMetadata(exactDir).bufferShaderPaths.size(),
+                 PhosphorShaders::kMaxBufferPasses);
+    }
+
     void testHalfFloatBuffersParseDefaultAndOptOut()
     {
         // Absent key: the safe RGBA16F default.

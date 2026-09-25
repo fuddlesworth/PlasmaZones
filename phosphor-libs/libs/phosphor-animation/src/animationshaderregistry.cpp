@@ -342,6 +342,19 @@ std::optional<AnimationShaderEffect> parseEffect(const QString& effectDir, const
     // struct is internally coherent regardless of which branch produced the
     // single-pass state. (Mirrors SurfaceShaderRegistry::parseEffect.)
     if (!e.isMultipass) {
+        // The PATHS first, which this block claimed to mirror and did not. A
+        // pack that declared bufferShaders without "multipass": true never
+        // entered the resolve-to-absolute branch above, so it still holds RAW
+        // RELATIVE names; left set they reach effectWatchPaths, the content
+        // signature and operator== as CWD-relative nonsense. Warn before
+        // clearing, since dropping a declared chain silently is how a pack
+        // ships doing nothing with no diagnostic at any level.
+        if (!e.bufferShaderPaths.isEmpty()) {
+            qCWarning(lcRegistry) << "Animation effect" << e.id << "declares" << e.bufferShaderPaths.size()
+                                  << "buffer shader(s) but not \"multipass\": true, so every one of them is "
+                                     "dropped and the pack renders single-pass";
+        }
+        e.bufferShaderPaths.clear();
         e.bufferWraps.clear();
         e.bufferFilters.clear();
         // The SINGULAR pair is the all-buffers default and is equally
@@ -403,8 +416,17 @@ void effectContentSignature(QCryptographicHash& hasher, const AnimationShaderEff
         }
         const QFileInfo fi(path);
         hasher.addData(path.toUtf8());
-        hasher.addData(QByteArray::number(fi.size()));
-        hasher.addData(QByteArray::number(fi.lastModified().toMSecsSinceEpoch()));
+        if (fi.exists()) {
+            hasher.addData(QByteArray::number(fi.size()));
+            hasher.addData(QByteArray::number(fi.lastModified().toMSecsSinceEpoch()));
+        } else {
+            // Stable sentinel for absent files: lastModified() on an invalid
+            // datetime is implementation-defined, and feeding that through
+            // toMSecsSinceEpoch() makes the signature of a pack with a missing
+            // declared texture depend on it. The surface and pointer twins both
+            // guard this; the animation one was the outlier.
+            hasher.addData(QByteArrayView("missing"));
+        }
     };
     if (!e.sourceDir.isEmpty()) {
         mixFile(e.sourceDir + QStringLiteral("/metadata.json"));
@@ -462,6 +484,31 @@ void AnimationShaderRegistry::addSearchPaths(const QStringList& paths, PhosphorF
 QStringList AnimationShaderRegistry::searchPaths() const
 {
     return m_loader->searchPaths();
+}
+
+QStringList AnimationShaderRegistry::sharedIncludePaths() const
+{
+    QStringList roots = m_loader->searchPaths();
+    std::reverse(roots.begin(), roots.end());
+    QStringList out;
+    for (const QString& root : roots) {
+        const QString sharedDir = root + QStringLiteral("/shared");
+        if (QDir(sharedDir).exists() && !out.contains(sharedDir)) {
+            out.append(sharedDir);
+        }
+    }
+    return out;
+}
+
+QString AnimationShaderRegistry::defaultVertexShaderPath() const
+{
+    for (const QString& sharedDir : sharedIncludePaths()) {
+        const QString vert = sharedDir + QStringLiteral("/animation.vert");
+        if (QFile::exists(vert)) {
+            return vert;
+        }
+    }
+    return {};
 }
 
 void AnimationShaderRegistry::setUserPath(const QString& path)
@@ -653,7 +700,7 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
     //
     // Slot offset: the canonical animation contract reserves
     // `uTexture0` for the redirected window/surface. `effect.textures[0]`
-    // therefore maps to `uTexture1` (runtime slot 1 / SRB binding 8) and
+    // therefore maps to `uTexture1` (runtime slot 1 / SRB binding 12) and
     // so on. friendlyParams may use the GLSL slot name (`uTexture1` ..
     // `uTexture3`) verbatim — that's the same convention overlay zones
     // use, which keeps the override format identical across categories.
@@ -684,6 +731,18 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
         if (slot < effect.textures.size()) {
             path = effect.textures[slot].path;
             wrap = effect.textures[slot].wrap;
+            // On-disk packs had their defaults resolved and traversal-checked at
+            // parseEffect scan time, but an IN-MEMORY pack's defaults arrive
+            // unvetted, so apply the same guard the override branch below does,
+            // both-or-neither on rejection. Reaches test fixtures and the scripted
+            // hooks this file's own comment anticipates. The surface and pointer
+            // twins both carry this; the animation one was the outlier.
+            if (effect.sourceDir.isEmpty() && !path.isEmpty() && !pathHasNoTraversalSegments(path)) {
+                qCWarning(lcRegistry).noquote() << "Animation effect" << effect.id << "in-memory default texture path"
+                                                << path << "rejected (path traversal guard)";
+                path.clear();
+                wrap.clear();
+            }
         }
         const auto pathOverride = friendlyParams.constFind(pathKey);
         if (pathOverride != friendlyParams.constEnd()) {

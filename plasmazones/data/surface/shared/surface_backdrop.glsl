@@ -30,7 +30,7 @@ uniform sampler2D uBackdrop;
 uniform vec4 uBackdropRect;
 #else
 // Daemon branch: the stand-in for "the scene behind this surface" — the desktop
-// wallpaper, where the host supplies one. Shares binding 11 with the overlay
+// wallpaper, where the host supplies one. Shares binding 15 with the overlay
 // category's wallpaper sampler, which is the same texture from the same
 // resolver, so no new binding point enters the dialect.
 //
@@ -46,8 +46,17 @@ uniform vec4 uBackdropRect;
 // answers "which part of this shared image lies behind THIS surface", because
 // every surface is handed the same desktop-sized wallpaper. Without it each one
 // samples the whole desktop squeezed into its own box.
-layout(binding = 11) uniform sampler2D uBackdrop;
+layout(binding = 15) uniform sampler2D uBackdrop;
 #endif
+
+// A PACK MUST INCLUDE THIS MODULE TO READ uBackdropRect ON BOTH HOSTS. On the
+// daemon it is a member of the core UBO in surface_uniforms.glsl, so it is in
+// scope for every pack whether or not this file is included. On the compositor it
+// is declared only here. So a pack that reads it without including this module
+// compiles on the daemon, in the preview and through the SPIR-V bake, and fails to
+// COMPILE where it ships. Compile and not link, which is the distinction that
+// matters here: a swallowed compile error is what renders the flat grey. The mirror of the hazard the animation header calls out for
+// iChannelResolution. No bundled pack does this today.
 
 // The scene texel BEHIND the surface at `uv` (the same uv space surfaceTexel
 // takes). On a host that bound no backdrop this returns transparent, so gate
@@ -63,12 +72,36 @@ layout(binding = 11) uniform sampler2D uBackdrop;
 // the wallpaper's own border the sampler is ClampToEdge anyway.
 //
 // The two also guarantee the transparent-when-unbound result in different
-// places: the daemon branch tests uHasBackdrop here, while the compositor
-// relies on its host binding a 1x1 transparent fallback to the sampler.
+// places. The daemon branch tests uHasBackdrop here. The compositor binds a
+// 1x1 transparent fallback to the sampler instead, and it decides to do so by
+// UNIFORM INTROSPECTION, not by the metadata flag: the fold checks whether the
+// linker kept uBackdrop (its resolved location) and binds the fallback
+// whenever it did and no capture is available. That is stronger than a
+// metadata guarantee in the case that matters here, because a third-party pack
+// that includes this module and calls backdropTexel() WITHOUT declaring
+// "needsBackdrop": true still gets transparent black rather than whatever
+// texture unit 0 holds.
 vec4 backdropTexel(vec2 uv) {
 #ifdef PLASMAZONES_KWIN
     vec2 td = vec2(uv.x, 1.0 - uv.y); // top-down normalized, like surfacePixel
-    td = clamp(td, uBackdropRect.xy, uBackdropRect.xy + uBackdropRect.zw);
+    // INSET BY HALF A TEXEL, because the sampler is GL_LINEAR and the bound used
+    // to be the rect's own edge. A sample landing exactly on that edge
+    // interpolates between the last real texel and the first one OUTSIDE the
+    // rect, and outside the rect is the cleared margin that was never blitted.
+    // So up to half the contribution at the boundary came from the very texels
+    // the clamp exists to exclude, in a band half a texel wide all round. A blur
+    // pass whose taps reach the edge, which is what the whole clamp is here for,
+    // is exactly the case that pulls it in.
+    //
+    // The upper bound is held at or above the lower one, so a rect narrower than
+    // one texel collapses to a point inside itself rather than inverting.
+    // NOT `const`: textureSize() is not a constant expression, and a driver
+    // compiler is free to reject a const initialized from one even where glslang
+    // accepts it.
+    vec2 halfTexel = 0.5 / vec2(textureSize(uBackdrop, 0));
+    vec2 lo = uBackdropRect.xy + halfTexel;
+    vec2 hi = max(uBackdropRect.xy + uBackdropRect.zw - halfTexel, lo);
+    td = clamp(td, lo, hi);
     return texture(uBackdrop, vec2(td.x, 1.0 - td.y));
 #else
     // Transparent when nothing is bound, so a pack that samples without

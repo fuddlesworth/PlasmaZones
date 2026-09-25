@@ -10,8 +10,12 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Core Test)
 # Shared test isolation: a private D-Bus session plus a per-target XDG
 # sandbox. Guarded so a standalone `git subtree split` configure of this
 # library still works without the top-level module.
-if(EXISTS "${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake")
-    include(${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake)
+# CMAKE_CURRENT_LIST_DIR, not CMAKE_SOURCE_DIR: the latter is the repo root
+# in-tree but this LIBRARY's directory in a standalone configure, so the guard
+# below was always FALSE there and the isolation was skipped even though the
+# module was reachable. The relative walk finds it from either.
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/PhosphorTestIsolation.cmake")
+    include(${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/PhosphorTestIsolation.cmake)
 endif()
 
 function(phosphorshelllauncher_add_test name)

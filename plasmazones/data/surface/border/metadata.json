@@ -33,7 +33,7 @@
             "default": 0.7,
             "min": 0.1,
             "max": 2.0,
-            "description": "Anti-alias feather of the border edge (px). Lower is a crisper hairline. 0.7 is the soft default."
+            "description": "Anti-alias feather of the border edge, in device pixels, so it does not grow with display scaling. Lower is a crisper hairline. 0.7 is the soft default."
         },
         {
             "id": "useSystemAccent",

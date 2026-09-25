@@ -40,11 +40,15 @@
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 
+#include <PhosphorRendering/ShaderCompiler.h>
 #include <PhosphorShaders/ShaderPreset.h>
+
+#include <rhi/qshader.h>
 
 #include "packvalidatortesthelpers.h"
 
 using namespace PackValidatorTest;
+using PhosphorRendering::ShaderCompiler;
 
 namespace {
 
@@ -465,6 +469,34 @@ private Q_SLOTS:
                  qPrintable(c.report));
     }
 
+    /// isValidParamId checks only the character set, so `reversed` is a legal
+    /// id that the preamble turns into `#define p_reversed <slot>` — over the
+    /// shared animation header's own `#define p_reversed (iIsReversed == 1)`.
+    /// GLSL rejects a redefinition with a different replacement list, so the
+    /// pack fails to compile with the error pointing at the shared header
+    /// rather than at the metadata the author can actually fix.
+    void aParamIdCollidingWithASharedDefineIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_ANIMATION_FIXTURE(tmp);
+
+        QJsonObject obj = basePack(QStringLiteral("param-collide"));
+        obj.insert(QStringLiteral("parameters"),
+                   QJsonArray{animationParam(QStringLiteral("reversed"), QStringLiteral("float"), 1.0)});
+        const PackResult r = validate(tmp, QStringLiteral("param-collide"), obj);
+        QVERIFY2(r.report.contains(QStringLiteral("collides with a define the shared animation header already owns")),
+                 qPrintable(r.report));
+        QVERIFY(r.errors > 0);
+
+        // A neighbouring id that merely CONTAINS the reserved word is fine —
+        // the collision is on the whole name, not a substring.
+        QJsonObject ok = basePack(QStringLiteral("param-nearby"));
+        ok.insert(QStringLiteral("parameters"),
+                  QJsonArray{animationParam(QStringLiteral("reversedFade"), QStringLiteral("float"), 1.0)});
+        const PackResult r2 = validate(tmp, QStringLiteral("param-nearby"), ok);
+        QVERIFY2(!r2.report.contains(QStringLiteral("collides with a define")), qPrintable(r2.report));
+    }
+
     /// A strip pack that ships its own main() is abandoned by the strip pass
     /// at load, and one that never samples the strip through getStripColor()
     /// is abandoned at link. Both bakes pass such packs, so both are lints.
@@ -602,432 +634,174 @@ private Q_SLOTS:
         }
     }
 
-    // ── Preset lints ────────────────────────────────────────────────────
+    /// data/overlays/shared/textures.glsl is compiled by NOTHING. A repo-wide
+    /// grep finds its only mention is itself: no bundled overlay pack includes
+    /// it, so the four user-texture samplers it declares at bindings 11 to 14
+    /// are never baked and never reflected against the shared binding table.
+    /// Those four slots are the least-exercised block in the table, and the one
+    /// most likely to drift, since no shipped pack would notice.
+    ///
+    /// A fixture pack is the only way to reach them: it has to declare image
+    /// parameters, include the header and SAMPLE all four, or the linker drops
+    /// the samplers and the bake reflects nothing.
+    void theOverlayUserTextureSlotsBakeAtTheirContractBindings()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        if (!PackValidatorTest::linkOverlaySharedIncludes(tmp)) {
+            QSKIP("data/overlays/shared not found — running outside source tree");
+        }
+
+        // One image parameter per slot: the header documents that the registry
+        // binds them in DECLARATION ORDER, so four declarations claim uTexture0
+        // through uTexture3. No bundled pack of any family declares an
+        // image-typed parameter, which is the other half of why these four slots
+        // have no coverage.
+        QJsonArray params;
+        for (int i = 0; i < 4; ++i) {
+            QJsonObject param;
+            param.insert(QStringLiteral("id"), QStringLiteral("tex%1").arg(i));
+            param.insert(QStringLiteral("name"), QStringLiteral("Texture %1").arg(i));
+            param.insert(QStringLiteral("type"), QStringLiteral("image"));
+            param.insert(QStringLiteral("default"), QStringLiteral("tex%1.png").arg(i));
+            params.append(param);
+        }
+        QJsonObject obj = overlayPack(QStringLiteral("ov-textures"));
+        obj.insert(QStringLiteral("parameters"), params);
+        // overlayPack declares multipass for the buffer-lint slots, and this one
+        // writes its own stage rather than going through validateOverlay's
+        // writeStage loop, so nothing would create the buffer pass it implies.
+        // The texture slots have nothing to do with multipass either way.
+        obj.remove(QStringLiteral("multipass"));
+
+        const QString dir = tmp.filePath(QStringLiteral("ov-textures"));
+        QVERIFY(writePackFile(dir, QStringLiteral("metadata.json"), QJsonDocument(obj).toJson()));
+        // pImage, not pZone: this needs no per-zone context and the whole-canvas
+        // entry keeps the body to the thing under test. Every one of the four is
+        // SAMPLED, because a declared-but-unsampled sampler is optimised out at
+        // link and the bake would then reflect an empty set.
+        QVERIFY(writePackFile(dir, QStringLiteral("zone.frag"),
+                              "#include <textures.glsl>\n"
+                              "vec4 pImage(vec2 fragCoord) {\n"
+                              "    vec2 uv = fragCoord / max(iResolution, vec2(1.0));\n"
+                              "    return texture(uTexture0, uv) + texture(uTexture1, uv)\n"
+                              "         + texture(uTexture2, uv) + texture(uTexture3, uv);\n"
+                              "}\n"));
+        // Four 1x1 PNGs, so a missing-image lint is not what fails.
+        for (int i = 0; i < 4; ++i) {
+            QImage px(1, 1, QImage::Format_RGBA8888);
+            px.fill(Qt::transparent);
+            QVERIFY(px.save(QDir(dir).filePath(QStringLiteral("tex%1.png").arg(i))));
+        }
+
+        QString report;
+        QTextStream stream(&report);
+        const int errors = PlasmaZones::ShaderValidate::validatePack(dir, stream);
+        stream.flush();
+
+        // The binding lint is what this is really for: it reflects every baked
+        // sampler against the table, so a clean bake here means all four
+        // resolved at 11 to 14. A wrong slot in the header would name the
+        // sampler in a "binding layout:" diagnostic.
+        QVERIFY2(!report.contains(QStringLiteral("binding layout:")), qPrintable(report));
+        QVERIFY2(errors == 0, qPrintable(report));
+    }
+
+    // bindingLayoutProblems is declared "Exposed so the tests can pin the rule
+    // without going through a whole pack", and until this slot nothing called
+    // it directly: every exercise of it came through a pack bake, where a pack
+    // whose bindings are right says nothing and a pack cannot easily be made to
+    // declare a WRONG one, because the shared headers own the slots. So the
+    // rule's three arms were reachable only by accident, and the uniform-block
+    // arm was not reachable at all, since no header puts the block anywhere but
+    // binding 0.
     //
-    // A preset is a partial tuning stored against a pack, so the only things
-    // decidable offline are that its keys name declared parameters and that
-    // its values fit those parameters' declared types and ranges. Everything
-    // below asserts exactly one of those, plus the two cases that must NOT
-    // draw a diagnostic.
-
-    void presetNamingAnUndeclaredParameterIsRejected()
+    // Baking tiny sources directly is what makes the wrong cases expressible.
+    void theBindingLayoutRuleAnswersEachArmDirectly()
     {
-        QTemporaryDir tmp;
-        REQUIRE_ANIMATION_FIXTURE(tmp);
+        const auto bake = [](const QByteArray& body) {
+            const ShaderCompiler::Result r = ShaderCompiler::compile(body, QShader::FragmentStage);
+            QStringList problems;
+            if (!r.success) {
+                // Surfaced rather than swallowed: a source that fails to compile
+                // would otherwise reflect as "no problems" and pass every
+                // negative assertion below without ever testing the rule.
+                problems << QStringLiteral("FIXTURE: source did not compile: ") + r.error;
+                return problems;
+            }
+            return PlasmaZones::ShaderValidate::bindingLayoutProblems(r.shader);
+        };
 
-        QJsonObject obj = basePack(QStringLiteral("preset-unknown"));
-        obj.insert(QStringLiteral("parameters"),
-                   QJsonArray{animationParam(QStringLiteral("speed"), QStringLiteral("float"), 1.0)});
-        QJsonObject presets;
-        presets.insert(QStringLiteral("Odd"), QJsonObject{{QStringLiteral("noSuchThing"), 1.0}});
-        obj.insert(QStringLiteral("presets"), presets);
-
-        const PackResult r = validate(tmp, QStringLiteral("preset-unknown"), obj);
-        QVERIFY2(r.report.contains(QStringLiteral("which the pack does not declare")), qPrintable(r.report));
-        QVERIFY(r.errors > 0);
-    }
-
-    void presetValueOutsideTheDeclaredRangeIsRejected()
-    {
-        QTemporaryDir tmp;
-        REQUIRE_ANIMATION_FIXTURE(tmp);
-
-        QJsonObject param = animationParam(QStringLiteral("speed"), QStringLiteral("float"), 1.0);
-        param.insert(QStringLiteral("min"), 0.0);
-        param.insert(QStringLiteral("max"), 2.0);
-
-        QJsonObject obj = basePack(QStringLiteral("preset-range"));
-        obj.insert(QStringLiteral("parameters"), QJsonArray{param});
-        QJsonObject presets;
-        presets.insert(QStringLiteral("TooFast"), QJsonObject{{QStringLiteral("speed"), 9.0}});
-        presets.insert(QStringLiteral("TooSlow"), QJsonObject{{QStringLiteral("speed"), -1.0}});
-        obj.insert(QStringLiteral("presets"), presets);
-
-        const PackResult r = validate(tmp, QStringLiteral("preset-range"), obj);
-        QVERIFY2(r.report.contains(QStringLiteral("above its declared maximum")), qPrintable(r.report));
-        QVERIFY2(r.report.contains(QStringLiteral("below its declared minimum")), qPrintable(r.report));
-    }
-
-    void presetValueOfTheWrongTypeIsRejected()
-    {
-        QTemporaryDir tmp;
-        REQUIRE_ANIMATION_FIXTURE(tmp);
-
-        QJsonObject obj = basePack(QStringLiteral("preset-type"));
-        obj.insert(QStringLiteral("parameters"),
-                   QJsonArray{animationParam(QStringLiteral("count"), QStringLiteral("int"), 1),
-                              animationParam(QStringLiteral("on"), QStringLiteral("bool"), true)});
-        QJsonObject presets;
-        presets.insert(QStringLiteral("Bad"),
-                       QJsonObject{{QStringLiteral("count"), QStringLiteral("lots")},
-                                   {QStringLiteral("on"), QStringLiteral("yes")}});
-        obj.insert(QStringLiteral("presets"), presets);
-
-        const PackResult r = validate(tmp, QStringLiteral("preset-type"), obj);
-        QVERIFY2(r.report.contains(QStringLiteral("non-numeric value")), qPrintable(r.report));
-        QVERIFY2(r.report.contains(QStringLiteral("a bool parameter wants true or false")), qPrintable(r.report));
-    }
-
-    void aValidPresetDrawsNoDiagnostic()
-    {
-        QTemporaryDir tmp;
-        REQUIRE_ANIMATION_FIXTURE(tmp);
-
-        QJsonObject param = animationParam(QStringLiteral("speed"), QStringLiteral("float"), 1.0);
-        param.insert(QStringLiteral("min"), 0.0);
-        param.insert(QStringLiteral("max"), 2.0);
-
-        QJsonObject obj = basePack(QStringLiteral("preset-good"));
-        obj.insert(QStringLiteral("parameters"), QJsonArray{param});
-        QJsonObject presets;
-        presets.insert(QStringLiteral("Gentle"), QJsonObject{{QStringLiteral("speed"), 0.5}});
-        obj.insert(QStringLiteral("presets"), presets);
-
-        const PackResult r = validate(tmp, QStringLiteral("preset-good"), obj);
-        // "preset '" is the diagnostic prefix; a bare "preset" would also match
-        // the pack name in the report header.
-        QVERIFY2(!r.report.contains(QStringLiteral("preset '")), qPrintable(r.report));
-        // And a POSITIVE assertion alongside it, because the negative above is
-        // satisfied just as well by the lint never running at all, which is how the
-        // surface arm stayed unexercised without anyone noticing. A clean pack
-        // reports no errors and reaches metadata OK.
-        QCOMPARE(r.errors, 0);
-        QVERIFY2(r.report.contains(QStringLiteral("metadata       OK")), qPrintable(r.report));
-    }
-
-    void aPresetMayOmitParameters()
-    {
-        // A preset is a PARTIAL tuning by design: what it says nothing about
-        // falls back to the parameter's default. Demanding completeness would
-        // make the common case (retune one slider, save) impossible to express.
-        QTemporaryDir tmp;
-        REQUIRE_ANIMATION_FIXTURE(tmp);
-
-        QJsonObject obj = basePack(QStringLiteral("preset-partial"));
-        obj.insert(QStringLiteral("parameters"),
-                   QJsonArray{animationParam(QStringLiteral("speed"), QStringLiteral("float"), 1.0),
-                              animationParam(QStringLiteral("glow"), QStringLiteral("float"), 0.5)});
-        QJsonObject presets;
-        presets.insert(QStringLiteral("OnlySpeed"), QJsonObject{{QStringLiteral("speed"), 1.5}});
-        obj.insert(QStringLiteral("presets"), presets);
-
-        const PackResult r = validate(tmp, QStringLiteral("preset-partial"), obj);
-        // "preset '" is the diagnostic prefix; a bare "preset" would also match
-        // the pack name in the report header.
-        QVERIFY2(!r.report.contains(QStringLiteral("preset '")), qPrintable(r.report));
-        QCOMPARE(r.errors, 0);
-    }
-
-    void aPresetIdThatIsNotAPathComponentIsLinted()
-    {
-        // A pack-declared preset's key IS its id, and the settings app builds a
-        // filename from an id when the user duplicates one into an editable
-        // preset. The parse deliberately KEEPS such a key so this lint can report
-        // it: dropping it there would make the validator blind, and the pack would
-        // ship green with nothing but a log line no author reads.
-        //
-        // This lived in the metadata schema as a `propertyNames` rule, where it
-        // worked on no family: the vendored JSON-schema validator rejects every
-        // name under that keyword, so on the one arm that applies it the rule
-        // refused legitimate packs, and the animation gate never consulted it at
-        // all — a `"../escape"` preset id shipped clean.
-        QTemporaryDir tmp;
-        REQUIRE_ANIMATION_FIXTURE(tmp);
-
-        QJsonObject obj = basePack(QStringLiteral("preset-badid"));
-        obj.insert(QStringLiteral("parameters"),
-                   QJsonArray{animationParam(QStringLiteral("speed"), QStringLiteral("float"), 1.0)});
-        QJsonObject presets;
-        presets.insert(QStringLiteral("../escape"), QJsonObject{{QStringLiteral("speed"), 1.5}});
-        presets.insert(QStringLiteral(".."), QJsonObject{{QStringLiteral("speed"), 1.5}});
-        presets.insert(QStringLiteral("Fine"), QJsonObject{{QStringLiteral("speed"), 1.5}});
-        obj.insert(QStringLiteral("presets"), presets);
-
-        const PackResult r = validate(tmp, QStringLiteral("preset-badid"), obj);
-        QVERIFY2(r.report.contains(QStringLiteral("has an unusable id")), qPrintable(r.report));
-        QVERIFY(r.errors >= 2);
-        // The usable one beside them is not implicated: one bad id does not
-        // condemn the pack's other presets.
-        QVERIFY2(!r.report.contains(QStringLiteral("preset 'Fine'")), qPrintable(r.report));
-    }
-
-    void anIntPresetValueMustBeIntegralAndAColourMustParse()
-    {
-        // An int-typed parameter reaches the shader through a cast that
-        // TRUNCATES, and an unparseable colour becomes an INVALID QColor, which
-        // the uniform receives as transparent black. Both read as "the preset did
-        // nothing" rather than "the preset has a typo", and both were invisible:
-        // the lint checked an int value was numeric and a colour value was a
-        // string, which each bad value here already is.
-        QTemporaryDir tmp;
-        REQUIRE_ANIMATION_FIXTURE(tmp);
-
-        QJsonObject obj = basePack(QStringLiteral("preset-types"));
-        obj.insert(
-            QStringLiteral("parameters"),
-            QJsonArray{animationParam(QStringLiteral("count"), QStringLiteral("int"), 4),
-                       animationParam(QStringLiteral("tint"), QStringLiteral("color"), QStringLiteral("#112233"))});
-        QJsonObject presets;
-        presets.insert(QStringLiteral("Sloppy"),
-                       QJsonObject{{QStringLiteral("count"), 1.5}, {QStringLiteral("tint"), QStringLiteral("ochre")}});
-        presets.insert(QStringLiteral("Tidy"),
-                       QJsonObject{{QStringLiteral("count"), 3}, {QStringLiteral("tint"), QStringLiteral("#445566")}});
-        obj.insert(QStringLiteral("presets"), presets);
-
-        const PackResult r = validate(tmp, QStringLiteral("preset-types"), obj);
-        QVERIFY2(r.report.contains(QStringLiteral("truncates to 1")), qPrintable(r.report));
-        QVERIFY2(r.report.contains(QStringLiteral("not a colour QColor can parse")), qPrintable(r.report));
-        QVERIFY(r.errors >= 2);
-        // The well-formed preset beside them reports nothing, so neither check is
-        // merely firing on every value it sees.
-        QVERIFY2(!r.report.contains(QStringLiteral("preset 'Tidy'")), qPrintable(r.report));
-    }
-
-    void theRemainingPresetLintBranchesFire()
-    {
-        // Three branches of the shared preset lint that no slot reached, so each
-        // could be deleted with the suite green.
-        //
-        // 1. The id lint's LENGTH half. Every id case above is refused by
-        //    `isUsableId` for its characters, so `|| size > MaxNameChars` never
-        //    decided anything. A 200-character key is a real authoring mistake:
-        //    the key is also the picker's label, and MaxNameChars truncation runs
-        //    only for USER presets, so it renders in full and mangles the row.
-        // 2. The int parameter's OWN range, independent of any declared one. The
-        //    declared bounds are optional, so `1e18` under an int parameter with
-        //    no min/max linted clean and then hit a static_cast<int>, which is
-        //    undefined behaviour rather than a clamp.
-        // 3. The non-string branch for colour and image values. A number under a
-        //    colour parameter cannot be parsed as a colour name at all, and the
-        //    `isValidColorName` check above it only ever sees strings.
-        QTemporaryDir tmp;
-        REQUIRE_ANIMATION_FIXTURE(tmp);
-
-        const QString longId = QString(200, QLatin1Char('n'));
-        QJsonObject obj = basePack(QStringLiteral("preset-branches"));
-        obj.insert(
-            QStringLiteral("parameters"),
-            QJsonArray{animationParam(QStringLiteral("count"), QStringLiteral("int"), 4),
-                       animationParam(QStringLiteral("tint"), QStringLiteral("color"), QStringLiteral("#112233"))});
-        QJsonObject presets;
-        presets.insert(longId, QJsonObject{{QStringLiteral("count"), 2}});
-        presets.insert(QStringLiteral("Huge"), QJsonObject{{QStringLiteral("count"), 1e18}});
-        presets.insert(QStringLiteral("NotAColour"), QJsonObject{{QStringLiteral("tint"), 7}});
-        // A non-finite value is deliberately NOT among these: Qt's JSON parser refuses
-        // one (`1e400` fails the whole document with "illegal number", verified with a
-        // probe), so such a pack never loads and there is nothing for a lint to catch.
-        presets.insert(QStringLiteral("Tidy"), QJsonObject{{QStringLiteral("count"), 3}});
-        obj.insert(QStringLiteral("presets"), presets);
-
-        const PackResult r = validate(tmp, QStringLiteral("preset-branches"), obj);
-        QVERIFY2(r.report.contains(QStringLiteral("has an unusable id")), qPrintable(r.report));
-        QVERIFY2(r.report.contains(QStringLiteral("does not fit in an int parameter")), qPrintable(r.report));
-        QVERIFY2(r.report.contains(QStringLiteral("to a non-color value")), qPrintable(r.report));
-        // EXACTLY three, not "at least": the count is knowable, and `>=` is satisfied
-        // by a lint that fires on everything.
-        QCOMPARE(r.errors, 3);
-        // And the clean preset beside them is untouched, so none of the three is
-        // firing on everything it sees.
-        QVERIFY2(!r.report.contains(QStringLiteral("preset 'Tidy'")), qPrintable(r.report));
-    }
-
-    void thePresetIdLengthBoundIsExact()
-    {
-        // The id lint's length half at its boundary. The slot above drives it with a
-        // 200-character key, which `> MaxNameChars` and `>= MaxNameChars` both refuse,
-        // so nothing stopped the comparison from drifting by one.
-        QTemporaryDir tmp;
-        REQUIRE_ANIMATION_FIXTURE(tmp);
-
-        const qsizetype cap = PhosphorShaders::ShaderPreset::MaxNameChars;
-        QJsonObject obj = basePack(QStringLiteral("preset-idcap"));
-        obj.insert(QStringLiteral("parameters"),
-                   QJsonArray{animationParam(QStringLiteral("speed"), QStringLiteral("float"), 1.0)});
-        QJsonObject presets;
-        presets.insert(QString(cap, QLatin1Char('n')), QJsonObject{{QStringLiteral("speed"), 1.5}});
-        obj.insert(QStringLiteral("presets"), presets);
-        const PackResult atCap = validate(tmp, QStringLiteral("preset-idcap"), obj);
-        QVERIFY2(!atCap.report.contains(QStringLiteral("has an unusable id")), qPrintable(atCap.report));
-
-        QJsonObject over;
-        over.insert(QString(cap + 1, QLatin1Char('n')), QJsonObject{{QStringLiteral("speed"), 1.5}});
-        obj.insert(QStringLiteral("presets"), over);
-        const PackResult overCap = validate(tmp, QStringLiteral("preset-idcap"), obj);
-        QVERIFY2(overCap.report.contains(QStringLiteral("has an unusable id")), qPrintable(overCap.report));
-    }
-
-    void anUnusableIdStillGetsItsValuesChecked()
-    {
-        // The id branch reports and carries on rather than skipping the preset's
-        // values: they are independent of the key, so an author who fixes the name
-        // should not then get a fresh round of value errors.
-        QTemporaryDir tmp;
-        REQUIRE_ANIMATION_FIXTURE(tmp);
-
-        QJsonObject obj = basePack(QStringLiteral("preset-both"));
-        obj.insert(QStringLiteral("parameters"),
-                   QJsonArray{animationParam(QStringLiteral("count"), QStringLiteral("int"), 4)});
-        QJsonObject presets;
-        presets.insert(QString(200, QLatin1Char('n')), QJsonObject{{QStringLiteral("count"), 1.5}});
-        obj.insert(QStringLiteral("presets"), presets);
-
-        const PackResult r = validate(tmp, QStringLiteral("preset-both"), obj);
-        QVERIFY2(r.report.contains(QStringLiteral("has an unusable id")), qPrintable(r.report));
-        QVERIFY2(r.report.contains(QStringLiteral("truncates to 1")), qPrintable(r.report));
-        QCOMPARE(r.errors, 2);
-    }
-
-    void theRawPresetsBlockIsLintedForWhatTheParseHides()
-    {
-        // Three faults the PARSED map cannot show, because by then they have already
-        // happened: a non-object `presets` is ignored wholesale (the pack ships none), and
-        // both loader caps truncate silently. Each cost the author presets with only a log
-        // line, and the shared lint receives the result rather than the declaration.
-        QTemporaryDir tmp;
-        REQUIRE_ANIMATION_FIXTURE(tmp);
-
-        // A non-object block.
-        QJsonObject obj = basePack(QStringLiteral("raw-presets"));
-        obj.insert(QStringLiteral("parameters"),
-                   QJsonArray{animationParam(QStringLiteral("speed"), QStringLiteral("float"), 1.0)});
-        obj.insert(QStringLiteral("presets"), QJsonArray{});
-        PackResult r = validate(tmp, QStringLiteral("raw-presets"), obj);
-        QVERIFY2(r.report.contains(QStringLiteral("`presets` is not an object")), qPrintable(r.report));
-        QCOMPARE(r.errors, 1);
-
-        // More presets than the loader keeps.
-        QJsonObject many;
-        for (int i = 0; i < 70; ++i) {
-            many.insert(QStringLiteral("p%1").arg(i), QJsonObject{{QStringLiteral("speed"), 1.5}});
+        // A contract sampler at the slot the table assigns, and the block at 0.
+        // The positive control: without it, a rule that rejected EVERYTHING
+        // would satisfy all three negative cases below.
+        {
+            const QStringList problems = bake(
+                "#version 450\n"
+                "layout(std140, binding = 0) uniform Buf { vec4 pad; };\n"
+                "layout(binding = 2) uniform sampler2D iChannel0;\n"
+                "layout(location = 0) in vec2 uv;\n"
+                "layout(location = 0) out vec4 fragColor;\n"
+                "void main() { fragColor = texture(iChannel0, uv) + pad; }\n");
+            QVERIFY2(problems.isEmpty(), qPrintable(problems.join(QLatin1String(" | "))));
         }
-        obj.insert(QStringLiteral("presets"), many);
-        r = validate(tmp, QStringLiteral("raw-presets"), obj);
-        QVERIFY2(r.report.contains(QStringLiteral("declares 70 presets")), qPrintable(r.report));
 
-        // More values in one preset than the loader keeps. The declared-parameter lints
-        // fire for the undeclared ids too, so assert on this diagnostic rather than a count.
-        QJsonObject fat;
-        for (int i = 0; i < 70; ++i) {
-            fat.insert(QStringLiteral("v%1").arg(i), 1.0);
+        // THE UNIFORM-BLOCK ARM, which no pack can reach: every shared header
+        // puts the block at binding 0, so only a hand-written source gets here.
+        {
+            const QStringList problems = bake(
+                "#version 450\n"
+                "layout(std140, binding = 3) uniform Buf { vec4 pad; };\n"
+                "layout(location = 0) out vec4 fragColor;\n"
+                "void main() { fragColor = pad; }\n");
+            QVERIFY2(problems.size() == 1, qPrintable(problems.join(QLatin1String(" | "))));
+            QVERIFY2(problems.first().contains(QLatin1String("uniform block")), qPrintable(problems.first()));
+            QVERIFY2(problems.first().contains(QLatin1String("binding 3")), qPrintable(problems.first()));
         }
-        obj.insert(QStringLiteral("presets"), QJsonObject{{QStringLiteral("Fat"), fat}});
-        r = validate(tmp, QStringLiteral("raw-presets"), obj);
-        QVERIFY2(r.report.contains(QStringLiteral("sets 70 values")), qPrintable(r.report));
 
-        // And a well-formed block draws none of the three.
-        obj.insert(QStringLiteral("presets"),
-                   QJsonObject{{QStringLiteral("Fine"), QJsonObject{{QStringLiteral("speed"), 1.5}}}});
-        r = validate(tmp, QStringLiteral("raw-presets"), obj);
-        QVERIFY2(!r.report.contains(QStringLiteral("is not an object")), qPrintable(r.report));
-        QVERIFY2(!r.report.contains(QStringLiteral("presets;")), qPrintable(r.report));
-        QCOMPARE(r.errors, 0);
-    }
+        // A CONTRACT sampler at the wrong slot. iChannel0 belongs at 2.
+        {
+            const QStringList problems = bake(
+                "#version 450\n"
+                "layout(std140, binding = 0) uniform Buf { vec4 pad; };\n"
+                "layout(binding = 5) uniform sampler2D iChannel0;\n"
+                "layout(location = 0) in vec2 uv;\n"
+                "layout(location = 0) out vec4 fragColor;\n"
+                "void main() { fragColor = texture(iChannel0, uv) + pad; }\n");
+            QVERIFY2(problems.size() == 1, qPrintable(problems.join(QLatin1String(" | "))));
+            QVERIFY2(problems.first().contains(QLatin1String("iChannel0")), qPrintable(problems.first()));
+        }
 
-    void theOverlayArmLintsPresetsToo()
-    {
-        // The preset lint is wired into all four validator arms, but every test
-        // above drives the ANIMATION one — so deleting the call from the overlay,
-        // surface or pointer arm left the suite green. This covers the overlay arm
-        // through the harness that was already sitting in this file unused.
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
+        // A sampler the contract does not define AT ALL. Nothing binds it on
+        // either host, so the message deliberately names no correct slot.
+        {
+            const QStringList problems = bake(
+                "#version 450\n"
+                "layout(std140, binding = 0) uniform Buf { vec4 pad; };\n"
+                "layout(binding = 6) uniform sampler2D uPackInvented;\n"
+                "layout(location = 0) in vec2 uv;\n"
+                "layout(location = 0) out vec4 fragColor;\n"
+                "void main() { fragColor = texture(uPackInvented, uv) + pad; }\n");
+            QVERIFY2(problems.size() == 1, qPrintable(problems.join(QLatin1String(" | "))));
+            QVERIFY2(problems.first().contains(QLatin1String("uPackInvented")), qPrintable(problems.first()));
+            QVERIFY2(problems.first().contains(QLatin1String("nothing will bind")), qPrintable(problems.first()));
+        }
 
-        QJsonObject param;
-        param.insert(QStringLiteral("id"), QStringLiteral("speed"));
-        // `name` is required by the overlay metadata schema, which the overlay arm
-        // validates before it reaches any lint — without it the pack fails schema
-        // validation and the preset lint is never consulted at all.
-        param.insert(QStringLiteral("name"), QStringLiteral("Speed"));
-        param.insert(QStringLiteral("type"), QStringLiteral("float"));
-        param.insert(QStringLiteral("default"), 1.0);
-        param.insert(QStringLiteral("min"), 0.0);
-        param.insert(QStringLiteral("max"), 2.0);
-
-        QJsonObject obj = overlayPack(QStringLiteral("ov-preset"));
-        obj.insert(QStringLiteral("multipass"), false);
-        obj.insert(QStringLiteral("parameters"), QJsonArray{param});
-        QJsonObject presets;
-        presets.insert(QStringLiteral("Undeclared"), QJsonObject{{QStringLiteral("noSuchThing"), 1.0}});
-        presets.insert(QStringLiteral("TooFast"), QJsonObject{{QStringLiteral("speed"), 99.0}});
-        obj.insert(QStringLiteral("presets"), presets);
-
-        const PackResult r = validateOverlay(tmp, QStringLiteral("ov-preset"), obj);
-        QVERIFY2(r.report.contains(QStringLiteral("which the pack does not declare")), qPrintable(r.report));
-        QVERIFY2(r.report.contains(QStringLiteral("above its declared maximum")), qPrintable(r.report));
-        QVERIFY(r.errors > 0);
-    }
-
-    void theOverlayArmLintsAPresetImagePath()
-    {
-        // No overlay test declared an image parameter, so the whole image branch of
-        // the preset lint was uncovered. Writing this one is what showed the
-        // containment half of it to be DEAD: parsePackPresets refuses an escaping
-        // value and drops the entry, so the lint never sees it. Both halves are
-        // asserted here — the dropped values produce no report line, which is the
-        // behaviour to notice rather than the behaviour to want, and the existence
-        // check catches the case that does survive the parse.
-        QTemporaryDir tmp;
-        QVERIFY(tmp.isValid());
-
-        QJsonObject param;
-        param.insert(QStringLiteral("id"), QStringLiteral("tex"));
-        param.insert(QStringLiteral("name"), QStringLiteral("Texture"));
-        param.insert(QStringLiteral("type"), QStringLiteral("image"));
-        param.insert(QStringLiteral("default"), QString());
-
-        QJsonObject obj = overlayPack(QStringLiteral("ov-preset-image"));
-        obj.insert(QStringLiteral("multipass"), false);
-        obj.insert(QStringLiteral("parameters"), QJsonArray{param});
-        QJsonObject presets;
-        presets.insert(QStringLiteral("Escaping"),
-                       QJsonObject{{QStringLiteral("tex"), QStringLiteral("../../../etc/passwd")}});
-        presets.insert(QStringLiteral("Absolute"), QJsonObject{{QStringLiteral("tex"), QStringLiteral("/etc/passwd")}});
-        // A path inside the pack that simply is not there. Also a silent no-op at
-        // runtime (the parameter falls back to its default), and also unreported
-        // until now.
-        presets.insert(QStringLiteral("Missing"), QJsonObject{{QStringLiteral("tex"), QStringLiteral("absent.png")}});
-        // Empty is legitimate: "no texture for this slot".
-        presets.insert(QStringLiteral("None"), QJsonObject{{QStringLiteral("tex"), QString()}});
-        obj.insert(QStringLiteral("presets"), presets);
-
-        const PackResult r = validateOverlay(tmp, QStringLiteral("ov-preset-image"), obj);
-        // The in-pack path that does not exist IS reported. This is the half of the
-        // image branch that can fire.
-        QVERIFY2(r.report.contains(QStringLiteral("preset 'Missing'")), qPrintable(r.report));
-        QVERIFY2(r.report.contains(QStringLiteral("names no file the pack ships")), qPrintable(r.report));
-        QVERIFY(r.errors >= 1);
-        // The two ESCAPING paths are not reported, and that is the parse's doing, not
-        // a miss in the lint: parsePackPresets refuses them and drops the entries, so
-        // nothing reaches the parsed map to lint. Pinned so the next reader does not
-        // "restore" a containment check here that can never fire — and so that if
-        // refusals are ever surfaced out of the parse, this assertion fails and points
-        // at the report line that should then exist.
-        QVERIFY2(!r.report.contains(QStringLiteral("preset 'Escaping'")), qPrintable(r.report));
-        QVERIFY2(!r.report.contains(QStringLiteral("preset 'Absolute'")), qPrintable(r.report));
-        // The legitimate empty one is silent too, so the existence check is not simply
-        // firing on every image-typed value it sees.
-        QVERIFY2(!r.report.contains(QStringLiteral("preset 'None'")), qPrintable(r.report));
-    }
-
-    void presetProblemsPrintUnderTheirOwnHeader()
-    {
-        // A preset fault used to print an unindented line and then leave the
-        // metadata section reporting OK directly below it, while still counting
-        // the error — a report that contradicted itself.
-        QTemporaryDir tmp;
-        REQUIRE_ANIMATION_FIXTURE(tmp);
-
-        QJsonObject obj = basePack(QStringLiteral("preset-header"));
-        obj.insert(QStringLiteral("parameters"),
-                   QJsonArray{animationParam(QStringLiteral("speed"), QStringLiteral("float"), 1.0)});
-        QJsonObject presets;
-        presets.insert(QStringLiteral("Odd"), QJsonObject{{QStringLiteral("noSuchThing"), 1.0}});
-        obj.insert(QStringLiteral("presets"), presets);
-
-        const PackResult r = validate(tmp, QStringLiteral("preset-header"), obj);
-        QVERIFY2(r.report.contains(QStringLiteral("presets        ERROR")), qPrintable(r.report));
-        // Indented under that header, like every sibling lint.
-        QVERIFY2(r.report.contains(QStringLiteral("    preset 'Odd'")), qPrintable(r.report));
+        // Two resources on ONE slot. Only one reaches the SRB, and which one is
+        // not the author's choice, so it is reported whatever the slot is.
+        {
+            const QStringList problems = bake(
+                "#version 450\n"
+                "layout(std140, binding = 0) uniform Buf { vec4 pad; };\n"
+                "layout(binding = 2) uniform sampler2D iChannel0;\n"
+                "layout(binding = 2) uniform sampler2D iChannel1;\n"
+                "layout(location = 0) in vec2 uv;\n"
+                "layout(location = 0) out vec4 fragColor;\n"
+                "void main() { fragColor = texture(iChannel0, uv) + texture(iChannel1, uv) + pad; }\n");
+            QVERIFY2(!problems.isEmpty(), "a shared binding must be reported");
+            QVERIFY2(problems.join(QLatin1String(" | ")).contains(QLatin1String("both declare binding 2")),
+                     qPrintable(problems.join(QLatin1String(" | "))));
+        }
     }
 };
 

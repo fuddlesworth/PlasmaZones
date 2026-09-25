@@ -10,6 +10,7 @@
 // defend. Over the 1150 ceiling before PR #891 and accepted as such.
 
 #include "plasmazoneseffect.h"
+#include "desktopvisibility.h"
 #include "kwincompat.h"
 #include "compositor/compositorclock.h"
 #include "handlers/navigationhandler.h"
@@ -975,11 +976,12 @@ void PlasmaZonesEffect::postPaintScreen()
         // the reap actually fires.
         for (auto it = m_windowDecorations.cbegin(); it != m_windowDecorations.cend(); ++it) {
             KWin::EffectWindow* const sw = findWindowByIdExact(it.key());
-            // Exact-id discipline (mirrors reconcileDecorationOnPlacementFlip and
-            // the teardown paths): findWindowById's fuzzy appId fallback can
-            // return a same-app sibling for a stale id, and repainting the
-            // sibling would be wrong. Skip unless it re-derives to this exact id.
-            if (!sw || getWindowId(sw) != it.key() || sw->isDeleted() || !sw->isOnCurrentDesktop()) {
+            // Exact-id discipline (mirrors reconcileDecorationOnPlacementFlip and the
+            // teardown paths): findWindowById's fuzzy appId fallback can return a same-app
+            // sibling for a stale id. PER-OUTPUT desktop test, because this loop parks and
+            // reaps too, which is decoration lifecycle and not a paint decision: on the
+            // global reading a window visible on its own output was never park-stamped.
+            if (!sw || getWindowId(sw) != it.key() || sw->isDeleted() || !isOnOwnOutputCurrentDesktop(sw)) {
                 continue;
             }
             // The shaderApplied gate is deliberately NOT the loop's first test,
@@ -1806,7 +1808,7 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
         // the linker dropped every backdrop uniform, or the pack failed to
         // compile). The fold for such a chain takes the all-static early
         // return and discards the capture every frame, so gate the capture on
-        // the same linked-uniform evidence packVariesPerFrame uses — resolved
+        // the same linked-uniform evidence packVariesPerFrame uses, split across chainBackdropScale — resolved
         // through the SAME lazy compile the fold uses, so the gate and the
         // fold agree within one frame. A raw cache probe here skipped the
         // capture on a fresh frost window's first paint (the fold compiled
@@ -1814,17 +1816,14 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
         // absent) and answered false for a frame after every registry reload
         // cleared the cache while a pre-reload backdropRect still claimed
         // validity.
-        // 0.0 = no compiled pack reads the backdrop (skip the capture);
-        // 1.0 = some MAIN pass samples it sharp (full-density capture);
-        // otherwise the largest bufferScale among the buffer passes that link
-        // it — a blur pyramid reads the capture at bufferScale resolution
-        // through normalized uvs, so capturing past that density stores and
-        // re-blits texels the samplers stride over. Max, not min: a chain
-        // with two blur packs must satisfy the denser reader.
-        qreal backdropScale = 0.0;
+        // needed == false: nothing links a backdrop uniform, skip the capture. Density 1.0:
+        // some MAIN pass samples it. Otherwise twice the largest NOMINAL bufferScale among
+        // the SAMPLING buffer passes, capped at 1.0, half density for the builtin pyramid.
+        // Twice, since a reduction pass spaces taps in the density it expects its source.
+        BackdropCapture backdropNeed;
         if (backIt != m_windowDecorations.constEnd() && backIt->needsBackdrop
             && (backIt->shaderApplied || m_shaderManager.findTransition(w)) && !isWithheldThisFrame()
-            && (backdropScale = chainBackdropScale(*backIt, backIt.key(), w)) > 0.0) {
+            && (backdropNeed = chainBackdropScale(*backIt, backIt.key(), w)).needed) {
             // While an animation is drawing the window somewhere other than
             // its resting rect, capture the backdrop where the quad actually
             // IS this frame, or the pane shows the wrong slice of the scene
@@ -1942,7 +1941,8 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
             // slotWindowClosed→windowDeleted span, during which the window IS
             // deleted — a corpse never re-captures its backdrop; it reuses the
             // frozen composite (see the gate's comment above).
-            captureWindowBackdrop(renderTarget, viewport, w, *backIt, deviceRegion, animatedFrame, backdropScale);
+            captureWindowBackdrop(renderTarget, viewport, w, *backIt, deviceRegion, animatedFrame,
+                                  backdropNeed.density);
         }
     }
 

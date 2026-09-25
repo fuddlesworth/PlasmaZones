@@ -33,6 +33,10 @@
 // pack declares as parameters are LOGICAL px; multiply by pointerScale()
 // (uPointerState.z) to reach device px.
 //
+// pointerPixel(), pointerScale(), pointerFilteredSpeed() and pointerReach(),
+// named throughout this header, are declared in pointer_lib.glsl, NOT here.
+// This file declares the uniforms; that one wraps them.
+//
 // OUTPUT: packs return PREMULTIPLIED rgba composited source-over the scene
 // (`glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA)` on both runtimes). Return
 // transparent black wherever nothing is painted, and fade to exactly zero
@@ -46,9 +50,10 @@
 // ── Compositor branch — classic default-block uniforms ──────────────────────
 
 // Seconds since this burst of pointer activity began: restarts at 0 for each
-// burst and never wraps on the compositor. (The preview wraps it at 1024 s
-// like every family; the base iTimeHi counterpart is not used by pointer
-// packs on either runtime.)
+// burst and never wraps on the compositor. (The preview wraps it at 1024 s,
+// like the OVERLAY and SURFACE families; the animation family's iTime is leg
+// progress in [0,1] and never wraps at all. The base iTimeHi counterpart is
+// not used by pointer packs on either runtime.)
 uniform float iTime;
 
 // The rest of the preview branch's BaseUniforms members, declared here too so
@@ -86,8 +91,14 @@ uniform vec4 customColors[16];
 // pointer_multipass.glsl module.
 uniform vec4 iChannelResolution[4];
 
-// User-declared image textures (metadata `textures`): slot N feeds
-// uTexture<N+1>, iTextureResolution[N].xy carries its pixel size.
+// User-declared image textures (metadata `textures`): slot N feeds uTexture<N+1>,
+// and iTextureResolution[N+1].xy carries its pixel size.
+//
+// INDEX ORIGIN, the trap: this array is indexed by GLSL slot, so
+// iTextureResolution[i] is the size of uTexture<i>. This family has no uTexture0
+// (binding 11 carries uCursorSprite instead), so index 0 is unused rather than
+// being your first declared texture. The sampler names are one-based over the
+// metadata list and this array is zero-based over the texture slots.
 uniform vec4 iTextureResolution[4];
 
 // ── Pointer tail ────────────────────────────────────────────────────────────
@@ -174,17 +185,18 @@ layout(std140, binding = 0) uniform PointerUniforms {
     vec4 uPointerTrail[32];      // offset 768 (512) — newest first: .xy px, .z age s, .w speed
 };                               // total 1280 bytes, no trailing pad
 
-// The cursor sprite (metadata `needsCursor`), binding 7 — the slot the surface
+// The cursor sprite (metadata `needsCursor`), binding 11 — the slot the surface
 // family gives uTexture0, which pointer packs do not have.
-layout(binding = 7) uniform sampler2D uCursorSprite;
-// User-declared image textures (metadata `textures`), bindings 8-10 — the
+layout(binding = 11) uniform sampler2D uCursorSprite;
+// User-declared image textures (metadata `textures`), bindings 12-14 — the
 // same sampler-name and binding-point dialect the other families use,
 // provided by the base ShaderEffect's user-texture plumbing.
-layout(binding = 8) uniform sampler2D uTexture1;
-layout(binding = 9) uniform sampler2D uTexture2;
-layout(binding = 10) uniform sampler2D uTexture3;
+layout(binding = 12) uniform sampler2D uTexture1;
+layout(binding = 13) uniform sampler2D uTexture2;
+layout(binding = 14) uniform sampler2D uTexture3;
 
-// The multipass iChannel sampler bindings (2-5) live in pointer_multipass.glsl,
+// The multipass iChannel sampler bindings (2-5 here, the first four of the
+// shared table's eight-wide block) live in pointer_multipass.glsl,
 // which a multipass pack includes.
 
 #endif // PLASMAZONES_KWIN

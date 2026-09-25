@@ -27,9 +27,13 @@ vec4 pSurface(vec2 uv) {
     BorderBand bb = standardBorderBand(p, p_borderWidth, p_cornerRadius);
 
     // Hue = perimeter angle scaled by the rainbow count, rotated by time.
-    // hueTurns 1.0 wraps exactly one wheel around the frame so the seam at
-    // the wrap point is invisible; fractional turn counts show a seam by
-    // design (the parameter floor of 0.5 keeps it a soft one).
+    //
+    // framePerimeter returns [-0.5, 0.5], so at the wrap point the hue jumps
+    // by fract(hueTurns). An INTEGER turn count therefore makes the jump zero
+    // and the seam invisible; every other value shows one, and the size of the
+    // jump is the fractional part rather than anything the 0.5 floor bounds.
+    // At 0.5 exactly the jump is half the wheel, which is the LARGEST possible
+    // seam, not a soft one.
     float u = framePerimeter(p, bb.fs.center, bb.fs.halfSize);
     float hue = fract(u * max(p_hueTurns, 0.5) - iTime * p_cycleSpeed);
     vec4 band = vec4(hsv2rgb(vec3(hue, clamp(p_saturation, 0.0, 1.0), clamp(p_brightness, 0.0, 1.0))), 1.0);

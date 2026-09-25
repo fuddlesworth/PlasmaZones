@@ -118,10 +118,11 @@ float classicHash(vec2 p) {
 }
 
 // niri-style bilinear value noise on niriHash (smooth-step interp
-// at integer lattice corners). Used by the 3 niri ports that need
-// procedural noise — soft-warp-fade, ink-splash,
-// smoke. Identical body across all three; lifting deduplicates ~10
-// lines per shader. Perlin's perlin_noise stays local because it
+// at integer lattice corners). Called DIRECTLY by soft-warp-fade alone; every
+// other consumer reaches it through the shared fbm() below, each with its own
+// literal octave count (ink-splash, smoke, phosphor-condense, phosphor-gate,
+// phosphor-ignite, phosphor-iris, phosphor-peek, phosphor-transfer).
+// Lifting deduplicates ~10 lines per shader. Perlin's perlin_noise stays local because it
 // uses an alternative bilinear formulation tied to perlin_random's
 // non-shareable hash.
 float niriNoise(vec2 p) {
@@ -138,10 +139,16 @@ float niriNoise(vec2 p) {
 // uses fbm(p, 5, 2.1) (its is_fbm) and smoke uses fbm(p, 6, 2.0) (its
 // sm_fbm), which share this skeleton and differ only in octave count and
 // lacunarity. Starting amplitude 0.5 and gain 0.5 are the shared constants.
+// Loop caps at 8 octaves so a bad `octaves` can't run unbounded, the same cap
+// the overlay family's fbm and simplexFBM carry. Costs nothing: gain 0.5 puts
+// octave 9 at 2^-9 of the amplitude, every bundled caller passes a literal 6
+// or fewer, and the cap is what stops a pack driving `octaves` from a
+// customParams slot turning this into an unbounded per-fragment loop on a
+// per-window compositor path.
 float fbm(vec2 p, int octaves, float lacunarity) {
     float v = 0.0;
     float amp = 0.5;
-    for (int i = 0; i < octaves; i++) {
+    for (int i = 0; i < octaves && i < 8; i++) {
         v += amp * niriNoise(p);
         p *= lacunarity;
         amp *= 0.5;

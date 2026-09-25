@@ -17,10 +17,10 @@
 #include <opengl/gltexture.h>
 
 #include <QByteArray>
-#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QImage>
+#include <QImageReader>
 #include <QLoggingCategory>
 #include <QPainter>
 #include <QPointer>
@@ -31,6 +31,7 @@
 #include <QSvgRenderer>
 #include <QThreadPool>
 
+#include <cmath>
 #include <limits>
 #include <memory>
 #include <unordered_set>
@@ -66,6 +67,34 @@ QImage ShaderInternal::loadUserTextureImage(const QString& path, int svgMaxDim)
     if (path.isEmpty()) {
         return {};
     }
+    // Mirrors ShaderEffect::kMaxSvgPixelBytes (RGBA8 at 2048 squared). Spelled out
+    // here rather than shared, because the effect does not link PhosphorRendering
+    // and must not start doing so for one constant. The two are held together by
+    // the parity claim in this function's doc, not by the compiler.
+    constexpr qint64 kMaxTexturePixelBytes = 16LL * 1024 * 1024;
+    const auto budgetedSize = [](QSize size) {
+        // Bounded per axis BEFORE the multiply. QImageReader::size() reports the
+        // header's DECLARED dimensions without allocating anything, so a hundred-byte
+        // PNG can claim two billion by two billion, and that product overflows qint64.
+        // Signed overflow is undefined, and an overflowed value can also land back
+        // under the budget and skip the downscale. The read would then fail its own
+        // allocation limit and return null, so nothing bad reached the GPU, but the
+        // arithmetic itself was the defect.
+        // The upper bound is the real guard; the lower one only turns a degenerate
+        // axis into 1 so the product below cannot be zero. That does mean a very
+        // elongated SVG whose aspect-preserving scale rounds an axis to 0 comes back
+        // CHANGED without having exceeded any budget, so the caller's
+        // changed-means-downscaled log reads oddly for it. Harmless, and preferable
+        // to rasterising at zero.
+        size = QSize(qBound(1, size.width(), 1 << 20), qBound(1, size.height(), 1 << 20));
+        const qint64 bytes = static_cast<qint64>(size.width()) * size.height() * 4;
+        if (bytes <= kMaxTexturePixelBytes) {
+            return size;
+        }
+        const double factor = std::sqrt(static_cast<double>(kMaxTexturePixelBytes) / static_cast<double>(bytes));
+        return QSize(qMax(1, static_cast<int>(size.width() * factor)),
+                     qMax(1, static_cast<int>(size.height() * factor)));
+    };
     const bool isSvg = path.endsWith(QLatin1String(".svg"), Qt::CaseInsensitive)
         || path.endsWith(QLatin1String(".svgz"), Qt::CaseInsensitive);
     if (isSvg) {
@@ -79,6 +108,14 @@ QImage ShaderInternal::loadUserTextureImage(const QString& path, int svgMaxDim)
         } else {
             size = QSize(svgMaxDim, svgMaxDim);
         }
+        // The per-axis cap alone does not bound the allocation: a near-square doc
+        // at svgMaxDim on both axes is svgMaxDim squared times 4 bytes.
+        const QSize budgetedSvg = budgetedSize(size);
+        if (budgetedSvg != size) {
+            qCWarning(lcEffect) << "Pack texture SVG rasterise size" << size << "exceeds the byte budget"
+                                << kMaxTexturePixelBytes << "B, downscaling to" << budgetedSvg << "for" << path;
+            size = budgetedSvg;
+        }
         QImage rasterised(size, QImage::Format_ARGB32_Premultiplied);
         rasterised.fill(Qt::transparent);
         QPainter painter(&rasterised);
@@ -86,7 +123,24 @@ QImage ShaderInternal::loadUserTextureImage(const QString& path, int svgMaxDim)
         painter.end();
         return rasterised.convertToFormat(QImage::Format_RGBA8888);
     }
-    return QImage(path).convertToFormat(QImage::Format_RGBA8888);
+    // Budget applied during DECODE. setScaledSize means an oversized file never
+    // materialises at full resolution, where a post-hoc QImage::scaled() would
+    // need the whole allocation first. A reader that cannot report size() up
+    // front answers an invalid QSize; decode unscaled then rather than guess.
+    // Deliberately NO setAutoTransform, matching the daemon: QImage(path) never
+    // applied EXIF orientation, and enabling it would silently rotate existing
+    // pack textures that carry an orientation tag.
+    QImageReader reader(path);
+    const QSize rasterSize = reader.size();
+    if (rasterSize.isValid() && !rasterSize.isEmpty()) {
+        const QSize budgetedRaster = budgetedSize(rasterSize);
+        if (budgetedRaster != rasterSize) {
+            qCWarning(lcEffect) << "Pack texture raster size" << rasterSize << "exceeds the byte budget"
+                                << kMaxTexturePixelBytes << "B, downscaling to" << budgetedRaster << "for" << path;
+            reader.setScaledSize(budgetedRaster);
+        }
+    }
+    return reader.read().convertToFormat(QImage::Format_RGBA8888);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -416,13 +470,12 @@ PlasmaZonesEffect::compileOrLoadAnimationShader(const QString& effectId,
             qCWarning(lcEffect) << "Shader file is empty" << eff.fragmentShaderPath;
             return nullptr;
         }
-        QStringList animIncludePaths;
-        for (const QString& sp : m_shaderManager.m_animationShaderRegistry.searchPaths()) {
-            const QString sharedDir = sp + QStringLiteral("/shared");
-            if (QDir(sharedDir).exists()) {
-                animIncludePaths.append(sharedDir);
-            }
-        }
+        // Highest priority first, and through the registry's own helper so this
+        // runtime resolves a shared header from the same tree the daemon does.
+        // searchPaths() is registration order, which is the reverse of what
+        // include resolution wants; sharedIncludePaths() is the one place that
+        // is handled.
+        const QStringList animIncludePaths = m_shaderManager.m_animationShaderRegistry.sharedIncludePaths();
         QString includeError;
         const QString currentDir = QFileInfo(eff.fragmentShaderPath).absolutePath();
         // T1.5: assemble an entry-only animation pack (pTransition / pIn+pOut,
@@ -685,11 +738,16 @@ PlasmaZonesEffect::compileOrLoadAnimationShader(const QString& effectId,
             // GLSL sampler name: uTexture1..3 (slot+1 because uTexture0 is
             // the redirected surface, not user-declared). Matches the
             // overlay shader convention in data/overlays/shared/textures.glsl.
-            // Pre-baked from the file-scope `kUserTextureSamplerNames` /
-            // `kITextureResolutionKeys` arrays — no per-slot QByteArray
-            // alloc per shader install.
+            // Pre-baked from the file-scope `kUserTextureSamplerNames` array — no
+            // per-slot QByteArray alloc per shader install.
             cached.userTextureLoc[slot] = shader->uniformLocation(kUserTextureSamplerNames[slot]);
-            cached.iTextureResolutionLoc[slot] = shader->uniformLocation(kITextureResolutionKeys[slot]);
+        }
+        // SEPARATE LOOP, because iTextureResolution is indexed by GLSL texture slot
+        // and not by pack slot: index 0 is uTexture0, the window's own content,
+        // which no pack declares. Sharing the loop above made the two arrays
+        // parallel and put pack slot 0's size on uTexture0's index.
+        for (int glslSlot = 0; glslSlot < PhosphorShaders::Bindings::kUserTextureCount; ++glslSlot) {
+            cached.iTextureResolutionLoc[glslSlot] = shader->uniformLocation(kITextureResolutionKeys[glslSlot]);
         }
         cached.shader = std::move(shader);
         cacheIt = m_shaderManager.m_shaderCache.emplace(effectId, std::move(cached)).first;

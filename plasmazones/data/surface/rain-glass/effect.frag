@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Rain-on-glass pack, main pass: the Gaussian-blurred backdrop (buffer 1)
+// Rain-on-glass pack, main pass: the Kawase-blurred backdrop (iChannel6)
 // as fog, with procedural rain droplets running down the pane. Two moving
 // droplet layers at different scales plus one static bead layer; each
 // droplet contributes a local offset vector (pointing at its centre) that
@@ -10,6 +10,14 @@
 // beads above them, the classic filmed-window look. All motion is
 // hash-derived from iTime, so there is no per-frame state. Same slab
 // composite as the blur family.
+//
+// SHARED BACKDROP STAGES, in order: each droplet's refracted sample runs
+// through surfaceBackdropGrade (brightness, contrast, OKLab saturation,
+// vibrancy), then the top-light highlight, and a driver-stable grain goes on
+// last, weighted by the sample's alpha so the cleared off-capture margin
+// stays clear. The Edge mirror switch decides what a refraction reaching past
+// the pane reads: folded back inside when on, the captured scene beside the
+// pane when off.
 //
 // Retired handlesOpacity contract: uSurfaceOpacity is a constant 1.0 now
 // (SetOpacity is layer-backed and custom chains own their alpha). The pack's
@@ -21,11 +29,15 @@
 // refracting a capture.
 //
 // ANIMATED (references iTime): metadata declares "animated": true so the
-// daemon host ticks the item; the compositor detects the linked iTime
-// uniform itself and repaints the window continuously while decorated.
+// daemon host ticks the item, and the compositor detects the linked iTime
+// uniform itself rather than reading the flag. Neither repaints without
+// limit: the compositor stops while the performance pause is on and while
+// the session is idle-gated, so an animated pack freezes rather than
+// burning frames on a desktop nobody is looking at.
 
 #include <surface_multipass.glsl>
 #include <surface_noise.glsl>
+#include <surface_color.glsl>
 
 // Droplet cell shape: cells ~2.5x taller than wide so each drop has a real
 // run and trails read vertically. Shared by dropLayer and the per-cell
@@ -62,12 +74,14 @@ vec3 dropLayer(vec2 st, float t) {
     // Droplet body — distances back in st units so drops stay round.
     vec2 toDrop = (f - vec2(x, dropY)) * cellDim;
     float dropR = 0.10 * (0.75 + 0.5 * n.y);
-    float drop = smoothstep(dropR, dropR * 0.5, length(toDrop));
+    // Low edge first: smoothstep with edge0 > edge1 is spec-undefined, and
+    // 1.0 - smoothstep(lo, hi, x) is the defined spelling of the same curve.
+    float drop = 1.0 - smoothstep(dropR * 0.5, dropR, length(toDrop));
 
     // Trail: a chain of beads strictly ABOVE the drop (smaller y), fading
     // with distance above it and drying out late in the fall.
     vec2 toBead = vec2(f.x - x, (fract(f.y * 12.0) - 0.5) / 12.0) * cellDim;
-    float beads = smoothstep(0.055, 0.03, length(toBead));
+    float beads = 1.0 - smoothstep(0.03, 0.055, length(toBead));
     float above = step(f.y, dropY) * smoothstep(dropY - 0.55, dropY, f.y);
     float trail = beads * above * (1.0 - 0.5 * fall);
 
@@ -76,7 +90,8 @@ vec3 dropLayer(vec2 st, float t) {
 }
 
 vec4 pSurface(vec2 uv) {
-    SurfaceSlab slab = surfaceSlabOpen(uv, p_cornerRadius * uSurfaceScale);
+    float cornerPx = p_cornerRadius * uSurfaceScale;
+    SurfaceSlab slab = surfaceSlabOpen(uv, cornerPx, p_roundBottomCorners >= 0.5 ? cornerPx : 0.0, p_edgeSoftness);
     // Fade the window content over the pane; the translucency it frees is
     // filled by the rained-on glass in slabComposite below.
     slab.window *= clamp(p_contentOpacity, 0.0, 1.0);
@@ -84,17 +99,34 @@ vec4 pSurface(vec2 uv) {
     float mask = slab.mask;
 
     // Glass space: device px scaled so dropletScale 1.0 gives ~90 px cells.
-    float cellPx = 90.0 * clamp(p_dropletScale, 0.25, 4.0) * max(uSurfaceScale, 0.001);
+    // Clamped to the DECLARED range (0.5 .. 2.0), same reasoning as glass's
+    // edgeCurve: a wider clamp of its own only ever admits a hand-edited
+    // profile value the settings UI can neither produce nor undo.
+    float cellPx = 90.0 * clamp(p_dropletScale, 0.5, 2.0) * max(uSurfaceScale, 0.001);
     vec2 st = (px - uSurfaceFrameTopLeft) / cellPx;
+    // The 0.0 is NOT the parameter's floor: rainSpeed declares a minimum of
+    // 0.05, so the rain never actually stops from the slider. It guards a
+    // hand-edited negative, which would run the animation backwards.
     float t = iTime * max(p_rainSpeed, 0.0);
 
     // Two falling layers at offset scales/speeds plus one static bead layer;
     // rainAmount thins the field by culling whole cells on a hash.
     float amount = clamp(p_rainAmount, 0.0, 1.0);
-    vec3 layer1 = dropLayer(st, t);
-    vec3 layer2 = dropLayer(st * 1.6 + 4.3, t * 1.35);
-    layer1 *= step(1.0 - amount, hash13(floor(st / kRainCellDim) + 2.7));
-    layer2 *= step(1.0 - amount, hash13(floor((st * 1.6 + 4.3) / kRainCellDim) + 8.1));
+    // CULL FIRST, then evaluate. The cull hash is paid either way, and
+    // dropLayer is the expensive body here (a hash23, two sin, two length,
+    // three smoothstep and a fract/floor/step chain). Running it and then
+    // multiplying by zero threw away about 30% of that work at the shipped
+    // rainAmount of 0.7. Coherence is good rather than perfect, since a cell is
+    // 90 x 225 device px at the default, so a warp usually agrees.
+    vec2 st2 = st * 1.6 + 4.3;
+    vec3 layer1 = vec3(0.0);
+    vec3 layer2 = vec3(0.0);
+    if (step(1.0 - amount, hash13(floor(st / kRainCellDim) + 2.7)) > 0.0) {
+        layer1 = dropLayer(st, t);
+    }
+    if (step(1.0 - amount, hash13(floor(st2 / kRainCellDim) + 8.1)) > 0.0) {
+        layer2 = dropLayer(st2, t * 1.35);
+    }
 
     // Static micro-beads: tiny fixed droplets that never move, filling the
     // pane so dry stretches still read as wet glass.
@@ -102,7 +134,7 @@ vec4 pSurface(vec2 uv) {
     vec3 mn = hash23(microId);
     vec2 microF = fract(st * 6.0) - 0.5;
     vec2 toMicro = microF - (mn.xy - 0.5) * 0.7;
-    float micro = smoothstep(0.06, 0.035, length(toMicro)) * step(mn.z, 0.35 * amount);
+    float micro = (1.0 - smoothstep(0.035, 0.06, length(toMicro))) * step(mn.z, 0.35 * amount);
 
     // Combined refraction offset in device px. layer1/layer2 offsets are in st
     // units, so ×cellPx maps them to px. toMicro lives in the 6×-denser micro-bead
@@ -110,6 +142,21 @@ vec4 pSurface(vec2 uv) {
     // that exaggerated push, gated to a subtle secondary lens by the *0.3, is what
     // makes the tiny fixed beads catch the light. Do not "correct" the scale
     // without checking the look.
+    //
+    // LAYER 2 IS OVER-SCALED 1.6× TOO, and that one was NOT documented. dropLayer
+    // returns its offset in whatever st units it was handed, and layer2 is called
+    // with `st * 1.6 + 4.3`, so its unit is cellPx / 1.6 px while this line
+    // multiplies both layers by the same cellPx. Layer 2's drops are 1/1.6 the
+    // size of layer 1's and bend the backdrop 1.6× HARDER, which is backwards for
+    // a lens: a smaller droplet is a shorter focal length in the picture and a
+    // weaker push here.
+    //
+    // LEFT AS IS, like the micro-bead scale above and for the same reason. Whether
+    // it reads as depth or as an error is a look question, this pack has not been
+    // rendered against the correction, and the author demonstrably documents the
+    // over-scales they intend. Dividing layer2.xy by 1.6 is the fix if the answer
+    // is that it was unintended. What is no longer true is that the comment names
+    // one over-scale and stays silent about the other.
     vec2 offsetPx = (layer1.xy + layer2.xy - toMicro * micro * 0.3) * cellPx;
     float wet = clamp(layer1.z + layer2.z + micro, 0.0, 1.0);
 
@@ -118,12 +165,22 @@ vec4 pSurface(vec2 uv) {
         // Fog everywhere; droplets refract the fogged scene toward their
         // centres (the blurred buffer keeps the lensed image soft and cheap).
         // refraction 40 = the geometric offset as-is; other values scale it.
-        vec2 sampleUv = clamp(uv + pxToUv(offsetPx * (p_refraction / 40.0)), 0.0, 1.0);
-        vec4 fog = texture(iChannel1, sampleUv);
+        vec2 bent = uv + pxToUv(offsetPx * (p_refraction / 40.0));
+        // Clamped to the canvas, or folded back inside the frame when the
+        // pack's Edge mirror switch is on.
+        vec2 sampleUv = surfaceBendUv(bent, p_edgeMirror >= 0.5);
+        vec4 fog = surfaceBackdropGrade(surfaceBlurTexel(sampleUv), p_brightness, p_contrast, p_saturation,
+                                        p_vibrancy, p_vibrancyDarkness);
         // Top-light: a small highlight on each droplet's upper edge (the
         // offset points down toward the centre there, so +y in px space).
-        float hi = wet * clamp(offsetPx.y / max(cellPx, 1.0) * 8.0, 0.0, 1.0) * 0.3;
-        pane = vec4(fog.rgb + hi * fog.a, fog.a) * mask;
+        // Focus-dimmed to the family's shared 0.55 floor, like every other lit
+        // pack: this highlight and rippled-glass's glint were the two that
+        // ignored focus while the glass pack beside them dimmed.
+        float hi = wet * clamp(offsetPx.y / max(cellPx, 1.0) * 8.0, 0.0, 1.0) * 0.3 * focusDim(0.55);
+        // Driver-stable grain over the fog, weighted by its alpha so the
+        // cleared off-capture margin stays clear.
+        float grain = surfaceGrain(px, p_noiseStrength);
+        pane = vec4(clamp(fog.rgb + (hi + grain) * fog.a, 0.0, max(fog.a, 0.0001)), fog.a) * mask;
     } else {
         // Original pseudo look with no backdrop: droplets glint over a
         // dark glass slab.

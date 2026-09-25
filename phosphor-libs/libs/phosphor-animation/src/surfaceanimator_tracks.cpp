@@ -16,8 +16,6 @@
 
 #include <PhosphorLayer/Surface.h>
 
-#include <QDir>
-#include <QFile>
 #include <QQuickItem>
 #include <private/qquickshadereffectsource_p.h>
 
@@ -450,17 +448,9 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
         // shader leg will actually attach — skip the per-leg filesystem
         // probes when the effect resolved invalid or was refused above.
         if (resolvedShaderEff.isValid()) {
-            for (const QString& sp : m_shaderRegistry->searchPaths()) {
-                const QString sharedDir = sp + QStringLiteral("/shared");
-                if (QDir(sharedDir).exists()) {
-                    animIncludePaths.append(sharedDir);
-                    if (resolvedShaderEff.vertexShaderPath.isEmpty()) {
-                        const QString sharedVert = sharedDir + QStringLiteral("/animation.vert");
-                        if (QFile::exists(sharedVert)) {
-                            resolvedShaderEff.vertexShaderPath = sharedVert;
-                        }
-                    }
-                }
+            animIncludePaths = m_shaderRegistry->sharedIncludePaths();
+            if (resolvedShaderEff.vertexShaderPath.isEmpty()) {
+                resolvedShaderEff.vertexShaderPath = m_shaderRegistry->defaultVertexShaderPath();
             }
         }
     }

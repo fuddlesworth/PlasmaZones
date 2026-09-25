@@ -21,19 +21,26 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
 {
     PhosphorShaders::UboFrameState state;
 
-    // UboFrameState's array extents are declared independently of the contract
-    // constants that bound the write loops below (phosphor-shaders cannot see
-    // the animation contract — dependency direction). Pin them here, the one
-    // TU that sees both, so a future kMax* bump cannot silently overrun the
-    // state arrays.
+    // UboFrameState's array extents are declared independently of the constants
+    // that bound the write loops below (phosphor-shaders cannot see this
+    // library — dependency direction). Pin them here, the one TU that sees
+    // both, so a future bump cannot silently overrun the state arrays.
+    //
+    // The bounds are PhosphorRendering's own namespace-scope constants, not a
+    // shader family's contract. kChannelResolutionSlots is the one exception,
+    // and it comes from the shared binding table rather than a contract too.
     static_assert(std::extent_v<decltype(state.customParams)> == kMaxCustomParams,
-                  "UboFrameState::customParams must match the contract's kMaxCustomParams");
+                  "UboFrameState::customParams must match PhosphorRendering::kMaxCustomParams");
     static_assert(std::extent_v<decltype(state.customColors)> == kMaxCustomColors,
-                  "UboFrameState::customColors must match the contract's kMaxCustomColors");
-    static_assert(std::extent_v<decltype(state.channelResolution)> == kMaxBufferPasses,
-                  "UboFrameState::channelResolution must match the contract's kMaxBufferPasses");
+                  "UboFrameState::customColors must match PhosphorRendering::kMaxCustomColors");
+    // The UBO describes only the first kChannelResolutionSlots channel sizes
+    // (its 672-byte base layout predates the eight-channel budget); a pass
+    // reading a later channel sizes it with textureSize().
+    static_assert(std::extent_v<decltype(state.channelResolution)>
+                      == PhosphorShaders::Bindings::kChannelResolutionSlots,
+                  "UboFrameState::channelResolution must match Bindings::kChannelResolutionSlots");
     static_assert(std::extent_v<decltype(state.textureResolution)> == kMaxUserTextures,
-                  "UboFrameState::textureResolution must match the contract's kMaxUserTextures");
+                  "UboFrameState::textureResolution must match PhosphorRendering::kMaxUserTextures");
 
     // Split full-precision m_time (double) into iTime (wrapped lo) + iTimeHi (wrap offset)
     state.time = static_cast<float>(m_time - static_cast<double>(m_timeHi));
@@ -69,7 +76,7 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
     // from a host flag: a pack branches on uHasBackdrop to decide whether to
     // sample uBackdrop at all, so a gate that outran the binding would have it
     // sampling a texture nobody bound. appendWallpaperBinding() keeps binding
-    // 11 populated either way (a dummy when there is nothing to show), so this
+    // 15 populated either way (a dummy when there is nothing to show), so this
     // is the only thing standing between a real backdrop and the pack's
     // fallback appearance. Both sides read the same predicate so they cannot
     // drift: see wallpaperBindingLive().
@@ -108,9 +115,14 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
 
     // iChannelResolution — resolved node-side (needs live RHI textures).
     const bool multiBufferMode = m_bufferPaths.size() > 1;
-    const int numChannels = multiBufferMode ? qMin(m_bufferPaths.size(), static_cast<qsizetype>(kMaxBufferPasses))
-                                            : (m_bufferShaderReady && m_bufferTexture ? 1 : 0);
-    for (int i = 0; i < kMaxBufferPasses; ++i) {
+    // The cast is explicit because the qMin answers a qsizetype and this is an
+    // int. It cannot lose anything, since the same qMin bounds it by
+    // kMaxBufferPasses, but an implicit narrowing here is indistinguishable at a
+    // glance from one that can.
+    const int numChannels = multiBufferMode
+        ? static_cast<int>(qMin(m_bufferPaths.size(), static_cast<qsizetype>(kMaxBufferPasses)))
+        : (m_bufferShaderReady && m_bufferTexture ? 1 : 0);
+    for (int i = 0; i < PhosphorShaders::Bindings::kChannelResolutionSlots; ++i) {
         if (i < numChannels) {
             if (multiBufferMode && m_multiBufferTextures[i]) {
                 QSize ps = m_multiBufferTextures[i]->pixelSize();
@@ -154,7 +166,7 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
     const int pendingAudioBars = (audioDeviceMax > 0) ? qMin(rawAudioBars, audioDeviceMax) : rawAudioBars;
     state.audioSpectrumSize = qMin(boundAudioWidth, pendingAudioBars);
 
-    // User texture resolutions (bindings 7-10) — resolved node-side.
+    // User texture resolutions (bindings 11-14) — resolved node-side.
     for (int i = 0; i < kMaxUserTextures; ++i) {
         if (m_userTextures[i] && !m_userTextureImages[i].isNull()) {
             state.textureResolution[i][0] = static_cast<float>(m_userTextureImages[i].width());
@@ -162,6 +174,22 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
         } else {
             state.textureResolution[i][0] = 1.0f;
             state.textureResolution[i][1] = 1.0f;
+        }
+    }
+    // SLOT 0 FOLLOWS ITS BINDING, which the loop above cannot see. When a
+    // source-texture provider is set, appendUserTextureBindings binds
+    // m_lastSourceRhiTexture at uTexture0 and never consults
+    // m_userTextureImages[0], so the loop wrote the (1, 1) fallback for a slot
+    // that is sampling a live surface. On the daemon animation path the
+    // override is always in play and the registry maps a pack's declared
+    // textures to uTexture<slot+1>, so [0] was the fallback on every frame.
+    // Read the size off the bound texture instead, and keep the fallback only
+    // for the transient where the provider has nothing resolved yet.
+    if (m_sourceTextureProvider && m_lastSourceRhiTexture) {
+        const QSize sourceSize = m_lastSourceRhiTexture->pixelSize();
+        if (!sourceSize.isEmpty()) {
+            state.textureResolution[0][0] = static_cast<float>(sourceSize.width());
+            state.textureResolution[0][1] = static_cast<float>(sourceSize.height());
         }
     }
 
@@ -214,7 +242,12 @@ void ShaderNodeRhi::uploadExtensionToUbo(QRhiResourceUpdateBatch* batch)
 // with no compiler error. The inline restoration is just a safety net for the
 // image pass; the full prepare() sequence does the real work.
 //
-// Dirty-flag invariants (who sets what):
+// Dirty-flag invariants (who sets what). The lists below name the SETTERS. Four
+// non-setter paths also raise m_sceneDataDirty, and a future setter author would
+// not think to look for them: resetBufferTargets(), ensureBufferTarget()'s
+// create-success path, the audio-spectrum resize re-arm inside uploadDirtyTextures
+// itself, and releaseRhiResources(). Each publishes iChannelResolution or
+// iAudioSpectrumSize from live textures:
 //   m_timeDirty       ← setTime, setTimeDelta, setFrame, setBufferFeedback
 //                        (toggle), prepare() on feedback-buffer clear
 //   m_timeHiDirty     ← setTime (wrap-offset crossing)
@@ -225,10 +258,20 @@ void ShaderNodeRhi::uploadExtensionToUbo(QRhiResourceUpdateBatch* batch)
 //                        (setSurfaceOpacity, setSurfaceScale, setSurfaceFocused,
 //                        setSurfaceSize, setSurfaceFrameTopLeft,
 //                        setSurfaceFrameSize)
-//   m_appFieldsDirty  ← setAppField0, setAppField1
+//   m_appFieldsDirty  ← setAppField0, setAppField1, invalidateUniforms,
+//                        releaseRhiResources. EVERY writer gates on
+//                        m_uboProfile->hasAppFields(): a profile without the
+//                        slots must never see this dirty, or its dirtyRegions()
+//                        could emit a K_APP_FIELDS region past the end of a
+//                        leaner UBO. The last two used to write it ungated.
 //   extension dirty   ← tracked via m_uniformExtension->isDirty() (set by the
 //                        extension's own updateFromX() methods)
-//   m_uniformsDirty   ← mirror: true if any of the five above are true
+//   m_uniformsDirty   ← mirror of the FOUR NODE-SIDE flags above. NOT the
+//                        extension: an extension that reports itself dirty
+//                        while m_uniformsDirty is false is uploaded by the
+//                        else branch below, which exists for exactly that
+//                        case, so folding it into the mirror would describe
+//                        a coupling the code deliberately does not have.
 // A setter that forgets to update m_uniformsDirty will correctly dirty its
 // region but skip the upload pass entirely — keep the mirror in sync.
 void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
@@ -277,8 +320,16 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 // dirty-region dispatch (which reproduces the exact legacy
                 // K_TIME_BLOCK / K_TIME_HI / K_SCENE_HEADER / K_APP_FIELDS
                 // broader-subsumes-narrower behaviour).
-                const PhosphorShaders::UboDirtyFlags flags{m_timeDirty, m_timeHiDirty, m_sceneDataDirty,
-                                                           m_appFieldsDirty};
+                // The profile gets a say in the SCENE-HEADER flag, because it owns
+                // one field the node has no event for: iDate advances on a clock
+                // of its own, once a second, and nothing node-side marks that.
+                // Without this the refreshed value sat in the profile's buffer and
+                // was never uploaded, so a playing pack with a still cursor showed
+                // a frozen time of day. Consumed, so it requests one upload rather
+                // than latching the region dirty forever.
+                const bool profileWantsSceneHeader = m_uboProfile->consumeSelfRefreshedSceneHeader();
+                const PhosphorShaders::UboDirtyFlags flags{
+                    m_timeDirty, m_timeHiDirty, m_sceneDataDirty || profileWantsSceneHeader, m_appFieldsDirty};
                 const auto dirtyRegions = m_uboProfile->dirtyRegions(flags);
                 for (const auto& r : dirtyRegions) {
                     batch->updateDynamicBuffer(m_ubo.get(), r.offset, r.size,
@@ -356,14 +407,7 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             cb->resourceUpdate(batch);
     }
 
-    if (m_dummyChannelTextureNeedsUpload && m_dummyChannelTexture) {
-        QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
-        if (batch) {
-            batch->uploadTexture(m_dummyChannelTexture.get(), m_transparentFallbackImage);
-            cb->resourceUpdate(batch);
-            m_dummyChannelTextureNeedsUpload = false;
-        }
-    }
+    uploadDummyChannelTexture(rhi, cb);
 
     if (m_dummyChannelTextureNeedsUpload)
         return;
@@ -447,7 +491,7 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         }
     }
 
-    // User texture upload (bindings 7-10)
+    // User texture upload (bindings 11-14)
     for (int i = 0; i < kMaxUserTextures; ++i) {
         if (m_userTextures[i] && !m_userTextureSamplers[i]) {
             const QRhiSampler::AddressMode addr = wrapModeToRhiAddress(m_userTextureWraps[i]);
@@ -458,19 +502,29 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 // gate above fires again next frame (dirty is still set) —
                 // a stranded non-created sampler would otherwise pass the
                 // truthiness gates below and be bound into the SRB.
-                qCWarning(lcShaderNode) << "user texture slot" << i << "sampler create() failed, will retry next frame";
+                // Latched per slot: the retry is per-frame by design (the slot
+                // stays dirty and this gate re-fires), so an unlatched line here
+                // repeats at vsync for as long as the backend refuses.
+                if (!m_userTextureSamplerWarned[static_cast<size_t>(i)]) {
+                    m_userTextureSamplerWarned[static_cast<size_t>(i)] = true;
+                    qCWarning(lcShaderNode) << "user texture slot" << i
+                                            << "sampler create() failed; retrying every frame, reported once per slot";
+                }
                 m_userTextureSamplers[i].reset();
                 continue;
             }
+            m_userTextureSamplerWarned[static_cast<size_t>(i)] = false;
             resetAllBindingsAndPipelines();
         }
-        // Sampler is the only hard prerequisite. m_userTextures[i] is null
-        // before the slot's first successful allocation (and after
-        // releaseRhiResources), and the size-mismatch branch below is what
-        // allocates it — so gating on the texture here would make the very
-        // first upload unreachable. Defensive beyond that: since the local-
-        // swap rework no path in this file leaves the slot null after a
-        // failed create.
+        // Sampler is the only hard prerequisite, and the texture deliberately
+        // is not. Initialisation pre-allocates all four slots with a 1x1 dummy
+        // (shadernoderhicore.cpp), so m_userTextures[i] is normally non-null
+        // well before a real image arrives; the size-mismatch branch below is
+        // what REPLACES that dummy with a correctly-sized texture. The slot is
+        // null only after releaseRhiResources, or after a failed create in the
+        // init loop, which tears every slot back down. Gating on the texture
+        // here would therefore add nothing in the normal case and would make
+        // the post-release re-upload unreachable in the abnormal one.
         if (!m_userTextureDirty[i] || !m_userTextureSamplers[i]) {
             continue;
         }
@@ -533,7 +587,7 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         }
     }
 
-    // Source-texture-provider plumbing for slot 0 / binding 7. When a
+    // Source-texture-provider plumbing for slot 0 / binding 11. When a
     // provider is set we own a dedicated sampler (separate from the
     // user-texture-0 sampler so callers that mix the two paths don't
     // step on each other) and detect QRhiTexture identity changes —
@@ -582,6 +636,20 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         if (resolved != m_lastSourceRhiTexture) {
             m_lastSourceRhiTexture = resolved;
             resetAllBindingsAndPipelines();
+            // REPUBLISH iTextureResolution[0], which is derived from this texture's
+            // pixelSize and which syncBaseUniforms already read THIS frame, above,
+            // while the pointer still held the old value (or null, on a provider
+            // swap). Without this the published size trails the binding by one
+            // provider, and on a pack that marks nothing per frame it never catches
+            // up: setSourceTextureProvider cannot do it, because at that point the
+            // new size is not knowable yet.
+            //
+            // requestAnotherFrame() as well, not just the flags, for the same reason
+            // the buffer-target create path gives: this runs inside prepare() on the
+            // render thread, where setting a dirty flag schedules nothing by itself.
+            m_uniformsDirty = true;
+            m_sceneDataDirty = true;
+            requestAnotherFrame();
         }
     }
 
@@ -596,7 +664,17 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         m_transparentFallbackTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
         if (m_transparentFallbackTexture->create()) {
             m_transparentFallbackTextureNeedsUpload = true;
+            m_transparentFallbackWarned = false;
         } else {
+            // This whole block is retried on EVERY prepare() while a source
+            // provider is set and unresolved, because the reset below restores
+            // the gate above. A backend that cannot give us a 1x1 RGBA8 is in
+            // serious trouble, and it used to say nothing at all.
+            if (!m_transparentFallbackWarned) {
+                m_transparentFallbackWarned = true;
+                qCWarning(lcShaderNode) << "transparent fallback texture create() failed; the source-provider "
+                                           "slot will sample unit 0 until it succeeds (reported once)";
+            }
             m_transparentFallbackTexture.reset();
         }
     }
@@ -609,7 +687,7 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         }
     }
 
-    // Desktop wallpaper texture upload (binding 11)
+    // Desktop wallpaper texture upload (binding 15)
     if (m_wallpaperDirty && m_wallpaperTexture && m_wallpaperSampler) {
         const QImage& img = m_wallpaperImage;
         const QSize targetSize = (!img.isNull() && img.width() > 0 && img.height() > 0) ? img.size() : QSize(1, 1);
@@ -703,7 +781,14 @@ void ShaderNodeRhi::releaseRhiResources()
     m_warnedAudioTruncated = false;
     m_warnedAudioCreateFailed = false;
     m_warnedWallpaperBindingOmitted = false;
+    m_warnedDepthBindingOmitted = false;
+    m_dummyChannelWarned = false;
+    m_halfFloatUnsupportedWarned = false;
+    m_bufferTargetCreateWarned = false;
+    m_userTextureSamplerWarned.fill(false);
+    m_transparentFallbackWarned = false;
     m_depthMultiBufferWarned = false;
+    m_depthScalesWarned = false;
     m_transparentFallbackTexture.reset();
     m_transparentFallbackTextureNeedsUpload = false;
 
@@ -751,7 +836,11 @@ void ShaderNodeRhi::releaseRhiResources()
     m_timeDirty = true;
     m_timeHiDirty = true;
     m_sceneDataDirty = true;
-    m_appFieldsDirty = true;
+    // Gated, like the setters and invalidateUniforms: a profile without the
+    // app-field slots must never see them dirty. See setAppField0.
+    if (m_uboProfile->hasAppFields()) {
+        m_appFieldsDirty = true;
+    }
     m_audioSpectrumDirty = true;
 }
 
@@ -769,14 +858,23 @@ void ShaderNodeRhi::releaseRhiResources()
 // side without the other makes the validator pass sources that fail live.
 void ShaderNodeRhi::bakeBufferShaders()
 {
-    const bool multipass = !m_bufferPath.isEmpty();
+    // The LIST, not its first entry. setBufferShaderPaths strips only TRAILING
+    // empties (an interior one keeps its slot so bufferWraps / bufferFilters stay
+    // positionally aligned), so a pack whose FIRST entry is empty leaves
+    // m_bufferPath empty while m_bufferPaths still has several entries. Deriving
+    // `multipass` from m_bufferPath then skipped this bake and both prepare()
+    // gates while multiBufferMode stayed true, so ensurePipeline took the multi
+    // branch and rendered against all-dummy channels with nothing logged. Gating
+    // on the list makes a leading empty behave like an interior one: the bake
+    // runs, the per-pass load fails on the empty path, and it fails closed with a
+    // diagnostic naming the pass.
+    const bool multipass = !m_bufferPaths.isEmpty();
     const bool multiBufferMode = m_bufferPaths.size() > 1;
 
     if (multipass && multiBufferMode && m_multiBufferShaderDirty) {
         m_multiBufferShaderDirty = false;
         m_multiBufferShadersReady = false;
         for (int i = 0; i < kMaxBufferPasses; ++i) {
-            m_multiBufferFragmentShaderSources[i].clear();
             m_multiBufferFragmentShaders[i] = QShader();
         }
         bool allOk = true;
@@ -787,11 +885,15 @@ void ShaderNodeRhi::bakeBufferShaders()
             if (src.isEmpty()) {
                 // loadAndExpand already returns empty on missing/unreadable;
                 // no separate exists() check needed (and the prior check was
-                // itself a TOCTOU race).
+                // itself a TOCTOU race). It DOES fill `err`, which this arm used
+                // to discard, leaving the pass that failed and the reason it
+                // failed nowhere at all — the only survivor was a later message
+                // blaming compilation for what was a load.
+                qCWarning(lcShaderNode) << "Buffer pass" << i << "load failed, path=" << path
+                                        << "error=" << (err.isEmpty() ? QStringLiteral("(no detail)") : err);
                 allOk = false;
                 break;
             }
-            m_multiBufferFragmentShaderSources[i] = src;
             // Buffer-pass shaders are compiled directly via ShaderCompiler::compile
             // and do NOT participate in the filename bake cache (which is keyed
             // off the main vertex+fragment pair). Tracking per-pass mtimes
@@ -818,9 +920,14 @@ void ShaderNodeRhi::bakeBufferShaders()
         } else {
             if (++m_multiBufferShaderRetries < 3) {
                 m_multiBufferShaderDirty = true;
+                // Ask for the frame that performs the retry. Re-arming the flag
+                // alone schedules nothing, so a pack with no per-frame input got
+                // exactly one retry and then sat blank until something unrelated
+                // repainted it.
+                requestAnotherFrame();
             } else {
-                qCWarning(lcShaderNode)
-                    << "Multi-buffer shader compilation failed after 3 attempts; giving up until shader path changes";
+                qCWarning(lcShaderNode) << "Multi-buffer shader load or compilation failed after 3 attempts; "
+                                           "giving up until shader path changes";
             }
         }
     }
@@ -842,6 +949,7 @@ void ShaderNodeRhi::bakeBufferShaders()
                                         << "error=" << (err.isEmpty() ? QStringLiteral("(no detail)") : err);
                 if (++m_bufferShaderRetries < 3) {
                     m_bufferShaderDirty = true;
+                    requestAnotherFrame(); // see the multi-buffer arm above
                 } else {
                     qCWarning(lcShaderNode)
                         << "Buffer shader load failed after 3 attempts; giving up until shader path changes";
@@ -861,7 +969,14 @@ void ShaderNodeRhi::bakeBufferShaders()
                 qCWarning(lcShaderNode) << "Buffer shader: compile failed, path=" << m_bufferPath
                                         << "error=" << result.error;
                 if (++m_bufferShaderRetries < 3) {
+                    // Drop the cached source so the retry RE-READS the file. Left
+                    // in place it recompiled the identical bytes and failed the
+                    // identical way, which made the three attempts one attempt
+                    // repeated: the only thing that can have changed between them
+                    // is the file on disk.
+                    m_bufferFragmentShaderSource.clear();
                     m_bufferShaderDirty = true;
+                    requestAnotherFrame(); // see the multi-buffer arm above
                 } else {
                     qCWarning(lcShaderNode)
                         << "Buffer shader compilation failed after 3 attempts; giving up until shader path changes";

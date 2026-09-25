@@ -1205,6 +1205,12 @@ public:
         return m_compositorBridge.get();
     }
 
+    /// Neutralise a decorated window's present shader for one OUT-OF-BAND draw when
+    /// its composite does not exist, and hand back the action that restores it.
+    /// Empty when there is nothing to do. Defined in surface_gating.cpp, which
+    /// carries the reasoning and the rest of the "a fold may not have run" logic.
+    std::function<void()> neutralisePresentForOutOfBandDraw(KWin::EffectWindow* w);
+
     /// Clear the EDID-based screen ID cache (call on screen add/remove/reconfigure)
     void clearScreenIdCache()
     {
@@ -1597,16 +1603,15 @@ private:
     /// must be the EXACT window, never a fuzzy same-app sibling.
     ///
     /// A few other sites erase m_surfaceMultipass directly, and each is deliberate:
-    ///   - lifecycle_wiring.cpp's surface-pack hot-reload clears the WHOLE map: every compiled
-    ///     pack is about to be recompiled (its PRESET sibling invalidates the fold flags
-    ///     instead, so a corpse keeps the frozen frame its close leg needs);
     ///   - lifecycle_wiring.cpp's windowDeleted backstop, which runs after the window is gone
     ///     and there is nothing left to animate;
     ///   - surface_capture.cpp's ensureSurfaceTargets, which on an allocation failure
     ///     erases the half-built state it just failed to allocate and returns false;
     ///     its caller abandons the fold immediately, so a transition loses its layer
     ///     for one frame rather than sampling a freed texture.
-    /// Nothing else may.
+    /// Nothing else may. The per-entry loops that walk m_surfaceMultipass on a settings
+    /// or registry change INVALIDATE and erase nothing, for the reason their own sites
+    /// give: a corpse's entry is the frame its close leg needs. No count, it drifts.
     void releaseSurfaceState(const QString& windowId, KWin::EffectWindow* target);
 
     /// The EXACT window a decoration belongs to: an exact-id live match, else the frozen
@@ -1756,18 +1761,16 @@ private:
                                               const QList<KWin::EffectWindow*>& windows,
                                               const std::function<void(KWin::EffectWindow*)>& afterWindow = {});
 
-    /// How densely the backdrop must be captured for @p deco's chain: 0.0 when no
-    /// compiled pack reads the backdrop, 1.0 when a MAIN pass samples it sharp,
-    /// otherwise the largest bufferScale among the buffer passes that link it (a
-    /// blur pyramid reads through normalized uvs, so capturing past its density
-    /// stores texels the samplers stride over; max rather than min, because a
-    /// chain with two blur packs must satisfy the denser reader).
+    /// How densely the backdrop must be captured for @p deco's chain. Full density when
+    /// a MAIN pass SAMPLES it, else twice the largest SAMPLING buffer pass's NOMINAL
+    /// bufferScale capped at 1.0. SAMPLES not links, TWICE not equal and NOMINAL not
+    /// multiplied: all three reasons are at the call site.
     ///
-    /// Resolves through the SAME lazy compile the fold uses, so the gate and the
-    /// fold agree within one frame — needsBackdrop is metadata and over-reports
-    /// when the linker dropped every backdrop uniform. Defined in
-    /// surface_capture.cpp, beside the rest of the fold's input side.
-    qreal chainBackdropScale(const WindowDecoration& deco, const QString& decoWindowId, KWin::EffectWindow* w);
+    /// Resolves through the SAME lazy compile the fold uses, so the gate and the fold
+    /// agree within one frame — needsBackdrop is metadata and over-reports when the
+    /// linker dropped every backdrop uniform. Defined in surface_capture.cpp.
+    BackdropCapture chainBackdropScale(const WindowDecoration& deco, const QString& decoWindowId,
+                                       KWin::EffectWindow* w);
 
     /// Capture the raw window surface for the fold to read as uTexture0. The single
     /// most expensive step of the fold — it re-enters KWin's whole draw chain — and the
@@ -1835,14 +1838,9 @@ private:
     /// follows it (scaled into the rest-rect-sized canvas) so a frost/glass
     /// pane shows the scene behind the moving quad instead of behind the
     /// resting rect. Invalid = capture at the live geometry.
-    /// backdropScale: the capture RESOLUTION relative to the composite
-    /// canvas, from chainBackdropScale in paintWindow. 1.0 when some pack's
-    /// main pass samples the backdrop sharp; the largest linked bufferScale
-    /// when only buffer passes read it — a blur pyramid samples the capture
-    /// at bufferScale resolution through normalized uvs, so texels past that
-    /// density were captured, held (a full-canvas RGBA8 per window) and
-    /// blitted every frame only to be skipped over by the sampler. The
-    /// texture stays canvas-ALIGNED (same padded rect, same normalized
+    /// backdropScale: the capture RESOLUTION relative to the composite canvas, from
+    /// chainBackdropScale in paintWindow, which is half density for the builtin
+    /// pyramid. The texture stays canvas-ALIGNED (same padded rect, same normalized
     /// backdropRect space) at reduced density; only the blit's destination
     /// arithmetic scales.
     /// After the blits the texture's alpha is stamped to 1 across its whole
@@ -1892,11 +1890,11 @@ private:
     /// registry hot-reload (effectsChanged) so a fixed pack that breaks again
     /// warns again.
     bool m_opacityTintFallbackWarned = false;
-    /// Once-latched journal warning for a backdrop texture or framebuffer
-    /// that failed to allocate (captureWindowBackdrop). The capture retries
-    /// every paint and the pane is absent meanwhile, so an unlatched
-    /// warning would spam at vsync rate. Never reset: an allocation that
-    /// fails is a VRAM state, not a pack state, and the first line says it.
+    /// Once-latched journal warning for a backdrop texture or framebuffer that
+    /// failed to allocate (captureWindowBackdrop). The capture retries every
+    /// paint, so an unlatched warning would spam at vsync rate. Re-armed at every
+    /// compile-cache clear, like its two neighbours: session-permanent meant one
+    /// transient failure silenced every later one.
     bool m_backdropAllocWarned = false;
 
     /// Reusable staging buffer for updateShellContentRect's glReadPixels — the
@@ -2056,19 +2054,21 @@ private:
     /// param values, the main-pass iChannel locations, and the multipass buffer
     /// passes for that one pack). Populated on first use by compiledPack();
     /// cleared wholesale on a SurfaceShaderRegistry hot-reload (effectsChanged)
-    /// and on teardown. A window's render path looks up its resolved base pack id
-    /// (WindowDecoration::basePackId) here.
+    /// and on teardown. A window's render path looks up EVERY pack in its chain
+    /// here, not a base pack (WindowDecoration::basePackId has no render reader).
     std::unordered_map<QString, CompiledSurfacePack> m_compiledPacks;
 
-    /// Per-pack CLAMPED bufferScale (clampedBufferScale() — the user's global
-    /// multiplier already folded in), cached off the registry's by-value
-    /// SurfaceShaderEffect lookup for the per-frame backdrop-density resolve
-    /// (chainBackdropScale in surface_capture.cpp). Metadata only — the
-    /// linked-uniform verdicts are compile state and deliberately NOT cached
-    /// here (see that lambda's comment for the two bugs a raw probe caused).
-    /// Cleared wherever m_compiledPacks clears (a registry hot-reload can
-    /// change the metadata too) AND when m_decorationBlurScaleMultiplier
-    /// changes, since the cached product bakes the multiplier in.
+    /// Per-pack backdrop capture density: the DENSEST backdrop-SAMPLING buffer pass's
+    /// nominal `bufferScale`, doubled and capped at kMaxBufferScale. Half density for
+    /// the seven bundled chain packs, which declare bufferScales[0] 0.25, not the
+    /// pack-wide `bufferScale` those leave at 1.0. Folds the pack's LINKAGE too: a
+    /// pass linking the gate or rect without the sampler contributes
+    /// BackdropCapture::kGateOnlyDensity, and a pack linking nothing caches a real
+    /// 0.0. Hence invalidated by every m_compiledPacks clear, whose count is not
+    /// quoted because the set grows. Multiplier-INDEPENDENT, deliberately: the tier
+    /// moves the buffer TARGETS, where its cost lives, and must not move the capture,
+    /// because the pyramid's first pass steps in fixed canvas px. Cached off the
+    /// registry's by-value lookup, for chainBackdropScale (surface_capture.cpp).
     std::unordered_map<QString, qreal> m_packBufferScaleCache;
 
     /// Has ANY compiled pack ever declared iMouse in the current compile generation?
@@ -3285,8 +3285,8 @@ private:
     /// group-mates above, this one shrinks (or, for a pack that declares less
     /// than full density, raises) the per-frame blur work itself. Applied
     /// through clampedBufferScale(), the single chokepoint both buffer-target
-    /// sizing (surface_capture.cpp) and the per-frame backdrop-density resolve
-    /// (paint_pipeline.cpp) go through, so capture density and sampler density
+    /// sizing and the per-frame backdrop-density resolve go through (both in
+    /// surface_capture.cpp), so capture density and sampler density
     /// keep agreeing by construction. Seeded from the shared SSOT the daemon's
     /// schema also clamps from, until the daemon pushes the real value.
     qreal m_decorationBlurScaleMultiplier = PhosphorCompositor::DecorationDefaults::BlurScaleMultiplier;
@@ -3303,11 +3303,11 @@ private:
 
     // Screen change debouncing and reapply handled by ScreenChangeHandler
 
-    /// The one clamp every consumer of a pack's metadata bufferScale applies:
-    /// the user's global multiplier folded in, then bounded into the band the
-    /// buffer-target allocator accepts. m_packBufferScaleCache stores THIS
-    /// value, so the cache must clear whenever the multiplier changes (the
-    /// daemon_settings.cpp loader does).
+    /// The one clamp every consumer of a pack's metadata bufferScale applies WHEN
+    /// SIZING A BUFFER TARGET: the user's global multiplier folded in, then bounded
+    /// into the band the allocator accepts. The backdrop CAPTURE deliberately does
+    /// not come through here and sizes off the nominal scale, because the pyramid's
+    /// first pass steps in fixed canvas px. See m_packBufferScaleCache.
     qreal clampedBufferScale(qreal metadataScale) const
     {
         return qBound(PhosphorSurfaceShaders::SurfaceShaderEffect::kMinBufferScale,

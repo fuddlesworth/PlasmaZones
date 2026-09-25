@@ -18,7 +18,6 @@
 #include <opengl/glshader.h>
 #include <opengl/glshadermanager.h>
 
-#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QLoggingCategory>
@@ -62,13 +61,11 @@ DesktopTransitionManager::CompiledDesktopShader* DesktopTransitionManager::compi
         return &compiled;
     }
 
-    QStringList animIncludePaths;
-    for (const QString& sp : mgr.shaderRegistry().searchPaths()) {
-        const QString sharedDir = sp + QStringLiteral("/shared");
-        if (QDir(sharedDir).exists()) {
-            animIncludePaths.append(sharedDir);
-        }
-    }
+    // Highest priority first, and through the registry's own helper so this
+    // runtime resolves a shared header from the same tree the daemon does.
+    // searchPaths() is registration order, which is the reverse of what include
+    // resolution wants; sharedIncludePaths() is the one place that is handled.
+    const QStringList animIncludePaths = mgr.shaderRegistry().sharedIncludePaths();
 
     // Reuse the exact per-window assembly: entry-point scaffold -> include
     // expansion -> named-param preamble -> KWin default-block define.

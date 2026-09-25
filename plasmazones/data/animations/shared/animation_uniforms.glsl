@@ -33,14 +33,15 @@
 // through (`vTexCoord = texCoord`); the kwin path receives texCoord
 // from KWin's Y-up offscreen FBO and flips it
 // (`vTexCoord = vec2(texCoord.x, 1.0 - texCoord.y)`). `gl_Position`
-// also differs: the kwin path multiplies `position` by
-// `modelViewProjectionMatrix`, the daemon emits clip-space directly.
+// also differs only in WHICH matrix: the kwin path multiplies `position` by
+// `modelViewProjectionMatrix`, the daemon by `qt_Matrix`. Neither emits
+// clip-space directly.
 // See `kKwinDefaultVertexSource` in
 // `kwin-effect/plasmazoneseffect/shader_textures.cpp` and
 // `kDefaultVertexShaderSource` in
 // `libs/phosphor-rendering/src/shadereffect.cpp`. The desktop-switch pass
-// is a THIRD source of the same invariant: `kDesktopQuadVertexSource`
-// (`kwin-effect/transitions/desktoptransitionshader.cpp`) passes texCoord
+// is a THIRD source of the same invariant: `TransitionPass::kOutputQuadVertexSource`
+// (`kwin-effect/transitions/transitionpasspure.h`) passes texCoord
 // through unflipped and gets Y-down from the blend quad's own vertex
 // texcoords instead.
 //
@@ -97,9 +98,23 @@ uniform vec4 customParams[8];
 uniform vec4 customColors[16];
 // `iChannelResolution[4]` from the UBO branch is intentionally absent
 // here: the kwin-effect never calls `setUniform` for it (single-pass, no
-// buffer FBOs), and no animation shader references it. Adding a
-// default-block declaration would compile but read garbage at runtime —
-// better to surface the gap as a compile error if a future shader
+// buffer FBOs), and no animation shader references it — which stays true
+// because THIS FAMILY DECLARES NO iChannel SAMPLERS AT ALL, on either
+// branch. The parser and the validator both accept `multipass` on an
+// animation pack, so its buffer passes would run; nothing in the pack could
+// then sample them, and the validator says so rather than leaving it silent.
+// Anyone adding the channel block here needs the sibling headers too, and
+// should note that they disagree on the TYPE: animation, pointer and surface
+// declare `vec4 iChannelResolution[4]` while the overlay header
+// (data/overlays/shared/common.glsl) declares `vec2[4]`. There is no third
+// spelling: phosphor-shaders ships no GLSL at all, and its C++ BaseUniforms
+// mirror declares the vec4 form. The std140 byte layout is identical (a vec2 array
+// pads to 16 bytes per element), so a shared helper must read `.xy` rather
+// than assume either spelling. Adding a
+// default-block declaration would compile and silently read ZERO at runtime
+// (GL zero-initialises default-block uniforms, as this file says at the top
+// and pointer_uniforms.glsl repeats) — better to surface the gap as a
+// compile error if a future shader
 // reaches for it on the kwin path. (The UBO branch keeps the field for
 // std140 layout parity with `PhosphorShaders::BaseUniforms`; see
 // static_asserts in `<PhosphorShaders/BaseUniforms.h>`.)
@@ -112,8 +127,16 @@ uniform vec4 customColors[16];
 // the compile error.
 // `iTextureResolution[4]` IS populated on the kwin path: the per-effect
 // uTexture<N> setter loop in `paint_shader_window.cpp` writes the
-// pixel size of each user texture into this uniform array before
-// `drawWindow`. Listed here distinct from the "absent on kwin" set above
+// pixel size of each texture into this uniform array before `drawWindow`.
+//
+// INDEX ORIGIN, the trap: `iTextureResolution[i].xy` is the pixel size of
+// `uTexture<i>`, so index 0 is the WINDOW's own content and a metadata slot N,
+// which feeds `uTexture<N+1>`, has its size at index N+1. The sampler names are
+// one-based over the metadata list and this array is zero-based over the texture
+// slots. Read index 0 expecting your first declared texture and you get the
+// window instead. The surface family carries the identical convention.
+//
+// Listed here distinct from the "absent on kwin" set above
 // (iChannelResolution, iAudioSpectrumSize) so a future reader doesn't
 // mistake the active declaration for an undocumented "compile-but-zero"
 // hazard.
@@ -122,9 +145,11 @@ uniform float iTimeHi;
 // 1 when the runtime is driving this leg in the "reverse" direction
 // (window.close / going-to-minimized / unmaximize on the kwin path,
 // hide leg on the daemon path); 0 for the forward direction. Symmetric
-// shaders ignore this — the runtime ALSO flips iTime so they auto-mirror.
-// Asymmetric shaders (matrix's directional rain + open-vs-close window
-// reveal) branch on it. See UBO branch below for the full contract.
+// shaders ignore this — the runtime ALSO flips iTime so they auto-mirror,
+// which is why NO bundled pack branches on it today: every mention in
+// data/animations is a comment recording that no branch was needed. It is
+// here for an asymmetric pack that cannot auto-mirror. See UBO branch below
+// for the full contract.
 uniform int iIsReversed;
 // .xy = surface origin in logical-screen pixels; .zw = (screenW, screenH).
 // Vertex / fragment shaders that need to know where the surface sits on
@@ -156,16 +181,31 @@ uniform vec2 iAnchorSize;
 // consumes it.
 uniform vec2 iAnchorPosInFbo;
 
-// Window's effective rule-resolved opacity in [0, 1] — compositor path
-// only. A `SetOpacity` rule must dim the window for the whole
-// transition, but the custom transition shader is compiled without the
-// `Modulate` trait, so KWin never applies `data.opacity()` to it.
-// `surfaceColor()` below multiplies the
-// premultiplied surface sample by this uniform so the dim holds across
-// the animation instead of snapping in only after it ends. The
-// kwin-effect pushes 1.0 for windows with no matching rule, so the
-// multiply is a no-op in the common case. Daemon-only animations have no
-// window-rule opacity, so the UBO branch omits this field entirely.
+// The window's effective opacity in [0, 1] — compositor path only. A dim must
+// hold for the whole transition, but the custom transition shader is compiled
+// without the `Modulate` trait, so KWin never applies `data.opacity()` to it.
+// `surfaceColor()` below multiplies the premultiplied surface sample by this
+// uniform so the dim holds across the animation instead of snapping in only
+// after it ends.
+//
+// TWO CORRECTIONS to what this used to say. It is not rule-only: the value is
+// the window's RESOLVED opacity, which is the config default with a
+// `SetOpacity` rule winning where one matches, so a config-only dim reaches
+// here with no rule loaded at all.
+//
+// And "1.0 for windows with no matching rule" understates how often it is 1.0.
+// The effect pushes a non-1.0 value ONLY on the bare-uTexture0 fallback of an
+// opacity-baking chain. Everywhere else it is 1.0 outright: an undecorated
+// window, a custom chain (which never honours the setting), and — the case
+// worth naming — a window whose chain DID composite a surface layer, because
+// the plain opacity-tint layer already folded the opacity into its pack param
+// and the composite the transition samples carries the dim baked in. Applying
+// it again here would dim twice.
+//
+// Daemon-only animations have no window-rule opacity, so the UBO branch
+// supplies it as a `#define` of 1.0 rather than a block member: a pack that
+// reads it still compiles on both branches, which is the parity promise this
+// header makes.
 uniform float iWindowOpacity;
 
 // Card's UV sub-rect within `uTexture0`, as (x, y, width, height) in
@@ -185,8 +225,9 @@ uniform float iWindowOpacity;
 // `cached->iAnchorRectInTextureLoc` setUniform site writes the value
 // computed by `ShaderInternal::computeTextureSubRect(anchorGeo,
 // expandedGeo)` for surface-extent legs; anchor-extent legs carry the
-// (0, 0, 1, 1) identity. Daemon:
-// `SurfaceAnimator::syncShaderGeometryNow` pushes it through
+// (0, 0, 1, 1) identity. Daemon: the free function
+// `syncShaderGeometryNow` (surfaceanimator_p.h, not a SurfaceAnimator
+// member) pushes it through
 // `AnimationUniformExtension`. Both stamp the value before
 // the first painted frame, so a fragment never sees the GL default
 // `vec4(0)` — `surfaceColor` would otherwise sample the corner texel
@@ -207,7 +248,7 @@ uniform sampler2D uTexture0;
 // User-declared textures — see AnimationShaderEffect::TextureSlot in
 // metadata.json or the runtime `uTexture<N>` parameter override. The
 // kwin-effect binds these to TEXTURE1..3 before drawWindow; the
-// daemon binds them to SRB bindings 8..10 via
+// daemon binds them to SRB bindings 12..14 via
 // ShaderNodeRhi::setUserTexture. Default `vec4(0)` (transparent black)
 // when neither declaration nor override resolves to a loadable file.
 uniform sampler2D uTexture1;
@@ -266,7 +307,7 @@ uniform vec4 iLayerRectInTexture;
 // element stride of 16 bytes in std140 (rule 4: rounded up to vec4
 // alignment). That makes `int _pad0[2]` 32 bytes — NOT 8 — which would
 // shove the next field 24 bytes past where the C `BaseUniforms` upload
-// places it. Sibling daemon `data/overlays/common.glsl` solves this by
+// places it. Sibling daemon `data/overlays/shared/common.glsl` solves this by
 // declaring no explicit padding and relying on std140's natural
 // vec4-alignment of the next array to bridge the gap. Match that
 // pattern here: after `int iFlipBufferY` (4 bytes at offset 580,
@@ -274,7 +315,9 @@ uniform vec4 iLayerRectInTexture;
 // auto-aligned to offset 592 by std140 (rule 4 → 16-byte boundary),
 // implicitly filling the same 8 bytes the C struct's
 // `_pad_after_audioSpectrum[2]` covers. Likewise `iSurfaceScreenPos`
-// below is auto-aligned to a 16-byte boundary (rule 2: vec2 at 672),
+// below is auto-aligned to a 16-byte boundary (rule 3, the vec4 rule — the
+// field IS a vec4, and std140's rule 2 is the 8-byte vec2 case, which would
+// not have moved 664 to 672),
 // bridging the 8 bytes C's `_pad_after_iIsReversed[2]` owns after
 // `iIsReversed` at 660 and landing the base block at 672 bytes. The
 // iSurfaceScreenPos .. iMoveMesh tail then extends the AnimationUniforms
@@ -303,7 +346,11 @@ layout(std140, binding = 0) uniform AnimationUniforms {
     int iAudioSpectrumSize;      // offset 576 — audio spectrum bin count
     int iFlipBufferY;            // offset 580 — always 1 (Y-flip); daemon-only
     // implicit 8-byte std140 padding here — see layout note above.
-    vec4 iTextureResolution[4];  // offset 592 (64 bytes)  — user texture sizes (bindings 7-10)
+    vec4 iTextureResolution[4];  // offset 592 (64 bytes)  — texture sizes for bindings
+                                 //              11-14, i.e. index 0 is uTexture0 (the
+                                 //              window content) and a metadata slot N is
+                                 //              at index N+1. See the index-origin note
+                                 //              above the declaration.
     float iTimeHi;               // offset 656 — wrap-offset counterpart of iTime;
                                  //              always 0 on the animation path. Do NOT
                                  //              read in animation shaders — exists only
@@ -390,7 +437,7 @@ layout(std140, binding = 0) uniform AnimationUniforms {
                                  //              content snapshot into
                                  //              uOldWindow (uTexture3); the
                                  //              kwin branch declares its
-                                 //              default-block twin below.
+                                 //              default-block twin ABOVE.
     vec4 iIconRect;              // offset 816 — minimize target (x/y/w/h in
                                  //              iSurfaceScreenPos space);
                                  //              all-zero = no icon target.
@@ -400,7 +447,7 @@ layout(std140, binding = 0) uniform AnimationUniforms {
     vec2 iMoveTrail[16];         // offset 832 (256 bytes; std140 pads each
                                  //              vec2 element to 16). Same
                                  //              contract as the kwin twin
-                                 //              below: offsets of past
+                                 //              ABOVE: offsets of past
                                  //              origins vs the current one,
                                  //              newest first, ~15 ms apart.
     vec2 iMoveMesh[16];          // offset 1088 (256 bytes) — wobble lattice
@@ -418,6 +465,16 @@ layout(std140, binding = 0) uniform AnimationUniforms {
 #define iWindowOpacity 1.0
 #define iHasSurfaceLayer 0
 #define iLayerRectInTexture vec4(0.0, 0.0, 1.0, 1.0)
+// The layer SAMPLER needs a stand-in too, and it is the one name on the kwin
+// branch that had none. `#define iHasSurfaceLayer 0` does not save a pack that
+// writes the idiomatic guard, because a #define is a constant rather than a
+// compile-time branch: the body of `if (iHasSurfaceLayer != 0) { texture(
+// uSurfaceLayer, uv); }` is still compiled here, and an undeclared sampler
+// inside it fails the bake on the daemon, the preview and the SPIR-V path
+// while compiling fine on the compositor. Aliasing it is also what it MEANS:
+// with no layer stack the layered surface IS the unlayered one, which is the
+// same aliasing old_content.glsl does for uOldWindow.
+#define uSurfaceLayer uTexture0
 // The move-class history arrays (iMoveTrail / iMoveMesh) are REAL block
 // members on this branch these days — see the transition tail above. A
 // host with no drag to report leaves them zero, which reads as "no motion
@@ -429,15 +486,15 @@ layout(std140, binding = 0) uniform AnimationUniforms {
 #define iMoveOffset vec2(0.0)
 #define iMoveVelocity2 vec2(0.0)
 
-layout(binding = 7) uniform sampler2D uTexture0;
+layout(binding = 11) uniform sampler2D uTexture0;
 // User-declared textures — see AnimationShaderEffect::TextureSlot or
-// the runtime `uTexture<N>` parameter override. Bindings 8..10 match
+// the runtime `uTexture<N>` parameter override. Bindings 12..14 match
 // the overlay shader convention (data/overlays/shared/textures.glsl)
 // so animation and overlay shaders speak the same sampler-name and
 // binding-point dialect.
-layout(binding = 8) uniform sampler2D uTexture1;
-layout(binding = 9) uniform sampler2D uTexture2;
-layout(binding = 10) uniform sampler2D uTexture3;
+layout(binding = 12) uniform sampler2D uTexture1;
+layout(binding = 13) uniform sampler2D uTexture2;
+layout(binding = 14) uniform sampler2D uTexture3;
 
 #endif // PLASMAZONES_KWIN
 
@@ -468,15 +525,18 @@ vec4 surfaceColor(vec2 uv) {
     vec2 t = iAnchorRectInTexture.xy + uv * iAnchorRectInTexture.zw;
 #ifdef PLASMAZONES_KWIN
     // KWin's FBO is bottom-origin (Y-up) — flip last. Then scale by the
-    // window-rule opacity: uTexture0 is premultiplied, so multiplying the
+    // window's resolved opacity: uTexture0 is premultiplied, so multiplying the
     // whole sample by the [0, 1] `iWindowOpacity` is the correct
-    // premultiplied-alpha dim. This is what makes a `SetOpacity` rule hold
-    // throughout a transition (with no `Modulate` trait the shader can't see
-    // `data.opacity()`); the effect feeds 1.0 when no rule matches, so the
-    // common case is unchanged. Every window-content shader reads the
+    // premultiplied-alpha dim. This is what makes a dim hold throughout a
+    // transition (with no `Modulate` trait the shader can't see
+    // `data.opacity()`). Every window-content shader reads the
     // surface through this helper (directly or via bmw_compat's
     // `getInputColor`), so the dim propagates uniformly without per-shader
     // edits.
+    //
+    // The uniform is 1.0 in every case but one, so the multiply is a no-op
+    // almost always — see its declaration for which case, and for why a window
+    // that HAS a live SetOpacity rule is usually one of the 1.0 ones.
     vec2 fc = vec2(t.x, 1.0 - t.y);
     // Surface-layer redirect: when the window has an active surface-layer stack
     // (border / rounded corners, ...), sample the pre-composited layered surface
@@ -600,7 +660,17 @@ float legProgress() {
 
 // ─── Geometry-leg helpers ──────────────────────────────────────────────
 // A geometry morph (window.movement.*) hands the vertex stage the leg's
-// endpoints as `iFromRect` / `iToRect`. Packs need two things from them:
+// endpoints as `iFromRect` / `iToRect`.
+//
+// THE KWIN BRANCH DOES NOT DECLARE THEM and this header does not either: both
+// rects are UBO-branch members of the transition tail, and the compositor
+// pushes them to any shader that DECLARES them. So a pack reading either rect
+// on the kwin path must declare them itself, inside its own
+// `#ifdef PLASMAZONES_KWIN`, which is what all six packs that use them do.
+// The helpers below take the rects as arguments for that reason rather than
+// reading them.
+//
+// Packs need two things from these rects:
 // which way the window actually went, and how much of the leg was motion
 // at all.
 //
@@ -642,7 +712,7 @@ vec2 legTranslation(vec4 fromRect, vec4 toRect) {
 // clean uniform morph on a stretch and keep their full look on a real slide.
 //
 // Unlike legDirection this has no pixel deadband, so a sub-pixel rigid
-// residue still reads as travel and can return a large share off motion
+// residue still reads as travel and can return a large share of motion
 // smaller than legDirection accepts as an axis. Such a leg does not normally
 // play at all.
 float legTravelShare(vec4 fromRect, vec4 toRect) {

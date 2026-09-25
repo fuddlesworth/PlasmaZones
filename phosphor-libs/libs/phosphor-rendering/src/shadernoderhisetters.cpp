@@ -284,7 +284,7 @@ void ShaderNodeRhi::setAppField1(int value)
 
 bool ShaderNodeRhi::setExtraBinding(int binding, QRhiTexture* texture, QRhiSampler* sampler)
 {
-    // The allowed range (binding 1 plus 13..kMaxConsumerBinding) is defined
+    // The allowed range (binding 1 plus 17..kMaxConsumerBinding) is defined
     // as a public helper in ShaderNodeRhi.h (isConsumerBinding) so consumers
     // can query the policy without duplicating the range table.
     if (!isConsumerBinding(binding)) {
@@ -303,7 +303,6 @@ bool ShaderNodeRhi::setExtraBinding(int binding, QRhiTexture* texture, QRhiSampl
         return true;
     }
     m_extraBindings[binding] = ExtraBinding{texture, sampler};
-    m_extraBindingsDirty = true;
     resetAllBindingsAndPipelines();
     return true;
 }
@@ -315,7 +314,6 @@ bool ShaderNodeRhi::removeExtraBinding(int binding)
         return false;
     }
     m_extraBindings.erase(it);
-    m_extraBindingsDirty = true;
     resetAllBindingsAndPipelines();
     return true;
 }
@@ -384,10 +382,18 @@ void ShaderNodeRhi::setUserTextureWrap(int slot, const QString& wrap)
     resetAllBindingsAndPipelines();
     // Schedule the frame that rebuilds them. Dropping the sampler and the
     // bindings changes what the next paint would produce but does not by
-    // itself ask for a next paint, so on a static pack (a plain border, a
-    // non-animated glass config) the new wrap mode would not appear until some
-    // unrelated repaint happened to come along. setUseWallpaper and
-    // setUseDepthBuffer mark dirty for exactly this reason.
+    // itself ask for a next paint.
+    //
+    // For every IN-TREE host this is a harmless duplicate, not a fix: all
+    // three updatePaintNode implementations (ShaderEffect, SurfaceShaderItem,
+    // ZoneShaderItem) end with an unconditional markDirty(DirtyMaterial), and
+    // ShaderNodeRhi's threading contract confines these setters to the sync
+    // phase, so every one of them already runs inside a sync that dirties at
+    // the end, and the item-side setters call update() besides. It is kept
+    // because this is an LGPL library and the only thing protecting an
+    // out-of-tree host that forgets that trailing markDirty. The lambda that
+    // fires from QSGTextureProvider::textureChanged is the genuine case, since
+    // that one arrives outside sync.
     markDirty(QSGNode::DirtyMaterial);
 }
 
@@ -407,13 +413,14 @@ void ShaderNodeRhi::setSourceTextureProvider(QSGTextureProvider* provider)
     // thread is the stock QSGRhiShaderEffectNode pattern. Disconnected here
     // on swap and in the destructor; provider destruction auto-disconnects.
     QObject::disconnect(m_sourceTextureChangedConn);
+    const bool providerCleared = m_sourceTextureProvider != nullptr && provider == nullptr;
     m_sourceTextureProvider = provider;
     if (provider) {
         m_sourceTextureChangedConn = QObject::connect(provider, &QSGTextureProvider::textureChanged, [this]() {
             markDirty(QSGNode::DirtyMaterial);
         });
     }
-    // Clear the cached binding-7 texture pointer so the SRB build sees
+    // Clear the cached binding-11 texture pointer so the SRB build sees
     // a "different texture" on the next prepare() and rebuilds bindings.
     // The asymmetric "only on provider→null" reset that lived here briefly
     // missed the null→provider-A→null→provider-B sequence: B's m_sourceSampler
@@ -423,6 +430,30 @@ void ShaderNodeRhi::setSourceTextureProvider(QSGTextureProvider* provider)
     // correct; the double-rebuild concern is one frame of extra pipeline work.
     m_lastSourceRhiTexture = nullptr;
     resetAllBindingsAndPipelines();
+    // NO DIRTY FLAGS ON THE WAY IN, deliberately, and it is worth saying why because
+    // raising them for every call looks like the obvious fix and is worse than doing
+    // nothing. iTextureResolution[0] comes from m_lastSourceRhiTexture->pixelSize(),
+    // which the line above just nulled, and uploadDirtyTextures runs syncBaseUniforms
+    // BEFORE it resolves the new provider's texture. So flags raised for a
+    // null->provider or provider->provider call make the next upload publish the
+    // (1, 1) fallback rather than the new size, where leaving them alone keeps the
+    // previous size until the real one is known. That re-arm belongs where the value
+    // becomes knowable, and it is there, in uploadDirtyTextures' identity-change
+    // branch.
+    //
+    // ON THE WAY OUT is the opposite case and does belong here. That identity-change
+    // branch sits inside `if (m_sourceTextureProvider)`, so it never runs once the
+    // provider is gone: appendUserTextureBindings falls back to the QImage slot while
+    // iTextureResolution[0] goes on reporting the departed provider's size, which is
+    // the same trailing-size defect in the other direction and is permanent on a
+    // non-animated stage. Here the correct value IS knowable, because it is whatever
+    // the QImage loop writes. Both shadereffect.cpp and surfaceshaderitem.cpp push a
+    // null provider every paint once sourceItem is gone, so this is a real path.
+    if (providerCleared) {
+        m_uniformsDirty = true;
+        m_sceneDataDirty = true;
+        requestAnotherFrame();
+    }
 }
 
 void ShaderNodeRhi::setWallpaperTexture(const QImage& image)
@@ -492,6 +523,23 @@ void ShaderNodeRhi::setUseDepthBuffer(bool use)
 // Buffer Shader Path / Feedback / Scale / Wrap / Filter
 // ============================================================================
 
+void ShaderNodeRhi::invalidateBufferShaders()
+{
+    m_bufferShaderDirty = true;
+    m_bufferShaderReady = false;
+    m_bufferShaderRetries = 0;
+    m_bufferFragmentShaderSource.clear();
+    m_multiBufferShadersReady = false;
+    m_multiBufferShaderDirty = true;
+    m_multiBufferShaderRetries = 0;
+    for (int i = 0; i < kMaxBufferPasses; ++i) {
+        m_multiBufferFragmentShaders[i] = QShader();
+    }
+    // The retry counters go back to zero with the rest. A pass that exhausted its
+    // budget against a source that has since been fixed on disk has to get the
+    // budget back, or the reload it was the point of cannot recover it.
+}
+
 void ShaderNodeRhi::setBufferShaderPath(const QString& path)
 {
     setBufferShaderPaths(path.isEmpty() ? QStringList() : QStringList{path});
@@ -500,7 +548,7 @@ void ShaderNodeRhi::setBufferShaderPath(const QString& path)
 void ShaderNodeRhi::setBufferShaderPaths(const QStringList& paths)
 {
     QStringList trimmed;
-    for (int i = 0; i < qMin(paths.size(), kMaxBufferPasses); ++i) {
+    for (int i = 0; i < qMin(paths.size(), static_cast<qsizetype>(kMaxBufferPasses)); ++i) {
         trimmed.append(paths.at(i));
     }
     // Drop only TRAILING empties (the common pad-to-kMaxBufferPasses case). An
@@ -508,8 +556,11 @@ void ShaderNodeRhi::setBufferShaderPaths(const QStringList& paths)
     // indexed positionally against this list, so compacting an interior gap
     // (the old behaviour) shifted every later buffer onto the wrong wrap and
     // filter — the exact misalignment the metadata parsers keep every entry in
-    // place to prevent. An interior empty is a malformed pack whose bake then
-    // fails-close per slot, which is the right outcome.
+    // place to prevent. An interior empty is a malformed pack, and the bake
+    // then fails CLOSED FOR THE WHOLE CHAIN rather than per slot:
+    // bakeBufferShaders clears allOk and breaks on the first empty source, so
+    // the multi-buffer bake fails, retries once and gives up. That is the
+    // right outcome, and it is a louder one than "per slot" suggested.
     while (!trimmed.isEmpty() && trimmed.constLast().isEmpty()) {
         trimmed.removeLast();
     }
@@ -530,13 +581,15 @@ void ShaderNodeRhi::setBufferShaderPaths(const QStringList& paths)
     m_multiBufferShaderDirty = true;
     m_multiBufferShaderRetries = 0;
     for (int i = 0; i < kMaxBufferPasses; ++i) {
-        m_multiBufferFragmentShaderSources[i].clear();
         m_multiBufferFragmentShaders[i] = QShader();
     }
     // Single-buffer mode is loaded lazily inside bakeBufferShaders() during
     // prepare(); the multi-buffer branch already does so. Loading shader
     // source synchronously from this setter would do disk I/O on whatever
-    // thread called us (typically the GUI thread via updatePaintNode sync),
+    // thread called us (the RENDER thread, during sync: under the threaded
+    // render loop, which is the Wayland default, updatePaintNode runs there
+    // with the GUI thread blocked — see the threading contract at the top of
+    // ShaderNodeRhi.h),
     // and the work is duplicated by bakeBufferShaders' single-path branch
     // anyway. m_bufferShaderDirty=true above is enough to trigger the
     // deferred load on the next prepare().
@@ -574,6 +627,13 @@ void ShaderNodeRhi::setBufferFeedback(bool enable)
     m_bufferSrbB.reset();
     m_srb.reset();
     m_srbB.reset();
+    // The MAIN pipeline goes with the main SRB it was built against, which this
+    // used to leave standing. Not a crash: Qt's contract binds the two at
+    // create() time and does not require the bindings object to outlive the
+    // pipeline. It is dropped for the same reason resetAllBindingsAndPipelines
+    // drops it, so a pipeline never outlives the bindings it names, and a reader
+    // is never left deciding whether this one case is the exception.
+    m_pipeline.reset();
     m_bufferTextureB.reset();
     m_bufferRenderTargetB.reset();
     m_bufferRenderPassDescriptorB.reset();
@@ -588,11 +648,62 @@ void ShaderNodeRhi::setBufferFeedback(bool enable)
 void ShaderNodeRhi::setBufferScale(qreal scale)
 {
     const qreal clamped = qBound(PhosphorShaders::kMinBufferScale, scale, PhosphorShaders::kMaxBufferScale);
+    // Compare the SINGLE value only, never the per-pass slots. This runs before
+    // setBufferScales in the sync order (ShaderEffect::updatePaintNode), and that
+    // call re-diverges the slots this one seeds, so comparing the slots here sees
+    // its own seed undone every frame and reallocates every buffer target twice
+    // per frame for any pack that declares `bufferScales`.
+    // A pack that DROPS its per-pass scales still re-flattens: setBufferScales is
+    // pushed unconditionally with an empty list, and its past-the-end fallback for
+    // every slot is m_bufferScale.
     if (qFuzzyCompare(m_bufferScale, clamped)) {
         return;
     }
     m_bufferScale = clamped;
+    m_bufferScales.fill(clamped);
     resetBufferTargets();
+}
+
+// Shared body for both setBufferScales overloads, templated on how a value is
+// read out of the caller's container. Named distinctively rather than given a
+// generic name because this TU takes part in a unity build.
+template<typename Accessor>
+static bool assignBufferPassScales(std::array<qreal, kMaxBufferPasses>& slots, qreal fallback, qsizetype count,
+                                   Accessor valueAt)
+{
+    bool changed = false;
+    for (int i = 0; i < kMaxBufferPasses; ++i) {
+        const qreal use = i < count
+            ? qBound(PhosphorShaders::kMinBufferScale, valueAt(i), PhosphorShaders::kMaxBufferScale)
+            : fallback;
+        if (!qFuzzyCompare(slots[static_cast<size_t>(i)], use)) {
+            slots[static_cast<size_t>(i)] = use;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+void ShaderNodeRhi::setBufferScales(const QList<qreal>& scales)
+{
+    if (assignBufferPassScales(m_bufferScales, m_bufferScale, scales.size(), [&scales](qsizetype i) {
+            return scales.at(i);
+        })) {
+        resetBufferTargets();
+    }
+}
+
+void ShaderNodeRhi::setBufferScales(const QVariantList& scales)
+{
+    // The item holds its per-pass scales as a QVariantList and pushes them on
+    // EVERY sync. Converting to QList<qreal> at the call site allocated a fresh
+    // list per frame per shader item purely to be read once and discarded, so
+    // read the variants in place instead.
+    if (assignBufferPassScales(m_bufferScales, m_bufferScale, scales.size(), [&scales](qsizetype i) {
+            return scales.at(i).toDouble();
+        })) {
+        resetBufferTargets();
+    }
 }
 
 void ShaderNodeRhi::setHalfFloatBuffers(bool enable)
@@ -607,11 +718,12 @@ void ShaderNodeRhi::setHalfFloatBuffers(bool enable)
     resetBufferTargets();
 }
 
-// Shared teardown for any change that invalidates the buffer-pass targets
-// (size via setBufferScale, texel format via setHalfFloatBuffers): textures,
-// render targets, pass descriptors, the pipelines compiled against them, and
-// every SRB that references a buffer texture. ensureBufferTarget rebuilds
-// lazily on the next frame.
+// Shared teardown for any change that invalidates the buffer-pass targets:
+// size via setBufferScale or setBufferScales, texel format via
+// setHalfFloatBuffers, and the depth attachment via setUseDepthBuffer. Drops
+// textures, render targets, pass descriptors, the pipelines compiled against
+// them, and every SRB that references a buffer texture. ensureBufferTarget
+// rebuilds lazily on the next frame.
 void ShaderNodeRhi::resetBufferTargets()
 {
     m_bufferTexture.reset();
@@ -638,6 +750,13 @@ void ShaderNodeRhi::resetBufferTargets()
         m_multiBufferPipelines[i].reset();
         m_multiBufferSrbs[i].reset();
     }
+    // Every channel this node publishes through iChannelResolution has just been
+    // destroyed, and that value is resolved from the live textures during the UBO
+    // upload, which is gated on m_uniformsDirty. The rebuild in ensureBufferTarget
+    // re-arms these too, but arming them here as well keeps the invariant local to
+    // the teardown rather than resting on the rebuild being reached.
+    m_uniformsDirty = true;
+    m_sceneDataDirty = true;
 }
 
 void ShaderNodeRhi::setBufferWrap(const QString& wrap)
@@ -673,34 +792,62 @@ void ShaderNodeRhi::setBufferWraps(const QStringList& wraps)
     }
 }
 
+// A FILTER FLIP INTO OR OUT OF "mipmap" HAS TO DROP THE TEXTURES, not just the
+// samplers. Mip-ness is a texture FLAG (UsedWithGenerateMips) and a level count,
+// both fixed at creation, and ensureBufferTarget's create gate tests only
+// null-or-size-mismatch. resetAllBindingsAndPipelines touches SRBs and pipelines
+// and nothing else, so on unchanged paths the old single-level texture survived
+// while ensureBufferSampler rebuilt asking for mip filtering: "mipmap" then
+// sampled the base level and behaved as "linear", silently, and the post-pass
+// generateMips was skipped too because it is guarded on the texture's own flag.
+// Gated on mip-ness rather than on any filter change, so a nearest-to-linear flip
+// stays cheap. Reachable through a same-paths metadata edit, which is the
+// live-reload flow; no bundled pack declares "mipmap" today.
+static bool wantsMipmapFilter(const QString& filter)
+{
+    return filter == QLatin1String("mipmap");
+}
+
 void ShaderNodeRhi::setBufferFilter(const QString& filter)
 {
     const QString use = normalizeFilterMode(filter);
     if (m_bufferFilterDefault == use) {
         return;
     }
+    bool mipChanged = false;
     m_bufferFilterDefault = use;
     for (int i = 0; i < kMaxBufferPasses; ++i) {
+        mipChanged = mipChanged || wantsMipmapFilter(m_bufferFilters[i]) != wantsMipmapFilter(use);
         m_bufferFilters[i] = use;
         m_bufferSamplers[i].reset();
     }
-    resetAllBindingsAndPipelines();
+    if (mipChanged) {
+        resetBufferTargets();
+    } else {
+        resetAllBindingsAndPipelines();
+    }
     markDirty(QSGNode::DirtyMaterial);
 }
 
 void ShaderNodeRhi::setBufferFilters(const QStringList& filters)
 {
     bool changed = false;
+    bool mipChanged = false;
     for (int i = 0; i < kMaxBufferPasses; ++i) {
         const QString use = (i < filters.size()) ? normalizeFilterMode(filters.at(i)) : m_bufferFilterDefault;
         if (m_bufferFilters[i] != use) {
+            mipChanged = mipChanged || wantsMipmapFilter(m_bufferFilters[i]) != wantsMipmapFilter(use);
             m_bufferFilters[i] = use;
             m_bufferSamplers[i].reset();
             changed = true;
         }
     }
-    if (changed) {
+    if (mipChanged) {
+        resetBufferTargets();
+    } else if (changed) {
         resetAllBindingsAndPipelines();
+    }
+    if (changed) {
         markDirty(QSGNode::DirtyMaterial);
     }
 }
@@ -718,13 +865,19 @@ bool ShaderNodeRhi::loadVertexShader(const QString& path)
     const qint64 mtime = QFileInfo(path).lastModified().toMSecsSinceEpoch();
     QString err;
     QStringList includedPaths;
-    m_vertexShaderSource = loadAndExpandShaderTracked(path, &includedPaths, &err);
-    if (m_vertexShaderSource.isEmpty()) {
+    // Read into a LOCAL and commit only once it is known good, which is what
+    // loadFragmentShader below deliberately does. Assigning the member first
+    // meant a FAILED load destroyed the previously installed vertex source as a
+    // side effect of failing, so a transient read error left the node with no
+    // vertex stage at all instead of the one it was already running.
+    const QString loaded = loadAndExpandShaderTracked(path, &includedPaths, &err);
+    if (loaded.isEmpty()) {
         m_shaderError = err.startsWith(QStringLiteral("Failed to open:"))
             ? QString(QStringLiteral("Failed to open vertex shader: ") + path)
             : QString(QStringLiteral("Vertex shader include: ") + err);
         return false;
     }
+    m_vertexShaderSource = loaded;
     m_vertexPath = path;
     m_vertexMtime = mtime;
     // Fingerprint now, while the includes are the ones just read — see the
@@ -794,17 +947,15 @@ void ShaderNodeRhi::setVertexShaderSource(const QString& source)
 {
     if (m_vertexShaderSource != source) {
         m_vertexShaderSource = source;
-        if (source.isEmpty()) {
-            m_vertexPath.clear();
-            m_vertexMtime = 0;
-            m_vertexIncludeFp.clear();
-        } else {
-            // Inline source — no file backing, so no transitively-
-            // included headers to fingerprint. Clear any leftover
-            // fingerprint from a prior loadVertexShader so the cache key
-            // matches the post-source-set state.
-            m_vertexIncludeFp.clear();
-        }
+        // Cleared for INLINE source too, not only for an empty one. All three are
+        // part of the bake-cache key, so leaving the path and mtime standing from
+        // a prior loadVertexShader made the key name a real file while the node
+        // baked inline text: the node could be served another node's entry for
+        // that file, or poison it with its own inline bake. Inline source has no
+        // file backing, so it has no includes to fingerprint either.
+        m_vertexPath.clear();
+        m_vertexMtime = 0;
+        m_vertexIncludeFp.clear();
         m_shaderDirty = true;
     }
 }
@@ -813,13 +964,11 @@ void ShaderNodeRhi::setFragmentShaderSource(const QString& source)
 {
     if (m_fragmentShaderSource != source) {
         m_fragmentShaderSource = source;
-        if (source.isEmpty()) {
-            m_fragmentPath.clear();
-            m_fragmentMtime = 0;
-            m_fragmentIncludeFp.clear();
-        } else {
-            m_fragmentIncludeFp.clear();
-        }
+        // Same reason as the vertex twin above: path and mtime are cache-key
+        // material and must not survive a switch to inline source.
+        m_fragmentPath.clear();
+        m_fragmentMtime = 0;
+        m_fragmentIncludeFp.clear();
         m_shaderDirty = true;
     }
 }
@@ -856,7 +1005,16 @@ void ShaderNodeRhi::invalidateUniforms()
     m_timeDirty = true;
     m_timeHiDirty = true;
     m_sceneDataDirty = true;
-    m_appFieldsDirty = true;
+    // Gated like setAppField0/1, and for the same reason: a profile that does
+    // not own the app-field slots must never see them dirty, or its
+    // dirtyRegions() could emit a K_APP_FIELDS region past the end of a leaner
+    // UBO. No in-tree profile does today (SurfaceUniformProfile ignores the
+    // flag outright), so this changes no behaviour; it keeps the flag's one
+    // stated invariant true at every writer instead of at most of them, which
+    // is what a future profile would rely on.
+    if (m_uboProfile->hasAppFields()) {
+        m_appFieldsDirty = true;
+    }
 }
 
 // ============================================================================

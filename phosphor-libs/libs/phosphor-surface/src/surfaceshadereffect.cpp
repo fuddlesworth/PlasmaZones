@@ -17,8 +17,8 @@ namespace {
 Q_LOGGING_CATEGORY(lcSurfaceShader, "phosphorsurfaceshaders.effect")
 } // namespace
 
-// Serializes the IN-MEMORY effect for two consumers: fromJson round-trips (the
-// registry test suite) and embedding inside a DecorationProfileTree. It is NOT
+// Serializes the IN-MEMORY effect for fromJson round-trips, which today means
+// the registry test suite and nothing else. It is NOT
 // a pack-metadata authoring format. fragmentShaderPath/vertexShaderPath here are
 // the POST-LOAD resolved forms (absolute, produced by resolveWithinDirectory),
 // so feeding this object back through the pack loader would hit its
@@ -81,6 +81,12 @@ QJsonObject SurfaceShaderEffect::toJson() const
     // values like 0.125 too.
     if (!qFuzzyCompare(bufferScale + 1.0, 2.0))
         obj.insert(QLatin1String("bufferScale"), bufferScale);
+    if (!bufferScales.isEmpty()) {
+        QJsonArray arr;
+        for (qreal s : bufferScales)
+            arr.append(s);
+        obj.insert(QLatin1String("bufferScales"), arr);
+    }
     if (!bufferWrap.isEmpty())
         obj.insert(QLatin1String("bufferWrap"), bufferWrap);
     if (!bufferWraps.isEmpty()) {
@@ -99,8 +105,9 @@ QJsonObject SurfaceShaderEffect::toJson() const
     }
     if (useDepthBuffer)
         obj.insert(QLatin1String("depthBuffer"), true);
-    // Only written when a pack opted out, matching the round-trip shape of
-    // every other default-true flag here.
+    // Only written when a pack opted out. This is the ONE default-true flag
+    // on the struct, so it is also the one field whose omission from the JSON
+    // means "true" rather than "false"; every other flag above writes on true.
     if (!halfFloatBuffers)
         obj.insert(QLatin1String("halfFloatBuffers"), false);
 
@@ -195,27 +202,35 @@ SurfaceShaderEffect SurfaceShaderEffect::fromJson(const QJsonObject& obj)
     // appends unconditionally for exactly this reason.
     const QJsonArray bufArr = obj.value(QLatin1String("bufferShaders")).toArray();
     for (const QJsonValue& v : bufArr) {
-        const QString name = v.toString();
         // Capped at the boundary: each pass costs a canvas-sized texture and a
-        // fullscreen draw per decorated window per frame, and anything past the
-        // fourth is structurally unreadable (the fold binds iChannel0..3). Drop the
-        // surplus loudly rather than allocating VRAM nothing can ever sample.
+        // fullscreen draw per decorated window per frame, and anything past
+        // kMaxBufferPasses is structurally unreadable (the fold binds
+        // iChannel0..kMaxBufferPasses-1). Drop the surplus rather than
+        // allocating VRAM nothing can ever sample.
         if (e.bufferShaderPaths.size() >= kMaxBufferPasses) {
-            qCWarning(lcSurfaceShader) << "SurfaceShaderEffect::fromJson: effect" << e.id << "declares more than"
-                                       << kMaxBufferPasses << "buffer passes; ignoring" << name
-                                       << "— the fold binds iChannel0..3, so later passes are unreadable";
-            continue;
+            break;
         }
-        e.bufferShaderPaths.append(name);
+        e.bufferShaderPaths.append(v.toString());
+    }
+    // ONE warning naming the count, not one per surplus entry. The three
+    // sibling caps below (bufferScales, bufferWraps, bufferFilters) all warn
+    // once after their loop, and a hand-edited pack declaring twenty buffers
+    // used to emit twelve identical lines from this one.
+    if (bufArr.size() > kMaxBufferPasses) {
+        qCWarning(lcSurfaceShader) << "SurfaceShaderEffect::fromJson: effect" << e.id << "declares" << bufArr.size()
+                                   << "buffer passes; dropping the last" << (bufArr.size() - kMaxBufferPasses)
+                                   << "past the" << kMaxBufferPasses
+                                   << "budget — the fold binds that many iChannels, so later passes are unreadable";
     }
     e.bufferFeedback = obj.value(QLatin1String("bufferFeedback")).toBool(false);
-    // Type-check before converting. QJsonValue::toDouble(fallback) returns the
-    // fallback only for a MISSING value; a present value of the wrong type
-    // answers 0.0, which the clamp below then turns into kMinBufferScale
-    // rather than the 1.0 default — so a quoted "0.5" in a hand-edited
-    // metadata.json would silently give the pack an eighth-resolution buffer
-    // chain. The clamp stays regardless: it is also what keeps a declared 0 or
-    // a negative out of the FBO sizing.
+    // Type-check before converting, to WARN rather than to change the value.
+    // QJsonValue::toDouble(fallback) returns the fallback whenever type() is
+    // not Double, so a quoted "0.5" in a hand-edited metadata.json already
+    // lands on the 1.0 default here and the pack simply renders at full
+    // resolution. What it does NOT do is tell the author their value was
+    // ignored, which is the whole job of this branch. The clamp below stays
+    // regardless: it is what keeps a declared 0 or a negative out of the FBO
+    // sizing.
     const QJsonValue bufferScaleValue = obj.value(QLatin1String("bufferScale"));
     if (bufferScaleValue.isUndefined() || bufferScaleValue.isDouble()) {
         e.bufferScale = qBound(kMinBufferScale, bufferScaleValue.toDouble(1.0), kMaxBufferScale);
@@ -223,6 +238,26 @@ SurfaceShaderEffect SurfaceShaderEffect::fromJson(const QJsonObject& obj)
         qCWarning(lcSurfaceShader) << "SurfaceShaderEffect::fromJson: effect" << e.id
                                    << "declares a non-numeric bufferScale; using the default 1.0";
         e.bufferScale = 1.0;
+    }
+    // Per-pass scales: positionally aligned with bufferShaders like the wrap
+    // and filter lists, so every entry is kept in place. A non-numeric entry
+    // falls back to the single-value scale for that slot (with a warning),
+    // never dropped, or every later pass would shift onto the wrong scale.
+    // Capped at the pass budget like its siblings.
+    const QJsonArray scalesArr = obj.value(QLatin1String("bufferScales")).toArray();
+    for (qsizetype i = 0; i < qMin<qsizetype>(scalesArr.size(), kMaxBufferPasses); ++i) {
+        const QJsonValue v = scalesArr.at(i);
+        if (v.isDouble()) {
+            e.bufferScales.append(qBound(kMinBufferScale, v.toDouble(), kMaxBufferScale));
+        } else {
+            qCWarning(lcSurfaceShader) << "SurfaceShaderEffect::fromJson: effect" << e.id << "bufferScales entry" << i
+                                       << "is not a number; that pass uses bufferScale";
+            e.bufferScales.append(e.bufferScale);
+        }
+    }
+    if (scalesArr.size() > kMaxBufferPasses) {
+        qCWarning(lcSurfaceShader) << "SurfaceShaderEffect::fromJson: bufferScales has" << scalesArr.size()
+                                   << "entries, cap is" << kMaxBufferPasses << "- surplus dropped";
     }
     // Buffer wrap/filter share the texture-slot `wrap` guard's rationale:
     // an unknown token is a typo or foreign vocabulary that the runtime
@@ -430,6 +465,12 @@ bool SurfaceShaderEffect::operator==(const SurfaceShaderEffect& other) const
         return false;
     if (!qFuzzyCompare(bufferScale + 1.0, other.bufferScale + 1.0))
         return false;
+    if (bufferScales.size() != other.bufferScales.size())
+        return false;
+    for (qsizetype i = 0; i < bufferScales.size(); ++i) {
+        if (!qFuzzyCompare(bufferScales[i] + 1.0, other.bufferScales[i] + 1.0))
+            return false;
+    }
     if (bufferShaderPaths != other.bufferShaderPaths || bufferWrap != other.bufferWrap
         || bufferWraps != other.bufferWraps || bufferFilter != other.bufferFilter
         || bufferFilters != other.bufferFilters)

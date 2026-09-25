@@ -14,7 +14,7 @@
 //   captureWindowSurface  — the raw window capture, which is the single most
 //                           expensive step of the whole fold (it re-enters KWin's
 //                           draw chain) and the reason the capture cache exists.
-//   updateShellContentRect— shell surfaces only: bound the capture's VISIBLE body.
+//   updateShellContentRect — shell surfaces only: bound the capture's VISIBLE body.
 //   chainBackdropScale    — how densely the backdrop must be captured for a
 //                           chain, or not at all.
 
@@ -31,14 +31,12 @@
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <opengl/glframebuffer.h>
-#include <opengl/glshader.h>
 #include <opengl/gltexture.h>
 #include <scene/item.h>
 #include <scene/windowitem.h>
 
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 
-#include <QByteArray>
 #include <QLoggingCategory>
 #include <QPoint>
 #include <QRectF>
@@ -51,6 +49,18 @@
 #include <epoxy/gl.h>
 
 namespace PlasmaZones {
+
+// The metadata scale buffer pass `index` of `eff` renders at: its own
+// `bufferScales` entry when the pack declares one, else the pack-wide
+// `bufferScale`. Callers feed the result through clampedBufferScale(). The one
+// place the per-pass fallback is spelled out, so the allocator below and the
+// backdrop-density resolver (chainBackdropScale) cannot disagree about which
+// scale a pass has. `static` with a distinct name rather than an anonymous
+// namespace: the effect builds as a Unity target.
+static qreal passBufferScaleFor(const PhosphorSurfaceShaders::SurfaceShaderEffect& eff, int index)
+{
+    return index >= 0 && index < eff.bufferScales.size() ? eff.bufferScales.at(index) : eff.bufferScale;
+}
 
 // (Re)allocate this window's composite / capture / per-pack buffer targets for the
 // current size, scale and chain, and drop every cache an allocation makes stale.
@@ -81,15 +91,19 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
     // null deref inside the compositor — the same reasoning the prefixTex
     // guard in surfacelayers.cpp spells out.
     if (state.compositeSize != textureSize || std::abs(state.captureScaleKey - captureScale) > kScaleEpsilon
-        || !state.compositeTex[0] || !state.compositeTex[1] || !state.captureTex) {
+        || !state.compositeTex[0] || !state.compositeTex[1] || !state.captureTex || !state.compositeFbo[0]
+        || !state.compositeFbo[1] || !state.captureFbo) {
         bool allocFailed = false;
         for (size_t i = 0; i < state.compositeTex.size(); ++i) {
             auto& t = state.compositeTex[i];
             // Drop the FRAMEBUFFER first. Reassigning the texture destroys the old one while
-            // its framebuffer still wraps it — legal in GL (the attachment auto-detaches),
-            // but it is the reverse of the order every sibling path uses (allocSurfaceTarget,
-            // the backdrop realloc), and an object destroyed out from under its own wrapper
-            // is not a habit worth keeping.
+            // its framebuffer still wraps it — legal in GL, since the attachment
+            // auto-detaches, but an object destroyed out from under its own wrapper is not a
+            // habit worth keeping.
+            // This is NOT what the sibling paths do, and the comment used to claim it was:
+            // allocSurfaceTarget (surface_fold.h:183) assigns the texture first and rebuilds
+            // the framebuffer after. Ordering it this way here is a local improvement on
+            // them rather than consistency with them.
             state.compositeFbo[i].reset();
             t = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
             if (!t) {
@@ -114,14 +128,19 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
         // The static-prefix target is NOT allocated here. It is only ever written
         // when a chain has a cacheable run followed by a per-frame pack, which the
         // most common chains do not — the default ["border"] has no per-frame pack at
-        // all — so allocating it eagerly meant a full-canvas RGBA8 (a fifth of the
-        // decoration's whole VRAM budget, ~8 MB on a 4K window) that was never
-        // written and never read. It is allocated lazily below, once the fold knows
+        // all — so allocating it eagerly meant a full-canvas RGBA8 (about 33 MB on a
+        // 4K window; 8 MB is the 1080p figure this comment used to quote) that was
+        // never written and never read. It is allocated lazily below, once the fold knows
         // the chain actually needs it.
         if (!allocFailed) {
             state.captureValid = false;
             state.prefixValid = false;
             state.compositeValid = false;
+            // The pair was just rebuilt, so whatever fold wrote the old one is gone,
+            // but finalSlot keeps its value across the realloc and would still name a
+            // slot. Without this, a realloc followed by a failed capture presents the
+            // new, never-written texture.
+            state.compositeWritten = false;
             state.prefixChainEnd = -1;
             state.captureFbo.reset();
             state.prefixTex.reset();
@@ -134,8 +153,19 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
             // Drop the half-allocated state. Erase AFTER the loop has ended so
             // we never destroy the container mid-iteration (state is a reference
             // into the map being erased).
-            qCWarning(lcEffect) << "Surface target allocation failed for" << windowId << "at" << textureSize
-                                << "— dropping this window's decoration (out of VRAM?)";
+            // Latched. The state is ERASED on this path, so a per-window flag cannot
+            // survive to suppress the repeat: the next frame builds a fresh state and
+            // fails again. While VRAM stays short that is one line per window per
+            // frame, which is exactly when the journal is least useful. A
+            // function-local static is the smallest thing that outlives the state,
+            // and it matches the one-shot `explained` latch the pack validator uses.
+            static bool allocFailureWarned = false;
+            if (!allocFailureWarned) {
+                allocFailureWarned = true;
+                qCWarning(lcEffect) << "Surface target allocation failed for" << windowId << "at" << textureSize
+                                    << "— dropping this window's decoration (out of VRAM?). This is "
+                                       "reported once per session.";
+            }
             m_surfaceMultipass.erase(windowId);
             return false;
         }
@@ -147,10 +177,16 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
     // (Re)allocate the cached per-pack buffer textures when the chain or size
     // changes, or when the blur-scale-multiplier loader (daemon_settings.cpp)
     // cleared chainKey to force a reallocation at the new density.
-    // chainBufferTex[k] holds one texture per pack k's buffer passes, sized by
-    // clampedBufferScale(eff.bufferScale) — the pack's declared bufferScale
-    // with the user's global multiplier folded in; a pack that fails to compile (or has
-    // no buffers) leaves an empty inner vector and renders single-pass in the fold.
+    // chainBufferTex[k] holds one texture per pack k's buffer passes, each sized
+    // by clampedBufferScale(passBufferScaleFor(eff, i)) — that pass's own
+    // declared bufferScales entry, falling back to the pack-wide bufferScale,
+    // with the user's global multiplier folded in either way. Per PASS, not per
+    // pack: a pyramid pack renders each level at its own resolution, which is
+    // the whole point of the per-pass scales. A pack that fails to compile (or
+    // declares no buffers at all) leaves an empty inner vector and renders
+    // single-pass in the fold. A pack that DECLARED passes and lost them to an
+    // allocation failure is different, and is handled below: for the blur family
+    // there is no single-pass path to fall back to, so it would render invisible.
     if (state.chainKey != chain) {
         // Framebuffers before textures, for the reason given at the composite realloc above.
         state.chainBufferFbo.clear();
@@ -163,16 +199,26 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
                 continue;
             }
             const PhosphorSurfaceShaders::SurfaceShaderEffect eff = m_surfaceShaderRegistry.effect(chain.at(k));
-            const qreal bufferScale = clampedBufferScale(eff.bufferScale);
-            const QSize bufferSize(qMax(1, qRound(textureSize.width() * bufferScale)),
-                                   qMax(1, qRound(textureSize.height() * bufferScale)));
             auto& bufs = state.chainBufferTex[k];
             auto& fbos = state.chainBufferFbo[k];
+            bool lostDeclaredPasses = false;
             bufs.reserve(pk->bufferPasses.size());
             fbos.reserve(pk->bufferPasses.size());
             for (size_t i = 0; i < pk->bufferPasses.size(); ++i) {
+                // Pass i renders at its own declared scale (a pyramid pack's
+                // `bufferScales`), falling back to the pack-wide bufferScale,
+                // with the user's global multiplier folded in either way.
+                const qreal bufferScale = clampedBufferScale(passBufferScaleFor(eff, static_cast<int>(i)));
+                const QSize bufferSize(qMax(1, qRound(textureSize.width() * bufferScale)),
+                                       qMax(1, qRound(textureSize.height() * bufferScale)));
                 std::unique_ptr<KWin::GLTexture> bt = KWin::GLTexture::allocate(GL_RGBA8, bufferSize);
                 if (!bt) {
+                    // Say which pass and what size: the degrade below is otherwise
+                    // silent, and the only trace is the driver's own GL_OUT_OF_MEMORY
+                    // line with nothing attributing it to a pack.
+                    qCWarning(lcEffect) << "Surface pack" << chain.at(k) << "buffer pass" << i << "allocation failed at"
+                                        << bufferSize << "(scale" << bufferScale << "canvas" << textureSize
+                                        << ") — pack renders single-pass for" << windowId;
                     // Pack k degrades to no buffers. The fold's main pass then
                     // binds the transparent fallback to every iChannel the pack
                     // still declares, so they genuinely sample 0 — an unset
@@ -180,6 +226,7 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
                     // composite.
                     bufs.clear();
                     fbos.clear(); // the framebuffers pooled beside them go too
+                    lostDeclaredPasses = true;
                     break;
                 }
                 bt->setFilter(GL_LINEAR);
@@ -188,12 +235,63 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
                 // Keep bufs/fbos strictly in lockstep — the fold indexes both by i.
                 auto bfbo = std::make_unique<KWin::GLFramebuffer>(bt.get());
                 if (!bfbo->valid()) {
+                    // Same degrade as the texture branch above, and it deserves the
+                    // same line: the pack silently renders single-pass otherwise, with
+                    // no trace of which pack or which pass gave up.
+                    qCWarning(lcEffect) << "Surface pack" << chain.at(k) << "buffer pass" << i
+                                        << "framebuffer invalid at" << bufferSize << "— pack renders single-pass for"
+                                        << windowId;
                     bufs.clear();
                     fbos.clear();
+                    lostDeclaredPasses = true;
                     break;
                 }
                 bufs.push_back(std::move(bt));
                 fbos.push_back(std::move(bfbo));
+            }
+            // A PACK THAT LOST ITS DECLARED PASSES AND SAMPLES A CHANNEL CANNOT DRAW.
+            // The fold binds the transparent fallback to every channel it declares,
+            // which stops it reading the running composite, but a pack whose main pass
+            // IS a channel read then samples 0 and composites to nothing. All seven
+            // blur-family packs are that shape: their main pass is surfaceBlurTexel,
+            // which is texture(iChannel6, uv). The result is an invisible decoration,
+            // and the composite-allocation path above already settled what to do about
+            // that in its own words, that undecorated beats invisible. So fail the
+            // whole ensure and let that same teardown run, rather than keeping a
+            // decoration the user cannot see.
+            //
+            // Narrow on purpose. A pack that declares channels it never samples, or
+            // that has a real single-pass path, keeps the old quiet degrade.
+            if (lostDeclaredPasses) {
+                bool samplesAChannel = false;
+                for (int ch = 0; ch < ShaderInternal::kSurfaceChannelCount; ++ch) {
+                    if (pk->iChannelLoc[static_cast<size_t>(ch)] >= 0) {
+                        samplesAChannel = true;
+                        break;
+                    }
+                }
+                if (samplesAChannel) {
+                    qCWarning(lcEffect)
+                        << "Surface pack" << chain.at(k)
+                        << "lost its declared buffer passes and samples an iChannel, so it would render invisible;"
+                        << "dropping this window's decoration instead for" << windowId;
+                    m_surfaceMultipass.erase(windowId);
+                    return false;
+                }
+            }
+            // Debug-level, once per (re)allocation: the pass count and sizes a
+            // pyramid pack actually got, which is the per-pass scale plumbing's
+            // one observable on a live session.
+            // Gated on the category, not just on having buffers: the list below is
+            // built eagerly, so without this it allocates a QStringList and a
+            // QString per pass on every (re)allocation for a message nobody reads.
+            if (!bufs.empty() && lcEffect().isDebugEnabled()) {
+                QStringList sizes;
+                for (const auto& b : bufs) {
+                    sizes << QStringLiteral("%1x%2").arg(b->width()).arg(b->height());
+                }
+                qCDebug(lcEffect) << "Surface pack" << chain.at(k) << "buffer passes allocated for" << windowId << ":"
+                                  << sizes.join(QLatin1Char(' ')) << "(canvas" << textureSize << ")";
             }
         }
         // A different chain folds to a different composite, so neither the whole-
@@ -205,12 +303,51 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
         // The prefix TEXTURE goes too (the size-change branch above releases it as well;
         // that branch clears chainKey, so this one always follows it). The new
         // chain may not want one at all (["border","glow"] → ["border"]), and holding a
-        // full-canvas RGBA8 nothing will ever write again is ~8 MB per 4K window. The fold
+        // full-canvas RGBA8 nothing will ever write again is about 33 MB per 4K window (8 MB
+        // is the 1080p figure). The fold
         // deliberately does NOT release it when usePrefix merely goes false, because that
         // flips with the animation gate and would realloc on every focus change — but a
         // chain change is rare and is already rebuilding everything.
         state.prefixTex.reset();
         state.prefixFbo.reset();
+
+        // THE BACKDROP WORKING SET GOES TOO when the new chain has no reader for
+        // it, and it is the LARGER of the two: a full-canvas RGBA8 like the
+        // prefix, plus its framebuffer. Releasing the prefix while leaving this
+        // resident beside it was half a fix.
+        //
+        // Nothing else frees it. Every release in the tree is inside
+        // captureWindowBackdrop, which stops being called the moment
+        // needsBackdrop goes false, so the texture for a chain that no longer
+        // wants one had no path out at all. The decoration REFRESH path keeps
+        // the surface state deliberately (keepSurfaceState=true), which is right
+        // for everything else in it and is what leaves this stranded.
+        //
+        // Not a rare case either: moving off a frost or glass pack is what snap
+        // and untile do to a window's chain.
+        //
+        // Reset the whole set, not just the texture. backdropRect, the written
+        // region and the generation list all describe the texture being dropped,
+        // and the allocation path at surface_backdrop.cpp clears exactly these
+        // alongside a fresh texture, so leaving any of them behind would hand a
+        // later capture a rect and a generation belonging to a texture that no
+        // longer exists.
+        bool chainWantsBackdrop = false;
+        for (const QString& packId : chain) {
+            if (m_surfaceShaderRegistry.effect(packId).needsBackdrop) {
+                chainWantsBackdrop = true;
+                break;
+            }
+        }
+        if (!chainWantsBackdrop) {
+            // Framebuffer before texture, as everywhere else in this file.
+            state.backdropFbo.reset();
+            state.backdropTex.reset();
+            state.backdropSize = QSize();
+            state.backdropRect = QVector4D();
+            state.backdropWritten = KWin::Region();
+            state.backdropGenerationOutputs.clear();
+        }
     }
     return true;
 }
@@ -247,6 +384,15 @@ bool PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMulti
         KWin::RenderTarget renderTarget(&fbo);
         KWin::RenderViewport viewport(logicalGeometry, captureScale, renderTarget, QPoint());
         KWin::GLFramebuffer::pushFramebuffer(&fbo);
+        // Guard the FRAMEBUFFER STACK across the same nested draw the flag above
+        // is guarded across, and for a worse consequence: an unbalanced stack
+        // leaves every LATER frame in the session rendering into this window's
+        // capture FBO, and ScopedGlState does not cover the framebuffer binding,
+        // so nothing else recovers it. Same idiom the pointer pass uses around
+        // its own buffer stages.
+        const auto popCaptureTarget = qScopeGuard([] {
+            KWin::GLFramebuffer::popFramebuffer();
+        });
         glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         KWin::ItemEffect keepRenderable(w->windowItem());
@@ -260,11 +406,22 @@ bool PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMulti
         const int captureMask = PAINT_WINDOW_TRANSFORMED | PAINT_WINDOW_TRANSLUCENT;
         drawn = KWinCompat::drawWindowChecked(renderTarget, viewport, w, captureMask, KWin::Region::infinite(),
                                               captureData);
-        KWin::GLFramebuffer::popFramebuffer();
     }
     resetCapture.dismiss();
     m_capturingSnapshot = false;
     if (!drawn) {
+        // Say so. This path was silent END TO END: the draw failed here with no
+        // line, the fold's bail returned nullptr with no line, and the paint
+        // pipeline drew nothing with no line, so a window whose decoration had
+        // quietly stopped composing left no trace at all. Latched per window and
+        // cleared on the next success below, so a persistent failure costs one
+        // line rather than one per frame.
+        if (!state.captureFailWarned) {
+            state.captureFailWarned = true;
+            qCWarning(lcEffect) << "Window capture failed for" << getWindowId(w)
+                                << "— its decoration is not composing this frame; retrying on a later "
+                                   "frame (reported once until the next successful capture)";
+        }
         // The draw failed (KWin 6.8 reports it). captureValid is exactly the
         // flag that says the texture may be reused, so leaving it false is the
         // whole fix: the fold retakes the capture on a later frame instead of
@@ -273,6 +430,9 @@ bool PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMulti
         return false;
     }
     state.captureValid = true;
+    // Re-arm the failure report: the next failure after a good capture is new
+    // information rather than a repeat.
+    state.captureFailWarned = false;
     state.captureInComposite = !intoCaptureTex;
     // The frame-relative offset the shell content scan must measure against
     // (see the field doc): the viewport above maps logicalGeometry onto the
@@ -500,9 +660,10 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
 
         // UNPAINTED — nothing stopped it, it simply was not drawn: minimized, on another
         // desktop, fully occluded. Nobody tells us that happened, so it is inferred from
-        // the gap since the last fold. lastFoldMs is stamped on BOTH terminal paths of the
-        // fold, including the cached-composite early return, so a window that IS being
-        // painted but is serving from cache never looks unpainted here.
+        // the gap since the last fold. lastFoldMs is stamped on EVERY terminal path of the
+        // fold — the full fold, the cached-composite early return, and the capture-failure
+        // bail — so a window that IS being painted never looks unpainted here, whether it
+        // is serving from cache or failing to capture.
         if (state.lastFoldMs >= 0 && nowMs - state.lastFoldMs > kNotPaintedGapMs) {
             notAnimatingMs = std::max(notAnimatingMs, nowMs - state.lastFoldMs);
         }
@@ -716,7 +877,13 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
     // eager allocation was a full-canvas RGBA8 held for nothing. Release it again if
     // the chain changes to a shape that no longer needs it.
     if (usePrefix) {
-        if (!state.prefixTex && !allocSurfaceTarget(state.prefixTex, state.prefixFbo, state.compositeSize)) {
+        // Test BOTH handles. Gating on the texture alone would let a tex-without-fbo state
+        // skip the realloc and hand the fold a null prefixFbo, which surfacelayers.cpp
+        // dereferences on the writesPrefix path. Guarding it at the fold's prefixValid check
+        // instead would be worse: clearing that flag is what ENABLES the write path, so an
+        // fbo term there routes INTO the deref rather than away from it.
+        if ((!state.prefixTex || !state.prefixFbo)
+            && !allocSurfaceTarget(state.prefixTex, state.prefixFbo, state.compositeSize)) {
             // Out of VRAM for the optional cache: fold the chain the long way rather
             // than failing the whole paint.
             usePrefix = false;
@@ -763,8 +930,8 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
     return plan;
 }
 
-// How densely the backdrop must be captured for @p deco's chain, or 0.0 when no
-// compiled pack in it reads the backdrop at all.
+// Whether @p deco's chain needs a backdrop capture, and how densely. `needed` is
+// false when no compiled pack in it reads the backdrop at all.
 //
 // Lives here rather than in paintWindow, where it began as a lambda: it resolves
 // the decoration profile, drives the lazy pack compile and maintains
@@ -775,11 +942,12 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
 // @p decoWindowId is the decoration map's own key, which is the same string as
 // the caller's windowId; @p w is passed so the profile resolve does not
 // re-derive the window it already holds.
-qreal PlasmaZonesEffect::chainBackdropScale(const WindowDecoration& deco, const QString& decoWindowId,
-                                            KWin::EffectWindow* w)
+BackdropCapture PlasmaZonesEffect::chainBackdropScale(const WindowDecoration& deco, const QString& decoWindowId,
+                                                      KWin::EffectWindow* w)
 {
+    using SE = PhosphorSurfaceShaders::SurfaceShaderEffect;
     std::optional<PhosphorSurfaceShaders::DecorationProfile> profile;
-    qreal scale = 0.0;
+    BackdropCapture out;
     for (const QString& packId : deco.chain) {
         CompiledSurfacePack* pk = nullptr;
         if (const auto cacheIt = m_compiledPacks.find(packId); cacheIt != m_compiledPacks.end()) {
@@ -797,47 +965,100 @@ qreal PlasmaZonesEffect::chainBackdropScale(const WindowDecoration& deco, const 
         if (!pk || !pk->shader) {
             continue;
         }
-        if (linksBackdropUniforms(pk->uBackdropLoc, pk->uHasBackdropLoc, pk->uBackdropRectLoc)) {
-            return 1.0; // a sharp main-pass read caps every other answer
+        // WHETHER a capture is needed and AT WHAT DENSITY are two questions, and
+        // BackdropCapture carries them as two fields for the reason its own doc
+        // gives. They must not share a predicate.
+        //
+        // The SAMPLER alone sets density. linksBackdropUniforms is an OR over all
+        // three locations and one of them is uHasBackdrop, the scalar gate, which
+        // samples no texels: every one of the eight bundled needsBackdrop packs
+        // reads that gate in its own fragment, so testing it here answered full
+        // density for all of them and the reduced capture this pipeline exists to
+        // enable never once engaged. Only mosaic's main pass genuinely samples.
+        if (pk->uBackdropLoc >= 0) {
+            // A sharp main-pass read caps every other answer.
+            return {true, SE::kMaxBufferScale};
         }
-        for (const CompiledSurfaceBufferPass& bp : pk->bufferPasses) {
-            if (linksBackdropUniforms(bp.uBackdropLoc, bp.uHasBackdropLoc, bp.uBackdropRectLoc)) {
-                // Same clamp ensureSurfaceTargets applies when sizing
-                // the buffer targets themselves, so capture density
-                // and sampler density agree by construction. The
-                // clamped value is cached per pack: bufferScale is
-                // pack METADATA (unlike the linked-uniform probes
-                // above, which are compile state and MUST resolve
-                // through the lazy compile — see the comment above
-                // this function), and the registry lookup copies a
-                // whole SurfaceShaderEffect by value, which this
-                // per-frame path must not pay per pack. The cached
-                // value is the multiplier-folded PRODUCT, so it is
-                // invalidated by EVERY m_compiledPacks clear (a
-                // registry hot-reload or a preset retune can change
-                // what it folds) plus the blur-scale-multiplier loader
-                // in daemon_settings.cpp. No count is quoted: the set
-                // of clear sites grows.
-                qreal packScale = 0.0;
-                if (const auto bsIt = m_packBufferScaleCache.find(packId); bsIt != m_packBufferScaleCache.end()) {
-                    packScale = bsIt->second;
-                } else {
-                    packScale = clampedBufferScale(m_surfaceShaderRegistry.effect(packId).bufferScale);
-                    m_packBufferScaleCache.emplace(packId, packScale);
+        // Linked but not sampling: the gate, or the rect without the sampler to use
+        // it with. Such a pack still needs a capture to EXIST, because the fold
+        // pushes the gate from whether one is available. Zero would skip the capture
+        // and flip the pack onto its no-backdrop fallback. The inverse cannot
+        // happen, since a pass is never missed here for being sampler-only.
+        if (pk->uHasBackdropLoc >= 0 || pk->uBackdropRectLoc >= 0) {
+            out.needed = true;
+            out.density = qMax(out.density, BackdropCapture::kGateOnlyDensity);
+        }
+        // TWICE the densest SAMPLING buffer pass, capped at full density.
+        //
+        // Twice, not equal: a pass that samples the capture and writes at scale s
+        // is performing a reduction, and its taps are spaced in the density it
+        // expects its source to have. Capturing at exactly s puts every tap inside
+        // one source texel, which averages a single texel into an output texel
+        // covering four of them. The builtin pyramid is the live case. Only
+        // kawase_down_0 samples the backdrop, at bufferScales[0] = 0.25, and
+        // surfaceKawaseDownBackdrop steps at kSurfaceKawaseBaseTexel * 0.5, which
+        // is 2 CANVAS px. At half density that step is exactly one source texel and
+        // the five taps are the textbook 2:1 Kawase reduction. At full density each
+        // tap averaged one canvas pixel into a base texel covering sixteen, which
+        // shimmers on backdrop motion rather than looking wrong when still.
+        //
+        // DENSEST, not first: under per-pass `bufferScales` a pack may sample from
+        // more than one pass at different densities, and sizing for the sparser one
+        // leaves the denser reader sampling texels that were never blitted. The max
+        // can only over-capture, which costs; the first can under-sample, which is a
+        // defect. A pyramid whose later passes read earlier passes rather than the
+        // capture has exactly one sampling pass and is unaffected either way.
+        //
+        // NOMINAL, not clampedBufferScale. That one folds the user's blur-quality
+        // multiplier, which is right for sizing a buffer TARGET and wrong here: the
+        // step surfaceKawaseDownBackdrop takes is kSurfaceKawaseBaseTexel * 0.5, a
+        // fixed 2 CANVAS px, and it does not move with the tier. Feeding the
+        // multiplied scale in tied the capture to it, so at the 0.25 tier the capture
+        // landed at 0.125, one texel spanned 8 canvas px, and all five taps fell
+        // inside a single texel — the first pyramid level stopped blurring
+        // altogether. The constant the shader steps by is nominal, so the scale it is
+        // matched against has to be nominal too. The tier still moves the buffer
+        // targets, which is where its cost lives.
+        //
+        // Cached per pack, because the registry lookup copies a whole
+        // SurfaceShaderEffect by value and this is a per-frame path. The cached value
+        // folds the pack's LINKAGE as well as its metadata, so it is invalidated by
+        // EVERY m_compiledPacks clear: a registry hot-reload or a preset retune can
+        // change either. No count is quoted, the set of clear sites grows. 0.0 for a
+        // pack whose buffer passes link nothing is a real answer and is cached as
+        // one, so a chain of such packs stops re-walking them per frame. The main
+        // pass's own gate-only floor above is NOT folded in: this cache covers the
+        // buffer passes.
+        qreal packScale = 0.0;
+        if (const auto bsIt = m_packBufferScaleCache.find(packId); bsIt != m_packBufferScaleCache.end()) {
+            packScale = bsIt->second;
+        } else {
+            const PhosphorSurfaceShaders::SurfaceShaderEffect regEff = m_surfaceShaderRegistry.effect(packId);
+            for (size_t bpIndex = 0; bpIndex < pk->bufferPasses.size(); ++bpIndex) {
+                const CompiledSurfaceBufferPass& bp = pk->bufferPasses[bpIndex];
+                if (bp.uBackdropLoc < 0) {
+                    if (bp.uHasBackdropLoc >= 0 || bp.uBackdropRectLoc >= 0) {
+                        packScale = qMax(packScale, BackdropCapture::kGateOnlyDensity);
+                    }
+                    continue;
                 }
-                scale = qMax(scale, packScale);
-                break; // one linked buffer pass answers for the pack
+                const qreal nominal = qBound(SE::kMinBufferScale, passBufferScaleFor(regEff, static_cast<int>(bpIndex)),
+                                             SE::kMaxBufferScale);
+                packScale = qMax(packScale, qMin(SE::kMaxBufferScale, nominal * 2.0));
             }
+            m_packBufferScaleCache.emplace(packId, packScale);
         }
-        // A buffer pass at the ceiling is already the maximum
-        // possible answer (the main-pass branch above returns the
-        // same value), so stop walking the chain — restores the
-        // short-circuit the pre-scale code had for every pack.
-        if (scale >= PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferScale) {
-            return PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferScale;
+        if (packScale > 0.0) {
+            out.needed = true;
+            out.density = qMax(out.density, packScale);
+        }
+        // A pass at the ceiling is already the maximum possible answer (the
+        // main-pass branch above returns the same value), so stop walking the chain.
+        if (out.density >= SE::kMaxBufferScale) {
+            return {true, SE::kMaxBufferScale};
         }
     }
-    return scale;
+    return out;
 }
 
 } // namespace PlasmaZones

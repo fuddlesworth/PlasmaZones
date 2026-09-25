@@ -14,6 +14,7 @@
 #include "plasmazoneseffect/shader_internal.h"
 #include "compositor/effectlogging.h"
 
+#include <PhosphorShaders/ShaderBindings.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
@@ -77,9 +78,18 @@ constexpr std::array<const char*, 4> kIChannelResNames = {
     {"iChannelResolution[0]", "iChannelResolution[1]", "iChannelResolution[2]", "iChannelResolution[3]"}};
 constexpr std::array<const char*, PSC::kMaxUserTextureSlots> kUserTextureNames = {
     {PSC::kUTexture1, PSC::kUTexture2, PSC::kUTexture3}};
-constexpr std::array<const char*, PSC::kMaxUserTextureSlots> kTextureResNames = {
-    {"iTextureResolution[0]", "iTextureResolution[1]", "iTextureResolution[2]"}};
+// GLSL-SLOT indexed, not pack indexed, and therefore one entry LONGER than the
+// sampler table beside it. iTextureResolution[i] is the size of uTexture<i> in
+// every family; this one simply has no uTexture0, because binding 11 carries
+// uCursorSprite instead, so index 0 is unused here and a pack's slot N is at
+// index N+1. Indexing it by pack slot put every size one element low and
+// disagreed with the RHI host, which fills by GLSL slot.
+constexpr std::array<const char*, PhosphorShaders::Bindings::kUserTextureCount> kTextureResNames = {
+    {"iTextureResolution[0]", "iTextureResolution[1]", "iTextureResolution[2]", "iTextureResolution[3]"}};
 static_assert(PSC::kMaxUserTextureSlots == 3, "pointer user-texture name arrays must grow with the slot budget");
+static_assert(kTextureResNames.size() == kUserTextureNames.size() + 1,
+              "iTextureResolution is GLSL-slot indexed and the sampler table pack-slot indexed, so the resolution "
+              "table carries exactly one more entry: index 0, which the pointer family has no uTexture0 for");
 
 // uPointerTrail[0..31]. KWin::GLShader exposes no array upload, so each
 // element needs its own location and its own setUniform; a pack that never
@@ -113,7 +123,16 @@ static_assert(std::tuple_size_v<decltype(ShaderInternal::kCustomColorsElementNam
 QStringList includePathsFrom(const PPS::PointerShaderRegistry& registry)
 {
     QStringList includePaths;
-    const QStringList searchPaths = registry.searchPaths();
+    // HIGHEST priority FIRST. The registry registers its roots lowest-priority
+    // first (system, then the user dir) and hands the list back in that order,
+    // so walking it verbatim resolved every shared header from the SYSTEM
+    // prefix even for a pack the user directory had won: the pack's body came
+    // from one tree and its contract headers from another. Since the contract
+    // headers carry the sampler BINDING table, a split pair is a binding
+    // mismatch rather than cosmetic drift. Reverse a local copy, exactly as the
+    // surface compile path does.
+    QStringList searchPaths = registry.searchPaths();
+    std::reverse(searchPaths.begin(), searchPaths.end());
     includePaths.reserve(searchPaths.size() * 2);
     for (const QString& sp : searchPaths) {
         const QString sharedDir = sp + QStringLiteral("/shared");
@@ -186,8 +205,17 @@ void PointerDecorationPass::cacheUniformLocations(KWin::GLShader* shader, const 
     for (int slot = 0; slot < PSC::kMaxUserTextureSlots; ++slot) {
         out.userTextures[static_cast<size_t>(slot)] =
             shader->uniformLocation(kUserTextureNames[static_cast<size_t>(slot)]);
-        out.iTextureResolution[static_cast<size_t>(slot)] =
-            shader->uniformLocation(kTextureResNames[static_cast<size_t>(slot)]);
+    }
+    // SEPARATE LOOP, because iTextureResolution is indexed by GLSL texture slot and
+    // the sampler table by pack slot. Sharing the loop above and offsetting only the
+    // DESTINATION was inert: it read kTextureResNames[slot], the name of GLSL element
+    // `slot`, and stored it at destination slot+1, so the paint site's matching +1
+    // read it straight back out and pack slot N's size still went to element N. It
+    // also never resolved element 3 at all. Same shape as the surface family's
+    // resolve in plasmazoneseffect/shader_textures.cpp.
+    for (int glslSlot = 0; glslSlot < PhosphorShaders::Bindings::kUserTextureCount; ++glslSlot) {
+        out.iTextureResolution[static_cast<size_t>(glslSlot)] =
+            shader->uniformLocation(kTextureResNames[static_cast<size_t>(glslSlot)]);
     }
     for (int i = 0; i < 4; ++i) {
         out.iChannel[static_cast<size_t>(i)] = shader->uniformLocation(kIChannelNames[static_cast<size_t>(i)]);

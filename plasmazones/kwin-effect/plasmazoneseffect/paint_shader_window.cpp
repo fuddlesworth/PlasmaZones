@@ -149,14 +149,13 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
         // `translateAnimationParams`. iTimeDelta / iFrame / iDate /
         // iMouse mirror the daemon's SurfaceAnimator semantics so a
         // single shader source observes equivalent state on either
-        // runtime. Audio / multipass / texture uniforms are still
-        // unpopulated on the kwin ANIMATION-transition path (window
-        // open/close/move/…) — those need C++ wiring (CAVA subscription,
-        // FBO chain, texture cache) that is out of scope here. NB: the
-        // surface DECORATION path (persistent border packs) DOES wire audio
-        // now via the effect's own CavaSpectrumProvider — see
-        // bindSurfaceAudio in surfacelayers.cpp; this comment is only about
-        // the transition shaders driven from this function.
+        // runtime. MULTIPASS is the one thing still unpopulated on the kwin
+        // ANIMATION-transition path (window open/close/move/…): it needs an
+        // FBO chain this path does not build. Audio and the user textures ARE
+        // wired, in THIS function: the audio bind reuses the effect's own
+        // CavaSpectrumProvider through bindSurfaceAudio, and the user-texture
+        // loop binds the declared slots and their iTextureResolution entries
+        // below.
         //
         // setUniform must run with the shader bound: KWin's
         // `GLShader::setUniform` calls `glUniform*` directly, which
@@ -222,15 +221,13 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
         // uses those to convert vTexCoord into anchor [0,1] space
         // (anchorRemap).
         //
-        // iAnchorRectInTexture is a SEPARATE uniform: it tells
-        // surfaceColor() where the anchor sits inside uTexture0.
-        // Surface-extent shaders sample with anchor-space [0,1]
-        // coordinates, but uTexture0 spans the shadow-padded expanded
-        // rect — sampling it at anchor [0,1] without this remap
-        // stretches frame+shadow into the frame's screen region and
-        // the window content animates smaller than it lands. Anchor-
-        // extent shaders sample uTexture0 directly, so they get the
-        // (0,0,1,1) identity.
+        // iAnchorRectInTexture is a SEPARATE uniform: it tells surfaceColor()
+        // where the anchor sits inside uTexture0. Surface-extent shaders sample
+        // with anchor-space [0,1] coordinates, but uTexture0 spans the
+        // shadow-padded expanded rect — sampling it at anchor [0,1] without this
+        // remap stretches frame+shadow into the frame's screen region and the
+        // window content animates smaller than it lands. Anchor-extent shaders
+        // sample uTexture0 directly, so they get the (0,0,1,1) identity.
         //
         // expandedGeometry is empty for a window with no decoration
         // or shadow extents; fall back to the frame there.
@@ -306,6 +303,19 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
             }
             if (cached->iResolutionLoc >= 0) {
                 shader->setUniform(cached->iResolutionLoc, anchorUniforms.resolution);
+            }
+            // iTextureResolution[0] is uTexture0's PIXEL size, which the daemon publishes
+            // and the compositor did not. expandedGeo, NOT anchorUniforms.resolution: that
+            // is textureGeo's size, the whole OUTPUT on a surface-extent leg per the block
+            // above. Times the scale, these being logical px. WHICH scale is unsettled: the
+            // window's own output, or the render target's on a mixed-DPI straddle (the case
+            // windowSurfaceScale() exists for). No bundled pack reads this uniform.
+            if (cached->iTextureResolutionLoc[0] >= 0) {
+                const qreal texScale = w->screen() ? w->screen()->scale() : 1.0;
+                shader->setUniform(cached->iTextureResolutionLoc[0],
+                                   QVector4D(static_cast<float>(qMax(expandedGeo.width(), 1.0) * texScale),
+                                             static_cast<float>(qMax(expandedGeo.height(), 1.0) * texScale), 0.0f,
+                                             0.0f));
             }
             if (cached->iTimeDeltaLoc >= 0) {
                 shader->setUniform(cached->iTimeDeltaLoc, iTimeDelta);
@@ -747,7 +757,7 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
             // texture KWin's OffscreenData::paint binds during
             // drawWindow. Push the matching sampler uniform so the
             // shader knows which unit to read; populate
-            // iTextureResolution[slot] so shaders that key on texture
+            // iTextureResolution[slot + 1] so shaders that key on texture
             // size (e.g. tile-grid shaders like Matrix's glyph atlas)
             // can compute their own UV math without authors hard-
             // coding bitmap dimensions.
@@ -789,21 +799,24 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
                     // transitions, so a slot that carried a real texture
                     // (and its size) on a prior leg would otherwise leave a
                     // stale non-zero iTextureResolution here.
-                    if (cached->iTextureResolutionLoc[slot] >= 0) {
-                        shader->setUniform(cached->iTextureResolutionLoc[slot], QVector4D(0.0f, 0.0f, 0.0f, 0.0f));
+                    if (cached->iTextureResolutionLoc[slot + 1] >= 0) {
+                        shader->setUniform(cached->iTextureResolutionLoc[slot + 1], QVector4D(0.0f, 0.0f, 0.0f, 0.0f));
                     }
                     continue;
                 }
                 KWin::GLTexture* tex = entry->texture.get();
                 // The declared size goes up whether or not the SAMPLER survived
-                // the link: a pack may read iTextureResolution[slot] without ever
+                // the link: a pack may read iTextureResolution[slot + 1] without ever
                 // sampling the texture, and this cached program persists uniform
                 // state across transitions, so skipping the push would leave a
                 // prior leg's stale size standing — the same reason the fallback
                 // arm above pushes it explicitly.
-                if (cached->iTextureResolutionLoc[slot] >= 0) {
+                // slot + 1: pack slot `slot` is uTexture<slot+1>, and
+                // iTextureResolution is indexed by GLSL texture slot. Index 0 is
+                // uTexture0's own size, pushed beside iResolution above.
+                if (cached->iTextureResolutionLoc[slot + 1] >= 0) {
                     const QSize sz = tex->size();
-                    shader->setUniform(cached->iTextureResolutionLoc[slot],
+                    shader->setUniform(cached->iTextureResolutionLoc[slot + 1],
                                        QVector4D(sz.width(), sz.height(), 0.0f, 0.0f));
                 }
                 // A slot the linker dropped (the shader never samples it) has no

@@ -45,10 +45,11 @@ vec4 pSurface(vec2 uv) {
     // Gaussian-profile reach falloff (exp(-4t²), a soft shadow not a flood),
     // feathered to zero just inside the texture edge so a slim capture margin
     // yields a smaller glow instead of a hard-cut rectangle, confined to the
-    // transparent margin, and focus-dimmed like Oxygen's active-window cue —
+    // margin and the band within two reaches inside the frame, and focus-dimmed
+    // like Oxygen's cue —
     // the shared glow/shadow halo.
     float reach = max(p_glowSize * uSurfaceScale, 1.0);
-    float halo = haloFalloff(fs.d, reach, p, base.a, p_glowStrength, 0.30);
+    float halo = haloFalloff(fs.d, reach, p, base.a, p_glowStrength, 0.30, p_cornerRadius * uSurfaceScale);
 
     // Premultiplied additive-over: the halo lights the margin under its own
     // alpha; the content term is untouched.

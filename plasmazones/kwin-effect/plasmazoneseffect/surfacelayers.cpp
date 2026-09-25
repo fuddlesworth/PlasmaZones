@@ -7,8 +7,8 @@
 #include "surface_fold.h"
 #include "types.h"
 
-#include <core/rendertarget.h>
-#include <core/renderviewport.h>
+#include "compositor/effectlogging.h"
+
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <opengl/glframebuffer.h>
@@ -16,22 +16,17 @@
 #include <opengl/glshadermanager.h>
 #include <opengl/gltexture.h>
 #include <opengl/glvertexbuffer.h>
-#include <scene/item.h>
-#include <scene/windowitem.h>
 
 #include <PhosphorSurface/SurfaceShaderContract.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 
 #include <QMatrix4x4>
-#include <QPoint>
 #include <QRectF>
-#include <QScopeGuard>
 #include <QSize>
 #include <QVector2D>
 #include <QVector4D>
 
 #include <array>
-#include <cmath>
 #include <optional>
 #include <epoxy/gl.h>
 
@@ -92,15 +87,20 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChain(ShaderTransition& transit
     // ran on every ALIVE paint frame and m_surfaceMultipass still holds the
     // final pre-close decorated composite (the entry outlives close because
     // slotWindowClosed defers removeWindowDecoration), which is exactly the frozen
-    // frame the close animation should carry. A plain single-pack unpadded
-    // window has no rest composite and animates the bare frozen uTexture0
-    // (its border does not ride the close — strictly better than the flash;
-    // a future rest-path composite for that class would restore it).
+    // frame the close animation should carry. This holds for EVERY decorated window, including a
+    // plain single-pack unpadded one: renderSurfaceChain delegates to
+    // renderSurfaceChainComposite unconditionally (see its doc above), so the
+    // bespoke chain[0]-only unpadded blit that used to leave that class without
+    // a rest composite is gone, and there is no window class here that falls
+    // back to the bare frozen uTexture0.
     if (w->isDeleted()) {
         const auto sIt = m_surfaceMultipass.find(getWindowId(w));
         if (sIt != m_surfaceMultipass.end()) {
             KWin::GLTexture* const frozen = sIt->second.compositeTex[sIt->second.finalSlot].get();
-            if (frozen) {
+            // compositeWritten, not just a non-null texture: a window closed before it
+            // ever folded successfully has an allocated pair holding undefined
+            // contents, and freezing THAT is the flash this branch exists to avoid.
+            if (frozen && sIt->second.compositeWritten) {
                 return frozen;
             }
         }
@@ -184,12 +184,19 @@ void PlasmaZonesEffect::refreshSurfaceShadowMargins(KWin::EffectWindow* window)
     // A shadow wider or taller than the window it surrounds is not a
     // shadow. The measured stale sample would have cached a 1374 px bottom
     // margin on a 678 px window; the real margins are 65/53/65/77 against
-    // frames from 628 to 2052 px, three orders of magnitude clear of this
-    // bound. Reject the update and keep the last good margins.
+    // frames from 628 to 2052 px, so roughly one order of magnitude clear of
+    // this bound at the tightest, not the three this used to claim. Reject the
+    // update and keep the last good margins.
     if (margins.left() > frame.width() || margins.right() > frame.width() || margins.top() > frame.height()
         || margins.bottom() > frame.height()) {
-        qCWarning(lcEffect) << "Refusing implausible shadow margins" << margins << "for" << window->windowClass()
-                            << "frame" << frame << "expanded" << expanded;
+        // DEBUG, not warning. A window genuinely smaller than its own shadow is a
+        // real and recurring shape (a small tooltip or a compact popup under a
+        // heavy shadow theme), and this fires on EVERY expanded-geometry event
+        // for such a window, so at warning level a perfectly healthy session
+        // fills the journal. The rejection itself is the correct handling and is
+        // unchanged; only its volume was wrong.
+        qCDebug(lcEffect) << "Refusing implausible shadow margins" << margins << "for" << window->windowClass()
+                          << "frame" << frame << "expanded" << expanded;
         return;
     }
     m_surfaceShadowMargins.insert(window, margins);
@@ -222,7 +229,8 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         const auto sIt = m_surfaceMultipass.find(windowId);
         if (sIt != m_surfaceMultipass.end()) {
             KWin::GLTexture* const frozen = sIt->second.compositeTex[sIt->second.finalSlot].get();
-            if (frozen) {
+            // See the twin above: an allocated pair is not a folded one.
+            if (frozen && sIt->second.compositeWritten) {
                 return frozen;
             }
         }
@@ -254,18 +262,41 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // main passes below) and the offscreen draws must not be clipped to a
     // scissor box the scene walk left enabled — a scissored clear would leave
     // stale/undefined texels in the composite. The guard restores scissor on
-    // exit (matching the captureWindowBackdrop and paint_pipeline siblings).
+    // exit (matching the captureWindowBackdrop and paint_capture.cpp siblings).
     glDisable(GL_SCISSOR_TEST);
+    // Blend OFF for the whole fold, for the same reason the pointer decoration
+    // path states at its own offscreen pass: a stage OWNS its target, it writes,
+    // it does not composite. Every pass below clears its FBO to (0,0,0,0) and
+    // draws one fullscreen quad, so there is nothing to blend against — but the
+    // fold never set blend state at all, which left each pass running under
+    // whatever enable and func the scene walk happened to leave behind. With a
+    // straight-alpha func such as (SRC_ALPHA, ONE_MINUS_SRC_ALPHA) a premultiplied
+    // pass output is multiplied by its alpha a second time, darkening every
+    // partially transparent edge in the composite. The guard restores it on exit.
+    glDisable(GL_BLEND);
     namespace SC = PhosphorSurfaceShaders::SurfaceShaderContract;
+
+    // Function-local rather than a member: plasmazoneseffect.h sits one line under
+    // its recorded ceiling, and this is a pure session-scoped diagnostic latch with
+    // no other reader. Same shape the capture path's allocation-failure latch uses.
+    static bool fallbackUnavailableWarned = false;
 
     // Upload the audio spectrum ONCE per fold, up front, before any pass binds
     // its textures. GLTexture::upload binds the new texture to the active unit,
     // so doing it mid-pass (inside bindSurfaceAudio) would clobber uTexture0's
     // binding on unit 0. audioActive() gates the work; the dirty flag makes the
     // repeat calls this frame (other windows, or the transition path) no-ops.
-    // The ScopedGlState guard above restores the active unit on exit regardless.
+    //
+    // PARK the active unit before the upload. ScopedGlState saves and restores
+    // GL_ACTIVE_TEXTURE, which is the unit SELECTOR, and touches no texture
+    // BINDING at all — so an upload performed on whatever unit the scene walk
+    // left active displaces that unit's texture for the rest of the frame, and
+    // nothing puts it back. Park on the unit the spectrum is going to live on
+    // anyway, which is the one the fold owns.
     if (audioActive()) {
+        glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceAudioUnit);
         ensureAudioSpectrumTexture();
+        glActiveTexture(GL_TEXTURE0);
     }
 
     // Size the targets to the window's expanded geometry × screen scale, with the
@@ -321,6 +352,16 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // treatment: re-find(windowId) after captureWindowSurface and abandon the
     // fold when the entry is gone (the shape ensureSurfaceTargets' dangling
     // alloc-failure path already documents).
+    //
+    // The capture is NOT the only re-entrant call made while this reference is
+    // held. compiledPackLazy above reaches compiledPack, which calls
+    // ensureSurfaceRegistryPaths, whose FIRST call emits effectsChanged inline.
+    // THE ORDERING IS THE WHOLE GUARANTEE. A window reaches this function only with a
+    // decoration record, and updateWindowDecoration calls ensureSurfaceRegistryPaths
+    // before it writes one, so the one-shot flag is already set and that inline emit
+    // cannot happen from here at all. It has to carry the whole weight: the handler's
+    // per-entry loop erases nothing, but it ends with updateAllDecorations(), whose
+    // sweep reaches removeWindowDecoration and so releaseSurfaceState, which does.
     SurfaceMultipassState& state = m_surfaceMultipass[windowId];
     state.canvasGeo = logicalGeometry;
 
@@ -409,6 +450,16 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         captureOk = captureWindowSurface(w, state, logicalGeometry, captureScale,
                                          /*intoCaptureTex=*/!plan.captureInComposite, captureOpacity);
     }
+    // AGAIN, because the capture above re-enters the whole KWin draw chain via a
+    // nested effects->drawWindow, and KWin's OffscreenData::paint toggles
+    // GL_SCISSOR_TEST. ScopedGlState snapshots scissor for exactly that reason
+    // (see its constructor), but that only restores it when the fold EXITS. The
+    // disable at the top of the fold protects the clears below it, and every one
+    // of those clears happens after this re-entry, so without re-asserting here a
+    // pass can clear through a scissor box the nested draw left enabled and leave
+    // stale texels in the composite. Blend is re-asserted for the same reason.
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_BLEND);
     // Shell surfaces: bound the capture's VISIBLE content so the packs can
     // hug what the user actually sees instead of the window rect (a floating
     // or Panel Colorizer-styled panel is a rounded body inset in a mostly
@@ -451,6 +502,42 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // every fold, and an early return that skipped it would strand the window on the
     // wrong shader.
     if (!captureOk) {
+        // If this state has NEVER folded there is no composite to fall back on, and the
+        // present shader re-asserted just above still points uFinal at
+        // compositeTex[finalSlot]: allocated, never written, undefined contents. The
+        // window shows garbage, or vanishes on a driver that zeroes fresh allocations.
+        // Two states reach here that way, a first fold whose capture fails and any
+        // frame where the pair was reallocated (finalSlot survives one) and the capture
+        // then failed.
+        //
+        // Hand the window back to KWin, exactly as the VRAM-failure branch above does
+        // and for the same reason: undecorated and visible beats invisible.
+        // removeWindowDecoration is the single owner of teardown, so this also clears
+        // shaderApplied, which makes apply()'s padded-quad rewrite fall false BY
+        // CONSTRUCTION rather than needing a second suppression flag. The entry is
+        // erased, so the next frame has no decoration and no second bail, and the
+        // decoration returns on the next updateWindowDecoration.
+        //
+        // Not during a transition, for the reason that branch gives: it owns the shader
+        // slot, would be torn out mid-animation, and re-captures every frame anyway.
+        //
+        // A state that HAS folded keeps its decoration. Its composite is stale but
+        // real, which reads as frozen, and that is the right answer to a transient
+        // capture failure.
+        // Stamp the fold clock even though nothing folded. This is the fold's THIRD
+        // terminal path, and the unpainted-gap sensor in planSurfaceFold carries no
+        // latch of its own — its latch IS the caller advancing lastFoldMs. Left
+        // unstamped, the same gap is re-added every frame, one frame longer each time,
+        // so timeOffsetMs grows without bound and the pack's own clock runs backwards
+        // for good, with no recovery because timeOffsetMs only ever increases. The
+        // other two terminal paths stamp it, pinned to the frame clock for the reason
+        // they give, so two windows in one frame cannot disagree about the time.
+        const qint64 pinnedBailMs = m_shaderManager.currentFrameClockMs();
+        state.lastFoldMs = pinnedBailMs >= 0 ? pinnedBailMs : ShaderInternal::shaderClockNowMs();
+        if (!state.compositeWritten && !captureRestoreShader) {
+            const auto selfRepaint = selfRepaintScope();
+            removeWindowDecoration(windowId, w);
+        }
         return nullptr;
     }
 
@@ -482,21 +569,19 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         // still true). A backdrop refold therefore cannot change a single pixel, so the
         // driver must not ask for another one.
         //
-        // Clearing the flag here is what an earlier pass did, and it converted a benign
-        // one-shot stall into a permanent 30Hz wake-up: the driver armed, this path cleared,
-        // 33ms later it armed again, forever, for a window whose composite is provably
-        // byte-identical. The flag stays set until a fold that actually folds something
-        // clears it — and a chain that starts varying per frame (a recompile lands, a pack
-        // starts animating) stops taking this path and clears it on its next real fold.
+        // Clearing it here converted a benign one-shot stall into a permanent 30Hz
+        // wake-up: the driver armed, this path cleared, 33ms later it armed again,
+        // forever, for a window whose composite is provably byte-identical. It stays set
+        // until a fold that folds something clears it, and a chain that starts varying
+        // per frame stops taking this path at all.
         //
         // The HOVER flag is the opposite, and the two are not symmetric. Reaching here proves
-        // compositeValid survived planSurfaceFold, and planSurfaceFold clears compositeValid
-        // whenever the fold cursor differs from the folded one — so the composite provably
-        // already reflects the live cursor and the hover repaint HAS been serviced. Leaving
-        // it set deadlocked the hover driver outright: it hard-skips any window whose flag is
-        // set, so a pure iMouse chain (classified static, because iMouse is state and not a
-        // per-frame input) armed the flag once, took this path, and never hover-updated again
-        // for the rest of the session.
+        // compositeValid survived planSurfaceFold, which clears it whenever the fold cursor
+        // differs from the folded one, so the composite provably already reflects the live
+        // cursor and the hover repaint HAS been serviced. Leaving it set deadlocked the hover
+        // driver, which hard-skips any window whose flag is set: a pure iMouse chain (static,
+        // because iMouse is state and not a per-frame input) armed it once, took this path,
+        // and never hover-updated again for the session.
         state.hoverRepaintPending = false;
         return state.compositeTex[state.finalSlot].get();
     }
@@ -578,8 +663,9 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             // own sampler location being -1 must not zero the gate.
             const bool backdropAvailable = backdropUsable(state);
             const bool passHasBackdrop = pass.uBackdropLoc >= 0 && backdropAvailable;
-            bool passBackdropUnitBound = false; ///< the transparent fallback went to unit 5
+            bool passBackdropUnitBound = false; ///< the transparent fallback went to the backdrop unit
             bool passAudioBound = false;
+            bool passUserTexturesBound = false; ///< at least one user-texture unit holds something
             {
                 KWin::ShaderBinder binder(pass.shader.get());
                 glActiveTexture(GL_TEXTURE0);
@@ -602,11 +688,11 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 if (pass.uScaleLoc >= 0) {
                     pass.shader->setUniform(pass.uScaleLoc, static_cast<float>(captureScale));
                 }
-                // Backdrop (needsBackdrop packs) on unit 5 — units 1..4
+                // Backdrop (needsBackdrop packs) on kSurfaceBackdropUnit — the units below it
                 // belong to the pass's iChannel bindings below.
                 if (passHasBackdrop) {
-                    pass.shader->setUniform(pass.uBackdropLoc, 5);
-                    glActiveTexture(GL_TEXTURE5);
+                    pass.shader->setUniform(pass.uBackdropLoc, ShaderInternal::kSurfaceBackdropUnit);
+                    glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceBackdropUnit);
                     state.backdropTex->bind();
                     glActiveTexture(GL_TEXTURE0);
                 } else if (pass.uBackdropLoc >= 0) {
@@ -618,18 +704,30 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                     // one exception, safe only because every bundled pack happens to gate on
                     // uHasBackdrop first. A third-party pack that does not is not a bug in
                     // the pack.
-                    pass.shader->setUniform(pass.uBackdropLoc, 5);
+                    pass.shader->setUniform(pass.uBackdropLoc, ShaderInternal::kSurfaceBackdropUnit);
                     // Set the uniform EVEN IF the fallback texture is null. An explicitly set sampler
-                    // pointing at an unbound unit reads black, which is the safe answer; an UNSET one
-                    // reads unit 0, the running composite. The lazy 1x1 upload can fail (OOM, context
-                    // loss), and every other consumer of this texture null-checks it — these two were
-                    // the only ones dereferencing it blind, which is a segfault in the compositor.
+                    // pointing at an unbound unit reads black, the safe answer; an UNSET one reads
+                    // unit 0, the running composite. The lazy 1x1 upload can fail (OOM, context loss)
+                    // and every other consumer null-checks it, so a blind dereference here segfaults.
+                    // Park the destination unit BEFORE the call, the way every other
+                    // fallback site in this fold does and for the reason
+                    // surface_audio.cpp spells out: transparentFallbackTexture() creates
+                    // the 1x1 lazily, and GLTexture::upload binds it to whatever unit is
+                    // ACTIVE. Active here is TEXTURE0, holding the running composite, so
+                    // the first such call of the session rebound unit 0 to a 1x1
+                    // transparent texture and this pass sampled the window as transparent
+                    // black: one frame of a vanished window.
+                    glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceBackdropUnit);
                     if (KWin::GLTexture* const fallback = transparentFallbackTexture()) {
-                        glActiveTexture(GL_TEXTURE5);
                         fallback->bind();
-                        glActiveTexture(GL_TEXTURE0);
                         passBackdropUnitBound = true;
+                    } else if (!fallbackUnavailableWarned) {
+                        fallbackUnavailableWarned = true;
+                        qCWarning(lcEffect) << "Surface fold: the 1x1 transparent fallback texture is unavailable;"
+                                            << "a declared-but-unbacked sampler will read texture unit 0, which holds"
+                                            << "the running composite";
                     }
+                    glActiveTexture(GL_TEXTURE0);
                 }
                 if (pass.uBackdropRectLoc >= 0) {
                     pass.shader->setUniform(pass.uBackdropRectLoc, state.backdropRect);
@@ -637,13 +735,15 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 if (pass.uHasBackdropLoc >= 0) {
                     pass.shader->setUniform(pass.uHasBackdropLoc, backdropAvailable ? 1.0f : 0.0f);
                 }
-                for (size_t j = 0; j < i && j < 4; ++j) {
-                    glActiveTexture(GL_TEXTURE1 + static_cast<int>(j));
+                for (size_t j = 0; j < i && j < static_cast<size_t>(ShaderInternal::kSurfaceChannelCount); ++j) {
+                    glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceFoldChannelBaseUnit + static_cast<int>(j));
                     bufs[j]->bind();
                     if (pass.iChannelLoc[j] >= 0) {
-                        pass.shader->setUniform(pass.iChannelLoc[j], 1 + static_cast<int>(j));
+                        pass.shader->setUniform(pass.iChannelLoc[j],
+                                                ShaderInternal::kSurfaceFoldChannelBaseUnit + static_cast<int>(j));
                     }
-                    if (pass.iChannelResolutionLoc[j] >= 0) {
+                    if (j < static_cast<size_t>(ShaderInternal::kSurfaceChannelResolutionSlots)
+                        && pass.iChannelResolutionLoc[j] >= 0) {
                         const QVector4D res(static_cast<float>(bufs[j]->width()), static_cast<float>(bufs[j]->height()),
                                             0.0f, 0.0f);
                         pass.shader->setUniform(pass.iChannelResolutionLoc[j], res);
@@ -656,22 +756,35 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 // pass samples iChannel0 was reading the window back into itself. The main
                 // pass, the audio slot and the user-texture slots all bind a fallback for
                 // exactly this reason; the buffer passes were left out of it.
-                for (size_t j = i; j < 4; ++j) {
+                for (size_t j = i; j < static_cast<size_t>(ShaderInternal::kSurfaceChannelCount); ++j) {
                     if (pass.iChannelLoc[j] < 0) {
                         continue; // the pass never samples this channel
                     }
                     // Park the destination unit BEFORE the call: the first-ever call
                     // creates the texture, and GLTexture::upload binds it on the ACTIVE
                     // unit, which is TEXTURE0 here.
-                    glActiveTexture(GL_TEXTURE1 + static_cast<int>(j));
+                    glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceFoldChannelBaseUnit + static_cast<int>(j));
                     KWin::GLTexture* const fallback = transparentFallbackTexture();
                     if (!fallback) {
+                        // Not benign, and it used to be silent at every level. Omitting
+                        // the bind restores the exact regression the fallback exists to
+                        // fix: the sampler is left UNSET, an unset sampler2D reads unit
+                        // 0, and unit 0 holds the running composite.
+                        if (!fallbackUnavailableWarned) {
+                            fallbackUnavailableWarned = true;
+                            qCWarning(lcEffect)
+                                << "Surface fold: the 1x1 transparent fallback texture is unavailable;"
+                                << "a declared-but-unbacked sampler will read texture unit 0, which holds"
+                                << "the running composite";
+                        }
                         glActiveTexture(GL_TEXTURE0);
-                        continue; // allocation failed — keep the old omit behaviour
+                        continue;
                     }
                     fallback->bind();
-                    pass.shader->setUniform(pass.iChannelLoc[j], 1 + static_cast<int>(j));
-                    if (pass.iChannelResolutionLoc[j] >= 0) {
+                    pass.shader->setUniform(pass.iChannelLoc[j],
+                                            ShaderInternal::kSurfaceFoldChannelBaseUnit + static_cast<int>(j));
+                    if (j < static_cast<size_t>(ShaderInternal::kSurfaceChannelResolutionSlots)
+                        && pass.iChannelResolutionLoc[j] >= 0) {
                         pass.shader->setUniform(pass.iChannelResolutionLoc[j],
                                                 QVector4D(static_cast<float>(fallback->width()),
                                                           static_cast<float>(fallback->height()), 0.0f, 0.0f));
@@ -704,23 +817,80 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 // reads surface_audio.glsl — same contract as the main pass.
                 passAudioBound =
                     bindSurfaceAudio(pass.shader.get(), pass.iAudioSpectrumSizeLoc, pass.uAudioSpectrumLoc, mayAnimate);
+                // The pack's own textures, on the same units and by the same rule as
+                // the main pass below. EVERY slot the pass references gets a bind, a
+                // real texture or the shared 1x1 transparent fallback, because an
+                // unset classic sampler reads unit 0 and unit 0 here is the running
+                // composite: without this a pass sampling a mask would sample the
+                // window back into its own blur.
+                if (pass.iTextureResolutionLoc[0] >= 0) {
+                    pass.shader->setUniform(pass.iTextureResolutionLoc[0],
+                                            QVector4D(static_cast<float>(state.compositeSize.width()),
+                                                      static_cast<float>(state.compositeSize.height()), 0.0f, 0.0f));
+                }
+                for (int t = 0; t < PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots; ++t) {
+                    if (pass.userTextureLoc[t] < 0) {
+                        continue;
+                    }
+                    KWin::GLTexture* userTex = pk->userTextures[t].get();
+                    if (!userTex) {
+                        // Park the destination unit before the lazy upload, same hazard
+                        // and same reason as the main pass: GLTexture::upload binds on
+                        // the CURRENTLY ACTIVE unit, which is 0 here.
+                        glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceUserTextureBaseUnit + t);
+                        userTex = transparentFallbackTexture();
+                        glActiveTexture(GL_TEXTURE0);
+                        if (!userTex) {
+                            // Set it even with nothing to bind, for the backdrop arm's
+                            // reason: unset sends the sampler to unit 0, the running
+                            // composite, so an omit folds the window into its own blur.
+                            pass.shader->setUniform(pass.userTextureLoc[t],
+                                                    ShaderInternal::kSurfaceUserTextureBaseUnit + t);
+                            if (!fallbackUnavailableWarned) {
+                                fallbackUnavailableWarned = true;
+                                qCWarning(lcEffect) << "Surface fold: no fallback texture for a buffer-pass user"
+                                                    << "texture slot; its sampler points at an empty unit";
+                            }
+                            continue;
+                        }
+                    } else if (pass.iTextureResolutionLoc[t + 1] >= 0) {
+                        pass.shader->setUniform(pass.iTextureResolutionLoc[t + 1],
+                                                QVector4D(static_cast<float>(userTex->width()),
+                                                          static_cast<float>(userTex->height()), 0.0f, 0.0f));
+                    }
+                    const int unit = ShaderInternal::kSurfaceUserTextureBaseUnit + t;
+                    pass.shader->setUniform(pass.userTextureLoc[t], unit);
+                    glActiveTexture(GL_TEXTURE0 + unit);
+                    userTex->bind();
+                    glActiveTexture(GL_TEXTURE0);
+                    passUserTexturesBound = true;
+                }
                 drawFullscreenQuad();
             }
-            // Unbind all four channel units, not just the prior-buffer ones: the loop
+            // Unbind every channel unit, not just the prior-buffer ones: the loop
             // above also binds a transparent fallback to every channel the pass declares
             // but has no buffer for, and leaving those bound would leak this pass's state
             // into the next one.
-            for (size_t j = 0; j < 4; ++j) {
-                glActiveTexture(GL_TEXTURE1 + static_cast<int>(j));
+            for (size_t j = 0; j < static_cast<size_t>(ShaderInternal::kSurfaceChannelCount); ++j) {
+                glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceFoldChannelBaseUnit + static_cast<int>(j));
                 glBindTexture(GL_TEXTURE_2D, 0);
             }
             if (passHasBackdrop || passBackdropUnitBound) {
-                glActiveTexture(GL_TEXTURE5);
+                glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceBackdropUnit);
                 glBindTexture(GL_TEXTURE_2D, 0);
             }
             if (passAudioBound) {
                 glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceAudioUnit);
                 glBindTexture(GL_TEXTURE_2D, 0);
+            }
+            if (passUserTexturesBound) {
+                // Every slot, not only the ones this pass bound: the next pass in the
+                // chain may reference a different subset, and a unit left bound leaks
+                // this pass's texture into it. Same discipline as the channel units.
+                for (int t = 0; t < PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots; ++t) {
+                    glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceUserTextureBaseUnit + t);
+                    glBindTexture(GL_TEXTURE_2D, 0);
+                }
             }
             glActiveTexture(GL_TEXTURE0);
             KWin::GLFramebuffer::popFramebuffer();
@@ -740,7 +910,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         // bind (frost's main reads the blurred buffers, not uBackdrop).
         const bool backdropAvailable = backdropUsable(state);
         const bool mainHasBackdrop = pk->uBackdropLoc >= 0 && backdropAvailable;
-        bool mainBackdropUnitBound = false; ///< the transparent fallback went to unit 5
+        bool mainBackdropUnitBound = false; ///< the transparent fallback went to the backdrop unit
         bool mainAudioBound = false;
         bool mainUserTexturesBound = false;
         // Highest iChannel unit bound by the main pass, +1. Tracked rather than
@@ -760,15 +930,22 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             // Bind only the buffers step 2a actually rendered (passCount), not
             // every allocated slot: if bufs ever outnumbers the pack's buffer
             // passes, the surplus textures are unwritten and must not be sampled.
-            const int n = qMin(static_cast<int>(passCount), 4);
+            const int n = qMin(static_cast<int>(passCount), ShaderInternal::kSurfaceChannelCount);
             for (int i = 0; i < n; ++i) {
-                glActiveTexture(GL_TEXTURE1 + i);
+                // Gate the BIND on the location too, not just the setUniform. A pack
+                // that samples iChannel0 and iChannel3 but not iChannel1 was still
+                // paying an activate-and-bind for slot 1, and still counting it into
+                // mainChannelsBound, which the unbind walk below then has to undo.
+                if (pk->iChannelLoc[i] < 0) {
+                    continue;
+                }
+                glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceFoldChannelBaseUnit + i);
                 bufs[i]->bind();
                 mainChannelsBound = i + 1;
-                if (pk->iChannelLoc[i] >= 0) {
-                    pk->shader->setUniform(pk->iChannelLoc[i], 1 + i);
+                {
+                    pk->shader->setUniform(pk->iChannelLoc[i], ShaderInternal::kSurfaceFoldChannelBaseUnit + i);
                 }
-                if (pk->iChannelResolutionLoc[i] >= 0) {
+                if (i < ShaderInternal::kSurfaceChannelResolutionSlots && pk->iChannelResolutionLoc[i] >= 0) {
                     const QVector4D res(static_cast<float>(bufs[i]->width()), static_cast<float>(bufs[i]->height()),
                                         0.0f, 0.0f);
                     pk->shader->setUniform(pk->iChannelResolutionLoc[i], res);
@@ -787,7 +964,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             // successful fold, whose units now hold unrelated texels. Bind the
             // transparent fallback so an unrendered channel really does read as 0,
             // which is what the allocation-failure path claims to deliver.
-            for (int i = n; i < 4; ++i) {
+            for (int i = n; i < ShaderInternal::kSurfaceChannelCount; ++i) {
                 if (pk->iChannelLoc[i] < 0) {
                     continue; // the pack never samples this channel
                 }
@@ -795,7 +972,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 // user-texture fallback below: the first-ever call creates the
                 // texture, and GLTexture::upload binds it on the CURRENTLY ACTIVE
                 // unit — which is TEXTURE0 here, holding the running composite.
-                glActiveTexture(GL_TEXTURE1 + i);
+                glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceFoldChannelBaseUnit + i);
                 KWin::GLTexture* const fallback = transparentFallbackTexture();
                 if (!fallback) {
                     glActiveTexture(GL_TEXTURE0);
@@ -803,36 +980,38 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 }
                 fallback->bind();
                 mainChannelsBound = i + 1;
-                pk->shader->setUniform(pk->iChannelLoc[i], 1 + i);
-                if (pk->iChannelResolutionLoc[i] >= 0) {
+                pk->shader->setUniform(pk->iChannelLoc[i], ShaderInternal::kSurfaceFoldChannelBaseUnit + i);
+                if (i < ShaderInternal::kSurfaceChannelResolutionSlots && pk->iChannelResolutionLoc[i] >= 0) {
                     pk->shader->setUniform(pk->iChannelResolutionLoc[i],
                                            QVector4D(static_cast<float>(fallback->width()),
                                                      static_cast<float>(fallback->height()), 0.0f, 0.0f));
                 }
                 glActiveTexture(GL_TEXTURE0);
             }
-            // Backdrop (needsBackdrop packs) on unit 5 — units 1..n above
+            // Backdrop (needsBackdrop packs) on kSurfaceBackdropUnit — units 1..n above
             // hold this pack's buffer outputs.
             if (mainHasBackdrop) {
-                pk->shader->setUniform(pk->uBackdropLoc, 5);
-                glActiveTexture(GL_TEXTURE5);
+                pk->shader->setUniform(pk->uBackdropLoc, ShaderInternal::kSurfaceBackdropUnit);
+                glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceBackdropUnit);
                 state.backdropTex->bind();
                 glActiveTexture(GL_TEXTURE0);
             } else if (pk->uBackdropLoc >= 0) {
                 // Declared with nothing behind it — the transparent fallback, for the reason
                 // given on the buffer-pass sibling above. Unit 0 is the running composite.
-                pk->shader->setUniform(pk->uBackdropLoc, 5);
-                // Set the uniform EVEN IF the fallback texture is null. An explicitly set sampler
-                // pointing at an unbound unit reads black, which is the safe answer; an UNSET one
-                // reads unit 0, the running composite. The lazy 1x1 upload can fail (OOM, context
-                // loss), and every other consumer of this texture null-checks it — these two were
-                // the only ones dereferencing it blind, which is a segfault in the compositor.
+                pk->shader->setUniform(pk->uBackdropLoc, ShaderInternal::kSurfaceBackdropUnit);
+                // Set the uniform even if the fallback is null, and park first: both
+                // for the reasons the buffer-pass sibling above spells out.
+                glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceBackdropUnit);
                 if (KWin::GLTexture* const fallback = transparentFallbackTexture()) {
-                    glActiveTexture(GL_TEXTURE5);
                     fallback->bind();
-                    glActiveTexture(GL_TEXTURE0);
                     mainBackdropUnitBound = true;
+                } else if (!fallbackUnavailableWarned) {
+                    fallbackUnavailableWarned = true;
+                    qCWarning(lcEffect) << "Surface fold: the 1x1 transparent fallback texture is unavailable;"
+                                        << "a declared-but-unbacked sampler will read texture unit 0, which holds"
+                                        << "the running composite";
                 }
+                glActiveTexture(GL_TEXTURE0);
             }
             if (pk->uBackdropRectLoc >= 0) {
                 pk->shader->setUniform(pk->uBackdropRectLoc, state.backdropRect);
@@ -846,6 +1025,16 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             // the spectrum texture only when live.
             mainAudioBound =
                 bindSurfaceAudio(pk->shader.get(), pk->iAudioSpectrumSizeLoc, pk->uAudioSpectrumLoc, mayAnimate);
+            // iTextureResolution[0] is uTexture0's size, which for this pass is the
+            // running composite on unit 0. The SAME value that feeds uSurfaceSize,
+            // so the two cannot disagree; the daemon publishes the equivalent and
+            // the compositor did not, which left index 0 answering differently on
+            // the two hosts for any pack that read it.
+            if (pk->iTextureResolutionLoc[0] >= 0) {
+                pk->shader->setUniform(pk->iTextureResolutionLoc[0],
+                                       QVector4D(static_cast<float>(state.compositeSize.width()),
+                                                 static_cast<float>(state.compositeSize.height()), 0.0f, 0.0f));
+            }
             // User-declared image textures (metadata `textures`), units
             // kSurfaceUserTextureBaseUnit.. — loaded once at compile time onto
             // the pack state. Every slot the shader REFERENCES gets a bind: a
@@ -870,10 +1059,21 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                     userTex = transparentFallbackTexture();
                     glActiveTexture(GL_TEXTURE0);
                     if (!userTex) {
-                        continue; // allocation failed — keep the old omit behaviour
+                        // Set it even with nothing to bind, same as the buffer-pass
+                        // arm above and for the same reason.
+                        pk->shader->setUniform(pk->userTextureLoc[t], ShaderInternal::kSurfaceUserTextureBaseUnit + t);
+                        if (!fallbackUnavailableWarned) {
+                            fallbackUnavailableWarned = true;
+                            qCWarning(lcEffect) << "Surface fold: no fallback texture for a main-pass user"
+                                                << "texture slot; its sampler points at an empty unit";
+                        }
+                        continue;
                     }
-                } else if (pk->iTextureResolutionLoc[t] >= 0) {
-                    pk->shader->setUniform(pk->iTextureResolutionLoc[t],
+                } else if (pk->iTextureResolutionLoc[t + 1] >= 0) {
+                    // t + 1: pack slot t is uTexture<t+1>, and iTextureResolution is
+                    // indexed by GLSL texture slot. Index 0 belongs to the surface
+                    // and is pushed below.
+                    pk->shader->setUniform(pk->iTextureResolutionLoc[t + 1],
                                            QVector4D(static_cast<float>(userTex->width()),
                                                      static_cast<float>(userTex->height()), 0.0f, 0.0f));
                 }
@@ -891,11 +1091,11 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             drawFullscreenQuad();
         }
         for (int i = 0; i < mainChannelsBound; ++i) {
-            glActiveTexture(GL_TEXTURE1 + i);
+            glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceFoldChannelBaseUnit + i);
             glBindTexture(GL_TEXTURE_2D, 0);
         }
         if (mainHasBackdrop || mainBackdropUnitBound) {
-            glActiveTexture(GL_TEXTURE5);
+            glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceBackdropUnit);
             glBindTexture(GL_TEXTURE_2D, 0);
         }
         if (mainAudioBound) {
@@ -925,6 +1125,9 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     }
 
     state.finalSlot = lastDst;
+    // The one place a composite becomes real. Everything that binds
+    // compositeTex[finalSlot] gates on this, so an unwritten pair is never presented.
+    state.compositeWritten = true;
     // The composite just folded is reusable verbatim only when nothing in the chain
     // varies PER FRAME (iTime, audio, backdrop). Focus, opacity and the cursor are baked
     // in as keys instead, so record what this fold used — the next one refuses the

@@ -53,12 +53,26 @@ QVariantMap clampToDeclaredRanges(const PhosphorSurfaceShaders::SurfaceShaderEff
             continue;
         }
         const QMetaType::Type type = static_cast<QMetaType::Type>(it.value().typeId());
-        const bool numeric = type == QMetaType::Int || type == QMetaType::UInt || type == QMetaType::LongLong
+        const bool numericType = type == QMetaType::Int || type == QMetaType::UInt || type == QMetaType::LongLong
             || type == QMetaType::ULongLong || type == QMetaType::Double || type == QMetaType::Float;
-        if (!numeric) {
+        double value = 0.0;
+        if (numericType) {
+            value = it.value().toDouble();
+        } else if (type == QMetaType::QString) {
+            // A NUMBER CAN ARRIVE AS A STRING, and a type whitelist alone let those
+            // past the clamp entirely. The profile tree round-trips through JSON and
+            // a hand-edited config can hold "24" for a float param, which is exactly
+            // the typo'd-or-hostile case this clamp exists for. Parsed rather than
+            // assumed, so a colour ("#ff0000") or an enum token still falls through
+            // untouched, and Bool stays excluded as before.
+            bool ok = false;
+            value = it.value().toString().toDouble(&ok);
+            if (!ok) {
+                continue;
+            }
+        } else {
             continue;
         }
-        double value = it.value().toDouble();
         // An inverted declared range is left alone rather than applied, the same
         // decision clampToBounds makes: applying both ends of a backwards pair moves
         // the value outside both of them.
@@ -99,6 +113,12 @@ DecorationPreviewController::DecorationPreviewController(PhosphorSurfaceShaders:
     if (m_registry) {
         connect(m_registry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
                 &DecorationPreviewController::bumpPreviewRevision);
+        // The second tick, and deliberately not folded into bumpPreviewRevision:
+        // that one also fires on a palette or colour change, where re-baking every
+        // stage would be pure waste. Only a committed rescan can have changed a
+        // pack's shader SOURCE, which is the case recomposing the chain misses.
+        connect(m_registry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
+                &DecorationPreviewController::bumpDecorationReloadGeneration);
     }
     if (auto* app = qGuiApp) {
         // The palette is the fallback for both colours AND the source of the
@@ -112,6 +132,13 @@ DecorationPreviewController::DecorationPreviewController(PhosphorSurfaceShaders:
         app->installEventFilter(this);
     }
     if (m_settings) {
+        // The blur-quality tier is folded into the composed stage map, so moving that
+        // combo changes what the daemon will draw and has to move the preview with it.
+        // bumpPreviewRevision, NOT the reload generation: the tier changes the stage
+        // MAP and not the shader source, so a recompose is enough and a re-bake of
+        // every stage would be waste.
+        connect(m_settings, &ISettings::decorationBlurScaleMultiplierChanged, this,
+                &DecorationPreviewController::bumpPreviewRevision);
         connect(m_settings, &ISettings::highlightColorChanged, this, &DecorationPreviewController::bumpPreviewRevision);
         connect(m_settings, &ISettings::inactiveColorChanged, this, &DecorationPreviewController::bumpPreviewRevision);
         // Follow the setting for as long as a host wants capture. Without this
@@ -165,6 +192,12 @@ void DecorationPreviewController::bumpPreviewRevision()
     Q_EMIT previewRevisionChanged();
 }
 
+void DecorationPreviewController::bumpDecorationReloadGeneration()
+{
+    ++m_decorationReloadGeneration;
+    Q_EMIT decorationReloadGenerationChanged();
+}
+
 QVariantList DecorationPreviewController::previewChain(const QString& packId, const QVariantMap& friendlyParams) const
 {
     QVariantList chain;
@@ -208,7 +241,11 @@ QVariantList DecorationPreviewController::previewChain(const QString& packId, co
     // own declared radius is the correct one to preview with. Injecting a card
     // radius here would show the user a rounding their real windows will not
     // get.
-    chain.append(PhosphorSurfaceShaders::composeStageMap(effect, resolved));
+    // The blur-quality tier, for the reason every other property on this path is
+    // forwarded: a preview that composes at a different density than the daemon
+    // stops predicting what the daemon draws.
+    chain.append(PhosphorSurfaceShaders::composeStageMap(
+        effect, resolved, m_settings ? m_settings->decorationBlurScaleMultiplier() : 1.0));
     return chain;
 }
 

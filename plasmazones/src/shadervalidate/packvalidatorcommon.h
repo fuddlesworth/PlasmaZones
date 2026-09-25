@@ -46,7 +46,7 @@ enum class PackModel {
 /// carries no marker.
 ///
 /// Detected from the pack's SIBLING `shared/` directory rather than from
-/// metadata.json, because the three schemas are not distinguishable: all four
+/// metadata.json, because the four schemas are not distinguishable: all four
 /// carry id / name / fragmentShader, and the only animation-exclusive field
 /// (`appliesTo`) is optional, so a universal animation pack that omits it looks
 /// exactly like an overlay pack. The shared directory is unambiguous, since
@@ -88,6 +88,15 @@ std::optional<PackModel> detectPackModel(const QString& packDir);
 /// helpers can never satisfy an include the tree itself lacks: a header
 /// missing from `data/<family>/shared` fails here the way it fails in CI,
 /// rather than resolving from a stale `/usr/share` copy on a developer machine.
+///
+/// THAT GUARANTEE COVERS `#include` ONLY, which this used to leave implied. A
+/// `builtin:` buffer token does not come through these roots at all: the
+/// registry's own resolver probes the pack's sibling shared/ and then falls
+/// back to QStandardPaths, so a self-contained tree missing a builtin file
+/// resolves it from the installed copy and validates on a developer machine
+/// while failing in CI. The surface arm lints that case by comparing the
+/// resolved directory against this list, which is exactly the discrimination
+/// this function is good for.
 QStringList packSharedRoots(const QString& packDir);
 
 // Confine a metadata-supplied shader path to its pack dir. Returns the confined
@@ -96,8 +105,8 @@ QStringList packSharedRoots(const QString& packDir);
 std::optional<QString> confinedPackPath(const QString& packDir, const QString& rel);
 
 // The report column for a stage label: labels shorter than the column are
-// padded to it, longer ones (`effect.frag (Qt-RHI preview)`) get one space so
-// the OK/ERROR word never runs into the label.
+// padded to it, longer ones (`kawase_down_0.frag`) get one space so the
+// OK/ERROR word never runs into the label.
 QString padLabel(const QString& label);
 
 // In-place confinement: rewrites @p path to its confined absolute form and
@@ -116,15 +125,104 @@ QString poolName(const QString& type);
 
 // Report a compiled stage's outcome ("OK", or "ERROR" with the glslang
 // diagnostics mapped to the author's file/line plus the did-you-mean hint).
-// Returns 1 on failure, 0 on success. Shared by all the validators.
+// A stage that compiled is then reflected against the shared descriptor-binding
+// table (bindingLayoutProblems) and fails when a sampler or uniform block sits
+// at the wrong binding. Returns 1 on failure, 0 on success. Shared by all the
+// validators.
+//
+// Takes NO source-string legend, unlike reportCompositorCompile. QShaderBaker
+// drops the `#line` source string and reports every error against the top-level
+// source, so there is no id here to resolve. Measured rather than assumed; the
+// definition says how, and what it costs.
 int reportCompile(QTextStream& out, const QString& label, const PhosphorRendering::ShaderCompiler::Result& result,
                   const QStringList& declared);
+
+/// Every way a baked stage's descriptor bindings disagree with the one table all
+/// four families and the daemon's ShaderNodeRhi share (PhosphorShaders::Bindings):
+/// a contract sampler at the wrong slot, a consumer sampler inside the reserved
+/// range, or a uniform block off binding 0. Empty when the layout is right.
+/// Exposed so the tests can pin the rule without going through a whole pack.
+QStringList bindingLayoutProblems(const QShader& shader);
 
 // Build the `p_<id>` name list a pack declares, for the did-you-mean hint.
 QStringList declaredParamNames(const QList<PhosphorShaders::ShaderRegistry::ParameterInfo>& params);
 QStringList declaredParamNames(const QList<PhosphorAnimationShaders::AnimationShaderEffect::ParameterInfo>& params);
 QStringList declaredParamNames(const QList<PhosphorSurfaceShaders::SurfaceShaderEffect::ParameterInfo>& params);
 QStringList declaredParamNames(const QList<PhosphorPointerShaders::PointerShaderEffect::ParameterInfo>& params);
+
+/// One declared parameter, reduced to what a preset lint needs: its id, its
+/// type token, and whatever range it declares. The four families spell their
+/// ParameterInfo differently (slot vs step, image vs no image), so the lint
+/// takes this instead of any one of them and each arm projects into it.
+struct PresetLintParam
+{
+    QString id;
+    QString type;
+    QVariant minValue;
+    QVariant maxValue;
+};
+
+/// Lint a preset value set on an IMAGE-typed parameter, for the two families that cannot
+/// keep one.
+///
+/// The animation and surface arms parse a pack's presets before its directory is stamped,
+/// so `parsePackPresets` refuses every image-typed preset value fail-closed and the value
+/// is gone before any other lint sees it. Reads the RAW `presets` block for the keys a
+/// pack sets, because the parsed map is exactly where they have already been dropped.
+/// Returns its lints rather than printing, so the three preset reporters share ONE
+/// `presets ERROR` header. Each used to print its own, and a pack tripping two of them
+/// (an image param plus an out-of-range float, say) printed the header twice in one
+/// report. See `reportPresetLints`.
+QStringList imageParamPresetLints(const QJsonObject& root);
+
+/// Lint the RAW `presets` value from @p root, for the faults the parsed map cannot show.
+///
+/// Each of them costs the author presets or values with only a log line: a
+/// present-but-non-object `presets` (the loader ignores it wholesale), a non-object preset
+/// BODY, a null preset value, more presets than the loader keeps, and a preset with more
+/// values than it keeps. `collectPresetLints` below receives the already-parsed,
+/// already-truncated map and so is blind to all of them.
+QStringList rawPresetLints(const QJsonObject& root);
+
+/// Lint a pack's `presets` block against what the pack declares.
+///
+/// Checks everything decidable without rendering: every preset key is usable as a
+/// picker label, every key names a declared parameter, every value matches that
+/// parameter's declared type, and a numeric value sits inside any declared range
+/// AND inside its own type's range. Containment is deliberately NOT among them —
+/// see the implementation, where the parse has already refused an escaping path
+/// before this lint can see it.
+///
+/// @p packDir is the pack's directory, used to check that an image-typed preset
+/// value names a file the pack actually ships. Every arm passes a real directory
+/// today; an empty one skips the existence check.
+///
+/// Deliberately NOT an error for a preset to omit parameters: a preset is a
+/// partial tuning by design, and the ones it says nothing about fall back to
+/// their defaults.
+///
+/// RETURNS its lints rather than printing them. `reportPresetLints` is what
+/// prints, under one shared header — see there for why.
+QStringList presetLints(const QString& packDir, const QMap<QString, QVariantMap>& presets,
+                        const QList<PresetLintParam>& declared);
+
+/// Per-family overloads, so each validator arm is one call rather than its own
+/// projection loop. The four ParameterInfo types spell themselves differently
+/// (slot vs step, image vs no image), which is why the lint takes the reduced
+/// PresetLintParam and these do the reducing.
+QStringList presetLints(const QString& packDir, const QMap<QString, QVariantMap>& presets,
+                        const QList<PhosphorShaders::ShaderRegistry::ParameterInfo>& declared);
+QStringList presetLints(const QString& packDir, const QMap<QString, QVariantMap>& presets,
+                        const QList<PhosphorAnimationShaders::AnimationShaderEffect::ParameterInfo>& declared);
+QStringList presetLints(const QString& packDir, const QMap<QString, QVariantMap>& presets,
+                        const QList<PhosphorSurfaceShaders::SurfaceShaderEffect::ParameterInfo>& declared);
+QStringList presetLints(const QString& packDir, const QMap<QString, QVariantMap>& presets,
+                        const QList<PhosphorPointerShaders::PointerShaderEffect::ParameterInfo>& declared);
+
+/// Print everything the three collectors gathered under ONE `presets ERROR` header and
+/// return the count, so a caller still does `errors += ...`. Prints nothing when @p lints
+/// is empty, which is what keeps a clean pack's report free of an empty section.
+int reportPresetLints(QTextStream& out, const QStringList& lints);
 
 // ── compositor (KWin classic-GL) bake ──────────────────────────────────────
 // Packs whose appliesTo makes them compositor-only are never loaded by the
@@ -141,77 +239,6 @@ QStringList declaredParamNames(const QList<PhosphorPointerShaders::PointerShader
 // direct libglslang dependency for one code path is a heavier build cost than
 // a tool the GLSL toolchain already ships.
 
-/// One declared parameter, reduced to what a preset lint needs: its id, its
-/// type token, and whatever range it declares. The four families spell their
-/// ParameterInfo differently (slot vs step, image vs no image), so the lint
-/// takes this instead of any one of them and each arm projects into it.
-struct PresetLintParam
-{
-    QString id;
-    QString type;
-    QVariant minValue;
-    QVariant maxValue;
-};
-
-/// Lint a pack's `presets` block against what the pack declares.
-///
-/// Checks everything decidable without rendering: every preset key is usable as a
-/// picker label, every key names a declared parameter, every value matches that
-/// parameter's declared type, a numeric value sits inside any declared range AND
-/// inside its own type's range, and an image-typed value names a file the pack ships.
-/// Containment is deliberately NOT among them — see the implementation, where the
-/// parse has already refused an escaping path before this lint can see it.
-///
-/// Collects its findings and prints them under a `presets ERROR` header, then
-/// returns the number of problems found. Emitting straight to the stream as each
-/// problem was found meant a pack whose only fault was a bad preset printed an
-/// unindented error line and then `metadata OK` directly below it, while still
-/// returning a non-zero error count.
-///
-/// @p packDir is the pack's directory, used to check that an image-typed preset
-/// value names a file the pack actually ships. NOT a containment check: the parse
-/// has already dropped an escaping path, so there is nothing left here to refuse
-/// (see the implementation). Every arm passes a real directory today; an empty one
-/// skips the existence check.
-///
-/// Deliberately NOT an error for a preset to omit parameters: a preset is a
-/// partial tuning by design, and the ones it says nothing about fall back to
-/// their defaults.
-/// Lint a preset value set on an IMAGE-typed parameter, for the two families that cannot
-/// keep one.
-///
-/// The animation and surface arms parse a pack's presets before its directory is stamped,
-/// so `parsePackPresets` refuses every image-typed preset value fail-closed and the value
-/// is gone before any other lint sees it. Reads the RAW `presets` block for the keys a
-/// pack sets, because the parsed map is exactly where they have already been dropped.
-int reportImageParamPresets(QTextStream& out, const QJsonObject& root);
-
-/// Lint the RAW `presets` value from @p root, for the faults the parsed map cannot show.
-///
-/// Three of them, each costing the author presets with only a log line: a
-/// present-but-non-object `presets` (the loader ignores it wholesale), more presets than
-/// the loader keeps, and a preset with more values than it keeps. `reportPresetProblems`
-/// below receives the already-parsed, already-truncated map and so is blind to all three.
-///
-/// Returns the number of problems found and prints them under the same `presets` header.
-int reportRawPresetProblems(QTextStream& out, const QJsonObject& root);
-
-int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
-                         const QList<PresetLintParam>& declared);
-
-/// Per-family overloads, so each validator arm is one call rather than its own
-/// projection loop. The four ParameterInfo types spell themselves differently
-/// (slot vs step, image vs no image), which is why the lint takes the reduced
-/// PresetLintParam and these do the reducing.
-int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
-                         const QList<PhosphorShaders::ShaderRegistry::ParameterInfo>& declared);
-int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
-                         const QList<PhosphorAnimationShaders::AnimationShaderEffect::ParameterInfo>& declared);
-int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
-                         const QList<PhosphorSurfaceShaders::SurfaceShaderEffect::ParameterInfo>& declared);
-int reportPresetProblems(QTextStream& out, const QString& packDir, const QMap<QString, QVariantMap>& presets,
-                         const QList<PhosphorPointerShaders::PointerShaderEffect::ParameterInfo>& declared);
-
 /// Absolute path to a usable glslang binary (`glslangValidator`, else the
 /// `glslang` the project renamed it to), or an empty string when neither is on
 /// PATH. Resolved once per run.
@@ -220,8 +247,13 @@ QString glslangValidatorPath();
 /// Compile @p source as @p stage through `glslangValidator` at @p toolPath and
 /// print OK/ERROR under @p label. @p stage is the glslang `-S` token ("frag" /
 /// "vert"). Returns 1 on failure, 0 on success.
+///
+/// @p sourcePaths is the include resolver's source-string legend. This is the
+/// arm where it matters: glslang run directly preserves the `#line` source id,
+/// so an error inside a shared header reads `surface_lib.glsl:112` instead of a
+/// bare `1`. Pass the list the same expansion filled.
 int reportCompositorCompile(QTextStream& out, const QString& label, const QString& stage, const QString& source,
-                            const QString& toolPath);
+                            const QString& toolPath, const QStringList& sourcePaths = {});
 
 // Compile one ZONE stage through the exact runtime assembly and print OK/ERROR.
 // Returns 1 on failure, 0 on success.

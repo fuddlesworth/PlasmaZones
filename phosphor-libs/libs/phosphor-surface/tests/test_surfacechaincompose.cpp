@@ -7,6 +7,8 @@
 #include <QUrl>
 #include <QtTest/QtTest>
 
+#include <limits>
+
 using namespace PhosphorSurfaceShaders;
 
 namespace {
@@ -34,10 +36,10 @@ SurfaceShaderEffect::ParameterInfo floatParam(const QString& id, double defaultV
 
 } // namespace
 
-/// Covers the two helpers the daemon overlay host, the kwin-effect
-/// compositor path, and the settings decoration preview share. The padding
-/// resolution had been copy-pasted into two of those and had already drifted
-/// in type; these pin the behaviour all three now depend on.
+/// Covers the two helpers the daemon overlay host, the kwin-effect compositor
+/// path, the settings decoration preview and the shell chrome share. The
+/// padding resolution had been copy-pasted into two of those and had already
+/// drifted in type; these pin the behaviour all four now depend on.
 class TestSurfaceChainCompose : public QObject
 {
     Q_OBJECT
@@ -90,13 +92,82 @@ private Q_SLOTS:
         QCOMPARE(paddingRequest(e, overrides), 12.0);
     }
 
+    /// The case the two above do not cover between them: paddingParam names an
+    /// UNDECLARED parameter AND an override carries that name. The declaration
+    /// check has to run first, or a stored override for a parameter the pack
+    /// does not have is honoured as a canvas request.
+    ///
+    /// Reachable rather than theoretical. resolveParams copies per-surface
+    /// deltas verbatim and clampToBounds skips ids with no declared bound, so
+    /// an undeclared id survives the flatten and arrives here.
+    void paddingRequest_ignores_an_override_under_an_undeclared_paddingParam()
+    {
+        SurfaceShaderEffect e = basePack();
+        e.paddingParam = QStringLiteral("nosuchparam");
+        e.parameters.append(floatParam(QStringLiteral("glowSize"), 12.0));
+        const QVariantMap overrides{{QStringLiteral("nosuchparam"), 240.0}};
+        QCOMPARE(paddingRequest(e, overrides), 0.0);
+    }
+
+    /// A padding override of the wrong TYPE must not suppress the declared
+    /// default. QVariant::toDouble() answers 0.0 for anything it cannot
+    /// convert, so gating on presence alone silently collapsed a pack's
+    /// margin to zero whenever a stored profile held a non-numeric value.
+    void paddingRequest_ignores_a_non_numeric_override()
+    {
+        SurfaceShaderEffect e = basePack();
+        e.paddingParam = QStringLiteral("glowSize");
+        e.parameters.append(floatParam(QStringLiteral("glowSize"), 16.0));
+
+        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), QStringLiteral("not a number")}}), 16.0);
+        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), QVariant()}}), 16.0);
+        // A numeric string is a legitimate override and still wins.
+        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), QStringLiteral("24")}}), 24.0);
+    }
+
+    /// A non-finite padding must not escape into a caller's clamp.
+    ///
+    /// NaN and infinity convert cleanly, so the type check above lets them
+    /// through; only the explicit isfinite() test stops them. This matters
+    /// past the aesthetics: the compositor bounds the result and then narrows
+    /// it to an int for the capture canvas, and narrowing a NaN or an
+    /// infinity to an integer is undefined behaviour. A qBound() around the
+    /// value does not save it either, since every comparison against NaN is
+    /// false.
+    void paddingRequest_rejects_a_non_finite_override()
+    {
+        SurfaceShaderEffect e = basePack();
+        e.paddingParam = QStringLiteral("glowSize");
+        e.parameters.append(floatParam(QStringLiteral("glowSize"), 16.0));
+
+        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), qQNaN()}}), 16.0);
+        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), qInf()}}), 16.0);
+        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), -qInf()}}), 16.0);
+    }
+
+    /// The same guard on the DECLARED side, which has its own conversion.
+    ///
+    /// A pack whose own default is non-finite has nothing to fall back to, so
+    /// the request has to come out as no padding at all rather than as a
+    /// value no caller can clamp.
+    void paddingRequest_rejects_a_non_finite_declared_default()
+    {
+        SurfaceShaderEffect e = basePack();
+        e.paddingParam = QStringLiteral("glowSize");
+        e.parameters.append(floatParam(QStringLiteral("glowSize"), qQNaN()));
+
+        QCOMPARE(paddingRequest(e, {}), 0.0);
+    }
     // ── composeStageMap ──────────────────────────────────────────────
 
     void composeStageMap_emits_the_host_contract_keys()
     {
         const SurfaceShaderEffect e = basePack();
         const QVariantMap stage = composeStageMap(e, {});
-        // The keys SurfaceDecoration.qml reads off every stage.
+        // The keys composeStageMap emits for EVERY stage, multipass or not.
+        // Not the whole set SurfaceDecoration.qml reads: it reads sixteen off
+        // stage.stageData, and the other ten are the buffer keys emitted only
+        // under multipass, which the two cases below pin.
         QVERIFY(stage.contains(QStringLiteral("source")));
         QVERIFY(stage.contains(QStringLiteral("vertexSource")));
         QVERIFY(stage.contains(QStringLiteral("preamble")));
@@ -132,10 +203,13 @@ private Q_SLOTS:
         const SurfaceShaderEffect e = basePack();
         const QVariantMap stage = composeStageMap(e, {});
         QCOMPARE(stage.value(QStringLiteral("multipass")).toBool(), false);
-        QVERIFY(!stage.contains(QStringLiteral("bufferShaderPaths")));
-        QVERIFY(!stage.contains(QStringLiteral("bufferScale")));
-        QVERIFY(!stage.contains(QStringLiteral("bufferFeedback")));
-        QVERIFY(!stage.contains(QStringLiteral("useDepthBuffer")));
+        // All TEN keys composeStageMap inserts under stageMultipass, not the
+        // four this used to check. A key left unpinned here is a key that can
+        // start leaking into a single-pass stage without failing anything.
+        for (const char* key : {"bufferShaderPaths", "bufferFeedback", "bufferScale", "bufferScales", "bufferWrap",
+                                "bufferWraps", "bufferFilter", "bufferFilters", "useDepthBuffer", "halfFloatBuffers"}) {
+            QVERIFY2(!stage.contains(QLatin1String(key)), key);
+        }
     }
 
     void composeStageMap_forwards_the_whole_buffer_set_for_a_multipass_pack()
@@ -146,6 +220,7 @@ private Q_SLOTS:
             QStringList{QStringLiteral("/packs/blur/gaussian_h.frag"), QStringLiteral("/packs/blur/gaussian_v.frag")};
         e.bufferFeedback = true;
         e.bufferScale = 0.25;
+        e.bufferScales = QList<qreal>{0.5, 0.125};
         e.bufferWrap = QStringLiteral("clamp");
         e.bufferWraps = QStringList{QStringLiteral("clamp"), QString()};
         e.bufferFilter = QStringLiteral("linear");
@@ -158,6 +233,12 @@ private Q_SLOTS:
         QCOMPARE(stage.value(QStringLiteral("bufferShaderPaths")).toStringList(), e.bufferShaderPaths);
         QCOMPARE(stage.value(QStringLiteral("bufferFeedback")).toBool(), true);
         QCOMPARE(stage.value(QStringLiteral("bufferScale")).toDouble(), 0.25);
+        // Per-pass scales ride along as a QVariantList the QML side can
+        // Array.from(); the shader item diverges its slots from them.
+        const QVariantList scales = stage.value(QStringLiteral("bufferScales")).toList();
+        QCOMPARE(scales.size(), 2);
+        QCOMPARE(scales.at(0).toDouble(), 0.5);
+        QCOMPARE(scales.at(1).toDouble(), 0.125);
         QCOMPARE(stage.value(QStringLiteral("bufferWrap")).toString(), QStringLiteral("clamp"));
         QCOMPARE(stage.value(QStringLiteral("bufferWraps")).toStringList(), e.bufferWraps);
         QCOMPARE(stage.value(QStringLiteral("bufferFilter")).toString(), QStringLiteral("linear"));
@@ -168,6 +249,74 @@ private Q_SLOTS:
         // the true default.
         QCOMPARE(stage.value(QStringLiteral("halfFloatBuffers")).toBool(), false);
         QVERIFY(stage.contains(QStringLiteral("halfFloatBuffers")));
+    }
+
+    /// The blur-quality tier multiplies every declared buffer scale.
+    ///
+    /// Pinned because this composer is the DAEMON-side counterpart of the
+    /// compositor's clampedBufferScale, and for a while only the compositor
+    /// applied the setting at all, so the same pack rendered at two densities
+    /// depending on whether it decorated a window or an OSD.
+    void composeStageMap_folds_the_blur_scale_multiplier_into_every_scale()
+    {
+        SurfaceShaderEffect e = basePack();
+        e.isMultipass = true;
+        e.bufferShaderPaths = QStringList{QStringLiteral("/packs/blur/a.frag"), QStringLiteral("/packs/blur/b.frag")};
+        e.bufferScale = 0.5;
+        e.bufferScales = QList<qreal>{0.5, 0.25};
+
+        const QVariantMap halved = composeStageMap(e, {}, 0.5);
+        QCOMPARE(halved.value(QStringLiteral("bufferScale")).toDouble(), 0.25);
+        const QVariantList scales = halved.value(QStringLiteral("bufferScales")).toList();
+        QCOMPARE(scales.size(), 2);
+        QCOMPARE(scales.at(0).toDouble(), 0.25);
+        QCOMPARE(scales.at(1).toDouble(), 0.125);
+
+        // Defaulted, so every existing caller keeps the declared density.
+        QCOMPARE(composeStageMap(e, {}).value(QStringLiteral("bufferScale")).toDouble(), 0.5);
+    }
+
+    /// The product is bounded into the allocator band, and an unusable multiplier
+    /// is the identity rather than a floor.
+    ///
+    /// The second half matters more than it looks: the value reaches the shell over
+    /// D-Bus, where an older daemon answers an unknown key with a valid EMPTY reply
+    /// and QVariant("").toReal() is 0.0. Treating that as a real multiplier would
+    /// collapse every pass to kMinBufferScale.
+    void composeStageMap_bounds_the_product_and_ignores_an_unusable_multiplier()
+    {
+        SurfaceShaderEffect e = basePack();
+        e.isMultipass = true;
+        e.bufferShaderPaths = QStringList{QStringLiteral("/packs/blur/a.frag")};
+        e.bufferScale = 1.0;
+        e.bufferScales = QList<qreal>{1.0};
+
+        // A HALF-density pack throughout, deliberately. With a pack at 1.0 the
+        // identity answer and the clamped answer are both kMaxBufferScale, so an
+        // assertion holds whether or not the multiplier is applied at all. That
+        // vacuity was real twice over: it left the `huge` case passing with the
+        // multiplier dropped entirely, and the infinity row passing with
+        // std::isfinite deleted.
+        SurfaceShaderEffect half = e;
+        half.bufferScale = 0.5;
+        half.bufferScales = QList<qreal>{0.5};
+
+        const QVariantMap huge = composeStageMap(half, {}, 1000.0);
+        QCOMPARE(huge.value(QStringLiteral("bufferScale")).toDouble(), SurfaceShaderEffect::kMaxBufferScale);
+        QCOMPARE(huge.value(QStringLiteral("bufferScales")).toList().at(0).toDouble(),
+                 SurfaceShaderEffect::kMaxBufferScale);
+
+        const QVariantMap tiny = composeStageMap(half, {}, 1.0e-9);
+        QCOMPARE(tiny.value(QStringLiteral("bufferScale")).toDouble(), SurfaceShaderEffect::kMinBufferScale);
+        QCOMPARE(tiny.value(QStringLiteral("bufferScales")).toList().at(0).toDouble(),
+                 SurfaceShaderEffect::kMinBufferScale);
+        const qreal unusable[] = {0.0, -1.0, std::numeric_limits<qreal>::quiet_NaN(),
+                                  std::numeric_limits<qreal>::infinity()};
+        for (const qreal m : unusable) {
+            const QVariantMap stage = composeStageMap(half, {}, m);
+            QCOMPARE(stage.value(QStringLiteral("bufferScale")).toDouble(), 0.5);
+            QCOMPARE(stage.value(QStringLiteral("bufferScales")).toList().at(0).toDouble(), 0.5);
+        }
     }
 
     /// The buffer format is a per-pack contract, and its default is the
@@ -255,56 +404,6 @@ private Q_SLOTS:
         noId.id.clear();
         QVERIFY(!noId.isValid());
         QVERIFY(composeStageMap(noId, {}).isEmpty());
-    }
-
-    /// A padding override of the wrong TYPE must not suppress the declared
-    /// default. QVariant::toDouble() answers 0.0 for anything it cannot
-    /// convert, so gating on presence alone silently collapsed a pack's
-    /// margin to zero whenever a stored profile held a non-numeric value.
-    void paddingRequest_ignores_a_non_numeric_override()
-    {
-        SurfaceShaderEffect e = basePack();
-        e.paddingParam = QStringLiteral("glowSize");
-        e.parameters.append(floatParam(QStringLiteral("glowSize"), 16.0));
-
-        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), QStringLiteral("not a number")}}), 16.0);
-        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), QVariant()}}), 16.0);
-        // A numeric string is a legitimate override and still wins.
-        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), QStringLiteral("24")}}), 24.0);
-    }
-
-    /// A non-finite padding must not escape into a caller's clamp.
-    ///
-    /// NaN and infinity convert cleanly, so the type check above lets them
-    /// through; only the explicit isfinite() test stops them. This matters
-    /// past the aesthetics: the compositor bounds the result and then narrows
-    /// it to an int for the capture canvas, and narrowing a NaN or an
-    /// infinity to an integer is undefined behaviour. A qBound() around the
-    /// value does not save it either, since every comparison against NaN is
-    /// false.
-    void paddingRequest_rejects_a_non_finite_override()
-    {
-        SurfaceShaderEffect e = basePack();
-        e.paddingParam = QStringLiteral("glowSize");
-        e.parameters.append(floatParam(QStringLiteral("glowSize"), 16.0));
-
-        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), qQNaN()}}), 16.0);
-        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), qInf()}}), 16.0);
-        QCOMPARE(paddingRequest(e, {{QStringLiteral("glowSize"), -qInf()}}), 16.0);
-    }
-
-    /// The same guard on the DECLARED side, which has its own conversion.
-    ///
-    /// A pack whose own default is non-finite has nothing to fall back to, so
-    /// the request has to come out as no padding at all rather than as a
-    /// value no caller can clamp.
-    void paddingRequest_rejects_a_non_finite_declared_default()
-    {
-        SurfaceShaderEffect e = basePack();
-        e.paddingParam = QStringLiteral("glowSize");
-        e.parameters.append(floatParam(QStringLiteral("glowSize"), qQNaN()));
-
-        QCOMPARE(paddingRequest(e, {}), 0.0);
     }
 };
 

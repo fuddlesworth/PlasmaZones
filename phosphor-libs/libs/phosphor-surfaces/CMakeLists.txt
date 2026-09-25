@@ -15,6 +15,18 @@ cmake_minimum_required(VERSION 3.16)
 
 set(PHOSPHORSURFACES_VERSION "0.1.0")
 
+# The Qt floor this library requires AND advertises in its generated
+# PhosphorSurfacesConfig.cmake. Taken from the top-level QT_MIN_VERSION when built in-tree so
+# the two cannot drift, with its own value for a STANDALONE build, where that
+# variable does not exist. The fallback is not optional: the Config template
+# substitutes this, and an undefined variable expands to nothing and ships a config
+# whose find_dependency(Qt6 ...) carries no version floor at all.
+if(DEFINED QT_MIN_VERSION)
+    set(PHOSPHORSURFACES_QT_MIN ${QT_MIN_VERSION})
+else()
+    set(PHOSPHORSURFACES_QT_MIN "6.10.0")
+endif()
+
 if(NOT PROJECT_VERSION)
     project(PhosphorSurfaces VERSION ${PHOSPHORSURFACES_VERSION} LANGUAGES CXX)
     set(CMAKE_CXX_STANDARD 20)
@@ -28,13 +40,25 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.10 REQUIRED COMPONENTS Core Quick)
+find_package(Qt6 ${PHOSPHORSURFACES_QT_MIN} REQUIRED COMPONENTS Core Quick)
 
 # In-tree builds set up PhosphorShellPatterns::PhosphorShellPatterns via
 # add_subdirectory in the top-level CMakeLists; stand-alone builds need
 # find_package. Guard so the in-tree path is a no-op.
 if(NOT TARGET PhosphorShellPatterns::PhosphorShellPatterns)
     find_package(PhosphorShellPatterns CONFIG REQUIRED)
+endif()
+
+# Sibling Phosphor libraries this one links. Each lookup is GUARDED rather than
+# unconditional: in-tree the parent add_subdirectory()s the sibling before this
+# directory, so its ALIAS target already exists and the find_package is skipped.
+# A STANDALONE configure (the project() guard above says this directory supports
+# one) has no such target, and without these it failed at target_link_libraries
+# with "links to X::X but the target was not found".
+
+# the layer-shell transport the surfaces are presented through
+if(NOT TARGET PhosphorLayer::PhosphorLayer)
+    find_package(PhosphorLayer CONFIG REQUIRED)
 endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════

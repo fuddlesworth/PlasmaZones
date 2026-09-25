@@ -92,7 +92,21 @@ vec2 motePath(float h1, float h2, float h3, float t, float reachPx,
     float wander = sin(age * 7.0 + h3 * TAU) * 0.5
                  + sin(age * 17.0 - t * 0.5 + h1 * TAU) * 0.3;
 
-    return spawn + normal * travel + tangent * (swayAmp * wander);
+    // THE SWAY IS BOUNDED TOO, not just the travel. `travel` is held to the reach
+    // handed in, which the caller already discounts to 0.9 of the captured margin
+    // so the streak stays inside it, but the TANGENTIAL term had no such bound: the
+    // declared ranges put sway at up to 48 logical px against a moteRange as low as
+    // 16, so a mote born near a corner was carried along the edge, round it, and
+    // out of the padded canvas. The shipped defaults do not reach that, the
+    // declared ranges do. Capped so the diagonal magnitude stays under the reach:
+    // sqrt(0.9^2 + 0.405^2) is about 0.99 of it.
+    // Bounded by scaling the AMPLITUDE, not by clamping the result: a clamp
+    // flat-topped the sine into a plateau, so past about half the mote range the
+    // sway visibly stalled at its extremes instead of simply travelling less far.
+    // |wander| <= 0.8, so 0.5625 * reachPx caps the excursion at the same 0.45 the
+    // clamp did. Only reachable in the regime that was out of bounds anyway.
+    float sway = min(swayAmp, 0.5625 * reachPx) * wander;
+    return spawn + normal * travel + tangent * sway;
 }
 
 // Fade in at birth, burn out well before the clock wraps, so a respawn at
@@ -128,16 +142,49 @@ vec3 microDust(vec2 px, float t, float amount, float reachPx, out float dustA) {
     float halo = exp(-dOut / max(reachPx * 0.9, 1.0));
 
     float cellPx = 13.0 * max(uSurfaceScale, 0.001);
-    // Emanation coordinates: bp is the nearest point on the frame rect, so
-    // s = bp.x + bp.y runs along the edge (constant at a corner, where the
-    // fan of fragments shares the corner as its source) and v = dOut runs
-    // outward. Scrolling v with the mote clock makes the specks drift away
-    // from the frame at every edge, corners included.
-    vec2 bp = clamp(px, cen - halfSz, cen + halfSz);
-    float s = bp.x + bp.y;
+    // Emanation coordinates: s runs along the frame's perimeter and v runs
+    // outward, scrolled by the mote clock so the specks drift away from the frame
+    // at every edge, corners included.
+    //
+    // s IS AN ANGLE ABOUT THE FRAME CENTRE, not the nearest-point sum it used to
+    // be. That sum was `clamp(px, ...)` projected as bp.x + bp.y, and it broke at
+    // the corners in two ways at once. For a fragment diagonally past a corner
+    // BOTH clamp components saturate, so the sum is a single constant over the
+    // whole quarter-plane fan: every other factor in the dust alpha is
+    // radius-only, so a cell that lit up painted a uniform quarter-RING about
+    // half a cell thick, expanding outward and blinking as a whole, instead of a
+    // speck. And because it was a SUM, two fragments mirrored across a corner's
+    // 45-degree line landed in the same cell, so the top dust field was a mirror
+    // copy of the left one. The angle is continuous and distinct in both cases.
+    //
+    // A WHOLE NUMBER OF CELLS around the loop, and the cell index taken modulo
+    // that, so the grid WRAPS. atan's seam lies on the -x axis, at the left
+    // edge's midpoint, and without the wrap the cell either side of it would be a
+    // different cell with a different speck and a different blink, which is a
+    // visible one-cell seam. The count comes from the rect's perimeter, so on a
+    // SQUARE frame a cell is about cellPx of edge.
+    //
+    // Only on a square frame. framePerimeter divides through the half-extents,
+    // mapping the rect onto a square, so every side spans a quarter turn and takes
+    // loopCells/4 cells however long it is — its own doc says it equalises the count
+    // per side and not the size. The along-edge cell is therefore proportional to
+    // that side's length, about 20.8 px on the long edges of a 1600x400 frame
+    // against 5.2 on the short, while the radial cell stays cellPx. For random dust
+    // the resulting stretch reads as variation rather than as an artefact, which is
+    // why the angle is kept: it is what removed the corner fan and the mirrored
+    // field. True arc length would hold the density uniform, and is the upgrade if
+    // this ever reads badly on a panel-shaped surface, where the short-edge cell
+    // goes sub-pixel.
+    float loopCells = max(floor(4.0 * (halfSz.x + halfSz.y) / cellPx + 0.5), 1.0);
+    float sCell = fract(framePerimeter(px, cen, halfSz) + 0.5) * loopCells;
     float v = dOut - t * 22.0 * max(uSurfaceScale, 0.001);
-    vec2 dq = vec2(s, v) / cellPx;
-    vec2 cellId = floor(dq);
+    vec2 dq = vec2(sCell, v / cellPx);
+    // No mod on the s index: fract() above already bounds sCell to [0, loopCells),
+    // so floor(dq.x) lands in [0, loopCells-1] and a mod would hand it straight back.
+    // What makes the seam clean is loopCells being a WHOLE number, which lines a cell
+    // boundary up with atan's seam; a fractional count would not have been rescued by
+    // a mod either.
+    vec2 cellId = vec2(floor(dq.x), floor(dq.y));
     vec3 h = hash23(cellId);
 
     // Sparse occupancy, per-speck twinkle phase. The twinkle keeps a floor
@@ -154,7 +201,13 @@ vec3 microDust(vec2 px, float t, float amount, float reachPx, out float dustA) {
 
     // Specks near the frame are young (cyan), far ones old (toward purple).
     vec3 col = fluxGradient(clamp(dOut / max(reachPx, 1.0), 0.0, 1.0) * 0.6 + h.x * 0.15);
-    dustA = body * twinkle * amount * halo * 0.55;
+    // TAPERED TO NOTHING BEFORE THE BOUNDARY. The halo above is an exponential,
+    // still about a third of peak where dOut reaches reachPx and not below 0.05
+    // until about 2.7 times it, so on a host that pads by exactly moteRange the
+    // twinkling field was truncated in a hard rectangle at a third of its
+    // strength, with specks sliced mid-body. The mote heads have a radial travel
+    // limit for this reason; the dust had none.
+    dustA = body * twinkle * amount * halo * 0.55 * (1.0 - smoothstep(0.75, 1.0, dOut / max(reachPx, 1.0)));
     return col * dustA;
 }
 
@@ -268,8 +321,15 @@ vec4 pSurface(vec2 uv) {
     glow += microDust(px, t, clamp(p_dustAmount, 0.0, 1.0), reachPx, dustA);
     alpha += dustA;
 
+    // BOTH sides of the premultiplied pair, not just alpha. glow and alpha are
+    // accumulated together above (glow += col * contrib beside alpha += contrib,
+    // and every fluxGradient channel is <= 1, so glow <= alpha holds through the
+    // accumulation). Clamping only alpha and scaling glow bare breaks that at the
+    // first mote overlap where the sum passes 1: alpha saturates while glow keeps
+    // climbing, and the pack ships rgb > a. Clamp glow to the clamped alpha, which
+    // preserves hue where nothing overflowed and only binds where it did.
     alpha = clamp(alpha * intensity, 0.0, 1.0);
-    glow *= intensity;
+    glow = min(glow * intensity, vec3(alpha));
 
     // Focus cue: the dust dims on unfocused surfaces, like the border family.
     float dim = focusDim(0.55);

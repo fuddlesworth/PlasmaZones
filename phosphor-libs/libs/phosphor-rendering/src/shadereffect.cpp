@@ -6,13 +6,11 @@
 
 #include "internal.h"
 
-#include <PhosphorShaders/CustomParamsKey.h>
 #include <PhosphorShaders/IUniformExtension.h>
 
 #include <QImageReader>
 #include <QMutexLocker>
 #include <QPainter>
-#include <QPointer>
 #include <QQuickWindow>
 #include <QRunnable>
 #include <QThread>
@@ -29,7 +27,7 @@ namespace PhosphorRendering {
 // authoritative ShaderNodeRhi.h value. Compile-time check — a future drift
 // would otherwise silently mis-size m_userTexture* member arrays.
 static_assert(kMaxUserTextureSlots == kMaxUserTextures,
-              "ShaderEffect::kMaxUserTextureSlots must equal ShaderNodeRhi::kMaxUserTextures");
+              "PhosphorRendering::kMaxUserTextureSlots must equal PhosphorRendering::kMaxUserTextures");
 
 // ============================================================================
 // Default identity vertex shader
@@ -43,9 +41,10 @@ static_assert(kMaxUserTextureSlots == kMaxUserTextures,
 // render path surfaces as a silent "render(): bail — shaderReady: false".
 //
 // Geometry-aware effects (slide/popin/morph/etc.) that need to translate or
-// scale the quad must override this by calling node->setVertexShaderSource()
-// or node->loadVertexShader() through a subclass — ZoneShaderItem is the
-// in-tree example of that pattern.
+// scale the quad replace it either way: a pack does so through the
+// `vertexShaderUrl` property on this item, and a subclass can call
+// node->setVertexShaderSource() or node->loadVertexShader() directly, which is
+// what ZoneShaderItem does.
 //
 // The QuadVertices buffer (see internal.h) emits positions in clip space
 // (-1..1) so a pass-through is sufficient. We bind the UBO at binding 0 as a
@@ -55,7 +54,9 @@ static_assert(kMaxUserTextureSlots == kMaxUserTextures,
 // (identity on Y-down-NDC backends like Vulkan, a Y-flip on Y-up-NDC backends
 // like OpenGL) — without applying it the fixed-NDC fullscreen quad presents
 // upside down on OpenGL when rendered direct-to-window (the daemon animation
-// path). ShaderNodeRhi sets this value (see shadernoderhiuniforms.cpp).
+// path). The bytes are written by BaseUniformProfile::fill, which seeds the
+// matrix and applies the flip from the node's yUpInNDC (baseuniformprofile.cpp);
+// shadernoderhiuniforms.cpp only describes the convention.
 //
 // Stored as `static const QString` (not QLatin1String) so the conversion
 // to QString happens once at static-init. Previously a per-paint
@@ -121,7 +122,7 @@ QImage ShaderEffect::loadUserTextureFile(const QString& path, int svgMaxDim)
     // Cap the requested per-axis size at the library ceiling regardless of
     // the per-slot setting — defends against subclasses or future setters
     // that bypass the setShaderParams parse-time clamp.
-    const int maxDim = qBound(64, svgMaxDim, kMaxSvgDimension);
+    const int maxDim = qBound(kMinSvgDimension, svgMaxDim, kMaxSvgDimension);
     if (!size.isEmpty()) {
         size.scale(maxDim, maxDim, Qt::KeepAspectRatio);
     } else {
@@ -165,6 +166,9 @@ ShaderEffect::ShaderEffect(QQuickItem* parent)
     setFlag(ItemHasContents, true);
 
     m_userTextureSvgSizes.fill(kDefaultUserTextureSvgSize);
+    // See the member's declaration: setShaderParams compares against these, so the
+    // effective default has to be in place before the first push, not a null.
+    m_userTextureWraps.fill(QStringLiteral("clamp"));
 
     // When the scene graph is invalidated (e.g. window hide on Vulkan destroys
     // the QRhi), release GPU resources from the render node and mark shader
@@ -386,7 +390,9 @@ void ShaderEffect::releaseIdleGraphicsResources()
     //     it to the destructor body).
     //   • Recovery is node-side: releaseRhiResources() retains the shader
     //     sources and re-arms the node's own dirty flags, so the next painted
-    //     frame re-bakes from cached source with zero file I/O. The item-side
+    //     frame re-bakes from cached source. That is free of file I/O for the
+    //     single-buffer case; a MULTI-buffer pack has its per-pass sources
+    //     cleared on release, so those passes are re-read. The item-side
     //     m_shaderDirty is deliberately NOT raised here — that would force
     //     updatePaintNode's needLoad branch, a synchronous QFile read +
     //     include expansion in the sync phase on the first frame of the next
@@ -487,7 +493,8 @@ void ShaderEffect::notifyOnGuiThread(void (ShaderEffect::*signal)())
     // the RENDER thread under the threaded loop. A direct Q_EMIT there hands
     // any DirectConnection consumer (and any queued side effect a handler
     // creates, which acquires render-thread affinity) the wrong thread — the
-    // same hazard the afterAnimating choice elsewhere in this file exists to
+    // same hazard the afterAnimating choice in shadereffect_setters.cpp
+    // (updatePlayingConnection) exists to
     // avoid. QML's own connection path marshals, but marshal here so the
     // signal's thread contract holds for every consumer. During sync the GUI
     // thread is blocked, so `this` cannot be destroyed before the queued
@@ -587,13 +594,15 @@ void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
         node->setWallpaperTexture(m_wallpaperTexture);
     }
 
-    // ── User textures (uTexture0..3 / SRB bindings 7..10) ────────────
+    // ── User textures (uTexture0..3 / SRB bindings 11..14) ────────────
     // Pushed here rather than in updatePaintNode so subclasses that
     // override updatePaintNode and delegate to syncBasePropertiesToNode
     // inherit texture sync without owning their own user-texture state
-    // (see ZoneShaderItem). The arrays are populated by setShaderParams
-    // and (for slot 0 on the SurfaceAnimator path) by
-    // setSourceTextureProvider rebinding the surface FBO.
+    // (see ZoneShaderItem). The arrays are written by setShaderParams,
+    // setUserTexture and setUserTextureWrap, and by nothing else.
+    // setSourceTextureProvider does NOT write them: it installs a node-side
+    // override that appendUserTextureBindings resolves at bind time, where it
+    // supersedes whatever slot 0 holds.
     for (int i = 0; i < kMaxUserTextures; ++i) {
         node->setUserTexture(i, m_userTextureImages[i]);
         node->setUserTextureWrap(i, m_userTextureWraps[i]);
@@ -618,6 +627,13 @@ void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
     node->setBufferShaderPaths(effectivePaths);
     node->setBufferFeedback(m_bufferFeedback);
     node->setBufferScale(m_bufferScale);
+    // AFTER the single-value scale, which seeds every per-pass slot; this
+    // diverges the slots the pack names.
+    //
+    // The QVariantList overload reads the variants in place. Converting to a
+    // QList<qreal> here allocated a fresh list per frame per shader item purely
+    // to hand it over and drop it.
+    node->setBufferScales(m_bufferScales);
     node->setHalfFloatBuffers(m_halfFloatBuffers);
     node->setBufferWrap(m_bufferWrap);
     // Pushed unconditionally — an EMPTY list is a meaningful value ("no
@@ -671,7 +687,7 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
     // ── Sync base properties (time, params, colors, audio, multipass, depth, wallpaper, user textures) ──
     syncBasePropertiesToNode(node);
 
-    // ── Sync source texture provider (slot 0 / binding 7 override) ───
+    // ── Sync source texture provider (slot 0 / binding 11 override) ───
     // Pushed every paint pass so a setSourceItem(...) call after the
     // node already exists picks up immediately, and so a torn-down
     // source (QPointer auto-nulls) clears the binding instead of
@@ -727,6 +743,15 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
                     node->setVertexShaderSource(kDefaultVertexShaderSource);
                 }
                 if (node->loadFragmentShader(fragPath)) {
+                    // The BUFFER passes too. Their sources are re-armed only by
+                    // setBufferShaderPaths, which returns early when the path list is
+                    // unchanged, and an in-place edit of a pass's source leaves it
+                    // unchanged. In the SUCCESS branch, so a failed reload does not
+                    // discard buffer bakes it cannot replace. The re-read itself stays
+                    // lazy, in prepare()'s bakeBufferShaders.
+                    // Here rather than in reloadShader(), because that runs on the
+                    // GUI thread and node state belongs to the render thread.
+                    node->invalidateBufferShaders();
                     node->invalidateShader();
                     setStatus(Status::Ready);
                     loadSucceededThisSync = true;

@@ -50,25 +50,35 @@ namespace PhosphorSurfaceShaders {
  * ## Multipass buffer passes
  *
  * Surface shaders support opt-in multipass: when `isMultipass` is set and
- * `bufferShaderPaths` is non-empty, the daemon runs those buffer passes
- * before the main fragment shader. Concretely that is the overlay
- * decoration host (phosphor-surface-quick's `SurfaceDecoration.qml`), whose per-stage
- * SurfaceShaderItem inherits the whole multipass property set from
- * PhosphorRendering::ShaderEffect; `OverlayService::applyDecoration`
- * forwards the fields below into each stage. A multipass stage is
- * layered (`layer.enabled`) because the render node drives its own
- * passes and needs a target isolated from the scene graph's batch
- * renderer. The kwin-effect compositor path is single-pass only;
- * multipass effects degrade to single-pass there with a diagnostic log,
- * matching the overlay / animation packs.
+ * `bufferShaderPaths` is non-empty, both hosts run those buffer passes
+ * before the main fragment shader.
+ *
+ * On the daemon side the fields below reach a `SurfaceShaderItem`, which
+ * inherits the whole multipass property set from
+ * `PhosphorRendering::ShaderEffect`. Four hosts forward them through
+ * `composeStageMap`: the overlay decoration host
+ * (phosphor-surface-quick's `SurfaceDecoration.qml`, via `OverlayService::applyDecoration`),
+ * the OSD (`osd.cpp`), the settings decoration preview
+ * (`plasmazones/src/settings/pages/decorationpreviewcontroller.cpp`) and the shell chrome
+ * (`phosphor-shell/src/shellchrome.cpp`). A multipass stage is layered
+ * (`layer.enabled`) because the render node drives its own passes and needs a
+ * target isolated from the scene graph's batch renderer.
+ *
+ * The kwin-effect compositor compiles and runs the same buffer passes in its
+ * composite fold. It degrades to single-pass, with a diagnostic log, only
+ * when a buffer pass fails to compile. The two hosts differ in three places,
+ * each documented on the field it belongs to: `bufferFeedback` is daemon-only,
+ * `vertexShaderPath` does not reach the compositor's buffer passes, and
+ * `textures` overrides are daemon-only.
  *
  * ## Trimmed vs AnimationShaderEffect
  *
- * This struct mirrors the multipass / buffer fields that
- * `AnimationShaderEffect` carries, but still OMITS the wallpaper / depth-
- * extent-style event and `fboExtent` fields that only make sense for a
- * finite-duration transition, while keeping the identical identity,
- * shader-path, preview, parameter, and texture-slot shape.
+ * Neither struct is a subset of the other. This one OMITS the event-class and
+ * `fboExtent` fields that only make sense for a finite-duration transition,
+ * and ADDS two buffer fields the animation twin does not carry: `bufferScales`
+ * (per-pass render scales, which is what lets a pyramid diverge its levels)
+ * and `halfFloatBuffers` (animation buffers are pinned RGBA16F). The identity,
+ * shader-path, preview, parameter and texture-slot shape are identical.
  */
 struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
 {
@@ -87,7 +97,9 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     /// Semantic version of this effect pack.
     QString version;
 
-    /// Category for settings-UI grouping (e.g. "Border", "Corners", "Tint").
+    /// Category for settings-UI grouping. The bundled packs use "Blur",
+    /// "Borders", "Ambience" and "Focus"; the field is free-form, so a
+    /// third-party pack may introduce its own.
     QString category;
 
     /// Path to the fragment shader (relative to the effect dir). The same
@@ -97,6 +109,17 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
 
     /// Path to the vertex shader (relative to the effect dir). Empty = use
     /// the runtime's built-in fullscreen-quad vertex shader.
+    ///
+    /// The declared stage applies to the MAIN pass. Buffer passes are handled
+    /// differently by the two hosts: the daemon runs them through this stage
+    /// with the matrix pinned to identity, while the compositor runs them
+    /// through its own built-in fullscreen quad, which emits `vTexCoord` at
+    /// location 0 and nothing else. A buffer fragment must therefore read no
+    /// varying beyond `vTexCoord`. One that reads more links on the daemon and
+    /// fails to link on the compositor, where the pack then drops to
+    /// single-pass with a log line and no other symptom. The pack validator
+    /// compiles the two stages independently, so it cannot catch a varying
+    /// mismatch either.
     QString vertexShaderPath;
 
     /// Resolved absolute directory containing this effect's assets.
@@ -111,10 +134,10 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     // ── Multipass buffer passes (opt-in, matching overlay/animation packs) ──
 
     /// Opt-in multipass mode. When true and `bufferShaderPaths` is
-    /// non-empty, the daemon path runs those buffer passes before the
-    /// main fragment. The kwin-effect compositor path is single-pass
-    /// only; multipass effects degrade to single-pass there with a
-    /// diagnostic log (see `SurfaceShaderContract.h`).
+    /// non-empty, both the daemon path and the kwin-effect compositor run
+    /// those buffer passes before the main fragment. Either host degrades a
+    /// pack to single-pass, with a diagnostic log, when one of its buffer
+    /// passes fails to compile (see `SurfaceShaderContract.h`).
     bool isMultipass = false;
 
     /// Names the parameter (an int/float, logical px) whose resolved value is
@@ -210,10 +233,27 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     /// `iChannel<N>`). Requires `isMultipass`. Daemon-only.
     bool bufferFeedback = false;
 
-    /// Render-target scale relative to the surface size. Clamped to
-    /// `[0.125, 1.0]` at `fromJson` time. Daemon-only — the compositor
-    /// path doesn't allocate auxiliary FBOs.
+    /// Render-target scale relative to the surface size, for every buffer
+    /// pass that `bufferScales` does not name. Clamped to
+    /// `[kMinBufferScale, kMaxBufferScale]` at `fromJson` time. Both hosts
+    /// honour it: the daemon through the stage map, the compositor when it
+    /// sizes the fold's per-pack buffer textures.
     qreal bufferScale = 1.0;
+
+    /// Per-pass render-target scales, positionally aligned with
+    /// `bufferShaderPaths` (metadata `bufferScales`). A pass past the list's
+    /// end renders at `bufferScale`. Each entry is clamped like `bufferScale`
+    /// and the list is capped at `kMaxBufferPasses`. This is what lets one
+    /// pack run a resolution pyramid (the builtin dual Kawase chain renders
+    /// each level at its own scale).
+    ///
+    /// DISCARDED ENTIRELY on the daemon when `useDepthBuffer` is set. Every pass
+    /// shares the one depth attachment, and a render target's colour and depth
+    /// attachments must agree in size, so a depth pack pins every pass to
+    /// `bufferScale`. The compositor implements no depth buffer for surface
+    /// packs at all and always honours these, so the two hosts diverge for such
+    /// a pack by design. The validator lints the combination.
+    QList<qreal> bufferScales;
 
     /// Default wrap mode for all buffer samplers. Sibling of
     /// `bufferWraps` (per-buffer overrides). Empty = runtime default.
@@ -248,8 +288,8 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
 
     /// Lower / upper bounds on `bufferScale` (multipass FBO downscale
     /// factor) — forwarders onto the cross-library canonical constants in
-    /// `<PhosphorShaders/CustomParamsKey.h>` (see there for the 0.125
-    /// cost-floor rationale). Kept as names on this class because
+    /// `<PhosphorShaders/CustomParamsKey.h>` (see there for why the floor
+    /// sits several steps below the deepest level any pack declares). Kept as names on this class because
     /// `fromJson`'s clamp + the round-trip stability comment in `toJson`
     /// reference them.
     static constexpr qreal kMinBufferScale = PhosphorShaders::kMinBufferScale;
@@ -259,14 +299,19 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
 
     /// Maximum number of buffer passes a pack may declare.
     ///
-    /// Bounded because every declared pass costs a canvas-sized RGBA16F texture and a
+    /// Bounded because every declared pass costs a texture at its scale and a
     /// fullscreen draw PER DECORATED WINDOW, PER FRAME, and the count comes from an
     /// installable pack's JSON — an unvalidated system boundary, and previously the
     /// one uncapped axis (bufferScale, outerPadding and the texture slots are all
-    /// bounded). Four is not arbitrary: the fold binds `iChannel0..3` and a pass
-    /// samples only the passes before it, so a fifth buffer is structurally
+    /// bounded). The value is the cross-family `PhosphorShaders::kMaxBufferPasses`:
+    /// the fold binds exactly that many `iChannelN` samplers and a pass samples
+    /// only the passes before it, so a buffer past the cap is structurally
     /// unreadable — allocated, cleared, drawn, and sampled by nothing.
-    static constexpr int kMaxBufferPasses = 4;
+    ///
+    /// PER PACK, not per window. A decoration CHAIN runs several packs, each
+    /// with its own budget, so a window's worst case is this cap times the
+    /// number of multipass packs in its chain. The bundled chains hold one.
+    static constexpr int kMaxBufferPasses = PhosphorShaders::kMaxBufferPasses;
 
     /// Declared shader inputs beyond the standard surface set
     /// (uTexture0, uSurfaceSize, uSurfaceFocused, etc.). An ORDERED list of
@@ -311,6 +356,14 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     /// default of clamp). Any other value is rejected by `fromJson` with
     /// a `qCWarning` and stored as empty. Up to three textures per
     /// effect; surplus entries are silently dropped at parse time.
+    ///
+    /// These pack defaults are the ONLY texture source the compositor host
+    /// uses. `SurfaceShaderRegistry::translateSurfaceParams` also emits
+    /// `uTexture1..3` and `uTexture1..3_wrap` override keys from a profile's
+    /// parameters, and the daemon host applies them, but the compositor
+    /// uploads from this list at first compile and caches for the pack's
+    /// lifetime, so a profile that overrides a surface texture changes the
+    /// decoration preview and not the window.
     struct TextureSlot
     {
         QString path; ///< Filename relative to the effect's sourceDir.

@@ -100,7 +100,7 @@ void SurfaceUniformProfile::fill(const PhosphorShaders::UboFrameState& state)
     }
 
     // Audio spectrum bar count (0 when CAVA is off). The node uploads the
-    // spectrum texture (binding 6) via setAudioSpectrum; only the size crosses
+    // spectrum texture (binding 10) via setAudioSpectrum; only the size crosses
     // into the UBO. The pad stays zero from the m_u{} value-init.
     m_u.iAudioSpectrumSize = state.audioSpectrumSize;
 
@@ -132,8 +132,10 @@ void SurfaceUniformProfile::fill(const PhosphorShaders::UboFrameState& state)
     m_u.iMouse[2] = state.surfaceSize[0] > 0.0f ? state.mouseX / state.surfaceSize[0] : state.mouseX;
     m_u.iMouse[3] = state.surfaceSize[1] > 0.0f ? state.mouseY / state.surfaceSize[1] : state.mouseY;
 
-    // User texture sizes (bindings 8-10) — the node resolves these live, same
-    // as the overlay profile.
+    // User texture sizes (uTexture0..3, bindings 11-14) — the node resolves
+    // these live, same as the overlay profile. Four slots, not three: the
+    // surface family declares three USER textures (uTexture1..3) but the array
+    // is the base contract's, and slot 0 is uTexture0, the surface itself.
     for (std::size_t i = 0; i < std::size(m_u.iTextureResolution); ++i) {
         m_u.iTextureResolution[i][0] = state.textureResolution[i][0];
         m_u.iTextureResolution[i][1] = state.textureResolution[i][1];
