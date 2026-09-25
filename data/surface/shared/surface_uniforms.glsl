@@ -27,8 +27,8 @@
 // focus value, and — for packs that ask for them — time, the audio spectrum, the
 // cursor, the backdrop and its rect, the folded opacity, and the sizes of any
 // buffer-pass and user-texture inputs. Every one of those is declared below.
-// Decoration APPEARANCE is NOT host state — border width, corner radius, colours,
-// glow, etc. — is NOT host state: it is each pack's own declared PARAMETERS
+// Decoration APPEARANCE — border width, corner radius, colours, glow, etc. — is
+// NOT host state: it is each pack's own declared PARAMETERS
 // (customParams / customColors via the standard parameter slots), so "border" is
 // just a shader whose width/radius/colour are its params, not a separately
 // defined concept. Lengths a pack declares are LOGICAL px; multiply by

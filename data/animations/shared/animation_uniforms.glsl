@@ -127,8 +127,16 @@ uniform vec4 customColors[16];
 // the compile error.
 // `iTextureResolution[4]` IS populated on the kwin path: the per-effect
 // uTexture<N> setter loop in `paint_shader_window.cpp` writes the
-// pixel size of each user texture into this uniform array before
-// `drawWindow`. Listed here distinct from the "absent on kwin" set above
+// pixel size of each texture into this uniform array before `drawWindow`.
+//
+// INDEX ORIGIN, the trap: `iTextureResolution[i].xy` is the pixel size of
+// `uTexture<i>`, so index 0 is the WINDOW's own content and a metadata slot N,
+// which feeds `uTexture<N+1>`, has its size at index N+1. The sampler names are
+// one-based over the metadata list and this array is zero-based over the texture
+// slots. Read index 0 expecting your first declared texture and you get the
+// window instead. The surface family carries the identical convention.
+//
+// Listed here distinct from the "absent on kwin" set above
 // (iChannelResolution, iAudioSpectrumSize) so a future reader doesn't
 // mistake the active declaration for an undocumented "compile-but-zero"
 // hazard.
@@ -338,7 +346,11 @@ layout(std140, binding = 0) uniform AnimationUniforms {
     int iAudioSpectrumSize;      // offset 576 — audio spectrum bin count
     int iFlipBufferY;            // offset 580 — always 1 (Y-flip); daemon-only
     // implicit 8-byte std140 padding here — see layout note above.
-    vec4 iTextureResolution[4];  // offset 592 (64 bytes)  — user texture sizes (bindings 11-14)
+    vec4 iTextureResolution[4];  // offset 592 (64 bytes)  — texture sizes for bindings
+                                 //              11-14, i.e. index 0 is uTexture0 (the
+                                 //              window content) and a metadata slot N is
+                                 //              at index N+1. See the index-origin note
+                                 //              above the declaration.
     float iTimeHi;               // offset 656 — wrap-offset counterpart of iTime;
                                  //              always 0 on the animation path. Do NOT
                                  //              read in animation shaders — exists only

@@ -544,8 +544,9 @@ bool PlasmaZonesEffect::drawWindowImpl(const KWin::RenderTarget& renderTarget, c
         // the maps. A miss yields an empty id, which no decoration key is expected
         // to be.
         const QString wid = m_idCaches.windowIdCache.value(w);
-        // find(), not constFind(): the const is on the ITERATOR, not the entry, so
-        // the foreign-transform branch below can record what it painted through it.
+        // find(), not constFind(): a QHash const_iterator yields a CONST entry, and the
+        // foreign-transform branch below writes lastForeignBand / lastForeignOpacity
+        // through this one.
         const auto bit = m_windowDecorations.find(wid);
         if (bit != m_windowDecorations.end() && bit->shaderApplied) {
             // FOREIGN ANIMATION on a PADDED chain. The only animation of ours that

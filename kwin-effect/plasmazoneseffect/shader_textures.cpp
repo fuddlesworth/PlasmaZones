@@ -73,6 +73,14 @@ QImage ShaderInternal::loadUserTextureImage(const QString& path, int svgMaxDim)
     // the parity claim in this function's doc, not by the compiler.
     constexpr qint64 kMaxTexturePixelBytes = 16LL * 1024 * 1024;
     const auto budgetedSize = [](QSize size) {
+        // Bounded per axis BEFORE the multiply. QImageReader::size() reports the
+        // header's DECLARED dimensions without allocating anything, so a hundred-byte
+        // PNG can claim two billion by two billion, and that product overflows qint64.
+        // Signed overflow is undefined, and an overflowed value can also land back
+        // under the budget and skip the downscale. The read would then fail its own
+        // allocation limit and return null, so nothing bad reached the GPU, but the
+        // arithmetic itself was the defect.
+        size = QSize(qBound(1, size.width(), 1 << 20), qBound(1, size.height(), 1 << 20));
         const qint64 bytes = static_cast<qint64>(size.width()) * size.height() * 4;
         if (bytes <= kMaxTexturePixelBytes) {
             return size;

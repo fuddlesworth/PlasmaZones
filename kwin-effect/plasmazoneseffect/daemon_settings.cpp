@@ -225,7 +225,11 @@ void PlasmaZonesEffect::loadCachedSettings()
                          const qreal m = qBound(DD::BlurScaleMultiplierMin, raw, DD::BlurScaleMultiplierMax);
                          if (!qFuzzyCompare(m_decorationBlurScaleMultiplier + 1.0, m + 1.0)) {
                              m_decorationBlurScaleMultiplier = m;
-                             m_packBufferScaleCache.clear();
+                             // m_packBufferScaleCache is NOT cleared here: it holds the
+                             // backdrop CAPTURE density, which is derived from the nominal
+                             // declared scale precisely so this tier cannot move it. The
+                             // buffer TARGETS do move, and the cleared chainKey below is what
+                             // makes ensureSurfaceTargets reallocate them.
                              for (auto& [id, surfaceState] : m_surfaceMultipass) {
                                  surfaceState.chainKey.clear();
                                  surfaceState.compositeValid = false;

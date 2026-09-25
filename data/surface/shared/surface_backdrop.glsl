@@ -54,7 +54,8 @@ layout(binding = 15) uniform sampler2D uBackdrop;
 // scope for every pack whether or not this file is included. On the compositor it
 // is declared only here. So a pack that reads it without including this module
 // compiles on the daemon, in the preview and through the SPIR-V bake, and fails to
-// link where it ships. The mirror of the hazard the animation header calls out for
+// COMPILE where it ships. Compile and not link, which is the distinction that
+// matters here: a swallowed compile error is what renders the flat grey. The mirror of the hazard the animation header calls out for
 // iChannelResolution. No bundled pack does this today.
 
 // The scene texel BEHIND the surface at `uv` (the same uv space surfaceTexel

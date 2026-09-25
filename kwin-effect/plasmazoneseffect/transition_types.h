@@ -12,6 +12,7 @@
 #include "mesh_sim.h"
 
 #include <PhosphorAnimation/AnimationShaderContract.h>
+#include <PhosphorShaders/ShaderBindings.h>
 #include <PhosphorAnimation/Curve.h>
 
 #include <effect/effectwindow.h>

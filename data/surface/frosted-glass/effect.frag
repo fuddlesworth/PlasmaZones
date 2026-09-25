@@ -105,9 +105,14 @@ vec4 pSurface(vec2 uv) {
         // 1600x400 pane the "crystals" rendered as 4:1 ellipses, which no reading
         // of "Density of the frost crystals" describes. The same normalisation also
         // tied crystal SIZE to window size, so one setting looked different on
-        // every window; the short axis now sets the scale and the long axis gets
-        // proportionally more cells, which is what a density means.
-        vec2 grainAspect = vec2(uSurfaceFrameSize.x / max(uSurfaceFrameSize.y, 1.0), 1.0);
+        // every window. Dividing BOTH axes by the SHORT side is what fixes that: the
+        // cell then measures shortSide/grainScale device px whichever way the pane is
+        // oriented, and the long axis simply gets proportionally more cells, which is
+        // what a density means. Dividing by the height alone made the cells square but
+        // left their size tracking one axis, so a 1600x400 pane and its transpose
+        // still disagreed by a factor of four at the same setting.
+        float grainShort = max(min(uSurfaceFrameSize.x, uSurfaceFrameSize.y), 1.0);
+        vec2 grainAspect = uSurfaceFrameSize / grainShort;
         float frost = frostedTexture(fuv * grainAspect * p_grainScale, iTime * p_grainSpeed);
         variation = (frost - 0.5) * p_grainAmount;
     }

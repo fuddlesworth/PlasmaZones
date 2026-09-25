@@ -930,8 +930,8 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
     return plan;
 }
 
-// How densely the backdrop must be captured for @p deco's chain, or 0.0 when no
-// compiled pack in it reads the backdrop at all.
+// Whether @p deco's chain needs a backdrop capture, and how densely. `needed` is
+// false when no compiled pack in it reads the backdrop at all.
 //
 // Lives here rather than in paintWindow, where it began as a lambda: it resolves
 // the decoration profile, drives the lazy pack compile and maintains
@@ -942,12 +942,12 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
 // @p decoWindowId is the decoration map's own key, which is the same string as
 // the caller's windowId; @p w is passed so the profile resolve does not
 // re-derive the window it already holds.
-qreal PlasmaZonesEffect::chainBackdropScale(const WindowDecoration& deco, const QString& decoWindowId,
-                                            KWin::EffectWindow* w)
+BackdropCapture PlasmaZonesEffect::chainBackdropScale(const WindowDecoration& deco, const QString& decoWindowId,
+                                                      KWin::EffectWindow* w)
 {
     using SE = PhosphorSurfaceShaders::SurfaceShaderEffect;
     std::optional<PhosphorSurfaceShaders::DecorationProfile> profile;
-    qreal scale = 0.0;
+    BackdropCapture out;
     for (const QString& packId : deco.chain) {
         CompiledSurfacePack* pk = nullptr;
         if (const auto cacheIt = m_compiledPacks.find(packId); cacheIt != m_compiledPacks.end()) {
@@ -966,8 +966,8 @@ qreal PlasmaZonesEffect::chainBackdropScale(const WindowDecoration& deco, const 
             continue;
         }
         // WHETHER a capture is needed and AT WHAT DENSITY are two questions, and
-        // this resolver answers both because the one caller uses a positive answer
-        // as the capture gate. They must not share a predicate.
+        // BackdropCapture carries them as two fields for the reason its own doc
+        // gives. They must not share a predicate.
         //
         // The SAMPLER alone sets density. linksBackdropUniforms is an OR over all
         // three locations and one of them is uHasBackdrop, the scalar gate, which
@@ -976,17 +976,17 @@ qreal PlasmaZonesEffect::chainBackdropScale(const WindowDecoration& deco, const 
         // density for all of them and the reduced capture this pipeline exists to
         // enable never once engaged. Only mosaic's main pass genuinely samples.
         if (pk->uBackdropLoc >= 0) {
-            return SE::kMaxBufferScale; // a sharp main-pass read caps every other answer
+            // A sharp main-pass read caps every other answer.
+            return {true, SE::kMaxBufferScale};
         }
         // Linked but not sampling: the gate, or the rect without the sampler to use
         // it with. Such a pack still needs a capture to EXIST, because the fold
-        // pushes the gate from whether one is available, so answer the floor rather
-        // than zero. Zero would skip the capture and flip the pack onto its
-        // no-backdrop fallback. No bundled pack is in this shape; a third-party one
-        // can be, and the inverse cannot happen, since a pass is never missed here
-        // for being sampler-only.
+        // pushes the gate from whether one is available. Zero would skip the capture
+        // and flip the pack onto its no-backdrop fallback. The inverse cannot
+        // happen, since a pass is never missed here for being sampler-only.
         if (pk->uHasBackdropLoc >= 0 || pk->uBackdropRectLoc >= 0) {
-            scale = qMax(scale, SE::kMinBufferScale);
+            out.needed = true;
+            out.density = qMax(out.density, BackdropCapture::kGateOnlyDensity);
         }
         // TWICE the densest SAMPLING buffer pass, capped at full density.
         //
@@ -1009,16 +1009,26 @@ qreal PlasmaZonesEffect::chainBackdropScale(const WindowDecoration& deco, const 
         // defect. A pyramid whose later passes read earlier passes rather than the
         // capture has exactly one sampling pass and is unaffected either way.
         //
+        // NOMINAL, not clampedBufferScale. That one folds the user's blur-quality
+        // multiplier, which is right for sizing a buffer TARGET and wrong here: the
+        // step surfaceKawaseDownBackdrop takes is kSurfaceKawaseBaseTexel * 0.5, a
+        // fixed 2 CANVAS px, and it does not move with the tier. Feeding the
+        // multiplied scale in tied the capture to it, so at the 0.25 tier the capture
+        // landed at 0.125, one texel spanned 8 canvas px, and all five taps fell
+        // inside a single texel — the first pyramid level stopped blurring
+        // altogether. The constant the shader steps by is nominal, so the scale it is
+        // matched against has to be nominal too. The tier still moves the buffer
+        // targets, which is where its cost lives.
+        //
         // Cached per pack, because the registry lookup copies a whole
-        // SurfaceShaderEffect by value and this is a per-frame path. The cached
-        // value folds the multiplier AND the pack's linkage, so it is invalidated by
-        // EVERY m_compiledPacks clear (a registry hot-reload or a preset retune can
-        // change either) plus the blur-scale-multiplier loader in
-        // daemon_settings.cpp. No count is quoted: the set of clear sites grows.
-        // 0.0 for a pack whose buffer passes sample nothing is a real answer and is
-        // cached as one, so a chain of such packs stops re-walking them per frame.
-        // The gate-only floor above is deliberately NOT folded into the cache: it is
-        // a property of the main pass, which this cache does not cover.
+        // SurfaceShaderEffect by value and this is a per-frame path. The cached value
+        // folds the pack's LINKAGE as well as its metadata, so it is invalidated by
+        // EVERY m_compiledPacks clear: a registry hot-reload or a preset retune can
+        // change either. No count is quoted, the set of clear sites grows. 0.0 for a
+        // pack whose buffer passes link nothing is a real answer and is cached as
+        // one, so a chain of such packs stops re-walking them per frame. The main
+        // pass's own gate-only floor above is NOT folded in: this cache covers the
+        // buffer passes.
         qreal packScale = 0.0;
         if (const auto bsIt = m_packBufferScaleCache.find(packId); bsIt != m_packBufferScaleCache.end()) {
             packScale = bsIt->second;
@@ -1028,23 +1038,27 @@ qreal PlasmaZonesEffect::chainBackdropScale(const WindowDecoration& deco, const 
                 const CompiledSurfaceBufferPass& bp = pk->bufferPasses[bpIndex];
                 if (bp.uBackdropLoc < 0) {
                     if (bp.uHasBackdropLoc >= 0 || bp.uBackdropRectLoc >= 0) {
-                        packScale = qMax(packScale, SE::kMinBufferScale);
+                        packScale = qMax(packScale, BackdropCapture::kGateOnlyDensity);
                     }
                     continue;
                 }
-                const qreal passScale = clampedBufferScale(passBufferScaleFor(regEff, static_cast<int>(bpIndex)));
-                packScale = qMax(packScale, qMin(SE::kMaxBufferScale, passScale * 2.0));
+                const qreal nominal = qBound(SE::kMinBufferScale, passBufferScaleFor(regEff, static_cast<int>(bpIndex)),
+                                             SE::kMaxBufferScale);
+                packScale = qMax(packScale, qMin(SE::kMaxBufferScale, nominal * 2.0));
             }
             m_packBufferScaleCache.emplace(packId, packScale);
         }
-        scale = qMax(scale, packScale);
+        if (packScale > 0.0) {
+            out.needed = true;
+            out.density = qMax(out.density, packScale);
+        }
         // A pass at the ceiling is already the maximum possible answer (the
         // main-pass branch above returns the same value), so stop walking the chain.
-        if (scale >= SE::kMaxBufferScale) {
-            return SE::kMaxBufferScale;
+        if (out.density >= SE::kMaxBufferScale) {
+            return {true, SE::kMaxBufferScale};
         }
     }
-    return scale;
+    return out;
 }
 
 } // namespace PlasmaZones

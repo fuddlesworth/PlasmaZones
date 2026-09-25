@@ -146,6 +146,12 @@ vec4 surfaceGaussianChannelV(vec2 uv) {
 // pass sizes itself from its real input and therefore does follow the
 // multiplier. (This comment used to say the opposite, naming the first pass as
 // the only one the multiplier widens.)
+//
+// The compositor holds up its half of that: it captures the backdrop at twice
+// this pass's NOMINAL declared scale, so one texel is 2 canvas px and the step
+// below is exactly one source texel whatever the user's tier is. Deriving the
+// capture from the multiplied scale instead put all five taps inside one texel
+// at the low end.
 const float kSurfaceKawaseBaseTexel = 4.0;
 
 // How many pyramid levels the radius asks for (1..4), and the tap offset that

@@ -11,6 +11,8 @@
 #include <PhosphorProtocol/ZoneMarshalling.h>
 #include <PhosphorCompositor/SnapAssistFilter.h>
 
+#include <functional>
+
 #include <core/output.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>

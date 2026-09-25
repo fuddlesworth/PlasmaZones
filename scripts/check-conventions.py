@@ -480,13 +480,16 @@ def prose_problems(s: str) -> list[str]:
         # for "semicolons separating genuine comma-bearing LIST ITEMS", and testing
         # the whole string meant a comma ANYWHERE suppressed the check: "The pane,
         # when focused, is blurred; the border is not." went unreported, which is a
-        # textbook splice with a parenthetical in the first clause. Only the item
-        # either side of THIS semicolon counts, and both must carry a comma for it to
-        # read as an enumeration.
-        prev_item = before.rsplit(";", 1)[-1]
-        next_item = after.split(";", 1)[0]
-        if "," in prev_item and "," in next_item:
-            continue  # list separator, not a clause splice
+        # textbook splice with a parenthetical in the first clause.
+        #
+        # There is NO comma carve-out left on this path, and there should not be. A
+        # list needs three items to be one, which is two semicolons, and that case
+        # returned early above. So a lone semicolon with commas either side can only
+        # be a two-item enumeration, which reads as a splice and is better written
+        # with "and". Keeping a per-item comma test here let a real violation
+        # through: "...so it is larger on a larger window; with it, the bend is
+        # confined to the bevel width" has a comma on each side and is a textbook
+        # splice.
         if len(before.split()) >= 3 and len(after.split()) >= 3:
             problems.append("clause-splicing semicolon; split into sentences or use \"and\"")
             break

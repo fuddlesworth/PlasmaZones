@@ -313,6 +313,31 @@ struct SurfaceFoldPlan
 /// SurfaceMultipassState::backdropGenerationOutputs): the output, keyed by
 /// its logical render rect, and the texture-px destination of the last FULL
 /// canvas slice it blitted, carried across a restart another output starts.
+/// WHETHER a chain needs a backdrop capture, and AT WHAT DENSITY. Two questions,
+/// so two fields. They shared one number, with the caller reading any positive
+/// value as the gate, which forced the "links a backdrop uniform but samples no
+/// texels" case to answer with the smallest non-zero density that reads as yes.
+/// That is kMinBufferScale, 1/128, at which a 4K canvas is 15x8 texels and every
+/// partial damage slice under ~128 device px rounds to a zero-extent destination
+/// and is skipped (surface_backdrop.cpp). Split, the floor can be chosen for
+/// whether the capture machinery works at it.
+struct BackdropCapture
+{
+    /// Does any compiled pack in the chain link a backdrop uniform at all.
+    bool needed = false;
+    /// Capture resolution relative to the composite canvas. Meaningless when
+    /// `needed` is false.
+    qreal density = 0.0;
+
+    /// For a chain linking only the scalar gate or the rect, never the sampler:
+    /// it reads no texels, so only the capture's EXISTENCE matters (the fold
+    /// pushes uHasBackdrop from whether one is available). Cheap, but not so
+    /// cheap the capture stops landing — at an eighth a four-device-px damage
+    /// slice still maps to a whole texel, against sixty-four at kMinBufferScale.
+    /// No bundled pack is this shape; a third-party one can be.
+    static constexpr qreal kGateOnlyDensity = 0.125;
+};
+
 struct BackdropGenerationMember
 {
     QRectF outputRect;

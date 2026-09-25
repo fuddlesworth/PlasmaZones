@@ -63,6 +63,11 @@ pre-commit:
       # and this is always a hard gate.
       glob:
         - "*.{cpp,cc,cxx,h,hpp,qml,luau,py,frag,vert,glsl}"
+        # BOTH spellings. lefthook's matcher wants a literal slash after the **, so
+        # data/**/*.json matches data/layouts/x.json and NOT data/whatsnew.json,
+        # which is the one file the prose walker was widened for. The json-schema
+        # hook above hit this and says so; this glob then used the bad pattern.
+        - "data/*.json"
         - "data/**/*.json"
         - "*.desktop*"
         - "*.metainfo.xml*"

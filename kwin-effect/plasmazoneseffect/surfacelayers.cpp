@@ -356,15 +356,12 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // The capture is NOT the only re-entrant call made while this reference is
     // held. compiledPackLazy above reaches compiledPack, which calls
     // ensureSurfaceRegistryPaths, whose FIRST call emits effectsChanged inline.
-    // That handler does NOT dangle the reference below: it walks the map and
-    // invalidates each entry in place (lifecycle_wiring.cpp), erasing nothing,
-    // so the SurfaceMultipassState this function holds stays put and the fold
-    // simply redraws what the handler just marked stale. What the ordering
-    // guarantees is separate and still worth stating: a window reaches this
-    // function only with a decoration record, and updateWindowDecoration calls
-    // ensureSurfaceRegistryPaths before it writes one, so the one-shot flag is
-    // always already set by the time any fold runs and the nested
-    // updateAllDecorations cannot reach removeWindowDecoration for this window.
+    // THE ORDERING IS THE WHOLE GUARANTEE. A window reaches this function only with a
+    // decoration record, and updateWindowDecoration calls ensureSurfaceRegistryPaths
+    // before it writes one, so the one-shot flag is already set and that inline emit
+    // cannot happen from here at all. It has to carry the whole weight: the handler's
+    // per-entry loop erases nothing, but it ends with updateAllDecorations(), whose
+    // sweep reaches removeWindowDecoration and so releaseSurfaceState, which does.
     SurfaceMultipassState& state = m_surfaceMultipass[windowId];
     state.canvasGeo = logicalGeometry;
 
@@ -505,30 +502,28 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // every fold, and an early return that skipped it would strand the window on the
     // wrong shader.
     if (!captureOk) {
-        // If this state has NEVER folded, there is no composite to fall back on, and
-        // the present shader re-asserted just above still points uFinal at
-        // compositeTex[finalSlot] — allocated, never written, undefined contents. The
-        // window would show garbage, or vanish on a driver that zeroes fresh
-        // allocations. Two states reach here that way: a first fold whose capture
-        // fails, and any frame where the pair was reallocated (finalSlot survives a
-        // realloc) and the capture then failed.
+        // If this state has NEVER folded there is no composite to fall back on, and the
+        // present shader re-asserted just above still points uFinal at
+        // compositeTex[finalSlot]: allocated, never written, undefined contents. The
+        // window shows garbage, or vanishes on a driver that zeroes fresh allocations.
+        // Two states reach here that way, a first fold whose capture fails and any
+        // frame where the pair was reallocated (finalSlot survives one) and the capture
+        // then failed.
         //
         // Hand the window back to KWin, exactly as the VRAM-failure branch above does
         // and for the same reason: undecorated and visible beats invisible.
         // removeWindowDecoration is the single owner of teardown, so this also clears
         // shaderApplied, which makes apply()'s padded-quad rewrite fall false BY
-        // CONSTRUCTION rather than needing a second suppression flag beside it. The
-        // entry is erased, so the next frame has no decoration and no second bail
-        // rather than re-entering this one every frame, and the decoration returns on
-        // the next updateWindowDecoration.
+        // CONSTRUCTION rather than needing a second suppression flag. The entry is
+        // erased, so the next frame has no decoration and no second bail, and the
+        // decoration returns on the next updateWindowDecoration.
         //
-        // Not during a transition, for the reason that branch gives: it owns the
-        // shader slot and would be torn out mid-animation, and it re-captures every
-        // frame so it gets its own chance next one.
+        // Not during a transition, for the reason that branch gives: it owns the shader
+        // slot, would be torn out mid-animation, and re-captures every frame anyway.
         //
         // A state that HAS folded keeps its decoration. Its composite is stale but
-        // real, which reads as a frozen decoration, and that is the right answer to a
-        // transient capture failure.
+        // real, which reads as frozen, and that is the right answer to a transient
+        // capture failure.
         // Stamp the fold clock even though nothing folded. This is the fold's THIRD
         // terminal path, and the unpainted-gap sensor in planSurfaceFold carries no
         // latch of its own — its latch IS the caller advancing lastFoldMs. Left
@@ -574,21 +569,19 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         // still true). A backdrop refold therefore cannot change a single pixel, so the
         // driver must not ask for another one.
         //
-        // Clearing the flag here is what an earlier pass did, and it converted a benign
-        // one-shot stall into a permanent 30Hz wake-up: the driver armed, this path cleared,
-        // 33ms later it armed again, forever, for a window whose composite is provably
-        // byte-identical. The flag stays set until a fold that actually folds something
-        // clears it — and a chain that starts varying per frame (a recompile lands, a pack
-        // starts animating) stops taking this path and clears it on its next real fold.
+        // Clearing it here converted a benign one-shot stall into a permanent 30Hz
+        // wake-up: the driver armed, this path cleared, 33ms later it armed again,
+        // forever, for a window whose composite is provably byte-identical. It stays set
+        // until a fold that folds something clears it, and a chain that starts varying
+        // per frame stops taking this path at all.
         //
         // The HOVER flag is the opposite, and the two are not symmetric. Reaching here proves
-        // compositeValid survived planSurfaceFold, and planSurfaceFold clears compositeValid
-        // whenever the fold cursor differs from the folded one — so the composite provably
-        // already reflects the live cursor and the hover repaint HAS been serviced. Leaving
-        // it set deadlocked the hover driver outright: it hard-skips any window whose flag is
-        // set, so a pure iMouse chain (classified static, because iMouse is state and not a
-        // per-frame input) armed the flag once, took this path, and never hover-updated again
-        // for the rest of the session.
+        // compositeValid survived planSurfaceFold, which clears it whenever the fold cursor
+        // differs from the folded one, so the composite provably already reflects the live
+        // cursor and the hover repaint HAS been serviced. Leaving it set deadlocked the hover
+        // driver, which hard-skips any window whose flag is set: a pure iMouse chain (static,
+        // because iMouse is state and not a per-frame input) armed it once, took this path,
+        // and never hover-updated again for the session.
         state.hoverRepaintPending = false;
         return state.compositeTex[state.finalSlot].get();
     }
@@ -850,6 +843,17 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                         userTex = transparentFallbackTexture();
                         glActiveTexture(GL_TEXTURE0);
                         if (!userTex) {
+                            // Set the uniform EVEN with nothing to bind, for the backdrop
+                            // arm's reason: unset sends the sampler to unit 0, which here
+                            // is the running composite. An empty unit reads black, wrong
+                            // but bounded, against folding the window into its own blur.
+                            pass.shader->setUniform(pass.userTextureLoc[t],
+                                                    ShaderInternal::kSurfaceUserTextureBaseUnit + t);
+                            if (!fallbackUnavailableWarned) {
+                                fallbackUnavailableWarned = true;
+                                qCWarning(lcEffect) << "Surface fold: no fallback texture for a buffer-pass user"
+                                                    << "texture slot; its sampler points at an empty unit";
+                            }
                             continue;
                         }
                     } else if (pass.iTextureResolutionLoc[t + 1] >= 0) {
@@ -890,7 +894,6 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                     glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceUserTextureBaseUnit + t);
                     glBindTexture(GL_TEXTURE_2D, 0);
                 }
-                glActiveTexture(GL_TEXTURE0);
             }
             glActiveTexture(GL_TEXTURE0);
             KWin::GLFramebuffer::popFramebuffer();

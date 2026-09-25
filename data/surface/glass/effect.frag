@@ -63,15 +63,23 @@
 // behaviour, an edge pixel stretched), or mirrored back inside the frame when the
 // pack's Edge mirror switch is on.
 //
-// ONLY THE CONCAVE MODE CAN REACH THE SWITCH, and it is worth knowing which,
-// because the other two cannot and the control was briefly removed for it. The
-// cheap mode offsets along `inward`, the negated SDF gradient. The Snell mode
-// offsets along -surfaceNormal and along refract()'s xy, which for eta < 1 is the
-// outward normal times a NEGATIVE scalar, since sqrt(1 - eta^2 + eta^2*nz^2)
-// exceeds eta*nz for every nz whenever eta < 1. Both are inward at every
-// fragment, and this pack declares no paddingParam, so its frame IS its canvas
-// and there is no margin band for a sample to land in. The concave mode widens
-// frameUv past the frame by up to 0.2 of the pane, which is the one case the
+// IN PRACTICE ONLY THE CONCAVE MODE REACHES THE SWITCH, and it is worth knowing
+// why, because the control was briefly removed for want of a reader. The cheap
+// mode offsets along `inward`, the negated SDF gradient. The Snell mode offsets
+// along -surfaceNormal and along refract()'s xy, which for eta < 1 is the outward
+// normal times a NEGATIVE scalar, since sqrt(1 - eta^2 + eta^2*nz^2) exceeds
+// eta*nz for every nz whenever eta < 1. Both are inward at every fragment, and
+// this pack declares no paddingParam, so its frame IS its canvas and there is no
+// margin band outside for a sample to land in.
+//
+// Inward bounds the DIRECTION, not the magnitude. The cheap mode genuinely cannot
+// escape, since 0.4 * concave * strength caps its offset at 0.8 of the pane's
+// short side measured inward from the rim. The Snell mode can, at extreme bevel,
+// strength and edge width on a small pane, where the inward push at the rim
+// exceeds the pane and lands past the OPPOSITE edge. That takes settings near
+// several declared maxima at once. The concave mode widens
+// frameUv past the frame by up to 0.2 of the pane on the reference (green)
+// channel, or 0.26 on red with fringing at its declared maximum, which is the one case the
 // clamp-or-fold choice decides.
 vec2 glassCoord(vec2 c) {
     return surfaceBendUv(c, p_edgeMirror >= 0.5);
@@ -130,10 +138,18 @@ vec4 pSurface(vec2 uv) {
         if (p_concaveLens >= 0.5) {
             // ── Concave lens (Better Blur DX's second refraction mode) ────
             // Compress a WIDER view of the backdrop into the pane, so its edges
-            // show a shrunken copy of the surroundings, the way a thick concave
-            // slab reads. Per channel for the fringing. 0.2 of the pane per unit
-            // of strength, so 0.4 at the declared maximum of 2.0. (The
-            // reference's own ceiling is the 0.2 factor.)
+            // show a shrunken copy of it, the way a thick concave slab reads. Per
+            // channel for the fringing. 0.2 of the pane per unit of strength, so
+            // 0.4 at the declared maximum of 2.0. (The reference's own ceiling is
+            // the 0.2 factor.)
+            //
+            // A shrunken copy of THE PANE'S OWN BACKDROP SLICE, not of the
+            // surroundings: this pack declares no paddingParam, so the blur pyramid
+            // covers the frame and nothing beyond it. The rim fragments whose mapped
+            // coordinate passes 1 therefore have no real content to show, and
+            // glassCoord decides what they get instead. With Edge mirror off they
+            // clamp, which stretches the edge texel into a flat band a few px wide,
+            // and that is the reference behaviour the switch's description names.
             //
             // (1 + shrink), NOT (1 - shrink). Sampling inward is what MAGNIFIES:
             // output(f) = input(0.5 + f*(1 - shrink)) spreads the centre content

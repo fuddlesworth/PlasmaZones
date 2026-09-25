@@ -65,7 +65,7 @@
             "default": 0.5,
             "min": 0.0,
             "max": 2.0,
-            "description": "How far the backdrop bends at the pane's bevelled edge. Without Physically based refraction the bend is a fraction of the whole pane, so it is larger on a larger window; with it, the bend is confined to the bevel width and barely changes with window size",
+            "description": "How far the backdrop bends at the pane's bevelled edge. Without Physically based refraction the bend is a fraction of the whole pane, so it is larger on a larger window. With it, the bend is confined to the bevel width and barely changes with window size",
             "group": "Refraction"
         },
         {
@@ -261,7 +261,7 @@
             "name": "Mirror at the edge",
             "type": "bool",
             "default": false,
-            "description": "Where the bend reaches past the pane's edge, fold the backdrop back inside. Only the concave lens mode reaches that far. Left off, the bend stretches the pane's edge pixel instead",
+            "description": "Where the bend reaches past the pane's edge, fold the backdrop back inside. In practice only the concave lens mode reaches that far. Left off, the bend stretches the pane's edge pixel instead",
             "group": "Refraction"
         }
     ]

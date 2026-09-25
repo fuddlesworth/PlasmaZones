@@ -121,9 +121,12 @@ const QString& kwinFinalizeColorBlock();
 /// byte budget (RGBA8 at 2048 squared), the raster one during decode via
 /// setScaledSize so an oversized file never materialises at full resolution
 /// inside the compositor process, the SVG one after the per-axis cap, which on
-/// its own does not bound a near-square doc. Same two budgets and the same value
-/// as the daemon's ShaderEffect::loadUserTextureFile, so a pack texture resolves
-/// to the same pixels on both runtimes. Returns a null QImage on any failure. Three callers: the async pre-warm in
+/// its own does not bound a near-square doc. Same two BUDGETS and the same values
+/// as the daemon's ShaderEffect::loadUserTextureFile. Not necessarily the same
+/// PIXELS for an SVG: every caller here takes the default 1024, while the daemon
+/// reads the pack's own uTexture<N>_svgSize clamped to [64, 2048], so a pack
+/// declaring 2048 rasterises twice as large there. A raster image does resolve
+/// identically. Returns a null QImage on any failure. Three callers: the async pre-warm in
 /// shader_textures.cpp, the animation compile path's synchronous cold-install fallback in shader_transitions.cpp, and
 /// the surface pack compile in surface_compile.cpp. External linkage rather than an anonymous-namespace copy per TU
 /// because the kwin-effect builds as a Unity (jumbo) target. Defined in shader_textures.cpp.
@@ -365,11 +368,22 @@ inline constexpr std::array<const char*, PhosphorAnimationShaders::AnimationShad
 /// texture slot and there are kUserTextureCount of those.
 inline constexpr std::array<const char*, PhosphorShaders::Bindings::kUserTextureCount> kITextureResolutionKeys = {
     "iTextureResolution[0]", "iTextureResolution[1]", "iTextureResolution[2]", "iTextureResolution[3]"};
-// The two indexing conventions, pinned at compile time rather than left to the
-// comment above, because the drift they guard against produced no diagnostic
-// anywhere: a pack read the wrong element and the shader still linked and ran.
-// Entry i of the sampler table is uTexture<i+1> and entry i of the resolution
-// table is iTextureResolution[i], so a write must offset by one between them.
+// The two indexing conventions, spelled out as asserts because the drift they
+// concern produced no diagnostic anywhere: a pack read the wrong element and the
+// shader still linked and ran. Entry i of the sampler table is uTexture<i+1> and
+// entry i of the resolution table is iTextureResolution[i], so a write must
+// offset by one between them.
+//
+// READ THE TWO STRING ASSERTS AS DOCUMENTATION, NOT AS COVERAGE, the same caveat
+// the pair further down this file carries. Each compares a literal against the
+// literal written ten lines above it, so it holds by construction, and each
+// checks only the first and last entry, so a mis-spelled middle one passes. The
+// drift that actually happened was in the WRITE index at the call sites, which
+// nothing here can see. The size relation is the one statement that constrains
+// anything: it fails if a slot is added to one table and not the other.
+static_assert(kITextureResolutionKeys.size() == kUserTextureSamplerNames.size() + 1,
+              "iTextureResolution is indexed by GLSL slot and the sampler table by pack slot, so the resolution "
+              "table carries exactly one more entry: index 0, uTexture0, which no pack declares");
 static_assert(std::string_view(kUserTextureSamplerNames[0]) == "uTexture1"
                   && std::string_view(kUserTextureSamplerNames[kUserTextureSamplerNames.size() - 1]) == "uTexture3",
               "kUserTextureSamplerNames is PACK-indexed: entry i names uTexture<i+1>");

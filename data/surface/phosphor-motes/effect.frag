@@ -100,7 +100,12 @@ vec2 motePath(float h1, float h2, float h3, float t, float reachPx,
     // out of the padded canvas. The shipped defaults do not reach that, the
     // declared ranges do. Capped so the diagonal magnitude stays under the reach:
     // sqrt(0.9^2 + 0.405^2) is about 0.99 of it.
-    float sway = clamp(swayAmp * wander, -0.45 * reachPx, 0.45 * reachPx);
+    // Bounded by scaling the AMPLITUDE, not by clamping the result: a clamp
+    // flat-topped the sine into a plateau, so past about half the mote range the
+    // sway visibly stalled at its extremes instead of simply travelling less far.
+    // |wander| <= 0.8, so 0.5625 * reachPx caps the excursion at the same 0.45 the
+    // clamp did. Only reachable in the regime that was out of bounds anyway.
+    float sway = min(swayAmp, 0.5625 * reachPx) * wander;
     return spawn + normal * travel + tangent * sway;
 }
 
@@ -156,18 +161,30 @@ vec3 microDust(vec2 px, float t, float amount, float reachPx, out float dustA) {
     // that, so the grid WRAPS. atan's seam lies on the -x axis, at the left
     // edge's midpoint, and without the wrap the cell either side of it would be a
     // different cell with a different speck and a different blink, which is a
-    // visible one-cell seam. The count comes from the rect's perimeter so a cell
-    // is about cellPx of edge, which keeps the density in device px.
+    // visible one-cell seam. The count comes from the rect's perimeter, so on a
+    // SQUARE frame a cell is about cellPx of edge.
     //
-    // The angle does not equalise cell size the way true arc length would, so
-    // density varies a little between a long edge's middle and its corners. For
-    // random dust that reads as variation rather than as an artefact;
-    // framePerimeter's own doc draws the same distinction for dashes.
+    // Only on a square frame. framePerimeter divides through the half-extents,
+    // mapping the rect onto a square, so every side spans a quarter turn and takes
+    // loopCells/4 cells however long it is — its own doc says it equalises the count
+    // per side and not the size. The along-edge cell is therefore proportional to
+    // that side's length, about 20.8 px on the long edges of a 1600x400 frame
+    // against 5.2 on the short, while the radial cell stays cellPx. For random dust
+    // the resulting stretch reads as variation rather than as an artefact, which is
+    // why the angle is kept: it is what removed the corner fan and the mirrored
+    // field. True arc length would hold the density uniform, and is the upgrade if
+    // this ever reads badly on a panel-shaped surface, where the short-edge cell
+    // goes sub-pixel.
     float loopCells = max(floor(4.0 * (halfSz.x + halfSz.y) / cellPx + 0.5), 1.0);
     float sCell = fract(framePerimeter(px, cen, halfSz) + 0.5) * loopCells;
     float v = dOut - t * 22.0 * max(uSurfaceScale, 0.001);
     vec2 dq = vec2(sCell, v / cellPx);
-    vec2 cellId = vec2(mod(floor(dq.x), loopCells), floor(dq.y));
+    // No mod on the s index: fract() above already bounds sCell to [0, loopCells),
+    // so floor(dq.x) lands in [0, loopCells-1] and a mod would hand it straight back.
+    // What makes the seam clean is loopCells being a WHOLE number, which lines a cell
+    // boundary up with atan's seam; a fractional count would not have been rescued by
+    // a mod either.
+    vec2 cellId = vec2(floor(dq.x), floor(dq.y));
     vec3 h = hash23(cellId);
 
     // Sparse occupancy, per-speck twinkle phase. The twinkle keeps a floor
@@ -186,7 +203,7 @@ vec3 microDust(vec2 px, float t, float amount, float reachPx, out float dustA) {
     vec3 col = fluxGradient(clamp(dOut / max(reachPx, 1.0), 0.0, 1.0) * 0.6 + h.x * 0.15);
     // TAPERED TO NOTHING BEFORE THE BOUNDARY. The halo above is an exponential,
     // still about a third of peak where dOut reaches reachPx and not below 0.05
-    // until about 2.4 times it, so on a host that pads by exactly moteRange the
+    // until about 2.7 times it, so on a host that pads by exactly moteRange the
     // twinkling field was truncated in a hard rectangle at a third of its
     // strength, with specks sliced mid-body. The mote heads have a radial travel
     // limit for this reason; the dust had none.

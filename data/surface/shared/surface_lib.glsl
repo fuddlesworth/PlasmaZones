@@ -184,8 +184,10 @@ BorderBand standardBorderBand(vec2 p, float borderWidth, float cornerRadius, flo
     float feather = max(aa, 1e-3);
     // A width of ZERO is the declared minimum on eight controls across seven
     // packs, and it has to mean NO LINE. Six of those eight come through this
-    // helper; border-double builds its own band from frameSdf and is not one of
-    // them. For the six, without this guard it does not mean no line: width
+    // helper. The other two are border-double's, which builds its bands from
+    // frameSdf directly and so carries its own copy of this test, added after the
+    // same phantom line was found live there. For the six, without this guard zero
+    // does not mean no line: width
     // collapses to 0, the edge term becomes smoothstep(-feather, +feather, d),
     // and that paints a band about two feathers wide straddling the frame edge
     // at up to a quarter of the colour's alpha. The user turns the border off
@@ -286,7 +288,8 @@ vec4 faintTintSlab(vec3 tint, float tintStrength, float mask) {
 // exp(-4t²) reach profile from SDF distance `d`, feathered to zero just inside
 // the texture edge so a thin capture margin fades out instead of clipping in a
 // hard rectangle, held to where the surface is not opaque (1 - baseAlpha) AND to
-// within one reach inside the frame, and scaled by `strength` and the focus dim
+// within two reaches inside the frame at full value for the first, and scaled by
+// `strength` and the focus dim
 // at floor `focusFloor`. `edgePx` is the
 // REAL (undisplaced) fragment position for the edge feather — the shadow pack
 // evaluates `d` against a displaced frame but feathers on the true position.
@@ -311,14 +314,28 @@ float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float stre
     float r = max(reach, 1e-3);
     float t = max(d, 0.0) / r;
     float halo = exp(-4.0 * t * t);
-    // DEPTH GATE. A halo has no business reaching further INSIDE the frame than
-    // its reach carries it outside, and both cases the clamp above protects sit
-    // within one reach of the edge: the corner sliver is just inside it, and the
-    // shadow's displaced band is within its own reach by construction. So hold the
-    // profile at full value down to one reach inside and fade it out by two, which
-    // zeroes only the deep interior. For an opaque window baseAlpha is 1 and the
-    // halo was already 0, so this changes nothing there.
-    halo *= smoothstep(-2.0 * r, -r, d);
+    // DEPTH GATE, ON THE UNDISPLACED FRAME. A halo has no business reaching
+    // further INSIDE the window body than its reach carries it outside, so hold the
+    // profile at full value down to one reach inside and fade it out by two. That
+    // zeroes only the deep interior of a translucent client, which is the case this
+    // exists for. For an opaque window baseAlpha is 1 and the halo was already 0.
+    //
+    // It gates on `edgePx`, NOT on `d`, and that distinction is the whole point.
+    // The shadow pack evaluates d against a frame DISPLACED by its cast offset, so
+    // every fragment in its margin band below the window reads as offsetY deep
+    // inside that displaced rect even though it sits OUTSIDE the real one. Gating on
+    // d erased the band outright whenever the offset exceeded the shadow size: at
+    // size 4 with offset 12 the band lands at depth 8..12 against a 4 px reach, so
+    // the gate was 0 across all of it and the drop shadow vanished.
+    //
+    // Square corners on purpose. This function is not handed the pack's corner
+    // radius, and the square reading is the conservative one. The cost is that the
+    // transparent corner sliver the clamp above preserves survives only while the
+    // reach exceeds about 0.29 of the border pack's radius, because the sliver's
+    // deepest point sits 0.293R inside the square edge.
+    vec2 gateHalf = 0.5 * uSurfaceFrameSize;
+    float dBody = sdRoundedBox(edgePx - (uSurfaceFrameTopLeft + gateHalf), gateHalf, 0.0);
+    halo *= smoothstep(-2.0 * r, -r, dBody);
     float edgeDist = min(min(edgePx.x, edgePx.y), min(uSurfaceSize.x - edgePx.x, uSurfaceSize.y - edgePx.y));
     // Floored so edge0 != edge1: smoothstep is undefined when they are equal, and
     // a zero reach collapsed them. With this, a zero reach is wholly safe rather

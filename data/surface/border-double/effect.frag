@@ -52,9 +52,22 @@ vec4 pSurface(vec2 uv) {
 
     float insideMask = 1.0 - smoothstep(-aa, aa, d);
     // Outer line: [-wOuter, 0]. Inner line: [-(total), -(wOuter + wGap)].
-    float outerLine = smoothstep(-wOuter - aa, -wOuter + aa, d);
-    float innerLine = (1.0 - smoothstep(-(wOuter + wGap) - aa, -(wOuter + wGap) + aa, d))
-        * smoothstep(-total - aa, -total + aa, d);
+    //
+    // A WIDTH OF ZERO MEANS NO LINE, and neither band gets that for free. Both
+    // widths declare a minimum of 0, and this pack builds its bands from frameSdf
+    // rather than through standardBorderBand, so it does not inherit that helper's
+    // guard. Without these two tests: at wOuter 0 the outer term becomes
+    // smoothstep(-aa, +aa, d) and insideMask its exact complement, so their product
+    // peaks at 0.25 on the frame edge and paints a band about two feathers wide at a
+    // quarter of the colour's alpha. At wInner 0 the two inner smoothsteps collapse
+    // onto identical edges and (1 - S) * S peaks at the same 0.25, one gap in. The
+    // user turns a line off and still sees it. Same defect, same remedy, as the six
+    // controls standardBorderBand covers.
+    float outerLine = wOuter > 0.0 ? smoothstep(-wOuter - aa, -wOuter + aa, d) : 0.0;
+    float innerLine = wInner > 0.0
+        ? (1.0 - smoothstep(-(wOuter + wGap) - aa, -(wOuter + wGap) + aa, d))
+            * smoothstep(-total - aa, -total + aa, d)
+        : 0.0;
     // Content is clipped inside the whole stack; the gap band between the
     // lines carries neither line nor content, showing what is behind.
     float stackEdge = smoothstep(-total - aa, -total + aa, d);

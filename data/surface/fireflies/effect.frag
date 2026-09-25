@@ -36,6 +36,10 @@ vec4 pSurface(vec2 uv) {
 
     vec3 glow = vec3(0.0);
     float alpha = 0.0;
+    // Hoisted: the boundary solve below is two divides per spark per fragment, on a
+    // padded full-canvas pass, per decorated window, per frame, for a value that does
+    // not change across the iterations.
+    vec2 invHalf = 1.0 / max(halfSz, vec2(1.0));
     for (int i = 0; i < kMaxFlies; ++i) {
         if (float(i) >= count) {
             break;
@@ -62,7 +66,14 @@ vec4 pSurface(vec2 uv) {
         // Now the radial distance TO THE RECT BOUNDARY along this direction, plus
         // off, so the spark is outside the frame at every angle. The boundary along
         // a unit direction sits at 1/k where k is the larger of the two normalized
-        // components. The edge midpoints are unchanged, since there the boundary
+        // components.
+        //
+        // The trade is that the angle is no longer a uniform-speed parameter. With
+        // the point on a long edge the along-edge speed goes as hy/sin(theta)^2, so a
+        // spark crawls at the edge midpoints and whips around the corners, by a
+        // factor of 1 + (hx/hy)^2: 2:1 on a square pane but about 17:1 on a 1600x400
+        // window. The old ellipse was a gentler 4:1 there. Arc-length
+        // parametrisation is the fix if it ever reads badly. The edge midpoints are unchanged, since there the boundary
         // radius IS the half-extent, so only the part of the path that was hidden
         // moves. The spark stays inside the capture margin too: it is off beyond the
         // boundary RADIALLY, so its perpendicular distance from the rect is at most
@@ -71,7 +82,7 @@ vec4 pSurface(vec2 uv) {
         float ang = TAU * fract(h1 + dir * t * (0.02 + 0.035 * h2));
         float off = reach * (0.25 + 0.6 * (0.5 + 0.5 * sin(t * (0.5 + 0.8 * h2) + h1 * TAU)));
         vec2 orbitDir = vec2(cos(ang), sin(ang));
-        float k = max(abs(orbitDir.x) / max(halfSz.x, 1.0), abs(orbitDir.y) / max(halfSz.y, 1.0));
+        float k = max(abs(orbitDir.x) * invHalf.x, abs(orbitDir.y) * invHalf.y);
         vec2 pos = cen + orbitDir * (1.0 / max(k, 1e-4) + off);
 
         // Soft gaussian body with a per-spark blink (cubed sine reads as a
