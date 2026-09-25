@@ -464,10 +464,28 @@ def prose_problems(s: str) -> list[str]:
     # Clause-splicing semicolon: only when both sides look like independent
     # clauses. Semicolons separating genuine comma-bearing list items are
     # legitimate, so those are excluded too.
+    # TWO OR MORE semicolons reads as an enumeration rather than a splice, and
+    # CLAUDE.md's carve-out leans permissive for lists. A clause splice is
+    # characteristically ONE semicolon joining two independent clauses. Without this,
+    # a three-item comma-bearing list ("the width, in pixels; the radius, in pixels;
+    # and the colour") was flagged on its LAST semicolon, where the final item
+    # carries no comma of its own. The cost is that a three-clause splice is missed,
+    # which is the side to err on given the carve-out.
+    if without_code.count(";") >= 2:
+        return problems
     for part in re.finditer(r";\s+(\w+)", without_code):
         before = without_code[: part.start()]
         after = without_code[part.start() + 1 :]
-        if "," in before or "," in after:
+        # THE COMMA TEST IS PER-SEGMENT, not whole-string. CLAUDE.md's carve-out is
+        # for "semicolons separating genuine comma-bearing LIST ITEMS", and testing
+        # the whole string meant a comma ANYWHERE suppressed the check: "The pane,
+        # when focused, is blurred; the border is not." went unreported, which is a
+        # textbook splice with a parenthetical in the first clause. Only the item
+        # either side of THIS semicolon counts, and both must carry a comma for it to
+        # read as an enumeration.
+        prev_item = before.rsplit(";", 1)[-1]
+        next_item = after.split(";", 1)[0]
+        if "," in prev_item and "," in next_item:
             continue  # list separator, not a clause splice
         if len(before.split()) >= 3 and len(after.split()) >= 3:
             problems.append("clause-splicing semicolon; split into sentences or use \"and\"")
@@ -778,9 +796,22 @@ SELFTEST_PROSE_BAD = [
     ("Blurs the pane — and lifts saturation.", "em-dash"),
     ("The pane is blurred; the border is not.", "semicolon"),
     ("Blur radius - in logical pixels.", "spaced hyphen"),
+    # A SPLICE WITH A COMMA IN IT. The comma test used to look at the whole string
+    # rather than the item either side of the semicolon, so any comma anywhere
+    # suppressed the check and this went unreported. The first version of this
+    # selftest missed it because none of its probes had a comma, which is the
+    # lesson: a selftest is only as good as the shapes it names.
+    ("The pane, when focused, is blurred; the border is not.", "semicolon past a comma"),
+    # An appositive long enough not to read as a label.
+    ("Blurs the scene behind the pane — a soft look that lifts saturation.", "em-dash appositive"),
 ]
 
 SELFTEST_PROSE_OK = [
+    # A genuine comma-bearing list, which the carve-out exists for. Three items, so
+    # the final one carries no comma of its own; flagging that was the false positive
+    # the per-item comma test introduced before the enumeration signal was added.
+    "Sets the width, in pixels; the radius, in pixels; and the colour",
+    "Left, top; right, bottom",
     # A literal separator between two nouns, which CLAUDE.md allows.
     "%1 — %2",
     # A settings breadcrumb.
