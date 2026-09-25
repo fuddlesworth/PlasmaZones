@@ -18,6 +18,7 @@
 
 #include <array>
 #include <chrono>
+#include <string_view>
 
 #include <epoxy/gl.h>
 
@@ -353,8 +354,30 @@ inline constexpr std::array<const char*, PhosphorAnimationShaders::AnimationShad
     kUserTextureSamplerNames = {"uTexture1", "uTexture2", "uTexture3"};
 inline constexpr std::array<const char*, PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots>
     kUserTextureWrapKeys = {"uTexture1_wrap", "uTexture2_wrap", "uTexture3_wrap"};
-inline constexpr std::array<const char*, PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots>
-    kITextureResolutionKeys = {"iTextureResolution[0]", "iTextureResolution[1]", "iTextureResolution[2]"};
+/// INDEXED BY GLSL TEXTURE SLOT, not by pack slot. `iTextureResolution[i]` is the
+/// pixel size of `uTexture<i>`, so index 0 is the surface's own content and a
+/// pack's Nth declared texture is uTexture<N+1> and therefore index N+1. The two
+/// sibling tables above ARE pack-indexed, which is exactly how this drifted: they
+/// were used as parallel arrays, so a pack's first texture went to uTexture1 and
+/// its size to iTextureResolution[0], which is the surface. The daemon writes
+/// slot i's size to index i and always did, so the two hosts disagreed. Sized to
+/// the BINDING table rather than a contract's pack budget, because the index is a
+/// texture slot and there are kUserTextureCount of those.
+inline constexpr std::array<const char*, PhosphorShaders::Bindings::kUserTextureCount> kITextureResolutionKeys = {
+    "iTextureResolution[0]", "iTextureResolution[1]", "iTextureResolution[2]", "iTextureResolution[3]"};
+// The two indexing conventions, pinned at compile time rather than left to the
+// comment above, because the drift they guard against produced no diagnostic
+// anywhere: a pack read the wrong element and the shader still linked and ran.
+// Entry i of the sampler table is uTexture<i+1> and entry i of the resolution
+// table is iTextureResolution[i], so a write must offset by one between them.
+static_assert(std::string_view(kUserTextureSamplerNames[0]) == "uTexture1"
+                  && std::string_view(kUserTextureSamplerNames[kUserTextureSamplerNames.size() - 1]) == "uTexture3",
+              "kUserTextureSamplerNames is PACK-indexed: entry i names uTexture<i+1>");
+static_assert(std::string_view(kITextureResolutionKeys[0]) == "iTextureResolution[0]"
+                  && std::string_view(kITextureResolutionKeys[kITextureResolutionKeys.size() - 1])
+                      == "iTextureResolution[3]",
+              "kITextureResolutionKeys is GLSL-SLOT-indexed: entry i names iTextureResolution[i], and index 0 is "
+              "uTexture0, the surface itself");
 inline constexpr std::array<const char*, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams>
     kCustomParamsElementNames = {"customParams[0]", "customParams[1]", "customParams[2]", "customParams[3]",
                                  "customParams[4]", "customParams[5]", "customParams[6]", "customParams[7]"};

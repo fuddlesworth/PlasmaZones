@@ -141,10 +141,13 @@ uniform float uSurfaceOpacity;
 uniform vec4 iMouse;
 
 // User-declared image textures (metadata `textures` — logo, mask, pattern).
-// Bound to dedicated units at draw time; iTextureResolution[N].xy carries
-// each bound texture's pixel size (slot N feeds uTexture<N+1>, mirroring the
-// animation contract's slot layout). A slot with no loadable file reads
-// transparent black.
+// Bound to dedicated units at draw time. iTextureResolution[i].xy is the pixel
+// size of uTexture<i>, so index 0 is the surface's own content and a metadata
+// slot N, which feeds uTexture<N+1>, has its size at index N+1. The sampler
+// names are one-based over the metadata list and iTextureResolution is
+// zero-based over the texture slots, which is a real trap and the reason it is
+// spelled out twice. Mirrors the animation contract. A slot with no loadable
+// file reads transparent black.
 uniform sampler2D uTexture1;
 uniform sampler2D uTexture2;
 uniform sampler2D uTexture3;
@@ -179,8 +182,9 @@ layout(std140, binding = 0) uniform SurfaceUniforms {
                                  //   top-down device-px space (.xy; negative when
                                  //   off-surface / no hover source), .zw = .xy
                                  //   normalized by uSurfaceSize
-    vec4 iTextureResolution[4];  // offset 592 (64) — user texture sizes (.xy;
-                                 //   slot N feeds uTexture<N+1>)
+    vec4 iTextureResolution[4];  // offset 592 (64) — texture sizes (.xy);
+                                 //   index i is uTexture<i>, so index 0 is the
+                                 //   surface and metadata slot N is index N+1
     vec4 uBackdropRect;          // offset 656 (16) — the sub-rect of the bound
                                  //   backdrop this surface should sample, in
                                  //   normalized texture coords (xy = min,

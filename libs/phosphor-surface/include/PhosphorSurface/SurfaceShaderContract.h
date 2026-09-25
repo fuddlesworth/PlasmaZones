@@ -248,10 +248,14 @@ inline constexpr const char* kIMouse = "iMouse";
 /// `sampler2D uTexture1..3` — user-declared image textures (metadata
 /// `textures`: logo, mask, pattern). Slot N of the metadata list feeds
 /// `uTexture<N+1>` (bindings 12-14 on the daemon; dedicated units on the
-/// compositor), and `iTextureResolution[N].xy` carries the bound texture's
-/// pixel size — the same slot layout as the animation contract, so the
-/// settings UI reuses the same editor components. A slot with no loadable
-/// file reads transparent black.
+/// compositor). `iTextureResolution[i].xy` is the pixel size of `uTexture<i>`,
+/// so metadata slot N's size is at `iTextureResolution[N+1]`, and index 0
+/// belongs to `uTexture0`, the surface itself. Mind the two different
+/// indices: the sampler names are one-based over the metadata list and
+/// iTextureResolution is zero-based over the texture slots. Otherwise the
+/// same slot layout as the animation contract, so the settings UI reuses the
+/// same editor components. A slot with no loadable file reads transparent
+/// black.
 inline constexpr const char* kUTexture1 = "uTexture1";
 inline constexpr const char* kUTexture2 = "uTexture2";
 inline constexpr const char* kUTexture3 = "uTexture3";

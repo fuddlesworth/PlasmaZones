@@ -96,9 +96,10 @@ struct alignas(16) SurfaceUniforms
     // off-surface sentinel rather than a phantom top-left hover.
     float iMouse[4]; // vec4: 16 bytes at offset 576
 
-    // User texture sizes: iTextureResolution[i].xy = the pixel size of the
-    // texture bound at slot i (slot N feeds uTexture<N+1>, bindings 12-14 on
-    // the daemon). The node resolves these live, same as the overlay UBO.
+    // User texture sizes: iTextureResolution[i].xy = the pixel size of
+    // uTexture<i>, bindings 11-14. Index 0 is the surface's own content, so a
+    // pack's metadata slot N, which feeds uTexture<N+1>, has its size at index
+    // N+1. The node resolves these live, same as the overlay UBO.
     float iTextureResolution[4][4]; // vec4[4]: 64 bytes at offset 592
 
     // The sub-rect of the bound backdrop this surface samples, in normalized

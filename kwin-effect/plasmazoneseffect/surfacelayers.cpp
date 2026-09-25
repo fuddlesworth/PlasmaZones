@@ -981,6 +981,16 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             // the spectrum texture only when live.
             mainAudioBound =
                 bindSurfaceAudio(pk->shader.get(), pk->iAudioSpectrumSizeLoc, pk->uAudioSpectrumLoc, mayAnimate);
+            // iTextureResolution[0] is uTexture0's size, which for this pass is the
+            // running composite on unit 0. The SAME value that feeds uSurfaceSize,
+            // so the two cannot disagree; the daemon publishes the equivalent and
+            // the compositor did not, which left index 0 answering differently on
+            // the two hosts for any pack that read it.
+            if (pk->iTextureResolutionLoc[0] >= 0) {
+                pk->shader->setUniform(pk->iTextureResolutionLoc[0],
+                                       QVector4D(static_cast<float>(state.compositeSize.width()),
+                                                 static_cast<float>(state.compositeSize.height()), 0.0f, 0.0f));
+            }
             // User-declared image textures (metadata `textures`), units
             // kSurfaceUserTextureBaseUnit.. — loaded once at compile time onto
             // the pack state. Every slot the shader REFERENCES gets a bind: a
@@ -1007,8 +1017,11 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                     if (!userTex) {
                         continue; // allocation failed — keep the old omit behaviour
                     }
-                } else if (pk->iTextureResolutionLoc[t] >= 0) {
-                    pk->shader->setUniform(pk->iTextureResolutionLoc[t],
+                } else if (pk->iTextureResolutionLoc[t + 1] >= 0) {
+                    // t + 1: pack slot t is uTexture<t+1>, and iTextureResolution is
+                    // indexed by GLSL texture slot. Index 0 belongs to the surface
+                    // and is pushed below.
+                    pk->shader->setUniform(pk->iTextureResolutionLoc[t + 1],
                                            QVector4D(static_cast<float>(userTex->width()),
                                                      static_cast<float>(userTex->height()), 0.0f, 0.0f));
                 }

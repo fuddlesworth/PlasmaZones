@@ -197,20 +197,24 @@ struct CompiledSurfacePack
         return a;
     }();
 
-    /// User-declared image textures (metadata `textures`): sampler +
-    /// iTextureResolution[N] element locations, plus the textures themselves,
-    /// loaded once at compile time (decorations are persistent, so the
-    /// pack-lifetime cache is the natural owner — freed with the shader on
-    /// cache clear, where the GL context discipline already applies). Slot N
-    /// feeds uTexture<N+1>. A slot with no loadable file stays null and the
-    /// fold skips its bind (the sampler then reads transparent black).
+    /// User-declared image textures (metadata `textures`): sampler locations plus
+    /// the textures themselves, loaded once at compile time (decorations are
+    /// persistent, so the pack-lifetime cache is the natural owner — freed with the
+    /// shader on cache clear, where the GL context discipline already applies).
+    /// PACK-indexed: slot N feeds uTexture<N+1>. A slot with no loadable file stays
+    /// null and the fold skips its bind (the sampler then reads transparent black).
     std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots> userTextureLoc = []() {
         std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots> a;
         a.fill(-1);
         return a;
     }();
-    std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots> iTextureResolutionLoc = []() {
-        std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots> a;
+    /// GLSL-TEXTURE-SLOT-indexed, unlike its neighbour above, because
+    /// `iTextureResolution[i]` is the size of `uTexture<i>`: index 0 is the
+    /// surface's own content and pack slot N is index N+1. Treating the two arrays
+    /// as parallel is what put a pack's first texture size on the surface's index
+    /// and disagreed with the daemon. See kITextureResolutionKeys.
+    std::array<int, PhosphorShaders::Bindings::kUserTextureCount> iTextureResolutionLoc = []() {
+        std::array<int, PhosphorShaders::Bindings::kUserTextureCount> a;
         a.fill(-1);
         return a;
     }();

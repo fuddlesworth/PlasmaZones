@@ -403,11 +403,17 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     static const std::array<const char*, SC::kMaxUserTextureSlots> kSurfaceUserTextureNames = {
         {SC::kUTexture1, SC::kUTexture2, SC::kUTexture3}};
     static_assert(SC::kMaxUserTextureSlots == 3, "surface user-texture name array must grow with the slot budget");
-    static_assert(SC::kMaxUserTextureSlots == PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots,
-                  "kITextureResolutionKeys is sized to the animation budget; the two contracts must stay equal");
+    static_assert(SC::kMaxUserTextureSlots + 1 == PhosphorShaders::Bindings::kUserTextureCount,
+                  "a pack's N slots plus the surface's own uTexture0 must fill the binding table's texture slots");
     for (int slot = 0; slot < SC::kMaxUserTextureSlots; ++slot) {
         packState.userTextureLoc[slot] = shader->uniformLocation(kSurfaceUserTextureNames[slot]);
-        packState.iTextureResolutionLoc[slot] = shader->uniformLocation(kITextureResolutionKeys[slot]);
+    }
+    // SEPARATE LOOP over GLSL texture slots, because iTextureResolution is indexed
+    // by those and not by pack slot: index 0 is the surface's own content, which no
+    // pack declares. Folding this into the loop above is what made the two arrays
+    // parallel and put a pack's first texture size on the surface's index.
+    for (int glslSlot = 0; glslSlot < PhosphorShaders::Bindings::kUserTextureCount; ++glslSlot) {
+        packState.iTextureResolutionLoc[glslSlot] = shader->uniformLocation(kITextureResolutionKeys[glslSlot]);
     }
     for (int slot = 0; slot < eff.textures.size() && slot < SC::kMaxUserTextureSlots; ++slot) {
         const auto& texSlot = eff.textures.at(slot);

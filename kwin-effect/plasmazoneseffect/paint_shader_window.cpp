@@ -306,6 +306,14 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
             if (cached->iResolutionLoc >= 0) {
                 shader->setUniform(cached->iResolutionLoc, anchorUniforms.resolution);
             }
+            // iTextureResolution[0] is uTexture0's size, which is what iResolution
+            // carries here. Pushed from the same value so the two cannot disagree.
+            // The daemon publishes the equivalent and the compositor did not, which
+            // left index 0 answering differently on the two hosts.
+            if (cached->iTextureResolutionLoc[0] >= 0) {
+                shader->setUniform(cached->iTextureResolutionLoc[0],
+                                   QVector4D(anchorUniforms.resolution.x(), anchorUniforms.resolution.y(), 0.0f, 0.0f));
+            }
             if (cached->iTimeDeltaLoc >= 0) {
                 shader->setUniform(cached->iTimeDeltaLoc, iTimeDelta);
             }
@@ -788,8 +796,8 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
                     // transitions, so a slot that carried a real texture
                     // (and its size) on a prior leg would otherwise leave a
                     // stale non-zero iTextureResolution here.
-                    if (cached->iTextureResolutionLoc[slot] >= 0) {
-                        shader->setUniform(cached->iTextureResolutionLoc[slot], QVector4D(0.0f, 0.0f, 0.0f, 0.0f));
+                    if (cached->iTextureResolutionLoc[slot + 1] >= 0) {
+                        shader->setUniform(cached->iTextureResolutionLoc[slot + 1], QVector4D(0.0f, 0.0f, 0.0f, 0.0f));
                     }
                     continue;
                 }
@@ -800,9 +808,12 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
                 // state across transitions, so skipping the push would leave a
                 // prior leg's stale size standing — the same reason the fallback
                 // arm above pushes it explicitly.
-                if (cached->iTextureResolutionLoc[slot] >= 0) {
+                // slot + 1: pack slot `slot` is uTexture<slot+1>, and
+                // iTextureResolution is indexed by GLSL texture slot. Index 0 is
+                // uTexture0's own size, pushed beside iResolution above.
+                if (cached->iTextureResolutionLoc[slot + 1] >= 0) {
                     const QSize sz = tex->size();
-                    shader->setUniform(cached->iTextureResolutionLoc[slot],
+                    shader->setUniform(cached->iTextureResolutionLoc[slot + 1],
                                        QVector4D(sz.width(), sz.height(), 0.0f, 0.0f));
                 }
                 // A slot the linker dropped (the shader never samples it) has no

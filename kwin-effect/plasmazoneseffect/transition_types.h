@@ -104,16 +104,19 @@ struct CachedShader
         a.fill(-1);
         return a;
     }();
-    /// Element locations for `iTextureResolution[0..N-1]`. Symmetric with
-    /// `customParamsLoc` / `customColorsLoc` — the element-name lookup
-    /// happens at compile time so paintWindow does not re-resolve
-    /// `"iTextureResolution[0]"` string lookups per frame.
-    std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots> iTextureResolutionLoc =
-        []() {
-            std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots> a;
-            a.fill(-1);
-            return a;
-        }();
+    /// Element locations for `iTextureResolution[0..3]`. Symmetric with
+    /// `customParamsLoc` / `customColorsLoc` — the element-name lookup happens at
+    /// compile time so paintWindow does not re-resolve `"iTextureResolution[0]"`
+    /// string lookups per frame.
+    ///
+    /// GLSL-TEXTURE-SLOT-indexed, unlike `userTextureLoc` above, because
+    /// `iTextureResolution[i]` is the size of `uTexture<i>`: index 0 is the window's
+    /// own content and pack slot N is index N+1. See kITextureResolutionKeys.
+    std::array<int, PhosphorShaders::Bindings::kUserTextureCount> iTextureResolutionLoc = []() {
+        std::array<int, PhosphorShaders::Bindings::kUserTextureCount> a;
+        a.fill(-1);
+        return a;
+    }();
     /// Geometry-morph uniform locations. The window moves instantly via
     /// `moveResize`; the morph shader animates the visual transition by
     /// interpolating the window quad from its old frame (`iFromRect`) to its

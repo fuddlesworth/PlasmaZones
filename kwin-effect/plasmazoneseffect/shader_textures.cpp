@@ -724,11 +724,16 @@ PlasmaZonesEffect::compileOrLoadAnimationShader(const QString& effectId,
             // GLSL sampler name: uTexture1..3 (slot+1 because uTexture0 is
             // the redirected surface, not user-declared). Matches the
             // overlay shader convention in data/overlays/shared/textures.glsl.
-            // Pre-baked from the file-scope `kUserTextureSamplerNames` /
-            // `kITextureResolutionKeys` arrays — no per-slot QByteArray
-            // alloc per shader install.
+            // Pre-baked from the file-scope `kUserTextureSamplerNames` array — no
+            // per-slot QByteArray alloc per shader install.
             cached.userTextureLoc[slot] = shader->uniformLocation(kUserTextureSamplerNames[slot]);
-            cached.iTextureResolutionLoc[slot] = shader->uniformLocation(kITextureResolutionKeys[slot]);
+        }
+        // SEPARATE LOOP, because iTextureResolution is indexed by GLSL texture slot
+        // and not by pack slot: index 0 is uTexture0, the window's own content,
+        // which no pack declares. Sharing the loop above made the two arrays
+        // parallel and put pack slot 0's size on uTexture0's index.
+        for (int glslSlot = 0; glslSlot < PhosphorShaders::Bindings::kUserTextureCount; ++glslSlot) {
+            cached.iTextureResolutionLoc[glslSlot] = shader->uniformLocation(kITextureResolutionKeys[glslSlot]);
         }
         cached.shader = std::move(shader);
         cacheIt = m_shaderManager.m_shaderCache.emplace(effectId, std::move(cached)).first;
