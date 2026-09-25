@@ -88,6 +88,15 @@ std::optional<PackModel> detectPackModel(const QString& packDir);
 /// helpers can never satisfy an include the tree itself lacks: a header
 /// missing from `data/<family>/shared` fails here the way it fails in CI,
 /// rather than resolving from a stale `/usr/share` copy on a developer machine.
+///
+/// THAT GUARANTEE COVERS `#include` ONLY, which this used to leave implied. A
+/// `builtin:` buffer token does not come through these roots at all: the
+/// registry's own resolver probes the pack's sibling shared/ and then falls
+/// back to QStandardPaths, so a self-contained tree missing a builtin file
+/// resolves it from the installed copy and validates on a developer machine
+/// while failing in CI. The surface arm lints that case by comparing the
+/// resolved directory against this list, which is exactly the discrimination
+/// this function is good for.
 QStringList packSharedRoots(const QString& packDir);
 
 // Confine a metadata-supplied shader path to its pack dir. Returns the confined

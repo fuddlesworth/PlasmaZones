@@ -684,9 +684,39 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
                 continue;
             }
             if (SurfaceShaderRegistry::isBuiltinBufferShader(bufName)) {
-                if (SurfaceShaderRegistry::resolveBuiltinBufferShader(bufName, QDir(packDir).absolutePath())
-                        .isEmpty()) {
+                const QString resolvedBuiltin =
+                    SurfaceShaderRegistry::resolveBuiltinBufferShader(bufName, QDir(packDir).absolutePath());
+                if (resolvedBuiltin.isEmpty()) {
                     lints << QStringLiteral("unknown or unlocatable builtin buffer shader: %1").arg(bufName);
+                    continue;
+                }
+                // RESOLVED FROM OUTSIDE THIS TREE, which is the dev-passes /
+                // CI-fails shape. The registry probes the pack's sibling shared/
+                // first and then falls back to QStandardPaths, so a self-contained
+                // tree missing a builtin file quietly resolves it from the
+                // INSTALLED copy under /usr/share. On a developer machine with the
+                // package on it the pack validates; in CI, or on any machine
+                // without the install, the same tree fails.
+                //
+                // packSharedRoots is what draws the line, and it draws it the right
+                // way round on its own: for a self-contained tree it is the sibling
+                // shared/ and nothing else, so an outside resolution is not in the
+                // list. For an INSTALLED pack it widens to the XDG chain, so
+                // resolving from the system prefix is expected and silent.
+                const QString resolvedDir = QFileInfo(resolvedBuiltin).canonicalPath();
+                bool insideTree = false;
+                for (const QString& root : packSharedRoots(packDir)) {
+                    if (!root.isEmpty() && QFileInfo(root).canonicalFilePath() == resolvedDir) {
+                        insideTree = true;
+                        break;
+                    }
+                }
+                if (!insideTree) {
+                    lints << QStringLiteral(
+                                 "%1 resolved to %2, which is outside this pack tree's shared roots. A tree that does "
+                                 "not ship the file validates here only because a copy is installed, and fails "
+                                 "anywhere without one")
+                                 .arg(bufName, resolvedBuiltin);
                 }
                 continue;
             }
