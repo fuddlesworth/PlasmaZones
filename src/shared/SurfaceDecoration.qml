@@ -115,6 +115,26 @@ Item {
     ///                               capture below. 0 for margin-less chains
     ///                               keeps the classic 1:1 geometry.
     property var decorationChain: []
+
+    /// Bumped by the host when the shader registry recommitted, to force a
+    /// re-bake that nothing else on this path can trigger.
+    ///
+    /// AN IN-PLACE EDIT OF A PACK'S SHADER SOURCE CHANGES NOTHING THIS QML CAN
+    /// SEE. The registry watches the frag, vert, buffer shaders and textures and
+    /// emits on a committed rescan, and the host re-resolves and rewrites
+    /// `decorationChain` in response. But after an in-place edit the path, the
+    /// metadata-derived preamble, the params and every buffer key are
+    /// byte-identical, so the recomposed chain EQUALS the old one, the stage
+    /// rebinds the same QUrl, and setShaderSource compares equal and early-returns
+    /// without marking the shader dirty. The bake is cached on the source hash, so
+    /// nothing re-reads the file.
+    ///
+    /// An integer the host increments is the smallest thing that cannot compare
+    /// equal. It is deliberately NOT part of the chain data: a chain change
+    /// already forces its own reload, and folding this in would re-bake on every
+    /// ordinary chain edit as well.
+    property int decorationReloadGeneration: 0
+
     // Live CAVA audio spectrum, forwarded to every stage's SurfaceShaderItem so
     // an audio-reactive pack (one that includes surface_audio.glsl) reacts.
     // Empty when the audio visualizer is off. The daemon writes it via
@@ -576,6 +596,26 @@ Item {
 
             SurfaceShaderItem {
                 id: stageItem
+
+                /// Force a re-bake when the host says the registry recommitted.
+                ///
+                /// A CONNECTION RATHER THAN A BINDING, because the point is the
+                /// EVENT, not a value: nothing on this item depends on the
+                /// generation, and the work is an imperative reload. A binding
+                /// that read it would have to write it somewhere to stay alive,
+                /// which is the shape that silently does nothing.
+                ///
+                /// Guarded on a non-zero generation so a freshly created delegate
+                /// does not reload on its initial 0, which would re-bake every
+                /// stage on every show for no reason.
+                Connections {
+                    target: root
+                    function onDecorationReloadGenerationChanged() {
+                        if (root.decorationReloadGeneration > 0) {
+                            stageItem.reloadShader();
+                        }
+                    }
+                }
 
                 // Forward the host's live audio spectrum so an audio-reactive
                 // pack (surface_audio.glsl) sees it. Inherited from ShaderEffect.

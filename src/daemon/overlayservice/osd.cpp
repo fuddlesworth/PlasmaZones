@@ -43,6 +43,9 @@
 namespace PlasmaZones {
 
 namespace {
+/// Forces the re-bake an in-place source edit cannot otherwise get; the QML
+/// property `decorationReloadGeneration` carries the reasoning.
+int s_decorationReloadGeneration = 0;
 
 // Size the OSD window to its target screen rect. The wl_surface is now
 // screen-sized (mirrors zone-selector / snap-assist) - anchors and
@@ -503,6 +506,7 @@ void OverlayService::setSurfaceShaderRegistry(PhosphorSurfaceShaders::SurfaceSha
         connect(m_surfaceShaderRegistry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
                 [this]() {
                     m_warnedDecorationPacks.clear();
+                    ++s_decorationReloadGeneration; // before the re-resolve, so it is written
                     // And RE-RESOLVE what is on screen. A pack installed, removed or
                     // edited on disk changes what a visible popup's chain composes to,
                     // and nothing else on this path pushes that: the chain is resolved
@@ -755,6 +759,8 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     writeQmlProperty(slot, QStringLiteral("backdropTexture"),
                      backdrop.isNull() ? QVariant() : QVariant::fromValue(backdrop));
     writeQmlProperty(slot, QStringLiteral("decorationChain"), QVariant::fromValue(stages));
+    // Every apply, so a slot decorated after a commit starts at the current value.
+    writeQmlProperty(slot, QStringLiteral("decorationReloadGeneration"), s_decorationReloadGeneration);
 
     // Record whether this slot now carries an audio-reactive pack, then reconcile
     // CAVA: a newly-decorated audio surface may need audio capture started, or a
