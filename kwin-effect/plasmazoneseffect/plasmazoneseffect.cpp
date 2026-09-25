@@ -341,4 +341,3 @@ KWIN_EFFECT_FACTORY_SUPPORTED(PlasmaZones::PlasmaZonesEffect, "metadata.json",
 
 // MOC include - REQUIRED for the Q_OBJECT in KWIN_EFFECT_FACTORY_SUPPORTED
 #include "plasmazoneseffect.moc"
-#include <opengl/glshader.h>

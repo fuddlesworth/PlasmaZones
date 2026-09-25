@@ -1597,16 +1597,16 @@ private:
     /// must be the EXACT window, never a fuzzy same-app sibling.
     ///
     /// A few other sites erase m_surfaceMultipass directly, and each is deliberate:
-    ///   - lifecycle_wiring.cpp's surface-pack hot-reload clears the WHOLE map: every compiled
-    ///     pack is about to be recompiled (its PRESET sibling invalidates the fold flags
-    ///     instead, so a corpse keeps the frozen frame its close leg needs);
     ///   - lifecycle_wiring.cpp's windowDeleted backstop, which runs after the window is gone
     ///     and there is nothing left to animate;
     ///   - surface_capture.cpp's ensureSurfaceTargets, which on an allocation failure
     ///     erases the half-built state it just failed to allocate and returns false;
     ///     its caller abandons the fold immediately, so a transition loses its layer
     ///     for one frame rather than sampling a freed texture.
-    /// Nothing else may.
+    /// Nothing else may. In particular the two hot-reload handlers do NOT erase: each
+    /// walks the map and invalidates every entry in place (compositeValid, prefixValid,
+    /// prefixChainEnd, chainKey), because a DELETED window's entry is the frame its
+    /// close leg needs and erasing it left a closing window undecorated for the rest of it.
     void releaseSurfaceState(const QString& windowId, KWin::EffectWindow* target);
 
     /// The EXACT window a decoration belongs to: an exact-id live match, else the frozen
@@ -3285,8 +3285,8 @@ private:
     /// group-mates above, this one shrinks (or, for a pack that declares less
     /// than full density, raises) the per-frame blur work itself. Applied
     /// through clampedBufferScale(), the single chokepoint both buffer-target
-    /// sizing (surface_capture.cpp) and the per-frame backdrop-density resolve
-    /// (paint_pipeline.cpp) go through, so capture density and sampler density
+    /// sizing and the per-frame backdrop-density resolve go through (both in
+    /// surface_capture.cpp), so capture density and sampler density
     /// keep agreeing by construction. Seeded from the shared SSOT the daemon's
     /// schema also clamps from, until the daemon pushes the real value.
     qreal m_decorationBlurScaleMultiplier = PhosphorCompositor::DecorationDefaults::BlurScaleMultiplier;

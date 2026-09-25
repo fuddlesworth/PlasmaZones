@@ -18,6 +18,7 @@
 #include <PhosphorSurface/DecorationSupportedPaths.h>
 
 #include <effect/effecthandler.h>
+#include <opengl/glshader.h>
 
 #include <QColor>
 #include <QJsonDocument>
@@ -27,7 +28,6 @@
 
 #include <algorithm>
 #include <utility>
-#include <opengl/glshader.h>
 
 namespace PlasmaZones {
 
@@ -196,10 +196,17 @@ void PlasmaZonesEffect::loadCachedSettings()
     // reallocate them (with the GL context current there, where the FBO
     // deletion is safe), and the fold invalidation forces that next fold — a
     // static chain would otherwise early-return its cached composite forever
-    // and never notice. The BACKDROP capture density self-heals with no help
-    // from this loader: chainBackdropScale re-resolves through the (now
-    // cleared) cache on the next paint and captureWindowBackdrop reallocates
-    // on the resulting size change (surface_backdrop.cpp). The window capture
+    // and never notice. Where the BACKDROP capture density tracks the multiplier
+    // at all it self-heals with no help from this loader: chainBackdropScale
+    // re-resolves through the (now cleared) cache on the next paint and
+    // captureWindowBackdrop reallocates on the resulting size change
+    // (surface_backdrop.cpp). That is latent for every bundled pack today, not
+    // live: chainBackdropScale returns 1.0 as soon as a pack's MAIN pass links any
+    // backdrop uniform, the scalar gate counts, and all eight bundled
+    // needsBackdrop packs read the gate in their own fragment. So the buffer-pass
+    // branch the multiplier would reach is unreachable for them and the capture
+    // stays at full canvas density whatever this value is. surface_types.h's
+    // backdropTex doc is where that is written up. The window capture
     // itself is unaffected — captureScale is the output scale, not a pack
     // density, so it never sees this multiplier.
     loadSettingAsync(QStringLiteral("decorationBlurScaleMultiplier"), [this](const QVariant& v) {

@@ -18,6 +18,7 @@
 #include <PhosphorProtocol/Registration.h>
 
 #include <effect/effecthandler.h>
+#include <opengl/glshader.h>
 #include <core/output.h>
 #include <virtualdesktops.h>
 #include <workspace.h>
@@ -41,7 +42,6 @@
 #include "handlers/snaphandler.h"
 #include "compositor/stripviewanimator.h"
 #include "compositor/windowanimator.h"
-#include <opengl/glshader.h>
 
 namespace PlasmaZones {
 
@@ -295,7 +295,7 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
     // Surface shader pack hot-reload: when a data/surface pack changes on disk,
     // drop EVERY compiled surface pack so the next paint recompiles each
     // referenced pack against the new source, and repaint so decorated windows
-    // pick it up. Also drop the per-window multipass FBO state: a recompiled pack
+    // pick it up. Also clear each window's chainKey and fold flags: a recompiled pack
     // whose buffer-pass COUNT changed would otherwise under-render, because the
     // composite path's chainBufferTex realloc keys on the chain pack-id list (and
     // size), not on each pack's buffer-pass count — only clearing it here forces

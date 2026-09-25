@@ -354,16 +354,17 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // alloc-failure path already documents).
     //
     // The capture is NOT the only re-entrant call made while this reference is
-    // held, and the second one deserves naming because it looks worse than it
-    // is. compiledPackLazy above reaches compiledPack, which calls
-    // ensureSurfaceRegistryPaths, whose FIRST call emits effectsChanged inline
-    // — and that handler clears m_surfaceMultipass wholesale
-    // (lifecycle_wiring.cpp), which would leave this reference dangling for the
-    // rest of the fold. What blocks it is ordering, not luck: a window reaches
-    // this function only with a decoration record, and updateWindowDecoration
-    // calls ensureSurfaceRegistryPaths before it writes one, so the one-shot
-    // flag is always already set by the time any fold runs. Moving or removing
-    // that call is what would open this hole.
+    // held. compiledPackLazy above reaches compiledPack, which calls
+    // ensureSurfaceRegistryPaths, whose FIRST call emits effectsChanged inline.
+    // That handler does NOT dangle the reference below: it walks the map and
+    // invalidates each entry in place (lifecycle_wiring.cpp), erasing nothing,
+    // so the SurfaceMultipassState this function holds stays put and the fold
+    // simply redraws what the handler just marked stale. What the ordering
+    // guarantees is separate and still worth stating: a window reaches this
+    // function only with a decoration record, and updateWindowDecoration calls
+    // ensureSurfaceRegistryPaths before it writes one, so the one-shot flag is
+    // always already set by the time any fold runs and the nested
+    // updateAllDecorations cannot reach removeWindowDecoration for this window.
     SurfaceMultipassState& state = m_surfaceMultipass[windowId];
     state.canvasGeo = logicalGeometry;
 
