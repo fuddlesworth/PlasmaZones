@@ -44,13 +44,35 @@ vec4 pSurface(vec2 uv) {
         float h2 = hashSin1(float(i) + 7.71);
         float h3 = hashSin1(float(i) + 42.9);
 
-        // Slow orbit around the frame, direction and rate per spark, with
-        // the radial distance breathing between the frame edge and the
-        // margin's reach so paths interleave instead of forming a ring.
+        // Slow orbit around the frame, direction and rate per spark, with the
+        // offset breathing between the frame edge and the margin's reach so paths
+        // interleave instead of forming a ring.
+        //
+        // OFFSET FROM THE RECT BOUNDARY, not from an inscribed ellipse. This was
+        // `vec2(cos(ang) * (halfSz.x + off), sin(ang) * (halfSz.y + off))`, an
+        // ellipse with semi-axes (hx + off, hy + off) about the frame centre. An
+        // ellipse like that only escapes the rectangle where one of its terms
+        // exceeds the matching half-extent, which near the diagonals needs off to
+        // be about 0.41 of the half-extent. `off` is a fraction of flyRange and the
+        // half-extents are window-sized, so on a normally sized window most of each
+        // path lay INSIDE the frame rect, where the slab composite hides the spark
+        // entirely: the swarm collapsed to four blinking arcs at the edge midpoints
+        // and vanished around every corner.
+        //
+        // Now the radial distance TO THE RECT BOUNDARY along this direction, plus
+        // off, so the spark is outside the frame at every angle. The boundary along
+        // a unit direction sits at 1/k where k is the larger of the two normalized
+        // components. The edge midpoints are unchanged, since there the boundary
+        // radius IS the half-extent, so only the part of the path that was hidden
+        // moves. The spark stays inside the capture margin too: it is off beyond the
+        // boundary RADIALLY, so its perpendicular distance from the rect is at most
+        // off, and the pack's paddingParam is flyRange.
         float dir = h3 > 0.5 ? 1.0 : -1.0;
         float ang = TAU * fract(h1 + dir * t * (0.02 + 0.035 * h2));
         float off = reach * (0.25 + 0.6 * (0.5 + 0.5 * sin(t * (0.5 + 0.8 * h2) + h1 * TAU)));
-        vec2 pos = cen + vec2(cos(ang) * (halfSz.x + off), sin(ang) * (halfSz.y + off));
+        vec2 orbitDir = vec2(cos(ang), sin(ang));
+        float k = max(abs(orbitDir.x) / max(halfSz.x, 1.0), abs(orbitDir.y) / max(halfSz.y, 1.0));
+        vec2 pos = cen + orbitDir * (1.0 / max(k, 1e-4) + off);
 
         // Soft gaussian body with a per-spark blink (cubed sine reads as a
         // firefly's pulse: mostly dim with bright peaks).
