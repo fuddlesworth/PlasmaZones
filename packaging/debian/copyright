@@ -7,80 +7,159 @@ Files: *
 Copyright: 2024-2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: GPL-3.0-or-later
 
+# Files whose own SPDX-FileCopyrightText names a holder the catch-all above
+# does not. Licence is unchanged; only the credit differs, and dropping it in
+# the packaging metadata would assert sole authorship of someone else's work.
+#
+# mesh_sim is a port of KWin's wobblywindows spring model, so the upstream
+# author is credited alongside. The two are the only files in the tree
+# carrying a second holder that no other stanza already covers.
+Files: plasmazones/kwin-effect/plasmazoneseffect/mesh_sim.h
+       plasmazones/kwin-effect/plasmazoneseffect/mesh_sim.cpp
+Copyright: 2008 Cédric Borgese <cedric.borgese@gmail.com>
+           2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+License: GPL-3.0-or-later
+
+# Contributed by abirkel, whose header is the sole copyright line on all three.
+Files: packaging/local-install/install.sh
+       packaging/local-install/uninstall.sh
+       packaging/local-install/web-install.sh
+Copyright: 2026 abirkel <abirkel@users.noreply.github.com>
+License: GPL-3.0-or-later
+
 # All phosphor-* extracted libraries ship as LGPL so third-party
 # plugins / shells can link them without inheriting GPL — see CLAUDE.md
 # for the per-tree license rules.
-Files: libs/phosphor-*/*
+Files: phosphor-libs/libs/phosphor-*/*
+       phosphor-shell-libs/libs/phosphor-*/*
 Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: LGPL-2.1-or-later
 
-# The bundled animation, pointer and surface shader packs ship as LGPL for the
-# same reason the libraries do: a third-party pack or tool can build on them.
-# The GPL exceptions below are the packs that incorporate upstream copyleft,
-# plus the surface tree's own un-normalised GPL headers.
-Files: data/animations/*
-       data/pointer/*
-       data/surface/*
+# The LGPL tiers' own scaffolding, which the libs/phosphor-* globs above do not
+# reach. These carry LGPL-2.1-or-later in their own SPDX headers, so the
+# Files: * catch-all was asserting GPL-3 over them in the packaging metadata
+# while the sources said otherwise.
+#
+# phosphor-libs/data/schemas/*.json matters most here: it has no header (JSON has no
+# comment syntax) but is RCC-embedded into PhosphorShaders, PhosphorZones and
+# PhosphorAnimation, so declaring it GPL-3 asserts GPL over content compiled
+# into LGPL shared libraries. That is the hazard CLAUDE.md names when it says
+# never to "fix" a lib header to GPL-3, expressed in packaging metadata rather
+# than in a header.
+# cmake/ is MIXED, so its LGPL members are named one by one rather than
+# globbed: format-qml.cmake, PhosphorCPack.cmake, PhosphorTranslations.cmake,
+# post-install-sycoca.sh and uninstall.cmake.in are GPL-3 and must keep
+# resolving to the catch-all.
+Files: cmake/PhosphorLibTesting.cmake
+       cmake/PhosphorTestIsolation.cmake
+       cmake/PhosphorTier.cmake
+       cmake/test-session-bus.conf
+       phosphor-libs/CMakeLists.txt
+       phosphor-libs/moon.yml
+       phosphor-libs/data/*
+       phosphor-shell-libs/CMakeLists.txt
+       phosphor-shell-libs/moon.yml
 Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: LGPL-2.1-or-later
 
-# Ports of Burn-My-Windows, which is GPL-3. PlasmaZones does not hold the
-# copyright in those bodies and cannot relicense them, so the license follows
-# the incorporated content.
-Files: data/animations/broken-glass/effect.frag
-       data/animations/fire/effect.frag
-       data/animations/glide/effect.frag
-       data/animations/incinerate/effect.frag
-       data/animations/paint-brush/effect.frag
-       data/animations/shared/bmw_compat.glsl
-       data/animations/tv-glitch/effect.frag
-       data/animations/wisps/effect.frag
+# AppStream metadata. Both files declare CC0-1.0 in their own headers, which is
+# the usual licence for distro metadata so downstreams can redistribute and
+# translate it freely.
+Files: plasmazones/src/editor/org.plasmazones.editor.metainfo.xml
+       plasmazones/src/settings/org.plasmazones.settings.metainfo.xml
 Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
-           2021-2024 Simon Schneegans (Burn-My-Windows)
+License: CC0-1.0
+
+# Bundled shader packs. PlasmaZones-original shaders are LGPL so a third-party
+# pack or tool can build on them; data/overlays is still GPL throughout and is
+# covered by the Files: * stanza above. DEP-5 is last-match-wins, so the
+# incorporated-upstream stanza below deliberately follows this one.
+Files: plasmazones/data/animations/*
+       plasmazones/data/pointer/*
+       plasmazones/data/surface/*
+Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+License: LGPL-2.1-or-later
+
+# Ports of upstream copyleft work. PlasmaZones is not the copyright holder of
+# these bodies and cannot relicense them, so they stay GPL-3.0-or-later and
+# credit their upstream authors. Listed per file, not per directory: a pack's
+# .frag may be a port while its .vert is PlasmaZones-original.
+Files: plasmazones/data/animations/broken-glass/effect.frag
+       plasmazones/data/animations/fire/effect.frag
+       plasmazones/data/animations/glide/effect.frag
+       plasmazones/data/animations/incinerate/effect.frag
+       plasmazones/data/animations/matrix/effect.frag
+       plasmazones/data/animations/paint-brush/effect.frag
+       plasmazones/data/animations/tv-glitch/effect.frag
+       plasmazones/data/animations/wisps/effect.frag
+       plasmazones/data/animations/shared/bmw_compat.glsl
+Copyright: 2021-2024 Simon Schneegans (Burn-My-Windows)
+           2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: GPL-3.0-or-later
 
-Files: data/animations/matrix/effect.frag
-Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
-           2021 Simon Schneegans (Burn-My-Windows)
+# matrix's own header credits 2021 alone, not the 2021-2024 range the other
+# Burn-My-Windows ports carry, and a stanza has to name the holder its files
+# actually name. Its own stanza, after the group above, so last-match-wins picks
+# this one for it.
+Files: plasmazones/data/animations/matrix/effect.frag
+Copyright: 2021 Simon Schneegans (Burn-My-Windows)
+           2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: GPL-3.0-or-later
 
-Files: data/animations/focus/effect.frag
-Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
-           2021-2024 Simon Schneegans (Burn-My-Windows)
+# focus is the only Burn-My-Windows port that also carries Justin Garza, so he
+# is named here and not on the nine above. Each Copyright field lists the
+# holders of the files in its own stanza, not the union across the pack set.
+Files: plasmazones/data/animations/focus/effect.frag
+Copyright: 2021-2024 Simon Schneegans (Burn-My-Windows)
            2021-2024 Justin Garza
+           2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: GPL-3.0-or-later
 
-Files: data/animations/honeycomb/effect.frag
+# GPL-3 for a different reason: these carry no upstream copyright line. Each
+# one's own header credits only fuddlesworth, so the two Burn-My-Windows
+# authors above must NOT be named here, whatever the shared licence suggests.
+# They sit in their own stanza after the LGPL data stanza so last-match-wins
+# still resolves them to GPL-3.
+#
+# frosted-glass/effect.frag describes itself as a port of the phosphor-shell
+# frosted panel shader but carries no second SPDX-FileCopyrightText, so no holder
+# is invented for it here: that is a question about its header, not about this
+# file. glass/effect.frag DOES carry one now, and takes its own stanza below.
+Files: plasmazones/data/surface/blur/effect.frag
+       plasmazones/data/surface/duotone/effect.frag
+       plasmazones/data/surface/frosted-glass/effect.frag
+       plasmazones/data/surface/glass/effect.frag
+       plasmazones/data/surface/mosaic/effect.frag
+       plasmazones/data/surface/rain-glass/effect.frag
+       plasmazones/data/surface/rippled-glass/effect.frag
 Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
-           2025 arch-disciple (niri-shader-collection)
 License: GPL-3.0-or-later
 
-# data/surface has not been license-normalised; these seven carry GPL headers
-# of their own, so the stanza follows the headers rather than the tree.
-Files: data/surface/blur/effect.frag
-       data/surface/duotone/effect.frag
-       data/surface/frosted-glass/effect.frag
-       data/surface/mosaic/effect.frag
-       data/surface/rain-glass/effect.frag
-       data/surface/rippled-glass/effect.frag
-Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+# glass/effect.frag credits kwin-effects-glass in its own header, so the stanza
+# names that holder. After the seven-file stanza above, which does not, so
+# last-match-wins resolves glass to this one.
+Files: plasmazones/data/surface/glass/effect.frag
+Copyright: kwin-effects-glass contributors
+           2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: GPL-3.0-or-later
 
-# The glass pack's main pass says in its own header that it is a FULL PORT of
-# kwin-effects-glass, naming that project's glass.glsl, snells-glass.glsl and
-# oklab.glsl, so upstream is credited rather than relicensed away. Its own stanza
-# AFTER the group above rather than inside it, because DEP-5 is last-match-wins
-# and a group listing it would override the credit. Better Blur is credited in the
-# file's prose only: what is taken from it is an idea, not a body.
-Files: data/surface/glass/effect.frag
-Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
-           kwin-effects-glass contributors
+Files: plasmazones/data/animations/honeycomb/effect.frag
+Copyright: 2025 arch-disciple (niri-shader-collection)
+           2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: GPL-3.0-or-later
 
-Files: data/overlays/neon-city/*
-Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
-           2026 nikitamashchenko (https://www.shadertoy.com/)
-License: GPL-3.0-or-later
+# Ports of MIT gl-transitions upstreams. The licence stays LGPL (CLAUDE.md
+# allows a permissively-licensed upstream to be relicensed that way), so this
+# stanza exists purely to CREDIT the upstream holder each of these four files
+# names in its own header. It follows the LGPL data stanza above and keeps the
+# same licence, so last-match-wins changes nothing about the resolution.
+Files: plasmazones/data/animations/desktop-crosszoom/effect.frag
+       plasmazones/data/animations/desktop-cube/effect.frag
+       plasmazones/data/animations/desktop-pixelate/effect.frag
+       plasmazones/data/animations/desktop-slide/effect.frag
+Copyright: gl-transitions contributors
+           2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+License: LGPL-2.1-or-later
 
 # The vibrancy helper in this shared header is a port of Hyprland's blur1.glsl,
 # whose BSD-3 terms permit the LGPL the file ships under. BSD-3 requires the
@@ -89,55 +168,32 @@ License: GPL-3.0-or-later
 # rather than relicensed away. The retained notice is the BSD-3-Clause paragraph
 # at the foot of this file; the License field stays LGPL-2.1-or-later because
 # that is what the file ships under.
-Files: data/surface/shared/surface_color.glsl
+Files: plasmazones/data/surface/shared/surface_color.glsl
 Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
            Hyprland contributors
 License: LGPL-2.1-or-later
 
-# Ports of gl-transitions, whose MIT terms permit the LGPL the surrounding
-# packs use. Upstream is credited rather than relicensed away. MIT requires its
-# notice be retained in a source redistribution, and these ship as source, so the
-# retained notice is the Expat paragraph at the foot of this file.
-Files: data/animations/desktop-crosszoom/effect.frag
-       data/animations/desktop-cube/effect.frag
-       data/animations/desktop-pixelate/effect.frag
-       data/animations/desktop-slide/effect.frag
-Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
-           gl-transitions contributors
-License: LGPL-2.1-or-later
-
-# Build-system modules that belong to the LGPL libraries' own test scaffolding
-# carry the libraries' license, not the application's.
-Files: cmake/PhosphorLibTesting.cmake
-       cmake/PhosphorTestIsolation.cmake
-       cmake/test-session-bus.conf
-Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
-License: LGPL-2.1-or-later
-
-# This one carries a GPL-3 header with no "or later", unlike its siblings.
-# Recorded as it stands; a packaging file describes licenses, it does not
-# widen them.
-Files: cmake/format-qml.cmake
-Copyright: 2026 PlasmaZones contributors
-License: GPL-3.0
-
-# AppStream metadata is CC0 so distributions and app stores can reuse it.
-Files: src/editor/org.plasmazones.editor.metainfo.xml
-       src/settings/org.plasmazones.settings.metainfo.xml
-Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
-License: CC0-1.0
-
-Files: kwin-effect/plasmazoneseffect/mesh_sim.cpp
-       kwin-effect/plasmazoneseffect/mesh_sim.h
-Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
-           2008 Cédric Borgese <cedric.borgese@gmail.com>
+# Credits the Shadertoy author named in this file's own header. The file
+# additionally records an unresolved CC-BY-NC-SA vs GPL-3 question in its
+# comments; that is a question about the shader's provenance and is NOT
+# answered here. This stanza only stops the packaging metadata from claiming
+# sole authorship of work the source says is someone else's.
+Files: plasmazones/data/overlays/neon-city/buffer.frag
+Copyright: 2026 nikitamashchenko (https://www.shadertoy.com/)
+           2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: GPL-3.0-or-later
 
-Files: packaging/local-install/install.sh
-       packaging/local-install/uninstall.sh
-       packaging/local-install/web-install.sh
-Copyright: 2026 abirkel <abirkel@users.noreply.github.com>
-License: GPL-3.0-or-later
+# Vendored third-party sources, committed as tarballs and extracted at build
+# time. Not ours, and not GPL.
+Files: phosphor-libs/extern/luau-*.tar.gz
+Copyright: 2019-2025 Roblox Corporation
+           1994-2019 Lua.org, PUC-Rio
+License: MIT
+
+Files: phosphor-libs/extern/valijson-*.tar.gz
+Copyright: 2016 Tristan Penman
+           2016 Akamai Technologies, Inc.
+License: BSD-2-Clause
 
 Files: debian/*
 Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
@@ -152,26 +208,46 @@ License: LGPL-2.1-or-later
  On Debian systems, the full text of the GNU Lesser General Public License
  version 2.1 can be found in the file '/usr/share/common-licenses/LGPL-2.1'.
 
-License: GPL-3.0
- This program is free software: you can redistribute it and/or modify
- it under the terms of version 3 of the GNU General Public License as
- published by the Free Software Foundation.
+License: MIT
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights
+ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ copies of the Software, and to permit persons to whom the Software is
+ furnished to do so, subject to the following conditions:
  .
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
+ The above copyright notice and this permission notice shall be included in all
+ copies or substantial portions of the Software.
  .
- On Debian systems, the full text of the GNU General Public License
- version 3 can be found in the file '/usr/share/common-licenses/GPL-3'.
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ SOFTWARE.
 
-License: CC0-1.0
- To the extent possible under law, the author(s) have dedicated all copyright
- and related and neighbouring rights to this metadata to the public domain
- worldwide. It is distributed without any warranty.
+License: BSD-2-Clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are met:
  .
- The full text of the CC0 1.0 Universal Public Domain Dedication is at
- https://creativecommons.org/publicdomain/zero/1.0/legalcode
+ 1. Redistributions of source code must retain the above copyright notice, this
+ list of conditions and the following disclaimer.
+ .
+ 2. Redistributions in binary form must reproduce the above copyright notice,
+ this list of conditions and the following disclaimer in the documentation
+ and/or other materials provided with the distribution.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 License: GPL-3.0-or-later
  This program is free software: you can redistribute it and/or modify
@@ -186,6 +262,18 @@ License: GPL-3.0-or-later
  .
  On Debian systems, the full text of the GNU General Public License
  version 3 can be found in the file '/usr/share/common-licenses/GPL-3'.
+
+License: CC0-1.0
+ To the extent possible under law, the author(s) have dedicated all copyright
+ and related and neighboring rights to this software to the public domain
+ worldwide. This software is distributed without any warranty.
+ .
+ You should have received a copy of the CC0 Public Domain Dedication along with
+ this software. If not, see
+ <https://creativecommons.org/publicdomain/zero/1.0/>.
+ .
+ On Debian systems the full text of the CC0 1.0 Universal license can be found
+ in /usr/share/common-licenses/CC0-1.0.
 
 # Retained upstream notices. Neither paragraph is a Files stanza: the files that
 # incorporate this code ship under the licence their own stanza declares, and these

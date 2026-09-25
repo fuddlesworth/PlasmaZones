@@ -19,16 +19,26 @@ on:
         required: false
         default: ''
 
-# Default scope is read-only. Only the `release` job and the AUR publish
-# need writes — they opt in via per-job permissions blocks.
+# Default scope is read-only. Only the `release` job opts into writes, via
+# its own permissions block. publish-aur and publish-obs deliberately have
+# none: they push over SSH with AUR_SSH_PRIVATE_KEY and to OBS with osc
+# credentials, so neither needs GITHUB_TOKEN writes. Do not "restore" a
+# permissions block for them — that would hand a write token to jobs whose
+# whole purpose is pushing to third-party hosts.
 permissions:
   contents: read
 
 # Two tag pushes (or a re-run of the same tag dispatch) must not race
-# the delete-and-recreate dance in the `release` job. Serialising per
-# ref keeps multiple in-flight releases out of each other's way.
+# the delete-and-recreate dance in the `release` job.
+#
+# Keyed on the resolved TAG, not github.ref: on a tag push the ref is
+# refs/tags/vX.Y.Z, but on workflow_dispatch it is whatever ref the
+# dispatch was fired against — kwin-rebuild-watch.yml passes a branch. Those
+# landed in two different concurrency groups, so a dispatch and a push for
+# the SAME tag could run simultaneously, which is exactly the case the
+# comment claimed to cover.
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -451,7 +461,12 @@ jobs:
           fi
 
       - name: Create source tarball
+        # pipefail: the producing tar's exit status is otherwise discarded, and
+        # the consuming tar still exits 0, so a partial copy would be packed
+        # into the SRPM and shipped without the step ever going red.
+        shell: bash
         run: |
+          set -o pipefail
           VERSION="${{ needs.version.outputs.version }}"
           mkdir -p PlasmaZones-${VERSION}
           # Copy source files. Exclude anything produced by prior steps
@@ -619,7 +634,12 @@ jobs:
           fi
 
       - name: Create source tarball
+        # pipefail: the producing tar's exit status is otherwise discarded, and
+        # the consuming tar still exits 0, so a partial copy would be packed
+        # into the SRPM and shipped without the step ever going red.
+        shell: bash
         run: |
+          set -o pipefail
           VERSION="${{ needs.version.outputs.version }}"
           mkdir -p PlasmaZones-${VERSION}
           # Same exclude list as build-rpm above — keep them in sync.
@@ -799,7 +819,7 @@ jobs:
           pkgname=plasmazones
           pkgver=${{ needs.version.outputs.version }}
           pkgrel=${{ needs.version.outputs.pkgrel }}
-          pkgdesc="Window tiling and autotiling for KDE Plasma"
+          pkgdesc="Window snapping, tiling and scrolling for KDE Plasma"
           arch=('x86_64')
           url="https://github.com/fuddlesworth/PlasmaZones"
           license=('GPL-3.0-or-later' 'LGPL-2.1-or-later')
@@ -811,6 +831,10 @@ jobs:
               'qt6-base' 'qt6-declarative' 'qt6-shadertools' 'qt6-svg'
               'kconfig' 'kconfigwidgets' 'kirigami'
               'kcmutils' 'kglobalaccel' 'qt6-wayland'
+              # kcolorscheme: the KWin effect links KF6::ColorScheme. It
+              # arrives transitively via kwin today, but packaging/arch/PKGBUILD
+              # declares it and this array says it mirrors that file.
+              'kcolorscheme'
               'kwin>=6.7.0'
           )
           makedepends=('cmake' 'extra-cmake-modules' 'qt6-tools' 'ninja')
@@ -849,9 +873,15 @@ jobs:
           su builder -c "makepkg -p PKGBUILD.ci -sf --noconfirm"
 
       - name: Validate package
+        # continue-on-error rather than `|| true`, matching ci.yml's draft
+        # step: namcap's advisory warnings should not red a release, but the
+        # intent belongs in the step definition where it is visible, not
+        # hidden in a shell operator that makes the step unconditionally
+        # green.
+        continue-on-error: true
         run: |
           cd packaging/arch
-          namcap *.pkg.tar.zst || true
+          namcap *.pkg.tar.zst
 
       - name: Move artifacts
         run: |
@@ -909,10 +939,18 @@ jobs:
         run: nix build -L --fallback .#default
 
       - name: Verify package version
+        # Actually compare. `--version || true` reported success for any output,
+        # including none, so a step named Verify verified nothing.
+        shell: bash
         run: |
           VERSION="${{ needs.version.outputs.version }}"
           echo "Expected version: $VERSION"
-          ./result/bin/plasmazonesd --version || true
+          got="$(./result/bin/plasmazonesd --version)"
+          echo "Built: $got"
+          case "$got" in
+              *"$VERSION"*) ;;
+              *) echo "::error::built '$got', expected to contain '$VERSION'"; exit 1 ;;
+          esac
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Create GitHub Release
@@ -1453,15 +1491,18 @@ jobs:
           # which hangs the runner. The file is chmod 600 and lives only
           # on the ephemeral CI VM; GitHub masks the secret values in logs.
           mkdir -p ~/.config/osc
-          cat > ~/.config/osc/oscrc << EOF
-          [general]
-          apiurl = https://api.opensuse.org
-
-          [https://api.opensuse.org]
-          credentials_mgr_class = osc.credentials.PlaintextConfigFileCredentialsManager
-          user = $OBS_USERNAME
-          pass = $OBS_PASSWORD
-          EOF
+          # printf with %s, not an unquoted heredoc: the heredoc expanded the
+          # credentials through the shell, so a password containing $, a
+          # backtick or a backslash was mangled or command-substituted. A
+          # QUOTED heredoc is not the fix either -- it would write the literal
+          # \$OBS_PASSWORD and break every upload. Values go in as arguments.
+          {
+            printf '[general]\napiurl = https://api.opensuse.org\n\n'
+            printf '[https://api.opensuse.org]\n'
+            printf 'credentials_mgr_class = osc.credentials.PlaintextConfigFileCredentialsManager\n'
+            printf 'user = %s\n' "$OBS_USERNAME"
+            printf 'pass = %s\n' "$OBS_PASSWORD"
+          } > ~/.config/osc/oscrc
           chmod 600 ~/.config/osc/oscrc
 
       - name: Stamp version and changelog into spec

@@ -83,7 +83,11 @@ grep -E "^(pkgver|pkgrel|_release|sha256sums)" "$PKGBUILD" | head -6
 # Generate .SRCINFO
 if command -v makepkg &> /dev/null; then
     echo "Generating .SRCINFO..."
-    makepkg --printsrcinfo > .SRCINFO
+    # -p, because every other step honours "$PKGBUILD" and a bare makepkg
+    # reads ./PKGBUILD. Called as documented with PKGBUILD.bin or
+    # PKGBUILD.git, this generated .SRCINFO from a different file, or
+    # errored under set -e with .SRCINFO already truncated by the >.
+    makepkg -p "$PKGBUILD" --printsrcinfo > .SRCINFO
     echo "Done!"
 else
     echo "Warning: makepkg not found, .SRCINFO not generated"

@@ -1,0 +1,2759 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# PlasmaZones Unit Tests
+#
+# FILE-SIZE EXCEPTION (sanctioned): this file is one flat list of test target
+# declarations, and the isolation block at the very bottom is what makes the
+# length structural rather than incidental. That block walks
+# `get_property(DIRECTORY . PROPERTY TESTS)`, which is DIRECTORY-scoped, so
+# every target it covers has to be declared in THIS file. Moving a group out
+# into an add_subdirectory would silently strip those targets of the
+# private-bus TEST_LAUNCHER and the per-target XDG sandbox — the exact
+# ctest-hang and cross-test config-clobbering the block exists to prevent —
+# unless each new subdirectory repeated it, which trades one long file for
+# several copies of the part that must not drift.
+
+# Helper macro for simple tests (Qt6::Test + Qt6::Core + plasmazones_core).
+#
+# IMPORTANT: This macro hands you Qt6::Test + Qt6::Core ONLY. If your test
+# source includes a D-Bus header, a Wayland-client header, or any other Qt
+# component not in that minimal pair, use a hand-rolled `add_executable` +
+# `target_link_libraries` with an explicit `target_link_libraries(... PRIVATE
+# Qt6::DBus ...)` instead. The macro will SEEM to work because plasmazones_core's
+# INTERFACE_LINK_LIBRARIES pulls Qt6::DBus transitively today — but that's
+# coincidental, not contractual. A future refactor that drops Qt6::DBus from
+# plasmazones_core's interface link would silently break every test that
+# relied on the transitive pull.
+#
+# Same caveat for QTEST_MAIN: with no Qt6::Gui here it expands to whichever
+# application class the transitively-linked Qt modules select, so a test that
+# genuinely needs QGuiApplication should link Qt6::Gui explicitly.
+macro(p_add_test _name _src)
+    add_executable(${_name} ${_src})
+    target_link_libraries(${_name} PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+    add_test(NAME ${_name} COMMAND ${_name})
+endmacro()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# core/ - Window Identity Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+p_add_test(test_window_identity core/windowtracking/test_window_identity.cpp)
+p_add_test(test_window_registry core/windowtracking/test_window_registry.cpp)
+p_add_test(test_virtual_desktop_per_screen core/screens/test_virtual_desktop_per_screen.cpp)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# core/ - Window Tracking Tests (snap/unsnap, floating)
+# ═══════════════════════════════════════════════════════════════════════════════
+p_add_test(test_window_tracking_snap core/windowtracking/test_window_tracking_snap.cpp)
+p_add_test(test_window_tracking_float core/windowtracking/test_window_tracking_float.cpp)
+p_add_test(test_window_placement_store core/windowtracking/test_window_placement_store.cpp)
+p_add_test(test_window_placement_store_collapse core/windowtracking/test_window_placement_store_collapse.cpp)
+# The per-desktop zone map of a snap slot: merge on record, forget, renumber
+# on desktop removal, the save / load round trip and the restorable-content
+# predicates. Its own suite because the store suite sits at its size baseline.
+p_add_test(test_window_placement_store_desktops core/windowtracking/test_window_placement_store_desktops.cpp)
+# The live-sibling contract of take() / peekLiveSibling and the open-claim
+# release and re-key rules (#1106); its own suite for the same reason as the
+# desktops suite above.
+p_add_test(test_window_placement_store_siblings core/windowtracking/test_window_placement_store_siblings.cpp)
+target_link_libraries(test_window_placement_store_siblings PRIVATE PhosphorEngine PhosphorIdentity::PhosphorIdentity)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# core/ - Session Persistence Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+p_add_test(test_session_persistence core/session/test_session_persistence.cpp)
+p_add_test(test_session_persistence_layout core/session/test_session_persistence_layout.cpp)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# core/ - QML i18n Context Substitution Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+p_add_test(test_localized_context_substitution core/test_localized_context_substitution.cpp)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# core/ - Window Tracking Service Tests (lifecycle, session, queries)
+# ═══════════════════════════════════════════════════════════════════════════════
+# Needs the FakePhysicalScreenSource: the mis-keyed free-geometry guard only engages
+# with real output geometry behind the ScreenManager (it fails open otherwise).
+add_executable(test_wts_lifecycle core/windowtracking/test_wts_lifecycle.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wts_lifecycle PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_wts_lifecycle PRIVATE Qt6::Test Qt6::Core Qt6::DBus Qt6::Gui plasmazones_core)
+add_test(NAME test_wts_lifecycle COMMAND test_wts_lifecycle)
+
+add_executable(test_wts_session core/windowtracking/test_wts_session.cpp)
+target_link_libraries(test_wts_session PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wts_session COMMAND test_wts_session)
+
+# FakePhysicalScreenSource compile-in: the zone-geometry screen-resolution cases need
+# a tracked multi-output topology that resolves an empty screen id to a primary.
+add_executable(test_wts_queries core/windowtracking/test_wts_queries.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wts_queries PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_wts_queries PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wts_queries COMMAND test_wts_queries)
+
+add_executable(test_daemongeometryresolver_inset core/geometry/test_daemongeometryresolver_inset.cpp)
+target_link_libraries(test_daemongeometryresolver_inset PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_daemongeometryresolver_inset COMMAND test_daemongeometryresolver_inset)
+
+add_executable(test_wts_clearfloat core/windowtracking/test_wts_clearfloat.cpp)
+target_link_libraries(test_wts_clearfloat PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wts_clearfloat COMMAND test_wts_clearfloat)
+
+add_executable(test_wts_virtual_migration core/windowtracking/test_wts_virtual_migration.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wts_virtual_migration PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+# Qt6::Gui named explicitly, matching test_wts_lifecycle: both targets compile
+# FakePhysicalScreenSource.cpp, which uses QScreen. It resolved transitively through
+# plasmazones_core before, so the two targets disagreed about a dependency they
+# share.
+target_link_libraries(test_wts_virtual_migration PRIVATE Qt6::Test Qt6::Core Qt6::DBus Qt6::Gui plasmazones_core)
+add_test(NAME test_wts_virtual_migration COMMAND test_wts_virtual_migration)
+
+add_executable(test_wts_crossmode_float core/windowtracking/test_wts_crossmode_float.cpp)
+target_link_libraries(test_wts_crossmode_float PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wts_crossmode_float COMMAND test_wts_crossmode_float)
+
+add_executable(test_wts_registry_integration core/windowtracking/test_wts_registry_integration.cpp)
+# Qt6::Gui explicitly: the instant-restore cache case asserts a resolved zone
+# rect, which needs QTEST_MAIN to expand to QGuiApplication (primaryScreen).
+target_link_libraries(test_wts_registry_integration PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::DBus plasmazones_core)
+add_test(NAME test_wts_registry_integration COMMAND test_wts_registry_integration)
+
+# DirtyMask invariants for delta-persistence (Phase 3 of refactor/dbus-performance).
+add_executable(test_wts_dirty_mask core/windowtracking/test_wts_dirty_mask.cpp)
+target_link_libraries(test_wts_dirty_mask PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wts_dirty_mask COMMAND test_wts_dirty_mask)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# core/ - SnapEngine Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_snap_engine core/snap/test_snap_engine.cpp helpers/SnapEngineTestFixture.h)
+target_link_libraries(test_snap_engine PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_engine COMMAND test_snap_engine)
+
+add_executable(test_snap_layer_switch core/snap/test_snap_layer_switch.cpp helpers/SnapEngineTestFixture.h)
+target_link_libraries(test_snap_layer_switch PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_layer_switch COMMAND test_snap_layer_switch)
+
+# Pure SnapState coverage of the layer-side focus memories (noteFocused
+# classification, every clear-on-layer-change site, migration semantics,
+# clear()/isEmpty()). No engine, no fixture.
+add_executable(test_snap_state_focus_memory core/snap/test_snap_state_focus_memory.cpp)
+target_link_libraries(test_snap_state_focus_memory PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_state_focus_memory COMMAND test_snap_state_focus_memory)
+
+# Restore-resolution half of the SnapEngine suite (capture placement, window
+# restore, fallback unfloat geometry, snap-to-empty gating). The fixture header
+# is listed as a source so AUTOMOC scans its Q_OBJECT classes.
+add_executable(test_snap_engine_restore core/snap/test_snap_engine_restore.cpp helpers/SnapEngineTestFixture.h)
+target_link_libraries(test_snap_engine_restore PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_engine_restore COMMAND test_snap_engine_restore)
+add_executable(test_snap_restore_layout_context core/snap/test_snap_restore_layout_context.cpp helpers/SnapEngineTestFixture.h)
+target_link_libraries(test_snap_restore_layout_context PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_restore_layout_context COMMAND test_snap_restore_layout_context)
+# Free-size restore on the float terminals (#1106). Its own target because
+# test_snap_engine_restore sits inside the 1150-line grace band. Needs the
+# FakePhysicalScreenSource: the screen-containment gate and the size clamp only
+# engage with real output geometry behind the ScreenManager.
+add_executable(test_snap_engine_free_size core/snap/test_snap_engine_free_size.cpp helpers/SnapEngineTestFixture.h
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_snap_engine_free_size PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_snap_engine_free_size PRIVATE Qt6::Test Qt6::Core Qt6::DBus Qt6::Gui plasmazones_core
+                                                         PhosphorSnapEngine::PhosphorSnapEngine
+                                                         PhosphorPlacement::PhosphorPlacement)
+add_test(NAME test_snap_engine_free_size COMMAND test_snap_engine_free_size)
+
+# Exclusion half of the SnapEngine suite (exclude wiring, size exclusion,
+# entry-zone crossing).
+add_executable(test_snap_engine_exclude core/snap/test_snap_engine_exclude.cpp helpers/SnapEngineTestFixture.h)
+target_link_libraries(test_snap_engine_exclude PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_engine_exclude COMMAND test_snap_engine_exclude)
+
+# End-to-end per-monitor snap acceptance (Discussion #724): cross-monitor unfloat
+# determinism, threaded-screen authority, per-screen independence, migration completeness.
+add_executable(test_snap_per_monitor core/snap/test_snap_per_monitor.cpp)
+target_link_libraries(test_snap_per_monitor PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_per_monitor COMMAND test_snap_per_monitor)
+
+# The snap engine's per-desktop membership arm: adoption grants a store of
+# its own on the desktop in view, the persisted per-desktop zone map, and the
+# close / release / restore paths over every member store. Same fixture shape
+# as test_snap_per_monitor (QTEST_MAIN so zone geometry resolves).
+add_executable(test_snap_desktop_membership core/snap/test_snap_desktop_membership.cpp)
+target_link_libraries(test_snap_desktop_membership PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_desktop_membership COMMAND test_snap_desktop_membership)
+
+# resolveFallbackUnfloatGeometry on-success coverage. QTEST_MAIN (not GUILESS) so a
+# QGuiApplication + offscreen primary screen exists and zoneGeometry() resolves —
+# the geometry-dependent path test_snap_engine.cpp (guiless) cannot reach.
+add_executable(test_snap_unfloat_fallback core/snap/test_snap_unfloat_fallback.cpp)
+# Qt6::Gui is explicit (not transitive via plasmazones_core) so QTEST_MAIN
+# resolves to QGuiApplication — the offscreen primary screen it provides is what
+# makes zoneGeometry() resolve. Relying on the transitive pull would silently
+# degrade to QCoreApplication (null primaryScreen) if core dropped Gui PUBLIC.
+target_link_libraries(test_snap_unfloat_fallback PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_unfloat_fallback COMMAND test_snap_unfloat_fallback)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# core/ - PlacementEngineBase Tests (LGPL shared engine base: settings injection + base prune)
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_placement_engine_base core/test_placement_engine_base.cpp)
+# The scroll engine's tracker stub (header-only over PhosphorEngine) drives the
+# shared free-size restore without any engine fixture; PhosphorIdentity for the
+# builders' probe helper.
+target_include_directories(test_placement_engine_base PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-scroll-engine/tests)
+target_link_libraries(test_placement_engine_base PRIVATE Qt6::Test Qt6::Core PhosphorEngine
+                                                         PhosphorIdentity::PhosphorIdentity)
+add_test(NAME test_placement_engine_base COMMAND test_placement_engine_base)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# autotile/ - Tiling Algorithm Tests (split by algorithm family)
+# ═══════════════════════════════════════════════════════════════════════════════
+p_add_test(test_tiling_algo_masterstack autotile/algorithms/test_tiling_algo_masterstack.cpp)
+target_compile_definitions(test_tiling_algo_masterstack PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+p_add_test(test_tiling_algo_spiral_monocle autotile/algorithms/test_tiling_algo_spiral_monocle.cpp)
+target_compile_definitions(test_tiling_algo_spiral_monocle PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+p_add_test(test_tiling_algo_grid_threecolumn autotile/algorithms/test_tiling_algo_grid_threecolumn.cpp)
+target_compile_definitions(test_tiling_algo_grid_threecolumn PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+p_add_test(test_tiling_algo_wide_centered autotile/algorithms/test_tiling_algo_wide_centered.cpp)
+target_compile_definitions(test_tiling_algo_wide_centered PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+p_add_test(test_tiling_algo_cascade_stair_spread autotile/algorithms/test_tiling_algo_cascade_stair_spread.cpp)
+target_compile_definitions(test_tiling_algo_cascade_stair_spread PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+p_add_test(test_tiling_algo_lshape autotile/algorithms/test_tiling_algo_lshape.cpp)
+target_compile_definitions(test_tiling_algo_lshape PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+p_add_test(test_tiling_algo_deck_zen autotile/algorithms/test_tiling_algo_deck_zen.cpp)
+target_compile_definitions(test_tiling_algo_deck_zen PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+p_add_test(test_tiling_algo_edge_cases autotile/algorithms/test_tiling_algo_edge_cases.cpp)
+target_compile_definitions(test_tiling_algo_edge_cases PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+p_add_test(test_tiling_algo_bsp autotile/algorithms/test_tiling_algo_bsp.cpp)
+target_compile_definitions(test_tiling_algo_bsp PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# core/ - PhosphorLayoutApi LayoutSourceBundle + FactoryContext
+# ═══════════════════════════════════════════════════════════════════════════════
+# Covers the PR #343 plugin-discovery API directly: FactoryContext
+# set/get, bundle lifecycle, duplicate-name handling, priority sort, and
+# the ~LayoutSourceBundle "no spurious emit" guarantee.
+p_add_test(test_layout_source_bundle core/layout/test_layout_source_bundle.cpp)
+p_add_test(test_layout_preview_serialize core/layout/test_layout_preview_serialize.cpp)
+p_add_test(test_unified_layout_order core/layout/test_unified_layout_order.cpp)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# autotile/ - Algorithm Registry Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+p_add_test(test_algorithm_registry autotile/algorithms/test_algorithm_registry.cpp)
+target_compile_definitions(test_algorithm_registry PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+p_add_test(test_algorithm_registry_custom autotile/algorithms/test_algorithm_registry_custom.cpp)
+target_compile_definitions(test_algorithm_registry_custom PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+p_add_test(test_split_tree autotile/state/test_split_tree.cpp)
+target_compile_definitions(test_split_tree PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+p_add_test(test_scripted_algorithm_loader autotile/algorithms/test_scripted_algorithm_loader.cpp)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# scripting/ - PhosphorScripting (embedded Luau host)
+# ═══════════════════════════════════════════════════════════════════════════════
+# Manual target: a library unit test that links only PhosphorScripting, not the
+# app core (plasmazones_core).
+add_executable(test_luau_engine scripting/test_luau_engine.cpp)
+set_target_properties(test_luau_engine PROPERTIES AUTOMOC ON)
+target_link_libraries(test_luau_engine PRIVATE Qt6::Test Qt6::Core PhosphorScripting::PhosphorScripting)
+add_test(NAME test_luau_engine COMMAND test_luau_engine)
+
+# Shared pluau helpers (guardArea/stripLayout/clamp/…): loads the real pluau.luau
+# prelude into a sandboxed VM and exercises each helper directly.
+add_executable(test_pluau_helpers scripting/test_pluau_helpers.cpp)
+set_target_properties(test_pluau_helpers PROPERTIES AUTOMOC ON)
+target_compile_definitions(test_pluau_helpers PRIVATE "PHOSPHOR_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/phosphor-libs\"")
+target_link_libraries(test_pluau_helpers PRIVATE Qt6::Test Qt6::Core PhosphorScripting::PhosphorScripting)
+add_test(NAME test_pluau_helpers COMMAND test_pluau_helpers)
+
+add_executable(test_luau_tile_algorithm scripting/test_luau_tile_algorithm.cpp)
+set_target_properties(test_luau_tile_algorithm PROPERTIES AUTOMOC ON)
+target_compile_definitions(test_luau_tile_algorithm PRIVATE "P_LUAU_TEST_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/scripting\"")
+target_link_libraries(test_luau_tile_algorithm PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
+add_test(NAME test_luau_tile_algorithm COMMAND test_luau_tile_algorithm)
+
+# Golden parity harness: ported Luau algorithms vs the committed golden fixture
+# (originally captured from the JS engine's byte-identical output).
+add_executable(test_luau_parity scripting/test_luau_parity.cpp)
+set_target_properties(test_luau_parity PROPERTIES AUTOMOC ON)
+target_compile_definitions(test_luau_parity PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+target_link_libraries(test_luau_parity PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
+add_test(NAME test_luau_parity COMMAND test_luau_parity)
+
+# Aligned resize-aware grid: loads the real bundled algorithm and proves the
+# interactive-resize scripting hook + persistent state bag work end-to-end.
+add_executable(test_luau_aligned_grid scripting/test_luau_aligned_grid.cpp)
+set_target_properties(test_luau_aligned_grid PROPERTIES AUTOMOC ON)
+target_compile_definitions(test_luau_aligned_grid PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+target_link_libraries(test_luau_aligned_grid PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
+add_test(NAME test_luau_aligned_grid COMMAND test_luau_aligned_grid)
+
+add_executable(test_luau_ratio_reflow scripting/test_luau_ratio_reflow.cpp)
+set_target_properties(test_luau_ratio_reflow PROPERTIES AUTOMOC ON)
+target_compile_definitions(test_luau_ratio_reflow PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+target_link_libraries(test_luau_ratio_reflow PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
+add_test(NAME test_luau_ratio_reflow COMMAND test_luau_ratio_reflow)
+
+add_executable(test_luau_theater scripting/test_luau_theater.cpp)
+set_target_properties(test_luau_theater PROPERTIES AUTOMOC ON)
+target_compile_definitions(test_luau_theater PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+target_link_libraries(test_luau_theater PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
+add_test(NAME test_luau_theater COMMAND test_luau_theater)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# autotile/ - Autotile Engine Tests (core, master, minsize, overflow)
+# ═══════════════════════════════════════════════════════════════════════════════
+p_add_test(test_autotile_engine_core autotile/engine/test_autotile_engine_core.cpp)
+target_compile_definitions(test_autotile_engine_core PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+p_add_test(test_autotile_engine_master autotile/engine/test_autotile_engine_master.cpp)
+target_compile_definitions(test_autotile_engine_master PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+# helpers/AutotileFakes.h declares a Q_OBJECT fake — listing it as a source is
+# what makes AUTOMOC generate its metaobject (a merely #included header is not
+# scanned), and the IAutotileSettings qobject_cast needs it.
+target_sources(test_autotile_engine_master PRIVATE helpers/AutotileFakes.h)
+target_sources(test_autotile_engine_core PRIVATE helpers/AutotileFakes.h)
+p_add_test(test_autotile_engine_minsize autotile/engine/test_autotile_engine_minsize.cpp)
+p_add_test(test_autotile_engine_overflow autotile/engine/test_autotile_engine_overflow.cpp)
+p_add_test(test_autotile_engine_retry autotile/engine/test_autotile_engine_retry.cpp)
+p_add_test(test_autotile_engine_order_cycling autotile/engine/test_autotile_engine_order_cycling.cpp)
+target_compile_definitions(test_autotile_engine_order_cycling PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+p_add_test(test_autotile_engine_class_mutation autotile/engine/test_autotile_engine_class_mutation.cpp)
+p_add_test(test_autotile_drag_insert autotile/behavior/test_autotile_drag_insert.cpp)
+target_compile_definitions(test_autotile_drag_insert PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+p_add_test(test_autotile_layer_switch autotile/behavior/test_autotile_layer_switch.cpp)
+p_add_test(test_autotile_handoff autotile/behavior/test_autotile_handoff.cpp)
+target_compile_definitions(test_autotile_handoff PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+# Producer-side validator guard - ensures the JSON emitted by
+# AutotileEngine::applyTiling round-trips through TileRequestEntry
+# parsing and passes validationError(). Would have caught PR #326 C1.
+p_add_test(test_autotile_tile_request_validation autotile/behavior/test_autotile_tile_request_validation.cpp)
+target_link_libraries(test_autotile_tile_request_validation PRIVATE PhosphorCompositor::PhosphorCompositor)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# autotile/ - Autotile + Virtual Screen Integration Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+p_add_test(test_autotile_per_screen_desktop autotile/behavior/test_autotile_per_screen_desktop.cpp)
+
+# Accepting a virtual screen ID needs the manager to resolve real virtual
+# geometry, which needs a backing physical screen — compile in the
+# FakePhysicalScreenSource (like the cross-surface navigation tests).
+add_executable(test_autotile_virtual
+               autotile/behavior/test_autotile_virtual.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_autotile_virtual
+               PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_autotile_virtual PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_autotile_virtual COMMAND test_autotile_virtual)
+target_compile_definitions(test_autotile_virtual PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# autotile/ - Autotile Engine Extended Tests (startup, float, algoswitch,
+#             script-state stash, overflow)
+# ═══════════════════════════════════════════════════════════════════════════════
+p_add_test(test_autotile_ext_startup_float autotile/behavior/test_autotile_ext_startup_float.cpp)
+# Names the libraries whose types it constructs (engine, service, registry).
+target_link_libraries(test_autotile_ext_startup_float PRIVATE PhosphorTileEngine::PhosphorTileEngine
+                                                              PhosphorPlacement::PhosphorPlacement
+                                                              PhosphorZones::PhosphorZones)
+p_add_test(test_autotile_ext_algoswitch autotile/behavior/test_autotile_ext_algoswitch.cpp)
+target_compile_definitions(test_autotile_ext_algoswitch PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+p_add_test(test_autotile_script_state_stash autotile/state/test_autotile_script_state_stash.cpp)
+target_compile_definitions(test_autotile_script_state_stash PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+# The tiling engine's per-desktop membership arm: adopt on switch, the
+# per-window release, and the close / handoff paths over every member state.
+p_add_test(test_autotile_desktop_membership autotile/state/test_autotile_desktop_membership.cpp)
+target_sources(test_autotile_desktop_membership PRIVATE helpers/AutotileFakes.h)
+# The split-tree case needs a screen with real geometry: the restore hangs off
+# recalculateLayout, which bails before it without one. Same fake provider
+# test_autotile_virtual uses.
+target_sources(test_autotile_script_state_stash
+               PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_autotile_script_state_stash
+               PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+p_add_test(test_autotile_ext_overflow autotile/behavior/test_autotile_ext_overflow.cpp)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# autotile/ - Tiling State Tests (windows, config, serialization)
+# ═══════════════════════════════════════════════════════════════════════════════
+p_add_test(test_tiling_state_windows autotile/state/test_tiling_state_windows.cpp)
+p_add_test(test_tiling_state_config autotile/state/test_tiling_state_config.cpp)
+p_add_test(test_tiling_state_core autotile/state/test_tiling_state_core.cpp)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# autotile/ - Overflow Manager Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+p_add_test(test_overflow_manager autotile/engine/test_overflow_manager.cpp)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# core/ - Geometry Utils Tests (minsizes, overlaps, BSP)
+# ═══════════════════════════════════════════════════════════════════════════════
+p_add_test(test_geometry_utils_minsizes core/geometry/test_geometry_utils_minsizes.cpp)
+p_add_test(test_geometry_utils_overlaps core/geometry/test_geometry_utils_overlaps.cpp)
+p_add_test(test_geometry_utils_bsp core/geometry/test_geometry_utils_bsp.cpp)
+p_add_test(test_geometry_utils_clamp core/geometry/test_geometry_utils_clamp.cpp)
+p_add_test(test_geometry_utils_serialization core/geometry/test_geometry_utils_serialization.cpp)
+p_add_test(test_spatial_adjacency core/zones/test_spatial_adjacency.cpp)
+p_add_test(test_virtualscreen_swapper core/screens/test_virtualscreen_swapper.cpp)
+p_add_test(test_screen_mode_router core/screens/test_screen_mode_router.cpp)
+# Constructs real Snap/Autotile/Scroll engines: the dependencies are
+# contractual, not the coincidental transitive pull through
+# plasmazones_core (same rationale as test_span_targets).
+target_link_libraries(test_screen_mode_router PRIVATE PhosphorSnapEngine::PhosphorSnapEngine
+                                                      PhosphorTileEngine::PhosphorTileEngine
+                                                      PhosphorScrollEngine::PhosphorScrollEngine)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# config/ - Settings Tests (core, validation, per-screen)
+# ═══════════════════════════════════════════════════════════════════════════════
+# Explicit Qt6::Gui: the pinned-colour round-trip and reload tests compare
+# palette-resolved zone colours (the resolved getters read
+# QGuiApplication::palette()); p_add_test links Core only and the transitive
+# pull through plasmazones_core is coincidental, not contractual.
+add_executable(test_settings_core config/settings/test_settings_core.cpp)
+target_link_libraries(test_settings_core PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_settings_core COMMAND test_settings_core)
+
+# Companion test executable: animation Profile JSON-blob storage,
+# per-field signal discrimination, aggregate-setter merge semantics.
+p_add_test(test_settings_animation_profile config/settings/test_settings_animation_profile.cpp)
+
+# Companion test executable: ShaderProfileTree persistence + prune,
+# autoAssignAllLayouts master toggle.
+p_add_test(test_settings_shader_tree config/settings/test_settings_shader_tree.cpp)
+# QTEST_MAIN constructing Settings needs QGuiApplication: Qt6::Gui is named
+# rather than ridden in on plasmazones_core's coincidental PUBLIC edge. Spelled
+# out longhand like every other Gui-needing target here, so the whole link line
+# reads in one place instead of a p_add_test plus a patch two lines later.
+add_executable(test_settings_overlay_shader_tree config/settings/test_settings_overlay_shader_tree.cpp)
+target_link_libraries(test_settings_overlay_shader_tree PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_settings_overlay_shader_tree COMMAND test_settings_overlay_shader_tree)
+
+# Companion test executable: DecorationProfileTree persistence + JSON facade
+# (the decoration analogue of test_settings_shader_tree). PhosphorSurface
+# symbols resolve transitively via plasmazones_core (which links
+# PhosphorSurface PUBLIC for Settings::decorationProfileTree()).
+p_add_test(test_settings_decoration_tree config/settings/test_settings_decoration_tree.cpp)
+
+# Companion test executable: the Decorations.Performance/SuppressWhileFullscreen
+# persistence chain — absent-key default (the key is default-true, so a reader
+# that skips the fallback inverts it rather than disabling it), change-gated
+# signal, save/reload in both directions, independence from its two same-typed
+# same-defaulted group-mates, reset(), and the schema entry itself.
+p_add_test(test_settings_fullscreen_suppression config/settings/test_settings_fullscreen_suppression.cpp)
+
+
+# Pins runtime palette tracking for system-colors mode (needs Qt6::Gui for
+# QGuiApplication palette events; p_add_test links Core only).
+add_executable(test_settings_system_palette_tracking config/settings/test_settings_system_palette_tracking.cpp)
+target_link_libraries(test_settings_system_palette_tracking PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_settings_system_palette_tracking COMMAND test_settings_system_palette_tracking)
+
+# Companion test executable: per-page Discard/Reset primitives — committed
+# baseline capture, isKeyModified, discardKeys (revert-to-baseline) and
+# resetKeys (revert-to-default) with NOTIFY re-emission.
+p_add_test(test_settings_pagereset config/settings/test_settings_pagereset.cpp)
+
+# Explicit Qt6::Gui for the same reason as test_settings_core: the sentinel
+# tests assert the resolved colours are valid, which reads the palette.
+add_executable(test_settings_validation config/settings/test_settings_validation.cpp)
+target_link_libraries(test_settings_validation PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_settings_validation COMMAND test_settings_validation)
+
+# Explicit Qt6::Gui like its scrolling sibling below: the test uses QTEST_MAIN
+# (not guiless) for the palette-backed colour getters, and would otherwise get
+# Gui only through plasmazones_core's PUBLIC link.
+add_executable(test_settings_perscreen config/settings/test_settings_perscreen.cpp)
+target_link_libraries(test_settings_perscreen PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_settings_perscreen COMMAND test_settings_perscreen)
+
+p_add_test(test_settings_disable_per_mode config/settings/test_settings_disable_per_mode.cpp)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# config/ - Virtual Screen Settings Tests (save/load round-trip, staged flow)
+# ═══════════════════════════════════════════════════════════════════════════════
+p_add_test(test_settings_virtualscreen config/settings/test_settings_virtualscreen.cpp)
+
+p_add_test(test_virtualscreen_staged config/test_virtualscreen_staged.cpp)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# config/ - ConfigDefaults Tests (standalone, no external dependency)
+# ═══════════════════════════════════════════════════════════════════════════════
+p_add_test(test_configdefaults config/test_configdefaults.cpp)
+
+p_add_test(test_configbackend_json config/test_configbackend_json.cpp)
+
+p_add_test(test_configmigration config/migrations/test_configmigration.cpp)
+p_add_test(test_configmigration_v2tov3 config/migrations/test_configmigration_v2tov3.cpp)
+p_add_test(test_migration_v1_animation config/migrations/test_migration_v1_animation.cpp)
+p_add_test(test_layoutsettings_relocation config/migrations/test_layoutsettings_relocation.cpp)
+# Explicit Qt6::Gui for the QTEST_MAIN QGuiApplication expansion, longhand like
+# the other Gui-needing targets in this file.
+add_executable(test_overlayshader_relocation config/migrations/test_overlayshader_relocation.cpp)
+target_link_libraries(test_overlayshader_relocation PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_overlayshader_relocation COMMAND test_overlayshader_relocation)
+
+# Scrolling schema guards: duplicate/Wayland-dead shortcut defaults,
+# enum fall-back-to-default validators, preset-list canonicalization.
+# test_scrolling_settings constructs Settings (QTEST_MAIN + QGuiApplication
+# palette read on load), so it needs an EXPLICIT Qt6::Gui link — p_add_test
+# links Core only and the transitive pull through plasmazones_core is
+# coincidental, not contractual (see the macro header).
+add_executable(test_scrolling_settings config/settings/test_scrolling_settings.cpp)
+target_link_libraries(test_scrolling_settings PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_scrolling_settings COMMAND test_scrolling_settings)
+
+# Scrolling.ZoneSelector, the strip-mode drag popup: schema defaults, the
+# stamped Horizontal layout mode, and the per-screen store's subset guard.
+# A sibling of test_scrolling_settings rather than part of it (that file is a
+# sanctioned size exception and says so); same explicit Qt6::Gui link, and for
+# the same reason.
+add_executable(test_scrolling_zone_selector_settings
+               config/settings/test_scrolling_zone_selector_settings.cpp)
+target_link_libraries(test_scrolling_zone_selector_settings
+                      PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_scrolling_zone_selector_settings COMMAND test_scrolling_zone_selector_settings)
+
+# Per-monitor scrolling overrides: the settings-store half of the channel
+# (validator, kind/value joint repair on both the setter and the load path,
+# save/load round trip, clear/has). Same explicit Qt6::Gui link as
+# test_scrolling_settings, and for the same reason: it constructs Settings.
+add_executable(test_settings_perscreen_scrolling config/settings/test_settings_perscreen_scrolling.cpp)
+target_link_libraries(test_settings_perscreen_scrolling PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_settings_perscreen_scrolling COMMAND test_settings_perscreen_scrolling)
+
+# Ownership invariants for SettingsController's per-page config manifest.
+# Source lives under settings/ rather than config/, because it compiles the
+# settings app's page-topology TU. It is grouped under this banner because
+# what it asserts is config-key ownership, and there is no settings/ banner.
+# Compiles the topology TU directly (SettingsController lives in the settings
+# executable, not a library) and only ever calls its static accessors, so no
+# moc/vtable for the class itself is needed.
+add_executable(test_page_owned_config_keys
+    settings/test_page_owned_config_keys.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/controller/settingscontroller_pagetopology.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/controller/settingscontroller_pagekeys.cpp
+)
+target_link_libraries(test_page_owned_config_keys PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core
+    PhosphorControl::PhosphorControl PhosphorRules::PhosphorRules)
+add_test(NAME test_page_owned_config_keys COMMAND test_page_owned_config_keys)
+
+# Binds the schema's declared choices to their user-facing labels.
+add_executable(test_settingsvaluelabels config/settings/test_settingsvaluelabels.cpp)
+target_link_libraries(test_settingsvaluelabels
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+target_compile_definitions(test_settingsvaluelabels PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+add_test(NAME test_settingsvaluelabels COMMAND test_settingsvaluelabels)
+
+# v3 → v4 window-rule consolidation migration.
+add_executable(test_migration_v3_to_v4 config/migrations/test_migration_v3_to_v4.cpp)
+target_link_libraries(test_migration_v3_to_v4
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
+add_test(NAME test_migration_v3_to_v4 COMMAND test_migration_v3_to_v4)
+
+# v3 → v4 premade Steam rule: seeded shape, what it matches, and the repair.
+add_executable(test_migration_v3_to_v4_steam config/migrations/test_migration_v3_to_v4_steam.cpp)
+target_link_libraries(test_migration_v3_to_v4_steam
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
+add_test(NAME test_migration_v3_to_v4_steam COMMAND test_migration_v3_to_v4_steam)
+
+# v3 → v4 failure paths: malformed input values, corrupt files, unwritable
+# sidecars, and the data-loss regressions each of those once caused.
+add_executable(test_migration_v3_to_v4_failures config/migrations/test_migration_v3_to_v4_failures.cpp)
+target_link_libraries(test_migration_v3_to_v4_failures
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
+add_test(NAME test_migration_v3_to_v4_failures COMMAND test_migration_v3_to_v4_failures)
+
+# v3 → v4 animation app-rule and animation-exclusion folds.
+add_executable(test_migration_v3_to_v4_animations config/migrations/test_migration_v3_to_v4_animations.cpp)
+target_link_libraries(test_migration_v3_to_v4_animations
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
+add_test(NAME test_migration_v3_to_v4_animations COMMAND test_migration_v3_to_v4_animations)
+
+# v3 → v4 snapping-exclusion and zone-rename folds.
+add_executable(test_migration_v3_to_v4_exclusions config/migrations/test_migration_v3_to_v4_exclusions.cpp)
+target_link_libraries(test_migration_v3_to_v4_exclusions
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
+add_test(NAME test_migration_v3_to_v4_exclusions COMMAND test_migration_v3_to_v4_exclusions)
+
+# v4 → v5 per-mode appearance + gaps → unified Windows/Gaps config-group migration.
+add_executable(test_migration_v4_to_v5 config/migrations/test_migration_v4_to_v5.cpp)
+target_link_libraries(test_migration_v4_to_v5
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
+add_test(NAME test_migration_v4_to_v5 COMMAND test_migration_v4_to_v5)
+
+# v5→v6: snapping zone colours become theme-fallback strings; UseSystem dropped.
+add_executable(test_migration_v5_to_v6 config/migrations/test_migration_v5_to_v6.cpp)
+target_link_libraries(test_migration_v5_to_v6
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
+add_test(NAME test_migration_v5_to_v6 COMMAND test_migration_v5_to_v6)
+
+# v6→v7: placement animation nodes renamed placeIn/placeOut; the maximize node retired into them.
+add_executable(test_migration_v6_to_v7 config/migrations/test_migration_v6_to_v7.cpp)
+target_link_libraries(test_migration_v6_to_v7
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
+add_test(NAME test_migration_v6_to_v7 COMMAND test_migration_v6_to_v7)
+
+# v7→v8: per-event motion timing overrides move from loose files into config.
+add_executable(test_migration_v7_to_v8 config/migrations/test_migration_v7_to_v8.cpp)
+target_link_libraries(test_migration_v7_to_v8
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
+add_test(NAME test_migration_v7_to_v8 COMMAND test_migration_v7_to_v8)
+
+# Retired provider-default rule pruned from rules.json (finalizeV4Conversion cleanup).
+add_executable(test_provider_default_cleanup config/test_provider_default_cleanup.cpp)
+target_link_libraries(test_provider_default_cleanup
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
+add_test(NAME test_provider_default_cleanup COMMAND test_provider_default_cleanup)
+
+# RuleStore — daemon-side rules.json persistence + mutation API.
+add_executable(test_rule_store config/test_rule_store.cpp)
+target_link_libraries(test_rule_store
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
+add_test(NAME test_rule_store COMMAND test_rule_store)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# daemon/ - Daemon-level Integration Tests (animation profile publication, etc.)
+# ═══════════════════════════════════════════════════════════════════════════════
+# Daemon-level publication contract: installMotionProfileTree registers the
+# user's per-event timing under its owner tag, Settings publishes to the
+# registry's `Global` path under the empty/direct owner, and a tree entry at
+# `Global` is silently skipped (Settings wins on settings-driven paths).
+# Mirrors the daemon's setupAnimationProfiles without constructing a real
+# Daemon (which requires D-Bus + KWin binding - out of scope for unit tests).
+add_executable(test_animation_profile_publication daemon/test_animation_profile_publication.cpp)
+target_link_libraries(test_animation_profile_publication
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorAnimation::PhosphorAnimation)
+add_test(NAME test_animation_profile_publication COMMAND test_animation_profile_publication)
+
+# Startup Wayland-display guard (main.cpp). Pins resolveWaylandSocketPath()
+# so an empty/unset WAYLAND_DISPLAY resolves to Qt's default "wayland-0" and
+# the guard exits cleanly instead of letting QGuiApplication qFatal() →
+# SIGABRT → core dump. Header-only logic, so links Qt6::Test + Qt6::Core
+# only (no plasmazones_core).
+add_executable(test_wayland_session_check daemon/test_wayland_session_check.cpp)
+target_link_libraries(test_wayland_session_check PRIVATE Qt6::Test Qt6::Core)
+add_test(NAME test_wayland_session_check COMMAND test_wayland_session_check)
+
+# Strip-mode zone selector: pure hit-test classification (header-only
+# helper, no QML scene) and the strip-card wire shape. The hit-test test
+# links Qt6::Test + Qt6::Core only, same convention as
+# test_wayland_session_check above (header-only logic needs the include
+# path, not plasmazones_core). The serializer test links
+# PhosphorScrollEngine explicitly for the snapshot value types — the
+# transitive pull through plasmazones_core is coincidental, per the macro
+# header's caveat.
+add_executable(test_strip_selector_hittest daemon/test_strip_selector_hittest.cpp)
+target_link_libraries(test_strip_selector_hittest PRIVATE Qt6::Test Qt6::Core)
+add_test(NAME test_strip_selector_hittest COMMAND test_strip_selector_hittest)
+add_executable(test_stripcard_serialize daemon/test_stripcard_serialize.cpp)
+target_link_libraries(test_stripcard_serialize
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorScrollEngine::PhosphorScrollEngine)
+add_test(NAME test_stripcard_serialize COMMAND test_stripcard_serialize)
+
+# The daemon's in-process strip-preview payload (StripZones::zoneMapsForTiles),
+# which the OSD strip card renders without crossing the bus. Its wire twin is
+# covered by test_scrolling_adaptor; this pins the tab keys on THIS side so the
+# two producers cannot drift into drawing a tabbed column differently.
+add_executable(test_stripzones_tabkeys daemon/test_stripzones_tabkeys.cpp)
+target_link_libraries(test_stripzones_tabkeys
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorScrollEngine::PhosphorScrollEngine
+            PhosphorProtocol::PhosphorProtocol)
+add_test(NAME test_stripzones_tabkeys COMMAND test_stripzones_tabkeys)
+
+# Phase-5 SurfaceAnimator scope-prefix policy. Pins down the
+# per-instance scope construction in osd.cpp / selector.cpp /
+# snapassist.cpp so a divergence from the PhosphorRoles base scopePrefix
+# doesn't silently fall back to the empty default config in release
+# builds. Replaces the debug-only Q_ASSERT_X in createZoneSelectorWindow
+# with a release-built check that covers every overlay role.
+add_executable(test_overlay_scope_prefixes daemon/test_overlay_scope_prefixes.cpp)
+target_link_libraries(test_overlay_scope_prefixes
+    PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Quick PhosphorLayer::PhosphorLayer
+            PhosphorShellPatterns::PhosphorShellPatterns
+            PhosphorAnimation::PhosphorAnimation
+            PhosphorOverlay::PhosphorOverlay)
+add_test(NAME test_overlay_scope_prefixes COMMAND test_overlay_scope_prefixes)
+
+# Snap-assist thumbnail provider: bounded LRU cache, monotonic URL
+# generation, eviction-tied URL state. Compiles the daemon source
+# directly because the provider lives in the plasmazonesd executable, not
+# plasmazones_core.
+add_executable(test_snap_assist_thumbnail_provider
+    daemon/test_snap_assist_thumbnail_provider.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/daemon/rendering/snapassistthumbnailprovider.cpp
+)
+# PhosphorProtocol pulls in ServiceConstants.h's
+# SnapAssistThumbnailCacheCapacity that the provider's CacheCapacity now
+# resolves against - header-only constant, no .so coupling beyond the
+# include path.
+target_link_libraries(test_snap_assist_thumbnail_provider
+    PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Quick PhosphorProtocol::PhosphorProtocol)
+add_test(NAME test_snap_assist_thumbnail_provider COMMAND test_snap_assist_thumbnail_provider)
+
+# Autotile seed-order filter (Daemon::seedAutotileOrderForScreen's admission
+# predicate): minimized placeholders kept, live/durable floats dropped.
+# Compiles the daemon source directly because the filter lives in the
+# plasmazonesd executable, not plasmazones_core.
+add_executable(test_autotile_seed_filter
+    daemon/test_autotile_seed_filter.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/daemon/daemon/seedorderfilter.cpp
+)
+target_include_directories(test_autotile_seed_filter PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/src)
+target_link_libraries(test_autotile_seed_filter PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_autotile_seed_filter COMMAND test_autotile_seed_filter)
+
+# Cheatsheet family compression: compiles the daemon source directly because
+# ShortcutManager lives in the plasmazonesd executable, not plasmazones_core.
+# The test drives only the static compressCheatsheetFamilies helper, so no
+# shortcut backend or Settings instance is constructed at runtime.
+add_executable(test_cheatsheet_compression
+    daemon/test_cheatsheet_compression.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/daemon/controllers/shortcutmanager.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/daemon/controllers/shortcutmanager_adhoc.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/daemon/controllers/shortcutmanager_catalog.cpp
+)
+target_link_libraries(test_cheatsheet_compression
+    PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core PhosphorShortcuts::PhosphorShortcuts)
+add_test(NAME test_cheatsheet_compression COMMAND test_cheatsheet_compression)
+
+# Shortcuts.Scrolling four-list parity (schema / registration / catalog /
+# D-Bus registry). Same daemon-source compilation as the two neighbours,
+# and it drives a real ShortcutManager, so it needs a Settings instance and
+# an injected backend at runtime.
+add_executable(test_scrolling_shortcut_parity
+    daemon/test_scrolling_shortcut_parity.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/daemon/controllers/shortcutmanager.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/daemon/controllers/shortcutmanager_adhoc.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/daemon/controllers/shortcutmanager_catalog.cpp
+)
+target_link_libraries(test_scrolling_shortcut_parity
+    PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core PhosphorShortcuts::PhosphorShortcuts)
+add_test(NAME test_scrolling_shortcut_parity COMMAND test_scrolling_shortcut_parity)
+
+# UnifiedLayoutController Templates (scrolling) semantics: the sentinel →
+# template display-id substitution and applyEntry's capability-gated routing.
+# Compiles the daemon controller source directly because it lives in the
+# plasmazonesd executable, not plasmazones_core; the null-dependency
+# construction (no ScreenManager / registry / engine) keeps it runnable
+# headless.
+add_executable(test_unified_layout_controller_scrolling
+    daemon/test_unified_layout_controller_scrolling.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/daemon/controllers/unifiedlayoutcontroller.cpp
+)
+target_include_directories(test_unified_layout_controller_scrolling PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/src)
+target_link_libraries(test_unified_layout_controller_scrolling
+    PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_unified_layout_controller_scrolling COMMAND test_unified_layout_controller_scrolling)
+
+# The generic None card on snapping/autotile contexts: presence + pinned-last
+# in the picker list, the mode-preserving opt-out writes ("none" /
+# "autotile:none"), and the display-id translation back to the card. Same
+# daemon-source compilation and null-dependency construction as the
+# scrolling suite above.
+add_executable(test_unified_layout_controller_none
+    daemon/test_unified_layout_controller_none.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/daemon/controllers/unifiedlayoutcontroller.cpp
+)
+target_include_directories(test_unified_layout_controller_none PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/src)
+# PhosphorZones and PhosphorLayoutApi named explicitly: the suite constructs
+# LayoutRegistry / Layout / Zone and calls LayoutId directly, and this file's
+# convention is that a target names what it uses rather than riding another
+# target's PUBLIC link interface.
+target_link_libraries(test_unified_layout_controller_none
+    PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core
+            PhosphorZones::PhosphorZones PhosphorLayoutApi::PhosphorLayoutApi)
+add_test(NAME test_unified_layout_controller_none COMMAND test_unified_layout_controller_none)
+
+# Shortcut teardown contract (discussion #851): unregisterShortcuts() must not
+# purge persistent bindings from the backend. Same daemon-source compilation
+# as test_cheatsheet_compression, plus a backend injected via
+# setBackendForTesting to observe the IBackend calls.
+add_executable(test_shortcutmanager_teardown
+    daemon/test_shortcutmanager_teardown.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/daemon/controllers/shortcutmanager.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/daemon/controllers/shortcutmanager_adhoc.cpp
+)
+target_link_libraries(test_shortcutmanager_teardown
+    PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core PhosphorShortcuts::PhosphorShortcuts)
+add_test(NAME test_shortcutmanager_teardown COMMAND test_shortcutmanager_teardown)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# core/ - Layout Tests (core, zones)
+# ═══════════════════════════════════════════════════════════════════════════════
+p_add_test(test_layout_core core/layout/test_layout_core.cpp)
+p_add_test(test_layout_zones core/layout/test_layout_zones.cpp)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# core/ - LayoutManager Tests (persistence, cycling, assignment)
+# ═══════════════════════════════════════════════════════════════════════════════
+p_add_test(test_layoutmanager_persistence core/layout/test_layoutmanager_persistence.cpp)
+p_add_test(test_layoutmanager_cycling core/layout/test_layoutmanager_cycling.cpp)
+p_add_test(test_scrollingtemplate_store core/layout/test_scrollingtemplate_store.cpp)
+# The scrolling-template schema is author-time only (no loader compiles it), so
+# this target reads it straight out of the source tree and runs it through the
+# same validator engine the runtime-gated schemas use. PhosphorZones is named
+# per this file's convention: the test constructs ScrollingTemplate and drives
+# ScrollingTemplateStore directly rather than reaching them through
+# plasmazones_core.
+target_link_libraries(test_scrollingtemplate_store PRIVATE PhosphorFsLoader::PhosphorFsLoader
+                                                           PhosphorZones::PhosphorZones)
+target_compile_definitions(test_scrollingtemplate_store PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+
+# data/whatsnew.json is consumed at runtime through the Qt resource, but the
+# ordering invariant the settings dialog relies on (newest release first) is
+# not something the schema can express, so this target reads the file straight
+# out of the source tree and pins it there. Same shape as the
+# scrolling-template schema test above.
+p_add_test(test_whatsnew_data data/test_whatsnew_data.cpp)
+target_link_libraries(test_whatsnew_data PRIVATE PhosphorFsLoader::PhosphorFsLoader)
+target_compile_definitions(test_whatsnew_data PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+
+# The other direction of the same contract. validate-json-schemas.py checks DATA
+# against the shader schemas; nothing checked the schemas' own numeric bounds
+# against the C++ constants they are meant to track, so every pass-budget or
+# buffer-scale change was a hand edit across four files with no gate behind it.
+# This target reads the committed schemas and compares each published bound to
+# its constant. Header-only contracts, so it links nothing.
+p_add_test(test_shader_schema_bounds data/test_shader_schema_bounds.cpp)
+# The four shader-family metadata schemas live in the phosphor-libs tier, not
+# beside the plasmazones ones: phosphor-animation and phosphor-shaders compile
+# them into Qt resources, so they sit with the libraries that consume them. Its
+# own define, not a hop off P_SOURCE_DIR, so a later move fails the configure
+# instead of emptying every QJsonObject this test reads.
+target_compile_definitions(test_shader_schema_bounds PRIVATE
+    "P_SHADER_SCHEMA_DIR=\"${CMAKE_SOURCE_DIR}/phosphor-libs/data/schemas\"")
+
+p_add_test(test_layoutmanager_assignment core/layout/test_layoutmanager_assignment.cpp)
+# The AssignmentEntry-shape half of the suite above, split off at its P6 banner
+# when the single file passed the 1150-line ceiling. Shares the same fixture.
+p_add_test(test_layoutmanager_assignment_entry core/layout/test_layoutmanager_assignment_entry.cpp)
+p_add_test(test_layoutmanager_default_synthesis core/layout/test_layoutmanager_default_synthesis.cpp)
+# The shared fixture header holds a Q_OBJECT base class; AUTOMOC only scans
+# headers listed as target sources, so every target must list it explicitly.
+target_sources(test_layoutmanager_assignment PRIVATE core/layout/LayoutManagerAssignmentFixture.h)
+target_sources(test_layoutmanager_assignment_entry PRIVATE core/layout/LayoutManagerAssignmentFixture.h)
+target_sources(test_layoutmanager_default_synthesis PRIVATE core/layout/LayoutManagerAssignmentFixture.h)
+p_add_test(test_layout_registry_cache core/layout/test_layout_registry_cache.cpp)
+
+# The editor's save payload is schema-gated at the D-Bus boundary, so the shape
+# EditorController::saveLayout emits has to satisfy the layout schema. Pins both
+# serialized forms of aspectRatioClass (editor int, canonical string from
+# Layout::toJson) against the schema that gates createLayoutFromJson/updateLayout.
+p_add_test(test_layout_schema_editor_shape core/layout/test_layout_schema_editor_shape.cpp)
+
+# exportLayout / importLayout report their outcome rather than logging it and
+# returning void, and the export writes atomically so a failure leaves the
+# user's chosen destination alone.
+p_add_test(test_layoutregistry_transfer core/layout/test_layoutregistry_transfer.cpp)
+
+# Regression guard for the in-process dual-RuleStore data-loss race
+# where Settings used to construct its own store pointed at the same file
+# as the daemon's. Pins the share-via-borrow-ctor wiring in daemon.cpp.
+p_add_test(test_daemon_dual_store_race core/test_daemon_dual_store_race.cpp)
+
+# Cascade-fidelity proof for the window-rule context model — the priority
+# formula reproduces the legacy zone-Assignment cascade.
+add_executable(test_rule_cascade_fidelity core/test_rule_cascade_fidelity.cpp)
+target_link_libraries(test_rule_cascade_fidelity
+    PRIVATE Qt6::Test Qt6::Core PhosphorRules::PhosphorRules PhosphorZones::PhosphorZones plasmazones_core)
+add_test(NAME test_rule_cascade_fidelity COMMAND test_rule_cascade_fidelity)
+
+# Context-domain half of the cascade proof (gaps, orientation, active layout,
+# tiling and scrolling params, exactContextEntry).
+add_executable(test_rule_cascade_context core/test_rule_cascade_context.cpp)
+target_link_libraries(test_rule_cascade_context
+    PRIVATE Qt6::Test Qt6::Core PhosphorRules::PhosphorRules PhosphorZones::PhosphorZones plasmazones_core)
+add_test(NAME test_rule_cascade_context COMMAND test_rule_cascade_context)
+
+# The overlay / lock / mode-routing sections of the same context proof, split
+# off at the overlay banner when the single file passed the 1150-line ceiling.
+# Shares RuleCascadeFixture.h with the two targets above, which is a plain
+# (non-Q_OBJECT) harness and so needs no target_sources entry.
+add_executable(test_rule_cascade_overlay_lock core/test_rule_cascade_overlay_lock.cpp)
+target_link_libraries(test_rule_cascade_overlay_lock
+    PRIVATE Qt6::Test Qt6::Core PhosphorRules::PhosphorRules PhosphorZones::PhosphorZones plasmazones_core)
+add_test(NAME test_rule_cascade_overlay_lock COMMAND test_rule_cascade_overlay_lock)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# core/ - Virtual Screen Tests (ID utilities, data model, PhosphorScreens::ScreenManager)
+# ═══════════════════════════════════════════════════════════════════════════════
+p_add_test(test_virtual_screen core/screens/test_virtual_screen.cpp)
+p_add_test(test_virtual_screen_manager core/screens/test_virtual_screen_manager.cpp)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# core/ - Snap Assist Virtual Screen Tests (screensMatch, buildOccupiedZoneSet)
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_snap_assist_virtual core/snap/test_snap_assist_virtual.cpp)
+target_link_libraries(test_snap_assist_virtual PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_assist_virtual COMMAND test_snap_assist_virtual)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# core/ - LayerSurface + computeLayerSize Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_layersurface core/wayland/test_layersurface.cpp)
+target_link_libraries(test_layersurface PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::WaylandClientPrivate Wayland::Client plasmazones_core)
+# PhosphorWayland private QPA headers + generated protocol headers
+target_include_directories(test_layersurface PRIVATE
+    ${CMAKE_BINARY_DIR}/plasmazones/src                          # plasmazones_export.h
+    ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-wayland/src                  # private QPA headers
+    ${CMAKE_BINARY_DIR}/phosphor-libs/libs/phosphor-wayland                      # phosphorwayland_export.h
+    ${CMAKE_BINARY_DIR}/phosphor-libs/libs/phosphor-wayland/generated-protocols  # wlr-layer-shell protocol header
+)
+add_test(NAME test_layersurface COMMAND test_layersurface)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# core/ - SinglePixelBuffer Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_singlepixelbuffer core/wayland/test_singlepixelbuffer.cpp)
+target_link_libraries(test_singlepixelbuffer PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorWayland::PhosphorWayland)
+add_test(NAME test_singlepixelbuffer COMMAND test_singlepixelbuffer)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# core/ - IdleNotifier Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_idlenotifier core/wayland/test_idlenotifier.cpp)
+target_link_libraries(test_idlenotifier PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorWayland::PhosphorWayland)
+add_test(NAME test_idlenotifier COMMAND test_idlenotifier)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# core/ - ToplevelDrag Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_topleveldrag core/wayland/test_topleveldrag.cpp)
+target_link_libraries(test_topleveldrag PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorWayland::PhosphorWayland)
+add_test(NAME test_topleveldrag COMMAND test_topleveldrag)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# core/ - ForeignToplevel Tests (wlr-foreign-toplevel-management offscreen)
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_foreigntoplevel core/wayland/test_foreigntoplevel.cpp)
+target_link_libraries(test_foreigntoplevel PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorWayland::PhosphorWayland)
+add_test(NAME test_foreigntoplevel COMMAND test_foreigntoplevel)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# core/ - Support Report Tests (redaction, generation)
+# ═══════════════════════════════════════════════════════════════════════════════
+p_add_test(test_support_report core/test_support_report.cpp)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# core/ - Zone Detection Tests (layout, service)
+# ═══════════════════════════════════════════════════════════════════════════════
+p_add_test(test_zone_detection_layout core/zones/test_zone_detection_layout.cpp)
+p_add_test(test_zone_detector_overlap core/zones/test_zone_detector_overlap.cpp)
+
+add_executable(test_zone_detection_service core/zones/test_zone_detection_service.cpp)
+target_link_libraries(test_zone_detection_service PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_zone_detection_service COMMAND test_zone_detection_service)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# autotile/ - Per-Screen Config Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+p_add_test(test_per_screen_config autotile/engine/test_per_screen_config.cpp)
+target_compile_definitions(test_per_screen_config PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# autotile/ - Navigation Controller Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+p_add_test(test_navigation_controller autotile/navigation/test_navigation_controller.cpp)
+p_add_test(test_snap_cross_surface snap/test_snap_cross_surface.cpp)
+p_add_test(test_span_targets snap/test_span_targets.cpp)
+# Constructs a real SnapEngine, so the dependency is contractual, not the
+# coincidental transitive pull through plasmazones_core. Scope: this explicit
+# link is spelled out on the handful of targets that name an engine type
+# directly (test_screen_mode_router and test_drag_policy cite this rationale).
+# Other engine-touching targets still ride the transitive pull and have not
+# been swept.
+target_link_libraries(test_span_targets PRIVATE PhosphorSnapEngine::PhosphorSnapEngine)
+p_add_test(test_snap_state_class_mutation snap/test_snap_state_class_mutation.cpp)
+
+# Cross-surface navigation exercises cross-output handoff, which needs real
+# output geometry — compile in the FakePhysicalScreenSource (like the WTA tests).
+add_executable(test_navigation_cross_surface
+               autotile/navigation/test_navigation_cross_surface.cpp
+               # Q_OBJECT fake — listed so AUTOMOC generates its metaobject.
+               helpers/AutotileFakes.h
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_navigation_cross_surface
+               PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+# QTEST_MAIN expands to a QGuiApplication main whenever QT_GUI_LIB is
+# defined, which here would otherwise arrive only through plasmazones_core's
+# transitive Qt6::Gui — coincidental, not contractual (the same reason
+# test_scrolling_settings links Gui explicitly above).
+target_link_libraries(test_navigation_cross_surface PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_navigation_cross_surface COMMAND test_navigation_cross_surface)
+
+# Real-retile cross-output test: drives the actual tile pipeline, so it needs
+# the FakePhysicalScreenSource AND the bundled Luau algorithms (P_SOURCE_DIR).
+add_executable(test_navigation_retile
+               autotile/navigation/test_navigation_retile.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_navigation_retile
+               PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_compile_definitions(test_navigation_retile PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+target_link_libraries(test_navigation_retile PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_navigation_retile COMMAND test_navigation_retile)
+
+add_executable(test_autotile_focus_retile
+               autotile/behavior/test_autotile_focus_retile.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_autotile_focus_retile
+               PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_compile_definitions(test_autotile_focus_retile PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+target_link_libraries(test_autotile_focus_retile PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_autotile_focus_retile COMMAND test_autotile_focus_retile)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# autotile/ - Engine Settings Tests (replaces deleted test_settings_bridge)
+# ═══════════════════════════════════════════════════════════════════════════════
+p_add_test(test_engine_settings autotile/engine/test_engine_settings.cpp)
+target_compile_definitions(test_engine_settings PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ui/ - Zone Shader Item Tests - need Qt6::Quick + plasmazones_rendering
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_zone_shader_item ui/zones/test_zone_shader_item.cpp)
+target_link_libraries(test_zone_shader_item PRIVATE Qt6::Test Qt6::Core Qt6::Quick Qt6::GuiPrivate plasmazones_rendering)
+add_test(NAME test_zone_shader_item COMMAND test_zone_shader_item)
+
+# Pins the shared ZonePreview's per-zone vs whole-card highlight split. The
+# zone selector's hit-tested `selectedZoneIndex` is only observable if the
+# singled-out zone renders differently from its siblings, while the picker / OSD
+# consumers rely on card-level state lighting every zone. Both halves live in
+# one expression, so a regression in either is silent at runtime.
+add_executable(test_zone_preview_highlight ui/zones/test_zone_preview_highlight.cpp)
+target_link_libraries(test_zone_preview_highlight PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick plasmazones_shared_qmlplugin)
+# The settings app's QML module hangs off its EXECUTABLE target, so it cannot
+# be linked here. LayoutThumbnail imports nothing beyond QtQuick, Kirigami and
+# org.plasmazones.common (all present), so its chain case loads the file
+# straight from the source tree instead. That is the only case in this binary
+# reading the SOURCE tree rather than the linked build-tree module, so an edit
+# to that one file without a rebuild would be checked against a stale
+# org.plasmazones.common. Running ctest after a build, which is the only
+# supported flow, cannot hit that.
+target_compile_definitions(test_zone_preview_highlight PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+add_test(NAME test_zone_preview_highlight COMMAND test_zone_preview_highlight)
+
+# Component-load canary for the shared QML module: "X is not a type" at app
+# runtime hides the nested cause; this fails with the real error instead.
+# plasmazones_rendering supplies ZoneShaderItem, which the test registers under
+# "PlasmaZones 1.0" (mirroring the daemon/editor composition roots) so
+# ZoneShaderRenderer's `import PlasmaZones` resolves. The SurfaceDecoration
+# item tests moved with the host to phosphor-surface-quick's
+# test_surfaceshaderitem; one slot here still instantiates it through the
+# org.phosphor.surface STATIC plugin link, the composition the daemon and the
+# settings app rely on, so that link is pinned from this tier too.
+add_executable(test_shared_module_load ui/test_shared_module_load.cpp)
+target_link_libraries(test_shared_module_load PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick plasmazones_shared_qmlplugin plasmazones_rendering PhosphorSurfaceQuick::PhosphorSurfaceQuickQml PhosphorSurfaceQuickQmlplugin)
+add_test(NAME test_shared_module_load COMMAND test_shared_module_load)
+
+# Pins the C++/QML contract the zone selector's cursor hit test depends on:
+# zone delegates discoverable by objectName, exposing their model index, with
+# rendered geometry that tracks LayoutCard's aspect-ratio letterboxing. All of
+# it fails silently at runtime — the highlight just stops following the cursor.
+add_executable(test_zone_selector_hit_geometry ui/zones/test_zone_selector_hit_geometry.cpp)
+target_link_libraries(test_zone_selector_hit_geometry PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick plasmazones_shared_qmlplugin plasmazones_core)
+add_test(NAME test_zone_selector_hit_geometry COMMAND test_zone_selector_hit_geometry)
+
+add_executable(test_shader_node_teardown ui/zones/test_shader_node_teardown.cpp)
+# GuiPrivate: ShaderNodeRhi.h includes <rhi/qrhi.h>, a private Qt Gui header.
+target_link_libraries(test_shader_node_teardown PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Quick Qt6::GuiPrivate PhosphorRendering)
+add_test(NAME test_shader_node_teardown COMMAND test_shader_node_teardown)
+
+# The cross-item QML binding contract: a Binding element wipes the image a
+# shader item takes through a QVariant property, so one slot sweeps every
+# shipping .qml under plasmazones/src (P_SOURCE_DIR) for that shape. The
+# SurfaceShaderItem unit tests live with the item in phosphor-surface-quick;
+# this links its C++ library only for the item's metaobject and the wipe
+# demonstration. Qt6::Qml as well as Quick: the demonstrations run a real QML
+# binding, the only shape that reproduces the silent write failure.
+add_executable(test_shader_item_qml_bindings ui/zones/test_shader_item_qml_bindings.cpp)
+target_link_libraries(test_shader_item_qml_bindings PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::GuiPrivate plasmazones_rendering PhosphorSurfaceQuick::PhosphorSurfaceQuick)
+target_compile_definitions(test_shader_item_qml_bindings PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+add_test(NAME test_shader_item_qml_bindings COMMAND test_shader_item_qml_bindings)
+
+# Pure-data byte-layout test for the zone UBO extension. No GPU / scene graph
+# required - guards against silent C++/GLSL UBO drift after a struct refactor.
+add_executable(test_zone_uniform_extension ui/zones/test_zone_uniform_extension.cpp)
+target_link_libraries(test_zone_uniform_extension PRIVATE Qt6::Test Qt6::Core Qt6::GuiPrivate plasmazones_rendering)
+# layout_matchesGlslUboDeclaration parses the real data/overlays/shared/common.glsl,
+# so the C++ struct is pinned to the declaration the packs actually compile against
+# rather than only to itself.
+target_compile_definitions(test_zone_uniform_extension PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+add_test(NAME test_zone_uniform_extension COMMAND test_zone_uniform_extension)
+
+# Bake-check the VERTEX stage of every animation pack (plus
+# shared/animation.vert) against ShaderCompiler so a qsb-incompatible source
+# change (e.g. accidentally re-introducing default-block uniforms in
+# #version 450) fails CI instead of silently breaking the daemon's
+# overlay-surface animation path. Pinned by the canonical UBO declaration in
+# data/animations/shared/animation_uniforms.glsl. Compositor-only packs bake
+# here too — the shared includes carry UBO branches, so every vert compiles
+# under the strict SPIR-V target. Their kwin-dialect variant is compiled
+# headlessly by the shader_validate_animations gate, which shells out to
+# glslang, and additionally by test_animation_shader_kwin_bake where a
+# desktop-GL 4.5 context exists (it QSKIPs headless). Fragment-stage coverage
+# lives in test_animation_shader_preamble_bake.
+add_executable(test_animation_shader_bake ui/shaders/test_animation_shader_bake.cpp)
+target_link_libraries(test_animation_shader_bake PRIVATE Qt6::Test Qt6::Core Qt6::GuiPrivate Qt6::ShaderToolsPrivate PhosphorAnimation::PhosphorAnimation PhosphorRendering::PhosphorRendering PhosphorShaders::PhosphorShaders)
+target_compile_definitions(test_animation_shader_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+add_test(NAME test_animation_shader_bake COMMAND test_animation_shader_bake)
+
+# Pins ShaderIncludeResolver's #line bracketing + source-string legend so a
+# glslang / driver diagnostic maps back to the author's file:line instead of a
+# line in the flattened include blob.
+add_executable(test_shader_include_resolver ui/shaders/test_shader_include_resolver.cpp)
+target_link_libraries(test_shader_include_resolver PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorShaders::PhosphorShaders)
+add_test(NAME test_shader_include_resolver COMMAND test_shader_include_resolver)
+
+# Pins the T1.4 entry-point harness: main()/entry-function detection
+# (comment-stripped, definition-not-call) and composeEntryPoint dispatch
+# (author main() wins, else wrap the first matching entry, else pass through).
+add_executable(test_shader_entry_point ui/shaders/test_shader_entry_point.cpp)
+target_link_libraries(test_shader_entry_point PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorShaders::PhosphorShaders)
+target_compile_definitions(test_shader_entry_point PRIVATE "PLASMAZONES_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+add_test(NAME test_shader_entry_point COMMAND test_shader_entry_point)
+
+# End-to-end: an entry-only zone shader (author writes only pZone/pImage)
+# assembles through the harness scaffold and bakes against the real zone UBO,
+# and a traditional main() pack is passed through unchanged (T1.4 scope B).
+add_executable(test_zone_entry_scaffold ui/zones/test_zone_entry_scaffold.cpp)
+target_link_libraries(test_zone_entry_scaffold PRIVATE Qt6::Test Qt6::Core Qt6::GuiPrivate Qt6::ShaderToolsPrivate plasmazones_rendering PhosphorRendering::PhosphorRendering PhosphorShaders::PhosphorShaders)
+target_compile_definitions(test_zone_entry_scaffold PRIVATE "PLASMAZONES_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+add_test(NAME test_zone_entry_scaffold COMMAND test_zone_entry_scaffold)
+
+# Pins buildParamPreamble's generated `#define p_<id> <accessor>` block:
+# declaration-order auto-slotting (must match the lane the runtime uploads to),
+# independent scalar/color/image pools, and skip-don't-break on bad input.
+add_executable(test_shader_param_preamble ui/shaders/test_shader_param_preamble.cpp)
+target_link_libraries(test_shader_param_preamble PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorShaders::PhosphorShaders)
+add_test(NAME test_shader_param_preamble COMMAND test_shader_param_preamble)
+
+# End-to-end: every built-in animation shader must still bake
+# once its generated `#define p_<id> ...` preamble is spliced in — proving the
+# generated accessors compile against the real animation UBO. Compositor-only
+# packs bake here too under the UBO branch. The shader_validate_animations
+# gate compiles their kwin-dialect variant headlessly through glslang, and
+# test_animation_shader_kwin_bake covers it again where a desktop-GL 4.5
+# context exists (it QSKIPs headless).
+add_executable(test_animation_shader_preamble_bake ui/shaders/test_animation_shader_preamble_bake.cpp)
+target_link_libraries(test_animation_shader_preamble_bake PRIVATE Qt6::Test Qt6::Core Qt6::GuiPrivate Qt6::ShaderToolsPrivate PhosphorAnimation::PhosphorAnimation PhosphorRendering::PhosphorRendering PhosphorShaders::PhosphorShaders)
+target_compile_definitions(test_animation_shader_preamble_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+add_test(NAME test_animation_shader_preamble_bake COMMAND test_animation_shader_preamble_bake)
+
+# Bakes the KWIN-PATH variant (#define PLASMAZONES_KWIN) of every animation pack
+# through a real offscreen OpenGL context — the branch qsb/SPIR-V rejects and the
+# daemon preamble bake therefore never compiles. Catches GLSL errors in the KWin
+# branch (getFromColor/getToColor, surfaceColor's kwin flip, customColors/iFrame
+# usage). Skips when no desktop-GL >= 4.5 context is available (headless CI).
+add_executable(test_animation_shader_kwin_bake ui/shaders/test_animation_shader_kwin_bake.cpp)
+target_link_libraries(test_animation_shader_kwin_bake PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorAnimation::PhosphorAnimation PhosphorShaders::PhosphorShaders)
+target_compile_definitions(test_animation_shader_kwin_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+add_test(NAME test_animation_shader_kwin_bake COMMAND test_animation_shader_kwin_bake)
+
+# The pointer twin: bakes the KWIN-PATH variant of every pointer pack (main
+# fragment with its preamble, buffer passes without one, and the compositor's
+# own vertex stage) through a real offscreen OpenGL context. Every pointer
+# pack ships on that branch while the preview bake only covers the Qt-RHI
+# one, and the two dialects declare different identifiers. Skips when no
+# desktop-GL >= 4.5 context is available; an empty pack discovery FAILS.
+add_executable(test_pointer_shader_kwin_bake ui/shaders/test_pointer_shader_kwin_bake.cpp)
+target_link_libraries(test_pointer_shader_kwin_bake PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorPointer::PhosphorPointer PhosphorShaders::PhosphorShaders)
+target_compile_definitions(test_pointer_shader_kwin_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+add_test(NAME test_pointer_shader_kwin_bake COMMAND test_pointer_shader_kwin_bake)
+
+# DRAWS every bundled strip pack through the KWin-path variant the strip
+# pass links (fragment assembled as striptransitionshader.cpp does, linked
+# against the pass's quad vertex stage) over a synthetic uStrip / uBelow
+# capture pair, and checks the pass's three contracts: identity at zero
+# motion, an untouched wallpaper in the gap, and no hole beside a column
+# edge under motion. The bake above only compiles. Skips without a
+# desktop-GL >= 4.5 context. Gated with the effect tree, like
+# test_transition_pass_pure below (whose block also creates the
+# PkgConfig::TestEpoxy target this links; a `::` target name resolves at
+# generate time, so the later creation is fine).
+if(USE_KDE_FRAMEWORKS AND BUILD_KWIN_EFFECT)
+    add_executable(test_strip_pack_contract ui/shaders/test_strip_pack_contract.cpp)
+    target_include_directories(test_strip_pack_contract PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+    target_link_libraries(test_strip_pack_contract PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorAnimation::PhosphorAnimation PhosphorShaders::PhosphorShaders PkgConfig::TestEpoxy)
+    target_compile_definitions(test_strip_pack_contract PRIVATE "PLASMAZONES_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+    add_test(NAME test_strip_pack_contract COMMAND test_strip_pack_contract)
+endif()
+
+# End-to-end: an entry-only animation shader (author writes only pTransition,
+# or pIn+pOut) assembles through the harness scaffold and bakes against the
+# real animation UBO; lone pIn falls through; traditional main() passes (T1.5).
+add_executable(test_animation_entry_scaffold ui/shaders/test_animation_entry_scaffold.cpp)
+target_link_libraries(test_animation_entry_scaffold PRIVATE Qt6::Test Qt6::Core Qt6::GuiPrivate Qt6::ShaderToolsPrivate PhosphorAnimation::PhosphorAnimation PhosphorRendering::PhosphorRendering PhosphorShaders::PhosphorShaders)
+target_compile_definitions(test_animation_entry_scaffold PRIVATE "PLASMAZONES_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+add_test(NAME test_animation_entry_scaffold COMMAND test_animation_entry_scaffold)
+
+# Cross-checks that every animation shader's `#define <paramId>
+# customParams[N].xyzw` (or customColors[N]) line agrees with the
+# allocation order an in-order walk of metadata.json's `parameters[]`
+# array would produce - i.e. the same allocation rule
+# AnimationShaderRegistry::translateAnimationParams uses at runtime.
+# Catches author-side wiring drift at CI time so a misordered pack
+# can't ship and silently deliver wrong values.
+add_executable(test_animation_shader_param_wiring ui/shaders/test_animation_shader_param_wiring.cpp)
+target_link_libraries(test_animation_shader_param_wiring PRIVATE Qt6::Test Qt6::Core)
+target_compile_definitions(test_animation_shader_param_wiring PRIVATE "PLASMAZONES_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+add_test(NAME test_animation_shader_param_wiring COMMAND test_animation_shader_param_wiring)
+
+# Pure-geometry test for the kwin-effect's anchor-uniform branch
+# (ShaderInternal::computeAnchorUniforms) — pins anchor-extent vs
+# surface-extent (fboExtent: "surface") iResolution/iAnchorPosInFbo math.
+add_executable(test_anchor_uniforms ui/effect/test_anchor_uniforms.cpp)
+target_link_libraries(test_anchor_uniforms PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorAnimation::PhosphorAnimation)
+# Resolve <plasmazoneseffect/shader_internal.h> without a brittle relative
+# path, and let CMake track the header as a dependency of the test.
+target_include_directories(test_anchor_uniforms PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_anchor_uniforms COMMAND test_anchor_uniforms)
+
+# Pure-timing test for the compositor's shader clock
+# (ShaderInternal::resolveTransitionLifetimeMs / easeProgress) — pins the
+# duration envelope (the only bound on a hand-edited profile or an undamped
+# spring), the stateless/stateful split, the dt cap, the peek contract, and the
+# deliberate overshoot passthrough. Same header-only reach as the anchor test.
+add_executable(test_shader_timing ui/effect/test_shader_timing.cpp)
+target_link_libraries(test_shader_timing PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorAnimation::PhosphorAnimation)
+target_include_directories(test_shader_timing PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_shader_timing COMMAND test_shader_timing)
+
+# Pure-logic test for the scroll-managed window decision helpers
+# (tilinghandler/scrolldecisions.h) — the windowed-fullscreen 5-way batch
+# decision and the maximize-to-edges 3-way decision (a 16-row truth table
+# each, plus their in-flight marker walks), the counter-assert burst budget
+# (rate limit, rollover, fresh-batch re-arm), the compositor-claim release
+# table with its teardown order and fullscreen-skip retention, and the
+# size-continuity carry-forward table. Same header-only reach as the anchor
+# test.
+add_executable(test_scroll_decisions ui/effect/test_scroll_decisions.cpp)
+target_link_libraries(test_scroll_decisions PRIVATE Qt6::Test Qt6::Core)
+target_include_directories(test_scroll_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_scroll_decisions COMMAND test_scroll_decisions)
+
+# Pure-logic test for the desktop-switch pre-autotile restore decision
+# (tilinghandler/pretiledecisions.h) — the truth table over
+# (local rect, rect's bucket screen, tracked-ness, windowed fullscreen),
+# pinning the cross-screen decline that keeps a bucket rect from another
+# monitor moving the window there. Same header-only reach as the scroll test.
+add_executable(test_pretile_decisions ui/effect/test_pretile_decisions.cpp)
+target_link_libraries(test_pretile_decisions PRIVATE Qt6::Test Qt6::Core)
+target_include_directories(test_pretile_decisions PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_pretile_decisions COMMAND test_pretile_decisions)
+
+# Pure-logic test for the minimize-float qualifiers
+# (tilinghandler/minimizefloatmarks.h) — whether a restoring window's frame
+# can still be the tile it is about to get. Same header-only reach.
+add_executable(test_minimize_float_marks ui/effect/test_minimize_float_marks.cpp)
+target_link_libraries(test_minimize_float_marks PRIVATE Qt6::Test Qt6::Core)
+target_include_directories(test_minimize_float_marks PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+add_test(NAME test_minimize_float_marks COMMAND test_minimize_float_marks)
+
+# Pure-geometry test for per-VS wallpaper cropping (PR #333). Pins the C++
+# cover-fit math against hand-worked expected rects so it can't silently
+# drift from the GLSL wallpaperUv helper it mirrors.
+add_executable(test_wallpaper_crop ui/test_wallpaper_crop.cpp)
+target_link_libraries(test_wallpaper_crop PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorShaders::PhosphorShaders)
+add_test(NAME test_wallpaper_crop COMMAND test_wallpaper_crop)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ui/ - Overlay Helpers Tests - need Qt6::Quick + QGuiApplication
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_overlay_helpers ui/test_overlay_helpers.cpp)
+target_link_libraries(test_overlay_helpers PRIVATE Qt6::Test Qt6::Core Qt6::Quick plasmazones_core)
+add_test(NAME test_overlay_helpers COMMAND test_overlay_helpers)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# dbus/ - D-Bus API Tests (convenience, schema, compositor bridge)
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_wta_convenience dbus/test_wta_convenience.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_convenience PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+# Constructs a real SnapEngine and authors Rules against a real RuleStore,
+# drives the engine-common placement API, and builds LayoutRegistry / Layout /
+# Zone directly, so these four are contractual dependencies rather than the
+# coincidental transitive pull through plasmazones_core.
+target_link_libraries(test_wta_convenience PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorSnapEngine::PhosphorSnapEngine PhosphorRules::PhosphorRules
+                      PhosphorEngine::PhosphorEngine PhosphorZones::PhosphorZones)
+add_test(NAME test_wta_convenience COMMAND test_wta_convenience)
+
+add_executable(test_scrolling_adaptor dbus/test_scrolling_adaptor.cpp dbus/scrollingadaptortestfixture.h)
+target_link_libraries(test_scrolling_adaptor PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                                                     PhosphorScrollEngine::PhosphorScrollEngine)
+add_test(NAME test_scrolling_adaptor COMMAND test_scrolling_adaptor)
+# The wire verbs (wheel pair, absolute setters), split out of the suite
+# above once it passed the size ceiling; same fixture header.
+add_executable(test_scrolling_adaptor_verbs dbus/test_scrolling_adaptor_verbs.cpp
+                                            dbus/scrollingadaptortestfixture.h)
+target_link_libraries(test_scrolling_adaptor_verbs PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                                                           PhosphorScrollEngine::PhosphorScrollEngine)
+add_test(NAME test_scrolling_adaptor_verbs COMMAND test_scrolling_adaptor_verbs)
+# The placement-map surfaces (stripModelJson, focusColumnAt, scrollViewByPx)
+# the Phosphor shell's strip map rides on; same fixture header.
+add_executable(test_scrolling_adaptor_map dbus/test_scrolling_adaptor_map.cpp
+                                          dbus/scrollingadaptortestfixture.h)
+target_link_libraries(test_scrolling_adaptor_map PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                                                         PhosphorScrollEngine::PhosphorScrollEngine)
+add_test(NAME test_scrolling_adaptor_map COMMAND test_scrolling_adaptor_map)
+
+# Close/reopen restore on the scroll engine through the unified placement
+# store: a reopened window's fresh uuid must match its record by appId FIFO
+# (WindowPlacementStore::takeForReopen), not uuid-exact only.
+add_executable(test_scroll_reopen_restore
+               scrolling/test_scroll_reopen_restore.cpp
+               # Q_OBJECT fake — listed so AUTOMOC generates its metaobject.
+               helpers/AutotileFakes.h)
+target_link_libraries(test_scroll_reopen_restore PRIVATE Qt6::Test Qt6::Core plasmazones_core
+                                                         PhosphorScrollEngine::PhosphorScrollEngine)
+add_test(NAME test_scroll_reopen_restore COMMAND test_scroll_reopen_restore)
+
+# RuleAdaptor's refusals are refusals to OVERWRITE the persisted rule set, so
+# a guard that quietly stops working loses user data rather than a feature.
+# The contract-sync test only checks the XML's shape; this pins the behaviour.
+add_executable(test_rule_adaptor dbus/test_rule_adaptor.cpp)
+target_link_libraries(test_rule_adaptor PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                                                PhosphorRules::PhosphorRules)
+add_test(NAME test_rule_adaptor COMMAND test_rule_adaptor)
+
+add_executable(test_wta_scroll_strips dbus/test_wta_scroll_strips.cpp)
+target_link_libraries(test_wta_scroll_strips PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wta_scroll_strips COMMAND test_wta_scroll_strips)
+
+add_executable(test_wta_routing dbus/test_wta_routing.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_routing PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+# Links PhosphorScrollEngine directly: the fixture constructs real ScrollEngine
+# objects, so the dependency is this target's own, not something to inherit
+# through plasmazones_core's link interface.
+target_link_libraries(test_wta_routing PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                                               PhosphorScrollEngine::PhosphorScrollEngine)
+add_test(NAME test_wta_routing COMMAND test_wta_routing)
+
+# WindowTrackingAdaptor rule-context tests — the screen-derived context fields
+# buildContextualRuleQuery stamps and the consumers that read them. Split out of
+# test_wta_convenience, which had outgrown the file-size ceiling. Same
+# FakePhysicalScreenSource compile-in: the open-path routing cases need real output
+# geometry.
+add_executable(test_wta_rule_context dbus/test_wta_rule_context.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_rule_context PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_wta_rule_context PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorSnapEngine::PhosphorSnapEngine PhosphorRules::PhosphorRules
+                      PhosphorEngine::PhosphorEngine PhosphorZones::PhosphorZones
+                      PhosphorWorkspaces::PhosphorWorkspaces)
+add_test(NAME test_wta_rule_context COMMAND test_wta_rule_context)
+
+add_executable(test_wta_capture_guards dbus/test_wta_capture_guards.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_capture_guards PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+# Links PhosphorScrollEngine directly for the same reason test_wta_routing does:
+# the close-during-hold case constructs a real ScrollEngine.
+target_link_libraries(test_wta_capture_guards PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                                                      PhosphorScrollEngine::PhosphorScrollEngine)
+add_test(NAME test_wta_capture_guards COMMAND test_wta_capture_guards)
+
+# WindowTrackingAdaptor windowScreenChanged tests — the stored-screen
+# comparison that keeps or drops a snap when the compositor reports a window
+# on a new output. Split out rather than folded into test_wta_convenience,
+# which is already at the file-size ceiling. Same shared fixture, so the same
+# FakePhysicalScreenSource compile-in and engine link set.
+add_executable(test_wta_screen_changed dbus/test_wta_screen_changed.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_wta_screen_changed PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+target_link_libraries(test_wta_screen_changed PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorSnapEngine::PhosphorSnapEngine PhosphorRules::PhosphorRules
+                      PhosphorEngine::PhosphorEngine PhosphorZones::PhosphorZones
+                      PhosphorWorkspaces::PhosphorWorkspaces)
+add_test(NAME test_wta_screen_changed COMMAND test_wta_screen_changed)
+
+add_executable(test_wta_reactive_metadata dbus/test_wta_reactive_metadata.cpp)
+target_link_libraries(test_wta_reactive_metadata PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wta_reactive_metadata COMMAND test_wta_reactive_metadata)
+
+# The Phosphor shell surface of WindowTrackingAdaptor (shellsurface.cpp):
+# activateWindow / getWindowMetadata / moveWindowToDesktop / getUrgentWindows
+# and the windowMetadataChanged / windowUrgencyChanged registry mirror.
+add_executable(test_wta_shell_surface dbus/test_wta_shell_surface.cpp)
+target_link_libraries(test_wta_shell_surface PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wta_shell_surface COMMAND test_wta_shell_surface)
+
+# The per-desktop reads of the same surface (shellsurface_desktop.cpp):
+# getWindowStatesForDesktop's desktop / sticky / screen filter and
+# findWindowByPid's most-recent-push tie-break.
+add_executable(test_wta_shell_desktop dbus/test_wta_shell_desktop.cpp)
+target_link_libraries(test_wta_shell_desktop PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorSnapEngine::PhosphorSnapEngine)
+add_test(NAME test_wta_shell_desktop COMMAND test_wta_shell_desktop)
+
+# ControlAdaptor's shortcut catalog read (controladaptor_shortcuts.cpp):
+# getShortcutsJson serialises the injected provider's rows and answers []
+# without one; shortcutsChanged relays notifyShortcutsChanged.
+add_executable(test_control_shortcuts dbus/test_control_shortcuts.cpp)
+target_link_libraries(test_control_shortcuts PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_control_shortcuts COMMAND test_control_shortcuts)
+
+add_executable(test_settings_schema dbus/test_settings_schema.cpp)
+target_link_libraries(test_settings_schema PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_settings_schema COMMAND test_settings_schema)
+
+# Regression guard for PR #324: the editor startup batches 8 gap/overlay
+# keys into one SettingsAdaptor::getSettings call. If the daemon-side
+# batch drops known keys or propagates unknown keys, the editor silently
+# falls back to defaults.
+add_executable(test_settings_adaptor_batch dbus/test_settings_adaptor_batch.cpp)
+target_link_libraries(test_settings_adaptor_batch PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_settings_adaptor_batch COMMAND test_settings_adaptor_batch)
+
+add_executable(test_compositor_bridge dbus/test_compositor_bridge.cpp)
+target_link_libraries(test_compositor_bridge PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_compositor_bridge COMMAND test_compositor_bridge)
+
+# A blanket disconnect(sender, &Signal, this, nullptr) removes EVERY connection
+# on that triple, so it is only correct above every connect it re-establishes.
+# A second one placed next to a later connect silently severs its siblings.
+# Scrapes the source because no Daemon fixture exists to assert it behaviourally.
+add_executable(test_connect_sweep_ordering daemon/test_connect_sweep_ordering.cpp)
+target_compile_definitions(test_connect_sweep_ordering
+                           PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+target_link_libraries(test_connect_sweep_ordering PRIVATE Qt6::Test Qt6::Core)
+add_test(NAME test_connect_sweep_ordering COMMAND test_connect_sweep_ordering)
+
+# Same shape and same reason as the sweep-ordering guard above: OverlayService cannot be
+# stood up in a fixture (QGuiApplication plus a Wayland transport), and the behaviour it
+# pins — setPresetRegistry applying at set time, not only subscribing — fires only on a
+# second init(), so the suite could not see it either way. The file states that limitation.
+add_executable(test_preset_registry_wiring daemon/test_preset_registry_wiring.cpp)
+target_compile_definitions(test_preset_registry_wiring
+                           PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+target_link_libraries(test_preset_registry_wiring PRIVATE Qt6::Test Qt6::Core)
+add_test(NAME test_preset_registry_wiring COMMAND test_preset_registry_wiring)
+
+# XML ↔ adaptor contract tripwire: the dbus/*.xml files are the installed
+# public contract while the adaptors are handwritten — this compares each
+# adaptor's staticMetaObject (bus-exposed slots/invokables, signals,
+# properties) against its XML so drift fails CI instead of shipping.
+add_executable(test_dbus_contract_sync dbus/test_dbus_contract_sync.cpp)
+target_compile_definitions(test_dbus_contract_sync
+                           PRIVATE PLASMAZONES_DBUS_XML_DIR="${CMAKE_SOURCE_DIR}/plasmazones/dbus")
+target_link_libraries(test_dbus_contract_sync PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_dbus_contract_sync COMMAND test_dbus_contract_sync)
+
+# Every setting the KWin effect fetches must be present in SettingsAdaptor's
+# hand-maintained getter registry. getSetting resolves keys through that map, NOT
+# through Qt property reflection, so a forgotten REGISTER_*_SETTING line ships a
+# feature that is dead on the effect side while every other layer looks complete.
+# That has happened; this is the tripwire. The expected keys are scraped from the
+# effect's own source rather than duplicated, so the test cannot drift.
+add_executable(test_settings_registry_contract dbus/test_settings_registry_contract.cpp)
+target_compile_definitions(test_settings_registry_contract
+                           PRIVATE PLASMAZONES_EFFECT_SRC_DIR="${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect"
+                                   PLASMAZONES_EDITOR_SRC_DIR="${CMAKE_SOURCE_DIR}/plasmazones/src/editor"
+                                   PLASMAZONES_PROTOCOL_INC_DIR="${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-protocol/include")
+# PhosphorAnimation: the fixture builds a real PhosphorProfileRegistry, because
+# initializeRegistry() gates the motionProfileTree getter behind a non-null one — with
+# a null registry the test would report a correctly-registered key as missing.
+# Qt6::Gui is explicit because this test uses QColor directly and its
+# QTEST_MAIN needs a QGuiApplication for the palette-resolving colour getters.
+# plasmazones_core links Qt6::Gui PUBLIC today, so this changes nothing now —
+# it stops the test depending on that staying true, per the note at the top of
+# this file.
+target_link_libraries(test_settings_registry_contract
+                      PRIVATE Qt6::Test Qt6::Core Qt6::DBus Qt6::Gui plasmazones_core
+                              PhosphorAnimation::PhosphorAnimation)
+add_test(NAME test_settings_registry_contract COMMAND test_settings_registry_contract)
+
+# End-to-end adaptor routing test: verifies typed-struct slot dispatch works
+# over a real QDBusConnection. Regression guard for the 2026-04-10 resnap
+# crash (moc recorded unqualified type names, metatype lookup failed).
+add_executable(test_dbus_adaptor_routing dbus/test_dbus_adaptor_routing.cpp)
+target_link_libraries(test_dbus_adaptor_routing PRIVATE Qt6::Test Qt6::Core Qt6::DBus
+                                                          PhosphorCompositor::PhosphorCompositor)
+add_test(NAME test_dbus_adaptor_routing COMMAND test_dbus_adaptor_routing)
+
+# Panel-ready gate for TilingAdaptor windowOpened queue. Regression guard
+# for the stale-VS-geometry race: entries arriving before the first panel
+# D-Bus query must be deferred until PhosphorScreens::ScreenManager::panelGeometryReady fires.
+add_executable(test_tiling_adaptor_panel_gate dbus/test_tiling_adaptor_panel_gate.cpp)
+target_link_libraries(test_tiling_adaptor_panel_gate PRIVATE Qt6::Test Qt6::Core Qt6::DBus
+                                                                 plasmazones_core)
+add_test(NAME test_tiling_adaptor_panel_gate COMMAND test_tiling_adaptor_panel_gate)
+
+# Emit-on-change gate for TilingAdaptor::setActiveLayouts. The daemon pushes
+# the rules-visible per-screen active-layout map from every updateEngineScreens
+# pass, so identical pushes must collapse to zero broadcasts while a changed map
+# reaches the wire once and reads back through the property getter.
+add_executable(test_tiling_adaptor_active_layouts dbus/test_tiling_adaptor_active_layouts.cpp)
+target_link_libraries(test_tiling_adaptor_active_layouts PRIVATE Qt6::Test Qt6::Core Qt6::DBus
+                                                                 plasmazones_core)
+add_test(NAME test_tiling_adaptor_active_layouts COMMAND test_tiling_adaptor_active_layouts)
+
+# Tab-indicator transport on TilingAdaptor: the scrollTabStripsChanged relay
+# and its scrollTabStrips replay cache (including the "[]" retraction and the
+# shutdown clear), the all-windows scrollTabColorsChanged broadcast, and the
+# scrollTabColors pass-through to the WTA's rule resolution. Also the
+# paint-override half of the same transport (setScrollTabPaintOverrides, the
+# scrollTabPaintOverridesChanged relay and its scrollTabPaintOverrides replay
+# getter, and the clearScrollTabPaintOverridesWhere sweep), plus the
+# per-window colour relay (relayScrollTabColorsForWindow).
+add_executable(test_tiling_adaptor_scroll_tabs dbus/test_tiling_adaptor_scroll_tabs.cpp)
+target_link_libraries(test_tiling_adaptor_scroll_tabs PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorRules::PhosphorRules PhosphorEngine::PhosphorEngine
+                      PhosphorZones::PhosphorZones)
+add_test(NAME test_tiling_adaptor_scroll_tabs COMMAND test_tiling_adaptor_scroll_tabs)
+
+# Placement-map surfaces on TilingAdaptor: the currentTilesJson per-screen
+# replay of the last tile batch (its pruning on close and its drop on
+# clearEngine and on a screen leaving the managed set), and the
+# managedFocusedWindow read with its once-per-change focusedWindowChanged
+# gate, driven against a real ScrollEngine wired the way init_engines.cpp
+# wires it.
+add_executable(test_tiling_adaptor_map dbus/test_tiling_adaptor_map.cpp)
+target_link_libraries(test_tiling_adaptor_map PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorEngine::PhosphorEngine PhosphorScrollEngine::PhosphorScrollEngine)
+add_test(NAME test_tiling_adaptor_map COMMAND test_tiling_adaptor_map)
+
+# Desktop-membership reconcile (#1076): a window whose virtual-desktop set
+# changed is released from any engine state keyed by a desktop it left,
+# driven through a real WindowRegistry against both tiling-family engines.
+add_executable(test_tiling_adaptor_desktop_reconcile dbus/test_tiling_adaptor_desktop_reconcile.cpp)
+target_link_libraries(test_tiling_adaptor_desktop_reconcile PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorEngine::PhosphorEngine PhosphorTileEngine::PhosphorTileEngine
+                      PhosphorScrollEngine::PhosphorScrollEngine PhosphorSnapEngine::PhosphorSnapEngine)
+add_test(NAME test_tiling_adaptor_desktop_reconcile COMMAND test_tiling_adaptor_desktop_reconcile)
+
+# Truth-table guard for WindowDragAdaptor::computeDragPolicy - pins the
+# (snap, autotile, context) matrix so the daemon's drag routing decision
+# can't drift relative to the compositor plugin's deleted local caches.
+# Regression guard for #310.
+add_executable(test_drag_policy dbus/test_drag_policy.cpp)
+# Constructs real Autotile/Scroll engines — contractual links (see the
+# test_span_targets rationale).
+target_link_libraries(test_drag_policy PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                                               PhosphorTileEngine::PhosphorTileEngine
+                                               PhosphorScrollEngine::PhosphorScrollEngine)
+add_test(NAME test_drag_policy COMMAND test_drag_policy)
+
+# Drag-insert cancel sweep seams + desktop-switch announce burst (the #1028
+# follow-up mechanisms): the live sweep's dragStillActive derivation, the
+# dead-session sweep's mark-first ordering, and TilingAdaptor's emit-time
+# desktop stamping under a per-output report burst.
+add_executable(test_windowdrag_cancel_sweeps dbus/test_windowdrag_cancel_sweeps.cpp
+               ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests/FakePhysicalScreenSource.cpp)
+target_include_directories(test_windowdrag_cancel_sweeps PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-screens/tests)
+# Constructs a real AutotileEngine — contractual link (see the
+# test_drag_policy rationale).
+target_link_libraries(test_windowdrag_cancel_sweeps PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                                                            PhosphorTileEngine::PhosphorTileEngine)
+add_test(NAME test_windowdrag_cancel_sweeps COMMAND test_windowdrag_cancel_sweeps)
+
+# The shell's drop proxy on WindowDragAdaptor (registerDropProxy /
+# unregisterDropProxy, dropproxy.h): strict parsing and hit-testing of the
+# registry, and the drag path resolving a proxy cell to its real zone through
+# updateDragCursor / endDrag on the offscreen platform's screen.
+add_executable(test_windowdrag_drop_proxy dbus/test_windowdrag_drop_proxy.cpp)
+target_link_libraries(test_windowdrag_drop_proxy PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                                                         PhosphorSnapEngine::PhosphorSnapEngine)
+add_test(NAME test_windowdrag_drop_proxy COMMAND test_windowdrag_drop_proxy)
+
+# Truth-table guard for resolveActivationActive() - pins the per-tick
+# overlay-active decision (toggle latch + deactivation override + the
+# always-active gate that scopes deactivation to its UI surface, #249).
+add_executable(test_drag_activation dbus/test_drag_activation.cpp)
+target_link_libraries(test_drag_activation PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_drag_activation COMMAND test_drag_activation)
+
+# Round-trip guard for the AlwaysActive sentinel handling shared by
+# TriggerUtils and SnappingBehaviorController (#249). Pins the cap-aware
+# merge that prevents the sentinel from being silently truncated when the
+# user already holds MAX activation triggers - without this, the
+# always-active toggle would quietly fail. Compiles the controller +
+# triggerutils sources directly because they live in the plasmazones-settings
+# executable rather than plasmazones_core.
+add_executable(test_snapping_behavior_controller
+    settings/pages/test_snapping_behavior_controller.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/snappingbehaviorcontroller.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/utils/triggerutils.cpp
+)
+target_link_libraries(test_snapping_behavior_controller PRIVATE Qt6::Test Qt6::Core plasmazones_core
+    PhosphorControl::PhosphorControl)
+add_test(NAME test_snapping_behavior_controller COMMAND test_snapping_behavior_controller)
+
+# The scrolling twin, same compile-the-sources-directly reason as above.
+add_executable(test_scrolling_behavior_controller
+    settings/pages/test_scrolling_behavior_controller.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/scrollingbehaviorcontroller.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/utils/triggerutils.cpp
+)
+target_link_libraries(test_scrolling_behavior_controller PRIVATE Qt6::Test Qt6::Core plasmazones_core
+    PhosphorControl::PhosphorControl)
+add_test(NAME test_scrolling_behavior_controller COMMAND test_scrolling_behavior_controller)
+
+# Pure string helpers behind AlgorithmService::createNewAlgorithm. Compiled
+# directly because they live in the plasmazones-settings executable rather than
+# plasmazones_core. Split by surface: the template splice / metadata rewrite
+# here, the shapes it refuses in _rejects, the blank scaffold next door. They
+# share no fixture beyond a copyright line.
+#
+# All three targets compile algorithmscaffold.cpp, which reads AutotileConstants.h's
+# ScriptedDefaultMaxWindows and DefaultSplitRatio so a generated algorithm
+# matches the engine's own fallbacks - header-only constants, no .so coupling
+# beyond the include path. Linking PhosphorTiles rather than hand-listing paths
+# lets its interface carry the transitive PhosphorLayoutApi include it needs.
+add_executable(test_algorithm_scaffold
+    settings/services/test_algorithm_scaffold.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/services/algorithmscaffold.cpp
+)
+target_link_libraries(test_algorithm_scaffold PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
+target_compile_definitions(test_algorithm_scaffold PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+add_test(NAME test_algorithm_scaffold COMMAND test_algorithm_scaffold)
+
+# The one AlgorithmService surface that feeds the scaffold's
+# already-sanitized-caller contract from the translation catalog: the duplicate
+# name suffix. Drives the real service against a real loader + registry over an
+# isolated XDG root, so it needs the service and scaffold TUs (both live in the
+# plasmazones-settings executable) plus PhosphorTiles for the Luau loader.
+add_executable(test_algorithm_copy_suffix
+    settings/services/test_algorithm_copy_suffix.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/services/algorithmservice.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/services/algorithmscaffold.cpp
+)
+target_link_libraries(test_algorithm_copy_suffix PRIVATE Qt6::Test Qt6::Core plasmazones_core
+    PhosphorTiles::PhosphorTiles)
+add_test(NAME test_algorithm_copy_suffix COMMAND test_algorithm_copy_suffix)
+
+add_executable(test_algorithm_scaffold_rejects
+    settings/services/test_algorithm_scaffold_rejects.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/services/algorithmscaffold.cpp
+)
+target_link_libraries(test_algorithm_scaffold_rejects PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
+add_test(NAME test_algorithm_scaffold_rejects COMMAND test_algorithm_scaffold_rejects)
+
+add_executable(test_algorithm_blank_scaffold
+    settings/services/test_algorithm_blank_scaffold.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/services/algorithmscaffold.cpp
+)
+target_link_libraries(test_algorithm_blank_scaffold PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
+add_test(NAME test_algorithm_blank_scaffold COMMAND test_algorithm_blank_scaffold)
+
+# clampName is header-only in src/core/types/constants.h, so there is no source
+# to compile in beyond the test itself. plasmazones_core supplies LayoutAdaptor
+# (src/dbus/layoutadaptor/layoutadaptor.cpp), whose duplicateLayout clamp the
+# test drives, and carries the include chain constants.h pulls (PhosphorEngine,
+# PhosphorLayoutApi, PhosphorZones). PhosphorZones is named for the
+# LayoutRegistry and Layout symbols the duplicate cases construct — duplicateNameSuffix() alone would need
+# no link, being inline in the header. Qt6::DBus is LayoutAdaptor's own base
+# class (QDBusAbstractAdaptor); the test calls the slot directly, never a bus.
+add_executable(test_layoutadaptor_nameclamp
+    settings/test_layoutadaptor_nameclamp.cpp
+)
+target_link_libraries(test_layoutadaptor_nameclamp PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+    PhosphorZones::PhosphorZones)
+add_test(NAME test_layoutadaptor_nameclamp COMMAND test_layoutadaptor_nameclamp)
+
+add_executable(test_window_appearance_controller
+    settings/pages/test_window_appearance_controller.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/windowappearancecontroller.cpp
+)
+target_link_libraries(test_window_appearance_controller PRIVATE Qt6::Test Qt6::Core plasmazones_core
+    PhosphorControl::PhosphorControl PhosphorRules::PhosphorRules)
+add_test(NAME test_window_appearance_controller COMMAND test_window_appearance_controller)
+
+add_executable(test_tiling_algorithm_controller
+    settings/pages/test_tiling_algorithm_controller.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/tilingalgorithmcontroller.cpp
+)
+target_link_libraries(test_tiling_algorithm_controller PRIVATE Qt6::Test Qt6::Core plasmazones_core
+    PhosphorControl::PhosphorControl PhosphorRules::PhosphorRules)
+target_compile_definitions(test_tiling_algorithm_controller PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+add_test(NAME test_tiling_algorithm_controller COMMAND test_tiling_algorithm_controller)
+
+# Animations-controller sources shared by the twelve test executables below
+# (page controller / preview controller / QML contracts / profile-store sync /
+# motion sets / presets / shader overrides / shader param writes / group writes /
+# group write bounds / suppression mirror / stale params). One list so a new
+# controller source file cannot silently miss one of the twelve.
+set(_animations_ctrl_SRCS
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/animationspagecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/animationpreviewcontroller.cpp
+    # The preview controller's move simulation drives the kwin-effect's
+    # wobble spring integrator (see animationpreviewcontroller.h).
+    ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect/plasmazoneseffect/mesh_sim.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/animationspagecontroller_shaders.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/animationspagecontroller_overrides.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/animationspagecontroller_groupwrites.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/animationspagecontroller_paths.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/services/shaderpackinstaller.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/stores/animationpresetlibrary.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/stores/shadersetstore.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/services/motionsetdomain.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/utils/animationfileutils.cpp
+)
+
+# Phase 0 of the animation-settings UI rework: AnimationsPageController
+# round-trips per-event override files in `<userProfilesDir>/<path>.json`,
+# walks the ProfilePaths inheritance chain for resolvedProfile(), and
+# surfaces the built-in taxonomy as section-grouped lists for the QML
+# drilldown. Compiles the controller source directly (it lives in the
+# plasmazones-settings executable, not plasmazones_core).
+# No animationpagescope.cpp and no P_SOURCE_DIR: the slots that needed either
+# moved to test_animations_qml_contracts.
+add_executable(test_animations_page_controller
+    settings/pages/test_animations_page_controller.cpp
+    ${_animations_ctrl_SRCS}
+)
+target_link_libraries(test_animations_page_controller
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_animations_page_controller COMMAND test_animations_page_controller)
+
+# AnimationPreviewController's per-frame drive (driveFrameClock) against a
+# real PhosphorRendering::ShaderEffect item, off-window: the iTimeDelta cap,
+# the 0-first iFrame counter, and its resets on configure and item change.
+add_executable(test_animation_preview_controller
+    settings/pages/test_animation_preview_controller.cpp
+    ${_animations_ctrl_SRCS}
+)
+target_link_libraries(test_animation_preview_controller
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Quick
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
+        PhosphorControl::PhosphorControl
+        PhosphorRendering::PhosphorRendering
+        plasmazones_core
+)
+add_test(NAME test_animation_preview_controller COMMAND test_animation_preview_controller)
+
+# The stock-animation suppression mirror, split out of the sibling above
+# when it crossed the 1150-line hard ceiling.
+add_executable(test_animations_suppression_mirror
+    settings/pages/test_animations_suppression_mirror.cpp
+    ${_animations_ctrl_SRCS}
+)
+target_link_libraries(test_animations_suppression_mirror
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_animations_suppression_mirror COMMAND test_animations_suppression_mirror)
+
+# Companion test executable: the contracts between the animations QML and its
+# controller, pinned by parsing the QML source. Separate from the sibling
+# because these are the only animations slots that need P_SOURCE_DIR to read
+# the source tree.
+add_executable(test_animations_qml_contracts
+    settings/pages/test_animations_qml_contracts.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/animationpagescope.cpp
+    ${_animations_ctrl_SRCS}
+)
+target_compile_definitions(test_animations_qml_contracts
+    PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\""
+)
+target_link_libraries(test_animations_qml_contracts
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_animations_qml_contracts COMMAND test_animations_qml_contracts)
+
+# Companion test executable: how inheritance resolution stays honest against
+# the debounced-watcher-fed PhosphorProfileRegistry. Split out of
+# test_animations_page_controller.cpp to keep both files under the size ceiling.
+# No animationpagescope.cpp: nothing in these slots or in _animations_ctrl_SRCS
+# references AnimationPageScope. Only test_animations_qml_contracts needs it.
+add_executable(test_animations_profile_store_sync
+    settings/pages/test_animations_profile_store_sync.cpp
+    ${_animations_ctrl_SRCS}
+)
+target_link_libraries(test_animations_profile_store_sync
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_animations_profile_store_sync COMMAND test_animations_profile_store_sync)
+
+# Companion test executable: the group-write API an event card applies across
+# its whole write-path group (the per-field merge, the per-field clear, the
+# divergence measure, the shader-leg group queries). These rules lived as JS
+# loops in AnimationEventCard.qml until they moved to the controller, where they
+# can be driven directly instead of scraped out of the QML source.
+add_executable(test_animations_group_writes
+    settings/pages/test_animations_group_writes.cpp
+    ${_animations_ctrl_SRCS}
+)
+target_link_libraries(test_animations_group_writes
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_animations_group_writes COMMAND test_animations_group_writes)
+
+add_executable(test_animations_group_write_bounds
+    settings/pages/test_animations_group_write_bounds.cpp
+    ${_animations_ctrl_SRCS}
+)
+target_link_libraries(test_animations_group_write_bounds
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_animations_group_write_bounds COMMAND test_animations_group_write_bounds)
+
+# Companion test executable: motion-set + pending-changes coverage.
+add_executable(test_animations_motion_sets
+    settings/pages/test_animations_motion_sets.cpp
+    ${_animations_ctrl_SRCS}
+)
+target_link_libraries(test_animations_motion_sets
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+# The shader-half round-trip tests use AnimationsControllerFixture, whose
+# PopulatedControllerFixture::dataDir() names the bundled pack tree.
+target_compile_definitions(test_animations_motion_sets PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+add_test(NAME test_animations_motion_sets COMMAND test_animations_motion_sets)
+
+# Companion test executable: the user-preset library (AnimationPresetLibrary).
+# Split from test_animations_motion_sets because presets and sets are separate
+# sub-services of the controller.
+add_executable(test_animations_presets
+    settings/pages/test_animations_presets.cpp
+    ${_animations_ctrl_SRCS}
+)
+target_link_libraries(test_animations_presets
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_animations_presets COMMAND test_animations_presets)
+
+# Companion test executable: shader-override end-to-end coverage.
+add_executable(test_animations_shader_overrides
+    settings/pages/test_animations_shader_overrides.cpp
+    ${_animations_ctrl_SRCS}
+)
+target_link_libraries(test_animations_shader_overrides
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+target_compile_definitions(test_animations_shader_overrides PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+add_test(NAME test_animations_shader_overrides COMMAND test_animations_shader_overrides)
+
+# Params-only shader writer + the group readers that answer what a path owns.
+# Split from test_animations_shader_overrides rather than added to it: that
+# file had reached 1110 lines against the 1150 hard ceiling, and this is a
+# coherent slice (pack-versus-parameters) on its own. Both sit well under the
+# target now.
+add_executable(test_animations_shader_param_writes
+    settings/pages/test_animations_shader_param_writes.cpp
+    ${_animations_ctrl_SRCS}
+)
+target_link_libraries(test_animations_shader_param_writes
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+target_compile_definitions(test_animations_shader_param_writes PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+add_test(NAME test_animations_shader_param_writes COMMAND test_animations_shader_param_writes)
+
+# The orphaned-parameter surface. Its own TU rather than more slots in the
+# param-writes file above: every slot here needs the POPULATED registry (the
+# predicate refuses to judge without one), which is a different fixture from
+# the one that file is built around.
+add_executable(test_animations_stale_params
+    settings/pages/test_animations_stale_params.cpp
+    ${_animations_ctrl_SRCS}
+)
+target_link_libraries(test_animations_stale_params
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorAudio::PhosphorAudio  # AnimationPreviewController's CAVA provider
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+target_compile_definitions(test_animations_stale_params PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+add_test(NAME test_animations_stale_params COMMAND test_animations_stale_params)
+
+# Decoration page (per-surface DecorationProfileTree editor): reader /
+# mutator coverage for DecorationPageController — chain resolution,
+# override engage/clear, per-pack parameter merge/prune, subtree ops and
+# profilesChanged reload propagation. Compiles the controller sources
+# directly (they live in the plasmazones-settings executable, not
+# plasmazones_core); the split _paths / _browser / _sets TUs carry
+# parentChain(), the shader-browser bridge and the set-store wiring.
+#
+# One source list, shared by test_decorationpagecontroller,
+# test_decoration_sets and test_decoration_sets_validation below, so a new
+# controller TU can't silently miss one of the three.
+set(_decoration_ctrl_SRCS
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/decorationpagecontroller.cpp
+    # The page controller constructs one of these in its ctor, so every TU that
+    # links the controller needs it — omitting it is a link error in each of the
+    # three consumers of this list, not a silent degradation.
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/decorationpreviewcontroller.cpp
+    # And one of these, since the pointer became another decoration surface:
+    # the controller serves both pack families and previews each through its
+    # own host.
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/pointerpreviewcontroller.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/decorationpagecontroller_paths.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/decorationpagecontroller_browser.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/decorationpagecontroller_sets.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/stores/shadersetstore.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/utils/animationfileutils.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/services/shaderpackinstaller.cpp
+)
+
+# decorationpagecontroller_sets.cpp carries the same GCC-only LTO
+# suppression it gets in src/settings/CMakeLists.txt (see the full
+# rationale there): source-file properties are directory-scoped, so the
+# settings dir's suppression does not reach these consuming targets,
+# and a Release+LTO build would re-emit the GCC 16 std::optional
+# maybe-uninitialized false positive from the test build.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set_source_files_properties(${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/decorationpagecontroller_sets.cpp PROPERTIES
+        COMPILE_OPTIONS "-fno-lto;-Wno-maybe-uninitialized")
+endif()
+add_executable(test_decorationpagecontroller
+    settings/pages/test_decorationpagecontroller.cpp
+    ${_decoration_ctrl_SRCS}
+)
+target_link_libraries(test_decorationpagecontroller
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorSurface::PhosphorSurface
+        PhosphorPointer::PhosphorPointer  # the controller serves the pointer surface too
+        PhosphorAudio::PhosphorAudio  # DecorationPreviewController's CAVA provider
+        PhosphorShaders::PhosphorShaders  # its wallpaperPath / loadWallpaperImage calls
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+# P_SOURCE_DIR: the previewKind slot pins the controller's route token against
+# the QML that compares literally against it. The QML side falls back to the
+# zone pane when the token does not match, so a drift is silent otherwise.
+target_compile_definitions(test_decorationpagecontroller PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+add_test(NAME test_decorationpagecontroller COMMAND test_decorationpagecontroller)
+
+# One source list, shared by test_overlays_page_controller,
+# test_overlays_qml_contracts and test_overlays_sets below, so a new
+# controller TU can't silently miss one of the three.
+set(_overlays_ctrl_SRCS
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/overlayspagecontroller.cpp
+    # The ctor builds the set store, so every TU linking the controller needs
+    # the sets TU and the store — omitting either is a link error, not a silent
+    # degradation.
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/overlayspagecontroller_sets.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/stores/shadersetstore.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/utils/animationfileutils.cpp
+    # installShaderPack forwards into the shared installer, so the symbol is
+    # needed at link even though the suites do not exercise it.
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/services/shaderpackinstaller.cpp
+)
+
+add_executable(test_overlays_page_controller
+    settings/pages/test_overlays_page_controller.cpp
+    ${_overlays_ctrl_SRCS}
+)
+target_link_libraries(test_overlays_page_controller
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        # Named, not left to the coincidental link: two slots build a real
+        # LayoutRegistry (with the RuleStore its ctor needs) because a null
+        # registry makes every label identical and the sort vacuous.
+        PhosphorZones::PhosphorZones
+        PhosphorRules::PhosphorRules
+        PhosphorShaders::PhosphorShaders  # ShaderRegistry base the ctor connects to
+        PhosphorAudio::PhosphorAudio  # shaderpreviewcontroller.h -> ishaderpreviewbackend.h include chain
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_overlays_page_controller COMMAND test_overlays_page_controller)
+
+# Contracts between the Appearance -> Overlays QML and its controller, pinned
+# by parsing the QML source. Needs P_SOURCE_DIR to read the source tree, which
+# is what keeps it out of the controller suite above.
+add_executable(test_overlays_qml_contracts
+    settings/pages/test_overlays_qml_contracts.cpp
+    ${_overlays_ctrl_SRCS}
+)
+target_compile_definitions(test_overlays_qml_contracts PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+target_link_libraries(test_overlays_qml_contracts
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorShaders::PhosphorShaders
+        PhosphorAudio::PhosphorAudio
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_overlays_qml_contracts COMMAND test_overlays_qml_contracts)
+
+# Overlay sets — the domain closures over the shared ShaderSetStore. Needs a
+# real LayoutRegistry (and so PhosphorRules, which its ctor takes a store from)
+# because the layout-applicability rule is the whole point of the suite.
+add_executable(test_overlays_sets
+    settings/pages/test_overlays_sets.cpp
+    ${_overlays_ctrl_SRCS}
+)
+target_link_libraries(test_overlays_sets
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorShaders::PhosphorShaders
+        PhosphorAudio::PhosphorAudio
+        PhosphorControl::PhosphorControl
+        PhosphorRules::PhosphorRules
+        plasmazones_core
+)
+add_test(NAME test_overlays_sets COMMAND test_overlays_sets)
+
+# Data surface behind the settings app's live decoration preview: chain
+# composition, the extended-FBO padding request, and the degraded paths a
+# browsing user can reach (unknown pack, no registry). Links only the preview
+# controller — it has no page-controller dependency.
+add_executable(test_decorationpreviewcontroller
+    settings/pages/test_decorationpreviewcontroller.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/decorationpreviewcontroller.cpp
+)
+target_link_libraries(test_decorationpreviewcontroller
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorSurface::PhosphorSurface
+        PhosphorAudio::PhosphorAudio
+        PhosphorShaders::PhosphorShaders  # its wallpaperPath / loadWallpaperImage calls
+        plasmazones_core
+)
+# P_SOURCE_DIR: the QML-contract slot scrapes the decoration preview QML for
+# `previewController.*` names and checks each against the controller's
+# metaobject. The animations route has the same guard for its `bridge.*`
+# surface, but it only ever instantiates AnimationsPageController, so it cannot
+# speak for this route's controllers.
+target_compile_definitions(test_decorationpreviewcontroller PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+add_test(NAME test_decorationpreviewcontroller COMMAND test_decorationpreviewcontroller)
+
+# The pointer route's counterpart to the guard above. The decoration sweep
+# deliberately excludes the pointer preview QML (its previewController is a
+# PointerPreviewController, a different class), so without this the pointer
+# preview's QML calls would go unchecked — the exact gap that sweep exists to
+# close.
+add_executable(test_pointer_qml_contracts
+    settings/pages/test_pointer_qml_contracts.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/pointerpreviewcontroller.cpp
+)
+target_link_libraries(test_pointer_qml_contracts
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Quick
+        PhosphorPointer::PhosphorPointer
+        PhosphorRendering::PhosphorRendering
+        PhosphorShaders::PhosphorShaders
+        plasmazones_core
+)
+target_include_directories(test_pointer_qml_contracts PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/src/settings)
+target_compile_definitions(test_pointer_qml_contracts PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+add_test(NAME test_pointer_qml_contracts COMMAND test_pointer_qml_contracts)
+
+# Companion test executable: decoration-set CRUD over the shared
+# ShaderSetStore (save / list / apply / remove / update / export / import,
+# the active-flag containment semantics, and the format-version gate). Mirrors
+# the motion side's test_animations_motion_sets.
+add_executable(test_decoration_sets
+    settings/stores/test_decoration_sets.cpp
+    ${_decoration_ctrl_SRCS}
+)
+target_link_libraries(test_decoration_sets
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorSurface::PhosphorSurface
+        PhosphorPointer::PhosphorPointer  # the controller serves the pointer surface too
+        PhosphorAudio::PhosphorAudio  # DecorationPreviewController's CAVA provider
+        PhosphorShaders::PhosphorShaders  # its wallpaperPath / loadWallpaperImage calls
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_decoration_sets COMMAND test_decoration_sets)
+
+# The refusal half of the decoration-set suite. It shares the sandbox guard and
+# the payload builders in helpers/DecorationSetHelpers.h with the round-trip
+# half.
+add_executable(test_decoration_sets_validation
+    settings/stores/test_decoration_sets_validation.cpp
+    ${_decoration_ctrl_SRCS}
+)
+target_link_libraries(test_decoration_sets_validation
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorSurface::PhosphorSurface
+        PhosphorPointer::PhosphorPointer  # the controller serves the pointer surface too
+        PhosphorAudio::PhosphorAudio  # DecorationPreviewController's CAVA provider
+        PhosphorShaders::PhosphorShaders  # its wallpaperPath / loadWallpaperImage calls
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_decoration_sets_validation COMMAND test_decoration_sets_validation)
+
+# The WRITE half of the shader-preset feature: ShaderPresetBridge, the
+# `presetBridge` every pack editor binds. The library half (parse, resolve,
+# loader, store) is covered by phosphor-shaders' own test_shaderpresets. Compiles
+# the bridge source directly rather than pulling in the settings app, so no
+# controller is constructed. plasmazones_core still comes in, for PhosphorI18n and
+# the logging categories the bridge uses; the test never builds a config store.
+add_executable(test_shaderpresetbridge
+    settings/stores/test_shaderpresetbridge.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/stores/shaderpresetbridge.cpp
+)
+target_link_libraries(test_shaderpresetbridge
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorShaders::PhosphorShaders
+        plasmazones_core
+)
+# P_SOURCE_DIR for the presetBridge QML-reachability guard, which scrapes the
+# settings QML tree the way the decoration preview's previewController guard
+# scrapes its own.
+target_compile_definitions(test_shaderpresetbridge PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+add_test(NAME test_shaderpresetbridge COMMAND test_shaderpresetbridge)
+
+# Settings profiles: the ProfileStore delta / inheritance-resolution engine
+# behind ProfilePageController::bridge. Driven with stub config closures, so it
+# links only the store itself (no PhosphorConfig::Store needed).
+add_executable(test_profilestore
+    settings/stores/test_profilestore.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/stores/profilestore.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/stores/profilestore_diff.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/stores/profilestore_revert.cpp
+)
+target_link_libraries(test_profilestore
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        plasmazones_core
+        PhosphorRules::PhosphorRules
+)
+add_test(NAME test_profilestore COMMAND test_profilestore)
+
+# Rules page (Phase 4 of the window-rule refactor): RuleModel
+# derives SectionRole / summaries from a rule's shape; RuleController
+# stages CRUD by UUID and builds the monitor overview. Compiles the model /
+# controller sources directly (they live in the plasmazones-settings
+# executable, not plasmazones_core). The two source lists are declared ONCE
+# here and shared by every rules-page test target below, so a TU added to the
+# controller's multi-file class definition cannot be forgotten in one copy.
+set(PZ_RULE_MODEL_SOURCES
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/rules/rulemodel.cpp
+    # Label tables + summaries, split from rulemodel.cpp for file-size; the
+    # match-side labels split again into rulemodel_matchlabels.cpp.
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/rules/rulemodel_labels.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/rules/rulemodel_matchlabels.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/rules/rulemodel_fieldtables.cpp
+    # rulemodel's action summary shares its boolean polarity phrasing with
+    # the editor via RuleAuthoring::boolActionStateLabel.
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/rules/ruleauthoring.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/rules/ruleauthoring_actiondescriptions.cpp
+    # Per-param labels, hints, schema, and defaultPayloadFor, split from
+    # ruleauthoring_actions.cpp for file-size.
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/rules/ruleauthoring_actionparams.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/rules/ruleauthoring_actions.cpp
+)
+set(PZ_RULE_CONTROLLER_SOURCES
+    ${PZ_RULE_MODEL_SOURCES}
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/rules/rulecontroller.cpp
+    # Read-only / projection methods (sections, rulesSnapshot, monitorOverview,
+    # author surfaces, validation). The controller's class definition spans
+    # this TU and rulecontroller.cpp.
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/rules/rulecontroller_views.cpp
+    # Label-lookup setters + wiring-completion gate. The controller's class
+    # definition spans this TU and rulecontroller.cpp.
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/rules/rulecontroller_lookups.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/rules/rulecontroller_baseline.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/rules/ruletemplates.cpp
+)
+add_executable(test_rule_model
+    settings/rules/test_rule_model.cpp
+    ${PZ_RULE_MODEL_SOURCES}
+)
+target_link_libraries(test_rule_model
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        PhosphorRules::PhosphorRules
+        plasmazones_core
+)
+add_test(NAME test_rule_model COMMAND test_rule_model)
+
+add_executable(test_rule_controller
+    settings/rules/test_rule_controller.cpp
+    ${PZ_RULE_CONTROLLER_SOURCES}
+)
+target_link_libraries(test_rule_controller
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::DBus
+        PhosphorRules::PhosphorRules
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_rule_controller COMMAND test_rule_controller)
+
+# Overview half of the controller suite (monitorOverview projections and the
+# curve-label resolver bridge). Same source set as test_rule_controller; the
+# controller's class definition spans several TUs.
+add_executable(test_rule_controller_overview
+    settings/rules/test_rule_controller_overview.cpp
+    ${PZ_RULE_CONTROLLER_SOURCES}
+)
+target_link_libraries(test_rule_controller_overview
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::DBus
+        PhosphorRules::PhosphorRules
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+# rulesSnapshotFeedsEveryRuleRowRequiredProperty scrapes RuleRow.qml from the
+# source tree to check the snapshot carries every property the row requires.
+target_compile_definitions(test_rule_controller_overview PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+add_test(NAME test_rule_controller_overview COMMAND test_rule_controller_overview)
+
+# Vocabulary half of the controller suite (engine-mode picker tokens, input
+# hints, templates, action domains, default payload seeding), split from
+# test_rule_controller_overview for file-size.
+add_executable(test_rule_controller_vocabulary
+    settings/rules/test_rule_controller_vocabulary.cpp
+    ${PZ_RULE_CONTROLLER_SOURCES}
+)
+target_link_libraries(test_rule_controller_vocabulary
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::DBus
+        PhosphorRules::PhosphorRules
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_rule_controller_vocabulary COMMAND test_rule_controller_vocabulary)
+
+# Validation methods on D-Bus struct types - pins the accept/reject table
+# for validationError() so cross-field invariants (DragOutcome action range,
+# ApplySnap zoneId, TileRequestEntry tiled/floating size semantics, etc.)
+# don't drift as producer code evolves.
+add_executable(test_dbus_validation dbus/test_dbus_validation.cpp)
+target_link_libraries(test_dbus_validation PRIVATE Qt6::Test Qt6::Core Qt6::DBus PhosphorCompositor::PhosphorCompositor)
+add_test(NAME test_dbus_validation COMMAND test_dbus_validation)
+
+# LayoutAdaptor signal contract test. Pins the rule: property mutations emit
+# the compact layoutPropertyChanged only, never layoutChanged(json) and never
+# layoutListChanged. Also covers the active-layout-per-screen wire.
+add_executable(test_layout_adaptor_signals dbus/test_layout_adaptor_signals.cpp)
+# PhosphorZones for the LayoutRegistry / Layout / Zone the fixture builds, and
+# PhosphorLayoutApi for LayoutId::makeAutotileId — both constructed directly
+# here, so name them rather than relying on the transitive pull through
+# plasmazones_core.
+target_link_libraries(test_layout_adaptor_signals PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorTiles::PhosphorTiles PhosphorZones::PhosphorZones
+                      PhosphorLayoutApi::PhosphorLayoutApi)
+add_test(NAME test_layout_adaptor_signals COMMAND test_layout_adaptor_signals)
+
+# LayoutAdaptor scrolling-template surface: the set/get pair's validation and
+# clear forms, the getter's mode gate, and the {layoutId, scrollingTemplate}
+# value shape of the flat batch getters. Same no-bus fixture as the signals
+# test above.
+add_executable(test_layout_adaptor_scrolling_template dbus/test_layout_adaptor_scrolling_template.cpp)
+target_link_libraries(test_layout_adaptor_scrolling_template PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_layout_adaptor_scrolling_template COMMAND test_layout_adaptor_scrolling_template)
+
+# Micro-benchmarks for D-Bus adaptor hot paths. Drives the
+# refactor/dbus-performance branch (SettingsAdaptor value-equality guard,
+# LayoutAdaptor signal split, JSON cache reuse). Run with
+# `ctest -R bench_dbus_adaptors` to capture numbers against
+# docs/perf/dbus-baseline.md. NOTE: add_test() puts it in the directory
+# TESTS property, so a bare `ctest` run DOES include it (and its verbose
+# benchmark output); use `ctest -LE bench` to exclude it — the LABELS
+# property below exists exactly for that.
+add_executable(bench_dbus_adaptors dbus/bench_dbus_adaptors.cpp)
+target_link_libraries(bench_dbus_adaptors PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME bench_dbus_adaptors COMMAND bench_dbus_adaptors)
+# LABELS=bench so `ctest -L bench` can select it for a perf-regression run.
+# Note that nothing currently passes `-LE bench`: CI and every
+# `moon run <tier>:test` run this benchmark like any other test.
+#
+# TIMEOUT 900, set explicitly rather than left to the directory sweep's 120s
+# default (phosphor_apply_directory_test_isolation only supplies that when a
+# test carries no TIMEOUT of its own). A benchmark is the test here most
+# likely to exceed two minutes on a loaded machine, where it would FAIL
+# rather than report numbers. NOT 0/unbounded: since nothing filters the
+# label out, an unbounded entry would let a wedged benchmark hang every CI
+# job and every local `ctest` indefinitely, which is the exact failure the
+# isolation module exists to prevent.
+set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench" TIMEOUT 900)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# compositor-common/ - Shared Library Types Tests
+#   test_wire_types: D-Bus wire type signature/roundtrip tests
+#   test_floating_cache: FloatingCache + ZoneCache + TriggerParser tests
+#   test_tiling_state: TilingStateHelpers + WindowId tests
+#   test_decoration_manager: DecorationManager ownership/veto behavioral spec
+#   test_strip_view_animator: StripViewAnimator per-output view-spring behaviour
+#   test_strip_motion_sampler: StripMotionSampler distance/speed sampling
+#   test_exact_trigger_match: trigger-set exact-match resolution
+#   test_scroll_behaviour_parse: scrolling behaviour token parsing
+#   test_scroll_tab_layout: tab-indicator layout geometry (declared ~300
+#     lines below this block, not with the ten that follow it)
+#   test_transition_pass_pure: transition-pass pure helpers
+#   test_modifier_utils: modifier parsing (source lives in core/, declared here)
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_wire_types compositor-common/test_wire_types.cpp)
+target_link_libraries(test_wire_types PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor
+                                              PhosphorProtocol::PhosphorProtocol)
+add_test(NAME test_wire_types COMMAND test_wire_types)
+
+add_executable(test_floating_cache compositor-common/test_floating_cache.cpp)
+target_link_libraries(test_floating_cache PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)
+add_test(NAME test_floating_cache COMMAND test_floating_cache)
+
+add_executable(test_exact_trigger_match compositor-common/test_exact_trigger_match.cpp)
+target_link_libraries(test_exact_trigger_match PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)
+add_test(NAME test_exact_trigger_match COMMAND test_exact_trigger_match)
+
+#   test_modifier_utils: the DragModifier <-> Qt bitmask bridge, which the
+#   trigger editor round-trips every captured chord through.
+add_executable(test_modifier_utils core/test_modifier_utils.cpp)
+target_link_libraries(test_modifier_utils PRIVATE Qt6::Test plasmazones_core)
+add_test(NAME test_modifier_utils COMMAND test_modifier_utils)
+
+add_executable(test_tiling_state compositor-common/test_tiling_state.cpp)
+target_link_libraries(test_tiling_state PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor
+                                                  PhosphorIdentity::PhosphorIdentity)
+add_test(NAME test_tiling_state COMMAND test_tiling_state)
+
+# StripViewAnimator never dereferences a KWin::LogicalOutput* (it is a map key
+# only), so the implementation compiles straight into the test and the suite
+# drives it with fake handles and a hand-driven clock — no compositor, no KWin
+# headers, and the include path is the effect tree so its own "compositor/..."
+# include resolves.
+add_executable(test_strip_view_animator compositor-common/test_strip_view_animator.cpp
+               ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect/compositor/stripviewanimator.cpp)
+target_include_directories(test_strip_view_animator PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+target_link_libraries(test_strip_view_animator PRIVATE Qt6::Test PhosphorAnimation::PhosphorAnimation
+                                                       PhosphorProtocol::Types)
+add_test(NAME test_strip_view_animator COMMAND test_strip_view_animator)
+
+# The scrollEffectBehaviour value parser is header-only plain Qt (no KWin),
+# extracted from TilingHandler exactly so this suite exists — its three-way
+# absent/malformed/valid contract fails silently on screen.
+add_executable(test_scroll_behaviour_parse compositor-common/test_scroll_behaviour_parse.cpp)
+target_include_directories(test_scroll_behaviour_parse PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+target_link_libraries(test_scroll_behaviour_parse PRIVATE Qt6::Test Qt6::DBus)
+add_test(NAME test_scroll_behaviour_parse COMMAND test_scroll_behaviour_parse)
+
+# StripMotionSampler is header-only plain numbers (no KWin types at all), so
+# the suite includes it straight from the effect tree and drives it with a
+# hand-rolled clock — the same shape as test_strip_view_animator above.
+add_executable(test_strip_motion_sampler compositor-common/test_strip_motion_sampler.cpp)
+target_include_directories(test_strip_motion_sampler PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+target_link_libraries(test_strip_motion_sampler PRIVATE Qt6::Test)
+add_test(NAME test_strip_motion_sampler COMMAND test_strip_motion_sampler)
+
+# The pure half of the screen-level passes' helpers (transitionpasspure.h):
+# the on-screen format to alpha-capable capture format table the strip pass
+# allocates with, and the shared quad vertex stage. Header-only GL enums,
+# same include-from-the-effect-tree shape as the sampler above. The header
+# pulls <epoxy/gl.h> for its GL enums, so the epoxy include path is taken
+# from pkg-config rather than assumed to be a system default (the effect's
+# own Epoxy target is directory-scoped and invisible here). Gated exactly
+# like the effect tree itself (top-level CMakeLists.txt): a portable build
+# without the effect must neither require libepoxy nor test a component it
+# did not build. test_strip_pack_contract (ui/shaders) shares the gate.
+if(USE_KDE_FRAMEWORKS AND BUILD_KWIN_EFFECT)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(TestEpoxy REQUIRED IMPORTED_TARGET epoxy)
+    add_executable(test_transition_pass_pure compositor-common/test_transition_pass_pure.cpp)
+    target_include_directories(test_transition_pass_pure PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+    target_link_libraries(test_transition_pass_pure PRIVATE Qt6::Test PkgConfig::TestEpoxy)
+    add_test(NAME test_transition_pass_pure COMMAND test_transition_pass_pure)
+endif()
+
+add_executable(test_decoration_manager compositor-common/test_decoration_manager.cpp)
+target_link_libraries(test_decoration_manager PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)
+add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# shadervalidate/ - Offline Pack Validator Tests
+#   test_pack_validators:      pack, parameter, token and buffer lints for the
+#                              animation and overlay authoring models
+#   test_pack_validator_presets: the PRESET lints for those models, split out
+#                              when the file above passed the size ceiling, at
+#                              the concern seam it had already drawn
+#   test_pointer_pack_validator: the same for the pointer model, split out when
+#                              the shared file passed the size ceiling
+#   test_surface_pack_validator: the same for the surface model, which had NO
+#                              harness at all until this was added
+#   test_animation_pack_bakes: the animation stage bakes on both hosts, and the
+#                              multipass buffer passes
+#   test_pack_model_detection: the shared/ marker lookup and include roots
+#
+# That topology is worth one honest sentence, because its shape caused a real
+# gap: the split above followed the file-size ceiling rather than the family
+# boundary, and since every executable here compiles all four arms, a lint
+# deleted from one family's arm broke no test and failed no link. The SURFACE
+# arm had no slots at all and nothing made that visible. One executable per
+# family over the shared helpers is the structure that would; until then, the
+# rule is that a new arm gets its own file here on the day it is written.
+# ═══════════════════════════════════════════════════════════════════════════════
+# The bundled-pack gates (shader_validate_*) only prove the shipped packs are
+# clean; these build deliberately-broken packs in a temp dir and assert the
+# diagnostic. Each compiles the four validator arms straight in, the way the
+# tool does, so it links the same parsers. They share the fixture helpers
+# in shadervalidate/packvalidatortesthelpers.h (header-only).
+#
+# glslang: the validator bakes EVERY animation pack's fragment for the
+# compositor through glslang, and the surface and pointer arms do the same. All
+# three QSKIP without the tool (REQUIRE_ANIMATION_FIXTURE,
+# REQUIRE_SURFACE_FIXTURE, REQUIRE_POINTER_FIXTURE), which also link the bundled
+# shared/ helpers into the fixture root, so the targets stay runnable on a
+# machine that has neither the tool nor an install. That is the opposite of the
+# shader_validate_animations, shader_validate_surface and shader_validate_pointer
+# gates, which fail instead: the gates are what must never silently lose
+# coverage, while these targets are also a developer's inner-loop tests.
+set(_pack_validator_arms
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/shadervalidate/packvalidator_overlay.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/shadervalidate/packvalidator_animation.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/shadervalidate/packvalidator_surface.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/shadervalidate/packvalidator_pointer.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/shadervalidate/packvalidatorcommon.cpp)
+foreach(_pv_test IN ITEMS test_pack_validators test_pack_validator_presets test_pointer_pack_validator
+                          test_surface_pack_validator test_surface_pack_lints test_animation_pack_bakes
+                          test_pack_model_detection)
+    add_executable(${_pv_test} shadervalidate/${_pv_test}.cpp
+                   shadervalidate/packvalidatortesthelpers.h
+                   ${_pack_validator_arms})
+    target_include_directories(${_pv_test} PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/src ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(${_pv_test}
+        PRIVATE
+            Qt6::Test
+            plasmazones_rendering
+            PhosphorRendering::PhosphorRendering
+            PhosphorShaders::PhosphorShaders
+            PhosphorAnimation::PhosphorAnimation
+            PhosphorSurface::PhosphorSurface
+            PhosphorPointer::PhosphorPointer
+            Qt6::GuiPrivate
+            Qt6::ShaderToolsPrivate
+    )
+    target_compile_definitions(${_pv_test} PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+    # No isolation call here on purpose: the directory-wide loop at the bottom of
+    # this file picks up every add_test registered above it, these included.
+    add_test(NAME ${_pv_test} COMMAND ${_pv_test})
+    # Every stage-compile assertion in these targets can be answered from the
+    # PERSISTENT shader cache instead of a fresh bake: a hit deserializes a
+    # QShader from disk and skips QShaderBaker entirely. Its key is SHA-256 over
+    # the stage byte plus the expanded source and NOTHING ELSE, so the baker
+    # configuration (bakeTargets(), the generated variant set) is not in it.
+    # Change either without moving the cache directory's "-v1" tag and a warm
+    # tree validates the PREVIOUS bake while a cold one bakes fresh.
+    #
+    # The isolation helper below is not enough on its own, though it is closer
+    # than it looks: it DOES set XDG_CACHE_HOME, per target, so the developer's
+    # own ~/.cache copy is already out of reach. What it cannot do is make the
+    # cache cold, because that per-target directory lives under the build tree
+    # and survives every ctest run in it. So the stale-hit window is a rebuilt
+    # baker against a build tree that was not wiped, which is exactly the
+    # configuration a developer has and CI never does.
+    #
+    # APPEND, not PROPERTIES ENVIRONMENT: the helper's own contract, since a
+    # plain set anywhere around it replaces the whole sandbox list.
+    set_property(TEST ${_pv_test} APPEND PROPERTY ENVIRONMENT "PHOSPHOR_DISABLE_SHADER_DISK_CACHE=1")
+endforeach()
+unset(_pack_validator_arms)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# editor/ - Zone z-order
+# ═══════════════════════════════════════════════════════════════════════════════
+# zOrder is the zone's index in the list, and EditorWindow.qml stacks zones at
+# zoneBaseZ + zOrder while DividerManager derives its own z from the zone count.
+# A hole or a tie in the zOrder run therefore mis-paints the canvas and breaks
+# divider hit-testing, silently. This pins density across every mutation, plus
+# the contract that undoing a delete returns the zone to its original height
+# rather than to the top. ZoneManager lives in the editor executable rather than
+# a library, so its TUs are compiled into the test directly.
+add_executable(test_zone_zorder editor/test_zone_zorder.cpp
+               ${CMAKE_SOURCE_DIR}/plasmazones/src/editor/services/ZoneManager.cpp
+               ${CMAKE_SOURCE_DIR}/plasmazones/src/editor/services/ZoneAutoFiller.cpp
+               ${CMAKE_SOURCE_DIR}/plasmazones/src/editor/services/zonemanager/divider.cpp
+               ${CMAKE_SOURCE_DIR}/plasmazones/src/editor/services/zonemanager/zorder.cpp
+               ${CMAKE_SOURCE_DIR}/plasmazones/src/editor/services/zonemanager/serialization.cpp
+               ${CMAKE_SOURCE_DIR}/plasmazones/src/editor/undo/commands/BaseZoneCommand.cpp
+               ${CMAKE_SOURCE_DIR}/plasmazones/src/editor/undo/commands/DeleteZoneCommand.cpp)
+# Qt6::Gui is explicit: DeleteZoneCommand derives from QUndoCommand. It arrives
+# transitively via plasmazones_core today, but that is not a contract.
+target_link_libraries(test_zone_zorder PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_zone_zorder COMMAND test_zone_zorder)
+
+# Scrolling-template edit state: the snapshot/applyState round trip and its
+# per-field signal discipline, the wire payload speaking the library's
+# ScrollingTemplate schema, undo/redo with gesture-scoped merging and the
+# obsolete collapse, and normalizePresetList's floor/sort/dedupe/cap
+# contract. EditorTemplateModel lives in the editor executable rather than a
+# library, so its TU (plus the undo command's) is compiled into the test
+# directly; EditorController is NOT — the test's link stubs cover the two
+# member references the mutation path carries, and every mutation here goes
+# through hand-built commands against a raw QUndoStack. UndoController.cpp
+# rides along only because pushCommand references its push(); the stubs keep
+# it unreached. Qt6::Gui is explicit for QUndoCommand, same rationale as
+# test_zone_zorder above.
+add_executable(test_editor_template_model editor/test_editor_template_model.cpp
+               ${CMAKE_SOURCE_DIR}/plasmazones/src/editor/EditorTemplateModel.cpp
+               ${CMAKE_SOURCE_DIR}/plasmazones/src/editor/undo/UndoController.cpp
+               ${CMAKE_SOURCE_DIR}/plasmazones/src/editor/undo/commands/UpdateTemplateCommand.cpp)
+target_link_libraries(test_editor_template_model PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core
+                                                         PhosphorZones::PhosphorZones)
+add_test(NAME test_editor_template_model COMMAND test_editor_template_model)
+
+# The editor's D-Bus client has to read the daemon's ANSWER, not just the reply
+# type: updateLayout is declared bool and a refusal comes back as an ordinary
+# ReplyMessage, which EditorController::saveLayout then treats as a landed write
+# (clean undo stack, no unsaved-changes prompt, work lost on close). The client
+# hard-binds the daemon's bus name, so the stub registry has to claim it — the
+# shared TEST_LAUNCHER's private bus (see the D-Bus isolation block at the
+# bottom) guarantees the name is unowned; when the launcher is unavailable the
+# test skips itself if a real daemon already owns the name. DBusLayoutService
+# lives in the editor executable rather than a library, so its TU is compiled
+# into the test directly. ILayoutService.h declares its Q_OBJECT base entirely
+# in the header, so it is listed explicitly: AUTOMOC has to see it to emit the
+# base's metaobject.
+add_executable(test_dbus_layout_service_replies editor/test_dbus_layout_service_replies.cpp
+               ${CMAKE_SOURCE_DIR}/plasmazones/src/editor/services/DBusLayoutService.cpp
+               ${CMAKE_SOURCE_DIR}/plasmazones/src/editor/services/ILayoutService.h)
+target_link_libraries(test_dbus_layout_service_replies
+                      PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                              PhosphorProtocol::PhosphorProtocol)
+add_test(NAME test_dbus_layout_service_replies COMMAND test_dbus_layout_service_replies)
+
+# Decoration page→root scoping helpers (decorationpagescope.{h,cpp}): the pure
+# dispatch/prefix/diff logic behind SettingsController's per-page decoration
+# Reset/Discard/dirty branches, compiled directly (it lives in the
+# plasmazones-settings executable). Pure QString + DecorationProfileTree — no
+# controller construction needed.
+add_executable(test_decoration_page_scope
+    settings/pages/test_decoration_page_scope.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/decorationpagescope.cpp
+)
+
+target_include_directories(test_decoration_page_scope PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/src)
+target_link_libraries(test_decoration_page_scope
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorSurface::PhosphorSurface
+)
+add_test(NAME test_decoration_page_scope COMMAND test_decoration_page_scope)
+
+# Animation page→event-root scoping — the same split, same rationale (pure
+# QString + ShaderProfileTree, no controller construction). Pins the one
+# include/exclude carve-out in the taxonomy (Window Motion vs Dragging), and
+# that the condensed simple page scopes to its own cards rather than the whole
+# tree.
+add_executable(test_animation_page_scope
+    settings/pages/test_animation_page_scope.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/settings/pages/animationpagescope.cpp
+)
+target_include_directories(test_animation_page_scope PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/src)
+target_link_libraries(test_animation_page_scope
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorAnimation::PhosphorAnimation
+)
+add_test(NAME test_animation_page_scope COMMAND test_animation_page_scope)
+
+# Search-catalogue advanced-only flags vs the QML that declares the tier. Reads
+# both trees as TEXT (no Qt Quick engine, no page construction), so it needs
+# only the source dir — see the file comment for why the flag has to be
+# mirrored at all.
+add_executable(test_search_catalog_tiers
+    settings/test_search_catalog_tiers.cpp
+)
+target_compile_definitions(test_search_catalog_tiers PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+target_link_libraries(test_search_catalog_tiers
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+)
+add_test(NAME test_search_catalog_tiers COMMAND test_search_catalog_tiers)
+
+# GPU-gated orientation guard for the per-render-target NDC Y-flip: renders a
+# two-stage surface-decoration chain (border + shadow via ShaderEffectSource
+# taps, mirroring SurfaceDecoration.qml) on a forced OpenGL scene graph and
+# asserts the sampled card content is upright. OPT-IN: it only runs with
+# PLASMAZONES_GPU_TESTS=1 in the environment, because it must present on the
+# LIVE session (its custom main drops the forced offscreen QPA — an offscreen
+# GL grab returns a uniform placeholder and proves nothing) and mapping a real
+# window D-Bus-activates the installed plasmazonesd via the KWin effect on a
+# developer machine, while CI containers pass the display/GL gates yet never
+# get a ready shader pipeline. Without the opt-in it exits as Skipped.
+add_executable(test_surface_decoration_orientation
+    rendering/test_surface_decoration_orientation.cpp
+)
+target_compile_definitions(test_surface_decoration_orientation PRIVATE
+    PLASMAZONES_SOURCE_ROOT="${CMAKE_SOURCE_DIR}/plasmazones")
+target_link_libraries(test_surface_decoration_orientation
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::DBus
+        Qt6::Gui
+        Qt6::Qml
+        Qt6::Quick
+        # The STATIC org.phosphor.surface module and its plugin: the replica
+        # scene imports the module for its SurfaceShaderItem stages.
+        PhosphorSurfaceQuick::PhosphorSurfaceQuickQml
+        PhosphorSurfaceQuickQmlplugin
+        PhosphorSurface::PhosphorSurface
+        PhosphorProtocol::PhosphorProtocol
+)
+add_test(NAME test_surface_decoration_orientation COMMAND test_surface_decoration_orientation)
+# Non-opted-in and headless runs exit with 77 from the test's custom main,
+# which ctest reports as SKIPPED rather than Passed — honest status for the
+# GPU gate. In-test QSKIPs still exit 0 via qExec (green, Qt's contract).
+set_tests_properties(test_surface_decoration_orientation PROPERTIES SKIP_RETURN_CODE 77)
+
+# The tab-indicator layout and raster half is pure Qt (QRect arithmetic and a
+# QPainter pass), with no KWin type in either entry point, so the raster TU
+# compiles straight into the test the same way StripViewAnimator's does. The
+# include path is the effect tree so its own "compositor/..." include resolves.
+# It stays out of the Unity blob here for the same reason it does in
+# plasmazones/kwin-effect/CMakeLists.txt (its file-local helpers carry generic names);
+# source-file properties are directory-scoped, so the effect tree's exclusion
+# does not reach this consuming target.
+set_source_files_properties(${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect/compositor/scrolltabindicatorpainter_raster.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+add_executable(test_scroll_tab_layout compositor-common/test_scroll_tab_layout.cpp
+               ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect/compositor/scrolltabindicatorpainter_raster.cpp)
+target_include_directories(test_scroll_tab_layout PRIVATE ${CMAKE_SOURCE_DIR}/plasmazones/kwin-effect)
+target_link_libraries(test_scroll_tab_layout PRIVATE Qt6::Test Qt6::Gui)
+add_test(NAME test_scroll_tab_layout COMMAND test_scroll_tab_layout)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Headless environment + config isolation
+# Apply a shared environment to every test in this directory so new tests added
+# above automatically inherit it - a hand-maintained list rotted and left tests
+# aborting in CI when the author forgot to append.
+#
+#   QT_QPA_PLATFORM=offscreen — headless rendering.
+#   XDG_{CONFIG,DATA,STATE,CACHE}_HOME — redirect QStandardPaths into a throwaway
+#     build-tree directory so tests that exercise config-writing paths
+#     (LayoutManager assignments, mode toggles, the Rule store) never
+#     mutate the developer's real ~/.config/plasmazones. Without this, running
+#     ctest wrote sample-screen rules (e.g. "eDP-1") into the live config.
+#
+# IMPORTANT: get_property(... PROPERTY TESTS) reads the test list at CMake
+# configure time, which means tests added BELOW this line are NOT covered.
+# Always add new test targets ABOVE this block — never after it.
+# ═══════════════════════════════════════════════════════════════════════════════
+include(${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake)
+
+# The shared sweep, not a hand-rolled copy. It supplies the private-bus
+# TEST_LAUNCHER and a per-target XDG sandbox. The bus config declares no service
+# directories, which is the essential part: a stock dbus-run-session bus still
+# reads /usr/share/dbus-1/services, so the installed daemon would be activated
+# on the private bus too — as a child of the private dbus-daemon, which then
+# holds the test's stdout pipe open and hangs ctest AFTER the test itself
+# passed. Several tests here compile client sources whose async calls target
+# org.plasmazones with QDBus's default auto-start flag.
+phosphor_apply_directory_test_isolation()
+
+# ─── ABOVE THIS LINE: ADD NEW TESTS — BELOW THIS LINE: env wiring only ───
+
+# The drop-proxy drag test resolves the cursor's screen through the QScreen
+# under it and registers its proxy under that screen's identifier. The sweep's
+# unnamed single offscreen screen identifies as the empty string, which the
+# registration refuses; the named config gives it a real id.
+# No if(TARGET ...) guard: test_windowdrag_drop_proxy is declared
+# unconditionally above, and set_property(TEST <missing>) is a hard CMake
+# error, so the guard could only ever hide a rename.
+phosphor_append_test_environment(test_windowdrag_drop_proxy
+    "QT_QPA_PLATFORM=offscreen:configfile=${CMAKE_CURRENT_SOURCE_DIR}/helpers/two-screens.json")

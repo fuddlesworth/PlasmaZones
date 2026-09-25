@@ -5,14 +5,14 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 # Overlay (zone) and surface (decoration) pack contracts
 
-Source of truth: `data/overlays/shared/common.glsl`, `src/daemon/rendering/zoneentryscaffold.cpp`,
-`data/schemas/shader-metadata.schema.json`; `data/surface/shared/surface_uniforms.glsl`,
-`data/surface/shared/surface_lib.glsl`, `libs/phosphor-surface/include/PhosphorSurface/SurfaceShaderEffect.h`,
-`data/schemas/surface-metadata.schema.json`. Read the two shared headers before writing.
+Source of truth: `plasmazones/data/overlays/shared/common.glsl`, `plasmazones/src/daemon/rendering/zoneentryscaffold.cpp`,
+`phosphor-libs/data/schemas/shader-metadata.schema.json`; `plasmazones/data/surface/shared/surface_uniforms.glsl`,
+`plasmazones/data/surface/shared/surface_lib.glsl`, `phosphor-libs/libs/phosphor-surface/include/PhosphorSurface/SurfaceShaderEffect.h`,
+`phosphor-libs/data/schemas/surface-metadata.schema.json`. Read the two shared headers before writing.
 
 | | overlay | surface |
 |---|---|---|
-| dir | `data/overlays/<id>/` | `data/surface/<id>/` |
+| dir | `plasmazones/data/overlays/<id>/` | `plasmazones/data/surface/<id>/` |
 | files | `metadata.json`, `effect.frag`, optional `passN.frag` | `metadata.json`, `effect.frag`, optional `passN.frag`, optional vertex shader, up to three `textures` |
 | licence header | `GPL-3.0-or-later` | mixed tree: LGPL for a new PlasmaZones-original pack, but the bundled backdrop packs (blur, glass, frosted-glass, rippled-glass, rain-glass, duotone, mosaic) are `GPL-3.0-or-later`; follow the closest sibling and CLAUDE.md "License" |
 | entry | `vec4 pZone(ZoneCtx z)` or `vec4 pImage(vec2 fragCoord)` | `vec4 pSurface(vec2 uv)` |
@@ -102,7 +102,7 @@ Required `id`, `name`, `fragmentShader`, `parameters` (may be `[]`). Top level i
 `providesOpacityTint`, `needsBackdrop`, `interiorOpaque`, `multipass`, `bufferShaders` (max 8),
 `bufferScale` (0.0078125..1.0), `bufferScales` (per-pass, same bounds, one entry per
 `bufferShaders` entry, surface-only), `bufferFeedback`, `bufferWrap(s)`, `bufferFilter(s)`, `depthBuffer`,
-`halfFloatBuffers`, `paddingParam`, `textures` (max 3), and the legacy `handlesOpacity`
+`halfFloatBuffers`, `paddingParam`, `textures` (max 3), `presets`, and the legacy `handlesOpacity`
 (accepted, ignored; do not write it). Max 48 params. No `slot` field (auto-slot by
 declaration order). Param keys, and ONLY these, because the schema is
 `additionalProperties: false`: `id, name, description, group, type, default, min, max, step`.

@@ -1,4 +1,5 @@
 #!/usr/bin/make -f
+# SPDX-FileCopyrightText: 2026 fuddlesworth
 # PlasmaZones Debian build rules
 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -13,6 +14,21 @@ override_dh_auto_configure:
 		-DCMAKE_INSTALL_PREFIX=/usr \
 		-DCMAKE_INSTALL_LIBDIR=lib/$(DEB_HOST_MULTIARCH) \
 		-DBUILD_TESTING=OFF
+
+override_dh_auto_install:
+	dh_auto_install
+	# Same strip as the RPM spec's %install, for the same reason: this is an
+	# end-user package, not a Phosphor SDK, and there is no -devel binary by
+	# design. Without it the .deb ships ~605 development files — the public
+	# headers, the CMake package configs and the unversioned .so devel
+	# symlinks — and lintian flags devel-file-in-non-devel-package and
+	# non-dev-pkg-with-shlib-symlink. Every Phosphor/plasmazones library sets
+	# SOVERSION, so the bare .so is always the devel symlink and never the
+	# runtime object.
+	rm -rf debian/plasmazones/usr/include/Phosphor*
+	rm -rf debian/plasmazones/usr/lib/*/cmake/Phosphor*
+	rm -f  debian/plasmazones/usr/lib/*/libPhosphor*.so
+	rm -f  debian/plasmazones/usr/lib/*/libplasmazones*.so
 
 override_dh_auto_test:
 	# Skip tests during package build

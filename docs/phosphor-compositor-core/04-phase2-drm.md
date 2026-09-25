@@ -10,7 +10,7 @@
 - Page-flip event handling integrated with wayland event loop
 - Multi-output support with hotplug via udev
 - Session management via libseat (VT switching, DRM master)
-- `DrmScreenProvider` implementing `PhosphorScreens::IScreenProvider`
+- `DrmScreenProvider` implementing `PhosphorScreens::IPhysicalScreenSource`
 
 ## Class Hierarchy
 
@@ -71,7 +71,7 @@ libs/phosphor-compositor-core/src/backend/
 ├── session.cpp
 ├── udev_monitor.h           — udev hotplug monitor
 ├── udev_monitor.cpp
-└── drm_screen_provider.h    — PhosphorScreens::IScreenProvider impl
+└── drm_screen_provider.h    — PhosphorScreens::IPhysicalScreenSource impl
     drm_screen_provider.cpp
 ```
 
@@ -303,13 +303,13 @@ Monitor connected:
      e. Create GbmSwapchain
      f. Perform initial modeset
      g. Insert SceneOutput into scene graph
-     h. Emit IScreenProvider::screenAdded()
+     h. Emit IPhysicalScreenSource::screenAdded()
      i. Notify clients via wl_output global
 
 Monitor disconnected:
   1. Same udev path
   2. DrmBackend detects connector disconnected:
-     a. Emit IScreenProvider::screenRemoved()
+     a. Emit IPhysicalScreenSource::screenRemoved()
      b. Destroy SceneOutput (removes from scene graph)
      c. Destroy GbmSwapchain
      d. Release CRTC + plane
@@ -317,10 +317,10 @@ Monitor disconnected:
      f. Remove wl_output global (clients get wl_registry.global_remove)
 ```
 
-## DrmScreenProvider (IScreenProvider implementation)
+## DrmScreenProvider (IPhysicalScreenSource implementation)
 
 ```cpp
-class DrmScreenProvider : public PhosphorScreens::IScreenProvider {
+class DrmScreenProvider : public PhosphorScreens::IPhysicalScreenSource {
     Q_OBJECT
 public:
     explicit DrmScreenProvider(DrmBackend* backend, QObject* parent = nullptr);

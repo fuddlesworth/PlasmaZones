@@ -2,7 +2,7 @@
 
 # PlasmaZones
 
-<img src="icons/hicolor/scalable/apps/plasmazones.svg" alt="PlasmaZones" width="96">
+<img src="plasmazones/icons/hicolor/scalable/apps/plasmazones.svg" alt="PlasmaZones" width="96">
 
 **Window snapping, tiling and scrolling for KDE Plasma**
 

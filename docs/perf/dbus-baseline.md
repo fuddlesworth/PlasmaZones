@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2026 fuddlesworth
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
 # D-Bus Performance Baseline
 
 Tracks before/after numbers for the refactor on branch `refactor/dbus-performance`.
@@ -15,7 +20,7 @@ ctest --test-dir build -R bench_dbus_adaptors --output-on-failure
 profile. `-event` is the default (counts instructions). All three are useful —
 pick whichever is available on the host.
 
-Benchmarks live in `tests/unit/dbus/bench_dbus_adaptors.cpp`. They use
+Benchmarks live in `plasmazones/tests/unit/dbus/bench_dbus_adaptors.cpp`. They use
 `StubSettings` + an in-memory `LayoutManager`, so there is no disk I/O in the
 hot path and the numbers reflect pure adaptor + QJson serialization cost.
 
@@ -75,7 +80,7 @@ WindowTrackingAdaptor delta persistence (Phase 3) has no dedicated
 bench — the optimization gates disk I/O on a per-field dirty bitfield,
 and the win scales with `(#fields not changed) × JSON size`, which
 only shows up in a realistic long-running session. The correctness
-invariant is covered by `tests/unit/core/test_wts_dirty_mask.cpp`.
+invariant is covered by `plasmazones/tests/unit/core/windowtracking/test_wts_dirty_mask.cpp`.
 
 ## How to reproduce
 

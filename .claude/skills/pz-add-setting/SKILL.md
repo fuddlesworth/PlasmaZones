@@ -14,15 +14,14 @@ A setting is spread over six files. Getting five of six right produces a value
 that reads back as its type-default with no error anywhere, so work down the
 list and verify each one.
 
-**The CLAUDE.md summary of this is out of date.** It describes a member-variable
-setting with explicit load/save/reset arms. The live pattern is store-backed:
-the getter reads through `m_store` on every call, there is **no member
-variable**, and there is **no load/save/reset arm** to write. Defaults and
-clamping come from the schema. Follow this file, not that summary.
+CLAUDE.md summarises this; the worked example lives here. The pattern is
+store-backed: the getter reads through `m_store` on every call, there is **no
+member variable**, and there is **no load/save/reset arm** to write. Defaults
+and clamping come from the schema.
 
 ## The six files
 
-### 1. `src/config/configdefaults_<area>.h` — the default value
+### 1. `plasmazones/src/config/configdefaults_<area>.h` — the default value
 
 `configdefaults.h` is split by area: `_appearance`, `_gaps`, `_limits`,
 `_screens`, `_scrolling`, `_scrolling_behavior`, `_scrolling_shortcuts`,
@@ -36,7 +35,14 @@ static constexpr int audioSpectrumBarCountMin() { return 16; }
 static constexpr int audioSpectrumBarCountMax() { return 256; }
 ```
 
-### 2. `src/config/configdefaults.h` — the group and key accessors
+### 2. `plasmazones/src/config/configkeys.h` — the group and key accessors
+
+`configkeys.h`, NOT `configdefaults.h`. The `P_CONFIG_GROUP` / `P_CONFIG_KEY`
+macros are defined in configkeys.h and every accessor lives there (or in
+`configkeys_scrolling.h` for a scrolling group); configdefaults.h declares
+none of them. They are reachable as `ConfigDefaults::fooGroup()` only because
+ConfigDefaults inherits through that chain, so the CALL is always spelled
+`ConfigDefaults::` even though the DECLARATION is not in that file.
 
 Only if the group or key is new. Group names are v2 dot-paths mirroring the UI
 hierarchy (`"Snapping.Behavior.ZoneSpan"`). Key accessors are generic
@@ -45,13 +51,14 @@ hierarchy (`"Snapping.Behavior.ZoneSpan"`). Key accessors are generic
 Never inline a config path as a `QStringLiteral`. `scripts/check-conventions.py`
 fails the build on that.
 
-### 3. `src/config/settingsschema*.cpp` — register the key
+### 3. `plasmazones/src/config/settingsschema*.cpp` — register the key
 
 This is the step that is easy to miss and the reason a setting silently reads
 back as `false` or `0`: **the store gets its default and its type from the
 schema**, not from the getter. Split across `settingsschema.cpp`,
 `settingsschema_tiling.cpp`, `settingsschema_scrolling.cpp`,
-`settingsschema_overlayshaders.cpp`.
+`settingsschema_overlayshaders.cpp`, `settingsschema_shaderbounds.cpp` and
+`settingsschema_shadertrees.cpp`.
 
 ```cpp
 schema.groups[CD::shadersAudioGroup()] = {
@@ -70,11 +77,11 @@ clause-splicing semicolon, no spaced hyphen. The conventions checker enforces
 that. The 5th field is the coercion applied on **every read and every write**,
 which is what makes the clamped-setter idiom below necessary.
 
-### 4. `src/core/interfaces/isettings.h` — the signal
+### 4. `plasmazones/src/core/interfaces/isettings.h` — the signal
 
 Add it under `Q_SIGNALS:`, past tense, named `<property>Changed`.
 
-### 5. `src/config/settings.h` — the property
+### 5. `plasmazones/src/config/settings.h` — the property
 
 ```cpp
 Q_PROPERTY(bool enableAudioVisualizer READ enableAudioVisualizer
@@ -89,15 +96,15 @@ file-size baseline, so the conventions checker fails if it grows. Adding a
 property to it means shrinking something else, or the addition belongs in a
 different header.
 
-### 6. `src/config/settings/<concern>.cpp` — getter and setter
+### 6. `plasmazones/src/config/settings/<concern>.cpp` — getter and setter
 
-Never `src/config/settings.cpp`. Pick the file matching the concern:
+Never `plasmazones/src/config/settings.cpp`. Pick the file matching the concern (not exhaustive):
 `setters.cpp`, `storescalars.cpp`, `shortcuts.cpp`, `scrolling.cpp`,
 `triggers.cpp`, `perscreen.cpp`, `disable.cpp`, `uienums.cpp`,
 `profiletrees.cpp`, `animationprofile.cpp`, `systemcolors.cpp`.
 
-Note there are three files named `settings.cpp` in the tree (`src/config/`,
-`src/daemon/overlayservice/`, `src/editor/controller/`). Always use full paths.
+Note there are three files named `settings.cpp` in the tree (`plasmazones/src/config/`,
+`plasmazones/src/daemon/overlayservice/`, `plasmazones/src/editor/controller/`). Always use full paths.
 
 **Unclamped setting** — compare, early-return, write, emit:
 

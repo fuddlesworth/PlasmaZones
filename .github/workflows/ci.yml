@@ -45,7 +45,7 @@ permissions:
   contents: read
 
 # One in-flight run per ref, matching kwin-rebuild-watch.yml and release.yml.
-# Without this every push to a PR ran the whole matrix — now five container jobs,
+# Without this every push to a PR ran the whole matrix — now seven container jobs,
 # each doing a full pacman -Syu, build and ctest — to completion, including the
 # runs whose results nobody will ever read. Cancellation is limited to pull
 # requests: a superseded PR push is genuinely dead work, whereas a push to a
@@ -148,10 +148,14 @@ jobs:
           # surface (offscreen QPA can't host RHI textures).
           # Parallel ctest with $(nproc); xvfb-run wraps when available so
           # surface-needing tests have a display.
+          # --no-tests=error on every ctest in this file: a build dir
+          # configured without BUILD_TESTING produces no tests, and bare ctest
+          # reports "No tests were found" and exits 0, so the gate would pass
+          # having run nothing.
           if command -v xvfb-run >/dev/null 2>&1; then
-            xvfb-run -a ctest --test-dir build --output-on-failure -j "$(nproc)"
+            xvfb-run -a ctest --test-dir build --output-on-failure --no-tests=error -j "$(nproc)"
           else
-            ctest --test-dir build --output-on-failure -j "$(nproc)"
+            ctest --test-dir build --output-on-failure --no-tests=error -j "$(nproc)"
           fi
 
       - name: Install (DESTDIR)
@@ -162,7 +166,7 @@ jobs:
           echo "=== Installed files ==="
           find install -type f | sort
 
-  # ─── Build shell: the phosphor-shell line (libs/phosphor-shell + the
+  # ─── Build shell: the phosphor-shell line (phosphor-shell-libs + phosphor-shell + the
   # gated phosphor-service-* libs + the example shell) is opt-in behind
   # BUILD_PHOSPHOR_SHELL and therefore NOT exercised by the default `build`
   # job. This job turns the gate ON so the Phase 1.5 / Phase 2 service libs
@@ -243,16 +247,16 @@ jobs:
           # other Phase 2 test). Making them QSKIP-aware is the proper follow-up.
           EXCLUDE='phosphorservicepipewire_smoke|phosphorservicebluetooth_smoke'
           if command -v xvfb-run >/dev/null 2>&1; then
-            xvfb-run -a ctest --test-dir build --output-on-failure -j "$(nproc)" -E "$EXCLUDE"
+            xvfb-run -a ctest --test-dir build --output-on-failure --no-tests=error -j "$(nproc)" -E "$EXCLUDE"
           else
-            ctest --test-dir build --output-on-failure -j "$(nproc)" -E "$EXCLUDE"
+            ctest --test-dir build --output-on-failure --no-tests=error -j "$(nproc)" -E "$EXCLUDE"
           fi
 
   # ─── Build against the NEXT Plasma: the `build` job above uses Arch's
   # stable Plasma, so nothing there exercises the KWin effect against the
   # upcoming release. kde-unstable carries the beta (Plasma 6.8 = KWin
   # 6.7.90), where the paint hooks return bool, RenderDevice exists, and
-  # Scene::renderer() takes a device. kwin-effect/kwincompat.h adapts to
+  # Scene::renderer() takes a device. plasmazones/kwin-effect/kwincompat.h adapts to
   # either, and this job is what keeps that true.
   #
   # ADVISORY (continue-on-error): kde-unstable is a moving target that is
@@ -282,12 +286,28 @@ jobs:
           printf '[kde-unstable]\nInclude = /etc/pacman.d/mirrorlist\n\n' > /tmp/kde-unstable.conf
           cat /tmp/kde-unstable.conf /etc/pacman.conf > /tmp/pacman.conf.new
           mv /tmp/pacman.conf.new /etc/pacman.conf
-          # Same package set as the `build` job's "Setup (Arch)" and as
-          # `build-shell`. THREE hand-maintained copies: a dependency added to one
-          # and not the others makes this job quietly build a different
-          # configuration from the one it exists to mirror — the same class of
-          # false equivalence the verify step below guards against for the paint
-          # API. Change one, change all three.
+          # Byte-identical to the `build` job's "Setup (Arch)". Those two are
+          # the shell-OFF set; a dependency added to one and not the other
+          # makes this job quietly build a different configuration from the one
+          # it exists to mirror — the same class of false equivalence the
+          # verify step below guards against for the paint API. Change one,
+          # change the other.
+          #
+          # There are SEVEN hand-maintained pacman lists in this file: five
+          # build-dependency lists in three groups, plus two small tool lists
+          # (`lint` and `luau-analyze`) that install neither Qt nor KF6.
+          # Do not assume an edit here reaches the rest:
+          #   * shell-OFF, identical: `build`, `build-plasma-next` (this one).
+          #   * shell-ON: `build-shell`, and `presets` which is the same set
+          #     minus ccache, xorg-server-xvfb and mesa because it neither
+          #     caches nor runs the suite. Both add libpipewire, polkit-qt6,
+          #     pam and ddcutil for the three shell libraries with hard
+          #     configure-time requirements.
+          #   * `build-arch-draft`, deliberately not a copy of either: it
+          #     bootstraps a makepkg host (base-devel, sudo, namcap) and lets
+          #     `makepkg -s` resolve the real dependencies from the PKGBUILD.
+          #     A new build dependency belongs in `packaging/` for that job,
+          #     not in its pacman line.
           #
           # NOT hoisted into a composite action under .github/actions, which is
           # the obvious fix: a LOCAL action is only readable once
@@ -340,7 +360,7 @@ jobs:
       # resynced between releases), the effect silently compiles its 6.7 arm and
       # this job becomes a duplicate of `build`. Assert the NEW arm was actually
       # selected, so "no newer Plasma to test" is a visible state rather than a
-      # false pass. kwin-effect/CMakeLists.txt emits the line.
+      # false pass. plasmazones/kwin-effect/CMakeLists.txt emits the line.
       #
       # Matched on the API-SELECTION phrase rather than a marketing version
       # number: a grep for "Plasma 6.8" keeps passing once kde-unstable moves on
@@ -366,9 +386,9 @@ jobs:
           # makes Qt emit a warning that warning-asserting tests then fail on.
           export XDG_RUNTIME_DIR="$(mktemp -d)"
           if command -v xvfb-run >/dev/null 2>&1; then
-            xvfb-run -a ctest --test-dir build --output-on-failure -j "$(nproc)"
+            xvfb-run -a ctest --test-dir build --output-on-failure --no-tests=error -j "$(nproc)"
           else
-            ctest --test-dir build --output-on-failure -j "$(nproc)"
+            ctest --test-dir build --output-on-failure --no-tests=error -j "$(nproc)"
           fi
 
   # ─── Lint: clang-format + qmlformat mirror the lefthook hooks so a
@@ -385,6 +405,65 @@ jobs:
   # initializer-list packing), so pinning CI to whatever Ubuntu ships
   # would force every contributor to also keep an older clang-format
   # on PATH for the pre-commit hook to agree with CI.
+  # Nothing else in CI touches CMakePresets.json or the moon workspace: every
+  # other job hand-writes its `cmake -B build -G Ninja -D...` line. So the
+  # presets, the five moon.yml projects and the phosphor_tier_target()
+  # aggregates could all break without turning CI red, while CLAUDE.md
+  # documents `moon run <tier>:build` and `cmake --preset release` as
+  # first-class entry points.
+  #
+  # Configure only, no build: this gate is about the tier graph existing, and
+  # the `build` job above already compiles the tree. That keeps it to about a
+  # minute.
+  presets:
+    name: Presets and tier graph
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'labeled' && github.event.action != 'unlabeled')
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Setup (Arch)
+        # This list follows build-shell's, NOT the default build job's: same
+        # set minus ccache, xorg-server-xvfb and mesa, which this job needs
+        # neither to cache nor to run the suite. The debug preset sets
+        # BUILD_PHOSPHOR_SHELL=ON, and three shell libraries
+        # have hard CONFIGURE-time requirements — phosphor-service-pipewire's
+        # pkg_check_modules(... REQUIRED), phosphor-service-polkit's
+        # find_package(PolkitQt6-1 REQUIRED), and phosphor-service-lock's
+        # explicit FATAL_ERROR for PAM — so a shell-OFF package list cannot
+        # configure this preset at all.
+        run: |
+          set -euo pipefail
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm --needed \
+            git base-devel cmake ninja extra-cmake-modules \
+            qt6-base qt6-declarative qt6-tools qt6-shadertools qt6-svg \
+            qt6-wayland wayland plasma-wayland-protocols wayland-protocols \
+            kwin kconfig kconfigwidgets kcmutils kglobalaccel kcolorscheme \
+            kirigami plasma-activities vulkan-headers vulkan-icd-loader glslang \
+            cava ffmpeg \
+            libpipewire polkit-qt6 pam ddcutil
+
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # The debug preset turns tests, the shell tier and the tools all ON, so
+      # this also proves the shell tier still configures.
+      - name: Configure from the debug preset
+        run: cmake --preset debug
+
+      - name: Every tier declares its aggregate target
+        run: |
+          set -euo pipefail
+          ninja -C build -t targets all > targets.txt
+          for tier in phosphor-libs phosphor-shell-libs phosphor-shell plasmazones; do
+            if ! grep -q "^${tier}-tier:" targets.txt; then
+              echo "missing aggregate target: ${tier}-tier" >&2
+              exit 1
+            fi
+            echo "ok: ${tier}-tier"
+          done
+
   lint:
     name: Lint
     # Same trigger gate as `build` — skip label-change events and
@@ -435,10 +514,25 @@ jobs:
           # Filter to source files we actually format, exclude
           # generator-output headers (they get regenerated, no point
           # round-tripping clang-format against them).
+          #
+          # The extension list mirrors lefthook's clang-format hook, which
+          # globs *.{cpp,h,hpp,cc,cxx}. Without the last three, a .hpp pushed
+          # with --no-verify was not checked here either, though the comment
+          # above claims this job mirrors the hooks.
+          #
+          # The _export.h filter is a tripwire rather than a live filter:
+          # every *_export.h is generate_export_header() output and none is
+          # tracked, so it matches nothing today. It costs one grep and would
+          # catch one committed by hand.
+          #
+          # Split so a failing diff is fatal. The `|| true` exists for
+          # grep's exit 1 on no matches, and it used to cover the diff as
+          # well, which would leave changed.txt empty and both lint steps
+          # reporting "nothing changed" on what reads as a green run.
           git diff --name-only --diff-filter=ACMR "$RANGE" -- \
-              '*.cpp' '*.h' '*.qml' \
-            | grep -v '^libs/.*/include/.*_export\.h$' \
-            > changed.txt || true
+              '*.cpp' '*.h' '*.hpp' '*.cc' '*.cxx' '*.qml' > all-changed.txt
+          grep -v '^[a-z-]*/libs/.*/include/.*_export\.h$' \
+              all-changed.txt > changed.txt || true
           echo "Changed files:"
           cat changed.txt
           # Emit the file list for the downstream steps.
@@ -447,7 +541,7 @@ jobs:
       - name: clang-format
         run: |
           set -euo pipefail
-          mapfile -t files < <(grep -E '\.(cpp|h)$' changed.txt || true)
+          mapfile -t files < <(grep -E '\.(cpp|h|hpp|cc|cxx)$' changed.txt || true)
           if [ "${#files[@]}" -gt 0 ]; then
             clang-format --dry-run -Werror "${files[@]}"
           else
@@ -469,7 +563,7 @@ jobs:
           fi
 
   # ─── JSON Schema: validate every bundled data file against the committed
-  # schemas under data/schemas/. These are the same schema files runtime
+  # schemas under phosphor-libs/data/schemas/ and plasmazones/data/schemas/. These are the same schema files runtime
   # validation compiles (phosphor-fsloader's SchemaValidator via valijson), so
   # this is the author-time gate that keeps malformed layouts (and future
   # document types) out of the tree. Mirrors the lefthook `json-schema` hook;
@@ -531,11 +625,11 @@ jobs:
   # and the pluau standard library with luau-analyze. Catches parse and type
   # errors (a broken bundled .luau would otherwise only surface at runtime as
   # a silently-skipped algorithm). The analyzer is built from the committed
-  # vendored Luau (extern/luau-*.tar.gz) so the lint/type ruleset is pinned exactly to
+  # vendored Luau (phosphor-libs/extern/luau-*.tar.gz) so the lint/type ruleset is pinned exactly to
   # the runtime we ship — analysis stays deterministic across CI runs and only
   # changes when we deliberately bump the vendored Luau.
   #
-  # The bundled algorithms consume `pluau` as an injected global; data/algorithms/
+  # The bundled algorithms consume `pluau` as an injected global; plasmazones/data/algorithms/
   # .luaurc declares it so the analyzer resolves it (pluau.luau itself *defines*
   # the global and is analyzed under the default config, which luau-analyze
   # picks per-file from the nearest .luaurc).
@@ -564,7 +658,7 @@ jobs:
           # Luau is vendored as a committed tarball; extract it before building
           # the analyzer CLI from it (same source the runtime links).
           mkdir -p luau-src
-          tar xzf extern/luau-*.tar.gz -C luau-src --strip-components=1
+          tar xzf phosphor-libs/extern/luau-*.tar.gz -C luau-src --strip-components=1
           cmake -S luau-src -B luau-cli -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DLUAU_BUILD_CLI=ON \
@@ -578,8 +672,8 @@ jobs:
           # Non-zero exit on any parse/type error fails the job. Lint findings
           # are advisory (lintErrors:false in .luaurc) but still printed.
           ./luau-cli/luau-analyze \
-            data/algorithms/*.luau \
-            libs/phosphor-tiles/src/pluau/pluau.luau
+            plasmazones/data/algorithms/*.luau \
+            phosphor-libs/libs/phosphor-tiles/src/pluau/pluau.luau
 
       - name: Analyze the pluau type stubs
         run: |
@@ -601,7 +695,7 @@ jobs:
           # The stripped copy sits next to the file it is a copy of, so any
           # .luaurc that would govern the real stub in this tree governs the
           # copy too. No such config exists today (the repo's only .luaurc is
-          # data/algorithms/.luaurc, which is out of this path's lookup), so
+          # plasmazones/data/algorithms/.luaurc, which is out of this path's lookup), so
           # right now this resolves the same default config /tmp would. The
           # trap clears the copy on the failing path too, where `set -e` would
           # otherwise leave it behind.
@@ -609,9 +703,9 @@ jobs:
           # An all-declare file would strip to nothing; grep exits 1 on no
           # match, so `set -e` fails the step rather than analyzing an empty
           # file and passing.
-          stub_copy=libs/phosphor-tiles/src/pluau/pluau-stub-check.luau
+          stub_copy=phosphor-libs/libs/phosphor-tiles/src/pluau/pluau-stub-check.luau
           trap 'rm -f "$stub_copy"' EXIT
-          grep -v '^declare ' libs/phosphor-tiles/src/pluau/pluau.d.luau > "$stub_copy"
+          grep -v '^declare ' phosphor-libs/libs/phosphor-tiles/src/pluau/pluau.d.luau > "$stub_copy"
           ./luau-cli/luau-analyze "$stub_copy"
 
   # ═══════════════════════════════════════════════════════════════════════════
@@ -653,10 +747,15 @@ jobs:
         run: nix build -L --fallback .#default
 
       - name: Verify binary
+        # `--version || true` passed whatever the binary printed, including
+        # nothing, so this step could not fail. Require some output.
+        shell: bash
         run: |
           echo "=== Package contents ==="
           ls -la result/bin/
-          ./result/bin/plasmazonesd --version || true
+          got="$(./result/bin/plasmazonesd --version)"
+          echo "Built: $got"
+          test -n "$got" || { echo "::error::plasmazonesd --version printed nothing"; exit 1; }
 
       - name: Verify devShell
         run: nix develop --fallback -c echo "devShell OK"
@@ -849,7 +948,7 @@ jobs:
           pkgname=plasmazones-pr
           pkgver=__PKGVER__
           pkgrel=1
-          pkgdesc="PlasmaZones — draft build for PR #__PR_NUMBER__ (__BRANCH__@__SHORT_SHA__)"
+          pkgdesc="PlasmaZones draft build for PR #__PR_NUMBER__ (__BRANCH__@__SHORT_SHA__)"
           arch=('x86_64')
           url="https://github.com/fuddlesworth/PlasmaZones"
           license=('GPL-3.0-or-later' 'LGPL-2.1-or-later')
@@ -945,7 +1044,7 @@ jobs:
           # clone that breaks describe still upgrades cleanly.
           pkgver=${{ steps.meta.outputs.pkgver }}
           pkgrel=1
-          pkgdesc="PlasmaZones — draft build for PR #${{ steps.meta.outputs.pr_number }} (${BRANCH})"
+          pkgdesc="PlasmaZones draft build for PR #${{ steps.meta.outputs.pr_number }} (${BRANCH})"
           arch=('x86_64')
           url="https://github.com/fuddlesworth/PlasmaZones"
           license=('GPL-3.0-or-later' 'LGPL-2.1-or-later')
