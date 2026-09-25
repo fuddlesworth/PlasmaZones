@@ -128,16 +128,37 @@ vec3 microDust(vec2 px, float t, float amount, float reachPx, out float dustA) {
     float halo = exp(-dOut / max(reachPx * 0.9, 1.0));
 
     float cellPx = 13.0 * max(uSurfaceScale, 0.001);
-    // Emanation coordinates: bp is the nearest point on the frame rect, so
-    // s = bp.x + bp.y runs along the edge (constant at a corner, where the
-    // fan of fragments shares the corner as its source) and v = dOut runs
-    // outward. Scrolling v with the mote clock makes the specks drift away
-    // from the frame at every edge, corners included.
-    vec2 bp = clamp(px, cen - halfSz, cen + halfSz);
-    float s = bp.x + bp.y;
+    // Emanation coordinates: s runs along the frame's perimeter and v runs
+    // outward, scrolled by the mote clock so the specks drift away from the frame
+    // at every edge, corners included.
+    //
+    // s IS AN ANGLE ABOUT THE FRAME CENTRE, not the nearest-point sum it used to
+    // be. That sum was `clamp(px, ...)` projected as bp.x + bp.y, and it broke at
+    // the corners in two ways at once. For a fragment diagonally past a corner
+    // BOTH clamp components saturate, so the sum is a single constant over the
+    // whole quarter-plane fan: every other factor in the dust alpha is
+    // radius-only, so a cell that lit up painted a uniform quarter-RING about
+    // half a cell thick, expanding outward and blinking as a whole, instead of a
+    // speck. And because it was a SUM, two fragments mirrored across a corner's
+    // 45-degree line landed in the same cell, so the top dust field was a mirror
+    // copy of the left one. The angle is continuous and distinct in both cases.
+    //
+    // A WHOLE NUMBER OF CELLS around the loop, and the cell index taken modulo
+    // that, so the grid WRAPS. atan's seam lies on the -x axis, at the left
+    // edge's midpoint, and without the wrap the cell either side of it would be a
+    // different cell with a different speck and a different blink, which is a
+    // visible one-cell seam. The count comes from the rect's perimeter so a cell
+    // is about cellPx of edge, which keeps the density in device px.
+    //
+    // The angle does not equalise cell size the way true arc length would, so
+    // density varies a little between a long edge's middle and its corners. For
+    // random dust that reads as variation rather than as an artefact;
+    // framePerimeter's own doc draws the same distinction for dashes.
+    float loopCells = max(floor(4.0 * (halfSz.x + halfSz.y) / cellPx + 0.5), 1.0);
+    float sCell = fract(framePerimeter(px, cen, halfSz) + 0.5) * loopCells;
     float v = dOut - t * 22.0 * max(uSurfaceScale, 0.001);
-    vec2 dq = vec2(s, v) / cellPx;
-    vec2 cellId = floor(dq);
+    vec2 dq = vec2(sCell, v / cellPx);
+    vec2 cellId = vec2(mod(floor(dq.x), loopCells), floor(dq.y));
     vec3 h = hash23(cellId);
 
     // Sparse occupancy, per-speck twinkle phase. The twinkle keeps a floor
