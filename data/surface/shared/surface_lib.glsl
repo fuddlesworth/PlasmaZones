@@ -285,8 +285,9 @@ vec4 faintTintSlab(vec3 tint, float tintStrength, float mask) {
 // Glow/shadow outer-margin falloff (the ~12 lines glow and shadow shared): the
 // exp(-4t²) reach profile from SDF distance `d`, feathered to zero just inside
 // the texture edge so a thin capture margin fades out instead of clipping in a
-// hard rectangle, confined to the transparent margin (1 - baseAlpha), and
-// scaled by `strength` and the focus dim at floor `focusFloor`. `edgePx` is the
+// hard rectangle, held to where the surface is not opaque (1 - baseAlpha) AND to
+// within one reach inside the frame, and scaled by `strength` and the focus dim
+// at floor `focusFloor`. `edgePx` is the
 // REAL (undisplaced) fragment position for the edge feather — the shadow pack
 // evaluates `d` against a displaced frame but feathers on the true position.
 float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float strength, float focusFloor) {
@@ -296,18 +297,28 @@ float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float stre
     // at 1.0, so this changes no output today; it is here so that a caller which
     // stops flooring cannot poison the frame.
     //
-    // KNOWN, AND NOT SAFE TO CHANGE HERE. Clamping d at 0 makes t zero for every
-    // fragment INSIDE the frame, so halo is exp(0) = 1, the full profile rather
-    // than a falloff, and the only thing confining it to the margin is the
-    // (1 - baseAlpha) term below. A translucent window therefore wears the halo
-    // across its whole body. Two fixes were considered and both cost something a
-    // shader-local edit cannot weigh: gating on d > 0 loses the transparent
-    // CORNER SLIVER whenever a pack's halo radius is smaller than the border
-    // pack's, and making the profile symmetric in d fades the shadow out inside
-    // its own displaced rect, which is exactly the band a drop shadow is for.
-    // Left as it is on purpose, with the choice recorded rather than taken.
-    float t = max(d, 0.0) / max(reach, 1e-3);
+    // Clamping d at 0 makes t zero for every fragment INSIDE the frame, so the
+    // profile there is exp(0) = 1, the full value rather than a falloff. That is
+    // deliberate and stays: the shadow pack evaluates d against a DISPLACED frame,
+    // so part of its band legitimately lies inside the real one, and a pack whose
+    // halo radius is smaller than the border pack's needs the transparent CORNER
+    // SLIVER just inside the edge.
+    //
+    // But it left (1 - baseAlpha) as the ONLY confinement, which is confinement to
+    // TRANSPARENCY and not to the margin, so a natively translucent client wore the
+    // halo across its whole body. Two earlier candidates were rejected for costing
+    // one of the two cases above. The depth gate below costs neither.
+    float r = max(reach, 1e-3);
+    float t = max(d, 0.0) / r;
     float halo = exp(-4.0 * t * t);
+    // DEPTH GATE. A halo has no business reaching further INSIDE the frame than
+    // its reach carries it outside, and both cases the clamp above protects sit
+    // within one reach of the edge: the corner sliver is just inside it, and the
+    // shadow's displaced band is within its own reach by construction. So hold the
+    // profile at full value down to one reach inside and fade it out by two, which
+    // zeroes only the deep interior. For an opaque window baseAlpha is 1 and the
+    // halo was already 0, so this changes nothing there.
+    halo *= smoothstep(-2.0 * r, -r, d);
     float edgeDist = min(min(edgePx.x, edgePx.y), min(uSurfaceSize.x - edgePx.x, uSurfaceSize.y - edgePx.y));
     // Floored so edge0 != edge1: smoothstep is undefined when they are equal, and
     // a zero reach collapsed them. With this, a zero reach is wholly safe rather

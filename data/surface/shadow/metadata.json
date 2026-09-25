@@ -1,7 +1,7 @@
 {
     "id": "shadow",
     "name": "Drop Shadow",
-    "description": "A soft dark shadow behind the window, cast slightly downward the way a real light would. It follows the frame's rounded corners and leaves the window content untouched. It dims when the window loses focus.",
+    "description": "A soft dark shadow behind the window, cast slightly downward the way a real light would. It follows the frame's rounded corners and draws only where the window is not fully opaque, so a window with a see-through body picks up a little of it near the edge. It dims when the window loses focus.",
     "author": "PlasmaZones",
     "version": "1.3",
     "category": "Ambience",
