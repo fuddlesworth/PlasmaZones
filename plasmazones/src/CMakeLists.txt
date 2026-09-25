@@ -571,6 +571,7 @@ set(plasmazones_daemon_SRCS
     daemon/controllers/contextresolverwiring.cpp
     daemon/overlayservice.cpp
     daemon/overlayservice/animation_config.cpp
+    daemon/overlayservice/decoration.cpp
     daemon/overlayservice/lifecycle.cpp
     daemon/overlayservice/settings.cpp
     daemon/overlayservice/overlay.cpp

@@ -122,4 +122,47 @@ QVariantMap composeStageMap(const SurfaceShaderEffect& effect, const QVariantMap
     return stageMap;
 }
 
+QString roundBottomCornersParamId()
+{
+    return QStringLiteral("roundBottomCorners");
+}
+
+QVariant chainRoundBottomCorners(const SurfaceShaderRegistry& registry, const QStringList& chain,
+                                 const QVariantMap& allPackParams)
+{
+    const QString key = roundBottomCornersParamId();
+    // Step 2's answer, held back until the whole chain has been searched for a
+    // step 1 answer. A stored value ANYWHERE in the chain outranks any declared
+    // default, including one declared by an earlier pack.
+    QVariant declaredFallback;
+    for (const QString& packId : chain) {
+        if (!registry.hasEffect(packId)) {
+            continue;
+        }
+        const SurfaceShaderEffect effect = registry.effect(packId);
+        if (!effect.isValid()) {
+            continue;
+        }
+        const auto declared =
+            std::find_if(effect.parameters.cbegin(), effect.parameters.cend(), [&key](const auto& param) {
+                return param.id == key;
+            });
+        if (declared == effect.parameters.cend()) {
+            continue;
+        }
+        // Bound to a named local: constFind on the temporary QVariantMap that
+        // value().toMap() returns would leave the iterator dangling at the end
+        // of the full expression.
+        const QVariantMap packParams = allPackParams.value(packId).toMap();
+        const auto stored = packParams.constFind(key);
+        if (stored != packParams.constEnd()) {
+            return QVariant(stored->toBool());
+        }
+        if (!declaredFallback.isValid()) {
+            declaredFallback = QVariant(declared->defaultValue.toBool());
+        }
+    }
+    return declaredFallback;
+}
+
 } // namespace PhosphorSurfaceShaders

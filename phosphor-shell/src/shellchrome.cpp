@@ -214,6 +214,11 @@ QVariantList ShellChrome::chainFor(const QString& surfacePath) const
         tokenOr(m_palette, QStringLiteral("surface"), QColor(0x0b, 0x10, 0x20)),
         tokenOr(m_palette, QStringLiteral("on_surface"), QColor(0xe6, 0xed, 0xff)),
     };
+    // One silhouette for the whole chain, resolved before any stage is composed.
+    // A backdrop pack that squares its bottom corners against the panel edge has
+    // to take the border and halo packs with it, or they trace an outline the
+    // pane no longer has. See chainRoundBottomCorners.
+    const QVariant chainBottomCorners = PhosphorSurfaceShaders::chainRoundBottomCorners(*m_registry, chain, allParams);
     for (const QString& packId : chain) {
         if (!m_registry->hasEffect(packId)) {
             qCDebug(lcShellChrome) << surfacePath << ": pack" << packId << "is not installed; stage skipped";
@@ -226,6 +231,11 @@ QVariantList ShellChrome::chainFor(const QString& surfacePath) const
         }
         QVariantMap params = allParams.value(packId).toMap();
         PhosphorSurfaceShaders::resolveThemeParamColors(effect, params, theme);
+        // Injected for every stage; a pack that does not declare the control has
+        // the key dropped by translateSurfaceParams.
+        if (chainBottomCorners.isValid()) {
+            params.insert(PhosphorSurfaceShaders::roundBottomCornersParamId(), chainBottomCorners);
+        }
         stages.append(PhosphorSurfaceShaders::composeStageMap(effect, params, m_blurScaleMultiplier));
     }
     return stages;

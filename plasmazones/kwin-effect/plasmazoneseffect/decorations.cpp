@@ -639,6 +639,17 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         m_borderInactiveColor.isValid() ? m_borderInactiveColor
                                         : QColor(QString(PhosphorCompositor::DecorationDefaults::FallbackInactiveHex)),
         pal.color(QPalette::Active, QPalette::Window), pal.color(QPalette::Active, QPalette::WindowText)};
+    // One bottom-corner answer for the whole chain, resolved before any pack's
+    // uniforms are built. This is the path a blur + border chain on a real window
+    // takes, and it is where the two used to disagree: the backdrop squared its
+    // bottom corners and the border went on tracing a rounded outline through the
+    // gap. Resolution order is in chainRoundBottomCorners.
+    //
+    // Resolved from allPackParams AFTER the rule overlay above, so a per-window
+    // rule that moves the silhouette moves it for every pack in that window's
+    // chain rather than for the one pack the rule happens to name.
+    const QVariant chainBottomCorners =
+        PhosphorSurfaceShaders::chainRoundBottomCorners(m_surfaceShaderRegistry, chain, allPackParams);
     for (const QString& packId : std::as_const(chain)) {
         const PhosphorSurfaceShaders::SurfaceShaderEffect eff = m_surfaceShaderRegistry.effect(packId);
         if (!eff.isValid()) {
@@ -654,6 +665,12 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         // useSystemAccent, glow/shadow useThemeTint) via the shared resolver, so
         // window decorations resolve them identically to the daemon overlay path.
         PhosphorSurfaceShaders::resolveThemeParamColors(eff, packOverrides, themeColors);
+        // The chain's silhouette, injected unconditionally: resolveSurfaceParamValues
+        // builds a value only for a parameter the pack declares, so the key is
+        // dropped for packs that draw no outline. Invalid means no pack declared it.
+        if (chainBottomCorners.isValid()) {
+            packOverrides.insert(PhosphorSurfaceShaders::roundBottomCornersParamId(), chainBottomCorners);
+        }
         wb.packParamValues.insert(packId, ShaderInternal::resolveSurfaceParamValues(eff, packOverrides));
 
         // Outer-margin request (e.g. the glow pack's glowSize): the resolved

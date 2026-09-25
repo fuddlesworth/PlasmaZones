@@ -5,11 +5,13 @@
 
 #include <PhosphorSurface/phosphorsurface_export.h>
 
+#include <QStringList>
 #include <QVariantMap>
 
 namespace PhosphorSurfaceShaders {
 
 struct SurfaceShaderEffect;
+class SurfaceShaderRegistry;
 
 /**
  * @brief Resolve one pack's outer-margin request, in LOGICAL pixels.
@@ -85,5 +87,49 @@ PHOSPHORSURFACE_EXPORT double paddingRequest(const SurfaceShaderEffect& effect, 
  */
 PHOSPHORSURFACE_EXPORT QVariantMap composeStageMap(const SurfaceShaderEffect& effect, const QVariantMap& resolvedParams,
                                                    qreal blurScaleMultiplier = 1.0);
+
+/**
+ * @brief The bottom-corner answer every pack in one chain has to draw to.
+ *
+ * A pane's silhouette belongs to the CHAIN, not to any single pack. A backdrop
+ * pack rounds its slab, a border pack traces an outline around that slab, and a
+ * glow or shadow pack hugs the same outline from outside. Let them disagree about
+ * whether the bottom corners are round and the user gets a border curving through
+ * empty space over a squared-off pane, or a shadow rounding a corner the pane
+ * gave up. Per-pack defaults cannot prevent it, because the two packs are
+ * configured on separate pages and nothing there says they are describing one
+ * shape.
+ *
+ * So the host resolves ONE answer for the whole chain and injects it into every
+ * stage, the way the daemon overlay path already injects its card corner radius.
+ * In order:
+ *
+ *   1. the value stored against the FIRST pack in chain order that carries one.
+ *      That is the pack the user actually set the control on.
+ *   2. otherwise the declared default of the first pack that declares the
+ *      control, which is what settles a third-party pack shipping a different
+ *      default from the bundled ones.
+ *   3. otherwise an invalid QVariant, meaning no pack in this chain draws an
+ *      outline at all and the host injects nothing.
+ *
+ * @p allPackParams is the post-flatten `effectiveParameters()` map, shaped
+ * { packId -> { paramId -> value } }. It carries only what a user or a preset
+ * actually set, which is what makes step 1 the user's own answer rather than one
+ * pack's default outvoting another's.
+ *
+ * Injecting the result into a pack that does not declare the control is harmless.
+ * translateSurfaceParams and resolveSurfaceParamValues emit a lane only for
+ * declared parameters, so the key is dropped for any pack without it, and hosts
+ * need no per-pack test before inserting.
+ *
+ * Packs the registry cannot resolve are skipped rather than treated as declaring
+ * nothing, so an uninstalled pack sitting in a stored chain does not get a vote.
+ */
+PHOSPHORSURFACE_EXPORT QVariant chainRoundBottomCorners(const SurfaceShaderRegistry& registry, const QStringList& chain,
+                                                        const QVariantMap& allPackParams);
+
+/// The parameter id `chainRoundBottomCorners` resolves and hosts inject under.
+/// Shared so the four call sites cannot drift on the spelling.
+PHOSPHORSURFACE_EXPORT QString roundBottomCornersParamId();
 
 } // namespace PhosphorSurfaceShaders

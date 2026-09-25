@@ -3,7 +3,15 @@
 
 #include <PhosphorSurface/SurfaceChainCompose.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
+#include <PhosphorSurface/SurfaceShaderRegistry.h>
 
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QTemporaryDir>
 #include <QUrl>
 #include <QtTest/QtTest>
 
@@ -32,6 +40,54 @@ SurfaceShaderEffect::ParameterInfo floatParam(const QString& id, double defaultV
     p.type = QStringLiteral("float");
     p.defaultValue = defaultValue;
     return p;
+}
+
+/// Write @p contents to @p path, creating parent directories.
+bool writeFile(const QString& path, const QByteArray& contents)
+{
+    const QFileInfo fi(path);
+    if (!QDir().mkpath(fi.absolutePath()))
+        return false;
+    QFile f(path);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        return false;
+    return f.write(contents) == contents.size();
+}
+
+/// Author `<root>/<id>/metadata.json` plus the stub effect.frag the registry's
+/// on-disk check needs.
+///
+/// chainRoundBottomCorners resolves against DECLARED parameters, so these go
+/// through a real registry rather than hand-built effects: the declared-default
+/// arm is only reachable when a pack actually declares the control, and that is
+/// the loader's job. @p roundBottomDefault invalid means the pack declares no
+/// parameters at all, which is every pack that draws no outline.
+bool writeSilhouettePack(const QString& root, const QString& id, const QVariant& roundBottomDefault)
+{
+    QJsonObject meta;
+    meta.insert(QLatin1String("id"), id);
+    meta.insert(QLatin1String("name"), id);
+    meta.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+    if (roundBottomDefault.isValid()) {
+        QJsonObject param;
+        param.insert(QLatin1String("id"), QStringLiteral("roundBottomCorners"));
+        param.insert(QLatin1String("name"), QStringLiteral("Round bottom corners"));
+        param.insert(QLatin1String("type"), QStringLiteral("bool"));
+        param.insert(QLatin1String("default"), roundBottomDefault.toBool());
+        QJsonArray params;
+        params.append(param);
+        meta.insert(QLatin1String("parameters"), params);
+    }
+    const QString packDir = root + QLatin1Char('/') + id;
+    if (!writeFile(packDir + QStringLiteral("/metadata.json"), QJsonDocument(meta).toJson()))
+        return false;
+    return writeFile(packDir + QStringLiteral("/effect.frag"), QByteArrayLiteral("// stub\n"));
+}
+
+/// One pack's entry in the post-flatten effectiveParameters() map.
+QVariantMap storedValue(bool roundBottomCorners)
+{
+    return QVariantMap{{QStringLiteral("roundBottomCorners"), roundBottomCorners}};
 }
 
 } // namespace
@@ -404,6 +460,146 @@ private Q_SLOTS:
         noId.id.clear();
         QVERIFY(!noId.isValid());
         QVERIFY(composeStageMap(noId, {}).isEmpty());
+    }
+
+    // ── chainRoundBottomCorners ──────────────────────────────────────
+    //
+    // The pane's silhouette is one shape for the whole chain. These pin the
+    // resolution order the four hosts inject from, because a disagreement
+    // between a backdrop pack and the border tracing it is always a visual
+    // defect and never a preference.
+
+    /// A chain of packs that draw no outline has nothing to agree about, and an
+    /// invalid answer is what tells the host to inject nothing. Injecting a
+    /// fabricated `true` instead would be indistinguishable downstream from a
+    /// pack that really declared it.
+    void chainRoundBottomCorners_is_invalid_when_no_pack_declares_it()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("fireflies"), {}));
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("opacity-tint"), {}));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+
+        const QStringList chain{QStringLiteral("fireflies"), QStringLiteral("opacity-tint")};
+        QVERIFY(!chainRoundBottomCorners(registry, chain, {}).isValid());
+    }
+
+    /// Nothing stored anywhere: the first pack in CHAIN ORDER that declares the
+    /// control settles it. Bundled packs all declare the same default, so this
+    /// arm only bites for a third-party pack shipping a different one, and it
+    /// still has to produce one answer rather than let each pack keep its own.
+    void chainRoundBottomCorners_falls_back_to_the_first_declaring_packs_default()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("backdrop"), false));
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("border"), true));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+
+        const QStringList chain{QStringLiteral("backdrop"), QStringLiteral("border")};
+        const QVariant answer = chainRoundBottomCorners(registry, chain, {});
+        QVERIFY(answer.isValid());
+        QCOMPARE(answer.toBool(), false);
+
+        // Reversing the chain reverses the answer: it is chain order that
+        // decides, not pack id or discovery order.
+        const QStringList reversed{QStringLiteral("border"), QStringLiteral("backdrop")};
+        QCOMPARE(chainRoundBottomCorners(registry, reversed, {}).toBool(), true);
+    }
+
+    /// A value the user actually set outranks ANY declared default, including
+    /// one belonging to an earlier pack in the chain. effectiveParameters()
+    /// carries only what a user or preset set, so presence in the map is the
+    /// signal that this is a choice rather than a default racing a default.
+    void chainRoundBottomCorners_prefers_a_stored_value_over_an_earlier_declared_default()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("backdrop"), true));
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("border"), true));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+
+        // Only the SECOND pack carries a stored value. The first pack's
+        // declared true must not win just for coming first.
+        const QVariantMap allParams{{QStringLiteral("border"), storedValue(false)}};
+        const QStringList chain{QStringLiteral("backdrop"), QStringLiteral("border")};
+        QCOMPARE(chainRoundBottomCorners(registry, chain, allParams).toBool(), false);
+    }
+
+    /// Two stored values disagree, which is a genuine conflict with no right
+    /// answer. It resolves by chain order and stays deterministic rather than
+    /// depending on QVariantMap iteration.
+    void chainRoundBottomCorners_takes_the_first_stored_value_in_chain_order()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("backdrop"), true));
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("border"), true));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+
+        const QVariantMap allParams{{QStringLiteral("backdrop"), storedValue(true)},
+                                    {QStringLiteral("border"), storedValue(false)}};
+        QCOMPARE(chainRoundBottomCorners(registry, {QStringLiteral("backdrop"), QStringLiteral("border")}, allParams)
+                     .toBool(),
+                 true);
+        QCOMPARE(chainRoundBottomCorners(registry, {QStringLiteral("border"), QStringLiteral("backdrop")}, allParams)
+                     .toBool(),
+                 false);
+    }
+
+    /// A profile naming a pack the user uninstalled keeps its stored values.
+    /// Letting that vote would hand the chain a silhouette from a pack that
+    /// draws nothing, which is the same class of bug as paddingRequest honouring
+    /// an override under an undeclared paddingParam.
+    void chainRoundBottomCorners_ignores_a_pack_the_registry_does_not_know()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("border"), true));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+        QVERIFY(!registry.hasEffect(QStringLiteral("uninstalled")));
+
+        const QVariantMap allParams{{QStringLiteral("uninstalled"), storedValue(false)}};
+        const QStringList chain{QStringLiteral("uninstalled"), QStringLiteral("border")};
+        // The surviving pack's declared true, not the ghost's stored false.
+        QCOMPARE(chainRoundBottomCorners(registry, chain, allParams).toBool(), true);
+    }
+
+    /// A stored value for a pack that never declared the control is stale config
+    /// (the user switched packs, or hand-edited the profile). resolveParams
+    /// copies unrecognised ids through verbatim, so this reaches the resolver and
+    /// must not be read as that pack's answer.
+    void chainRoundBottomCorners_ignores_a_stored_value_on_a_pack_that_does_not_declare_it()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("opacity-tint"), {}));
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("border"), true));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+
+        const QVariantMap allParams{{QStringLiteral("opacity-tint"), storedValue(false)}};
+        const QStringList chain{QStringLiteral("opacity-tint"), QStringLiteral("border")};
+        QCOMPARE(chainRoundBottomCorners(registry, chain, allParams).toBool(), true);
+    }
+
+    /// The id the hosts inject under has to be the id the resolver reads, or the
+    /// chain answer lands in a key no pack declares and is silently dropped.
+    void roundBottomCornersParamId_is_the_id_packs_declare()
+    {
+        QCOMPARE(roundBottomCornersParamId(), QStringLiteral("roundBottomCorners"));
     }
 };
 
