@@ -60,11 +60,21 @@ License: GPL-3.0-or-later
 Files: data/surface/blur/effect.frag
        data/surface/duotone/effect.frag
        data/surface/frosted-glass/effect.frag
-       data/surface/glass/effect.frag
        data/surface/mosaic/effect.frag
        data/surface/rain-glass/effect.frag
        data/surface/rippled-glass/effect.frag
 Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+License: GPL-3.0-or-later
+
+# The glass pack's main pass says in its own header that it is a FULL PORT of
+# kwin-effects-glass, naming that project's glass.glsl, snells-glass.glsl and
+# oklab.glsl, so upstream is credited rather than relicensed away. Its own stanza
+# AFTER the group above rather than inside it, because DEP-5 is last-match-wins
+# and a group listing it would override the credit. Better Blur is credited in the
+# file's prose only: what is taken from it is an idea, not a body.
+Files: data/surface/glass/effect.frag
+Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+           kwin-effects-glass contributors
 License: GPL-3.0-or-later
 
 Files: data/overlays/neon-city/*

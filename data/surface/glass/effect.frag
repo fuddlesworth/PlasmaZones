@@ -1,5 +1,20 @@
+// SPDX-FileCopyrightText: kwin-effects-glass contributors
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
+//
+// The first copyright line is there because this file says, two paragraphs down,
+// that it is a FULL PORT of kwin-effects-glass, and names that project's own
+// glass.glsl, snells-glass.glsl and oklab.glsl. CLAUDE.md's rule for the
+// animation and pointer trees applies just as much here: a port of an upstream
+// body carries a second SPDX-FileCopyrightText, because PlasmaZones is not that
+// body's copyright holder. data/surface is exempt from the GPL/LGPL
+// normalisation, not from crediting a third-party work. Same shape as the niri
+// honeycomb port in data/animations.
+//
+// Better Blur and Better Blur DX are credited in prose below but NOT with a
+// copyright line, because what is taken from them is an idea rather than a body:
+// the concave-lens arm is a plain uniform scale toward the pane centre, written
+// here, and the bevel-normal control is named after theirs.
 //
 // Glass pack, main pass: a refracting pane over the blurred backdrop
 // (iChannel6) — a full port of kwin-effects-glass (glass.glsl /
@@ -204,9 +219,25 @@ vec4 pSurface(vec2 uv) {
             float strengthUv = 0.4 * concave * strength;
             // Same px -> uv conversion the Snell branch gets from pxToUv, so
             // the two modes share one Y convention instead of hand-rolling a
-            // second copy that only tracked the compositor. The frame/canvas
-            // ratio stays: this offset is expressed relative to the frame.
-            vec2 dirUv = pxToUv(inward * strengthUv * uSurfaceFrameSize);
+            // second copy that only tracked the compositor.
+            //
+            // ISOTROPIC IN DEVICE px, against the pane's SHORT side. Scaling by the
+            // whole uSurfaceFrameSize made the displacement a fraction of each axis
+            // SEPARATELY, so on a 1600x400 pane one "Refraction strength" bent the
+            // backdrop four times as far left and right as it did up and down. A
+            // strength slider that means a different amount depending on which way
+            // the surface faces has no coherent reading, the same objection as the
+            // frost crystals inheriting the pane aspect. The short side keeps a
+            // square pane byte-identical and takes the larger axis down to match.
+            //
+            // This does NOT close the gap between the two modes' magnitudes: cheap
+            // is a fraction of the pane and Snell a fraction of the bevel width, so
+            // the toggle still changes the bend by roughly an order of magnitude on
+            // a large window. Both are internally coherent, unifying them would be a
+            // look change with no correctness argument behind it, and the two
+            // parameter descriptions now say which scale each bends against.
+            float paneShortPx = min(uSurfaceFrameSize.x, uSurfaceFrameSize.y);
+            vec2 dirUv = pxToUv(inward * strengthUv * paneShortPx);
             vec4 g = surfaceBlurTexel(glassCoord(uv + dirUv));
             lit = g.rgb;
             // Gated the way the concave and Snell arms already gate theirs. Run

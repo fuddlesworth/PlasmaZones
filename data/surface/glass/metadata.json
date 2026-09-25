@@ -65,7 +65,7 @@
             "default": 0.5,
             "min": 0.0,
             "max": 2.0,
-            "description": "How far the backdrop bends at the pane's bevelled edge",
+            "description": "How far the backdrop bends at the pane's bevelled edge. Without Physically based refraction the bend is a fraction of the whole pane, so it is larger on a larger window; with it, the bend is confined to the bevel width and barely changes with window size",
             "group": "Refraction"
         },
         {
@@ -113,7 +113,7 @@
             "name": "Physically based refraction",
             "type": "bool",
             "default": false,
-            "description": "Bend the backdrop with Snell's law instead of the simple offset. Ignored while Concave lens is on",
+            "description": "Bend the backdrop with Snell's law instead of the simple offset. This also makes the bend much smaller at the same strength, because it is measured against the bevel width rather than against the pane. Ignored while Concave lens is on",
             "group": "Refraction"
         },
         {
