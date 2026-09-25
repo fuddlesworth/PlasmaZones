@@ -348,6 +348,22 @@ vec2 frameMirrorUv(vec2 uv) {
     return surfaceUvFromPixel(uSurfaceFrameTopLeft + f * uSurfaceFrameSize);
 }
 
+// Where a bent sample LANDS: folded back inside the frame when @p mirror, else
+// clamped to the canvas.
+//
+// The two-way choice was written out three times, once per refracting pack
+// (glass, rippled-glass, rain-glass). frameMirrorUv above was already shared,
+// but the POLICY around it was not, and the policy is the part that has to
+// agree: a pack that clamped where its siblings mirror shows a stretched edge
+// pixel where they show the pane folding over, on the same user setting.
+//
+// Takes the flag rather than reading a parameter, because `p_edgeMirror` is a
+// per-pack generated name that a shared header cannot see. The packs keep their
+// own one-line wrappers for readability and pass the flag through.
+vec2 surfaceBendUv(vec2 uv, bool mirror) {
+    return mirror ? frameMirrorUv(uv) : clamp(uv, 0.0, 1.0);
+}
+
 // px-space (top-down) vector -> canvas UV offset, used for backdrop
 // refraction offsets. The flip is per-runtime for the same reason
 // surfacePixel's is: px space is top-down on both hosts, but the compositor

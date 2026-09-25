@@ -44,7 +44,7 @@ float rippleHeight(vec2 q, float t) {
 // Where a bent sample lands: clamped to the canvas, or folded back inside the
 // frame when the pack's Edge mirror switch is on.
 vec2 rippleCoord(vec2 c) {
-    return p_edgeMirror >= 0.5 ? frameMirrorUv(c) : clamp(c, 0.0, 1.0);
+    return surfaceBendUv(c, p_edgeMirror >= 0.5);
 }
 
 vec4 pSurface(vec2 uv) {
@@ -171,7 +171,7 @@ vec4 pSurface(vec2 uv) {
                   .rgb;
         lit += glint * g.a;
         lit = mix(lit, tint * g.a, tintStrength);
-        lit += (hash13(px) - 0.5) * 2.0 * clamp(p_noiseStrength, 0.0, 0.2) * g.a;
+        lit += surfaceGrain(px, p_noiseStrength) * g.a;
         pane = vec4(clamp(lit, 0.0, max(g.a, 0.0001)), g.a) * mask;
     } else {
         pane = faintTintSlab(tint, tintStrength, mask);

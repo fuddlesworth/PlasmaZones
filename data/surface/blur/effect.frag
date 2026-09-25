@@ -55,7 +55,7 @@ vec4 pSurface(vec2 uv) {
         col = surfaceColorAdjust(col, p_brightness, p_contrast, p_saturation);
         col = surfaceVibrancy(col, p_vibrancy, p_vibrancyDarkness);
         col = mix(col, tint, tintStrength);
-        col += (hash13(slab.px) - 0.5) * 2.0 * clamp(p_noiseStrength, 0.0, 0.2);
+        col += surfaceGrain(slab.px, p_noiseStrength);
         frost = vec4(clamp(col, 0.0, 1.0) * blurred.a, blurred.a) * slab.mask;
     } else {
         // Nothing bound behind this surface: a faint tint slab.

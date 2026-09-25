@@ -43,7 +43,7 @@ vec4 pSurface(vec2 uv) {
         vec3 mapped = mix(p_colorA.rgb, p_colorB.rgb, luma);
         // Driver-stable grain over the two-tone map, which hides the banding
         // a smooth luminance ramp otherwise shows between the two colours.
-        mapped += (hash13(slab.px) - 0.5) * 2.0 * clamp(p_noiseStrength, 0.0, 0.2);
+        mapped += surfaceGrain(slab.px, p_noiseStrength);
         pane = vec4(clamp(mapped, 0.0, 1.0) * blurred.a, blurred.a) * slab.mask;
     } else {
         // Original pseudo look with no backdrop: a vertical

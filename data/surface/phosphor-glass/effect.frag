@@ -123,7 +123,7 @@ vec4 pSurface(vec2 uv) {
 
         vec3 color = (base + glowCol * response * glowStrength * blurred.a) * vignette;
         // Driver-stable grain, weighted by the backdrop alpha.
-        color += (hash13(slab.px) - 0.5) * 2.0 * clamp(p_noiseStrength, 0.0, 0.2) * blurred.a;
+        color += surfaceGrain(slab.px, p_noiseStrength) * blurred.a;
         color = clamp(color, 0.0, max(blurred.a, 0.0001));
         pane = vec4(color, blurred.a) * slab.mask;
     } else {

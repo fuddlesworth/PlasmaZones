@@ -120,4 +120,24 @@ float hashSin1(float n) {
     return fract(sin(n * 127.1 + 311.7) * 43758.5453);
 }
 
+// The family's grain term: driver-stable noise in [-1, 1] scaled by @p strength,
+// which is clamped to the 0.2 ceiling every pack's Noise parameter declares.
+//
+// Written out identically in five packs (blur, duotone, phosphor-glass,
+// rain-glass, rippled-glass), each repeating that 0.2. The ceiling is the thing
+// worth having in one place: it is a rendering decision about how much grain is
+// too much, and five copies of it drift one at a time.
+//
+// GLASS DELIBERATELY DOES NOT USE THIS. Its grain is tuned to hashSin's specific
+// per-driver output, which the header above keeps as a separate symbol precisely
+// so it cannot be silently swapped onto the integer hash. It keeps its own line
+// and its own comment saying why.
+//
+// Returns the UN-weighted term. A pack over a premultiplied backdrop multiplies
+// by that alpha itself, which four of the five do and blur does not need to,
+// since it grains an un-premultiplied colour and re-premultiplies after.
+float surfaceGrain(vec2 px, float strength) {
+    return (hash13(px) - 0.5) * 2.0 * clamp(strength, 0.0, 0.2);
+}
+
 #endif // PLASMAZONES_SURFACE_NOISE_GLSL

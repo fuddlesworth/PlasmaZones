@@ -153,7 +153,7 @@ vec4 pSurface(vec2 uv) {
         vec2 bent = uv + pxToUv(offsetPx * (p_refraction / 40.0));
         // Clamped to the canvas, or folded back inside the frame when the
         // pack's Edge mirror switch is on.
-        vec2 sampleUv = p_edgeMirror >= 0.5 ? frameMirrorUv(bent) : clamp(bent, 0.0, 1.0);
+        vec2 sampleUv = surfaceBendUv(bent, p_edgeMirror >= 0.5);
         vec4 fog = surfaceBackdropGrade(surfaceBlurTexel(sampleUv), p_brightness, p_contrast, p_saturation,
                                         p_vibrancy, p_vibrancyDarkness);
         // Top-light: a small highlight on each droplet's upper edge (the
@@ -164,7 +164,7 @@ vec4 pSurface(vec2 uv) {
         float hi = wet * clamp(offsetPx.y / max(cellPx, 1.0) * 8.0, 0.0, 1.0) * 0.3 * focusDim(0.55);
         // Driver-stable grain over the fog, weighted by its alpha so the
         // cleared off-capture margin stays clear.
-        float grain = (hash13(px) - 0.5) * 2.0 * clamp(p_noiseStrength, 0.0, 0.2);
+        float grain = surfaceGrain(px, p_noiseStrength);
         pane = vec4(clamp(fog.rgb + (hi + grain) * fog.a, 0.0, max(fog.a, 0.0001)), fog.a) * mask;
     } else {
         // Original pseudo look with no backdrop: droplets glint over a

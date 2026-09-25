@@ -75,7 +75,24 @@ layout(binding = 15) uniform sampler2D uBackdrop;
 vec4 backdropTexel(vec2 uv) {
 #ifdef PLASMAZONES_KWIN
     vec2 td = vec2(uv.x, 1.0 - uv.y); // top-down normalized, like surfacePixel
-    td = clamp(td, uBackdropRect.xy, uBackdropRect.xy + uBackdropRect.zw);
+    // INSET BY HALF A TEXEL, because the sampler is GL_LINEAR and the bound used
+    // to be the rect's own edge. A sample landing exactly on that edge
+    // interpolates between the last real texel and the first one OUTSIDE the
+    // rect, and outside the rect is the cleared margin that was never blitted.
+    // So up to half the contribution at the boundary came from the very texels
+    // the clamp exists to exclude, in a band half a texel wide all round. A blur
+    // pass whose taps reach the edge, which is what the whole clamp is here for,
+    // is exactly the case that pulls it in.
+    //
+    // The upper bound is held at or above the lower one, so a rect narrower than
+    // one texel collapses to a point inside itself rather than inverting.
+    // NOT `const`: textureSize() is not a constant expression, and a driver
+    // compiler is free to reject a const initialized from one even where glslang
+    // accepts it.
+    vec2 halfTexel = 0.5 / vec2(textureSize(uBackdrop, 0));
+    vec2 lo = uBackdropRect.xy + halfTexel;
+    vec2 hi = max(uBackdropRect.xy + uBackdropRect.zw - halfTexel, lo);
+    td = clamp(td, lo, hi);
     return texture(uBackdrop, vec2(td.x, 1.0 - td.y));
 #else
     // Transparent when nothing is bound, so a pack that samples without

@@ -48,7 +48,7 @@
 // behaviour, an edge pixel stretched), or mirrored back inside the frame when
 // the pack's Edge mirror switch is on.
 vec2 glassCoord(vec2 c) {
-    return p_edgeMirror >= 0.5 ? frameMirrorUv(c) : clamp(c, 0.0, 1.0);
+    return surfaceBendUv(c, p_edgeMirror >= 0.5);
 }
 
 vec4 pSurface(vec2 uv) {
