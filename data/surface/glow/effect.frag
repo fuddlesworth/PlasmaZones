@@ -49,7 +49,7 @@ vec4 pSurface(vec2 uv) {
     // like Oxygen's cue —
     // the shared glow/shadow halo.
     float reach = max(p_glowSize * uSurfaceScale, 1.0);
-    float halo = haloFalloff(fs.d, reach, p, base.a, p_glowStrength, 0.30);
+    float halo = haloFalloff(fs.d, reach, p, base.a, p_glowStrength, 0.30, p_cornerRadius * uSurfaceScale);
 
     // Premultiplied additive-over: the halo lights the margin under its own
     // alpha; the content term is untouched.

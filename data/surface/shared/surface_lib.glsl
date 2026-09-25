@@ -293,7 +293,8 @@ vec4 faintTintSlab(vec3 tint, float tintStrength, float mask) {
 // at floor `focusFloor`. `edgePx` is the
 // REAL (undisplaced) fragment position for the edge feather — the shadow pack
 // evaluates `d` against a displaced frame but feathers on the true position.
-float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float strength, float focusFloor) {
+float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float strength, float focusFloor,
+                  float gateCornerPx) {
     // reach is caller-supplied and a zero would make this inf, then NaN through
     // exp(), and a NaN propagates through the whole composite rather than
     // showing up as one bad pixel. Both in-tree callers (glow, shadow) floor it
@@ -338,13 +339,17 @@ float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float stre
     // pack calling this from a buffer pass reads a zero frame there and a real one
     // on the daemon. focusDim below has the same shape.
     //
-    // Square corners on purpose. This function is not handed the pack's corner
-    // radius, and the square reading is the conservative one. The cost is that the
-    // transparent corner sliver the clamp above preserves survives only while the
-    // reach exceeds about 0.29 of the border pack's radius, because the sliver's
-    // deepest point sits 0.293R inside the square edge.
+    // ROUNDED to the caller's own corner radius, not square. A rounded rect is a
+    // subset of its bounding square, so the square SDF is <= the rounded one
+    // everywhere and EQUAL except in the corner zone — which means a square gate
+    // reads the transparent corner sliver as deeper inside than it is, and zeroes
+    // the halo there once the reach falls under about 0.29 of the radius (the
+    // sliver's deepest point sits 0.293R inside the square edge). glowSize 4 with
+    // cornerRadius 64 is legal and hits it. Passing the radius costs nothing and
+    // leaves every non-corner fragment identical.
     vec2 gateHalf = 0.5 * uSurfaceFrameSize;
-    float dBody = sdRoundedBox(edgePx - (uSurfaceFrameTopLeft + gateHalf), gateHalf, 0.0);
+    float gateR = clamp(gateCornerPx, 0.0, min(gateHalf.x, gateHalf.y));
+    float dBody = sdRoundedBox(edgePx - (uSurfaceFrameTopLeft + gateHalf), gateHalf, gateR);
     halo *= smoothstep(-2.0 * r, -r, dBody);
     float edgeDist = min(min(edgePx.x, edgePx.y), min(uSurfaceSize.x - edgePx.x, uSurfaceSize.y - edgePx.y));
     // Floored so edge0 != edge1: smoothstep is undefined when they are equal, and
@@ -355,6 +360,15 @@ float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float stre
     halo *= (1.0 - baseAlpha);
     halo *= strength * focusDim(focusFloor);
     return halo;
+}
+
+// The pre-existing SIX-argument form, kept so a third-party pack calling it is
+// byte-identical to what it had. A square gate, which is what this helper did
+// before it took a radius, and which costs the corner sliver on a pack whose halo
+// reach is small against its corner radius. A pack that rounds its frame should
+// pass the radius to the seven-argument form above.
+float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float strength, float focusFloor) {
+    return haloFalloff(d, reach, edgePx, baseAlpha, strength, focusFloor, 0.0);
 }
 
 // Frame-normalised UV for a device-px fragment. In [0,1] only for a fragment

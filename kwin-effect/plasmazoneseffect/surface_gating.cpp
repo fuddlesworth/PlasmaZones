@@ -505,13 +505,20 @@ std::function<void()> PlasmaZonesEffect::neutralisePresentForOutOfBandDraw(KWin:
     }
     // PARK WHAT THE DECORATION BELIEVES IT LAST PAINTED, whatever else this
     // function decides below. drawWindowImpl's padded-present branch records
-    // lastForeignBand / lastForeignOpacity from the WindowPaintData it is handed,
-    // and the next real frame's changed-test is their only reader. This draw is
-    // handed a DEFAULT one, no translation and opacity 1.0, so for a padded window
-    // under a foreign transform it writes "no band" over the real values and the
-    // next real frame then answers unchanged, issues no damage, and leaves the halo
-    // band neither recomposited nor cleared. The branch's own ForeignBandUndo does
-    // not cover this: it restores only when the draw FAILED, and this one succeeds.
+    // lastForeignBand / lastForeignOpacity from the WindowPaintData it is handed, and
+    // the next real frame's changed-test is their only reader. This draw is handed a
+    // DEFAULT one, no translation and opacity 1.0, so for a padded window under a
+    // foreign transform it writes "no band" over the real values — a record of
+    // something no frame ever painted. The branch's own ForeignBandUndo does not
+    // cover it, restoring only when the draw FAILED, and this one succeeds.
+    //
+    // NOT a lost-damage fix, and an earlier version of this comment claimed it was.
+    // Trace it: the empty band differs from the non-empty record, so `changed` is
+    // TRUE, the out-of-band draw issues its damage, and the next real frame compares
+    // non-empty against the empty record and answers changed again. That is one
+    // redundant damage cycle, never a missing one. What the park buys is that the
+    // record keeps meaning "what a real frame put on screen", which is the only
+    // thing its reader can sensibly act on.
     QPointer<KWin::EffectWindow> parkW(w);
     const QRectF parkedBand = decoIt->lastForeignBand;
     const qreal parkedOpacity = decoIt->lastForeignOpacity;

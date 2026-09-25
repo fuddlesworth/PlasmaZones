@@ -39,7 +39,7 @@ vec4 pSurface(vec2 uv) {
     // the frame, and only mildly
     // focus-softened (a real shadow persists unfocused) — the shared halo.
     float reach = max(p_shadowSize * uSurfaceScale, 1.0);
-    float body = haloFalloff(fs.d, reach, realPx, base.a, p_shadowStrength, 0.65);
+    float body = haloFalloff(fs.d, reach, realPx, base.a, p_shadowStrength, 0.65, p_cornerRadius * uSurfaceScale);
 
     // Premultiplied over: the dark veil fills the margin under its own
     // alpha; with the default black colour the rgb term contributes nothing
