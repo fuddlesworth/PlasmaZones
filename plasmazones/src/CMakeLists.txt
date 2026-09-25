@@ -839,8 +839,11 @@ set(plasmazones_editor_SRCS
 # Create the executable first
 add_executable(plasmazones-editor ${plasmazones_editor_SRCS})
 
-# ColorUtils.js is a stateless utility imported explicitly by each QML file that uses it;
-# skip its qmldir entry to avoid re-evaluation in every importer (Qt 6.8+ dev warning)
+# ColorUtils.js is imported by relative path from each QML file that uses it, so it needs
+# no qmldir entry. NOT about re-evaluation: the file's own `.pragma library` is what makes
+# it shared, and it declares one inside Qt's 128-byte scan window. ThemeHelpers.js is
+# imported the same way and carries no such property, so this is asymmetric rather than
+# load-bearing; drop it if the qmldir omission ever stops mattering.
 set_source_files_properties(editor/qml/ColorUtils.js PROPERTIES
     QT_QML_SKIP_QMLDIR_ENTRY TRUE
 )

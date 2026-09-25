@@ -85,6 +85,15 @@ float sdRoundedBoxSplit(vec2 p, vec2 b, float rTop, float rBottom) {
 // frameSdf with separate top / bottom radii (device px), each clamped to half
 // the smaller side. `radius` reports the TOP radius, which is the one the
 // glass lens builds its normal field from.
+// The bottom radius a pack derives from its own declared roundBottomCorners switch.
+// Twenty packs had their own copy of this ternary, including twenty copies of the
+// `>= 0.5` convention for reading a bool out of the float lane the contract uploads
+// it in. The flag is a parameter for the same reason surfaceBendUv's is:
+// `p_roundBottomCorners` is a per-pack generated name a shared header cannot see.
+float surfaceBottomRadius(float cornerRadiusPx, float roundBottomFlag) {
+    return roundBottomFlag >= 0.5 ? cornerRadiusPx : 0.0;
+}
+
 FrameSDF frameSdfSplit(vec2 p, float topRadiusPx, float bottomRadiusPx) {
     FrameSDF fs;
     fs.halfSize = 0.5 * uSurfaceFrameSize;

@@ -45,7 +45,7 @@ vec4 pSurface(vec2 uv) {
     // used to get a glow still curving around a corner the pane no longer had.
     vec2 p = surfacePixel(uv);
     float cornerPx = p_cornerRadius * uSurfaceScale;
-    float bottomPx = p_roundBottomCorners >= 0.5 ? cornerPx : 0.0;
+    float bottomPx = surfaceBottomRadius(cornerPx, p_roundBottomCorners);
     FrameSDF fs = frameSdfSplit(p, cornerPx, bottomPx);
 
     // Gaussian-profile reach falloff (exp(-4t²), a soft shadow not a flood),

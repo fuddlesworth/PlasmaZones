@@ -24,7 +24,7 @@ vec4 pSurface(vec2 uv) {
         return tex;
     }
 
-    float bottomRadius = p_roundBottomCorners >= 0.5 ? p_cornerRadius : 0.0;
+    float bottomRadius = surfaceBottomRadius(p_cornerRadius, p_roundBottomCorners);
     BorderBand bb =
         standardBorderBandSplit(surfacePixel(uv), p_borderWidth, p_cornerRadius, bottomRadius, p_edgeSoftness);
 

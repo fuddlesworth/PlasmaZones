@@ -35,7 +35,7 @@ vec4 pSurface(vec2 uv) {
     vec2 realPx = surfacePixel(uv);
     vec2 p = realPx - offset;
     float cornerPx = p_cornerRadius * uSurfaceScale;
-    float bottomPx = p_roundBottomCorners >= 0.5 ? cornerPx : 0.0;
+    float bottomPx = surfaceBottomRadius(cornerPx, p_roundBottomCorners);
     FrameSDF fs = frameSdfSplit(p, cornerPx, bottomPx);
 
     // Same exp(-4t²) reach falloff as the glow pack, but the edge feather is

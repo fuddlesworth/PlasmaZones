@@ -35,7 +35,7 @@ vec4 pSurface(vec2 uv) {
     // Band geometry: the family's OUTER-radius rounded-rect SDF, content clip
     // and band edge from this pack's logical-px width and corner radius.
     vec2 p = surfacePixel(uv);
-    float bottomRadius = p_roundBottomCorners >= 0.5 ? p_cornerRadius : 0.0;
+    float bottomRadius = surfaceBottomRadius(p_cornerRadius, p_roundBottomCorners);
     BorderBand bb = standardBorderBandSplit(p, p_borderWidth, p_cornerRadius, bottomRadius, p_edgeSoftness);
 
     // ── Flowing gradient: the perimeter coordinate drifts with time and is

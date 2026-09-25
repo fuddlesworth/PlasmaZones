@@ -176,6 +176,15 @@ void PlasmaZonesEffect::deferDecorationTeardownWhileAnimated(const QString& wind
     // ~250ms scaled by the user's global animation speed, so a handful of
     // ticks covers the common case.
     constexpr int kAnimatedTeardownPollMs = 120;
+    // NO RETRY BUDGET, deliberately, and worth stating because the loop is
+    // self-re-arming: each tick removes the id, calls updateWindowDecoration, and
+    // that re-enters here and arms again, so a window whose EffectWindowVisibleRef is
+    // never dropped polls for as long as it is held. That is the correct behaviour —
+    // the ref IS the signal that something is still animating, and capping it would
+    // tear down a decoration mid-animation, which is the defect the deferral exists
+    // to prevent. The cost per tick is one findWindowById walk, and no in-tree path
+    // leaks the ref; a foreign effect that did would show up as this poll, not as a
+    // stuck border.
     if (m_animatedDecoTeardownPending.contains(windowId)) {
         return; // a poll is already armed; decoration sweeps re-enter freely
     }

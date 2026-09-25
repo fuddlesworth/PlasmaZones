@@ -465,9 +465,8 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             for (const SurfaceShaderEffect::ParameterInfo& p : eff.parameters) {
                 if (p.id == paddingParam && (p.type == QLatin1String("float") || p.type == QLatin1String("int"))) {
                     resolves = true;
-                    // The host bounds the request into [0, kMaxDecorationOuterPaddingPx],
-                    // so a declared max above that ceiling has a dead top end: the slider
-                    // moves and the margin stops. Every bundled pack sits at or under it.
+                    // The host bounds the request into [0, kMaxDecorationOuterPaddingPx], so
+                    // a max above that ceiling has a dead top end. All bundled packs comply.
                     bool okMax = false;
                     const double declaredMax = p.maxValue.toDouble(&okMax);
                     if (okMax

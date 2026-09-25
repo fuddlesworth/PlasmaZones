@@ -143,6 +143,13 @@ QString roundBottomCornersParamId()
 /// Both inputs cross the same trust boundary usablePadding describes: an
 /// installed pack's metadata.json for the declared default, and a stored
 /// per-surface profile for the override.
+///
+/// So a WRONG-TYPED stored value is explicitly not covered: QVariant::toBool() is
+/// true for any string that is not empty, "0" or "false", so `"off"` reads as round.
+/// Nothing in the tree can produce that today (the settings UI writes a bool and the
+/// flatten copies it verbatim), and the alternative — gating on the declared type —
+/// was rejected for the reason above. A hand-edited profile gets the value it asked
+/// for rather than a refusal.
 static bool usableBool(const QVariant& value, bool* out)
 {
     if (!value.isValid() || value.isNull()) {

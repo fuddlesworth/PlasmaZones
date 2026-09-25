@@ -7,6 +7,7 @@
     "category": "Ambience",
     "animated": true,
     "fragmentShader": "effect.frag",
+    "interiorOpaque": true,
     "paddingParam": "moteRange",
     "parameters": [
         {

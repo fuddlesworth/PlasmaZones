@@ -170,6 +170,12 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     // Resolve @p surfacePath through the decoration tree. resolve() walks
     // baseline → category → leaf and returns a DecorationProfile carrying an
     // effective CHAIN (ordered pack ids) plus a per-pack parameters map.
+    // Rebuilt per call, and per call means per slot per sweep: the settings getter carries
+    // no parse cache, so each one re-parses the stored blob, re-seeds the defaults and
+    // re-runs the preset flatten below. Acceptable because every trigger is a user edit or
+    // a pack rescan, never a frame, and the screen-id gating in the sweep keeps it to the
+    // slots that can actually be up. If that stops holding, the shell chrome's
+    // revision-keyed m_resolvedCache is the shape to copy.
     const PhosphorSurfaceShaders::DecorationProfileTree tree = m_settings->decorationProfileTree();
     // Flatten each layer's preset reference into its parameters, after the
     // walk-up rather than before it — see withPresetsResolved for why the order
