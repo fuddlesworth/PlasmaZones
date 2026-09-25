@@ -44,25 +44,22 @@
 #include <surface_noise.glsl>
 #include <surface_color.glsl>
 
-// Where a bent sample coordinate lands: clamped to the canvas.
+// Where a bent sample coordinate lands: clamped to the canvas (the reference
+// behaviour, an edge pixel stretched), or mirrored back inside the frame when the
+// pack's Edge mirror switch is on.
 //
-// NO EDGE-MIRROR SWITCH HERE, unlike rippled-glass and rain-glass, because on
-// this pack it could never do anything. All three of this pack's refraction
-// modes displace INWARD, so a coordinate that starts inside the pane stays
-// inside it and both arms of surfaceBendUv are then the identity:
-//
-//   • the concave lens scales frameUv toward 0.5 by at most 0.4, and the
-//     per-channel fringing cannot invert that because `fringing` is capped at 1;
-//   • the cheap mode offsets along `inward`, the negated SDF gradient;
-//   • the Snell mode offsets along -surfaceNormal and along refract()'s xy,
-//     which for eta < 1 is always the outward normal times a NEGATIVE scalar:
-//     sqrt(1 - eta^2 + eta^2*nz^2) exceeds eta*nz for every nz whenever eta < 1.
-//
-// The pack also declares no paddingParam, so its frame IS its canvas and there
-// is no margin band for a sample to land in either. Restore the switch, and the
-// metadata parameter with it, if a mode ever displaces outward.
+// ONLY THE CONCAVE MODE CAN REACH THE SWITCH, and it is worth knowing which,
+// because the other two cannot and the control was briefly removed for it. The
+// cheap mode offsets along `inward`, the negated SDF gradient. The Snell mode
+// offsets along -surfaceNormal and along refract()'s xy, which for eta < 1 is the
+// outward normal times a NEGATIVE scalar, since sqrt(1 - eta^2 + eta^2*nz^2)
+// exceeds eta*nz for every nz whenever eta < 1. Both are inward at every
+// fragment, and this pack declares no paddingParam, so its frame IS its canvas
+// and there is no margin band for a sample to land in. The concave mode widens
+// frameUv past the frame by up to 0.2 of the pane, which is the one case the
+// clamp-or-fold choice decides.
 vec2 glassCoord(vec2 c) {
-    return clamp(c, 0.0, 1.0);
+    return surfaceBendUv(c, p_edgeMirror >= 0.5);
 }
 
 vec4 pSurface(vec2 uv) {
@@ -117,16 +114,26 @@ vec4 pSurface(vec2 uv) {
         vec3 lit;
         if (p_concaveLens >= 0.5) {
             // ── Concave lens (Better Blur DX's second refraction mode) ────
-            // Scale the whole backdrop toward the pane's centre by the bevel
-            // profile, so the edges show a shrunken copy of the interior, the
-            // way a thick concave slab reads. Per channel for the fringing.
-            // 0.2 of the pane per unit of strength, so 0.4 at the declared
-            // maximum of 2.0. (The reference's own ceiling is the 0.2 factor.)
+            // Compress a WIDER view of the backdrop into the pane, so its edges
+            // show a shrunken copy of the surroundings, the way a thick concave
+            // slab reads. Per channel for the fringing. 0.2 of the pane per unit
+            // of strength, so 0.4 at the declared maximum of 2.0. (The
+            // reference's own ceiling is the 0.2 factor.)
+            //
+            // (1 + shrink), NOT (1 - shrink). Sampling inward is what MAGNIFIES:
+            // output(f) = input(0.5 + f*(1 - shrink)) spreads the centre content
+            // outward across the pane, which is a convex slab and the opposite of
+            // this mode's name, its description and the sentence above. At the
+            // declared ceiling the pane edge sampled uv 0.80 where it needs 1.20.
+            // Widening it past 1 is also what makes the edge-mirror control below
+            // meaningful on this pack: the sample now reaches 0.2 of the pane
+            // outside the frame, where before every mode bent inward and the
+            // clamp-or-fold choice could never change a pixel.
             vec2 f = frameUv(px) - 0.5;
             float shrink = 0.2 * concave * strength;
-            vec2 fG = 0.5 + f * (1.0 - shrink);
-            vec2 fR = 0.5 + f * (1.0 - shrink * (1.0 + fringe));
-            vec2 fB = 0.5 + f * (1.0 - shrink * (1.0 - fringe));
+            vec2 fG = 0.5 + f * (1.0 + shrink);
+            vec2 fR = 0.5 + f * (1.0 + shrink * (1.0 + fringe));
+            vec2 fB = 0.5 + f * (1.0 + shrink * (1.0 - fringe));
             vec2 topLeft = uSurfaceFrameTopLeft;
             vec2 size = uSurfaceFrameSize;
             vec4 g = surfaceBlurTexel(glassCoord(surfaceUvFromPixel(topLeft + fG * size)));

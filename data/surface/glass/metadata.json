@@ -255,6 +255,14 @@
             "default": false,
             "description": "Shrink the whole backdrop toward the pane's centre near its edges, like looking through a thick concave slab, instead of bending only the bevel",
             "group": "Refraction"
+        },
+        {
+            "id": "edgeMirror",
+            "name": "Mirror at the edge",
+            "type": "bool",
+            "default": false,
+            "description": "Where the bend reaches past the pane's edge, fold the backdrop back inside. Only the concave lens mode reaches that far. Left off, the bend stretches the pane's edge pixel instead",
+            "group": "Refraction"
         }
     ]
 }
