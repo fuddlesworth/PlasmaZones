@@ -230,15 +230,24 @@ private Q_SLOTS:
             return validateSurface(tmp, name, obj, surfaceBodyReading({}));
         };
 
+        // KEYED ON THE RANGE LINT'S OWN WORDS, not on the bare key name. A bare
+        // `contains("bufferScale")` is satisfied by the NOT-A-NUMBER lint too, so
+        // it would pass on a pack whose range check never ran.
         const PackResult low = runWithScale(QStringLiteral("sf-scale-low"), 0.0001);
-        QVERIFY2(low.report.contains(QStringLiteral("bufferScale")), qPrintable(low.report));
+        QVERIFY2(low.report.contains(QStringLiteral("bufferScale out of range")), qPrintable(low.report));
         const PackResult high = runWithScale(QStringLiteral("sf-scale-high"), 4.0);
-        QVERIFY2(high.report.contains(QStringLiteral("bufferScale")), qPrintable(high.report));
+        QVERIFY2(high.report.contains(QStringLiteral("bufferScale out of range")), qPrintable(high.report));
 
-        // A legal scale draws nothing, so neither arm is firing on the key's
-        // mere presence.
+        // A legal scale draws nothing, so neither arm is firing on the key's mere
+        // presence.
+        //
+        // THIS CONTROL WAS VACUOUS. It asserted the absence of "bufferScale value",
+        // a string this tree emits NOWHERE, so it could not fail and proved none of
+        // what the sentence above claims. It is the exact trap this file's header
+        // warns about, which is worth leaving on the record rather than quietly
+        // correcting.
         const PackResult ok = runWithScale(QStringLiteral("sf-scale-ok"), 0.5);
-        QVERIFY2(!ok.report.contains(QStringLiteral("bufferScale value")), qPrintable(ok.report));
+        QVERIFY2(!ok.report.contains(QStringLiteral("bufferScale out of range")), qPrintable(ok.report));
     }
 
     /// A declared stage that does not exist. The fragment is the pack's required

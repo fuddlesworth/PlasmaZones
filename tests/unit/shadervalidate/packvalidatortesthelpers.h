@@ -308,6 +308,25 @@ inline bool reportLineHas(const QString& report, const QString& stage, const QSt
     return false;
 }
 
+/// As `reportLineHas`, but the line must ALSO not contain @p excluded.
+///
+/// Needed because the two host markers NEST: a compositor line reads
+/// "OK (compositor)", which contains "OK", so asserting `reportLineHas(stage,
+/// "OK")` is SUBSUMED by the compositor assertion beside it and the Qt-RHI half
+/// goes untested. Deleting the whole daemon buffer-pass loop left both of those
+/// assertions satisfied. Use this for the daemon side of any both-hosts claim.
+inline bool reportLineHasWithout(const QString& report, const QString& stage, const QString& marker,
+                                 const QString& excluded)
+{
+    const QStringList lines = report.split(QLatin1Char('\n'));
+    for (const QString& line : lines) {
+        if (line.contains(stage) && line.contains(marker) && !line.contains(excluded)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace PackValidatorTest
 
 /// The preconditions every slot that runs the ANIMATION validator shares. The

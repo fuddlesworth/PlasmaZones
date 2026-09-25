@@ -747,14 +747,17 @@ private Q_SLOTS:
         // Both stages, on both hosts. reportLineHas rather than a bare contains,
         // because the fragment's own OK lines are in the same report and would
         // satisfy a whole-report match whether or not these stages ran at all.
-        QVERIFY2(reportLineHas(r.report, QStringLiteral("gaussian_h.frag"), QStringLiteral("OK")),
-                 qPrintable(r.report));
-        QVERIFY2(reportLineHas(r.report, QStringLiteral("gaussian_h.frag"), QStringLiteral("OK (compositor)")),
-                 qPrintable(r.report));
-        QVERIFY2(reportLineHas(r.report, QStringLiteral("gaussian_v.frag"), QStringLiteral("OK")),
-                 qPrintable(r.report));
-        QVERIFY2(reportLineHas(r.report, QStringLiteral("gaussian_v.frag"), QStringLiteral("OK (compositor)")),
-                 qPrintable(r.report));
+        // The DAEMON line is asserted with the compositor marker EXCLUDED. The two
+        // markers nest ("OK (compositor)" contains "OK"), so a plain
+        // reportLineHas(stage, "OK") is satisfied by the compositor line alone and
+        // the Qt-RHI half goes untested: deleting the whole daemon buffer-pass loop
+        // left the old form of these four assertions green.
+        for (const QString& stage : {QStringLiteral("gaussian_h.frag"), QStringLiteral("gaussian_v.frag")}) {
+            QVERIFY2(reportLineHasWithout(r.report, stage, QStringLiteral("OK"), QStringLiteral("(compositor)")),
+                     qPrintable(stage + QStringLiteral(" has no daemon OK line\n") + r.report));
+            QVERIFY2(reportLineHas(r.report, stage, QStringLiteral("OK (compositor)")),
+                     qPrintable(stage + QStringLiteral(" has no compositor OK line\n") + r.report));
+        }
         QCOMPARE(r.errors, 0);
     }
 
