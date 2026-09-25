@@ -37,8 +37,12 @@ vec4 pSurface(vec2 uv) {
     }
 
     // Band geometry: the family's OUTER-radius rounded-rect SDF, content clip
-    // and band edge from this pack's logical-px width and corner radius.
-    BorderBand bb = standardBorderBand(surfacePixel(uv), p_borderWidth, p_cornerRadius, p_edgeSoftness);
+    // and band edge from this pack's logical-px width and corner radius. The
+    // bottom corners carry their own radius so this pack traces the same
+    // outline as a backdrop pack squared off against a panel or a screen edge.
+    float bottomRadius = p_roundBottomCorners >= 0.5 ? p_cornerRadius : 0.0;
+    BorderBand bb =
+        standardBorderBandSplit(surfacePixel(uv), p_borderWidth, p_cornerRadius, bottomRadius, p_edgeSoftness);
 
     // Focus-mixed border colour (the shader picks active vs inactive).
     vec4 outlineColor = mix(p_inactiveColor, p_activeColor, clamp(uSurfaceFocused, 0.0, 1.0));

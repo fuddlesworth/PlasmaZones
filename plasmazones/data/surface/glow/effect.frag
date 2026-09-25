@@ -39,8 +39,14 @@ vec4 pSurface(vec2 uv) {
 
     // Rounded-rect SDF over the frame rect (same construction as the border
     // pack). d > 0 outside the frame — the region the halo lives in.
+    //
+    // Split top/bottom so the halo hugs the SAME outline as the backdrop pack
+    // under it. A pane that squares its bottom corners against a panel edge
+    // used to get a glow still curving around a corner the pane no longer had.
     vec2 p = surfacePixel(uv);
-    FrameSDF fs = frameSdf(p, p_cornerRadius * uSurfaceScale);
+    float cornerPx = p_cornerRadius * uSurfaceScale;
+    float bottomPx = p_roundBottomCorners >= 0.5 ? cornerPx : 0.0;
+    FrameSDF fs = frameSdfSplit(p, cornerPx, bottomPx);
 
     // Gaussian-profile reach falloff (exp(-4t²), a soft shadow not a flood),
     // feathered to zero just inside the texture edge so a slim capture margin
@@ -48,8 +54,12 @@ vec4 pSurface(vec2 uv) {
     // margin and the band within two reaches inside the frame, and focus-dimmed
     // like Oxygen's cue —
     // the shared glow/shadow halo.
+    // The gate takes the TOP radius for both ends on purpose. It only decides how
+    // deep inside the frame the halo is still allowed to tint a translucent body,
+    // and at a squared bottom corner the widest radius is the conservative choice,
+    // so the gate keeps rather than clips. The visible outline is fs above.
     float reach = max(p_glowSize * uSurfaceScale, 1.0);
-    float halo = haloFalloff(fs.d, reach, p, base.a, p_glowStrength, 0.30, p_cornerRadius * uSurfaceScale);
+    float halo = haloFalloff(fs.d, reach, p, base.a, p_glowStrength, 0.30, cornerPx);
 
     // Premultiplied additive-over: the halo lights the margin under its own
     // alpha; the content term is untouched.

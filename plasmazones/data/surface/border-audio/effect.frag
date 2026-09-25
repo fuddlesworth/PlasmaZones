@@ -24,7 +24,9 @@ vec4 pSurface(vec2 uv) {
         return tex;
     }
 
-    BorderBand bb = standardBorderBand(surfacePixel(uv), p_borderWidth, p_cornerRadius);
+    float bottomRadius = p_roundBottomCorners >= 0.5 ? p_cornerRadius : 0.0;
+    BorderBand bb =
+        standardBorderBandSplit(surfacePixel(uv), p_borderWidth, p_cornerRadius, bottomRadius, p_edgeSoftness);
 
     // Base focus-mixed border colour, then react to the bass. getBassSoft() is
     // 0 when the audio visualizer is off, so the reactive terms vanish and this

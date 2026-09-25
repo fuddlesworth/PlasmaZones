@@ -24,7 +24,8 @@ vec4 pSurface(vec2 uv) {
     // Band geometry: the family's OUTER-radius rounded-rect SDF, content clip
     // and band edge from this pack's logical-px width and corner radius.
     vec2 p = surfacePixel(uv);
-    BorderBand bb = standardBorderBand(p, p_borderWidth, p_cornerRadius);
+    float bottomRadius = p_roundBottomCorners >= 0.5 ? p_cornerRadius : 0.0;
+    BorderBand bb = standardBorderBandSplit(p, p_borderWidth, p_cornerRadius, bottomRadius, p_edgeSoftness);
 
     // Hue = perimeter angle scaled by the rainbow count, rotated by time.
     //

@@ -18,10 +18,10 @@ vec4 pSurface(vec2 uv) {
     }
 
     vec2 p = surfacePixel(uv);
-    const float aa = 0.7;
+    float aa = max(p_edgeSoftness, 0.001);
 
-    // Bound the whole stack to half the frame, the way standardBorderBand does
-    // for the single-line packs and frameSdf does for the radius. This pack
+    // Bound the whole stack to half the frame, the way standardBorderBandSplit
+    // does for the single-line packs and frameSdfSplit does for the radius. This pack
     // builds its own bands rather than calling that helper, so without this a
     // stack wider than the frame's half extent leaves every interior fragment
     // past the smoothstep and paints the surface as solid border with the
@@ -44,18 +44,23 @@ vec4 pSurface(vec2 uv) {
         total = limit;
     }
     // OUTER radius = content radius + the full stack, so both lines and the
-    // gap sit inside it and the content corner ends at p_cornerRadius.
+    // gap sit inside it and the content corner ends at p_cornerRadius. Each end
+    // of the frame gets its own, so squaring the bottom corners squares them for
+    // both lines and the content clip together rather than for none of them.
+    // A bottom radius of 0 still dilates to `total` on the outside, which is the
+    // right outer shape: the stack has real width at a square corner too.
     float radius = p_cornerRadius * uSurfaceScale + total;
+    float bottomRadius = (p_roundBottomCorners >= 0.5 ? p_cornerRadius * uSurfaceScale : 0.0) + total;
 
-    FrameSDF fs = frameSdf(p, radius);
+    FrameSDF fs = frameSdfSplit(p, radius, bottomRadius);
     float d = fs.d;
 
     float insideMask = 1.0 - smoothstep(-aa, aa, d);
     // Outer line: [-wOuter, 0]. Inner line: [-(total), -(wOuter + wGap)].
     //
     // A WIDTH OF ZERO MEANS NO LINE, and neither band gets that for free. Both
-    // widths declare a minimum of 0, and this pack builds its bands from frameSdf
-    // rather than through standardBorderBand, so it does not inherit that helper's
+    // widths declare a minimum of 0, and this pack builds its bands from frameSdfSplit
+    // rather than through standardBorderBandSplit, so it does not inherit that helper's
     // guard. Without these two tests: at wOuter 0 the outer term becomes
     // smoothstep(-aa, +aa, d) and insideMask its exact complement, so their product
     // peaks at 0.25 on the frame edge and paints a band about two feathers wide at a

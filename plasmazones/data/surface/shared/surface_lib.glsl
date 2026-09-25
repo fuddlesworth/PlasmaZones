@@ -176,7 +176,14 @@ struct BorderBand {
     float insideMask;
     float edge;
 };
-BorderBand standardBorderBand(vec2 p, float borderWidth, float cornerRadius, float aa) {
+// THE PANE'S SILHOUETTE IS A PROPERTY OF THE CHAIN, not of one pack. A backdrop
+// pack can square its bottom corners (surfaceSlabOpen takes a separate bottom
+// radius), and until this function existed no border pack could follow it: they
+// all resolved through frameSdf, which takes one radius for all four corners. A
+// chain holding both then drew a rounded border tracing empty space over a
+// square backdrop corner. The host propagates the chain's answer to every pack
+// that declares the control, the way it already does for cornerRadius.
+BorderBand standardBorderBandSplit(vec2 p, float borderWidth, float cornerRadius, float bottomRadius, float aa) {
     // A zero feather makes both smoothstep() edges equal, which is undefined in
     // GLSL (NaN / garbage on the boundary fragment). Floor it at a hair so an
     // aggressively crisp (or hand-edited) value degrades to a near-hard edge
@@ -195,7 +202,7 @@ BorderBand standardBorderBand(vec2 p, float borderWidth, float cornerRadius, flo
     // family's common.glsl.
     if (borderWidth <= 0.0) {
         BorderBand off;
-        off.fs = frameSdf(p, cornerRadius * uSurfaceScale);
+        off.fs = frameSdfSplit(p, cornerRadius * uSurfaceScale, bottomRadius * uSurfaceScale);
         off.insideMask = 1.0 - smoothstep(-feather, feather, off.fs.d);
         off.edge = 0.0;
         return off;
@@ -210,12 +217,24 @@ BorderBand standardBorderBand(vec2 p, float borderWidth, float cornerRadius, flo
     float width = min(borderWidth * uSurfaceScale, max(0.9 * min(halfSize.x, halfSize.y), 0.1));
     // Radius derives from the CLAMPED width, so the content corner still ends
     // at the requested cornerRadius rather than drifting in the clamped case.
+    // Both ends add the SAME width: the band lies `width` inside the outer
+    // boundary, so the outer radius leaving a content corner at radius r is
+    // r + width. That holds at r = 0 too, where dilating a square corner by
+    // width gives an outer quarter-circle of exactly that radius, which is why
+    // a squared bottom still gets a correctly mitred band rather than a notch.
     BorderBand b;
-    b.fs = frameSdf(p, cornerRadius * uSurfaceScale + width);
+    b.fs = frameSdfSplit(p, cornerRadius * uSurfaceScale + width, bottomRadius * uSurfaceScale + width);
     b.insideMask = 1.0 - smoothstep(-feather, feather, b.fs.d);
     b.edge = smoothstep(-width - feather, -width + feather, b.fs.d);
     return b;
 }
+// Uniform-radius forms, kept so a third-party pack written against the old
+// signatures still compiles and renders exactly as before. Both ends take the
+// same radius, which is what every caller meant before the split existed.
+BorderBand standardBorderBand(vec2 p, float borderWidth, float cornerRadius, float aa) {
+    return standardBorderBandSplit(p, borderWidth, cornerRadius, cornerRadius, aa);
+}
+
 BorderBand standardBorderBand(vec2 p, float borderWidth, float cornerRadius) {
     return standardBorderBand(p, borderWidth, cornerRadius, 0.7);
 }

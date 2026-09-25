@@ -55,6 +55,13 @@
             "description": "Corner rounding the shadow follows (px, match the Border pack)"
         },
         {
+            "id": "roundBottomCorners",
+            "name": "Round bottom corners",
+            "type": "bool",
+            "default": true,
+            "description": "Round the bottom corners as well as the top. Turn off to round only the top two, for a pane that sits against a panel or the screen edge. Every pack in a chain follows the same answer, so the outline stays one shape."
+        },
+        {
             "id": "shadowColor",
             "name": "Shadow colour",
             "type": "color",

@@ -153,7 +153,7 @@
             "name": "Round bottom corners",
             "type": "bool",
             "default": true,
-            "description": "Round the bottom corners as well as the top. Turn off to round only the top two. The Border, Glow and Drop Shadow packs always round all four, so turning this off in a chain that also holds one of them leaves their rounded bottom over this pack's square one",
+            "description": "Round the bottom corners as well as the top. Turn off to round only the top two, for a pane that sits against a panel or the screen edge. Every pack in a chain follows the same answer, so the outline stays one shape.",
             "group": "Shape"
         },
         {

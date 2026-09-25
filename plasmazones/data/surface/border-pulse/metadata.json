@@ -28,6 +28,22 @@
             "description": "Roundness of the corners (px, 0 for square)"
         },
         {
+            "id": "roundBottomCorners",
+            "name": "Round bottom corners",
+            "type": "bool",
+            "default": true,
+            "description": "Round the bottom corners as well as the top. Turn off to round only the top two, for a pane that sits against a panel or the screen edge. Every pack in a chain follows the same answer, so the outline stays one shape."
+        },
+        {
+            "id": "edgeSoftness",
+            "name": "Edge softness",
+            "type": "float",
+            "default": 0.7,
+            "min": 0.1,
+            "max": 2.0,
+            "description": "Anti-alias feather of the border edge, in device pixels, so it does not grow with display scaling. Lower is a crisper hairline. 0.7 is the soft default."
+        },
+        {
             "id": "pulseSpeed",
             "name": "Pulse speed",
             "type": "float",

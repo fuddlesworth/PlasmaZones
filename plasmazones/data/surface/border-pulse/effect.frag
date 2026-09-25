@@ -21,7 +21,9 @@ vec4 pSurface(vec2 uv) {
 
     // Band geometry: the family's OUTER-radius rounded-rect SDF, content clip
     // and band edge from this pack's logical-px width and corner radius.
-    BorderBand bb = standardBorderBand(surfacePixel(uv), p_borderWidth, p_cornerRadius);
+    float bottomRadius = p_roundBottomCorners >= 0.5 ? p_cornerRadius : 0.0;
+    BorderBand bb =
+        standardBorderBandSplit(surfacePixel(uv), p_borderWidth, p_cornerRadius, bottomRadius, p_edgeSoftness);
 
     // Breathe: 0 at the A end, 1 at the B end, continuous across the wrap.
     float phase = 0.5 - 0.5 * cos(iTime * max(p_pulseSpeed, 0.0) * TAU);
