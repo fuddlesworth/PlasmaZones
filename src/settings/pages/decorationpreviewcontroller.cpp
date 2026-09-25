@@ -220,7 +220,11 @@ QVariantList DecorationPreviewController::previewChain(const QString& packId, co
     // own declared radius is the correct one to preview with. Injecting a card
     // radius here would show the user a rounding their real windows will not
     // get.
-    chain.append(PhosphorSurfaceShaders::composeStageMap(effect, resolved));
+    // The blur-quality tier, for the reason every other property on this path is
+    // forwarded: a preview that composes at a different density than the daemon
+    // stops predicting what the daemon draws.
+    chain.append(PhosphorSurfaceShaders::composeStageMap(
+        effect, resolved, m_settings ? m_settings->decorationBlurScaleMultiplier() : 1.0));
     return chain;
 }
 

@@ -575,11 +575,10 @@ bool ShaderNodeRhi::ensureBufferPipeline()
                 m_multiBufferSrbs[i] = std::move(srb);
             }
             if (!m_multiBufferPipelines[i]) {
-                QRhiRenderPassDescriptor* rpDescI = m_multiBufferRenderPassDescriptors[i]
-                    ? m_multiBufferRenderPassDescriptors[i].get()
-                    : m_multiBufferRenderTargets[i]->renderPassDescriptor();
+                // rpDesc, resolved and null-checked at the top of this iteration. This
+                // used to recompute the identical expression into a second local.
                 m_multiBufferPipelines[i] = createFullscreenQuadPipeline(
-                    rhi, rpDescI, m_vertexShader, m_multiBufferFragmentShaders[i], m_multiBufferSrbs[i].get(),
+                    rhi, rpDesc, m_vertexShader, m_multiBufferFragmentShaders[i], m_multiBufferSrbs[i].get(),
                     /*enableBlend=*/false, /*numColorAttachments=*/m_useDepthBuffer ? 2 : 1);
                 if (!m_multiBufferPipelines[i]) {
                     m_shaderError = QStringLiteral("Failed to create multi-buffer pipeline ") + QString::number(i);

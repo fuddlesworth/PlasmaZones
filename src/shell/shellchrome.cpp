@@ -201,7 +201,7 @@ QVariantList ShellChrome::chainFor(const QString& surfacePath) const
         }
         QVariantMap params = allParams.value(packId).toMap();
         PhosphorSurfaceShaders::resolveThemeParamColors(effect, params, theme);
-        stages.append(PhosphorSurfaceShaders::composeStageMap(effect, params));
+        stages.append(PhosphorSurfaceShaders::composeStageMap(effect, params, m_blurScaleMultiplier));
     }
     return stages;
 }
@@ -237,9 +237,11 @@ void ShellChrome::subscribeToDaemon()
     // Any setting change refetches: the tree is one key and the signal
     // carries none, so this is the daemon's own contract for followers.
     bus.connect(service, path, settings, QStringLiteral("settingsChanged"), this, SLOT(fetchTree()));
+    bus.connect(service, path, settings, QStringLiteral("settingsChanged"), this, SLOT(fetchBlurScaleMultiplier()));
     // A daemon that (re)appears publishes a fresh tree.
     auto* watcher = new QDBusServiceWatcher(service, bus, QDBusServiceWatcher::WatchForRegistration, this);
     connect(watcher, &QDBusServiceWatcher::serviceRegistered, this, &ShellChrome::fetchTree);
+    connect(watcher, &QDBusServiceWatcher::serviceRegistered, this, &ShellChrome::fetchBlurScaleMultiplier);
     // The registry watches its directories; a pack installed while the
     // shell runs re-resolves too.
     connect(m_registry.get(), &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this, &ShellChrome::bump);
@@ -260,6 +262,37 @@ void ShellChrome::fetchTree()
             return;
         }
         setTreeJson(unwrapDBusVariant(reply.value()).toString());
+    });
+}
+
+void ShellChrome::fetchBlurScaleMultiplier()
+{
+    QDBusMessage call = QDBusMessage::createMethodCall(
+        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+        QString(PhosphorProtocol::Service::Interface::Settings), QStringLiteral("getSetting"));
+    call << QString(PhosphorProtocol::Service::SettingProperty::DecorationBlurScaleMultiplier);
+    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(call), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        const QDBusPendingReply<QVariant> reply = *w;
+        if (!reply.isValid()) {
+            qCDebug(lcShellChrome) << "decorationBlurScaleMultiplier unavailable:" << reply.error().message();
+            return;
+        }
+        // Numeric-or-bust, the same guard the compositor's loader applies and for
+        // the same reason: an older daemon answers an unknown key with a valid
+        // EMPTY reply, and QVariant("").toReal() is 0.0, which composeStageMap
+        // would read as unusable and fall back to 1.0 anyway. Rejecting it here
+        // keeps the stored value meaning what it says.
+        bool ok = false;
+        const qreal m = unwrapDBusVariant(reply.value()).toReal(&ok);
+        if (!ok || !qIsFinite(m) || m <= 0.0 || qFuzzyCompare(m_blurScaleMultiplier + 1.0, m + 1.0)) {
+            return;
+        }
+        m_blurScaleMultiplier = m;
+        // Recompose: the stage maps carry the folded scales, so a tier change has
+        // to rebuild them. bump() is the single invalidation point.
+        bump();
     });
 }
 

@@ -70,8 +70,20 @@ PHOSPHORSURFACE_EXPORT double paddingRequest(const SurfaceShaderEffect& effect, 
  * fragment shader — which is also what the path-traversal guard leaves behind
  * when it rejects a pack's declared shader). Hosts must treat that as "skip
  * this stage" rather than appending it, or they add a stage with no source.
+ *
+ * @p blurScaleMultiplier is the user's decoration blur-quality tier
+ * (Decorations.Performance.BlurScaleMultiplier). It multiplies every declared
+ * buffer scale, `bufferScale` and each entry of `bufferScales`, and the product is
+ * bounded into [kMinBufferScale, kMaxBufferScale] exactly as the compositor's
+ * clampedBufferScale() does. This is the daemon-side counterpart of that
+ * chokepoint, and the reason it belongs here rather than in each host is that the
+ * setting is a GLOBAL blur-quality tier. For a while the compositor honoured it
+ * while nothing on this path read it at all, so the same pack rendered at two
+ * densities depending on whether it decorated a window or an OSD.
+ *
+ * Defaulted to 1.0, the identity, for a caller with no settings to offer.
  */
-PHOSPHORSURFACE_EXPORT QVariantMap composeStageMap(const SurfaceShaderEffect& effect,
-                                                   const QVariantMap& resolvedParams);
+PHOSPHORSURFACE_EXPORT QVariantMap composeStageMap(const SurfaceShaderEffect& effect, const QVariantMap& resolvedParams,
+                                                   qreal blurScaleMultiplier = 1.0);
 
 } // namespace PhosphorSurfaceShaders

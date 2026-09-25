@@ -7,6 +7,8 @@
 #include <QUrl>
 #include <QtTest/QtTest>
 
+#include <limits>
+
 using namespace PhosphorSurfaceShaders;
 
 namespace {
@@ -247,6 +249,70 @@ private Q_SLOTS:
         // the true default.
         QCOMPARE(stage.value(QStringLiteral("halfFloatBuffers")).toBool(), false);
         QVERIFY(stage.contains(QStringLiteral("halfFloatBuffers")));
+    }
+
+    /// The blur-quality tier multiplies every declared buffer scale.
+    ///
+    /// Pinned because this composer is the DAEMON-side counterpart of the
+    /// compositor's clampedBufferScale, and for a while only the compositor
+    /// applied the setting at all, so the same pack rendered at two densities
+    /// depending on whether it decorated a window or an OSD.
+    void composeStageMap_folds_the_blur_scale_multiplier_into_every_scale()
+    {
+        SurfaceShaderEffect e = basePack();
+        e.isMultipass = true;
+        e.bufferShaderPaths = QStringList{QStringLiteral("/packs/blur/a.frag"), QStringLiteral("/packs/blur/b.frag")};
+        e.bufferScale = 0.5;
+        e.bufferScales = QList<qreal>{0.5, 0.25};
+
+        const QVariantMap halved = composeStageMap(e, {}, 0.5);
+        QCOMPARE(halved.value(QStringLiteral("bufferScale")).toDouble(), 0.25);
+        const QVariantList scales = halved.value(QStringLiteral("bufferScales")).toList();
+        QCOMPARE(scales.size(), 2);
+        QCOMPARE(scales.at(0).toDouble(), 0.25);
+        QCOMPARE(scales.at(1).toDouble(), 0.125);
+
+        // Defaulted, so every existing caller keeps the declared density.
+        QCOMPARE(composeStageMap(e, {}).value(QStringLiteral("bufferScale")).toDouble(), 0.5);
+    }
+
+    /// The product is bounded into the allocator band, and an unusable multiplier
+    /// is the identity rather than a floor.
+    ///
+    /// The second half matters more than it looks: the value reaches the shell over
+    /// D-Bus, where an older daemon answers an unknown key with a valid EMPTY reply
+    /// and QVariant("").toReal() is 0.0. Treating that as a real multiplier would
+    /// collapse every pass to kMinBufferScale.
+    void composeStageMap_bounds_the_product_and_ignores_an_unusable_multiplier()
+    {
+        SurfaceShaderEffect e = basePack();
+        e.isMultipass = true;
+        e.bufferShaderPaths = QStringList{QStringLiteral("/packs/blur/a.frag")};
+        e.bufferScale = 1.0;
+        e.bufferScales = QList<qreal>{1.0};
+
+        const QVariantMap huge = composeStageMap(e, {}, 1000.0);
+        QCOMPARE(huge.value(QStringLiteral("bufferScale")).toDouble(), SurfaceShaderEffect::kMaxBufferScale);
+        QCOMPARE(huge.value(QStringLiteral("bufferScales")).toList().at(0).toDouble(),
+                 SurfaceShaderEffect::kMaxBufferScale);
+
+        const QVariantMap tiny = composeStageMap(e, {}, 1.0e-9);
+        QCOMPARE(tiny.value(QStringLiteral("bufferScale")).toDouble(), SurfaceShaderEffect::kMinBufferScale);
+
+        // A HALF-density pack for the unusable cases, deliberately. With a pack at
+        // 1.0 the identity answer and the clamped-infinity answer are both
+        // kMaxBufferScale, so the assertion holds whether or not the guard is
+        // there. That vacuity was real: dropping std::isfinite left this passing.
+        SurfaceShaderEffect half = e;
+        half.bufferScale = 0.5;
+        half.bufferScales = QList<qreal>{0.5};
+        const qreal unusable[] = {0.0, -1.0, std::numeric_limits<qreal>::quiet_NaN(),
+                                  std::numeric_limits<qreal>::infinity()};
+        for (const qreal m : unusable) {
+            const QVariantMap stage = composeStageMap(half, {}, m);
+            QCOMPARE(stage.value(QStringLiteral("bufferScale")).toDouble(), 0.5);
+            QCOMPARE(stage.value(QStringLiteral("bufferScales")).toList().at(0).toDouble(), 0.5);
+        }
     }
 
     /// The buffer format is a per-pack contract, and its default is the

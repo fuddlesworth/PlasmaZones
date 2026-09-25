@@ -35,12 +35,22 @@ find_program(_phosphor_dbus_run_session dbus-run-session)
 # does not reach into the GPL app test tree for it. (The conf file is LGPL for the
 # same reason.)
 #
-# This does NOT make the module reachable from a standalone library configure.
-# Every caller includes it as `${CMAKE_SOURCE_DIR}/cmake/PhosphorTestIsolation.cmake`,
-# which in a standalone configure of e.g. libs/phosphor-fsloader resolves inside
-# that library, where there is no `cmake/` directory — so the `include()` errors
-# out before this path is consulted. A standalone build that wants the isolation
-# has to guard its own include.
+# HOW CALLERS REACH IT, which is not uniform and must not be assumed to be.
+#
+# The 51 library test trees walk up relatively, behind an EXISTS guard:
+# `${CMAKE_CURRENT_LIST_DIR}/../../../cmake/PhosphorTestIsolation.cmake`. That
+# resolves from the repo root in-tree AND from a standalone configure of the
+# library, and the guard covers a genuine extracted subtree where the repo-root
+# module is not present at all. Each of those falls back to a no-op stand-in, which
+# UN-ISOLATES rather than breaks: the real function sets only TEST_LAUNCHER and the
+# per-target XDG environment.
+#
+# `tests/unit` and `tools/shader-render` still use `${CMAKE_SOURCE_DIR}/cmake/...`
+# unguarded, which is correct for them: neither is ever configured standalone, so
+# CMAKE_SOURCE_DIR is always the repo root there.
+#
+# So a standalone library configure DOES reach this module, through the relative
+# walk. That is the opposite of what this comment used to say.
 # CACHE INTERNAL so the global functions below read a well-defined value from
 # any directory scope, not whatever directory happened to include the module.
 set(_phosphor_test_session_bus_conf "${CMAKE_CURRENT_LIST_DIR}/test-session-bus.conf" CACHE INTERNAL "")

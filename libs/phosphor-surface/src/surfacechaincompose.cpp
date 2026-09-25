@@ -68,8 +68,20 @@ double paddingRequest(const SurfaceShaderEffect& effect, const QVariantMap& frie
     return usablePadding(declared->defaultValue, &value) ? value : 0.0;
 }
 
-QVariantMap composeStageMap(const SurfaceShaderEffect& effect, const QVariantMap& resolvedParams)
+QVariantMap composeStageMap(const SurfaceShaderEffect& effect, const QVariantMap& resolvedParams,
+                            qreal blurScaleMultiplier)
 {
+    // The user's blur-quality tier, folded into every declared scale and bounded
+    // into the allocator band. Mirrors PlasmaZonesEffect::clampedBufferScale, and
+    // the multiplier itself is sanitised first because it arrives over D-Bus in the
+    // compositor's case and off a store read here: a non-finite or non-positive
+    // value would otherwise floor every pass at kMinBufferScale.
+    const qreal multiplier =
+        (blurScaleMultiplier > 0.0 && std::isfinite(blurScaleMultiplier)) ? blurScaleMultiplier : 1.0;
+    const auto clampedScale = [multiplier](qreal declared) {
+        return qBound(SurfaceShaderEffect::kMinBufferScale, declared * multiplier,
+                      SurfaceShaderEffect::kMaxBufferScale);
+    };
     QVariantMap stageMap;
     // An unusable pack composes to nothing rather than to a half-formed stage.
     // translateSurfaceParams already returns an empty map for one, so without
@@ -93,11 +105,11 @@ QVariantMap composeStageMap(const SurfaceShaderEffect& effect, const QVariantMap
     if (stageMultipass) {
         stageMap.insert(QLatin1String("bufferShaderPaths"), QVariant::fromValue(effect.bufferShaderPaths));
         stageMap.insert(QLatin1String("bufferFeedback"), effect.bufferFeedback);
-        stageMap.insert(QLatin1String("bufferScale"), effect.bufferScale);
+        stageMap.insert(QLatin1String("bufferScale"), clampedScale(effect.bufferScale));
         QVariantList scales;
         scales.reserve(effect.bufferScales.size());
         for (qreal s : effect.bufferScales) {
-            scales.append(s);
+            scales.append(clampedScale(s));
         }
         stageMap.insert(QLatin1String("bufferScales"), scales);
         stageMap.insert(QLatin1String("bufferWrap"), effect.bufferWrap);

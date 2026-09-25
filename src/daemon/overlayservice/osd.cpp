@@ -43,8 +43,7 @@
 namespace PlasmaZones {
 
 namespace {
-/// Forces the re-bake an in-place source edit cannot otherwise get; the QML
-/// property `decorationReloadGeneration` carries the reasoning.
+/// Forces the re-bake an in-place source edit cannot get. See qml_property_names.h.
 int s_decorationReloadGeneration = 0;
 
 // Size the OSD window to its target screen rect. The wl_surface is now
@@ -634,6 +633,8 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     bool chainWantsBackdrop = false;
     // Theme colours for the pack flag resolver, read once for the whole chain.
     const QPalette pal = QGuiApplication::palette();
+    // The blur-quality tier the composer folds into every declared buffer scale.
+    const qreal blurScale = m_settings ? m_settings->decorationBlurScaleMultiplier() : 1.0;
     for (const QString& packId : chain) {
         if (!m_surfaceShaderRegistry->hasEffect(packId)) {
             // One warning per pack id per REASON, not one per show: a profile
@@ -717,12 +718,10 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
             resolvedParams.insert(QStringLiteral("cornerRadius"), cardRadius.toReal());
         }
 
-        // Stage map (source / preamble / translated params / animated /
-        // multipass set) is composed by the shared builder, so this host and
-        // the settings app's decoration preview cannot describe a stage
-        // differently — a preview that composed its own stage would stop
-        // predicting what the daemon draws.
-        stages.append(PhosphorSurfaceShaders::composeStageMap(effect, resolvedParams));
+        // Through the shared builder, so this host, the settings app's decoration
+        // preview and the shell cannot describe a stage differently. A preview that
+        // composed its own would stop predicting what the daemon draws.
+        stages.append(PhosphorSurfaceShaders::composeStageMap(effect, resolvedParams, blurScale));
     }
     if (stages.isEmpty()) {
         clearDecoration();

@@ -102,6 +102,11 @@ Q_SIGNALS:
 
 private Q_SLOTS:
     void fetchTree();
+    /// The user's decoration blur-quality tier, over the same bus and refetched on
+    /// the same settingsChanged signal as the tree. The shell holds no ISettings,
+    /// and this is one value, so it follows the daemon's contract for followers
+    /// rather than growing a settings dependency for it.
+    void fetchBlurScaleMultiplier();
     void bump();
 
 private:
@@ -129,6 +134,11 @@ private:
     QPointer<PhosphorTheme::PaletteStore> m_palette;
     QPointer<QObject> m_decorationComponent;
     int m_revision = 0;
+    /// The blur-quality tier composeStageMap folds into every declared buffer scale.
+    /// 1.0 until the daemon answers, which is the identity, so a shell that starts
+    /// before the daemon composes at the pack's declared density and recomposes when
+    /// the real value lands.
+    qreal m_blurScaleMultiplier = 1.0;
 };
 
 } // namespace PhosphorShellApp

@@ -203,40 +203,41 @@ void PlasmaZonesEffect::loadCachedSettings()
     // the resulting size change (surface_backdrop.cpp). The window capture
     // itself is unaffected — captureScale is the output scale, not a pack
     // density, so it never sees this multiplier.
-    loadSettingAsync(QStringLiteral("decorationBlurScaleMultiplier"), [this](const QVariant& v) {
-        // Numeric-or-bust guard, same rationale as the bool loaders above: an
-        // older daemon answers unknown keys with a valid EMPTY reply, and
-        // QVariant("").toReal() is 0.0 — which would floor every buffer target
-        // to kMinBufferScale instead of leaving the default multiplier alone.
-        // qIsFinite rejects NaN explicitly (NaN passes an m <= 0.0 test and
-        // would silently degrade the product clamp to its floor).
-        bool ok = false;
-        namespace DD = PhosphorCompositor::DecorationDefaults;
-        const qreal raw = v.toReal(&ok);
-        if (!ok || !qIsFinite(raw) || raw <= 0.0) {
-            return;
-        }
-        // Boundary clamp against the shared SSOT, like every numeric loader in
-        // this file: the daemon's schema clamps to the same band, but a
-        // separate process's reply is not trusted with the range. The product
-        // clamp in clampedBufferScale() would saturate an out-of-range value
-        // anyway; this keeps the stored member inside its declared band.
-        const qreal m = qBound(DD::BlurScaleMultiplierMin, raw, DD::BlurScaleMultiplierMax);
-        if (!qFuzzyCompare(m_decorationBlurScaleMultiplier + 1.0, m + 1.0)) {
-            m_decorationBlurScaleMultiplier = m;
-            m_packBufferScaleCache.clear();
-            for (auto& [id, surfaceState] : m_surfaceMultipass) {
-                surfaceState.chainKey.clear();
-                surfaceState.compositeValid = false;
-                surfaceState.prefixValid = false;
-                // The cleared chainKey makes ensureSurfaceTargets reset this
-                // before planSurfaceFold reads it, so this reset is symmetry
-                // with the profile-tree loader below, not a live fix.
-                surfaceState.prefixChainEnd = -1;
-            }
-            repaintAllDecorations();
-        }
-    });
+    loadSettingAsync(QString(PhosphorProtocol::Service::SettingProperty::DecorationBlurScaleMultiplier),
+                     [this](const QVariant& v) {
+                         // Numeric-or-bust guard, same rationale as the bool loaders above: an
+                         // older daemon answers unknown keys with a valid EMPTY reply, and
+                         // QVariant("").toReal() is 0.0 — which would floor every buffer target
+                         // to kMinBufferScale instead of leaving the default multiplier alone.
+                         // qIsFinite rejects NaN explicitly (NaN passes an m <= 0.0 test and
+                         // would silently degrade the product clamp to its floor).
+                         bool ok = false;
+                         namespace DD = PhosphorCompositor::DecorationDefaults;
+                         const qreal raw = v.toReal(&ok);
+                         if (!ok || !qIsFinite(raw) || raw <= 0.0) {
+                             return;
+                         }
+                         // Boundary clamp against the shared SSOT, like every numeric loader in
+                         // this file: the daemon's schema clamps to the same band, but a
+                         // separate process's reply is not trusted with the range. The product
+                         // clamp in clampedBufferScale() would saturate an out-of-range value
+                         // anyway; this keeps the stored member inside its declared band.
+                         const qreal m = qBound(DD::BlurScaleMultiplierMin, raw, DD::BlurScaleMultiplierMax);
+                         if (!qFuzzyCompare(m_decorationBlurScaleMultiplier + 1.0, m + 1.0)) {
+                             m_decorationBlurScaleMultiplier = m;
+                             m_packBufferScaleCache.clear();
+                             for (auto& [id, surfaceState] : m_surfaceMultipass) {
+                                 surfaceState.chainKey.clear();
+                                 surfaceState.compositeValid = false;
+                                 surfaceState.prefixValid = false;
+                                 // The cleared chainKey makes ensureSurfaceTargets reset this
+                                 // before planSurfaceFold reads it, so this reset is symmetry
+                                 // with the profile-tree loader below, not a live fix.
+                                 surfaceState.prefixChainEnd = -1;
+                             }
+                             repaintAllDecorations();
+                         }
+                     });
 
     loadSettingAsync(QStringLiteral("showWindowBorder"), [this](const QVariant& v) {
         // Type-guard every bool loader in this file, not only the default-true
