@@ -92,7 +92,16 @@ vec2 motePath(float h1, float h2, float h3, float t, float reachPx,
     float wander = sin(age * 7.0 + h3 * TAU) * 0.5
                  + sin(age * 17.0 - t * 0.5 + h1 * TAU) * 0.3;
 
-    return spawn + normal * travel + tangent * (swayAmp * wander);
+    // THE SWAY IS BOUNDED TOO, not just the travel. `travel` is held to the reach
+    // handed in, which the caller already discounts to 0.9 of the captured margin
+    // so the streak stays inside it, but the TANGENTIAL term had no such bound: the
+    // declared ranges put sway at up to 48 logical px against a moteRange as low as
+    // 16, so a mote born near a corner was carried along the edge, round it, and
+    // out of the padded canvas. The shipped defaults do not reach that, the
+    // declared ranges do. Capped so the diagonal magnitude stays under the reach:
+    // sqrt(0.9^2 + 0.405^2) is about 0.99 of it.
+    float sway = clamp(swayAmp * wander, -0.45 * reachPx, 0.45 * reachPx);
+    return spawn + normal * travel + tangent * sway;
 }
 
 // Fade in at birth, burn out well before the clock wraps, so a respawn at
@@ -175,7 +184,13 @@ vec3 microDust(vec2 px, float t, float amount, float reachPx, out float dustA) {
 
     // Specks near the frame are young (cyan), far ones old (toward purple).
     vec3 col = fluxGradient(clamp(dOut / max(reachPx, 1.0), 0.0, 1.0) * 0.6 + h.x * 0.15);
-    dustA = body * twinkle * amount * halo * 0.55;
+    // TAPERED TO NOTHING BEFORE THE BOUNDARY. The halo above is an exponential,
+    // still about a third of peak where dOut reaches reachPx and not below 0.05
+    // until about 2.4 times it, so on a host that pads by exactly moteRange the
+    // twinkling field was truncated in a hard rectangle at a third of its
+    // strength, with specks sliced mid-body. The mote heads have a radial travel
+    // limit for this reason; the dust had none.
+    dustA = body * twinkle * amount * halo * 0.55 * (1.0 - smoothstep(0.75, 1.0, dOut / max(reachPx, 1.0)));
     return col * dustA;
 }
 
