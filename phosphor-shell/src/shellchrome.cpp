@@ -264,9 +264,10 @@ double ShellChrome::outerPaddingFor(const QString& surfacePath) const
     double padding = 0.0;
     const QStringList chain = profile.enabledChain();
     for (const QString& packId : chain) {
-        if (!m_registry->hasEffect(packId)) {
-            continue;
-        }
+        // No hasEffect() probe: effect() answers a default-constructed effect for an
+        // id the registry does not hold, and that has an empty id so isValid() is
+        // already false. With no diagnostic on either arm the probe was a second
+        // lookup for the same answer, the shape chainRoundBottomCorners documents.
         const PhosphorSurfaceShaders::SurfaceShaderEffect effect = m_registry->effect(packId);
         if (!effect.isValid()) {
             continue;

@@ -705,18 +705,19 @@ def rule_prose(files: list[str]) -> list[Violation]:
         # than prose, and the trailing ([#nnnn](url)) reference is markup whose
         # URL would otherwise read as prose punctuation.
         #
-        # THREE THINGS THIS ARM DOES NOT CATCH, so a reviewer still has to read:
-        #   1. the entry's bold TITLE, since the split below discards everything
-        #      up to and including the lead-in;
-        #   2. the dramatic "Label: payload" colon, the rule-of-three triad and
-        #      "not just X, but Y" — prose_problems tests none of them;
-        #   3. a clause-splicing semicolon built from past-tense prose, because
-        #      the verb list the semicolon arm matches on holds no past-tense
-        #      lexical verbs ("The pane is one shape; each pack decided it alone."
-        #      passes).
+        # FOUR THINGS THIS ARM DOES NOT CATCH, so a reviewer still has to read:
+        #   1. the entry's bold TITLE, which the split below discards;
+        #   2. the dramatic "Label: payload" colon;
+        #   3. the rule-of-three triad and "not just X, but Y" (prose_problems
+        #      tests neither 2 nor 3);
+        #   4. a clause-splicing semicolon from past-tense prose, because the verb
+        #      list the semicolon arm matches holds no past-tense lexical verbs
+        #      ("The pane is one shape; each pack decided it alone." passes).
+        # Sub-bullets ARE checked: the lstrip below reaches an indented "- " too.
         if Path(f).name == "CHANGELOG.md":
             text = read(f)
             for n, ln in enumerate(text.splitlines(), 1):
+                ln = ln.lstrip()
                 if not ln.startswith("- "):
                     continue
                 body = ln.split("**:", 1)[1] if "**:" in ln else ln[2:]
@@ -998,6 +999,35 @@ def rule_js_pragma(files: list[str]) -> list[Violation]:
     return out
 
 
+# Rule: shared-param-text — a control the host resolves once per chain must read the
+# same on every pack offering it. The twenty `roundBottomCorners` copies drifted twice
+# in one audit. `files` is unused: a staged subset cannot tell whether the twenty agree.
+SHARED_PARAM_TEXT = {"roundBottomCorners": "plasmazones/data/surface/*/metadata.json"}
+
+
+def rule_shared_param_text(files: list[str]) -> list[Violation]:
+    del files
+    out: list[Violation] = []
+    for param, pattern in SHARED_PARAM_TEXT.items():
+        seen: dict[str, list[str]] = {}
+        for path in sorted(Path().glob(pattern)):
+            try:
+                doc = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue  # rule_prose reports malformed JSON
+            for p in doc.get("parameters", []):
+                if isinstance(p, dict) and p.get("id") == param:
+                    seen.setdefault(str(p.get("description", "")), []).append(str(path))
+        if len(seen) <= 1:
+            continue
+        ref = max(seen, key=lambda k: len(seen[k]))
+        for text, holders in sorted(seen.items()):
+            for h in holders if text != ref else []:
+                out.append(Violation("shared-param-text", h, 0, f"'{param}' description differs "
+                                     f"from the other {len(seen[ref])} packs -> {text[:80]!r}"))
+    return out
+
+
 # --------------------------------------------------------------------------
 # Driver
 # --------------------------------------------------------------------------
@@ -1011,6 +1041,7 @@ RULES = {
     "prose": (rule_prose, "user-facing strings carry no em-dash splice, clause semicolon or spaced hyphen"),
     "dep5": (rule_dep5, "packaging/debian/copyright declares each file's real license and holders"),
     "js-pragma": (rule_js_pragma, f"QML .js libraries declare '.pragma library' in Qt's first {JS_PRAGMA_WINDOW} bytes"),
+    "shared-param-text": (rule_shared_param_text, "a chain-resolved param reads the same on every pack"),
 }
 
 

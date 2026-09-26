@@ -706,19 +706,35 @@ private Q_SLOTS:
         QVERIFY(tmp.isValid());
         QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("backdrop"), true));
         QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("border"), true));
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("late"), false));
 
         SurfaceShaderRegistry registry;
         registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
         QVERIFY(registry.hasEffect(QStringLiteral("backdrop")));
         QVERIFY(registry.hasEffect(QStringLiteral("border")));
+        QVERIFY(registry.hasEffect(QStringLiteral("late")));
 
         // backdrop's stored value is null, so it contributes only its declared true as a
-        // fallback; border's stored false is a real choice and must win.
+        // fallback; border's stored false is a real choice and must win. Turning the
+        // fall-through into an early RETURN would answer backdrop's true and fail here.
         const QVariantMap allParams{{QStringLiteral("backdrop"),
                                      QVariantMap{{QStringLiteral("roundBottomCorners"), QVariant::fromValue(nullptr)}}},
                                     {QStringLiteral("border"), storedValue(false)}};
         const QStringList chain{QStringLiteral("backdrop"), QStringLiteral("border")};
         QCOMPARE(chainRoundBottomCorners(registry, chain, allParams).toBool(), false);
+
+        // The mirror case, needed because the assertion above passes against the
+        // PRE-FIX code too (which read the null as a usable false and returned it, the
+        // same answer border's stored false gives). Here no later pack stores anything,
+        // so the fallback backdrop contributed IS the answer, and it must be backdrop's
+        // true rather than `late`'s declared false. Three mutations fail this:
+        // treating the null as usable, skipping the pack outright instead of falling
+        // through, and letting a later declarer overwrite an already-held fallback.
+        const QVariantMap fallbackOnly{
+            {QStringLiteral("backdrop"),
+             QVariantMap{{QStringLiteral("roundBottomCorners"), QVariant::fromValue(nullptr)}}}};
+        const QStringList fallbackChain{QStringLiteral("backdrop"), QStringLiteral("late")};
+        QCOMPARE(chainRoundBottomCorners(registry, fallbackChain, fallbackOnly).toBool(), true);
     }
 
     /// A pack the registry KNOWS but cannot use gets no vote either. The loader keeps a

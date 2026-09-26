@@ -481,8 +481,10 @@ install(TARGETS plasmazones_rendering
 # settings app (which injects its own IShaderPreviewBackend). The daemon does NOT
 # link it because it hosts no preview, not to keep dependencies out: every one of
 # this target's PUBLIC deps (plasmazones_core, plasmazones_rendering,
-# PhosphorAudio, Qt6::Gui) is already linked into plasmazonesd below, CAVA
-# included, since the daemon runs its own CavaSpectrumProvider.
+# PhosphorAudio, Qt6::Gui) already reaches plasmazonesd below, CAVA included,
+# since the daemon runs its own CavaSpectrumProvider. The first three are named
+# on it directly; Qt6::Gui arrives transitively through Qt6::Quick, so do not
+# expect to find it in the link list.
 set(plasmazones_shaderpreview_SRCS
     shaderpreview/ishaderpreviewbackend.h
     shaderpreview/shaderpreviewcontroller.h
@@ -842,8 +844,11 @@ add_executable(plasmazones-editor ${plasmazones_editor_SRCS})
 # ColorUtils.js is imported by relative path from each QML file that uses it, so it needs
 # no qmldir entry. NOT about re-evaluation: the file's own `.pragma library` is what makes
 # it shared, and it declares one inside Qt's 128-byte scan window. ThemeHelpers.js is
-# imported the same way and carries no such property, so this is asymmetric rather than
-# load-bearing; drop it if the qmldir omission ever stops mattering.
+# imported the same way and declares its pragma at the same offset, but carries no such
+# CMAKE SOURCE PROPERTY, so the two are inconsistent. Keeping it on this one file is the
+# conservative half of that inconsistency: it suppresses a qmldir entry nothing imports
+# through, and removing it has not been checked against qmllint or qmlls, which read the
+# generated qmldir. Add it to ThemeHelpers.js, or drop it here once that check is done.
 set_source_files_properties(editor/qml/ColorUtils.js PROPERTIES
     QT_QML_SKIP_QMLDIR_ENTRY TRUE
 )

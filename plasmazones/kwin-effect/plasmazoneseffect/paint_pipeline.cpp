@@ -1450,16 +1450,16 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // no pack involved.
     //
     // SCOPE LIMIT, verified against the same workspacescene.cpp sources: a
-    // PADDED chain (outerPadding > 0) is marked PAINT_WINDOW_TRANSFORMED
-    // above, and the transformed flag independently excludes the window from
-    // BOTH culling halves — so skipping setTranslucent() recovers nothing for
-    // it. All four bundled interiorOpaque declarers are padded, which means
-    // the skip below is live only for an unpadded
-    // interiorOpaque chain: a third-party contract today, not a bundled win.
-    // Keeping the flag is still correct (it is the necessary half of the
-    // recovery; the transformed presentation is the other), and the sweep's
-    // AND is what a future unpadded pack or a padded-presentation redesign
-    // will inherit.
+    // PADDED chain (outerPadding > 0) is marked PAINT_WINDOW_TRANSFORMED above,
+    // and that flag already excludes the window from BOTH culling halves, so
+    // skipping setTranslucent() recovers nothing for it. All four bundled
+    // declarers are padded, so the skip is live for an unpadded third-party
+    // chain, and the sweep's AND is what a padded-presentation redesign inherits.
+    // The exception is a PARKED column: the transformed gate withholds itself
+    // there on purpose and paintWindowImpl draws nothing, so declaring the
+    // interior opaque would leave the stale pixels the foreign-output branch
+    // above describes. That reaches a BUNDLED all-interiorOpaque chain, hence
+    // the park term below; the default {border, shadow} is not one.
     //
     // Note what this is NOT for. It used to be set to keep the window in KWin's paint
     // set so drawWindow kept firing on idle frames. That was a repaint-scheduling hack
@@ -1468,7 +1468,7 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // The cases where the composite changes with no window damage (a focus cross-fade,
     // an iTime pack, a backdrop refresh) schedule their own repaints in postPaintScreen.
     if (!transformDriven && decorated) {
-        const bool interiorOpaque = decoIt->chainInteriorOpaque && decoIt->foldedOpacity >= 1.0;
+        const bool interiorOpaque = decoIt->chainInteriorOpaque && decoIt->foldedOpacity >= 1.0 && !parkedOffscreen;
         if (!interiorOpaque) {
             data.setTranslucent();
         }

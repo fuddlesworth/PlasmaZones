@@ -46,7 +46,7 @@
             "default": 8,
             "min": 0,
             "max": 64,
-            "description": "Roundness of the pane corners (px, 0 for square, match the Border pack)",
+            "description": "Roundness of the pane corners (px, 0 for square)",
             "group": "Shape"
         },
         {
@@ -154,7 +154,7 @@
             "name": "Round bottom corners",
             "type": "bool",
             "default": true,
-            "description": "Round the bottom corners as well as the top. Turn off to round only the top two, for a pane that sits against a panel or the screen edge. The whole chain follows one answer, so the bottom corners are all rounded or all square.",
+            "description": "Round the bottom corners as well as the top. Turn off to round only the top two, for a pane that sits against a panel or the screen edge. Every pack in the chain that offers this setting follows one answer, so their bottom corners are all rounded or all square. Set it on any pack and the whole chain follows. Where two packs have it set differently, the one earliest in the chain wins.",
             "group": "Shape"
         },
         {

@@ -226,7 +226,9 @@ private Q_SLOTS:
 
     void interiorOpaque_flag_parses_and_roundtrips()
     {
-        // "interiorOpaque" is the margin-only promise (shadow / glow): the
+        // "interiorOpaque" is the never-thins-the-interior promise, which a
+        // margin-only halo pack (glow, shadow) and a pack compositing over the
+        // capture (fireflies, phosphor-motes) both satisfy: the
         // pack never thins a texel inside the natural frame rect, so a chain
         // of such packs keeps the client's opaque region truthful and the
         // compositor can skip setTranslucent(). Pin the parse, the FALSE

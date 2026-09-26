@@ -964,14 +964,14 @@ private:
     /// reset, the clear-before-teardown contract the two siblings above state.
     PhosphorShaders::ShaderPresetRegistry* m_presetRegistry = nullptr;
 
-    /// Decoration pack refusals already reported, keyed "<packId>|<reason>".
+    /// Decoration pack refusals already reported, keyed "<surfacePath>|<packId>|<reason>".
     ///
     /// A decoration profile naming an uninstalled or unloadable pack is a
     /// standing condition, and the chain resolve runs on every OSD show, so
     /// the warning is keyed here to fire once rather than once per show.
-    /// The reason is part of the key because a pack can be refused for
+    /// Path and reason are both in the key: one pack can be refused for
     /// different reasons over its lifetime (uninstalled, then reinstalled
-    /// broken), and a bare id would let the first refusal silence the second.
+    /// broken) and on several surfaces, so a bare id would silence all but one.
     /// Cleared whenever the registry is replaced or its contents change, so a
     /// genuinely new breakage after a reinstall is reported again.
     QSet<QString> m_warnedDecorationPacks;
@@ -1340,10 +1340,10 @@ private:
     void pushLayoutOsdContent(QObject* osdSlot, const LayoutOsdContentParams& params);
 
     /// Resolve a surface-decoration pack from the settings' DecorationProfileTree
-    /// (@p surfacePath, e.g. "osd" / "popup.snapAssist" / "popup.zoneSelector" /
-    /// "popup.layoutPicker") and push it onto @p slot's decoration properties
-    /// (Stage d). Shared by every OSD show path (all modes: layout / locked /
-    /// disabled / navigation) and the three transient popup show paths. Clears
+    /// (@p surfacePath, one of "osd" / "popup.snapAssist" / "popup.zoneSelector" /
+    /// "popup.layoutPicker" / "popup.cheatsheet") and push it onto @p slot's
+    /// decoration properties (Stage d). Shared by every OSD show path (all modes:
+    /// layout / locked / disabled / navigation) and the four popup show paths. Clears
     /// the slot's decorationChain (and decorationOuterPadding) when no pack
     /// resolves so a stale decoration never renders.
     void applyDecoration(QObject* slot, const QString& surfacePath);

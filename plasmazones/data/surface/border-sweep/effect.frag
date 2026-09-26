@@ -25,7 +25,7 @@ vec4 pSurface(vec2 uv) {
     }
 
     // Band geometry: the family's rounded-rect SDF (outer radius = content radius +
-    // width, except at a zero radius, which stays square), content clip
+    // width, except at a zero end, which stays square), content clip
     // and band edge from this pack's logical-px width and corner radius.
     vec2 p = surfacePixel(uv);
     float bottomRadius = surfaceBottomRadius(p_cornerRadius, p_roundBottomCorners);

@@ -125,15 +125,21 @@ Contract flags (declare honestly, the hosts key behaviour on them):
 - `paddingParam: "<paramId>"`: names the int/float logical-px param that is the transparent
   outer margin the pack draws into (glow, shadow, particles). Host inflates the canvas by the
   chain's largest request.
-- `interiorOpaque`: only if the pack NEVER lowers alpha inside the frame rect (shadow, glow).
-  Every border, glass, tint pack leaves it false.
+- `interiorOpaque`: only if the pack NEVER lowers alpha inside the frame rect. Two routes
+  qualify: a halo confined to the transparent margin (glow, shadow) and a composite over the
+  capture that can only raise alpha (fireflies, phosphor-motes, via `slabComposite`). Every
+  border, glass and tint pack leaves it false.
+- `roundBottomCorners` (bool, default true): ANY pack that resolves the frame through a corner
+  radius MUST declare this, whatever else it declares. It is not a `providesBorder` concern —
+  ten of the twenty bundled declarers are blur, glass, glow and shadow packs. The host resolves
+  ONE answer per chain and injects it into every pack that declares it, so a pack that omits it
+  keeps rounded bottoms inside a chain the user squared, which is the exact disagreement the
+  chain-wide answer exists to remove. A pack that places content around the frame RECT with no
+  corner radius at all (fireflies and phosphor-motes, via `framePerimeter`) has no silhouette to
+  reconcile and correctly omits it.
 - `providesBorder`: declare params `borderWidth` and `cornerRadius` (ints, px). Settings seeds
-  them from the plain border setting. Also declare `roundBottomCorners` (bool, default true)
-  and `edgeSoftness` (float, default 0.7, 0.1–2.0): any pack that draws the pane's outline or
-  a halo around it MUST carry the bottom-corner switch, because the host resolves ONE answer
-  per chain and injects it into every pack that declares it. A pack that omits it keeps
-  rounded bottoms inside a chain the user squared, which is the exact disagreement the
-  chain-wide answer exists to remove.
+  them from the plain border setting. Also declare `edgeSoftness` (float): the Borders family
+  declares default 0.7 over 0.1–2.0, the Blur family default 1.0 over 0.1–3.0.
 - `providesOpacityTint`: declare `opacity`, `tintStrength`, `tintColor`.
 - `audio`: includes `<surface_audio.glsl>`.
 - Blur, and multipass in general: declare THREE keys, not one. `"multipass": true` is what
@@ -202,19 +208,32 @@ Helpers: `surfacePixel(uv)` (device px, runtime Y handled), `surfaceTexel(uv)`,
 `surfaceSlabOpen(uv, topRadiusDevicePx, bottomRadiusDevicePx, aaDevicePx)`
 -> `{window, px, fs, mask}`, `slabComposite(window, pane)`, `marginComposite(base, rgb, a)`,
 `faintTintSlab`,
-`haloFalloff(d, reach, edgePx /* vec2 */, baseAlpha, strength, focusFloor, gateCornerDevicePx)`,
+`surfaceBottomRadius(roundedRadius, roundBottomFlag)`,
+`haloFalloff(d, reach, edgePx /* vec2 */, baseAlpha, strength, focusFloor, gateCornerTopDevicePx,
+gateCornerBottomDevicePx)`,
 `frameUv(px)`, `pxToUv(v)`, `framePerimeter(p, center, halfSize)` (-0.5..0.5 around the frame,
 for travelling gleams).
 
 The uniform-radius `standardBorderBand`, `frameSdf` and two-arg `surfaceSlabOpen`, and the
-six-arg `haloFalloff`, still exist as third-party compatibility overloads. Do NOT write a new
-pack against them: they take one radius for all four corners, so a pack that uses them cannot
-follow the chain's bottom-corner answer.
+six- and seven-arg `haloFalloff`, still exist as third-party compatibility overloads. Do NOT
+write a new pack against them: they take one radius for both ends, so a pack that uses them
+cannot follow the chain's bottom-corner answer.
 
-Derive the bottom radius from the declared switch, exactly as the bundled packs do:
-`float bottomRadius = p_roundBottomCorners >= 0.5 ? p_cornerRadius : 0.0;`
-and pass it through. A ZERO radius means square and is deliberately not dilated by the band
-width, so the outline coincides with a squared backdrop slab underneath it.
+Derive the bottom radius with `surfaceBottomRadius`, which every bundled declarer calls:
+
+```glsl
+// border family — logical px, because standardBorderBandSplit scales internally
+float bottomRadius = surfaceBottomRadius(p_cornerRadius, p_roundBottomCorners);
+// slab and halo families — device px, for surfaceSlabOpen / frameSdfSplit / haloFalloff
+float cornerPx = p_cornerRadius * uSurfaceScale;
+float bottomPx = surfaceBottomRadius(cornerPx, p_roundBottomCorners);
+```
+
+The helper is a pure select, so it neither scales nor clamps and the unit you hand it is the
+unit you get back. Pass whichever one your consumer wants, and do not pre-scale for
+`standardBorderBandSplit` or the bottom end gets scaled twice while the top stays right.
+A ZERO radius means square and is deliberately not dilated by the band width, so the outline
+coincides with a squared backdrop slab underneath it.
 
 Compositing contracts:
 - border: sample the texel, guard degenerate frames, use `standardBorderBandSplit` with the

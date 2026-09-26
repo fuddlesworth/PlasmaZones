@@ -50,11 +50,14 @@ void OverlayService::setSurfaceShaderRegistry(PhosphorSurfaceShaders::SurfaceSha
     // Disconnect from the outgoing registry before the borrow is overwritten,
     // or a re-set would leave a second connection behind. Daemon::stop() nulls
     // this borrow before resetting the registry, so the old pointer is still
-    // alive here. Named signal and slot rather than a blanket
-    // disconnect(sender, nullptr, this, nullptr): today effectsChanged below is the
-    // only connection from a registry to this object, so the blanket form happened to
-    // be equivalent, but it would silently sever any second one a later change adds.
-    // setPresetRegistry keeps a QMetaObject::Connection handle for the same reason.
+    // alive here. The signal is named rather than left as a blanket
+    // disconnect(sender, nullptr, this, nullptr), which is a readability choice and
+    // NOT a safety one: effectsChanged is the registry's only signal, so naming it
+    // still severs every slot this object has on it, exactly as the blanket form did.
+    // It is also strictly narrower, so a future second SIGNAL on the registry would
+    // survive here where the blanket form would have cleaned it up. Only a stored
+    // QMetaObject::Connection distinguishes one slot from another, which is what
+    // setPresetRegistry keeps and what a second slot on this signal would need.
     if (m_surfaceShaderRegistry) {
         disconnect(m_surfaceShaderRegistry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
                    nullptr);
@@ -85,9 +88,12 @@ void OverlayService::reapplyVisiblePopupDecorations()
 {
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
         const auto& state = it.value();
-        // The zone selector is genuinely MULTI-screen: showZoneSelector loops every
-        // eligible screen, so its flag alone is the right gate and there is no
-        // companion screen id to compare against.
+        // The zone selector CAN be multi-screen and carries no companion screen id,
+        // so its flag alone is the right gate. showZoneSelector loops every eligible
+        // screen, and skips all but one when a target is passed, which the drag-time
+        // caller does; the no-target form is the hot-plug recreation path. Either way
+        // there is no single owning screen recorded to compare against, and every
+        // other selector sweep in this class gates the same way.
         if (m_zoneSelectorVisible) {
             applyDecoration(state.zoneSelectorSlot(), PhosphorSurfaceShaders::decorationPopupZoneSelectorPath());
         }
@@ -140,16 +146,16 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     // Helper to leave the slot undecorated: clear the chain so the QML
     // SurfaceDecoration stays inert and the card draws its native chrome.
     const auto clearDecoration = [this, slot]() {
-        // Padding before the chain, matching the write order applyDecoration
-        // documents below: the chain write is the load trigger, so everything a
-        // stage reads goes first. Inconsequential here (no stage survives an empty
-        // chain) but the two halves of one pair should not state opposite orders.
+        // Padding and backdrop before the chain, matching the write order
+        // applyDecoration documents below: the chain write is the load trigger, so
+        // everything a stage reads goes first. Inconsequential here (no stage
+        // survives an empty chain) but the two halves of one pair should not state
+        // opposite orders, and the backdrop is dropped for its own reason too: an
+        // undecorated slot has nothing to sample it, and holding the image would
+        // keep a wallpaper-sized texture uploaded for a surface that draws none.
         writeQmlProperty(slot, QString(OverlayQmlPropertyNames::DecorationOuterPadding), 0.0);
-        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::DecorationChain), QVariant::fromValue(QVariantList()));
-        // Drop the backdrop with the chain: an undecorated slot has nothing to
-        // sample it, and holding the image would keep a wallpaper-sized texture
-        // uploaded for a surface that draws none of it.
         writeQmlProperty(slot, QString(OverlayQmlPropertyNames::BackdropTexture), QVariant());
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::DecorationChain), QVariant::fromValue(QVariantList()));
         // No decoration -> no audio need on this slot; let CAVA wind down if it
         // was only kept alive for an audio decoration here.
         if (auto* item = qobject_cast<QQuickItem*>(slot)) {

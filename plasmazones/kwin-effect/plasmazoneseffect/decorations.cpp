@@ -584,10 +584,12 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         // this branch does not run, and the tree's params win instead.
         // This REPLACES the whole "border" entry, so any stored roundBottomCorners on that
         // pack is dropped before chainRoundBottomCorners runs below and the chain falls to
-        // the pack's declared default. Deliberate and harmless here: easy mode exposes no
-        // per-pack parameter editor, its chain is at most {border, opacity-tint}, and
-        // opacity-tint does not declare the control, so there is nothing for the two to
-        // disagree about. The resolved appearance owns this layer's params outright.
+        // the pack's declared default. That covers a rule's border params too, which the
+        // overlay above may have written even in easy mode. Deliberate and harmless here:
+        // easy mode's own UI exposes no per-pack parameter editor, its chain is at most
+        // {border, opacity-tint}, and opacity-tint does not declare the control, so there
+        // is nothing for the two to disagree about. The resolved appearance owns this
+        // layer's params outright.
         QVariantMap borderParams;
         borderParams.insert(QStringLiteral("borderWidth"),
                             appearance->borderWidth.value_or(PhosphorCompositor::DecorationDefaults::BorderWidth));

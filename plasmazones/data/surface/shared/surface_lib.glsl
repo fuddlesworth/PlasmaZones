@@ -82,18 +82,29 @@ float sdRoundedBoxSplit(vec2 p, vec2 b, float rTop, float rBottom) {
     return sdRoundedBox(p, b, p.y < 0.0 ? rTop : rBottom);
 }
 
-// frameSdf with separate top / bottom radii (device px), each clamped to half
-// the smaller side. `radius` reports the TOP radius, which is the one the
-// glass lens builds its normal field from.
 // The bottom radius a pack derives from its own declared roundBottomCorners switch.
 // Twenty packs had their own copy of this ternary, including twenty copies of the
 // `>= 0.5` convention for reading a bool out of the float lane the contract uploads
 // it in. The flag is a parameter for the same reason surfaceBendUv's is:
 // `p_roundBottomCorners` is a per-pack generated name a shared header cannot see.
-float surfaceBottomRadius(float cornerRadiusPx, float roundBottomFlag) {
-    return roundBottomFlag >= 0.5 ? cornerRadiusPx : 0.0;
+//
+// UNIT-NEUTRAL, deliberately, which is why the radius argument carries no `Px`
+// suffix like the rest of this header. It is a pure select: it neither scales nor
+// clamps, so it hands back whatever it was given and the caller passes the unit
+// its own consumer wants. The nine border-band packs pass LOGICAL px, because
+// standardBorderBandSplit scales internally; the ten slab and halo packs pass
+// DEVICE px, for frameSdfSplit / surfaceSlabOpen / haloFalloff; and border-double
+// passes a device-px radius it has already dilated by its own stack width. Reading
+// the name as a promise of device px and pre-scaling before
+// standardBorderBandSplit would double-scale the BOTTOM while the top stayed
+// right, which shows up only on a scaled display and only at one end.
+float surfaceBottomRadius(float roundedRadius, float roundBottomFlag) {
+    return roundBottomFlag >= 0.5 ? roundedRadius : 0.0;
 }
 
+// frameSdf with separate top / bottom radii (device px), each clamped to half
+// the smaller side. `radius` reports the TOP radius, which is the one the
+// glass lens builds its normal field from.
 FrameSDF frameSdfSplit(vec2 p, float topRadiusPx, float bottomRadiusPx) {
     FrameSDF fs;
     fs.halfSize = 0.5 * uSurfaceFrameSize;
@@ -171,9 +182,10 @@ vec4 marginComposite(vec4 base, vec3 col, float a) {
     return vec4(base.rgb + col * ca, base.a + ca);
 }
 
-// The border family's shared band assembly: the OUTER-radius rounded-rect SDF
+// The border family's shared band assembly: the outer-radius rounded-rect SDF
 // (content radius + border width, both logical px scaled to device px by
-// uSurfaceScale), the content-clip mask, and the band edge. `p` is the
+// uSurfaceScale, except at a zero end, which stays square and is not dilated at
+// all — see the level-set note below), the content-clip mask, and the band edge. `p` is the
 // device-px fragment (surfacePixel); `borderWidth` / `cornerRadius` are the
 // pack's logical-px params (pack macros the shared code can't name, so they are
 // passed in). Packs whose band geometry differs (border-double's three-width
@@ -243,11 +255,18 @@ BorderBand standardBorderBandSplit(vec2 p, float borderWidth, float cornerRadius
     //
     // A ZERO end adds NOTHING, and that asymmetry is the point. Dilating a
     // square corner by width gives an outer quarter-circle of that radius, so
-    // "0 for square" used to come out arced by the border's own width — the
-    // silhouette's SHAPE depended on the band's thickness, which no caller
-    // predicts and no other family does. The backdrop-slab packs pass their
-    // radius to surfaceSlabOpen undilated, so a squared slab under a squared
-    // border disagreed at every corner. Leaving a zero radius alone makes the
+    // "0 for square" used to come out arced by the border's own width, and at a
+    // zero end the silhouette's SHAPE therefore depended on the band's
+    // thickness, which no caller predicts and no other family does. The
+    // backdrop-slab packs pass their radius to surfaceSlabOpen undilated, so a
+    // squared slab under a squared border disagreed at every corner.
+    //
+    // This fixes the ZERO end only, and that is deliberate. At a non-zero end the
+    // outer radius is still r + width by design, because `cornerRadius` names the
+    // CONTENT corner, so a border in the chain still governs the composited
+    // silhouette: it erases a radius-r slab corner by about 0.41*width along the
+    // diagonal. Under a pixel at the default width 2, plainly visible at width 20.
+    // Leaving a zero radius alone makes the
     // -width level set a sharp inset rect, i.e. a true mitre: `width` thick
     // perpendicular to each edge and width*sqrt(2) across the corner diagonal,
     // which is what a square pane wants and what CSS and QPen MiterJoin draw.
@@ -350,7 +369,7 @@ vec4 faintTintSlab(vec3 tint, float tintStrength, float mask) {
 // REAL (undisplaced) fragment position for the edge feather — the shadow pack
 // evaluates `d` against a displaced frame but feathers on the true position.
 float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float strength, float focusFloor,
-                  float gateCornerPx) {
+                  float gateCornerTopPx, float gateCornerBottomPx) {
     // reach is caller-supplied and a zero would make this inf, then NaN through
     // exp(), and a NaN propagates through the whole composite rather than
     // showing up as one bad pixel. Both in-tree callers (glow, shadow) floor it
@@ -395,17 +414,33 @@ float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float stre
     // pack calling this from a buffer pass reads a zero frame there and a real one
     // on the daemon. focusDim below has the same shape.
     //
-    // ROUNDED to the caller's own corner radius, not square. A rounded rect is a
-    // subset of its bounding square, so the square SDF is <= the rounded one
-    // everywhere and EQUAL except in the corner zone — which means a square gate
-    // reads the transparent corner sliver as deeper inside than it is, and zeroes
-    // the halo there once the reach falls under about 0.29 of the radius (the
-    // sliver's deepest point sits 0.293R inside the square edge). glowSize 4 with
-    // cornerRadius 64 is legal and hits it. Passing the radius costs nothing and
-    // leaves every non-corner fragment identical.
+    // ROUNDED to the caller's own corner radii, not square, and SPLIT top/bottom
+    // so the gate follows the same outline the caller's own FrameSDF does.
+    //
+    // A rounded rect is a subset of its bounding square, so the square SDF is <=
+    // the rounded one everywhere and EQUAL except in the corner zone. Walking h
+    // inward along a corner diagonal, the rounded distance is R*(sqrt(2)-1) -
+    // h*sqrt(2) while h < R and -h after, so rounded minus square is
+    // (R-h)*(sqrt(2)-1): zero exactly when h >= R, positive otherwise. Either
+    // mismatch therefore moves the gate's thresholds by that much, in whichever
+    // direction the gate is the rounder of the two:
+    //   gate SQUARE under a ROUNDED frame — reads the transparent corner sliver
+    //     as deeper inside than it is and ZEROES halo there once the reach falls
+    //     under about 0.29 of the radius (the sliver's deepest point sits 0.293R
+    //     inside the square edge). glowSize 4 with cornerRadius 64 hits it.
+    //   gate ROUNDED under a SQUARED end — reads a squared corner as further
+    //     outside than it is and KEEPS halo there, which is what the gate exists
+    //     to stop. Full-keep reaches [R*(sqrt(2)-1) + r]/sqrt(2) instead of r,
+    //     so it begins as soon as cornerRadius exceeds the reach, not at some
+    //     large multiple of it.
+    // The second case is why this takes two radii rather than one: a pane that
+    // squares its bottom corners against a panel edge would otherwise wear a
+    // halo around a corner it no longer has.
     vec2 gateHalf = 0.5 * uSurfaceFrameSize;
-    float gateR = clamp(gateCornerPx, 0.0, min(gateHalf.x, gateHalf.y));
-    float dBody = sdRoundedBox(edgePx - (uSurfaceFrameTopLeft + gateHalf), gateHalf, gateR);
+    float gateCap = min(gateHalf.x, gateHalf.y);
+    float dBody = sdRoundedBoxSplit(edgePx - (uSurfaceFrameTopLeft + gateHalf), gateHalf,
+                                    clamp(gateCornerTopPx, 0.0, gateCap),
+                                    clamp(gateCornerBottomPx, 0.0, gateCap));
     halo *= smoothstep(-2.0 * r, -r, dBody);
     float edgeDist = min(min(edgePx.x, edgePx.y), min(uSurfaceSize.x - edgePx.x, uSurfaceSize.y - edgePx.y));
     // Floored so edge0 != edge1: smoothstep is undefined when they are equal, and
@@ -418,13 +453,22 @@ float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float stre
     return halo;
 }
 
+// The SEVEN-argument form, kept so a third-party pack calling it is byte-identical
+// to what it had. One radius for both ends, which is what this helper did before
+// it took two, and which costs the bottom corner on a pack that squares it. A pack
+// that follows the chain's bottom-corner answer should pass both radii above.
+float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float strength, float focusFloor,
+                  float gateCornerPx) {
+    return haloFalloff(d, reach, edgePx, baseAlpha, strength, focusFloor, gateCornerPx, gateCornerPx);
+}
+
 // The pre-existing SIX-argument form, kept so a third-party pack calling it is
 // byte-identical to what it had. A square gate, which is what this helper did
 // before it took a radius, and which costs the corner sliver on a pack whose halo
 // reach is small against its corner radius. A pack that rounds its frame should
-// pass the radius to the seven-argument form above.
+// pass its radii to the eight-argument form above.
 float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float strength, float focusFloor) {
-    return haloFalloff(d, reach, edgePx, baseAlpha, strength, focusFloor, 0.0);
+    return haloFalloff(d, reach, edgePx, baseAlpha, strength, focusFloor, 0.0, 0.0);
 }
 
 // Frame-normalised UV for a device-px fragment. In [0,1] only for a fragment

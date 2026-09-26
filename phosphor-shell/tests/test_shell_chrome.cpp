@@ -188,6 +188,9 @@ private Q_SLOTS:
         // must flip 1.0 -> 0.0. With the injection at chainFor removed both maps carry
         // border's own default and NOTHING differs, so this fails rather than passing
         // vacuously.
+        // Iterating the ROUNDED map's keys is sufficient only because both chains run the
+        // same two packs in the same order, so the lane sets are identical and a lane
+        // present in one is present in the other.
         QStringList changed;
         for (auto it = roundedBorder.constBegin(); it != roundedBorder.constEnd(); ++it) {
             const QVariant squaredValue = squaredBorder.value(it.key());
@@ -197,7 +200,15 @@ private Q_SLOTS:
                 QCOMPARE(squaredValue.toDouble(), 0.0);
             }
         }
-        QCOMPARE(changed.size(), 1);
+        // Names the premise, because "Actual: 0 Expected: 1" on its own sends the reader
+        // looking at the injection when the likelier cause is the fixture: this needs the
+        // bundled blur and border packs to BOTH declare roundBottomCorners, and blur's
+        // default to be true so squaring it is a change.
+        QVERIFY2(changed.size() == 1,
+                 qPrintable(QStringLiteral("expected exactly one differing lane, got %1. Do bundled blur and "
+                                           "border both still declare roundBottomCorners, with blur defaulting "
+                                           "to true?")
+                                .arg(changed.size())));
     }
 
     void outerPaddingFollowsTheChainsLargestRequest()

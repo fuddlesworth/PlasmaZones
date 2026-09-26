@@ -12,11 +12,11 @@
 
 #include "plasmazoneseffect.h"
 
-#include <effect/effecthandler.h>
-#include <effect/effectwindow.h>
-
 #include "surface_fold.h"
 #include "window_query.h"
+
+#include <effect/effecthandler.h>
+#include <effect/effectwindow.h>
 
 namespace PlasmaZones {
 

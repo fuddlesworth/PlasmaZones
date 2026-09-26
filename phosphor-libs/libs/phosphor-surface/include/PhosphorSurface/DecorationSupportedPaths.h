@@ -30,10 +30,16 @@ inline QString decorationShellAppletPopupPath()
 }
 
 /// XDG data subdirectory holding installed surface-shader packs, relative to a
-/// GenericDataLocation root. Lives here because BOTH application tiers scan it and
-/// neither may link the other: the daemon's warm-bake and the Phosphor shell's own
-/// chrome each built the same two paths from their own copy of the literal, so a
-/// rename would have moved one and left the other looking in the old place.
+/// GenericDataLocation root. Lives here because every tier that scans it can reach
+/// this header while the application tiers may not link each other: the daemon's
+/// warm-bake, the Phosphor shell's chrome, the compositor's registry search path and
+/// this library's own QML item each built it from a separate copy of the literal, so
+/// a rename would have moved some and left the rest looking in the old place.
+///
+/// `ConfigDefaults::userSurfaceSubdir()` is the settings tier's LEADING-SLASH form
+/// and now derives from this, so there is one string and two spellings of it rather
+/// than two strings. Keep it that way: the slash belongs to the callers that join
+/// without one, not to the location.
 inline QString surfacePackDataSubdir()
 {
     return QStringLiteral("plasmazones/surface");

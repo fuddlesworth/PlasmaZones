@@ -103,7 +103,9 @@ public:
     [[nodiscard]] Q_INVOKABLE double outerPaddingFor(const QString& surfacePath) const;
 
     /// Replace the tree from its JSON form (the daemon's publication).
-    /// Returns false and keeps the current tree on malformed input.
+    /// Returns false and keeps the current tree on malformed input, and likewise on an
+    /// empty payload, which is the expected answer from a daemon that does not know
+    /// this key rather than a fault.
     bool setTreeJson(const QString& json);
     [[nodiscard]] const PhosphorSurfaceShaders::DecorationProfileTree& tree() const;
 

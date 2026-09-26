@@ -489,19 +489,6 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             }
         }
     }
-    // A NOTE, not a lint: cornerRadius is not reserved, so a pack may declare it for an
-    // inner badge and still be correct. But the silhouette reaches only packs declaring
-    // roundBottomCorners, so one omitting it cannot follow a squared chain. All 20 declare both.
-    const auto declaresParam = [&eff](QLatin1String id) {
-        return std::any_of(eff.parameters.cbegin(), eff.parameters.cend(), [id](const auto& p) {
-            return p.id == id;
-        });
-    };
-    if (declaresParam(QLatin1String("cornerRadius")) && !declaresParam(QLatin1String("roundBottomCorners"))) {
-        out << "  " << padLabel(QStringLiteral("note"))
-            << "declares cornerRadius but not roundBottomCorners, so it cannot follow a chain that "
-               "squares its bottom corners\n";
-    }
     // preview is the pack's thumbnail. The registry clears one that escapes the
     // pack directory with a journal warning only, and accepts a name whose file
     // does not exist, so either mistake ships green and shows up as a pack with
@@ -962,6 +949,19 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
         out << "  " << padLabel(QString())
             << "and the surface family ships no depth module, so declare "
                "`layout(binding = 16) uniform sampler2D uDepthBuffer;` yourself\n";
+    }
+    // Also a NOTE, beside the one above because a note printed before the lint flush
+    // lands above its own `metadata ERROR` header. cornerRadius is not reserved, so a
+    // pack may declare it for a badge and be right; only declarers get the silhouette.
+    const auto declaresParam = [&eff](QLatin1String id) {
+        return std::any_of(eff.parameters.cbegin(), eff.parameters.cend(), [id](const auto& p) {
+            return p.id == id;
+        });
+    };
+    if (declaresParam(QLatin1String("cornerRadius")) && !declaresParam(QLatin1String("roundBottomCorners"))) {
+        out << "  " << padLabel(QStringLiteral("note"))
+            << "declares cornerRadius but not roundBottomCorners, so it cannot follow a chain that "
+               "squares its bottom corners\n";
     }
 
     // Preset lint: every preset key must name a declared parameter, and every value

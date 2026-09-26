@@ -150,6 +150,12 @@ QString roundBottomCornersParamId()
 /// flatten copies it verbatim), and the alternative — gating on the declared type —
 /// was rejected for the reason above. A hand-edited profile gets the value it asked
 /// for rather than a refusal.
+///
+/// Note the EMPTY-vs-null string asymmetry that falls out of this, since it is a
+/// third case beyond the absent and explicitly-null ones named above. A stored `""`
+/// is valid and not null, so it is ACCEPTED and converts to false, squaring the
+/// chain; a default-constructed QString is null, so it abstains. Both are reachable
+/// only from a hand-edited profile, and each gets the value its shape asks for.
 static bool usableBool(const QVariant& value, bool* out)
 {
     if (!value.isValid() || value.isNull()) {
@@ -172,9 +178,10 @@ QVariant chainRoundBottomCorners(const SurfaceShaderRegistry& registry, const QS
         // SurfaceShaderEffect for an id the registry does not hold, and that has
         // an empty id so isValid() is already false for it. Both calls perform the
         // same factory lookup, so the probe was a second one for the same answer.
-        // NOTE this reasoning is local to the resolver. The hosts' own hasEffect
-        // probes are NOT redundant: they distinguish "not installed" from
-        // "installed but broken" for two separately-keyed warnings.
+        // NOTE this reasoning is local to the resolver, and it does NOT condemn every
+        // host probe. The daemon overlay host's is load-bearing: it distinguishes
+        // "not installed" from "installed but broken" for two separately-keyed
+        // warnings. A probe with no diagnostic on either arm is the redundant shape.
         const SurfaceShaderEffect effect = registry.effect(packId);
         if (!effect.isValid()) {
             continue;

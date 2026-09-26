@@ -104,8 +104,10 @@ void OverlayService::finishOsdShow(QQuickWindow* window, PhosphorLayer::Surface*
     // stack translucently behind the incoming OSD. Slot-level animator hide; the
     // shell surface stays Shown for the OSD that follows.
     //
-    // Deliberately here rather than in prepareLayoutOsdWindow, which every caller
-    // runs BEFORE its own refusal checks. A path that prepared and then bailed hid
+    // Deliberately here rather than in prepareLayoutOsdWindow. Most callers refuse
+    // before they prepare, but showNavigationOsd refuses AFTER (its dedup and
+    // needsLayout checks both follow the prepare), so that one path could prepare
+    // and then bail. A path that did hid
     // the selector with nothing to bring it back: the restore runs off a sibling
     // slot's hide completion, and no OSD had been shown to complete one, while
     // showZoneSelector early-returns on the still-set visible flag. The slot then

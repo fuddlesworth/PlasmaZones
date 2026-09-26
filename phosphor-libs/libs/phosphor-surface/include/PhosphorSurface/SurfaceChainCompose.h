@@ -68,8 +68,11 @@ PHOSPHORSURFACE_EXPORT double paddingRequest(const SurfaceShaderEffect& effect, 
  * identically or the preview stops predicting what the daemon draws. One
  * deliberate exception: the two live hosts inject the chain's bottom-corner answer
  * into every stage's params before calling this, and the preview does not, because
- * it composes ONE pack at a time and so has no chain to reconcile. It makes the
- * same departure for the card corner radius, for the same reason. The consequence
+ * it composes ONE pack at a time and so has no chain to reconcile. It injects no
+ * card corner radius either, but for a reason of its own rather than this one: its
+ * stand-in card is deliberately square-cornered so the pack owns the radius, and
+ * injecting one would show a rounding real windows will not get (see
+ * decorationpreviewcontroller.cpp). The consequence of the bottom-corner omission
  * is worth knowing: previewing a pack that is not first in its chain shows that
  * pack's own bottom-corner setting, while the real surface shows the chain's.
  *
