@@ -156,10 +156,10 @@ QString roundBottomCornersParamId()
 /// QVariant::isNull(), so a default-constructed QString and a `""` both report isNull()
 /// false, both pass this guard, and both convert to false.
 ///
-/// In practice only an ABSENT key abstains. DecorationProfile::fromJson drops a JSON
-/// `null` at both the pack and the parameter level before it can reach here, and says
-/// why where it does it, so the null arm below covers a caller that builds the
-/// QVariantMap in C++ instead. That is the std::nullptr_t shape the tests pin.
+/// A JSON `null` arrives as std::nullptr_t — valid, isNull() true — and abstains, the
+/// shape the tests pin. The TREE path cannot deliver one: DecorationProfile::fromJson
+/// drops nulls at both levels, and says why. A rule's params (shader_resolve.cpp's
+/// toVariantMap) and a pack's own `"default": null` both can, so the arm is live.
 static bool usableBool(const QVariant& value, bool* out)
 {
     if (!value.isValid() || value.isNull()) {

@@ -143,10 +143,12 @@ Contract flags (declare honestly, the hosts key behaviour on them):
   not a `providesBorder` concern — the eight Blur declarers set no such flag. The Borders
   family declares default 0.7 over 0.1–2.0, the Blur family default 1.0 over 0.1–3.0.
 - `providesBorder`: declare params `borderWidth` and `cornerRadius` (ints, px). Settings seeds
-  them from the plain border setting, by exact id, and skips silently when an id is absent. A
-  multi-band pack may name its widths otherwise (border-double has `outerWidth`, `gapWidth` and
-  `innerWidth` and no `borderWidth`), in which case only `cornerRadius` is seeded and the widths
-  keep their pack defaults. That is supported, not a mistake.
+  four ids from the plain border setting (`borderWidth`, `cornerRadius`, `activeColor`,
+  `inactiveColor`), by exact id, skipping silently when one is absent. A multi-band pack may
+  name its widths otherwise (border-double has `outerWidth`, `gapWidth` and `innerWidth` and no
+  `borderWidth`), in which case the widths keep their pack defaults and only the ids the pack
+  does declare get seeded. For border-double that is `cornerRadius` alone, since it names its
+  colours `colorA`/`colorB` too. All of that is supported, not a mistake.
 - `providesOpacityTint`: declare `opacity`, `tintStrength`, `tintColor`.
 - `audio`: includes `<surface_audio.glsl>`.
 - Blur, and multipass in general: declare THREE keys, not one. `"multipass": true` is what
@@ -240,8 +242,9 @@ float bottomPx = surfaceBottomRadius(cornerPx, p_roundBottomCorners);
 Label by CONSUMER, not by family: border-double is a Borders pack that builds its bands from
 `frameSdfSplit`, so it takes the second form and passes a radius it has already dilated by its
 own stack width. Do not match on the variable NAME either — it spells that device-px value
-`bottomRadius`, which is the name the first form uses for a logical-px one. The helper is a pure select, so it neither scales nor clamps and the unit you
-hand it is the unit you get back. Pass whichever one your consumer wants, and do not pre-scale for
+`bottomRadius`, which is the name the first form uses for a logical-px one. The helper is a
+pure select, so it neither scales nor clamps and the unit you hand it is the unit you get
+back. Pass whichever one your consumer wants, and do not pre-scale for
 `standardBorderBandSplit` or the bottom end gets scaled twice while the top stays right.
 A ZERO radius means square and is deliberately not dilated by the band width, so the outline
 coincides with a squared backdrop slab underneath it.

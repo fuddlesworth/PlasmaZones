@@ -981,9 +981,9 @@ private:
      * below-strip snapshot, and the topmost, above which the capture
      * composites sharp) skip one, falling back to the parked members when
      * every column on the output is parked rather than capturing the
-     * whole scene, the desktop-transition capture excludes one from the
-     * outgoing scene, and the tab-strip builder skips one when deciding which
-     * members still warrant a pill. Note the anchor election runs BEFORE the strip view
+     * whole scene, the desktop-transition composite's own pill-anchor
+     * election skips one, and so does the pill-band occlusion probe.
+     * Note the anchor election runs BEFORE the strip view
      * animator advances for the frame, so its answer is one advance behind
      * the paint-path sites mid-leg — the failure is the benign,
      * already-documented one (indicators fall back to their layer slot for a
