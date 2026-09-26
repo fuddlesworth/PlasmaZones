@@ -157,9 +157,14 @@ QString roundBottomCornersParamId()
 /// false, both pass this guard, and both convert to false.
 ///
 /// A JSON `null` arrives as std::nullptr_t — valid, isNull() true — and abstains, the
-/// shape the tests pin. The TREE path cannot deliver one: DecorationProfile::fromJson
-/// drops nulls at both levels, and says why. A rule's params (shader_resolve.cpp's
-/// toVariantMap) and a pack's own `"default": null` both can, so the arm is live.
+/// shape the tests pin. A tree PROFILE cannot carry one: DecorationProfile::fromJson
+/// drops nulls at both levels, and says why. That is the profile's own parameters map
+/// and nothing else, so it does NOT make the arm dead. Every tree read flattens through
+/// withPresetsResolved, and a USER preset file keeps its nulls: ShaderPreset::fromJson
+/// raw-converts, overlayPresetDeltas copies verbatim, and clampToBounds skips anything
+/// non-numeric. A pack-DECLARED preset does drop them, so the asymmetry is the user
+/// file. A rule's params (shader_resolve.cpp) and a pack's own `"default": null` reach
+/// here too. Four producers, so the arm is live on every host.
 static bool usableBool(const QVariant& value, bool* out)
 {
     if (!value.isValid() || value.isNull()) {

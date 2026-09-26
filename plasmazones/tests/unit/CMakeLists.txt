@@ -817,14 +817,15 @@ target_compile_definitions(test_whatsnew_data PRIVATE "P_SOURCE_DIR=\"${CMAKE_SO
 # buffer-scale change was a hand edit across four files with no gate behind it.
 # This target reads the committed schemas and compares each published bound to
 # its constant. The contracts are header-only, but a header still needs its
-# INCLUDE DIRECTORY, and p_add_test only brings what plasmazones_core exports:
-# PhosphorAnimation, PhosphorShaders and PhosphorSurface are PUBLIC deps of it,
-# PhosphorPointer is not. So the fourth contract has to be named here.
+# INCLUDE DIRECTORY, and the only Phosphor dirs p_add_test brings are the ones
+# plasmazones_core exports: PhosphorAnimation, PhosphorShaders and PhosphorSurface
+# are PUBLIC deps of it, PhosphorPointer is not. So the fourth contract has to be
+# named here.
 #
 # Without this the file compiled on any machine with the libraries INSTALLED,
 # because <PhosphorPointer/...> then resolves from the system prefix, and failed
-# in every clean CI container. That is why a local pass proves nothing about
-# include hygiene for a target whose headers ship to /usr/include.
+# in every clean CI container. That is why a local pass proves nothing about a
+# target's include hygiene when the headers it includes also ship to /usr/include.
 p_add_test(test_shader_schema_bounds data/test_shader_schema_bounds.cpp)
 target_link_libraries(test_shader_schema_bounds PRIVATE PhosphorPointer::PhosphorPointer)
 # The four shader-family metadata schemas live in the phosphor-libs tier, not

@@ -470,9 +470,11 @@ void OverlayService::pushLayoutOsdContent(QObject* osdSlot, const LayoutOsdConte
     }
     // Stage d: resolve + push the OSD's surface-shader decoration (rounded
     // corners + border) onto the slot. Done here so every path routing through
-    // pushLayoutOsdContent decorates consistently, which is all five of them (the
-    // layout, locked, template, strip and disabled shows); showNavigationOsd calls
-    // applyDecoration directly since it does not route through here.
+    // pushLayoutOsdContent decorates consistently: its five call sites, in
+    // showLayoutOsdImpl (which serves both the layout and the LOCKED show, the latter
+    // being an argument rather than a call site of its own), showScrollingTemplateOsd,
+    // showScrollingStripOsd, the showLayoutOsd(string…) overload and showDisabledOsd.
+    // showNavigationOsd calls applyDecoration directly, not routing through here.
     applyDecoration(osdSlot, PhosphorSurfaceShaders::decorationOsdPath());
 }
 
