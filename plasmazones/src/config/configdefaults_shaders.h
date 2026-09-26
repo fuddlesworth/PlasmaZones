@@ -227,40 +227,46 @@ public:
     // every other group: ConfigDefaults derives from ConfigKeys).
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// Built-in DecorationProfileTree seed layer. NOT persisted and NOT the
-    /// schema default (that is the empty tree — the stored blob holds only
-    /// user edits): `Settings::decorationProfileTree()` overlays this tree at
-    /// LOWEST precedence on every read via
-    /// `DecorationProfileTree::withSeedDefaults`, the same seed model as the
-    /// animation motion defaults (PhosphorProfileRegistry's low-precedence
-    /// owner tag). A user edit at a seeded path becomes a real override and
-    /// wins; clearing that override (per-page Reset) reveals the seed again;
-    /// an engaged-but-empty chain keeps the surface explicitly undecorated.
-    ///
-    /// The decoration tree is the user-applied surface-shader pack stack. Window
-    /// border and title-bar appearance are owned by the window rules, not by this
-    /// tree, so windows and popups start undecorated until the user engages a
-    /// pack (e.g. glow) from the Decoration pages.
-    ///
-    /// The PopupFrame-based card surfaces are the exception: the OSD ("osd") and
-    /// the three PopupFrame popups ("popup.layoutPicker", "popup.zoneSelector",
-    /// "popup.cheatsheet") ship a default chain that chromes their cards through the
-    /// surface-decoration pipeline rather than PopupFrame's built-in MultiEffect
-    /// — a crisp neutral frame-contrast border plus a real, theme-tinted drop
-    /// shadow. (Snap-assist is left undecorated: it carries its own anchor, not
-    /// PopupFrame, so it has no equivalent card chrome to replace.) These flow
-    /// through the same merged tree the Decoration pages edit, so a user can
-    /// retune them (a parameters-only retune keeps the seed chain) or clear
-    /// them (remove every pack, which persists an explicit empty chain). The border
-    /// colour resolves from the theme in OverlayService::applyDecoration
-    /// (useThemeNeutral, at frameContrast 0.2) so it tracks light and dark;
-    /// edgeSoftness 0.5 keeps the 1px border a crisp hairline. The shadow pack is
-    /// a proper drop shadow (offset, edge-feathered so it never cuts off in a
-    /// hard rectangle), tinted with the theme background (useThemeTint,
-    /// PopupFrame's original glow colour) so the halo tracks light and dark too.
+    // Built-in DecorationProfileTree seed layer, described here because it is too long
+    // to sit on the accessor. `decorationProfileTree()` below is what returns it; the
+    // `///` doc on each accessor is its own. Demoted from `///` deliberately: attached to
+    // the next declaration it documented the wrong one.
+    //
+    // NOT persisted and NOT the
+    // schema default (that is the empty tree — the stored blob holds only
+    // user edits): `Settings::decorationProfileTree()` overlays this tree at
+    // LOWEST precedence on every read via
+    // `DecorationProfileTree::withSeedDefaults`, the same seed model as the
+    // animation motion defaults (PhosphorProfileRegistry's low-precedence
+    // owner tag). A user edit at a seeded path becomes a real override and
+    // wins; clearing that override (per-page Reset) reveals the seed again;
+    // an engaged-but-empty chain keeps the surface explicitly undecorated.
+    //
+    // The decoration tree is the user-applied surface-shader pack stack. Window
+    // border and title-bar appearance are owned by the window rules, not by this
+    // tree, so windows and popups start undecorated until the user engages a
+    // pack (e.g. glow) from the Decoration pages.
+    //
+    // The PopupFrame-based card surfaces are the exception: the OSD ("osd") and
+    // the three PopupFrame popups ("popup.layoutPicker", "popup.zoneSelector",
+    // "popup.cheatsheet") ship a default chain that chromes their cards through the
+    // surface-decoration pipeline rather than PopupFrame's built-in MultiEffect
+    // — a crisp neutral frame-contrast border plus a real, theme-tinted drop
+    // shadow. (Snap-assist is left undecorated: it carries its own anchor, not
+    // PopupFrame, so it has no equivalent card chrome to replace.) These flow
+    // through the same merged tree the Decoration pages edit, so a user can
+    // retune them (a parameters-only retune keeps the seed chain) or clear
+    // them (remove every pack, which persists an explicit empty chain). The border
+    // colour resolves from the theme in OverlayService::applyDecoration
+    // (useThemeNeutral, at frameContrast 0.2) so it tracks light and dark;
+    // edgeSoftness 0.5 keeps the 1px border a crisp hairline. The shadow pack is
+    // a proper drop shadow (offset, edge-feathered so it never cuts off in a
+    // hard rectangle), tinted with the theme background (useThemeTint,
+    // PopupFrame's original glow colour) so the halo tracks light and dark too.
+
     /// The SCHEMA default for the stored decoration tree, which is the empty tree.
-    /// The seeds above are overlaid on read and never persisted, so a fresh config
-    /// stores nothing. Here rather than inline in the KeyDef so the schema reads
+    /// A fresh config stores nothing, because the seed tree below is overlaid on read
+    /// and never persisted. Here rather than inline in the KeyDef so the schema reads
     /// through an accessor like every other key, and so the empty-tree spelling has
     /// one home if the tree's JSON shape ever gains a field.
     static QVariantMap decorationProfileTreeStoredDefault()
@@ -268,6 +274,8 @@ public:
         return ::PhosphorSurfaceShaders::DecorationProfileTree().toJson().toVariantMap();
     }
 
+    /// The SEED tree: the baked-in decoration profiles described at length above,
+    /// overlaid at lowest precedence on every read of the stored tree.
     static ::PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree()
     {
         // One shared card decoration for every PopupFrame surface — the OSD and

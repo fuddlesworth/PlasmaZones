@@ -157,6 +157,60 @@ private Q_SLOTS:
         QCOMPARE(revised.count(), 1);
     }
 
+    /// The chain's bottom-corner answer has to reach the UPLOADED slot map of a pack
+    /// that never set it, not merely come out of the resolver. Stored on the FIRST pack
+    /// in chain order only, so anything the second pack draws at the bottom can only
+    /// have come from the chain.
+    void theChainsBottomCornerAnswerReachesEveryStage()
+    {
+        ShellChrome chrome({QStringLiteral(PZ_BUNDLED_SURFACE_DIR)}, nullptr);
+        const QStringList chain{QStringLiteral("blur"), QStringLiteral("border")};
+
+        // blur squares its bottom; border stores nothing and declares the opposite.
+        QVariantMap squaredTree;
+        QVariantMap blurParams;
+        blurParams.insert(QStringLiteral("roundBottomCorners"), false);
+        squaredTree.insert(QStringLiteral("blur"), blurParams);
+        QVERIFY(chrome.setTreeJson(treeJson(decorationShellPhosphorBarPath(), chain, squaredTree)));
+        const QVariantList squaredStages = chrome.chainFor(decorationShellPhosphorBarPath());
+        QCOMPARE(squaredStages.size(), 2);
+        const QVariantMap squaredBorder = squaredStages.at(1).toMap().value(QStringLiteral("params")).toMap();
+
+        // Same chain, nothing stored: step 2 hands both packs a declared true.
+        QVERIFY(chrome.setTreeJson(treeJson(decorationShellPhosphorBarPath(), chain)));
+        const QVariantList roundedStages = chrome.chainFor(decorationShellPhosphorBarPath());
+        QCOMPARE(roundedStages.size(), 2);
+        const QVariantMap roundedBorder = roundedStages.at(1).toMap().value(QStringLiteral("params")).toMap();
+
+        // Compared by DIFFERENCE, not by lane name: translateSurfaceParams numbers the
+        // lanes from the pack's OWN declaration order, so naming one would break on an
+        // unrelated reorder of border's parameters. Exactly one lane may move, and it
+        // must flip 1.0 -> 0.0. With the injection at chainFor removed both maps carry
+        // border's own default and NOTHING differs, so this fails rather than passing
+        // vacuously.
+        // Iterating the ROUNDED map's keys is sufficient only because both chains run the
+        // same two packs in the same order, so the lane sets are identical and a lane
+        // present in one is present in the other.
+        QStringList changed;
+        for (auto it = roundedBorder.constBegin(); it != roundedBorder.constEnd(); ++it) {
+            const QVariant squaredValue = squaredBorder.value(it.key());
+            if (squaredValue != it.value()) {
+                changed << it.key();
+                QCOMPARE(it.value().toDouble(), 1.0);
+                QCOMPARE(squaredValue.toDouble(), 0.0);
+            }
+        }
+        // Names the premise, because "Actual: 0 Expected: 1" on its own sends the reader
+        // looking at the injection when the likelier cause is the fixture: this needs the
+        // bundled blur and border packs to BOTH declare roundBottomCorners, and blur's
+        // default to be true so squaring it is a change.
+        QVERIFY2(changed.size() == 1,
+                 qPrintable(QStringLiteral("expected exactly one differing lane, got %1. Do bundled blur and "
+                                           "border both still declare roundBottomCorners, with blur defaulting "
+                                           "to true?")
+                                .arg(changed.size())));
+    }
+
     void outerPaddingFollowsTheChainsLargestRequest()
     {
         ShellChrome chrome({QStringLiteral(PZ_BUNDLED_SURFACE_DIR)}, nullptr);

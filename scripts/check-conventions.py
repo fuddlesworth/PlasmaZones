@@ -40,6 +40,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+
+
+def _add_script_dir_to_path() -> None:
+    """Make this file's directory importable for its two lazily-imported siblings.
+
+    Idempotent, because a bare insert grew sys.path on every call.
+    """
+    d = str(Path(__file__).resolve().parent)
+    if d not in sys.path:
+        sys.path.insert(0, d)
 BASELINE = REPO / "scripts" / "oversize-baseline.json"
 
 # CLAUDE.md: under 1000 is the target, 1000-1150 is tolerated, past 1150 split.
@@ -704,9 +714,20 @@ def rule_prose(files: list[str]) -> list[Violation]:
         # lead-in is an explicitly allowed colon, headings are structure rather
         # than prose, and the trailing ([#nnnn](url)) reference is markup whose
         # URL would otherwise read as prose punctuation.
+        #
+        # FOUR THINGS THIS ARM DOES NOT CATCH, so a reviewer still has to read:
+        #   1. the entry's bold TITLE, which the split below discards;
+        #   2. the dramatic "Label: payload" colon;
+        #   3. the rule-of-three triad and "not just X, but Y" (prose_problems
+        #      tests neither 2 nor 3);
+        #   4. a clause-splicing semicolon from past-tense prose, because the verb
+        #      list the semicolon arm matches holds no past-tense lexical verbs
+        #      ("The pane is one shape; each pack decided it alone." passes).
+        # Sub-bullets ARE checked: the lstrip below reaches an indented "- " too.
         if Path(f).name == "CHANGELOG.md":
             text = read(f)
             for n, ln in enumerate(text.splitlines(), 1):
+                ln = ln.lstrip()
                 if not ln.startswith("- "):
                     continue
                 body = ln.split("**:", 1)[1] if "**:" in ln else ln[2:]
@@ -988,6 +1009,24 @@ def rule_js_pragma(files: list[str]) -> list[Violation]:
     return out
 
 
+# Rule: shared-param-text — a control the host resolves once per chain must carry the
+# same DESCRIPTION on every pack offering it. Description only. `name`, `type` and
+# `default` are single-valued across the twenty today and would drift silently; `group`
+# legitimately varies (8 packs say "Shape", 12 omit it), because it is presentation and
+# the 12 group nothing at all, so a flat list is what they render. The data and the
+# check live in conventions_shared_text.py, for the reason the self-test arm below records.
+def rule_shared_param_text(files: list[str]) -> list[Violation]:
+    # `files` is unused: whether the twenty agree is not answerable from a staged
+    # subset, and the failure to catch is a commit that updates nineteen and leaves the
+    # twentieth, whose file is then the one NOT staged. So this always globs and can
+    # name a file the commit did not touch, which is the honest answer.
+    del files
+    _add_script_dir_to_path()
+    from conventions_shared_text import shared_param_problems
+
+    return [Violation("shared-param-text", p, 0, m) for p, m in shared_param_problems(REPO)]
+
+
 # --------------------------------------------------------------------------
 # Driver
 # --------------------------------------------------------------------------
@@ -1001,6 +1040,7 @@ RULES = {
     "prose": (rule_prose, "user-facing strings carry no em-dash splice, clause semicolon or spaced hyphen"),
     "dep5": (rule_dep5, "packaging/debian/copyright declares each file's real license and holders"),
     "js-pragma": (rule_js_pragma, f"QML .js libraries declare '.pragma library' in Qt's first {JS_PRAGMA_WINDOW} bytes"),
+    "shared-param-text": (rule_shared_param_text, "a chain-resolved param's description matches on every pack"),
 }
 
 
@@ -1020,7 +1060,7 @@ def selftest() -> int:
     # coincide for `python3 scripts/check-conventions.py`, which is how lefthook and
     # CI invoke it, and diverge for anything that runs a copy from elsewhere — where
     # the failure would be an ImportError that reads like a selftest failure.
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    _add_script_dir_to_path()
     from conventions_selftest import run_selftest
 
     return run_selftest(prose_problems, iter_json_prose)
@@ -1048,7 +1088,7 @@ def main() -> int:
 
     if args.list_rules:
         for name, (_, desc) in RULES.items():
-            print(f"{name:14} {desc}")
+            print(f"{name:18} {desc}")
         return 0
 
     if args.update_baseline:
@@ -1056,7 +1096,8 @@ def main() -> int:
 
     selected = list(RULES)
     if args.rules:
-        selected = [r.strip() for r in args.rules.split(",")]
+        # Deduped in order: `--rules a,a` ran the rule twice and double-printed it.
+        selected = list(dict.fromkeys(r.strip() for r in args.rules.split(",")))
         unknown = [r for r in selected if r not in RULES]
         if unknown:
             print(f"unknown rule(s): {', '.join(unknown)}", file=sys.stderr)

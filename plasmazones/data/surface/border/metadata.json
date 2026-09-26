@@ -1,7 +1,7 @@
 {
     "id": "border",
     "name": "Border",
-    "description": "Rounded corners and a window border. Clips the surface to a rounded rectangle and lays a configurable border band over the desktop, so a translucent border blends with what is behind the surface rather than its own content. Width, corner radius and colour are this pack's own parameters.",
+    "description": "Rounded corners and a window border. Clips the surface to a rounded rectangle and lays a configurable border band over the desktop, so a translucent border blends with what is behind the surface rather than its own content.",
     "author": "PlasmaZones",
     "version": "1.2",
     "category": "Borders",
@@ -15,7 +15,7 @@
             "default": 2,
             "min": 0,
             "max": 20,
-            "description": "Thickness of the coloured border (px)"
+            "description": "Thickness of the coloured border (px). At 0 the pack draws nothing at all and the window keeps its own corners, so use a backdrop pack if you want rounding without a band"
         },
         {
             "id": "cornerRadius",
@@ -27,13 +27,20 @@
             "description": "Roundness of the corners (px, 0 for square)"
         },
         {
+            "id": "roundBottomCorners",
+            "name": "Round bottom corners",
+            "type": "bool",
+            "default": true,
+            "description": "Round the bottom corners as well as the top. Turn off to round only the top two, for a pane that sits against a panel or the screen edge. Every pack in the chain that offers this setting follows one answer, so their bottom corners are all rounded or all square. Set it on any pack and the whole chain follows. Where two packs have it set differently, the one earliest in the chain wins."
+        },
+        {
             "id": "edgeSoftness",
             "name": "Edge softness",
             "type": "float",
             "default": 0.7,
             "min": 0.1,
             "max": 2.0,
-            "description": "Anti-alias feather of the border edge, in device pixels, so it does not grow with display scaling. Lower is a crisper hairline. 0.7 is the soft default."
+            "description": "Anti-alias feather of the border and the pane edge, in device pixels, so it does not grow with display scaling. Lower is a crisper hairline."
         },
         {
             "id": "useSystemAccent",

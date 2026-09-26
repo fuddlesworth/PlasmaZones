@@ -15,6 +15,7 @@
 #include <PhosphorShaders/ShaderEntryPoint.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorSurface/SurfaceShaderContract.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 
@@ -150,7 +151,7 @@ void PlasmaZonesEffect::ensureSurfaceRegistryPaths()
     std::reverse(bases.begin(), bases.end());
     paths.reserve(bases.size());
     for (const QString& base : bases) {
-        paths.append(base + QStringLiteral("/plasmazones/surface"));
+        paths.append(base + QLatin1Char('/') + PhosphorSurfaceShaders::surfacePackDataSubdir());
     }
     if (!paths.isEmpty()) {
         m_surfaceShaderRegistry.addSearchPaths(paths);

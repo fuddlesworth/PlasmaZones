@@ -83,11 +83,14 @@ void OverlayService::setPresetRegistry(PhosphorShaders::ShaderPresetRegistry* re
     // before tearing the store down, so the old pointer is still alive here.
     //
     // The precise handle, not `disconnect(registry, nullptr, this, nullptr)`: the
-    // blanket form severs every slot this object has on that sender, which is safe
-    // only while there is exactly one. This class keeps handles for exactly that
-    // reason (see m_shadersChangedConnection). Note setSurfaceShaderRegistry still
-    // uses the blanket form — correct there today because this object makes exactly
-    // one connection to that sender, but it is the counter-example, not the model.
+    // blanket form severs every slot this object has on that sender, which on a
+    // replace-the-borrow setter like this one is the CORRECT end state, so it is not
+    // what the handle buys. This class keeps handles for a different
+    // reason (see m_shadersChangedConnection). A stored handle is what a LAMBDA
+    // connection needs, since no slot name can single one out; a second lambda slot
+    // here would need its own second handle, because this one does not sever it.
+    // setSurfaceShaderRegistry names its signal instead, and its own comment records
+    // what that does and does not buy.
     if (m_presetsChangedConnection) {
         disconnect(m_presetsChangedConnection);
         m_presetsChangedConnection = {};
@@ -131,8 +134,9 @@ void OverlayService::setPresetRegistry(PhosphorShaders::ShaderPresetRegistry* re
                                                  // Mirror of the decorationProfileTreeChanged arm in
                                                  // setSettings: a visible popup's decoration chain is
                                                  // resolved at show time, so a retune has to be pushed into
-                                                 // the slots that are already up. OSDs are omitted for the
-                                                 // same reason they are there — they auto-dismiss sub-second.
+                                                 // the slots that are already up, the OSD included: the
+                                                 // sweep keys each popup arm on its service flag and the
+                                                 // OSD arm on the item's own visibility.
                                                  reapplyVisiblePopupDecorations();
                                                  break;
                                              case PhosphorShaders::ShaderFamily::Pointer:
@@ -368,7 +372,7 @@ void OverlayService::stopShaderAnimation()
 
 QList<QQuickItem*> OverlayService::visibleAudioDecorationSlots() const
 {
-    // The decoration hosts are the OSD + the three popups, per screen; each is a
+    // The decoration hosts are the OSD + the four popups, per screen; each is a
     // SurfaceDecoration carrying an audioSpectrum property. A slot is fed audio
     // only while it is visible AND its current chain has an audio-reactive pack
     // (recorded by applyDecoration as the dynamic _wantsAudioDecoration flag).

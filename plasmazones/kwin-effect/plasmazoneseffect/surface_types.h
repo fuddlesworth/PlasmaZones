@@ -834,16 +834,20 @@ struct WindowDecoration
     /// param.
     double foldedOpacity = 1.0;
 
-    /// Every drawing pack in the chain declares `interiorOpaque` (its output
-    /// never thins a texel inside the natural frame rect — shadow/glow, whose
-    /// halo is confined to the transparent margin). Computed by the
+    /// Every drawing pack in the chain declares `interiorOpaque`: its output
+    /// never thins a texel inside the natural frame rect. Four bundled packs
+    /// qualify, by two different routes. glow and shadow confine a halo to the
+    /// transparent margin; fireflies and phosphor-motes composite over the
+    /// capture with slabComposite, which can only raise an alpha. Computed by the
     /// updateWindowDecoration chain sweep; a pack the registry does not know
     /// draws nothing and cannot thin the interior, so it does not veto.
     /// prePaintWindow uses this (with foldedOpacity at rest) to SKIP
     /// setTranslucent(): the client's own opaque region stays truthful for
     /// such a chain, and keeping it preserves KWin's occlusion culling —
     /// both its damage-cull and paint-cull halves (verified against the KWin
-    /// 6.7.3 sources, workspacescene.cpp collectDamage/paintSimpleScreen).
+    /// 6.7.3 sources, workspacescene.cpp collectDamage/paintSimpleScreen). A
+    /// parked strip column is covered ON the foreign-output branch, not here,
+    /// because that cull carries no decoration term.
     bool chainInteriorOpaque = false;
 
     /// Damage bookkeeping for padded chains across window moves/resizes:

@@ -36,15 +36,24 @@ vec4 pSurface(vec2 uv) {
         return tex;
     }
 
-    // Band geometry: the family's OUTER-radius rounded-rect SDF, content clip
-    // and band edge from this pack's logical-px width and corner radius.
-    BorderBand bb = standardBorderBand(surfacePixel(uv), p_borderWidth, p_cornerRadius, p_edgeSoftness);
+    // Band geometry: the family's rounded-rect SDF (outer radius = content radius +
+    // width, except at a zero end, which stays square), content clip
+    // and band edge from this pack's logical-px width and corner radius. The
+    // bottom corners carry their own radius so this pack traces the same
+    // outline as a backdrop pack squared off against a panel or a screen edge.
+    float bottomRadius = surfaceBottomRadius(p_cornerRadius, p_roundBottomCorners);
+    BorderBand bb =
+        standardBorderBandSplit(surfacePixel(uv), p_borderWidth, p_cornerRadius, bottomRadius, p_edgeSoftness);
 
     // Focus-mixed border colour (the shader picks active vs inactive).
     vec4 outlineColor = mix(p_inactiveColor, p_activeColor, clamp(uSurfaceFocused, 0.0, 1.0));
 
     // Clip content to the inner rounded rect; lay the band over transparency,
-    // premultiplied. width <= 0 (no border in the chain's params) leaves the
-    // content rounded with no band.
+    // premultiplied. At width <= 0 (no border in the chain's params) the helper
+    // returns edge = 0, and borderComposite clips content by (1 - edge), so the
+    // capture passes through UNCHANGED — square corners and no band, not rounded
+    // corners with no band. Rounding without a band would need a composite arm
+    // that this signature cannot express, so it is an API question rather than
+    // something to patch here.
     return borderComposite(tex, outlineColor, bb.edge, bb.insideMask);
 }

@@ -478,9 +478,13 @@ install(TARGETS plasmazones_rendering
 )
 
 # plasmazones_shaderpreview: shared zone-shader live-preview feed. Used by the
-# settings app (which injects its own IShaderPreviewBackend); deliberately NOT
-# linked by the daemon so the audio (CAVA) + preview deps stay out of the
-# compositor service.
+# settings app (which injects its own IShaderPreviewBackend). The daemon does NOT
+# link it because it hosts no preview, not to keep dependencies out: every one of
+# this target's PUBLIC deps (plasmazones_core, plasmazones_rendering,
+# PhosphorAudio, Qt6::Gui) already reaches plasmazonesd below, CAVA included,
+# since the daemon runs its own CavaSpectrumProvider. The first three are named
+# on it directly. Qt6::Gui is not named, and arrives two ways: through Qt6::Quick,
+# and one hop from the Qt6::GuiPrivate the daemon links further down.
 set(plasmazones_shaderpreview_SRCS
     shaderpreview/ishaderpreviewbackend.h
     shaderpreview/shaderpreviewcontroller.h
@@ -571,6 +575,7 @@ set(plasmazones_daemon_SRCS
     daemon/controllers/contextresolverwiring.cpp
     daemon/overlayservice.cpp
     daemon/overlayservice/animation_config.cpp
+    daemon/overlayservice/decoration.cpp
     daemon/overlayservice/lifecycle.cpp
     daemon/overlayservice/settings.cpp
     daemon/overlayservice/overlay.cpp
@@ -638,6 +643,12 @@ target_link_libraries(plasmazonesd
         PhosphorShortcuts::PhosphorShortcuts  # ShortcutManager / Registry / backends
         PhosphorAudio::PhosphorAudio  # audio spectrum provider (CAVA)
         PhosphorSurfaces::PhosphorSurfaces  # managed surface lifecycle (engine, keep-alive)
+        # Named directly, not left to plasmazones_core's PUBLIC edge: eleven daemon TUs
+        # include <PhosphorSurface/...> and daemon/overlayservice/decoration.cpp calls its
+        # exported chain-compose helpers, so a future demotion of that edge to PRIVATE
+        # would break them. The other two chain hosts (kwin-effect, phosphor-shell) both
+        # name it explicitly already.
+        PhosphorSurface::PhosphorSurface  # SurfaceChainCompose / registry / DecorationSupportedPaths
         PhosphorServiceIdle::PhosphorServiceIdle  # ext-idle-notify-v1; the daemon owns session-idle detection and pushes it to the KWin effect (a compositor SERVES that protocol, it cannot consume it)
         PhosphorOverlay::PhosphorOverlay  # per-screen shell-host + slot mechanism (Phase 2 onward)
         # Frozen-snapshot per-screen mode + disable/lock cascade façade.
@@ -830,8 +841,16 @@ set(plasmazones_editor_SRCS
 # Create the executable first
 add_executable(plasmazones-editor ${plasmazones_editor_SRCS})
 
-# ColorUtils.js is a stateless utility imported explicitly by each QML file that uses it;
-# skip its qmldir entry to avoid re-evaluation in every importer (Qt 6.8+ dev warning)
+# ColorUtils.js is imported by relative path from each QML file that uses it, so it needs
+# no qmldir entry. NOT about re-evaluation: the file's own `.pragma library` is what makes
+# it shared, and it declares one inside Qt's 128-byte scan window. ThemeHelpers.js is
+# imported the same way and declares its pragma at the same byte offset, but carries no
+# such CMAKE SOURCE PROPERTY, so the two files are inconsistent. The inconsistency stays,
+# deliberately and in this direction. The property's whole effect is visible in the
+# generated qmldir, which lists ThemeHelpers.js and not ColorUtils.js, and nothing imports
+# either through the module URI. Levelling it either way would change what qmllint and
+# qmlls read, and no gate in this repo runs them, so there is nothing that would catch a
+# regression from the change.
 set_source_files_properties(editor/qml/ColorUtils.js PROPERTIES
     QT_QML_SKIP_QMLDIR_ENTRY TRUE
 )
@@ -843,13 +862,12 @@ set_source_files_properties(editor/qml/ColorUtils.js PROPERTIES
 # resource init) leave it empty or — after `--clean-first` — missing, so
 # cc1plus fires before AUTOMOC recreates it. Set here (after the core /
 # rendering / shaderpreview / daemon targets above, which are unaffected). NOTE: directory
-# COMPILE_OPTIONS apply to EVERY target created after this point in the
-# scope — plasmazones-editor itself just below (an executable, so
-# qt_add_qml_module compiles its QML into the target rather than into
-# sub-targets), but also
-# plasmazones-shader-validate and the add_subdirectory(settings) tree
-# further down. The suppression is harmless for those (it only silences
-# the missing-AUTOMOC-include-dir warning class). Mirrors
+# COMPILE_OPTIONS are read at TARGET-CREATION time, so they apply only to targets
+# created AFTER this point in the scope. plasmazones-editor is declared ABOVE it and
+# therefore does NOT carry the flag (verified in the generated flags.make); what does
+# is plasmazones-shader-validate, plus the add_subdirectory(settings) tree further
+# down. The suppression is harmless for those (it only silences the
+# missing-AUTOMOC-include-dir warning class). Mirrors
 # plasmazones/src/shared/CMakeLists.txt.
 set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dirs")
 

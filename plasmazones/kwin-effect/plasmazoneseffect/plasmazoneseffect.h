@@ -953,7 +953,7 @@ private:
      * delta, plus the live view offset — intersects no part of its managed
      * output. The visual rect is where a column is drawn AT REST, which is the
      * one honest visibility test for a parked column; the committed rect is
-     * always off every output (that is what parking IS) and answers nothing.
+     * normally off every output (that is what parking IS) and answers nothing.
      *
      * The WindowAnimator's term IS folded in: a live per-window leg draws at
      * the animator's current rect rather than the committed frame, so testing
@@ -970,9 +970,9 @@ private:
      * just above and put the predicate right back at the destination.
      *
      * The consumers, which must stay in lockstep or a column blinks or
-     * burns: prePaintWindow withholds the TRANSFORMED flag (so KWin's own
-     * culling is free to skip the window instead of being forced to paint
-     * it), paintWindow skips the backdrop capture / decoration fold / draw,
+     * burns: prePaintWindow withholds the TRANSFORMED flag AND drops the
+     * opaque region (KWin may skip the window, and a region nothing overdraws
+     * must not cull), paintWindow skips the backdrop capture / fold / draw,
      * the postPaintScreen repaint driver stops driving the window's
      * decoration (the ~30fps backdrop refold and the animated-pack pump),
      * prePaintScreen's tab-anchor election skips a parked column so an
@@ -1975,9 +1975,9 @@ private:
     /// in nine, including the hottest one (every time-driven animation's teardown). It is
     /// one call here instead, idempotent and a no-op when the context is already current.
     ///
-    /// False only during compositor teardown, where GL is going away and the driver
-    /// reclaims everything regardless — so callers clear their state either way rather
-    /// than leaking it to avoid a call that cannot matter.
+    /// False for compositor teardown (no `KWin::effects`) and for a failed make-current:
+    /// GL is going away in the first, and there is no context to delete against in the
+    /// second. Callers that DISCARD the result proceed either way; two branch on it.
     bool ensureGlContextCurrent() const
     {
         return KWin::effects && KWin::effects->makeOpenGLContextCurrent();

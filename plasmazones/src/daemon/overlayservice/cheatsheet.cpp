@@ -15,8 +15,10 @@
 #include "core/platform/logging.h"
 #include "phosphor_slot_keys.h"
 #include "phosphor_roles.h"
+#include "qml_property_names.h"
 
 #include <PhosphorOverlay/ShellHost.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorLayer/Surface.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -140,7 +142,7 @@ void OverlayService::showCheatsheet(const QString& screenId, const QVariantList&
     // Same SurfaceDecoration host the picker uses, retargeted to the
     // cheatsheet's surface path. Empty resolution = no decoration (card
     // draws natively).
-    applyDecoration(slot, QStringLiteral("popup.cheatsheet"));
+    applyDecoration(slot, PhosphorSurfaceShaders::decorationPopupCheatsheetPath());
 
     if (shellWindow) {
         assertWindowOnScreen(shellWindow, screen, screenGeom);
@@ -250,7 +252,7 @@ void OverlayService::onCheatsheetSlotHideCompleted(const QString& effectiveId)
     // Release the backdrop stand-in, matching onOsdSlotHideCompleted: a hidden
     // slot draws none of it, the image is wallpaper-sized, and every show runs
     // applyDecoration again, which rewrites it.
-    writeQmlProperty(it->cheatsheetSlot(), QStringLiteral("backdropTexture"), QVariant());
+    writeQmlProperty(it->cheatsheetSlot(), QString(OverlayQmlPropertyNames::BackdropTexture), QVariant());
     syncPassiveShellSurfaceState(effectiveId);
     // Symmetric with every other modal's hide completion (snap assist, the
     // picker, the OSD): the zone selector suppresses its restore while an

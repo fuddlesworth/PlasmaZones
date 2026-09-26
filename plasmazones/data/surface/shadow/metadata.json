@@ -1,7 +1,7 @@
 {
     "id": "shadow",
     "name": "Drop Shadow",
-    "description": "A soft dark shadow behind the window, cast slightly downward the way a real light would. It follows the frame's rounded corners and draws only where the window is not fully opaque, so a window with a see-through body picks up a little of it near the edge. It dims when the window loses focus.",
+    "description": "A soft dark shadow behind the window, cast slightly downward the way a real light would. It follows the frame's corners, rounded or squared, and draws only where the window is not fully opaque, so a window with a see-through body picks up a little of it near the edge. It dims when the window loses focus.",
     "author": "PlasmaZones",
     "version": "1.3",
     "category": "Ambience",
@@ -16,7 +16,7 @@
             "default": 28,
             "min": 4,
             "max": 128,
-            "description": "How far the shadow reaches from the edge (px)"
+            "description": "How far the shadow reaches from the edge (px). It also sets the room reserved around the window, which the offsets do not add to"
         },
         {
             "id": "shadowStrength",
@@ -43,7 +43,7 @@
             "default": 8,
             "min": -12,
             "max": 12,
-            "description": "Downward cast of the shadow (px, positive is down)"
+            "description": "Downward cast of the shadow (px, positive is down). Only Shadow size reserves room around the window, so a large offset on a small shadow can reach the edge of that room and end abruptly"
         },
         {
             "id": "cornerRadius",
@@ -52,7 +52,14 @@
             "default": 8,
             "min": 0,
             "max": 64,
-            "description": "Corner rounding the shadow follows (px, match the Border pack)"
+            "description": "Corner rounding the shadow follows (px). The shadow traces this radius on the window frame. A Border pack earlier in the chain paints its band from its own corner radius out to that radius plus its border width, so match this to the sum for the two to meet. At a border radius of 0 the band stays square and nothing sits further out."
+        },
+        {
+            "id": "roundBottomCorners",
+            "name": "Round bottom corners",
+            "type": "bool",
+            "default": true,
+            "description": "Round the bottom corners as well as the top. Turn off to round only the top two, for a pane that sits against a panel or the screen edge. Every pack in the chain that offers this setting follows one answer, so their bottom corners are all rounded or all square. Set it on any pack and the whole chain follows. Where two packs have it set differently, the one earliest in the chain wins."
         },
         {
             "id": "shadowColor",

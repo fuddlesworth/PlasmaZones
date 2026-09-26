@@ -14,6 +14,7 @@
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
 #include <PhosphorShaders/ShaderPresetStore.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 #include <PhosphorSurfaceQuick/SurfaceShaderItem.h>
@@ -82,12 +83,13 @@ void Daemon::setupSurfaceShaderEffects()
     // after the user dir is appended last. Surface packs install to
     // `plasmazones/surface` (singular), the third category beside
     // `plasmazones/overlays` and `plasmazones/animations`.
-    QStringList surfaceDirs = QStandardPaths::locateAll(
-        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/surface"), QStandardPaths::LocateDirectory);
+    const QString surfacePackSubdir = PhosphorSurfaceShaders::surfacePackDataSubdir();
+    QStringList surfaceDirs = QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, surfacePackSubdir,
+                                                        QStandardPaths::LocateDirectory);
     std::reverse(surfaceDirs.begin(), surfaceDirs.end());
 
     const QString userSurfaceDir =
-        QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/plasmazones/surface");
+        QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/') + surfacePackSubdir;
     if (!surfaceDirs.contains(userSurfaceDir))
         surfaceDirs.append(userSurfaceDir);
 

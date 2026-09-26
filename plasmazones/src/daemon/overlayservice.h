@@ -964,14 +964,14 @@ private:
     /// reset, the clear-before-teardown contract the two siblings above state.
     PhosphorShaders::ShaderPresetRegistry* m_presetRegistry = nullptr;
 
-    /// Decoration pack refusals already reported, keyed "<packId>|<reason>".
+    /// Decoration pack refusals already reported, keyed "<surfacePath>|<packId>|<reason>".
     ///
     /// A decoration profile naming an uninstalled or unloadable pack is a
     /// standing condition, and the chain resolve runs on every OSD show, so
     /// the warning is keyed here to fire once rather than once per show.
-    /// The reason is part of the key because a pack can be refused for
+    /// Path and reason are both in the key: one pack can be refused for
     /// different reasons over its lifetime (uninstalled, then reinstalled
-    /// broken), and a bare id would let the first refusal silence the second.
+    /// broken) and on several surfaces, so a bare id would silence all but one.
     /// Cleared whenever the registry is replaced or its contents change, so a
     /// genuinely new breakage after a reinstall is reported again.
     QSet<QString> m_warnedDecorationPacks;
@@ -1340,17 +1340,17 @@ private:
     void pushLayoutOsdContent(QObject* osdSlot, const LayoutOsdContentParams& params);
 
     /// Resolve a surface-decoration pack from the settings' DecorationProfileTree
-    /// (@p surfacePath, e.g. "osd" / "popup.snapAssist" / "popup.zoneSelector" /
-    /// "popup.layoutPicker") and push it onto @p slot's decoration properties
-    /// (Stage d). Shared by every OSD show path (all modes: layout / locked /
-    /// disabled / navigation) and the three transient popup show paths. Clears
-    /// the slot's decorationChain (and decorationOuterPadding) when no pack
-    /// resolves so a stale decoration never renders.
+    /// (@p surfacePath, one of "osd" / "popup.snapAssist" / "popup.zoneSelector" /
+    /// "popup.layoutPicker" / "popup.cheatsheet") and push it onto @p slot's
+    /// decoration properties (Stage d). Shared by every pushLayoutOsdContent path
+    /// (layout / locked / template / strip / disabled), showNavigationOsd's direct call
+    /// and the four popup shows. When no pack resolves it clears the chain, the padding,
+    /// the backdrop stand-in, the audio flag and the slot's CAVA show/hide hook.
     void applyDecoration(QObject* slot, const QString& surfacePath);
-    /// Re-apply the decoration chain to every popup slot currently up. A visible popup's
-    /// chain is resolved at show time, so a retune (a tree edit, a preset change, a pack
-    /// reload) has to reach the slots already on screen; OSDs are omitted because they
-    /// auto-dismiss sub-second. One function rather than the same eleven lines thrice.
+    /// Re-apply the decoration chain to every decorated slot currently up, the OSD
+    /// included: the four popups key on their service flag, the OSD on the item's own
+    /// visibility since it has no flag. A chain is resolved at show time, so a retune (a
+    /// tree edit, a preset change, a pack reload) has to reach the slots already up.
     void reapplyVisiblePopupDecorations();
 
     void destroyIfTypeMismatch(const QString& screenId);
@@ -1516,13 +1516,13 @@ private:
     std::optional<PreparedLayoutOsdWindow> prepareLayoutOsdWindow(const QString& screenId = QString());
 
     /**
-     * @brief Shared show tail for every OSD path (layout, template, disabled,
-     * navigation): size to the screen, map the surface, animate the slot in
-     * and kick the auto-dismiss timer. Callers write their content
-     * properties and the mode string first.
+     * @brief Shared show tail for every OSD path: hide any zone selector on the
+     * screen, size to it, map the surface, animate the slot in and kick the
+     * auto-dismiss timer. Callers write their content properties and the mode
+     * string first. The hide is here, after their bails, not in the prepare step.
      */
     void finishOsdShow(QQuickWindow* window, PhosphorLayer::Surface* surface, QQuickItem* osdSlot,
-                       const QRect& screenGeom);
+                       const QRect& screenGeom, const QString& effectiveScreenId);
 
     /// Parameters for @ref createLayerSurface. Defined in
     /// overlayservice_types.h; aliased here so existing nested-name

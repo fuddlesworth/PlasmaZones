@@ -1309,8 +1309,8 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // report the empty case.
     const bool parkedOffscreen = scrollParkedOffscreen(w, windowId);
 
-    // A scroll-strip window on a FOREIGN output's pass: paintWindow will skip
-    // drawing it entirely, so it must not occlude either. Leaving its opaque
+    // A scroll-strip window paintWindow will SKIP: on a FOREIGN output's pass, or
+    // parked off the viewport. Either way it must not occlude. Leaving its opaque
     // region declared tells KWin's occlusion culling that everything behind
     // the frame is covered, so the background there is never recomposited —
     // and with the window itself skipped, nothing overdraws those pixels at
@@ -1319,8 +1319,14 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // transition branch below documents for translated renders). The ghost is
     // indistinguishable from "the clip is broken": the window was never being
     // DRAWN over there, it was being REMEMBERED there.
+    //
+    // The park case belongs HERE, not on the interiorOpaque branch below, because
+    // paintWindowImpl's cull carries no decoration term: it skips ANY parked column.
+    // Usually inert: the opaque region follows the COMMITTED rect, the predicate tests
+    // the DRAWN one, and an ordinary park commits off every output (atScrollPark).
     if (w && !m_capturingSnapshot && m_currentPassOutput) {
-        if (const KWin::LogicalOutput* managed = scrollManagedOutputFor(w); managed && managed != m_currentPassOutput) {
+        const KWin::LogicalOutput* managed = scrollManagedOutputFor(w);
+        if (parkedOffscreen || (managed && managed != m_currentPassOutput)) {
             data.setTranslucent();
         }
     }
@@ -1339,10 +1345,10 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         // `KWin::effects->addRepaint(output->geometry())` rather than
         // addLayerRepaint — the scene clips a layer repaint to the window
         // item's bounding rect, which is exactly the margin the expansion
-        // needs to paint past. prePaintWindow doesn't drive that on KWin 6;
-        // `WindowPrePaintData::devicePaint` is the dirty region in
-        // device coords and isn't the right surface for declaring "I
-        // want to paint this many pixels past the natural frame".
+        // needs to paint past. prePaintWindow cannot drive that on KWin 6 at
+        // all: WindowPrePaintData carries only `mask`, setTranslucent() and
+        // setTransformed(), with no dirty-region member to widen, so there is
+        // nothing here to say "paint this many pixels past the natural frame".
         data.setTransformed();
 
         // Mark the window non-opaque for the duration of the transition.
@@ -1429,18 +1435,18 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     //   borderComposite  ba = edge * insideMask * col.a — the band's output alpha IS
     //                    the border colour's alpha, and a translucent border colour is
     //                    a supported feature, not an edge case.
-    //   standardBorderBand  radius = (cornerRadius + borderWidth) * uSurfaceScale —
-    //                    the OUTER radius includes the border width, so even a zero
-    //                    corner radius arcs the window's outer corners away whenever
-    //                    the border has any width. And the smoothstep feather leaves
-    //                    the outermost ring of the frame partially transparent
-    //                    regardless.
+    //   standardBorderBandSplit  the smoothstep feather leaves the outermost ring of
+    //                    the frame partially transparent at every radius, so the band
+    //                    thins frame texels unconditionally. (A zero radius is no longer
+    //                    dilated, so the feather leg alone is what carries this now.)
     //
     // So every border-family chain thins frame texels and must stay translucent. But
-    // the margin-only packs (shadow, glow) provably do NOT: their halo is gated on
-    // `1 - base.a` (haloFalloff) and composited additively over the transparent
-    // margin (marginComposite), so the interior passes through byte-for-byte and
-    // the client's own opaque region stays truthful. That is exactly the metadata
+    // the four interiorOpaque packs provably do NOT. shadow and glow gate their halo on
+    // `1 - base.a` (haloFalloff) and add it over the transparent margin
+    // (marginComposite); fireflies and phosphor-motes return either the capture untouched
+    // or slabComposite(window, pane) = window + pane * (1 - window.a), which cannot lower
+    // an alpha. Either way the interior passes through byte-for-byte where the client is
+    // already opaque, so its opaque region stays truthful. That is exactly the metadata
     // contract an earlier attempt at this flag lacked: packs now declare
     // `interiorOpaque` (SurfaceShaderEffect), the chain sweep in
     // updateWindowDecoration ANDs it into WindowDecoration::chainInteriorOpaque,
@@ -1449,17 +1455,11 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // CAPTURE itself (see foldedOpacity's doc) and that thins the interior with
     // no pack involved.
     //
-    // SCOPE LIMIT, verified against the same workspacescene.cpp sources: a
-    // PADDED chain (outerPadding > 0) is marked PAINT_WINDOW_TRANSFORMED
-    // above, and the transformed flag independently excludes the window from
-    // BOTH culling halves — so skipping setTranslucent() recovers nothing for
-    // it. The two bundled interiorOpaque declarers (shadow, glow) are both
-    // padded, which means the skip below is live only for an unpadded
-    // interiorOpaque chain: a third-party contract today, not a bundled win.
-    // Keeping the flag is still correct (it is the necessary half of the
-    // recovery; the transformed presentation is the other), and the sweep's
-    // AND is what a future unpadded pack or a padded-presentation redesign
-    // will inherit.
+    // SCOPE LIMIT, verified against the same workspacescene.cpp sources: a PADDED
+    // chain (outerPadding > 0) is already marked PAINT_WINDOW_TRANSFORMED above, which
+    // excludes it from BOTH culling halves, so skipping setTranslucent() recovers
+    // nothing. All four bundled declarers ask at least 4 px, so the skip is live only
+    // for an unpadded third-party chain, which is what the sweep's AND is for.
     //
     // Note what this is NOT for. It used to be set to keep the window in KWin's paint
     // set so drawWindow kept firing on idle frames. That was a repaint-scheduling hack

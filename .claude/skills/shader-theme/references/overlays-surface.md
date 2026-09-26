@@ -125,10 +125,28 @@ Contract flags (declare honestly, the hosts key behaviour on them):
 - `paddingParam: "<paramId>"`: names the int/float logical-px param that is the transparent
   outer margin the pack draws into (glow, shadow, particles). Host inflates the canvas by the
   chain's largest request.
-- `interiorOpaque`: only if the pack NEVER lowers alpha inside the frame rect (shadow, glow).
-  Every border, glass, tint pack leaves it false.
+- `interiorOpaque`: only if the pack NEVER lowers alpha inside the frame rect. Two routes
+  qualify: a halo confined to the transparent margin (glow, shadow) and a pane composited
+  behind the PREVIOUS STAGE's texel with `slabComposite`, which can only raise alpha
+  (fireflies, phosphor-motes). Note the second route needs no backdrop: neither pack declares
+  `needsBackdrop`, and `window` there is `surfaceTexel`, not the capture. Every border, glass
+  and tint pack leaves it false.
+- `roundBottomCorners` (bool, default true): ANY pack that resolves the frame through a corner
+  radius MUST declare this, whatever else it declares. It is not a `providesBorder` concern —
+  ten of the twenty bundled declarers are blur, glass, glow and shadow packs. The host resolves
+  ONE answer per chain and injects it into every pack that declares it, so a pack that omits it
+  keeps rounded bottoms inside a chain the user squared, which is the exact disagreement the
+  chain-wide answer exists to remove. A pack that places content around the frame RECT with no
+  corner radius at all has no silhouette to reconcile and correctly omits it: phosphor-motes
+  does that through `framePerimeter`, fireflies from its own half-size and centre.
+- `edgeSoftness` (float): the anti-alias feather of the edge, and like the switch above it is
+  not a `providesBorder` concern — the eight Blur declarers set no such flag. The Borders
+  family declares default 0.7 over 0.1–2.0, the Blur family default 1.0 over 0.1–3.0.
 - `providesBorder`: declare params `borderWidth` and `cornerRadius` (ints, px). Settings seeds
-  them from the plain border setting.
+  them from the plain border setting, by exact id, and skips silently when an id is absent. A
+  multi-band pack may name its widths otherwise (border-double has `outerWidth`, `gapWidth` and
+  `innerWidth` and no `borderWidth`), in which case only `cornerRadius` is seeded and the widths
+  keep their pack defaults. That is supported, not a mistake.
 - `providesOpacityTint`: declare `opacity`, `tintStrength`, `tintColor`.
 - `audio`: includes `<surface_audio.glsl>`.
 - Blur, and multipass in general: declare THREE keys, not one. `"multipass": true` is what
@@ -184,27 +202,57 @@ used by `backdropTexel()`), `iChannelResolution[4]`, `iMouse` (xy device px top-
 `x < 0` = off surface), `uTexture1..3`, `iTextureResolution[4]`. `uSurfaceOpacity` is legacy 1.0.
 
 Every logical-px param is multiplied by `uSurfaceScale` at the call site, EXCEPT for the
-helpers documented as taking logical px: `standardBorderBand` scales `borderWidth` and
-`cornerRadius` internally, so pre-scaling them double-scales on a 2x display. `frameSdf`,
-`surfaceSlabOpen` and `haloFalloff` take device px. Output is the final PREMULTIPLIED colour;
-there is no clamp pass after `pSurface`.
+helpers documented as taking logical px: `standardBorderBandSplit` scales `borderWidth`,
+`cornerRadius` and `bottomRadius` internally, so pre-scaling them double-scales on a 2x
+display. `frameSdfSplit`, `surfaceSlabOpen` and `haloFalloff` take device px. Output is the
+final PREMULTIPLIED colour; there is no clamp pass after `pSurface`.
 
 Helpers: `surfacePixel(uv)` (device px, runtime Y handled), `surfaceTexel(uv)`,
-`surfaceFrameDegenerate()`, `frameSdf(p, radiusDevicePx)`, `frameMask(d)`, `focusDim(lo)`,
-`standardBorderBand(p, borderWidthLogical, cornerRadiusLogical[, aaDevicePx])` -> `{fs, insideMask, edge}`,
-`borderComposite(tex, bandColor, edge, insideMask)`, `surfaceSlabOpen(uv, cornerRadiusDevicePx)`
+`surfaceFrameDegenerate()`, `frameSdfSplit(p, topRadiusDevicePx, bottomRadiusDevicePx)`,
+`frameMask(d[, aaDevicePx])`, `focusDim(lo)`,
+`standardBorderBandSplit(p, borderWidthLogical, cornerRadiusLogical, bottomRadiusLogical, aaDevicePx)` -> `{fs, insideMask, edge}`,
+`borderComposite(tex, bandColor, edge, insideMask)`,
+`surfaceSlabOpen(uv, topRadiusDevicePx, bottomRadiusDevicePx, aaDevicePx)`
 -> `{window, px, fs, mask}`, `slabComposite(window, pane)`, `marginComposite(base, rgb, a)`,
-`faintTintSlab`, `haloFalloff(d, reach, edgePx /* vec2 */, baseAlpha, strength, focusFloor)`, `frameUv(px)`,
-`pxToUv(v)`, `framePerimeter(p, center, halfSize)` (-0.5..0.5 around the frame, for travelling
-gleams).
+`faintTintSlab`,
+`surfaceBottomRadius(roundedRadius, roundBottomFlag)`,
+`haloFalloff(d, reach, edgePx /* vec2 */, baseAlpha, strength, focusFloor, gateCornerTopDevicePx,
+gateCornerBottomDevicePx)`,
+`frameUv(px)`, `pxToUv(v)`, `framePerimeter(p, center, halfSize)` (-0.5..0.5 around the frame,
+for travelling gleams).
+
+The uniform-radius `standardBorderBand`, `frameSdf` and two-arg `surfaceSlabOpen`, and the
+six- and seven-arg `haloFalloff`, still exist as third-party compatibility overloads. Do NOT
+write a new pack against them: the seven-arg `haloFalloff` takes one radius for both ends and
+the six-arg form a square gate at both, and the rest take one radius for all four corners, so
+a pack that uses any of them cannot follow the chain's bottom-corner answer.
+
+Derive the bottom radius with `surfaceBottomRadius`, which every bundled declarer calls:
+
+```glsl
+// feeding standardBorderBandSplit — logical px, because it scales internally
+float bottomRadius = surfaceBottomRadius(p_cornerRadius, p_roundBottomCorners);
+// feeding surfaceSlabOpen / frameSdfSplit / haloFalloff — device px
+float cornerPx = p_cornerRadius * uSurfaceScale;
+float bottomPx = surfaceBottomRadius(cornerPx, p_roundBottomCorners);
+```
+
+Label by CONSUMER, not by family: border-double is a Borders pack that builds its bands from
+`frameSdfSplit`, so it takes the second form and passes a radius it has already dilated by its
+own stack width. Do not match on the variable NAME either — it spells that device-px value
+`bottomRadius`, which is the name the first form uses for a logical-px one. The helper is a pure select, so it neither scales nor clamps and the unit you
+hand it is the unit you get back. Pass whichever one your consumer wants, and do not pre-scale for
+`standardBorderBandSplit` or the bottom end gets scaled twice while the top stays right.
+A ZERO radius means square and is deliberately not dilated by the band width, so the outline
+coincides with a squared backdrop slab underneath it.
 
 Compositing contracts:
-- border: sample the texel, guard degenerate frames, use `standardBorderBand`, apply
-  `focusDim` and finish with `borderComposite`.
-- glass: use `surfaceSlabOpen`, preserve the intended content opacity, branch on
-  `uHasBackdrop`, provide a fallback slab and finish with `slabComposite`.
-- margin effect: use `frameSdf` to locate the outer region and `marginComposite` to preserve
-  the interior.
+- border: sample the texel, guard degenerate frames, use `standardBorderBandSplit` with the
+  derived bottom radius, apply `focusDim` and finish with `borderComposite`.
+- glass: use `surfaceSlabOpen` with the derived bottom radius, preserve the intended content
+  opacity, branch on `uHasBackdrop`, provide a fallback slab and finish with `slabComposite`.
+- margin effect: use `frameSdfSplit` to locate the outer region and `marginComposite` to
+  preserve the interior.
 
 Focus: `focusDim(0.30 .. 0.65)` on the effect's alpha or brightness. Every decoration pack dims
 when unfocused. Chains are serial filters: order in `chain` is bottom to top, so glass first,

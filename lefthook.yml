@@ -57,9 +57,16 @@ pre-commit:
       # the GPL-3 app / LGPL-2.1 libs/phosphor-* split (any tier's libs/
       # directory), the file-size ceiling
       # (growth-only, against scripts/oversize-baseline.json), i18n() in C++,
-      # inline config paths that should be ConfigDefaults:: accessors, and the
-      # plain-prose rules on user-facing strings. Only the staged files are
-      # checked so the hook stays instant; CI runs the whole tree.
+      # inline config paths that should be ConfigDefaults:: accessors, `.pragma
+      # library` in QML .js libraries, the DEP-5 copyright file, the plain-prose
+      # rules on user-facing strings, and the shared description a chain-resolved
+      # shader param carries on every pack. Only the staged files are checked so
+      # the hook stays instant, with TWO exceptions. shared-param-text is a
+      # whole-set rule and compares all twenty packs whenever this hook runs at
+      # all, so it can name a file this commit did not stage; and dep5 widens to
+      # the whole tree when packaging/debian/copyright is itself staged. A commit
+      # that stages nothing matching the globs below runs neither, because the
+      # gate returns before any rule. CI's whole-tree run is the backstop.
       #
       # Stdlib-only, so unlike the schema hook there is no venv to bootstrap
       # and this is always a hard gate.

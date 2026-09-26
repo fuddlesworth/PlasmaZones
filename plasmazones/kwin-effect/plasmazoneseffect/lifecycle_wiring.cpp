@@ -315,11 +315,12 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
         // and m_surfaceMultipass owns GLTextures, so their destruction issues
         // glDelete* calls that want a current context (the same discipline
         // compiledPack()/surfacePresentShader() apply for off-paint callers).
-        // ensureGlContextCurrent() is that one shared make-current; its only
-        // false case is compositor teardown (!KWin::effects), where GL is being
-        // torn down and the driver reclaims the objects regardless, so the
-        // clears are safe either way. The sibling animation-registry handler
-        // above uses the same helper.
+        // ensureGlContextCurrent() is that one shared make-current; it answers
+        // false for compositor teardown (!KWin::effects) and for a failed
+        // make-current, and in both there is no context to delete against while
+        // the driver reclaims the objects regardless, so the clears are safe
+        // either way. The sibling animation-registry handler above uses the same
+        // helper.
         ensureGlContextCurrent();
         m_compiledPacks.clear();
         m_packBufferScaleCache.clear(); // metadata cache rides the compile cache's lifetime
