@@ -30,6 +30,8 @@ the guard that reasoning implies and it is not optional. It took two goes to get
 counting globbed FILES alone still passed on two unparseable packs, and on twenty that
 parse while none declares the param. It now counts declarers too.
 """
+from __future__ import annotations
+
 import json
 from pathlib import Path
 
@@ -47,11 +49,24 @@ def shared_param_problems(repo: Path) -> list[tuple[str, str]]:
     is the one failure mode a consistency gate must not have.
     """
     out: list[tuple[str, str]] = []
+    # An EMPTY table is the cheapest way to switch this rule off while leaving it
+    # listed in --list-rules, so it cannot be the quiet path. Deleting the last entry
+    # to silence a finding has to announce itself.
+    if not SHARED_PARAM_TEXT:
+        out.append(("scripts/conventions_shared_text.py",
+                    "SHARED_PARAM_TEXT is empty, so this rule checks nothing; delete the "
+                    "rule outright rather than emptying its table"))
     for param, pattern in SHARED_PARAM_TEXT.items():
         seen: dict[str, list[str]] = {}
-        matched = 0
+        # Counted on the RESOLVED path. Two glob hits that are the same file through a
+        # symlinked pack directory are one piece of evidence, and letting them count as
+        # two would satisfy the floor below with no independent coverage at all.
+        real: set[Path] = set()
         for path in sorted(repo.glob(pattern)):
-            matched += 1
+            try:
+                real.add(path.resolve())
+            except OSError:
+                real.add(path)
             try:
                 # utf-8-sig so a BOM'd pack still PARTICIPATES. Decoding it as plain
                 # utf-8 raises, and swallowing that below would drop the pack out of the
@@ -68,9 +83,20 @@ def shared_param_problems(repo: Path) -> list[tuple[str, str]]:
                             f"comparison; no other rule reports it when the bad byte falls "
                             f"inside a JSON string"))
                 continue
-            except (OSError, ValueError):
-                # rule_prose reports a JSON SYNTAX error, including a BOM read as utf-8.
-                # It does NOT report an unreadable file; its own read() raises on one.
+            except OSError as exc:
+                # Reported, not skipped, and this is the arm's own mirror of the decode
+                # one above. The gate's main() does drop an unreadable TRACKED path with
+                # its own finding, but this rule globs rather than taking the file list,
+                # so an untracked pack directory never passes through that filter. Saying
+                # it twice for a tracked one is the cheaper mistake: the message here is
+                # the one that names which comparison lost a participant.
+                out.append((str(path.relative_to(repo)),
+                            f"cannot be read ({exc.strerror or exc.__class__.__name__}), so it "
+                            f"was dropped from the '{param}' comparison"))
+                continue
+            except ValueError:
+                # rule_prose reports a JSON SYNTAX error, including a BOM read as utf-8,
+                # so this one defers rather than duplicating it.
                 continue
             if not isinstance(doc, dict):
                 continue  # a root that parses but is not an object is not a pack
@@ -101,6 +127,13 @@ def shared_param_problems(repo: Path) -> list[tuple[str, str]]:
                                     f"declares a non-string '{param}' description "
                                     f"({type(desc).__name__})"))
                         continue
+                    elif not desc.strip():
+                        # Whitespace-only says nothing either, and normalising it HERE
+                        # rather than testing for it at each use is what keeps the
+                        # reporting arms below consistent: they ask `not text`, which a
+                        # single space passes, so " " would have been quoted back to the
+                        # author as a genuine competing wording.
+                        desc = ""
                     rel = str(path.relative_to(repo))
                     holders = seen.setdefault(desc, [])
                     # One entry per FILE. A pack declaring the id twice would otherwise
@@ -124,14 +157,28 @@ def shared_param_problems(repo: Path) -> list[tuple[str, str]]:
         # floor. Twenty packs can declare the id and every one omit the description: the
         # schema requires only id/name/type/default, so dropping it is schema-LEGAL and
         # the json-schema gate will not catch it either. All of them then land in the one
-        # "" bucket, len(seen) == 1, and the rule goes quiet. So count declarers carrying
-        # NON-EMPTY text, which is what there has to be two of for a comparison to mean
-        # anything. Real tree: 24 globbed, 20 declaring, 20 with text.
-        declaring = {h for text, holders in seen.items() if text.strip() for h in holders}
-        if matched < 2 or len(declaring) < 2:
-            out.append((pattern, f"matched {matched} path(s), {len(declaring)} of them carrying a "
-                                 f"non-empty '{param}' description, so it was compared against "
-                                 f"nothing and this rule is a silent no-op"))
+        # "" bucket, len(seen) == 1, and the rule goes quiet. So the floor has to reach
+        # declared TEXT and not just declared ids.
+        #
+        # The fourth version splits what the third conflated. "Fewer than two packs carry
+        # text" was one test doing two jobs, and it threw away a real finding to do the
+        # second: one pack with text beside four that declare the id and omit it is not a
+        # rule with nothing to compare, it is the drift this rule exists for, and the
+        # floor swallowed it while reporting "compared against nothing" — which was also
+        # untrue, since seen held two buckets. The two questions are now separate. Too few
+        # paths means the glob is stale. No text anywhere means the id is mistyped or the
+        # description has left the tree. Either is a dead rule. One pack with text is not.
+        # Real tree: 24 globbed, 20 declaring, 20 with text, no empty bucket at all.
+        matched = len(real)
+        declaring = {h for text, holders in seen.items() if text for h in holders}
+        if matched < 2:
+            out.append((pattern, f"matched {matched} path(s), so there is nothing to compare and "
+                                 f"this rule is a silent no-op; the glob has gone stale"))
+            continue
+        if not declaring:
+            out.append((pattern, f"matched {matched} path(s) and not one carries a '{param}' "
+                                 f"description, so this rule is a silent no-op; either the id is "
+                                 f"mistyped here or the description has left the packs"))
             continue
         if len(seen) <= 1:
             continue
@@ -139,7 +186,17 @@ def shared_param_problems(repo: Path) -> list[tuple[str, str]]:
         # arbitrary, so the message quotes BOTH sides and calls the winner the reference
         # rather than asserting the other is wrong. The gate fires either way, which is
         # the part that matters.
-        ref = max(seen, key=lambda k: len(seen[k]))
+        #
+        # Chosen among the packs that actually say something. An omission is not a wording
+        # and must not become the canon: with ten packs silent and two pairs disagreeing,
+        # the empty bucket won on count, both real wordings were told they were the only
+        # text in the tree, and the disagreement between them went unreported. That was the
+        # fifth defect of one shape in this file — a fix applied to one side of a pair —
+        # so this one is structural rather than another arm. Every empty holder now routes
+        # to the `not text` arm below, and the arm that answered for an empty reference is
+        # gone because no reference can be empty: the floor above guarantees a non-empty
+        # text exists before this line runs.
+        ref = max((t for t in seen if t), key=lambda k: len(seen[k]))
         for text, holders in sorted(seen.items()):
             if text == ref:
                 continue
@@ -152,14 +209,9 @@ def shared_param_problems(repo: Path) -> list[tuple[str, str]]:
             # Three shapes have no differing character at all, and a naive excerpt quotes
             # the empty string for one side of each. `at` lands at the shorter length, so
             # slicing the SHORTER side past its end gives ''. Name what changed instead.
-            if not ref:
-                # The REFERENCE is empty, so the majority omitted the description and this
-                # pack is the one that has it. Blaming this pack would invert the fault.
-                # Its own mirror arm, because every previous version of this block fixed
-                # one side of a pair and left the other.
-                what = (f"is the only text here: the {len(seen[ref])} pack(s) it was compared "
-                        f"against declare no description at all, so THEY are the likelier fault")
-            elif not text:
+            # This arm has to come first: an empty text gives limit == 0 and at == 0, which
+            # satisfies the truncation test below and would be described as one.
+            if not text:
                 what = (f"declares no description, or an empty one; the reference text is "
                         f"{ref[:90]!r}")
             elif at == limit and len(text) < len(ref):

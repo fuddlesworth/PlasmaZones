@@ -2480,6 +2480,9 @@ add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
 #                              the shared file passed the size ceiling
 #   test_surface_pack_validator: the same for the surface model, which had NO
 #                              harness at all until this was added
+#   test_surface_pack_lints:   the surface metadata lints the file above does not
+#                              reach, one negative slot each, cut from it by
+#                              coverage gap rather than by subject
 #   test_animation_pack_bakes: the animation stage bakes on both hosts, and the
 #                              multipass buffer passes
 #   test_pack_model_detection: the shared/ marker lookup and include roots

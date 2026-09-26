@@ -31,7 +31,6 @@ from __future__ import annotations
 
 import argparse
 import codecs
-import fnmatch
 import json
 import re
 import string
@@ -108,12 +107,26 @@ def read(path: str) -> str:
     # Never raises. An unreadable tracked file (no read permission, or a path that is not
     # a regular file) used to take the whole gate down with a traceback from whichever
     # rule reached it first, which reads like a broken gate rather than a dirty tree.
-    # Returning "" makes it a spdx/license finding instead, which is the honest answer:
-    # a file whose header cannot be read has no header as far as this tool can tell.
+    #
+    # "" is a fallback, not a diagnosis. main() drops unreadable paths before any rule
+    # sees them and reports the real cause, because "" makes every rule downstream of it
+    # lie: prose calls well-formed JSON malformed, spdx and license call a file that has
+    # a header headerless, and file-size sees zero lines. Returning "" still matters for
+    # a path a rule opens on its own, such as a companion header it names, where the
+    # cost of an empty string is a missed check rather than a false one.
     try:
         return (REPO / path).read_text(encoding="utf-8", errors="replace")
     except OSError:
         return ""
+
+
+def read_error(path: str) -> str | None:
+    """The reason a path cannot be read as text, or None when it can be."""
+    try:
+        (REPO / path).read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return exc.strerror or exc.__class__.__name__
+    return None
 
 
 def strip_c_comments(text: str) -> str:
@@ -794,17 +807,17 @@ def rule_prose(files: list[str]) -> list[Violation]:
 #
 # The data and the check live in conventions_dep5.py. This file reached the
 # 1150-line ceiling and CLAUDE.md says to split past it; dep5 is the most
-# separable rule, and the sibling takes the three helpers it needs as arguments
-# so the two cannot form an import cycle.
+# separable rule, and the sibling takes the repo root and the two helpers it needs
+# as arguments so the two cannot form an import cycle. It reads file heads itself,
+# in binary and bounded, because it is the one rule that meets binaries and
+# symlinks, so it does not take read().
 def rule_dep5(files: list[str]) -> list[Violation]:
     _add_script_dir_to_path()
     from conventions_dep5 import dep5_problems
 
     return [Violation("dep5", p, ln, m) for p, ln, m in
-            dep5_problems(files, repo=REPO, read=read, line_of=line_of,
+            dep5_problems(files, repo=REPO, line_of=line_of,
                           tracked_files=tracked_files)]
-
-
 
 
 # --------------------------------------------------------------------------
@@ -1016,7 +1029,25 @@ def main() -> int:
     else:
         files = tracked_files()
 
+    # A path that cannot be read gets one finding naming why, and is then kept away
+    # from the rules. Handing them "" instead made them answer confidently about a
+    # file none of them had seen: "malformed JSON" on well-formed JSON, "missing SPDX
+    # header" on a file that carries one. This is a precondition of the gate rather
+    # than a convention, so it is not in RULES and --rules cannot switch it off; a
+    # subset run that could re-admit unreadable paths would bring the false findings
+    # back with it.
     violations: list[Violation] = []
+    readable: list[str] = []
+    for f in files:
+        err = read_error(f)
+        if err is None:
+            readable.append(f)
+        else:
+            violations.append(
+                Violation("unreadable", f, 0, f"cannot be read ({err}), so no rule could check it")
+            )
+    files = readable
+
     for name in selected:
         violations.extend(RULES[name][0](files))
 

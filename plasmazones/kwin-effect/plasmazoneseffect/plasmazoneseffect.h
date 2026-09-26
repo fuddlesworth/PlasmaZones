@@ -986,16 +986,16 @@ private:
      * prePaintScreen's election above runs BEFORE the strip view
      * animator advances for the frame, so its answer is one advance behind
      * the paint-path sites mid-leg — the failure is the benign,
-     * already-documented one (indicators fall back to their layer slot for a
-     * frame). A column that scrolls back toward the viewport starts
-     * intersecting — the view offset is part of the rect, re-read every pass
-     * — and the paint-path sites wake in the same frame.
+     * already-documented one (one frame with the pills under the second
+     * trigger instead of the first). A column that scrolls back toward the
+     * viewport starts intersecting — the view offset is part of the rect,
+     * re-read every pass — and the paint-path sites wake in the same frame.
      *
      * Snapshot captures must NOT consult this: a parked column's offscreen
      * capture (close snapshot, decoration capture) is legitimate work on an
-     * invisible window. Both paint-path callers sit behind the
-     * m_capturingSnapshot exemption already, matching the foreign-output
-     * cull's treatment.
+     * invisible window. The two arms that would drop it carry the
+     * m_capturingSnapshot exemption; the TRANSFORMED gates need none, since a
+     * capture sets that flag in its own mask and never runs prePaintWindow.
      */
     bool scrollParkedOffscreen(KWin::EffectWindow* w, const QString& windowId) const;
 

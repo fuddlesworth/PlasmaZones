@@ -1344,8 +1344,8 @@ private:
     /// "popup.layoutPicker" / "popup.cheatsheet") and push it onto @p slot's
     /// decoration properties (Stage d). Shared by pushLayoutOsdContent's five call sites
     /// (the layout and locked shows share showLayoutOsdImpl), showNavigationOsd's direct
-    /// call and the four popup shows. When no pack resolves it clears the chain, the padding,
-    /// the backdrop stand-in, the audio flag and the slot's CAVA show/hide hook.
+    /// call, the four popup shows and the retune sweep below. When no pack resolves it clears
+    /// the chain, the padding, the backdrop stand-in, the audio flag and the slot's CAVA show/hide hook.
     void applyDecoration(QObject* slot, const QString& surfacePath);
     /// Re-apply the decoration chain to every decorated slot currently up, the OSD
     /// included: the four popups key on their service flag, the OSD on the item's own

@@ -146,10 +146,12 @@ QString roundBottomCornersParamId()
 ///
 /// So a WRONG-TYPED stored value is explicitly not covered: QVariant::toBool() is
 /// true for any string that is not empty, "0" or "false", so `"off"` reads as round.
-/// Nothing in the tree can produce that today (the settings UI writes a bool and the
+/// No code path in the tree produces that today (the settings UI writes a bool and the
 /// flatten copies it verbatim), and the alternative — gating on the declared type —
-/// was rejected for the reason above. A hand-edited profile gets the value it asked
-/// for rather than a refusal.
+/// was rejected for the reason above. A HAND-EDITED profile can, and it gets the value
+/// it asked for rather than a refusal: the flatten keeps every non-null inner value
+/// verbatim, so a string survives it. A rule can carry one too, since paramsBlobIsSane
+/// refuses arrays and over-long strings but accepts an ordinary one.
 ///
 /// A STRING stored here squares the chain rather than abstaining, and there is no
 /// empty-vs-null asymmetry to it. Qt 6 dropped the QString::isNull() special case from
@@ -159,12 +161,12 @@ QString roundBottomCornersParamId()
 /// A JSON `null` arrives as std::nullptr_t — valid, isNull() true — and abstains, the
 /// shape the tests pin. A tree PROFILE cannot carry one: DecorationProfile::fromJson
 /// drops nulls at both levels, and says why. That is the profile's own parameters map
-/// and nothing else, so it does NOT make the arm dead. Every tree read flattens through
-/// withPresetsResolved, and a USER preset file keeps its nulls: ShaderPreset::fromJson
-/// raw-converts, overlayPresetDeltas copies verbatim, and clampToBounds skips anything
-/// non-numeric. A pack-DECLARED preset does drop them, so the asymmetry is the user
-/// file. A rule's params (shader_resolve.cpp) and a pack's own `"default": null` reach
-/// here too. Four producers, so the arm is live on every host.
+/// and nothing else, so it does NOT make the arm dead. Every tree read that has a preset
+/// registry flattens through withPresetsResolved, and a USER preset file keeps its nulls:
+/// ShaderPreset::fromJson raw-converts, overlayPresetDeltas copies verbatim, and
+/// clampToBounds skips anything non-numeric. A pack-DECLARED preset does drop them, so
+/// the asymmetry is the user file. A rule's params (shader_resolve.cpp) and a pack's own
+/// `"default": null` reach here too. Three producers, so the arm is live on every host.
 static bool usableBool(const QVariant& value, bool* out)
 {
     if (!value.isValid() || value.isNull()) {

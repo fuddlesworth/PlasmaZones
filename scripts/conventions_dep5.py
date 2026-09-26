@@ -5,15 +5,17 @@
 Split out of the gate for the reason its two siblings record: the gate reached its
 1150-line ceiling, and CLAUDE.md says to split past it rather than shave comments.
 This is the most separable rule — self-contained, the only one that walks every
-tracked path rather than a suffix-filtered subset, and dependent on nothing but three
-gate helpers, which arrive as keyword arguments the way run_selftest's do.
+tracked path rather than a suffix-filtered subset, and dependent on nothing but the
+repo root and two gate helpers, which arrive as keyword arguments the way
+run_selftest's do.
 
 Returns plain (path, line, message) tuples rather than the gate's Violation, so the
 two files cannot form an import cycle.
 """
+from __future__ import annotations
+
 import fnmatch
 import re
-
 
 
 # The Debian DEP-5 file tells every downstream redistributor what each shipped
@@ -99,7 +101,7 @@ def dep5_stanza_for(rel: str, stanzas: list[dict]) -> tuple[dict, str] | tuple[N
     return hit
 
 
-def dep5_problems(files, *, repo, read, line_of, tracked_files):
+def dep5_problems(files, *, repo, line_of, tracked_files):
     dep5 = repo / "packaging" / "debian" / "copyright"
     if not dep5.exists():
         return []
@@ -134,9 +136,21 @@ def dep5_problems(files, *, repo, read, line_of, tracked_files):
             )
         blob = " ".join(s["copyright"])
         for holder in re.findall(r"SPDX-FileCopyrightText:\s*(.+)", head):
-            # Drop the comment syntax the header sits inside, then compare on
-            # the name alone: the stanza spells fuddlesworth with an address.
+            # Drop the comment syntax the header sits inside, drop the address
+            # the stanza spells out and the header does not, and drop the leading
+            # year span. Then compare on the name alone, which is the only part
+            # of a holder this rule is in a position to check.
+            #
+            # The year has to go. A stanza written "2024-2026 fuddlesworth" is a
+            # DEP-5 range covering every file it matches, so a header's single
+            # year is not a substring of it except by accident: "2026" happens to
+            # end the range and passes, while 2025 and 2027 do not. Comparing the
+            # years would mean teaching this rule to expand DEP-5 ranges, and a
+            # year that has merely fallen out of date is not a licensing defect.
+            # What matters to a redistributor is that every holder named in a
+            # file is also named in the stanza that covers it.
             name = re.sub(r"\s*(-->|\*/|\",?)\s*$", "", holder.strip()).split("<")[0].strip()
+            name = re.sub(r"^\d{4}(\s*[-,]\s*\d{4})*\s*", "", name).strip()
             if name and name not in blob:
                 out.append(
                     (f,
