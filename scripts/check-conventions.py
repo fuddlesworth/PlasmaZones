@@ -999,33 +999,20 @@ def rule_js_pragma(files: list[str]) -> list[Violation]:
     return out
 
 
-# Rule: shared-param-text — a control the host resolves once per chain must read the
-# same on every pack offering it. The twenty `roundBottomCorners` copies drifted twice
-# in one audit. `files` is unused: a staged subset cannot tell whether the twenty agree.
-SHARED_PARAM_TEXT = {"roundBottomCorners": "plasmazones/data/surface/*/metadata.json"}
-
-
+# Rule: shared-param-text — a control the host resolves once per chain must carry the
+# same DESCRIPTION on every pack offering it. Description only, not `name` or the bounds,
+# which have their own single values today and would drift silently. The data and the
+# check live in conventions_shared_text.py, for the reason the self-test arm below records.
 def rule_shared_param_text(files: list[str]) -> list[Violation]:
+    # `files` is unused: whether the twenty agree is not answerable from a staged
+    # subset, and the failure to catch is a commit that updates nineteen and leaves the
+    # twentieth, whose file is then the one NOT staged. So this always globs and can
+    # name a file the commit did not touch, which is the honest answer.
     del files
-    out: list[Violation] = []
-    for param, pattern in SHARED_PARAM_TEXT.items():
-        seen: dict[str, list[str]] = {}
-        for path in sorted(Path().glob(pattern)):
-            try:
-                doc = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                continue  # rule_prose reports malformed JSON
-            for p in doc.get("parameters", []):
-                if isinstance(p, dict) and p.get("id") == param:
-                    seen.setdefault(str(p.get("description", "")), []).append(str(path))
-        if len(seen) <= 1:
-            continue
-        ref = max(seen, key=lambda k: len(seen[k]))
-        for text, holders in sorted(seen.items()):
-            for h in holders if text != ref else []:
-                out.append(Violation("shared-param-text", h, 0, f"'{param}' description differs "
-                                     f"from the other {len(seen[ref])} packs -> {text[:80]!r}"))
-    return out
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from conventions_shared_text import shared_param_problems
+
+    return [Violation("shared-param-text", p, 0, m) for p, m in shared_param_problems(REPO)]
 
 
 # --------------------------------------------------------------------------
@@ -1041,7 +1028,7 @@ RULES = {
     "prose": (rule_prose, "user-facing strings carry no em-dash splice, clause semicolon or spaced hyphen"),
     "dep5": (rule_dep5, "packaging/debian/copyright declares each file's real license and holders"),
     "js-pragma": (rule_js_pragma, f"QML .js libraries declare '.pragma library' in Qt's first {JS_PRAGMA_WINDOW} bytes"),
-    "shared-param-text": (rule_shared_param_text, "a chain-resolved param reads the same on every pack"),
+    "shared-param-text": (rule_shared_param_text, "a chain-resolved param's description matches on every pack"),
 }
 
 
@@ -1089,7 +1076,7 @@ def main() -> int:
 
     if args.list_rules:
         for name, (_, desc) in RULES.items():
-            print(f"{name:14} {desc}")
+            print(f"{name:18} {desc}")
         return 0
 
     if args.update_baseline:

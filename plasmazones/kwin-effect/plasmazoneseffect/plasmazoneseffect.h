@@ -1975,9 +1975,9 @@ private:
     /// in nine, including the hottest one (every time-driven animation's teardown). It is
     /// one call here instead, idempotent and a no-op when the context is already current.
     ///
-    /// False for compositor teardown (no `KWin::effects`) and for a failed make-current.
-    /// In the first GL is going away and the driver reclaims everything; in the second
-    /// there is no context to delete against — so callers clear their state either way.
+    /// False for compositor teardown (no `KWin::effects`) and for a failed make-current:
+    /// GL is going away in the first, and there is no context to delete against in the
+    /// second. Callers that DISCARD the result clear state either way; two branch on it.
     bool ensureGlContextCurrent() const
     {
         return KWin::effects && KWin::effects->makeOpenGLContextCurrent();

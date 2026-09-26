@@ -151,11 +151,12 @@ QString roundBottomCornersParamId()
 /// was rejected for the reason above. A hand-edited profile gets the value it asked
 /// for rather than a refusal.
 ///
-/// Note the EMPTY-vs-null string asymmetry that falls out of this, since it is a
-/// third case beyond the absent and explicitly-null ones named above. A stored `""`
-/// is valid and not null, so it is ACCEPTED and converts to false, squaring the
-/// chain; a default-constructed QString is null, so it abstains. Both are reachable
-/// only from a hand-edited profile, and each gets the value its shape asks for.
+/// A STRING stored here squares the chain rather than abstaining, and there is no
+/// empty-vs-null asymmetry to it. Qt 6 dropped the QString::isNull() special case from
+/// QVariant::isNull(), so a default-constructed QString and a `""` both report isNull()
+/// false, both pass this guard, and both convert to false. Only an ABSENT key or a JSON
+/// `null` abstains, the latter arriving as std::nullptr_t, which is the shape the tests
+/// pin. JSON cannot express a null QString at all, so those two are the whole set.
 static bool usableBool(const QVariant& value, bool* out)
 {
     if (!value.isValid() || value.isNull()) {
@@ -179,9 +180,10 @@ QVariant chainRoundBottomCorners(const SurfaceShaderRegistry& registry, const QS
         // an empty id so isValid() is already false for it. Both calls perform the
         // same factory lookup, so the probe was a second one for the same answer.
         // NOTE this reasoning is local to the resolver, and it does NOT condemn every
-        // host probe. The daemon overlay host's is load-bearing: it distinguishes
-        // "not installed" from "installed but broken" for two separately-keyed
-        // warnings. A probe with no diagnostic on either arm is the redundant shape.
+        // host probe. The daemon overlay host's and the shell's chainFor are both
+        // load-bearing: each distinguishes "not installed" from "installed but broken"
+        // for its own pair of diagnostics. A probe with no diagnostic on either arm is
+        // the redundant shape.
         const SurfaceShaderEffect effect = registry.effect(packId);
         if (!effect.isValid()) {
             continue;

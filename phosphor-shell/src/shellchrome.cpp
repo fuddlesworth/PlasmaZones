@@ -125,9 +125,16 @@ void ShellChrome::setPalette(PhosphorTheme::PaletteStore* palette)
     if (m_palette == palette) {
         return;
     }
-    // Named signal rather than a blanket disconnect(sender, nullptr, this, nullptr):
-    // paletteChanged below is the only connection today, so the two are equivalent, but
-    // the blanket form would silently sever any second one a later change adds.
+    // Signal and slot are both named rather than left as a blanket
+    // disconnect(sender, nullptr, this, nullptr). That is a readability choice, NOT a
+    // safety one, and it cuts the other way from how it reads: this is a
+    // replace-the-borrow setter, so severing EVERY connection to the outgoing store is
+    // the correct outcome, and the named form is the one that would leak. PaletteStore
+    // declares three signals (paletteChanged, sourcePathChanged, loadError), so a
+    // future second connection from this object to a different one of them would
+    // survive here where the blanket form would have cleaned it up. Naming both signal
+    // and slot does mean a second SLOT on paletteChanged is distinguishable without a
+    // stored handle, which is what the daemon's lambda connections need instead.
     if (m_palette) {
         disconnect(m_palette, &PhosphorTheme::PaletteStore::paletteChanged, this, &ShellChrome::bump);
     }

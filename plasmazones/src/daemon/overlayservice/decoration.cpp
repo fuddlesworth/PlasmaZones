@@ -55,9 +55,10 @@ void OverlayService::setSurfaceShaderRegistry(PhosphorSurfaceShaders::SurfaceSha
     // NOT a safety one: effectsChanged is the registry's only signal, so naming it
     // still severs every slot this object has on it, exactly as the blanket form did.
     // It is also strictly narrower, so a future second SIGNAL on the registry would
-    // survive here where the blanket form would have cleaned it up. Only a stored
-    // QMetaObject::Connection distinguishes one slot from another, which is what
-    // setPresetRegistry keeps and what a second slot on this signal would need.
+    // survive here where the blanket form would have cleaned it up. This connection is
+    // a LAMBDA, so naming a slot cannot single it out and only a stored
+    // QMetaObject::Connection can, which is what setPresetRegistry keeps; a second
+    // lambda slot on this signal would need its own second handle.
     if (m_surfaceShaderRegistry) {
         disconnect(m_surfaceShaderRegistry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
                    nullptr);
@@ -148,11 +149,12 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     const auto clearDecoration = [this, slot]() {
         // Padding and backdrop before the chain, matching the write order
         // applyDecoration documents below: the chain write is the load trigger, so
-        // everything a stage reads goes first. Inconsequential here (no stage
-        // survives an empty chain) but the two halves of one pair should not state
+        // everything a stage reads goes first. Inconsequential here (no stage DRAWS
+        // under an empty chain) but the two halves of one pair should not state
         // opposite orders, and the backdrop is dropped for its own reason too: an
         // undecorated slot has nothing to sample it, and holding the image would
-        // keep a wallpaper-sized texture uploaded for a surface that draws none.
+        // keep a wallpaper-sized QImage alive on the slot for a surface that draws
+        // none of it.
         writeQmlProperty(slot, QString(OverlayQmlPropertyNames::DecorationOuterPadding), 0.0);
         writeQmlProperty(slot, QString(OverlayQmlPropertyNames::BackdropTexture), QVariant());
         writeQmlProperty(slot, QString(OverlayQmlPropertyNames::DecorationChain), QVariant::fromValue(QVariantList()));

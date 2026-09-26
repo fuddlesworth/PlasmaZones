@@ -34,7 +34,7 @@
             "default": 8,
             "min": 0,
             "max": 64,
-            "description": "Corner rounding the halo follows (px). The halo traces this radius on the window frame. A Border pack earlier in the chain paints its band from its own corner radius out to that radius plus its border width, so match this to the sum for the two to meet. At a border radius of 0 the band stays square and nothing sits further out"
+            "description": "Corner rounding the halo follows (px). The halo traces this radius on the window frame. A Border pack earlier in the chain paints its band from its own corner radius out to that radius plus its border width, so match this to the sum for the two to meet. At a border radius of 0 the band stays square and nothing sits further out."
         },
         {
             "id": "roundBottomCorners",

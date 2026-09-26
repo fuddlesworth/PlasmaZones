@@ -1309,8 +1309,8 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // report the empty case.
     const bool parkedOffscreen = scrollParkedOffscreen(w, windowId);
 
-    // A scroll-strip window on a FOREIGN output's pass: paintWindow will skip
-    // drawing it entirely, so it must not occlude either. Leaving its opaque
+    // A scroll-strip window paintWindow will SKIP: on a FOREIGN output's pass, or
+    // parked off the viewport. Either way it must not occlude. Leaving its opaque
     // region declared tells KWin's occlusion culling that everything behind
     // the frame is covered, so the background there is never recomposited —
     // and with the window itself skipped, nothing overdraws those pixels at
@@ -1319,8 +1319,14 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // transition branch below documents for translated renders). The ghost is
     // indistinguishable from "the clip is broken": the window was never being
     // DRAWN over there, it was being REMEMBERED there.
+    //
+    // The park case belongs HERE, not on the interiorOpaque branch below, because
+    // paintWindowImpl's cull carries no decoration term: it skips ANY parked column.
+    // Usually inert: the opaque region follows the COMMITTED rect, the predicate tests
+    // the DRAWN one, and an ordinary park commits off every output (atScrollPark).
     if (w && !m_capturingSnapshot && m_currentPassOutput) {
-        if (const KWin::LogicalOutput* managed = scrollManagedOutputFor(w); managed && managed != m_currentPassOutput) {
+        const KWin::LogicalOutput* mgd = scrollManagedOutputFor(w);
+        if (parkedOffscreen || (mgd && mgd != m_currentPassOutput)) {
             data.setTranslucent();
         }
     }
@@ -1449,17 +1455,11 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // CAPTURE itself (see foldedOpacity's doc) and that thins the interior with
     // no pack involved.
     //
-    // SCOPE LIMIT, verified against the same workspacescene.cpp sources: a
-    // PADDED chain (outerPadding > 0) is marked PAINT_WINDOW_TRANSFORMED above,
-    // and that flag already excludes the window from BOTH culling halves, so
-    // skipping setTranslucent() recovers nothing for it. All four bundled
-    // declarers are padded, so the skip is live for an unpadded third-party
-    // chain, and the sweep's AND is what a padded-presentation redesign inherits.
-    // The exception is a PARKED column: the transformed gate withholds itself
-    // there on purpose and paintWindowImpl draws nothing, so declaring the
-    // interior opaque would leave the stale pixels the foreign-output branch
-    // above describes. That reaches a BUNDLED all-interiorOpaque chain, hence
-    // the park term below; the default {border, shadow} is not one.
+    // SCOPE LIMIT, verified against the same workspacescene.cpp sources: a PADDED
+    // chain (outerPadding > 0) is already marked PAINT_WINDOW_TRANSFORMED above, which
+    // excludes it from BOTH culling halves, so skipping setTranslucent() recovers
+    // nothing. All four bundled declarers ask at least 4 px, so the skip is live only
+    // for an unpadded third-party chain, which is what the sweep's AND is for.
     //
     // Note what this is NOT for. It used to be set to keep the window in KWin's paint
     // set so drawWindow kept firing on idle frames. That was a repaint-scheduling hack
@@ -1468,7 +1468,7 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // The cases where the composite changes with no window damage (a focus cross-fade,
     // an iTime pack, a backdrop refresh) schedule their own repaints in postPaintScreen.
     if (!transformDriven && decorated) {
-        const bool interiorOpaque = decoIt->chainInteriorOpaque && decoIt->foldedOpacity >= 1.0 && !parkedOffscreen;
+        const bool interiorOpaque = decoIt->chainInteriorOpaque && decoIt->foldedOpacity >= 1.0;
         if (!interiorOpaque) {
             data.setTranslucent();
         }

@@ -85,8 +85,9 @@ void OverlayService::setPresetRegistry(PhosphorShaders::ShaderPresetRegistry* re
     // The precise handle, not `disconnect(registry, nullptr, this, nullptr)`: the
     // blanket form severs every slot this object has on that sender, which is safe
     // only while there is exactly one. This class keeps handles for exactly that
-    // reason (see m_shadersChangedConnection). A stored handle is the only form that
-    // survives a second slot being added later, which is why it is the one to copy;
+    // reason (see m_shadersChangedConnection). A stored handle is what a LAMBDA
+    // connection needs, since no slot name can single one out; a second lambda slot
+    // here would need its own second handle, because this one does not sever it.
     // setSurfaceShaderRegistry names its signal instead, and its own comment records
     // what that does and does not buy.
     if (m_presetsChangedConnection) {

@@ -483,8 +483,8 @@ install(TARGETS plasmazones_rendering
 # this target's PUBLIC deps (plasmazones_core, plasmazones_rendering,
 # PhosphorAudio, Qt6::Gui) already reaches plasmazonesd below, CAVA included,
 # since the daemon runs its own CavaSpectrumProvider. The first three are named
-# on it directly; Qt6::Gui arrives transitively through Qt6::Quick, so do not
-# expect to find it in the link list.
+# on it directly. Qt6::Gui is not named, and arrives two ways: through Qt6::Quick,
+# and one hop from the Qt6::GuiPrivate the daemon links further down.
 set(plasmazones_shaderpreview_SRCS
     shaderpreview/ishaderpreviewbackend.h
     shaderpreview/shaderpreviewcontroller.h
@@ -844,11 +844,13 @@ add_executable(plasmazones-editor ${plasmazones_editor_SRCS})
 # ColorUtils.js is imported by relative path from each QML file that uses it, so it needs
 # no qmldir entry. NOT about re-evaluation: the file's own `.pragma library` is what makes
 # it shared, and it declares one inside Qt's 128-byte scan window. ThemeHelpers.js is
-# imported the same way and declares its pragma at the same offset, but carries no such
-# CMAKE SOURCE PROPERTY, so the two are inconsistent. Keeping it on this one file is the
-# conservative half of that inconsistency: it suppresses a qmldir entry nothing imports
-# through, and removing it has not been checked against qmllint or qmlls, which read the
-# generated qmldir. Add it to ThemeHelpers.js, or drop it here once that check is done.
+# imported the same way and declares its pragma at the same byte offset, but carries no
+# such CMAKE SOURCE PROPERTY, so the two files are inconsistent. The inconsistency stays,
+# deliberately and in this direction. The property's whole effect is visible in the
+# generated qmldir, which lists ThemeHelpers.js and not ColorUtils.js, and nothing imports
+# either through the module URI. Levelling it either way would change what qmllint and
+# qmlls read, and no gate in this repo runs them, so there is nothing that would catch a
+# regression from the change.
 set_source_files_properties(editor/qml/ColorUtils.js PROPERTIES
     QT_QML_SKIP_QMLDIR_ENTRY TRUE
 )

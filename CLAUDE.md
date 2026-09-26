@@ -224,14 +224,18 @@ ctest --test-dir build --output-on-failure
 # PhosphorI18n::tr() over i18n() in C++, ConfigDefaults:: accessors over inline
 # config paths, `.pragma library` inside Qt's 128-byte window in QML .js
 # libraries (see QML Style), the plain-prose rules on the user-facing strings it
-# can reach, and that packaging/debian/copyright still declares every file's real
-# license and copyright holders. Stdlib only.
+# can reach, that packaging/debian/copyright still declares every file's real
+# license and copyright holders, and that a chain-resolved shader param's
+# DESCRIPTION reads identically on every pack that offers it (the twenty
+# roundBottomCorners copies; the check and its data live in
+# scripts/conventions_shared_text.py). Stdlib only.
 #
 # The prose rule reaches data JSON, tr()/i18n(), settings-schema descriptions,
 # .desktop, AppStream, packaging, .github/workflows/*.yml (through the pkgdesc
 # arm), algorithm .luau, and CHANGELOG.md entry BODIES (the text after the
 # `**Term**:` lead-in; the bold lead-in itself and the trailing reference link
-# are skipped). Four things stay review-only even where it does reach: an entry's
+# are skipped, and an indented sub-bullet is reached like any other entry). Four
+# things stay review-only even where it does reach: an entry's
 # bold title; the dramatic "Label: payload" colon; the rule-of-three triad and
 # "not just X, but Y", none of which it tests; and a clause-splicing semicolon
 # built from PAST-tense prose, because the verb list its semicolon arm matches on

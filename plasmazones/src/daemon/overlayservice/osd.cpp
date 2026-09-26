@@ -107,11 +107,10 @@ void OverlayService::finishOsdShow(QQuickWindow* window, PhosphorLayer::Surface*
     // Deliberately here rather than in prepareLayoutOsdWindow. Most callers refuse
     // before they prepare, but showNavigationOsd refuses AFTER (its dedup and
     // needsLayout checks both follow the prepare), so that one path could prepare
-    // and then bail. A path that did hid
-    // the selector with nothing to bring it back: the restore runs off a sibling
-    // slot's hide completion, and no OSD had been shown to complete one, while
-    // showZoneSelector early-returns on the still-set visible flag. The slot then
-    // stayed hidden for the rest of the drag.
+    // and then bail. A path that did hid the selector with nothing to bring it back:
+    // the restore runs off a sibling slot's hide completion, and no OSD had been shown
+    // to complete one, while showZoneSelector early-returns on the still-set visible
+    // flag. The slot then stayed hidden for the rest of the drag.
     hideZoneSelectorSlotOnScreen(effectiveScreenId);
     sizeOsdToScreen(window, screenGeom);
     // Disarm the render-pipeline prime first so its queued hide doesn't

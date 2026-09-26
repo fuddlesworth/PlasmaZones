@@ -63,7 +63,7 @@ inline QString decorationWindowFloatingPath()
     return QStringLiteral("window.floating");
 }
 
-/// The OSD surface and the three transient overlays invoked by user action.
+/// The OSD surface and the four transient overlays invoked by user action.
 /// Accessors rather than literals because the seed tree in
 /// configdefaults_shaders.h writes overrides at these exact paths, and a
 /// typo there is a seed that silently decorates nothing.

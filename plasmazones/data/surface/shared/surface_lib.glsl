@@ -185,8 +185,8 @@ vec4 marginComposite(vec4 base, vec3 col, float a) {
 // The border family's shared band assembly: the outer-radius rounded-rect SDF
 // (content radius + border width, both logical px scaled to device px by
 // uSurfaceScale, except at a zero end, which stays square and is not dilated at
-// all — see the level-set note below), the content-clip mask, and the band edge. `p` is the
-// device-px fragment (surfacePixel); `borderWidth` / `cornerRadius` are the
+// all — see the level-set note below), the content-clip mask, and the band edge.
+// `p` is the device-px fragment (surfacePixel); `borderWidth` / `cornerRadius` are the
 // pack's logical-px params (pack macros the shared code can't name, so they are
 // passed in). Packs whose band geometry differs (border-double's three-width
 // stack) build their own.
@@ -265,8 +265,8 @@ BorderBand standardBorderBandSplit(vec2 p, float borderWidth, float cornerRadius
     // outer radius is still r + width by design, because `cornerRadius` names the
     // CONTENT corner, so a border in the chain still governs the composited
     // silhouette: it erases a radius-r slab corner by about 0.41*width along the
-    // diagonal. Under a pixel at the default width 2, plainly visible at width 20.
-    // Leaving a zero radius alone makes the
+    // diagonal, in DEVICE px, so under a pixel at the default width 2 on an
+    // unscaled display and plainly visible at width 20. Leaving a zero radius alone makes the
     // -width level set a sharp inset rect, i.e. a true mitre: `width` thick
     // perpendicular to each edge and width*sqrt(2) across the corner diagonal,
     // which is what a square pane wants and what CSS and QPen MiterJoin draw.
@@ -368,6 +368,9 @@ vec4 faintTintSlab(vec3 tint, float tintStrength, float mask) {
 // at floor `focusFloor`. `edgePx` is the
 // REAL (undisplaced) fragment position for the edge feather — the shadow pack
 // evaluates `d` against a displaced frame but feathers on the true position.
+// `gateCornerTopPx` / `gateCornerBottomPx` are the caller's own corner radii in
+// device px, 0 for a squared end, and the depth gate follows them so it holds the
+// same outline the caller's FrameSDF draws.
 float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float strength, float focusFloor,
                   float gateCornerTopPx, float gateCornerBottomPx) {
     // reach is caller-supplied and a zero would make this inf, then NaN through
@@ -424,10 +427,12 @@ float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float stre
     // (R-h)*(sqrt(2)-1): zero exactly when h >= R, positive otherwise. Either
     // mismatch therefore moves the gate's thresholds by that much, in whichever
     // direction the gate is the rounder of the two:
-    //   gate SQUARE under a ROUNDED frame — reads the transparent corner sliver
-    //     as deeper inside than it is and ZEROES halo there once the reach falls
-    //     under about 0.29 of the radius (the sliver's deepest point sits 0.293R
-    //     inside the square edge). glowSize 4 with cornerRadius 64 hits it.
+    //   gate SQUARE under a ROUNDED frame — reads the transparent corner sliver as
+    //     deeper inside than it is and thins halo there. The sliver's deepest point
+    //     sits 0.293R inside the square edge, and the gate below spans two reaches,
+    //     so attenuation begins once the reach falls under about 0.29 of the radius
+    //     and reaches zero only under about 0.146 of it. glowSize 4 with
+    //     cornerRadius 64 zeroes it (18.75 of depth against a 8 px span).
     //   gate ROUNDED under a SQUARED end — reads a squared corner as further
     //     outside than it is and KEEPS halo there, which is what the gate exists
     //     to stop. Full-keep reaches [R*(sqrt(2)-1) + r]/sqrt(2) instead of r,
