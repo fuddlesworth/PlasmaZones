@@ -19,6 +19,8 @@ Usage:
     scripts/check-conventions.py               # check the whole tree
     scripts/check-conventions.py FILE...       # check only these files
     scripts/check-conventions.py --rules R,R   # run only the named rules
+    scripts/check-conventions.py --staged F... # the pre-commit form lefthook invokes
+    scripts/check-conventions.py --selftest    # the form CI invokes beside the gate
     scripts/check-conventions.py --list-rules
     scripts/check-conventions.py --update-baseline
 
@@ -49,6 +51,8 @@ def _add_script_dir_to_path() -> None:
     d = str(Path(__file__).resolve().parent)
     if d not in sys.path:
         sys.path.insert(0, d)
+
+
 BASELINE = REPO / "scripts" / "oversize-baseline.json"
 
 # CLAUDE.md: under 1000 is the target, 1000-1150 is tolerated, past 1150 split.
@@ -101,7 +105,15 @@ def tracked_files() -> list[str]:
 
 
 def read(path: str) -> str:
-    return (REPO / path).read_text(encoding="utf-8", errors="replace")
+    # Never raises. An unreadable tracked file (no read permission, or a path that is not
+    # a regular file) used to take the whole gate down with a traceback from whichever
+    # rule reached it first, which reads like a broken gate rather than a dirty tree.
+    # Returning "" makes it a spdx/license finding instead, which is the honest answer:
+    # a file whose header cannot be read has no header as far as this tool can tell.
+    try:
+        return (REPO / path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
 
 
 def strip_c_comments(text: str) -> str:
@@ -779,141 +791,20 @@ def rule_prose(files: list[str]) -> list[Violation]:
 # --------------------------------------------------------------------------
 # Rule: dep5
 # --------------------------------------------------------------------------
-
-# The Debian DEP-5 file tells every downstream redistributor what each shipped
-# file's license is. Nothing kept it honest, so it drifted: it declared 165
-# LGPL shader-pack files as GPL-3, which defeats the whole reason those trees
-# are LGPL. Reconciling it once fixes today and nothing else, because the next
-# pack added under data/ breaks it again silently. This rule is the ratchet.
 #
-# It reads only the file HEAD, like the license rule, so SPDX text appearing in
-# a string literal or in a contributing guide's example is not mistaken for a
-# header.
-DEP5 = REPO / "packaging" / "debian" / "copyright"
-DEP5_HEAD_LINES = 8
-
-
-def dep5_head(rel: str) -> str | None:
-    """The first DEP5_HEAD_LINES lines, or None for anything without a readable
-    text head. This rule is the one that walks EVERY tracked path rather than a
-    suffix-filtered subset, so it meets what the others never see: the symlinked
-    skill directories under .agents/, and binary assets. Reading a bounded slice
-    also keeps a whole-tree run cheap."""
-    p = REPO / rel
-    try:
-        if not p.is_file():
-            return None
-        with p.open("rb") as fh:
-            raw = fh.read(4096)
-    except OSError:
-        return None
-    if b"\0" in raw:
-        return None
-    return "\n".join(raw.decode("utf-8", errors="replace").split("\n")[:DEP5_HEAD_LINES])
-
-
-def parse_dep5() -> list[dict]:
-    """The Files stanzas in declaration order. DEP-5 resolution is last-match-wins."""
-    stanzas: list[dict] = []
-    cur: dict | None = None
-    field: str | None = None
-    for raw in DEP5.read_text(encoding="utf-8").split("\n"):
-        line = raw.rstrip()
-        if line.startswith("#"):
-            continue
-        if not line.strip():
-            if cur and cur["files"]:
-                stanzas.append(cur)
-            cur, field = None, None
-            continue
-        m = re.match(r"^(\S+):\s*(.*)$", line)
-        if m:
-            key, val = m.group(1).lower(), m.group(2).strip()
-            if key == "files":
-                cur = {"files": [val] if val else [], "copyright": [], "license": ""}
-                field = "files"
-            elif cur is not None and key == "copyright":
-                if val:
-                    cur["copyright"].append(val)
-                field = "copyright"
-            elif cur is not None and key == "license":
-                cur["license"] = val
-                field = "license"
-            else:
-                field = None
-        elif line.startswith((" ", "\t")) and cur is not None and field in ("files", "copyright"):
-            cur[field].append(line.strip())
-    if cur and cur["files"]:
-        stanzas.append(cur)
-    return stanzas
-
-
-def dep5_stanza_for(rel: str, stanzas: list[dict]) -> tuple[dict, str] | tuple[None, None]:
-    """Last matching stanza wins. DEP-5 globs: * spans any run of characters,
-    including '/', which is why fnmatch is right here and Path.match is not.
-
-    Returns the pattern that matched alongside the stanza, not just the stanza's
-    first pattern: a stanza that lists eight paths would otherwise point the
-    reader at the wrong one."""
-    hit: tuple[dict, str] | tuple[None, None] = (None, None)
-    for s in stanzas:
-        for pat in s["files"]:
-            if fnmatch.fnmatchcase(rel, pat):
-                hit = (s, pat)
-                break
-    return hit
-
-
+# The data and the check live in conventions_dep5.py. This file reached the
+# 1150-line ceiling and CLAUDE.md says to split past it; dep5 is the most
+# separable rule, and the sibling takes the three helpers it needs as arguments
+# so the two cannot form an import cycle.
 def rule_dep5(files: list[str]) -> list[Violation]:
-    if not DEP5.exists():
-        return []
-    stanzas = parse_dep5()
-    if not stanzas:
-        return [Violation("dep5", str(DEP5.relative_to(REPO)), 0, "no Files stanza parsed")]
+    _add_script_dir_to_path()
+    from conventions_dep5 import dep5_problems
 
-    # Editing the DEP-5 file can break any file in the tree, not only the ones
-    # staged beside it, so that edit widens the check to everything.
-    targets = tracked_files() if str(DEP5.relative_to(REPO)) in files else files
+    return [Violation("dep5", p, ln, m) for p, ln, m in
+            dep5_problems(files, repo=REPO, read=read, line_of=line_of,
+                          tracked_files=tracked_files)]
 
-    out = []
-    for f in targets:
-        head = dep5_head(f)
-        if head is None:
-            continue
-        m = re.search(r"SPDX-License-Identifier:\s*([A-Za-z0-9.+-]+)", head)
-        if not m:
-            continue
-        got = m.group(1)
-        s, pat = dep5_stanza_for(f, stanzas)
-        if s is None:
-            out.append(Violation("dep5", f, 0, "no Files stanza in packaging/debian/copyright matches this path"))
-            continue
-        if s["license"] != got:
-            out.append(
-                Violation(
-                    "dep5",
-                    f,
-                    line_of(head, m.start()),
-                    f"header says {got}, but packaging/debian/copyright declares {s['license']} "
-                    f"for it (matched by 'Files: {pat}')",
-                )
-            )
-        blob = " ".join(s["copyright"])
-        for holder in re.findall(r"SPDX-FileCopyrightText:\s*(.+)", head):
-            # Drop the comment syntax the header sits inside, then compare on
-            # the name alone: the stanza spells fuddlesworth with an address.
-            name = re.sub(r"\s*(-->|\*/|\",?)\s*$", "", holder.strip()).split("<")[0].strip()
-            if name and name not in blob:
-                out.append(
-                    Violation(
-                        "dep5",
-                        f,
-                        0,
-                        f"copyright holder {name!r} is not named in the matching "
-                        f"packaging/debian/copyright stanza ('Files: {pat}')",
-                    )
-                )
-    return out
+
 
 
 # --------------------------------------------------------------------------

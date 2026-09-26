@@ -148,5 +148,3 @@ def run_selftest(prose_problems, iter_json_prose) -> int:
         return 1
     print("selftest: ok")
     return 0
-
-

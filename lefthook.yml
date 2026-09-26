@@ -98,7 +98,14 @@ pre-commit:
     conventions-selftest:
       # Only when the gate itself is edited. A rule that narrows reports a clean
       # tree, so the whole-tree run above cannot catch its own blind spots.
-      glob: "scripts/check-conventions.py"
+      #
+      # The gate is FOUR files now, not one: watching only the entry point meant a
+      # commit that broke conventions_selftest.py ran no selftest at all, because
+      # this glob did not match it and the `conventions` hook only imports the
+      # sibling under --selftest. CI was the sole net.
+      glob:
+        - "scripts/check-conventions.py"
+        - "scripts/conventions_*.py"
       run: python3 scripts/check-conventions.py --selftest
     shader-validate:
       glob: "plasmazones/data/overlays/**/*.{frag,vert,glsl,json}"

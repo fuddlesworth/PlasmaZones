@@ -65,7 +65,8 @@ def shared_param_problems(repo: Path) -> list[tuple[str, str]]:
                 # parses there and looks fine.
                 out.append((str(path.relative_to(repo)),
                             f"is not valid UTF-8 ({exc}), so it was dropped from the '{param}' "
-                            f"comparison and no other rule reports it"))
+                            f"comparison; no other rule reports it when the bad byte falls "
+                            f"inside a JSON string"))
                 continue
             except (OSError, ValueError):
                 # rule_prose reports a JSON SYNTAX error, including a BOM read as utf-8.
@@ -83,8 +84,25 @@ def shared_param_problems(repo: Path) -> list[tuple[str, str]]:
                 continue
             for p in params:
                 if isinstance(p, dict) and p.get("id") == param:
+                    # A non-string description would otherwise be str()'d, so `null` reads
+                    # as the literal word None in the message and sends the author hunting
+                    # for it in the file. Schema-invalid, and guarded for the same reason
+                    # the non-list `parameters` above is: a finding, never a traceback and
+                    # never misleading prose.
+                    desc = p.get("description")
+                    if desc is None:
+                        # Absent and JSON `null` both mean "says nothing", so both land in
+                        # the empty bucket where the coverage floor can see them. str()-ing
+                        # a null gave the bucket the literal key "None", which counted as
+                        # text and let twenty all-null packs pass the floor.
+                        desc = ""
+                    elif not isinstance(desc, str):
+                        out.append((str(path.relative_to(repo)),
+                                    f"declares a non-string '{param}' description "
+                                    f"({type(desc).__name__})"))
+                        continue
                     rel = str(path.relative_to(repo))
-                    holders = seen.setdefault(str(p.get("description", "")), [])
+                    holders = seen.setdefault(desc, [])
                     # One entry per FILE. A pack declaring the id twice would otherwise
                     # inflate the count the author reads to decide which side is canonical.
                     if rel not in holders:
@@ -102,11 +120,18 @@ def shared_param_problems(repo: Path) -> list[tuple[str, str]]:
         # actually DECLARED it too. On this tree that is 20 of 24 globbed, so the floor has
         # 18 to spare and can only fire once the entry has gone stale, which is when it
         # should be deleted rather than trusted.
-        declaring = {h for holders in seen.values() for h in holders}
+        # Counting DECLARERS was still not enough, which is the third version of this
+        # floor. Twenty packs can declare the id and every one omit the description: the
+        # schema requires only id/name/type/default, so dropping it is schema-LEGAL and
+        # the json-schema gate will not catch it either. All of them then land in the one
+        # "" bucket, len(seen) == 1, and the rule goes quiet. So count declarers carrying
+        # NON-EMPTY text, which is what there has to be two of for a comparison to mean
+        # anything. Real tree: 24 globbed, 20 declaring, 20 with text.
+        declaring = {h for text, holders in seen.items() if text.strip() for h in holders}
         if matched < 2 or len(declaring) < 2:
-            out.append((pattern, f"matched {matched} file(s), {len(declaring)} of them declaring "
-                                 f"'{param}', so it was compared against nothing and this rule is "
-                                 f"a silent no-op"))
+            out.append((pattern, f"matched {matched} path(s), {len(declaring)} of them carrying a "
+                                 f"non-empty '{param}' description, so it was compared against "
+                                 f"nothing and this rule is a silent no-op"))
             continue
         if len(seen) <= 1:
             continue
@@ -127,7 +152,14 @@ def shared_param_problems(repo: Path) -> list[tuple[str, str]]:
             # Three shapes have no differing character at all, and a naive excerpt quotes
             # the empty string for one side of each. `at` lands at the shorter length, so
             # slicing the SHORTER side past its end gives ''. Name what changed instead.
-            if not text:
+            if not ref:
+                # The REFERENCE is empty, so the majority omitted the description and this
+                # pack is the one that has it. Blaming this pack would invert the fault.
+                # Its own mirror arm, because every previous version of this block fixed
+                # one side of a pair and left the other.
+                what = (f"is the only text here: the {len(seen[ref])} pack(s) it was compared "
+                        f"against declare no description at all, so THEY are the likelier fault")
+            elif not text:
                 what = (f"declares no description, or an empty one; the reference text is "
                         f"{ref[:90]!r}")
             elif at == limit and len(text) < len(ref):
