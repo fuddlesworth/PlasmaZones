@@ -25,8 +25,10 @@ declared default, so "the one earliest in the chain wins" holds for two stored v
 and inverts in the mixed case.
 
 What the decline does not excuse is a rule that compares nothing. Zero coverage, not a
-missing canon, is what actually went wrong the first time, so the coverage floor below
-is the guard that reasoning implies and it is not optional.
+missing canon, is what actually went wrong the first time, so the coverage floor below is
+the guard that reasoning implies and it is not optional. It took two goes to get right:
+counting globbed FILES alone still passed on two unparseable packs, and on twenty that
+parse while none declares the param. It now counts declarers too.
 """
 import json
 from pathlib import Path
@@ -54,10 +56,21 @@ def shared_param_problems(repo: Path) -> list[tuple[str, str]]:
                 # utf-8-sig so a BOM'd pack still PARTICIPATES. Decoding it as plain
                 # utf-8 raises, and swallowing that below would drop the pack out of the
                 # comparison silently, which for a majority holder also lowers the count
-                # the message reports. rule_prose is what reports the file as malformed.
+                # the message reports.
                 doc = json.loads(path.read_text(encoding="utf-8-sig"))
+            except UnicodeDecodeError as exc:
+                # MUST precede the ValueError arm, being a subclass. Reported rather than
+                # skipped because nothing else reports it: rule_prose reads with
+                # errors="replace", and U+FFFD is legal inside a JSON string, so the file
+                # parses there and looks fine.
+                out.append((str(path.relative_to(repo)),
+                            f"is not valid UTF-8 ({exc}), so it was dropped from the '{param}' "
+                            f"comparison and no other rule reports it"))
+                continue
             except (OSError, ValueError):
-                continue  # rule_prose reports malformed and unreadable JSON
+                # rule_prose reports a JSON SYNTAX error, including a BOM read as utf-8.
+                # It does NOT report an unreadable file; its own read() raises on one.
+                continue
             if not isinstance(doc, dict):
                 continue  # a root that parses but is not an object is not a pack
             # NOT `doc.get("parameters", [])`: the default only applies to an ABSENT key,
@@ -76,14 +89,24 @@ def shared_param_problems(repo: Path) -> list[tuple[str, str]]:
                     # inflate the count the author reads to decide which side is canonical.
                     if rel not in holders:
                         holders.append(rel)
-        # COVERAGE FLOOR. A rule that compares nothing reports clean, which is exactly how
-        # the CWD-relative glob this function replaced stayed invisible: it found zero packs
-        # from any directory but the repo root and passed. A mutation test is not a ratchet,
-        # so the floor is the ratchet — if the pattern is ever mistyped or the tree moves,
-        # this fires instead of going quiet.
-        if matched < 2:
-            out.append((pattern, f"matched {matched} file(s), so '{param}' was compared against "
-                                 f"nothing and this rule is a silent no-op"))
+        # COVERAGE FLOOR, on BOTH counts. A rule that compares nothing reports clean, which
+        # is how the CWD-relative glob this function replaced stayed invisible: it found
+        # zero packs from any directory but the repo root and passed. A mutation test is
+        # not a ratchet, so the floor is.
+        #
+        # Counting globbed files ALONE was not enough, and the first version did only that:
+        # two packs that both fail to parse, or twenty that parse while none declares the
+        # param, both give matched >= 2 with nothing compared. The likelier real shape is
+        # the second — rename the id across the packs, or mistype the key in
+        # SHARED_PARAM_TEXT, and the rule goes quiet forever. So count the packs that
+        # actually DECLARED it too. On this tree that is 20 of 24 globbed, so the floor has
+        # 18 to spare and can only fire once the entry has gone stale, which is when it
+        # should be deleted rather than trusted.
+        declaring = {h for holders in seen.values() for h in holders}
+        if matched < 2 or len(declaring) < 2:
+            out.append((pattern, f"matched {matched} file(s), {len(declaring)} of them declaring "
+                                 f"'{param}', so it was compared against nothing and this rule is "
+                                 f"a silent no-op"))
             continue
         if len(seen) <= 1:
             continue
@@ -101,12 +124,21 @@ def shared_param_problems(repo: Path) -> list[tuple[str, str]]:
             # looks correct and hides the thing it just detected.
             limit = min(len(text), len(ref))
             at = next((i for i in range(limit) if text[i] != ref[i]), limit)
-            # A pack whose text is a strict PREFIX of the reference — a truncated edit —
-            # has no differing character at all, so `at` lands at the end and an excerpt
-            # of the offending side is EMPTY. Say what is missing instead.
-            if at == limit and len(text) < len(ref):
+            # Three shapes have no differing character at all, and a naive excerpt quotes
+            # the empty string for one side of each. `at` lands at the shorter length, so
+            # slicing the SHORTER side past its end gives ''. Name what changed instead.
+            if not text:
+                what = (f"declares no description, or an empty one; the reference text is "
+                        f"{ref[:90]!r}")
+            elif at == limit and len(text) < len(ref):
                 what = (f"is the reference text TRUNCATED at 0-based character {at} "
                         f"({len(text)} chars against {len(ref)}); it should continue {ref[at:at + 90]!r}")
+            elif at == limit:
+                # The mirror of the truncation case: appending a sentence to one pack is
+                # the likeliest authoring drift, and quoting ref[at:] for it asks the
+                # reference for an index it does not have.
+                what = (f"is the reference text EXTENDED from 0-based character {at} "
+                        f"({len(text)} chars against {len(ref)}); it adds {text[at:at + 90]!r}")
             else:
                 what = (f"first differs at 0-based character {at}: this pack has {text[at:at + 90]!r} "
                         f"where the reference has {ref[at:at + 90]!r}")

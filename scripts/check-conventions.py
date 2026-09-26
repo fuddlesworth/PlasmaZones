@@ -35,7 +35,6 @@ import re
 import string
 import subprocess
 import sys
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -96,7 +95,9 @@ def tracked_files() -> list[str]:
     out = subprocess.run(
         ["git", "ls-files"], cwd=REPO, capture_output=True, text=True, check=True
     ).stdout.split("\n")
-    return [f for f in out if f and not f.startswith(EXCLUDED_PREFIXES)]
+    # is_file() because `git ls-files` still lists a file deleted without `git rm`, and
+    # read() raises on it, taking six of the nine rules down with a traceback.
+    return [f for f in out if f and not f.startswith(EXCLUDED_PREFIXES) and (REPO / f).is_file()]
 
 
 def read(path: str) -> str:

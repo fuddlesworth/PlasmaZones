@@ -65,8 +65,10 @@ pre-commit:
       # whole-set rule and compares all twenty packs whenever this hook runs at
       # all, so it can name a file this commit did not stage; and dep5 widens to
       # the whole tree when packaging/debian/copyright is itself staged. A commit
-      # that stages nothing matching the globs below runs neither, because the
-      # gate returns before any rule. CI's whole-tree run is the backstop.
+      # that stages nothing matching the globs below runs neither, because lefthook
+      # skips a command whose glob filters every staged path away; the gate's own
+      # empty-staged-list early return is the backstop for a hand-run or another
+      # runner. CI's whole-tree run is the backstop for both.
       #
       # Stdlib-only, so unlike the schema hook there is no venv to bootstrap
       # and this is always a hard gate.
