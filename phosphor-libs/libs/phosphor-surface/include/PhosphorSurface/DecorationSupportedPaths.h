@@ -31,10 +31,12 @@ inline QString decorationShellAppletPopupPath()
 
 /// XDG data subdirectory holding installed surface-shader packs, relative to a
 /// GenericDataLocation root. Lives here because every tier that scans it can reach
-/// this header while the application tiers may not link each other: the daemon's
-/// warm-bake, the Phosphor shell's chrome, the compositor's registry search path and
-/// this library's own QML item each built it from a separate copy of the literal, so
-/// a rename would have moved some and left the rest looking in the old place.
+/// this header while the application tiers may not link each other. Each producer
+/// used to build it from a separate copy of the literal, so a rename would have moved
+/// some and left the rest looking in the old place. Deliberately NOT an enumeration
+/// of the consumers: that list was written three times and was wrong twice, each time
+/// letting the extraction be declared finished with a spelling still live. Grep for
+/// the literal instead, including sub-paths like `.../shared/`.
 ///
 /// `ConfigDefaults::userSurfaceSubdir()` is the settings tier's LEADING-SLASH form
 /// and now derives from this, so there is one string and two spellings of it rather

@@ -154,9 +154,12 @@ QString roundBottomCornersParamId()
 /// A STRING stored here squares the chain rather than abstaining, and there is no
 /// empty-vs-null asymmetry to it. Qt 6 dropped the QString::isNull() special case from
 /// QVariant::isNull(), so a default-constructed QString and a `""` both report isNull()
-/// false, both pass this guard, and both convert to false. Only an ABSENT key or a JSON
-/// `null` abstains, the latter arriving as std::nullptr_t, which is the shape the tests
-/// pin. JSON cannot express a null QString at all, so those two are the whole set.
+/// false, both pass this guard, and both convert to false.
+///
+/// In practice only an ABSENT key abstains. DecorationProfile::fromJson drops a JSON
+/// `null` at both the pack and the parameter level before it can reach here, and says
+/// why where it does it, so the null arm below covers a caller that builds the
+/// QVariantMap in C++ instead. That is the std::nullptr_t shape the tests pin.
 static bool usableBool(const QVariant& value, bool* out)
 {
     if (!value.isValid() || value.isNull()) {

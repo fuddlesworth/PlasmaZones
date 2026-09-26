@@ -842,12 +842,12 @@ struct WindowDecoration
     /// updateWindowDecoration chain sweep; a pack the registry does not know
     /// draws nothing and cannot thin the interior, so it does not veto.
     /// prePaintWindow uses this (with foldedOpacity at rest) to SKIP
-    /// setTranslucent(). A parked strip column is handled separately, on the
-    /// branch beside the foreign-output one, because that cull ignores
-    /// decoration entirely: the client's own opaque region stays truthful for
+    /// setTranslucent(): the client's own opaque region stays truthful for
     /// such a chain, and keeping it preserves KWin's occlusion culling —
     /// both its damage-cull and paint-cull halves (verified against the KWin
-    /// 6.7.3 sources, workspacescene.cpp collectDamage/paintSimpleScreen).
+    /// 6.7.3 sources, workspacescene.cpp collectDamage/paintSimpleScreen). A
+    /// parked strip column is covered ON the foreign-output branch, not here,
+    /// because that cull carries no decoration term.
     bool chainInteriorOpaque = false;
 
     /// Damage bookkeeping for padded chains across window moves/resizes:

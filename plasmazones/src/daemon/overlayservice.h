@@ -1342,10 +1342,10 @@ private:
     /// Resolve a surface-decoration pack from the settings' DecorationProfileTree
     /// (@p surfacePath, one of "osd" / "popup.snapAssist" / "popup.zoneSelector" /
     /// "popup.layoutPicker" / "popup.cheatsheet") and push it onto @p slot's
-    /// decoration properties (Stage d). Shared by every OSD show path (all modes:
-    /// layout / locked / disabled / navigation) and the four popup show paths. Clears
-    /// the slot's decorationChain, decorationOuterPadding and backdrop stand-in when
-    /// no pack resolves, so a stale decoration never renders.
+    /// decoration properties (Stage d). Shared by every pushLayoutOsdContent path
+    /// (layout / locked / template / strip / disabled), showNavigationOsd's direct call
+    /// and the four popup shows. When no pack resolves it clears the chain, the padding,
+    /// the backdrop stand-in, the audio flag and the slot's CAVA show/hide hook.
     void applyDecoration(QObject* slot, const QString& surfacePath);
     /// Re-apply the decoration chain to every decorated slot currently up, the OSD
     /// included: the four popups key on their service flag, the OSD on the item's own

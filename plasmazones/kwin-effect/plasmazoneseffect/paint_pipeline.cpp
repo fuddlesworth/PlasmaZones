@@ -1325,8 +1325,8 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // Usually inert: the opaque region follows the COMMITTED rect, the predicate tests
     // the DRAWN one, and an ordinary park commits off every output (atScrollPark).
     if (w && !m_capturingSnapshot && m_currentPassOutput) {
-        const KWin::LogicalOutput* mgd = scrollManagedOutputFor(w);
-        if (parkedOffscreen || (mgd && mgd != m_currentPassOutput)) {
+        const KWin::LogicalOutput* managed = scrollManagedOutputFor(w);
+        if (parkedOffscreen || (managed && managed != m_currentPassOutput)) {
             data.setTranslucent();
         }
     }
@@ -1345,10 +1345,10 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         // `KWin::effects->addRepaint(output->geometry())` rather than
         // addLayerRepaint — the scene clips a layer repaint to the window
         // item's bounding rect, which is exactly the margin the expansion
-        // needs to paint past. prePaintWindow doesn't drive that on KWin 6;
-        // `WindowPrePaintData::devicePaint` is the dirty region in
-        // device coords and isn't the right surface for declaring "I
-        // want to paint this many pixels past the natural frame".
+        // needs to paint past. prePaintWindow cannot drive that on KWin 6 at
+        // all: WindowPrePaintData carries only `mask`, setTranslucent() and
+        // setTransformed(), with no dirty-region member to widen, so there is
+        // nothing here to say "paint this many pixels past the natural frame".
         data.setTransformed();
 
         // Mark the window non-opaque for the duration of the transition.

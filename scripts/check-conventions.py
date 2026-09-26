@@ -40,6 +40,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+
+
+def _add_script_dir_to_path() -> None:
+    """Make this file's directory importable for its two lazily-imported siblings.
+
+    Idempotent, because a bare insert grew sys.path on every call.
+    """
+    d = str(Path(__file__).resolve().parent)
+    if d not in sys.path:
+        sys.path.insert(0, d)
 BASELINE = REPO / "scripts" / "oversize-baseline.json"
 
 # CLAUDE.md: under 1000 is the target, 1000-1150 is tolerated, past 1150 split.
@@ -1000,8 +1010,10 @@ def rule_js_pragma(files: list[str]) -> list[Violation]:
 
 
 # Rule: shared-param-text — a control the host resolves once per chain must carry the
-# same DESCRIPTION on every pack offering it. Description only, not `name` or the bounds,
-# which have their own single values today and would drift silently. The data and the
+# same DESCRIPTION on every pack offering it. Description only. `name`, `type` and
+# `default` are single-valued across the twenty today and would drift silently; `group`
+# legitimately varies (8 packs say "Shape", 12 omit it), because it is presentation and
+# the 12 group nothing at all, so a flat list is what they render. The data and the
 # check live in conventions_shared_text.py, for the reason the self-test arm below records.
 def rule_shared_param_text(files: list[str]) -> list[Violation]:
     # `files` is unused: whether the twenty agree is not answerable from a staged
@@ -1009,7 +1021,7 @@ def rule_shared_param_text(files: list[str]) -> list[Violation]:
     # twentieth, whose file is then the one NOT staged. So this always globs and can
     # name a file the commit did not touch, which is the honest answer.
     del files
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    _add_script_dir_to_path()
     from conventions_shared_text import shared_param_problems
 
     return [Violation("shared-param-text", p, 0, m) for p, m in shared_param_problems(REPO)]
@@ -1048,7 +1060,7 @@ def selftest() -> int:
     # coincide for `python3 scripts/check-conventions.py`, which is how lefthook and
     # CI invoke it, and diverge for anything that runs a copy from elsewhere — where
     # the failure would be an ImportError that reads like a selftest failure.
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    _add_script_dir_to_path()
     from conventions_selftest import run_selftest
 
     return run_selftest(prose_problems, iter_json_prose)
@@ -1084,7 +1096,8 @@ def main() -> int:
 
     selected = list(RULES)
     if args.rules:
-        selected = [r.strip() for r in args.rules.split(",")]
+        # Deduped in order: `--rules a,a` ran the rule twice and double-printed it.
+        selected = list(dict.fromkeys(r.strip() for r in args.rules.split(",")))
         unknown = [r for r in selected if r not in RULES]
         if unknown:
             print(f"unknown rule(s): {', '.join(unknown)}", file=sys.stderr)
