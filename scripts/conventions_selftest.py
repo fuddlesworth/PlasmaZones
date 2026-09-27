@@ -550,8 +550,9 @@ def _dep5_failures() -> list[str]:
     # The sibling constant SPDX_HEAD_LINES had this closed a round earlier and this one was
     # missed in the same edit.
     if mod.DEP5_HEAD_LINES != 8:
-        bad.append(f"DEP5_HEAD_LINES is {mod.DEP5_HEAD_LINES}, not 8; narrowing it silently stops the rule "
-                   f"reading any header whose tags sit past the new bound")
+        bad.append(f"DEP5_HEAD_LINES is {mod.DEP5_HEAD_LINES}, not 8; changing it silently moves what the rule "
+                   f"reads — narrowing hides any header whose tags sit past the new bound, and widening pulls "
+                   f"unrelated lines into the header")
     # Deliberately shaped like the real packaging/debian/copyright rather than flat: a
     # leading COMMENT, a multi-line Files list, and a CONTINUATION line on Copyright. The
     # flat version left the continuation arm, the comment skip, the final-stanza flush and
@@ -831,12 +832,15 @@ def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
     # after a mutation proved the suite green — or worse, red for the wrong reason — without
     # it. THREE are written by the arm they belong to (the wiring arm stubs `read_error` and
     # wraps `conventions_dep5._dead_stanza_problems`, the baseline-writer arm stubs
-    # `tracked_files`) and `_SELECTED_RULES` by the main() the wiring arm drives. All four
-    # matter beyond tidiness because a later arm inherits them: rule_license's no-identifier
-    # deferral reads _SELECTED_RULES and a license arm runs AFTER the wiring arm, a leaked
-    # tracked_files would hand every later rule a temp file list, and a leaked
-    # _dead_stanza_problems makes the dead-stanza arm report TWO failures that both accuse the
-    # check under test rather than the leak. conventions_shared_text.SHARED_PARAM_TEXT is
+    # `tracked_files`) and `_SELECTED_RULES` by the main() the wiring arm drives. EACH OF THE
+    # FOUR matters beyond tidiness because a later arm inherits it, and all four mechanisms are
+    # named here rather than three, because an earlier version listed three under an "all four"
+    # lead-in: rule_license's no-identifier deferral reads _SELECTED_RULES and a license arm
+    # runs AFTER the wiring arm, a leaked tracked_files would hand every later rule a temp file
+    # list, a leaked _dead_stanza_problems makes the dead-stanza arm report TWO failures that
+    # both accuse the check under test rather than the leak, and a leaked read_error is read by
+    # every later rule, which is what turns a well-formed file into a "malformed JSON" finding.
+    # conventions_shared_text.SHARED_PARAM_TEXT is
     # redirected by two arms in this file and is the same shape. All of them are compared here
     # rather than left to the arm that set them, because the arm that leaks is not the arm
     # that fails — which is also why none of these messages names a culprit.

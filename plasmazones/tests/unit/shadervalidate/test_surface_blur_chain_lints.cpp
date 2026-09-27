@@ -387,15 +387,24 @@ private Q_SLOTS:
 
         const PackResult r = validateSurface(tmp, QStringLiteral("sf-both-backdrop"), obj,
                                              surfaceBodyReading({QStringLiteral("blurRadius")}));
-        // Both names, in declaration order, with a PLURAL verb. The message is built from two
-        // predicates rather than a ternary precisely so it can say both.
+        // Both names, with a PLURAL verb. NOT in declaration order: the message is built from
+        // two predicates rather than a ternary precisely so it can say both, and kawase-down-0
+        // is the one appended first, so the pair comes out Kawase-first whatever the pack
+        // declared. This fixture declares gaussian-h at [0] and kawase-down-0 at [2], so the
+        // asserted string below is itself the counter-example to the "declaration order" this
+        // comment used to claim.
         QVERIFY2(r.report.contains(QStringLiteral("builtin:kawase-down-0 and builtin:gaussian-h passes sample")),
                  qPrintable(r.report));
-        // The Kawase pyramid is incomplete here (up-2 absent), so the order lint fires too —
-        // asserted rather than left as unnamed collateral, since this fixture cannot be made
-        // Kawase-clean while also being gaussian-bearing at index 0.
+        // ALL THREE of the errors the count pins are named here, because a bare QCOMPARE on 3
+        // with two of them asserted leaves the third free to change into something else. The
+        // Kawase pyramid is incomplete (up-2 absent), so the order lint fires, and the chain
+        // declares no bufferScales, so that lint fires as well. A Kawase-CLEAN alternative
+        // exists that draws the join message alone — the canonical seven with their canonical
+        // scales, plus gaussian-h appended at [7] — but it would drop the incomplete-pyramid
+        // coverage this fixture also carries, so the errors are named instead of avoided.
         QVERIFY2(r.report.contains(QStringLiteral("are positional and must appear as bufferShaders[0..6]")),
                  qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("needs per-pass bufferScales")), qPrintable(r.report));
         QCOMPARE(r.errors, 3);
     }
 

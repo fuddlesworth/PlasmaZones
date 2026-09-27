@@ -112,6 +112,14 @@ uniform vec4 customColors[16];
 // surface_multipass.glsl module — a single-pass pack (the border) declares
 // neither. This resolution array stays in the core contract because it is a
 // pinned std140 UBO member on the daemon.
+//
+// ONLY WRITTEN FOR A CHANNEL THE PASS ALSO SAMPLES. Declaring
+// iChannelResolution[N] while never sampling iChannelN leaves that slot holding
+// whatever the program last had, because GL uniform state is per-program and
+// outlives both the frame and the window. Three of the compositor's four
+// channel-bind sites always worked that way and the fourth did not, so one pack
+// could read a live size from one pass and a stale one from the next. They agree
+// now: sample the channel whose size you read.
 uniform vec4 iChannelResolution[4];
 
 // Backdrop capture GATE: 1.0 when the host bound something behind the surface

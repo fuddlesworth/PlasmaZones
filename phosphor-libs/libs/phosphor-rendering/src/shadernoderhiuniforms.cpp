@@ -397,6 +397,14 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             m_sceneDataDirty = false;
             m_appFieldsDirty = false;
             m_uniformsDirty = false;
+        } else {
+            // Pool exhausted, so every flag above stays set. Ask for the frame that
+            // retries them: a STATIC item gets no further prepare() on its own, and a
+            // deferred scene header leaves the shader reading last frame's resolution,
+            // mouse and surface state until unrelated damage repaints the window. No
+            // bound, for the reason the grid upload in prepare() gives — an item burning
+            // 64 batches in one frame is already painting every frame.
+            requestAnotherFrame();
         }
     } else {
         QRhiResourceUpdateBatch* batch = nullptr;
@@ -414,8 +422,14 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 m_vboUploaded = true;
             }
         }
-        if (batch)
+        if (batch) {
             cb->resourceUpdate(batch);
+        } else if ((extensionHasData && m_uniformExtension->isDirty()) || !m_vboUploaded) {
+            // batch is also null when there was nothing to upload, hence the re-test:
+            // ask only when an exhausted pool actually left the extension dirty or the
+            // quad unuploaded, neither of which re-arms itself.
+            requestAnotherFrame();
+        }
     }
 
     uploadDummyChannelTexture(rhi, cb);
@@ -469,6 +483,13 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 audioResizeFailed = true;
             } else {
                 m_audioSpectrumTexture = std::move(resized);
+                // A success clears the warning latch, so a failure that recurs after a
+                // genuine recovery is reported again rather than swallowed for the node's
+                // life — the rule m_bufferTargetCreateWarned's success path states, and the
+                // one m_userTextureSamplerWarned and m_bufferSamplerCreateWarned follow.
+                // m_warnedAudioTruncated deliberately does NOT: an oversized vector stays
+                // oversized, so re-arming it would flood at spectrum cadence.
+                m_warnedAudioCreateFailed = false;
                 // iAudioSpectrumSize mirrors the bound texture's width, and the
                 // UBO region for this frame was filled before this resize ran.
                 // Re-arm so the next frame publishes the new width.
@@ -486,9 +507,17 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 // the inconsistency, not the frame count.
                 requestAnotherFrame();
                 resetAllBindingsAndPipelines();
-                if (!ensurePipeline()) {
-                    return;
-                }
+                // Result deliberately ignored, in all three arms that do this. Returning
+                // here used to leave the freshly created texture installed with its CONTENT
+                // upload skipped, so a failure that prepare()'s own ensurePipeline then
+                // recovered from — via the second ensureDummyChannelResources attempt
+                // between the two calls — could draw one frame of whatever the driver left
+                // in the allocation. prepare() re-runs this and bails on failure anyway
+                // (the "real work" this function's header comment points at), so the early
+                // return bought nothing and cost the upload. Falling through also keeps the
+                // promise the resize-failure arm above makes, that a bad spectrum must not
+                // starve the user-texture, source-provider and wallpaper uploads below.
+                ensurePipeline();
             }
         }
         // Clear dirty only once a batch is in hand: nextResourceUpdateBatch()
@@ -497,6 +526,15 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         QRhiResourceUpdateBatch* batch = audioResizeFailed ? nullptr : rhi->nextResourceUpdateBatch();
         if (batch) {
             m_audioSpectrumDirty = false;
+        } else if (!audioResizeFailed) {
+            // Pool exhausted rather than a failed resize, so ask for the frame that
+            // retries the upload. The audioResizeFailed arm is excluded deliberately, and
+            // that is the one asymmetry in this function that is not an oversight: it
+            // keeps the previous working texture bound, so its cost is one frame of stale
+            // bars rather than a blank slot, and it is only reachable because the producer
+            // just pushed a differently sized spectrum — which means the producer supplies
+            // the next frame. The batch arm has no such producer behind it.
+            requestAnotherFrame();
         }
         if (batch && bars > 0) {
             QImage img(bars, 1, QImage::Format_RGBA8888);
@@ -581,18 +619,29 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             // failure the slot keeps its previous texture (or stays null on
             // initial alloc, which appendUserTextureBindings() skips via
             // its truthiness gate) and dirty stays set, so a transient
-            // RHI-side condition (OOM, device loss) self-heals next frame.
+            // RHI-side condition (OOM, device loss) self-heals on the next frame
+            // SOMETHING ELSE draws. That qualifier is the honest one: a slot is
+            // written by setUserTexture, so a QML-driven or animated item gets
+            // the retry frame from its own next update, but a static item that
+            // set the slot once gets no further prepare() of its own and keeps
+            // the previous texture until unrelated damage repaints. Asking for
+            // a frame here would need a bound, which is why it does not.
             std::unique_ptr<QRhiTexture> resized(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
             if (!resized->create()) {
-                qCWarning(lcShaderNode) << "user texture slot" << i << "create() failed for size" << targetSize
-                                        << ", slot will retry next frame";
+                // Latched per slot, the shape m_userTextureSamplerWarned already uses:
+                // dirty stays set above, so this arm re-runs every frame while the create
+                // keeps failing and logged on every one of them.
+                if (!m_userTextureCreateWarned[i]) {
+                    m_userTextureCreateWarned[i] = true;
+                    qCWarning(lcShaderNode) << "user texture slot" << i << "create() failed for size" << targetSize
+                                            << ", slot will retry next frame (reported once per slot)";
+                }
                 continue;
             }
+            m_userTextureCreateWarned[i] = false;
             m_userTextures[i] = std::move(resized);
             resetAllBindingsAndPipelines();
-            if (!ensurePipeline()) {
-                return;
-            }
+            ensurePipeline(); // result ignored: see the audio-spectrum arm above
         }
         QRhiResourceUpdateBatch* ubatch = rhi->nextResourceUpdateBatch();
         if (ubatch) {
@@ -606,6 +655,9 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 ubatch->uploadTexture(m_userTextures[i].get(), m_transparentFallbackImage);
             }
             cb->resourceUpdate(ubatch);
+        } else {
+            // Pool exhausted: the slot stays dirty, so ask for the frame that retries it.
+            requestAnotherFrame();
         }
     }
 
@@ -706,6 +758,13 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             fbatch->uploadTexture(m_transparentFallbackTexture.get(), m_transparentFallbackImage);
             cb->resourceUpdate(fbatch);
             m_transparentFallbackTextureNeedsUpload = false;
+        } else {
+            // Same batch-in-hand rule, same missing half: the flag stays set and nothing
+            // else schedules the retry. This one matters more than its size suggests —
+            // until it lands, the source-provider slot samples an uninitialised 1x1 rather
+            // than transparent black, which is the defect uploadDummyChannelTexture's
+            // comment describes for its own texture.
+            requestAnotherFrame();
         }
     }
 
@@ -725,15 +784,27 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             // node's remaining life.
             std::unique_ptr<QRhiTexture> resized(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
             if (!resized->create()) {
-                qCWarning(lcShaderNode) << "wallpaper texture create() failed for size" << targetSize
-                                        << ", keeping previous texture; will retry next frame";
+                // Latched: m_wallpaperDirty stays set, so this arm re-runs on every
+                // prepare() while the create keeps failing and logged on every one of
+                // them. This is the weakest-covered of the four textures for the retry
+                // itself — the wallpaper has no per-frame producer behind it, so the
+                // frame that retries comes from the next setWallpaperTexture or from
+                // unrelated damage, and until then the node samples the texture it was
+                // initialised with. Asking for that frame unbounded would repaint at
+                // frame rate against a driver that keeps refusing, and bounding it means
+                // the m_depthCreateRetries apparatus keyed on a size, which is a larger
+                // mechanism than a wallpaper that changes on a user event warrants.
+                if (!m_warnedWallpaperCreateFailed) {
+                    m_warnedWallpaperCreateFailed = true;
+                    qCWarning(lcShaderNode) << "wallpaper texture create() failed for size" << targetSize
+                                            << ", keeping previous texture; will retry next frame (reported once)";
+                }
                 return;
             }
+            m_warnedWallpaperCreateFailed = false;
             m_wallpaperTexture = std::move(resized);
             resetAllBindingsAndPipelines();
-            if (!ensurePipeline()) {
-                return;
-            }
+            ensurePipeline(); // result ignored: see the audio-spectrum arm above
         }
         QRhiResourceUpdateBatch* ubatch = rhi->nextResourceUpdateBatch();
         if (ubatch) {
@@ -747,6 +818,11 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 ubatch->uploadTexture(m_wallpaperTexture.get(), m_transparentFallbackImage);
             }
             cb->resourceUpdate(ubatch);
+        } else {
+            // Pool exhausted: dirty stays set, and for this texture a dropped upload is
+            // the worst of the four, since it is allocated once at node init and there is
+            // no wallpaper producer pushing frames. Ask for the retry.
+            requestAnotherFrame();
         }
     }
 }
@@ -809,6 +885,8 @@ void ShaderNodeRhi::releaseRhiResources()
     m_bufferTargetCreateWarned = false;
     m_bufferSamplerCreateWarned = false;
     m_userTextureSamplerWarned.fill(false);
+    m_userTextureCreateWarned.fill(false);
+    m_warnedWallpaperCreateFailed = false;
     m_transparentFallbackWarned = false;
     m_depthMultiBufferWarned = false;
     m_depthScalesWarned = false;

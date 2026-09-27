@@ -30,9 +30,28 @@
 #include "phosphor_roles.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
+#include <utility> // std::as_const
+
 namespace PlasmaZones {
 
 namespace {
+
+// Does any zone in this list ask for the miniature layout preview? This is the ONE predicate
+// that decides whether `previewZones` carries the list or an empty one, and both writers now
+// answer it the same way, from the list they are about to write. The re-stamp path used to ask
+// the QML side instead, with `property("previewZones").toList().isEmpty()`, which is a `property
+// var`: every read rebuilds the whole QVariantList of QVariantMaps out of JS purely to test
+// emptiness, and that path runs per drag tick.
+bool anyZoneUsesLayoutPreview(const QVariantList& zones)
+{
+    for (const QVariant& z : zones) {
+        if (z.toMap().value(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode).toInt()
+            == static_cast<int>(OverlayDisplayMode::LayoutPreview)) {
+            return true;
+        }
+    }
+    return false;
+}
 
 // Collapse a dismissed overlay slot's labels texture to a 1x1 placeholder so
 // the labels payload (the sparse glyph-tile ZoneLabelTexture) is released while
@@ -122,6 +141,18 @@ void OverlayService::destroyIfTypeMismatch(const QString& screenId)
 
 void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& cursorPos)
 {
+    // Captured before anything can move it, because BOTH visibility arms below need it and
+    // this is the one function in the service that can be entered with m_visible already
+    // true and still leave it false. showAtPosition falls through to here when the cursor's
+    // virtual screen has no window or an invisible slot (lifecycle.cpp), so a transport
+    // failure on that path used to drop visible→hidden with no notification at all, leaving
+    // the `visible` Q_PROPERTY — and the org.plasmazones.Overlay.overlayVisibilityChanged
+    // signal the adaptor relays from it — permanently stale for every external client. The
+    // success arm had the mirror-image bug, emitting true on a fall-through where nothing
+    // changed. Same idiom as recreateOverlayWindowsOnTypeMismatch below and handleScreenAdded
+    // in screens.cpp, whose transient true→false needs no signal precisely because it nets out.
+    const bool wasVisible = m_visible;
+
     // Determine if we should show on all monitors (cursorScreen == nullptr means all)
     const bool showOnAllMonitors = (cursorScreen == nullptr);
 
@@ -365,7 +396,13 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     // will retry on the next drag tick, and handleScreenAdded will also
     // attempt recreation on screen reconnection.
     int liveOverlayCount = 0;
-    for (const auto& state : m_screenStates) {
+    // std::as_const, because a range-for over a non-const QHash takes the MUTABLE begin() and
+    // detaches. It costs nothing today (this map's refcount is always 1, so the detach finds
+    // nothing to copy) but the spelling is what stops that being load-bearing. The four
+    // explicit begin()/end() loops elsewhere in this service are deliberately left alone: their
+    // bodies are not all read-only, and one of them feeds a callee that does its own non-const
+    // find on the same map.
+    for (const auto& state : std::as_const(m_screenStates)) {
         if (state.overlayPhysScreen && state.shell && state.shell->shellWindow()) {
             ++liveOverlayCount;
         }
@@ -376,6 +413,9 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
                                 "phosphorwayland transport unavailable "
                                 "(overlays disabled on this screen)";
         m_visible = false;
+        if (wasVisible) {
+            Q_EMIT visibilityChanged(false);
+        }
         return;
     }
 
@@ -398,7 +438,9 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     // overlays are un-idled simultaneously.
     applyIdleStateForCursor(cursorEffectiveId, showOnAllMonitors);
 
-    Q_EMIT visibilityChanged(true);
+    if (!wasVisible) {
+        Q_EMIT visibilityChanged(true);
+    }
 }
 
 void OverlayService::updateLayout(PhosphorZones::Layout* layout)
@@ -524,7 +566,9 @@ void OverlayService::restampZoneHighlights()
         // previewZones mirrors the patched list whenever LayoutPreview mode is
         // active (updateOverlayWindow writes both from the same value); leaving
         // it behind would keep the miniature previews on the stale highlight.
-        if (!slot->property("previewZones").toList().isEmpty()) {
+        // Decided from `patched`, which is already in hand, rather than by reading the QML
+        // property back: same answer, on fresher data, without materialising the list.
+        if (anyZoneUsesLayoutPreview(patched)) {
             writeQmlProperty(slot, QStringLiteral("previewZones"), patched);
         }
         // highlightedCount gates RenderNodeOverlayContent's cursor-hover
@@ -703,6 +747,12 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
         // shader-mode glyph-tile payload stayed pinned on the slot for the whole rectangle
         // session, in a mode that can never sample it — and a drag-end does not collect it,
         // because that goes to setIdleForDragPause, which keeps the property on purpose.
+        // Its wallpaperTexture half is a DUPLICATE on this route — clearShaderSlotProperties
+        // just above writes the same 1x1 transparent placeholder — and is left alone rather
+        // than split out, because on every other caller (the dismiss and destroy paths, which
+        // do not call clearShaderSlotProperties) that half is the only wallpaper release
+        // there is. ZoneShaderItem dedupes the second write on value, and the slot is about
+        // to be reloaded regardless, so the cost is one compare.
         releaseOverlaySlotTextures(slot);
         // Required by releaseOverlaySlotTextures' own contract: the hash compare in
         // updateLabelsTextureForWindow would otherwise short-circuit a later rebuild and leave
@@ -933,13 +983,16 @@ void OverlayService::destroyOverlayWindow(const QString& screenId)
     it->overlayPhysScreen = nullptr;
     it->overlayGeometry = QRect();
     it->overlayGeomConnection = {};
-    // Release the slot's labels payload too. ONE of the two shader->non-shader flip routes
-    // comes through here, the initializeOverlay one via destroyIfTypeMismatch, and the
-    // non-shader createOverlayWindow reload does NOT overwrite labelsTexture, so without this
-    // the slot would pin the last shader-mode labels payload for the screen's whole non-shader
-    // session. The OTHER route, recreateOverlayWindowsOnTypeMismatch off a live settings edit,
-    // never reaches this function at all and carries the same release at its own site in
-    // createOverlayWindow's non-shader branch. The screen-teardown callers immediately
+    // Release the slot's labels payload too. The shader->non-shader flip that comes through
+    // here is the initializeOverlay one, via destroyIfTypeMismatch, and the non-shader
+    // createOverlayWindow reload does NOT overwrite labelsTexture, so without this the slot
+    // would pin the last shader-mode labels payload for the screen's whole non-shader
+    // session. The recreateOverlayWindowsOnTypeMismatch flip off a live settings edit never
+    // reaches this function at all and carries the same release at its own site in
+    // createOverlayWindow's non-shader branch. No count here on purpose: createOverlayWindow
+    // has nine callers, and whether a given one can flip a slot's type is a property of the
+    // caller rather than of this release, so a number would go stale the next time one is
+    // added. The screen-teardown callers immediately
     // destroyPassiveShell, where this is a harmless no-op on an about-to-be-freed slot.
     // Mirrors dismissOverlayWindow's release.
     releaseOverlaySlotTextures(it->mainOverlaySlot());
@@ -1005,15 +1058,8 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
     QVariantList patched = patchZonesWithHighlight(zones, slot);
 
     // Pass previewZones (all zones with relative geometries) only when LayoutPreview mode is active
-    bool anyZoneUsesPreview = false;
-    for (const QVariant& z : std::as_const(patched)) {
-        if (z.toMap().value(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode).toInt()
-            == static_cast<int>(OverlayDisplayMode::LayoutPreview)) {
-            anyZoneUsesPreview = true;
-            break;
-        }
-    }
-    writeQmlProperty(slot, QStringLiteral("previewZones"), anyZoneUsesPreview ? patched : QVariantList{});
+    writeQmlProperty(slot, QStringLiteral("previewZones"),
+                     anyZoneUsesLayoutPreview(patched) ? patched : QVariantList{});
     writeQmlProperty(slot, QString(OverlayQmlPropertyNames::Zones), patched);
 
     if (windowIsShader && screenUsesShader) {

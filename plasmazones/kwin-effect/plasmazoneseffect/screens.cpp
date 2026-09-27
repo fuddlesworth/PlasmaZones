@@ -45,6 +45,12 @@ namespace PlasmaZones {
 // the #724 failure family. The concrete break is scrollTrackedScreenFor, which gates on
 // connectedPhysicalIds().contains(...) and fails OPEN for the paint clip and the input filter
 // when the id misses.
+// HONOURED ON A CACHE MISS ONLY. The screenIdCache lookup below runs before @p excluded is
+// looked at, so a warm entry is returned whatever the caller passed. That is safe for the one
+// caller because onScreenRemoved calls clearScreenIdCache() immediately before its rebuild loop
+// and nothing repopulates the cache in between — it is NOT a property of this function. A
+// second caller that wants the exclusion has to clear the cache first, or it gets the
+// unexcluded answer with no signal that it did.
 QString PlasmaZonesEffect::outputScreenId(const KWin::LogicalOutput* output, const KWin::LogicalOutput* excluded) const
 {
     if (!output) {
@@ -145,8 +151,26 @@ void PlasmaZonesEffect::reportScreenDesktop(const QString& screenId, int desktop
 // mid-reconfigure).
 KWin::LogicalOutput* PlasmaZonesEffect::windowOutput(KWin::EffectWindow* w) const
 {
-    // Guarded here so every caller is: the gates in surface_gating.cpp reach
-    // this on teardown paths where KWin::effects can already be null.
+    // KWIN::EFFECTS CANNOT BE NULL HERE, and this is the one place that says so, because
+    // an earlier version of this comment claimed the opposite ("the gates in
+    // surface_gating.cpp reach this on teardown paths where KWin::effects can already be
+    // null") and three separate review passes took it at face value, each time reporting
+    // the unguarded siblings below as null-deref bugs. The ordering is upstream's, in
+    // kwin/src/effect/effecthandler.cpp, which the package does not install — only the
+    // header is in /usr/include/kwin, which is why reading from inside this tree could
+    // never settle it. EffectsHandler's constructor assigns KWin::effects = this BEFORE
+    // the effect loader runs, and its destructor is `unloadAllEffects(); KWin::effects =
+    // nullptr;` in that order. So every effect plugin is destroyed while the global is
+    // still valid, and the global is null only when NoCompositing made the constructor
+    // return early, in which case no effect was loaded and none of this code runs.
+    // The `!KWin::effects` test stays because it costs nothing and a comparison is a
+    // cheaper thing to carry than the risk of tracking an upstream teardown change. It is
+    // belt-and-braces, NOT evidence that null is reachable: outputForScreenId,
+    // connectedPhysicalIds and fetchAllVirtualScreenConfigs below deref the global
+    // unguarded and are CORRECT to, and the guards downstream in tilinghandler/state.cpp
+    // are equally dead. Do not raise those as findings, and do not add more of them.
+    // An EffectWindow*, a LogicalOutput* or a findWindow() result is a different matter
+    // and still needs its own check — this invariant is about the global only.
     if (!w || !KWin::effects) {
         return nullptr;
     }
@@ -162,6 +186,7 @@ KWin::LogicalOutput* PlasmaZonesEffect::outputForScreenId(const QString& screenI
         return nullptr;
     }
     // Virtual screens subdivide one output, so match on the physical part.
+    // No KWin::effects guard, deliberately: see the invariant at windowOutput above.
     const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
     for (const auto& output : KWin::effects->screens()) {
         if (outputScreenId(output) == physId) {
@@ -637,6 +662,23 @@ void PlasmaZonesEffect::onScreenAdded(KWin::LogicalOutput* output)
     if (!output) {
         return;
     }
+    // Two caches sit under a screen id and BOTH have to go, which is why this is two
+    // calls. clearScreenIdCache() drops only the effect's own screenIdCache hash; the
+    // serial those ids are built from comes from ScreenId::readEdidHeaderSerial, a
+    // process-local static hash keyed by CONNECTOR NAME, and buildScreenBaseId prefers it
+    // over QScreen::serialNumber(). The effect is loaded into kwin_wayland, so it holds its
+    // own copy of that static, and nothing here was invalidating it — while the daemon does,
+    // on both add and remove. A connector reused by a DIFFERENT monitor (dock swap, KVM,
+    // different cable) therefore had the effect building newManuf:newModel:OLDSERIAL while
+    // the daemon built the new serial: the same cross-process spelling disagreement the
+    // #724 family is about, and reachable without two identical monitors.
+    // ADD SIDE ONLY. onScreenRemoved must NOT mirror this: it resolves removedScreenId
+    // BEFORE its own cache clear precisely so the id matches the spelling the pre-unplug
+    // state was stored under, and re-reading a disconnected connector's now-empty edid
+    // would change that spelling and break the two consumers that compare against it.
+    // Add-side alone is sufficient for the reused-connector case, because the new monitor's
+    // serial is read fresh on its first resolve.
+    PhosphorIdentity::ScreenId::invalidateEdidCache(output->name());
     // Hotplug is the earliest signal in the cascade (before any per-window
     // outputChanged): the connected-physical-id set must invalidate HERE or
     // scrollTrackedScreenFor's liveness gate answers from the pre-plug set

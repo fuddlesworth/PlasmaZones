@@ -354,8 +354,10 @@ private:
     /// for, so a find-none elsewhere cannot be holding one.
     ///
     /// `snapshotBelowCapture` is the one whose bail is WIDER than a find-none — it also
-    /// returns on an already-taken snapshot, and on an entry that exists with a null
-    /// texture, where a hide may well be held. Releasing there would still be wrong, and
+    /// returns on a null screen (no capture exclusion is set), on an already-taken snapshot,
+    /// and on an entry that exists with a null texture, where a hide may well be held. All
+    /// THREE of its extra bails are named because a previous version named two. Releasing
+    /// there would still be wrong, and
     /// for the reason this class's own contract gives above rather than anything about the
     /// pushed framebuffer: KWin draws its overlay item at the END of the scene walk, so a
     /// cursor shown mid-walk lands INSIDE the capture and the pack smears it — which is the

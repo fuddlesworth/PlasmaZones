@@ -951,7 +951,11 @@ private:
     /// One-shot latches for the audio-spectrum diagnostics. Both conditions
     /// persist across frames by design (an oversized vector stays oversized;
     /// the create() retry is per-frame), so without a latch each would log at
-    /// spectrum cadence. Cleared in releaseRhiResources() beside the RHI latch.
+    /// spectrum cadence. Both are cleared in releaseRhiResources() beside the
+    /// RHI latch, and the create one ALSO clears on a successful resize, so a
+    /// failure recurring after a genuine recovery is reported again — the rule
+    /// m_bufferTargetCreateWarned states. The truncation one deliberately does
+    /// not, because an oversized vector stays oversized.
     bool m_warnedAudioTruncated = false;
     bool m_warnedAudioCreateFailed = false;
     /// One-shot: the dummy 1x1 texture or its sampler would not create. Both
@@ -1057,6 +1061,25 @@ private:
     /// resize and reset the count before it could reach the bound, which is the flood the
     /// bound exists to prevent.
     QSize m_depthCreateFailedSize;
+
+    /// One-shot latches for the two REMAINING create-failure warnings in
+    /// uploadDirtyTextures, which had none: the wallpaper resize and the per-slot user
+    /// texture resize. Both arms leave their dirty flag set, so both are re-entered from
+    /// prepare() on every frame while the create keeps failing, and both logged every one
+    /// of those frames — the same vsync flood m_warnedAudioCreateFailed, m_depthCreateWarned,
+    /// m_bufferTargetCreateWarned and m_bufferSamplerCreateWarned each already stop. Four
+    /// precedents in this class and these two were missed. Cleared on a successful create
+    /// and in releaseRhiResources, so a failure that recurs after a recovery is reported
+    /// again. Declared here rather than beside their siblings above because members are
+    /// appended, never inserted.
+    ///
+    /// Neither arm asks for a retry frame, and that is deliberate rather than the same
+    /// oversight: a create failure needs a BOUND, which is the whole m_depthCreateRetries /
+    /// m_depthCreateFailedSize apparatus above, and an unbounded request would repaint at
+    /// frame rate against a driver that keeps refusing. Each arm's comment says what does
+    /// supply its next frame and what a static item loses if nothing does.
+    bool m_warnedWallpaperCreateFailed = false;
+    std::array<bool, kMaxUserTextures> m_userTextureCreateWarned = {};
 };
 
 /** Result of warmShaderBakeCacheForPaths for reporting to UI. */

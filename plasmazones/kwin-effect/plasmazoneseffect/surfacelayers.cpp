@@ -741,12 +741,12 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                         glActiveTexture(GL_TEXTURE0 + unit);
                         bufs[j]->bind();
                         pass.shader->setUniform(pass.iChannelLoc[j], unit);
-                    }
-                    if (j < static_cast<size_t>(ShaderInternal::kSurfaceChannelResolutionSlots)
-                        && pass.iChannelResolutionLoc[j] >= 0) {
-                        const QVector4D res(static_cast<float>(bufs[j]->width()), static_cast<float>(bufs[j]->height()),
-                                            0.0f, 0.0f);
-                        pass.shader->setUniform(pass.iChannelResolutionLoc[j], res);
+                        if (j < static_cast<size_t>(ShaderInternal::kSurfaceChannelResolutionSlots)
+                            && pass.iChannelResolutionLoc[j] >= 0) {
+                            const QVector4D res(static_cast<float>(bufs[j]->width()),
+                                                static_cast<float>(bufs[j]->height()), 0.0f, 0.0f);
+                            pass.shader->setUniform(pass.iChannelResolutionLoc[j], res);
+                        }
                     }
                 }
                 // Both loops key on `iChannelLoc[j] >= 0`, what the pass SAMPLES: the one above

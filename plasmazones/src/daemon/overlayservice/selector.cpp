@@ -312,10 +312,16 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
         // rather than an oversight: this body holds no reference to it.key() and hands the key
         // to nothing that looks it up again, so the only hazard would be a QML binding
         // inserting into m_screenStates during a writeQmlProperty. An audit enumerated QML's
-        // entire reach into this class — one context property, one read-only Q_PROPERTY, two
-        // hide slots, no Q_INVOKABLEs — and found no insertion route. Audited-safe, not
-        // structurally safe; the sibling snapshots because it keeps a key across a completion
-        // lambda, which is a different exposure.
+        // entire reach into this class — one context property, one read-only Q_PROPERTY, and
+        // the two public slots, which are ONE hide (hideLayoutPicker) and one shader-error
+        // reporter (onShaderError), the latter being the one QML actually calls; no
+        // Q_INVOKABLEs — and found no insertion route. Both slot bodies were read: one does
+        // find + hideSlot, the other only logs. Audited-safe, not structurally safe. The
+        // sibling loop further up this file snapshots for a DIFFERENT reason, and the reason is
+        // stated where that snapshot is taken: a synchronously-fired hideSlot completion can
+        // INSERT into m_screenStates and rehash, invalidating its iterators. Not because it
+        // keeps a key across a completion lambda, which an earlier version of this sentence
+        // claimed — that lambda captures the id by value, so it would hold a copy either way.
         //
         // screensMatch, not raw !=, matching the mirror clear below and the
         // drop guard's convention. ASSUMPTION: one screen never coexists

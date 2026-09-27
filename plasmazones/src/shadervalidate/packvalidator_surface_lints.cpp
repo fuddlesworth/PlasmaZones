@@ -38,6 +38,8 @@
 #include <QString>
 #include <QStringList>
 
+#include <algorithm>
+
 using PhosphorSurfaceShaders::SurfaceShaderEffect;
 using PhosphorSurfaceShaders::SurfaceShaderRegistry;
 
@@ -323,6 +325,24 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
                     << QStringLiteral("%1 is declared on a single-pass pack, where it is never read").arg(QString(key));
             }
         }
+        // The SCALAR and BOOL buffer keys are just as inert here, and the registry's single-pass
+        // coherence block drops all of them. They were missing from the sweep above, which read
+        // as deliberate but was not: the POINTER validator lints its own equivalent
+        // ("bufferFeedback declared without `multipass: true` (ignored at load)"), so the
+        // precedent in the tree is to report them rather than to treat an array as the only
+        // shape worth reporting. An EXPLICIT bool only, for halfFloatBuffers the same reason as
+        // in the multipass branch, and for bufferFeedback and depthBuffer because both default
+        // to false so nothing but an opt-in can trip them.
+        for (const QLatin1String key :
+             {QLatin1String("bufferFeedback"), QLatin1String("depthBuffer"), QLatin1String("halfFloatBuffers")}) {
+            if (meta.value(key).isBool() && meta.value(key).toBool()) {
+                lints << QStringLiteral("%1 is declared true on a single-pass pack, where it is dropped at load")
+                             .arg(QString(key));
+            }
+        }
+        if (meta.value(QLatin1String("bufferScale")).isDouble()) {
+            lints << QStringLiteral("bufferScale is declared on a single-pass pack, where it is never read");
+        }
     }
     if (!rawBufferShaders.isEmpty() && !eff.isMultipass) {
         lints << QStringLiteral(
@@ -505,8 +525,9 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
             if (vIndex == 0) {
                 lints << QStringLiteral(
                     "builtin:gaussian-v is bufferShaders[0], and it samples iChannel0 — buffer pass 0's output, "
-                    "which at pass 0 is nothing this chain has written: the 1x1 transparent fallback, or this "
-                    "pass's own previous frame where the daemon honours \"bufferFeedback\". The vertical half has "
+                    "which at pass 0 is nothing this chain has written: the 1x1 transparent fallback, or, on a "
+                    "chain declaring a SINGLE buffer pass, that pass's own previous frame where the daemon "
+                    "honours \"bufferFeedback\". The vertical half has "
                     "to follow the horizontal one, so declare builtin:gaussian-h as bufferShaders[0]");
             } else if (anyGaussianH && hIndex != 0) {
                 lints << QStringLiteral(
@@ -636,7 +657,23 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
                 const QString resolvedBuiltin =
                     SurfaceShaderRegistry::resolveBuiltinBufferShader(bufName, QDir(packDir).absolutePath());
                 if (resolvedBuiltin.isEmpty()) {
-                    lints << QStringLiteral("unknown or unlocatable builtin buffer shader: %1").arg(bufName);
+                    // A correctly spelled `builtin:` PREFIX with a mis-cased SUFFIX lands here
+                    // rather than in the spelling arm below, because isBuiltinBufferShader's
+                    // startsWith is case-sensitive: a lower-case prefix makes it answer true and
+                    // the failure moves to this exact-case table lookup. That is the likelier of
+                    // the two author slips and it was getting a message that reads as "your
+                    // install is missing a file". Decided by asking the RESOLVER whether the
+                    // lower-cased token resolves, rather than by copying its token table here —
+                    // the table is private to it, and a copy is one more thing to keep in step.
+                    const QString lowered = bufName.toLower();
+                    if (lowered != bufName
+                        && !SurfaceShaderRegistry::resolveBuiltinBufferShader(lowered, QDir(packDir).absolutePath())
+                                .isEmpty()) {
+                        lints << QStringLiteral("builtin buffer shader tokens are lower case: %1 should be %2")
+                                     .arg(bufName, lowered);
+                    } else {
+                        lints << QStringLiteral("unknown or unlocatable builtin buffer shader: %1").arg(bufName);
+                    }
                     continue;
                 }
                 // RESOLVED FROM OUTSIDE THIS TREE, which is the dev-passes /
@@ -824,27 +861,75 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         lintDaemonOnlyToken(QLatin1String("bufferWraps"), QLatin1String("clamp"));
         lintDaemonOnlyToken(QLatin1String("bufferFilter"), QLatin1String("linear"));
         lintDaemonOnlyToken(QLatin1String("bufferFilters"), QLatin1String("linear"));
-        // The two daemon-only BOOLS, which the four vocabulary arms above cannot cover. Same
-        // divergence class: the compositor's surface fold reads neither key. (Its POINTER
+        // The two daemon-only BOOLS. Only bufferFeedback is linted; the paragraph below says why
+        // halfFloatBuffers is linted on an EXPLICIT true only. Same divergence class as the four
+        // vocabulary arms above: the compositor's surface fold reads neither key. (Its POINTER
         // decoration path does honour bufferFeedback, which is why grepping the effect for the
         // name is misleading — the surface fold is the host that matters here.)
+        //
+        // THE MESSAGE SPLITS ON THE LIVE PASS COUNT, because the daemon only honours the flag
+        // with exactly one buffer pass. Everything that implements feedback in ShaderNodeRhi
+        // sits inside the single-buffer branch — the ping-pong clear, writeIndex, the
+        // bufferRT/bufferSrb/writtenTexture selection, createBufferSrb's prevFrame, and the
+        // m_srbB build, which is literally `if (!multiBufferMode && m_bufferFeedback ...)`. The
+        // multi-buffer loop never mentions the flag. So above one pass it is inert on BOTH hosts
+        // and there is nothing to diverge; the old single message claimed a settings-preview
+        // difference the author could not have found, which is the one failure here that could
+        // make someone change a working pack. This arm's contract used to come from the
+        // neighbouring comment ("honoured by the DAEMON") rather than from the code that
+        // implements it, which is the same mistake the gaussian positional lint was built on.
+        // Counted the way the POINTER validator counts (non-empty entries, capped at the pass
+        // budget), so the count matches what fromJson actually loads. The gaussian, backdrop and
+        // radius scans above deliberately do NOT take this cap: they can only report on a
+        // dropped pass when the pack is already rejected for exceeding the budget, so the extra
+        // diagnostic is redundant rather than wrong.
+        const auto nonEmptyBuffers =
+            std::count_if(declaredBuffers.cbegin(), declaredBuffers.cend(), [](const QJsonValue& v) {
+                return !v.toString().isEmpty();
+            });
+        const auto livePasses =
+            std::min<qsizetype>(nonEmptyBuffers, PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses);
         if (meta.value(QLatin1String("bufferFeedback")).toBool()) {
-            lints << QStringLiteral(
-                "\"bufferFeedback\": true is honoured by the DAEMON and ignored by the compositor's surface "
-                "fold, so a pass reads its own previous frame in the settings preview and the 1x1 "
-                "transparent fallback on a real window");
+            if (livePasses > 1) {
+                lints << QStringLiteral(
+                             "\"bufferFeedback\": true with %1 buffer passes is read by NEITHER host: the "
+                             "daemon's feedback path is the single-buffer one, and the compositor's surface "
+                             "fold ignores the key outright. A pack that wants feedback must declare exactly "
+                             "one buffer pass")
+                             .arg(livePasses);
+            } else {
+                lints << QStringLiteral(
+                    "\"bufferFeedback\": true is honoured by the DAEMON and ignored by the compositor's surface "
+                    "fold, so a pass reads its own previous frame in the settings preview and the 1x1 "
+                    "transparent fallback on a real window");
+            }
         }
-        // NO halfFloatBuffers ARM HERE, deliberately, and the reason is worth recording because
-        // the divergence is real: the loader reads that key with toBool(TRUE), so a multipass
-        // pack which says nothing gets RGBA16F on the daemon and RGBA8 on the compositor, and
-        // all seven bundled chain packs write false explicitly to avoid it. A lint on it was
-        // written and withdrawn: because the DEFAULT is the divergent value, it fired on every
-        // idiomatic minimal pack rather than on an author mistake — it broke fourteen of the
-        // sixteen blur-chain fixtures, none of which is wrong. A lint whose true positive is the
-        // normal case is reporting a bad default, not a bad pack. The fix belongs at the default
-        // or in the compositor honouring the key, both of which change rendering for existing
-        // third-party packs and so are decisions rather than repairs. bufferFeedback above is
-        // linted because it defaults to FALSE, so only an explicit opt-in trips it.
+        // halfFloatBuffers, linted on an EXPLICIT true ONLY — never an absent key, and never a
+        // non-bool, which the kBoolKeys arm above already owns.
+        if (meta.value(QLatin1String("halfFloatBuffers")).isBool()
+            && meta.value(QLatin1String("halfFloatBuffers")).toBool()) {
+            lints << QStringLiteral(
+                "\"halfFloatBuffers\": true is honoured by the DAEMON, which creates RGBA16F buffer targets, "
+                "and ignored by the compositor's surface fold, which creates every buffer target RGBA8. Any "
+                "buffer value outside [0,1] is clipped on a real window");
+        }
+        // WHY THE halfFloatBuffers ARM ABOVE TESTS isBool() FIRST. The loader reads the key with
+        // toBool(TRUE), so a multipass pack which says nothing gets RGBA16F on the daemon and
+        // RGBA8 on the compositor, and all seven bundled chain packs write false explicitly to
+        // avoid it. A lint on the LOADED value was written and withdrawn: because the DEFAULT is
+        // the divergent value it fired on every idiomatic minimal pack rather than on an author
+        // mistake, breaking all fourteen blur-chain slots, none of which is wrong. A lint whose
+        // true positive is the normal case is reporting a bad default, not a bad pack.
+        // Narrowing it to an EXPLICIT true is what makes it a lint about the pack again, and it
+        // is the same argument that keeps bufferFeedback: the value that trips it is an opt-in
+        // the author typed. Its positive set was measured before it was added, twice and
+        // independently — zero of the seven bundled packs (all write false), zero of the fourteen
+        // blur-chain slots (none declares the key), and nothing else in the tree declares it
+        // true either. What it deliberately still does NOT catch is the pack that says nothing
+        // and silently diverges; fixing THAT belongs at the default or in the compositor
+        // honouring the key, both of which change rendering for existing third-party packs and
+        // so are decisions rather than repairs.
+        //
         // The single-value twin of the per-entry not-a-number lint above. toDouble
         // answers its DEFAULT for a string or a bool, so `"bufferScale": "0.5"`
         // silently loads as 1.0 and the range check below sees nothing wrong.

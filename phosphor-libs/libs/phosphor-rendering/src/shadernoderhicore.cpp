@@ -717,7 +717,16 @@ void ShaderNodeRhi::prepare()
             ensurePipeline();
         }
     }
-    if (m_shaderReady && (!m_pipeline || !m_srb || (m_bufferFeedback && !m_srbB))) {
+    // `!multiBufferMode &&` on the feedback term, matching the identical sub-expression four
+    // lines above. m_srbB is built only on the single-buffer path (ensurePipeline's own test is
+    // `!multiBufferMode && m_bufferFeedback`), so without the gate a multipass pack with more
+    // than one pass and bufferFeedback true satisfied this on EVERY prepare() and called
+    // ensurePipeline every frame for the node's life. It was not a rebuild — ensurePipeline
+    // early-outs once m_srb and m_pipeline exist — but it paid a serializedFormat() QVector
+    // allocation plus an ensureDummyChannelResources walk per frame, forever, on a condition
+    // that could never become false. No bundled pack reaches it; the validator now reports the
+    // metadata shape that would.
+    if (m_shaderReady && (!m_pipeline || !m_srb || (!multiBufferMode && m_bufferFeedback && !m_srbB))) {
         ensurePipeline();
     }
 

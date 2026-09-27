@@ -57,7 +57,12 @@ void ShaderNodeRhi::requestDepthCreateRetry()
     // enclosing branch is re-entered from prepare() on every frame while it keeps failing:
     // an unbounded request would repaint at frame rate for as long as the driver refuses.
     // Modelled on m_multiBufferShaderRetries, including the give-up line, so a permanent
-    // failure costs three frames and one message rather than a spin.
+    // failure costs three REQUESTED frames and one message rather than a self-sustained
+    // spin. What the bound does NOT stop is the create attempt: an item driven from
+    // outside (an animated pack, a resize) re-enters the depth block on every frame it
+    // paints anyway and calls newTexture() + create() again, silently, for as long as it
+    // paints. That is not a leak to plug — it is how the node recovers at all, since only
+    // a successful create clears the latch and the count.
     // Spent budget: return before the increment, so the counter STOPS at the bound rather
     // than rising for as long as the driver keeps refusing. That also makes the give-up line
     // below a one-shot PER RETRY BUDGET, by structure rather than by an equality test a later
@@ -73,8 +78,9 @@ void ShaderNodeRhi::requestDepthCreateRetry()
         requestAnotherFrame();
         return;
     }
-    qCWarning(lcShaderNode) << "Depth texture or sampler creation failed after 3 attempts; giving up until the "
-                               "depth setting, the buffer size or the node's resources change";
+    qCWarning(lcShaderNode) << "Depth texture or sampler creation failed after 3 attempts; no longer requesting "
+                               "retry frames until the depth setting, the buffer size or the node's resources "
+                               "change";
 }
 
 void ShaderNodeRhi::clearDepthCreateFailure()
@@ -132,13 +138,16 @@ bool ShaderNodeRhi::ensureBufferTarget()
         //
         // What the split costs, stated exactly, because an earlier version of this sentence
         // rounded it to "one diagnostic per node": the first-failure line above is one per
-        // node, and requestDepthCreateRetry's give-up line is one per exhausted budget, so a
-        // resize that settles at several sizes while failing prints it once per size. The
-        // trade is deliberate — a new size that cannot allocate is worth one line — and the
-        // give-up text already names the buffer size as a thing that re-arms it. One
-        // consequence the earlier version also missed: m_depthCreateWarned is SHARED between
-        // the texture line and the sampler line, so a sampler failure at a new size is
-        // reported only by the generic give-up line, never by name.
+        // LATCH PERIOD (the latch clears on a success, on releaseRhiResources and on a depth
+        // toggle, and the success path below says so outright), and requestDepthCreateRetry's
+        // give-up line is one per exhausted budget, so a resize that settles at several sizes
+        // while failing prints it once per size. The trade is deliberate — a new size that
+        // cannot allocate is worth one line — and the give-up text already names the buffer
+        // size as a thing that re-arms it. One consequence the earlier version also missed:
+        // m_depthCreateWarned is SHARED between the texture line and the sampler line, so a
+        // sampler failure that FOLLOWS a texture failure is reported only by the generic
+        // give-up line, never by name. A sampler failure on a clear latch IS named, at any
+        // size, which is why this says "follows" and not "at a new size".
         if (bufferSize != m_depthCreateFailedSize) {
             m_depthCreateRetries = 0;
             m_depthCreateFailedSize = bufferSize;

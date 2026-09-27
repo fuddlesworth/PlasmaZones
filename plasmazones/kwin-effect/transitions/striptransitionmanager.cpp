@@ -634,7 +634,10 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
         // leaves the entry resident with no frame scheduled, because postPaintScreen's
         // reapSettled only erases once the fade has closed. Not "its two textures" — this arm
         // is reached precisely when at least one of them is already gone, so what it retains
-        // is the entry, its sampler, and whichever texture survived. Arm A above needs none:
+        // is the entry, its sampler, its capture FBO (allocated and reset in lockstep with
+        // captureTex, so it survives whenever that does) and whichever texture survived. The
+        // FBO holds no output-sized memory, so naming it does not change the cost this
+        // paragraph states. Arm A above needs none:
         // its entry is already gone, so there is no fade to pump and nothing held.
         if (!springLive) {
             KWin::effects->addRepaint(screen->geometry());
@@ -957,7 +960,22 @@ void StripTransitionManager::releaseCursorHideForForeignPaint(KWin::LogicalOutpu
     // Unconditional for THIS output, unlike updateCursorHiding: a live pass
     // on it does not keep the hide, because the caller is about to paint the
     // output without this pass, and nothing else would draw the cursor.
-    if (!m_cursorHidden || !cursorOnOutput(screen)) {
+    if (!m_cursorHidden) {
+        return;
+    }
+    if (!cursorOnOutput(screen)) {
+        // The pointer has LEFT this output since the hide was taken, and m_cursorHidden is
+        // one global flag rather than one per output. Returning here used to strand it: the
+        // frame that hid for output A can be followed by a frame where the pointer sits on
+        // B, and if A then takes a failed-paint arm, A neither draws the cursor nor releases
+        // it, while postPaintScreen deliberately skips reapSettled after a failed paint — so
+        // updateCursorHiding, the one thing that would have noticed, never runs and the
+        // compositor's cursor stays hidden on B. Delegating asks the question that actually
+        // decides it (is a live pass still painting the cursor on whichever output the
+        // pointer is on now) and releases when the answer is no. This is NOT the
+        // unconditional cross-output release the early return was protecting against: a
+        // live pass that holds the cursor still keeps the hide.
+        updateCursorHiding();
         return;
     }
     if (KWin::effects) {

@@ -9,11 +9,15 @@
 //
 // THE OPT-IN IS `"multipass": true`, NOT `"bufferShaders"`. The two are separate
 // metadata keys and only the first one gates anything: isMultipass is read from
-// `multipass` alone, and the registry's single-pass coherence block CLEARS
-// bufferShaderPaths, bufferWraps, bufferFilters, bufferFeedback, depthBuffer and
-// bufferScale whenever isMultipass is false. A pack that lists its buffer passes
-// and omits the flag therefore loads with every one of them discarded, renders
-// single-pass, and gets no diagnostic for it. Declare both.
+// `multipass` alone, and the registry's single-pass coherence block CLEARS EVERY
+// buffer-only field whenever isMultipass is false: bufferShaderPaths, bufferWraps,
+// bufferScales, bufferFilters, bufferWrap, bufferFilter, bufferFeedback,
+// useDepthBuffer, bufferScale and halfFloatBuffers. Written as "every buffer-only
+// field" rather than as a list because an earlier version of this sentence named
+// six of the ten and read as complete. A pack that lists its buffer passes and
+// omits the flag therefore loads with every one of them discarded and renders
+// single-pass. The pack validator does report it, both for the passes themselves
+// and for each buffer-only key declared alongside them. Declare both.
 //
 // Each buffer pass renders into an FBO; its output is bound as iChannelN for
 // downstream passes and the main effect, the same iChannel dialect the
