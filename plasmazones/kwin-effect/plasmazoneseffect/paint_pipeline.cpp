@@ -724,8 +724,8 @@ void PlasmaZonesEffect::postPaintScreen()
     // cursor hide when the chain went quiet on an output that stopped
     // painting entirely. An unengaged or quiet chain returns immediately.
     m_pointerPass.scheduleRepaints();
-    // Free strip-pass entries whose view spring has settled (the spring's own
-    // repaint pump drives live legs; this is resource hygiene, not a ticker).
+    // Free strip-pass entries whose view spring has settled. Resource hygiene, not a
+    // ticker: this schedules nothing, and no strip pump is driven from here at all.
     //
     // Skipped on a failed pass for the same reason the park reap below is: the
     // erase frees two output-sized GLTextures, and KWin 6.8 documents that after

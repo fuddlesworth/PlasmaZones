@@ -100,9 +100,9 @@ vec4 pSurface(vec2 uv) {
     // minimum of 0 the fallback still draws a full-saturation two-colour
     // gradient, at 40% alpha, while the backdrop path at 0 shows no gradient at
     // all. That asymmetry is deliberate — the fallback has nothing else to
-    // draw, and a fully transparent pane would communicate nothing — but it is
-    // not what the parameter's description says, so do not read the two paths
-    // as one control.
+    // draw, and a fully transparent pane would communicate nothing — and the
+    // parameter's description now states it, so do not read the two paths as
+    // one control.
     float variation = 0.0;
     if (p_grainAmount > 0.0) {
         // ASPECT-CORRECTED, because voronoi works on an isotropic unit lattice and

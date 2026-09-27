@@ -2592,10 +2592,10 @@ private:
     /// would then report whatever that second walk said, silently swallowing the
     /// first failure whenever the retry happened to succeed.
     ///
-    /// Set where a chained paint's failure abandons the PRESENTED frame, and never by the offscreen
-    /// window captures or the capture walk's blit, which degrade locally instead. Cleared in
-    /// prePaintScreen beside the two latches above. Read by paintScreenImpl, the three IN-PASS
-    /// pill-blit sites and the pointer chain, and THREE TIMES in postPaintScreen: no blit, no reaps.
+    /// Set where a chained paint's failure abandons the PRESENTED frame, plus paintWindowImpl's
+    /// m_capturingSnapshot arm, an offscreen capture that latches anyway through notePaintOk and is
+    /// unreachable under KWin's closed draw chain. Cleared in prePaintScreen beside the two latches
+    /// above. Read five times in paintScreenImpl, at the two other pill sites, THRICE in postPaintScreen.
     bool m_currentPassPaintFailed = false;
 
     /// The three paint hooks' actual bodies, version-independent: true when the

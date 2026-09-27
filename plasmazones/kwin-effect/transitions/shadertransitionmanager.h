@@ -270,8 +270,9 @@ public:
     /// as staggered ghost copies of the in-flight window.
     /// paintWindow is no longer the only reader: postPaintScreen, the strip pass's
     /// liveness gate and its paintOutput, the decoration render and the surface
-    /// fold all read it too, which is the point — everything inside one bracket
-    /// has to answer from one timestamp.
+    /// fold all read it too. NOT every in-bracket reader is on it, though — a few
+    /// sample live on purpose and say so at their own site, so do not read this as
+    /// a tree-wide invariant.
     ///
     /// `-1` means "no cycle in progress; fall back to a live read". That sentinel
     /// is LOAD-BEARING on production paths, not just test ones: the strip pass's

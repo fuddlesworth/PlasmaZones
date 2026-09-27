@@ -205,9 +205,11 @@ bool StripTransitionManager::isRunningForOutput(KWin::LogicalOutput* screen) con
 bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                                          int mask, const KWin::Region& deviceRegion, KWin::LogicalOutput* screen)
 {
-    // As on the desktop pass: the damage region does not participate —
-    // prePaintScreen sets PAINT_SCREEN_TRANSFORMED for a running output and
-    // the spring's repaint callback damages the full output every frame.
+    // As on the desktop pass: the damage region does not participate, because
+    // prePaintScreen sets PAINT_SCREEN_TRANSFORMED for a running output, which makes
+    // KWin paint the whole output whatever the region says. There is NO per-frame
+    // strip repaint pump: StripViewAnimator::scheduleRepaints is never called from
+    // postPaintScreen, unlike the window, desktop and pointer passes.
     Q_UNUSED(deviceRegion)
     if (!screen) {
         return false;
@@ -549,9 +551,8 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
                 // unconditional per-output release, which is what "the caller is
                 // about to paint this output without us" needs.
                 releaseCursorHideForForeignPaint(screen);
-                // A settling leg pumps its own remaining frames — the spring's
-                // repaint pump died with the spring — and that pump lives in the
-                // tail this return skips.
+                // A settling leg pumps its own remaining frames, and that self-pump
+                // lives in the tail this return skips.
                 //
                 // postPaintScreen DOES still run after a failed paint, but it
                 // deliberately skips reapSettled on such a pass, because freeing
@@ -600,8 +601,8 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // this function. Live legs run the finite-difference estimator; a leg
     // whose spring has settled runs the settle fade instead — the frozen
     // last live velocity decaying to zero so velocity-driven packs land
-    // without a pop — and self-pumps its remaining frames (the spring's own
-    // repaint pump died with it).
+    // without a pop — and self-pumps its remaining frames, since the spring that
+    // was driving them is gone.
     // The shader pass stays ONE-DIMENSIONAL on purpose, so it takes the signed
     // scalar along the strip's own axis rather than the resolved point. Which
     // way that axis points reaches the shader as a separate uniform.
