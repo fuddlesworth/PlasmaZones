@@ -584,6 +584,17 @@ void PlasmaZonesEffect::loadCachedSettings()
             // recompiles on the next scroll, which is negligible against a
             // settings toggle.
             m_stripTransition.reset();
+            // And damage, which reset() cannot do for itself: a pass killed mid SETTLE FADE
+            // was still presenting its decorated capture last frame, and nothing else
+            // repaints it. StripViewAnimator::setEnabled(false) above damages only outputs
+            // whose spring is still animating, which during a fade is none of them, so the
+            // smeared strip frame would persist on the un-damaged regions until unrelated
+            // damage arrived. Same pairing the outputRemoved sites and the daemon-death path
+            // already make; full-output because reset() has dropped the per-output state
+            // that would tell us which ones were presenting.
+            if (KWin::effects) {
+                KWin::effects->addRepaintFull();
+            }
         }
         // The animations master toggle is part of the suppression predicate
         // for every group: with animations off none of our packs run, so

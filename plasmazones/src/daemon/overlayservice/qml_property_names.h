@@ -23,12 +23,16 @@
  * failing test) instead of producing a runtime no-op.
  *
  * SCOPE, so the absence of a name here is not read as an oversight: this
- * holds the names the daemon also READS BACK, plus the ones a test asserts
- * on. It is NOT every property the daemon pushes. A name written once and
- * never read has only one spelling to get wrong, so the round trip this
- * protects does not exist for it, and the overlay slot code spells those
- * inline. Moving the write-only names here would be a large mechanical
- * change with its own typo risk and no round trip to protect.
+ * holds the names whose spelling has to match a SECOND SITE. That site is
+ * usually a C++ read-back, but it can equally be a QML `property`
+ * declaration the writer must hit, or a test assertion — see the
+ * DecorationReloadGeneration and BackdropTexture notes below, both of which
+ * are write-only from C++ and are hosted here precisely because their
+ * spelling once fell through to setProperty and became a dead dynamic
+ * property. It is NOT every property the daemon pushes: a name with only one
+ * site has nothing to disagree with, and the overlay slot code spells those
+ * inline. Moving them here would be a large mechanical change with its own
+ * typo risk and no second site to protect.
  */
 namespace PlasmaZones {
 namespace OverlayQmlPropertyNames {

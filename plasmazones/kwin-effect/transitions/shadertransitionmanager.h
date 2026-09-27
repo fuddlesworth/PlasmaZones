@@ -255,7 +255,7 @@ public:
     // PlasmaZonesEffect and operate on m_shaderManager state via friend access.
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Per-frame State (set by prePaintScreen, read by paintWindow)
+    // Per-frame State (set by prePaintScreen, read across the paint bracket)
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// Frame-pinned shader clock. `prePaintScreen` samples
@@ -268,9 +268,16 @@ public:
     /// `progress` from a fresh `shaderClockNowMs()`, painting the
     /// surface-extent quad at a different position each call — visible
     /// as staggered ghost copies of the in-flight window.
-    /// `-1` means "no cycle in progress; fall back to live read"
-    /// (paintWindow happening before prePaintScreen on this effect
-    /// instance, e.g. test paths).
+    /// paintWindow is no longer the only reader: postPaintScreen, the strip pass's
+    /// liveness gate and its paintOutput, the decoration render and the surface
+    /// fold all read it too, which is the point — everything inside one bracket
+    /// has to answer from one timestamp.
+    ///
+    /// `-1` means "no cycle in progress; fall back to a live read". That sentinel
+    /// is LOAD-BEARING on production paths, not just test ones: the strip pass's
+    /// off-paint-thread D-Bus arms and its teardown hooks call the same liveness
+    /// helpers from outside any bracket and rely on the fallback. Do not tidy the
+    /// branch away.
     qint64 currentFrameClockMs() const
     {
         return m_currentFrameClockMs;

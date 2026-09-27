@@ -2592,10 +2592,10 @@ private:
     /// would then report whatever that second walk said, silently swallowing the
     /// first failure whenever the retry happened to succeed.
     ///
-    /// Set wherever a chained paint reports failure, cleared in prePaintScreen beside the
-    /// two latches above. Read by paintScreenImpl, by the three IN-PASS pill-blit sites and the
-    /// pointer chain, and THREE TIMES in postPaintScreen, which still runs after a failed paint:
-    /// it books no blit and skips both glDelete* reaps. The capture walk's blit needs no term.
+    /// Set where a chained paint's failure abandons the PRESENTED frame, and never by the offscreen
+    /// window captures or the capture walk's blit, which degrade locally instead. Cleared in
+    /// prePaintScreen beside the two latches above. Read by paintScreenImpl, the three IN-PASS
+    /// pill-blit sites and the pointer chain, and THREE TIMES in postPaintScreen: no blit, no reaps.
     bool m_currentPassPaintFailed = false;
 
     /// The three paint hooks' actual bodies, version-independent: true when the
@@ -2948,7 +2948,7 @@ private:
     /// the clip for the pill blit wherever it fires (the anchor trigger, the
     /// above-anchor trigger, paintScreen's post-walk fallback). Set by
     /// paintScreen for the presented walk and by the nested capture walks
-    /// (desktop transition) for theirs, through ScrollTabWalkScope; valid
+    /// for theirs, through ScrollTabWalkScope; valid
     /// only inside that scope. A blit clipped to the TRIGGER WINDOW's region
     /// instead cut away every pill outside the anchor column, because KWin
     /// hands each paintWindow the damage intersected with that window's own

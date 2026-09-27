@@ -151,7 +151,7 @@
             "default": 1.0,
             "min": 0.0,
             "max": 2.0,
-            "description": "Saturation of the glass in the OKLab colour space, where 1.0 leaves it unchanged",
+            "description": "Saturation of the glass in the OKLab colour space, rim light and glint included. 1.0 leaves it unchanged.",
             "group": "Colour"
         },
         {

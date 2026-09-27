@@ -81,6 +81,10 @@ vec4 surfaceGaussianBackdropH(vec2 uv) {
 // It is CLAMP on the compositor unconditionally: the buffer targets are
 // created GL_LINEAR / GL_CLAMP_TO_EDGE and the `bufferWraps` and
 // `bufferFilters` keys are daemon-only, which the fields themselves declare.
+// `halfFloatBuffers` is daemon-only in the same way and does NOT declare it:
+// the compositor hardcodes GL_RGBA8 and never reads the key, so a pack asking
+// for true gets RGBA16F on one host and RGBA8 on the other. Every bundled pack
+// declares false, so the two agree today.
 // So a big radius on a small surface smears the edge texel rather than
 // blurring, identically on both hosts at the default wrap. Do NOT "fix" that
 // by clamping uv here; that changes the Gaussian's edge behaviour everywhere.

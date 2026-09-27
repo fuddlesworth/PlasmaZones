@@ -78,10 +78,11 @@ class Violation:
 CPP_SUFFIXES = {".cpp", ".cc", ".cxx", ".h", ".hpp"}
 QML_SUFFIXES = {".qml"}
 SHADER_SUFFIXES = {".frag", ".vert", ".glsl"}
-# .js is here so rule_spdx and rule_license cover the 17 QML .js libraries.
-# rule_js_pragma already polices them; the licence split on that file class
-# was otherwise unenforced.
-CODE_SUFFIXES = CPP_SUFFIXES | QML_SUFFIXES | SHADER_SUFFIXES | {".luau", ".py", ".js"}
+# .js is here so rule_spdx and rule_license cover the 17 QML .js libraries, which
+# rule_js_pragma polices but whose licence split was otherwise unenforced. .sh/.cmake/.spec/
+# .desktop joined once every tracked one carried a head header; .in, .xml, .yml stay exempt.
+CODE_SUFFIXES = (CPP_SUFFIXES | QML_SUFFIXES | SHADER_SUFFIXES
+                 | {".luau", ".py", ".js", ".sh", ".cmake", ".spec", ".desktop"})
 
 # Which rules this invocation is running. rule_license consults it so it only
 # defers a missing header to the spdx rule when that rule will actually run.
@@ -141,7 +142,7 @@ def partition_readable(files: list[str], *, repo: Path | None = None) -> tuple[l
     that carries one. This is a PRECONDITION of the gate rather than a convention, so it
     is not in RULES and --rules cannot switch it off; a subset run that could re-admit
     unreadable paths would bring the false findings back with it. Two rules DO reach past
-    this list by design, and each documents why at its own widening.
+    this list by design: dep5 says why at its widening, the pack glob in its OSError arm.
 
     A function rather than a loop inside main() so it can be pinned: as inline code its
     only caller was main(), which no test invokes, and neutering it left the self-test
@@ -1115,8 +1116,8 @@ def main() -> int:
             if rel.startswith(EXCLUDED_PREFIXES):
                 continue
             if not p.is_file():
-                # Announced, not dropped in silence: a stale path list would otherwise check
-                # NOTHING and exit 0. Not an error, since --staged hands us staged DELETIONS.
+                # Announced, not dropped in silence: a stale or hand-passed list would otherwise
+                # check NOTHING and exit 0. Forward cover: lefthook never passes a deleted path.
                 print(f"check-conventions: skipping {rel} (not a file)", file=sys.stderr)
                 continue
             files.append(rel)

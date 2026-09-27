@@ -83,7 +83,9 @@ void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QStrin
     auto it = m_active.find(output);
     if (!runnable) {
         if (it != m_active.end()) {
-            // Damage BEFORE the erase when the pass was still presenting:
+            // DECIDED before the erase, which destroys the evidence, for the case where the
+            // pass was still presenting (the damage call itself is below the erase, and its
+            // order relative to it does not matter since addRepaint only accumulates):
             // paintOutput replaces the whole output with the decorated
             // capture while a pass holds, and holdsAfterSettle keeps it
             // holding after the spring settles — an erase with no repaint
@@ -227,14 +229,11 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // out for the same reason, and an invalidation here would be a
     // use-after-free in the paint path.
     OutputStripPass* pass = &it->second;
-    // Pinned per-pass clock (one timestamp per output pass; re-sampling per
-    // call is the multi-pass ghosting trap the pin exists for). -1 means a
-    // caller outside any bracket, which cannot happen from paintScreen, but
-    // fall back rather than compare time against a sentinel.
-    qint64 nowMs = m_effect->m_shaderManager.currentFrameClockMs();
-    if (nowMs < 0) {
-        nowMs = ShaderInternal::shaderClockNowMs();
-    }
+    // The pass clock, through the one accessor, because THIS is the liveness decision the
+    // other readers exist to agree with. It used to hand-roll the same pinned-with-fallback
+    // read, which made passClockMs's own "every liveness decision in this class" untrue of
+    // the most consequential one.
+    const qint64 nowMs = passClockMs();
     const bool springLive = m_effect->m_stripViewAnimator->isAnimatingOn(screen);
     if (!springLive && !pass->motion.holdsAfterSettle(nowMs)) {
         // Settled with the fade closed (or killed while idle) — fall

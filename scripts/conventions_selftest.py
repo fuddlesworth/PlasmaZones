@@ -491,7 +491,10 @@ def _dep5_failures() -> list[str]:
             for rel, body in files.items():
                 p = d / rel
                 p.parent.mkdir(parents=True, exist_ok=True)
-                p.write_bytes(body) if isinstance(body, bytes) else p.write_text(body, encoding="utf-8")
+                if isinstance(body, bytes):
+                    p.write_bytes(body)
+                else:
+                    p.write_text(body, encoding="utf-8")
             targets = list(check) if check is not None else list(files)
             return [m for _, _, m in mod.dep5_problems(
                 targets, repo=d, line_of=line_of,
@@ -541,8 +544,9 @@ def _dep5_failures() -> list[str]:
                      # a preposition at the front of the reported holder.
                      "2015-", "2026 -", "2026 by", "Copyright (c) 2026 by",
                      # A comma with NO year before it, which the year group's own trailing
-                     # separator cannot reach. The second is the non-obvious one: the sign
-                     # prefix's `\\s*` eats the space, leaving a bare comma.
+                     # separator cannot reach. Either row alone covers the trailing-comma arm;
+                     # the second keeps that cover if the first is ever removed, and adds the
+                     # prefix-then-bare-comma sequence.
                      ",", "© ,"):
         got = run({"src/a.cpp": hdr(year=spelling)}, dep5=bare)
         if got:
@@ -586,6 +590,11 @@ def _dep5_failures() -> list[str]:
     nameless = run({"src/a.cpp": hdr(year="", who="Copyright")}, dep5=bare)
     if not any("names no holder" in m for m in nameless):
         bad.append(f"a copyright line naming no holder was not reported: {nameless}")
+    # An EMPTY tag value, which is what pins the capture to its own LINE. With `\s*` there the
+    # capture crossed the newline and quoted the SPDX-License-Identifier line as the holder.
+    empty = run({"src/a.cpp": "// SPDX-FileCopyrightText:\n// SPDX-License-Identifier: GPL-3.0-or-later\n"})
+    if not any(m.startswith("copyright line names no holder at all") for m in empty):
+        bad.append(f"an empty SPDX-FileCopyrightText value was not reported as holderless: {empty}")
     # The finding quotes the RAW holder beside the stripped name whenever the strip changed
     # it, so an author can search for the string their file actually holds. Nothing pinned
     # that arm: reverting it to the stripped name alone left the suite green.

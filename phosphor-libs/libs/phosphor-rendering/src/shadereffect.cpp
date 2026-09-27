@@ -8,6 +8,7 @@
 
 #include <PhosphorShaders/IUniformExtension.h>
 
+#include <QFileInfo>
 #include <QImageReader>
 #include <QMutexLocker>
 #include <QPainter>
@@ -450,7 +451,7 @@ void ShaderEffect::releaseIdleGraphicsResources()
 }
 
 // ============================================================================
-// Status Management
+// Render Node Factory / Shader URL Resolution
 // ============================================================================
 
 ShaderNodeRhi* ShaderEffect::createShaderNode()
@@ -462,12 +463,30 @@ ShaderNodeRhi* ShaderEffect::createShaderNode()
 /// URL resolution, and both in-tree subclasses (SurfaceShaderItem, ZoneShaderItem) had
 /// hand-rolled a copy handling only `qrc:` and toLocalFile(). Both dropped the `url.path()`
 /// fallback, so a SCHEME-LESS url — which setShaderSource accepts, and whose toLocalFile()
-/// is empty — resolved to nothing. Their fragment load was then skipped rather than failed,
-/// and the item reported Ready over a node carrying no fragment source. Callers must still
-/// treat an empty return as a failure.
+/// is empty — resolved to nothing, and the vertex arm in each then reported it as a missing
+/// zone.vert / surface.vert rather than as the fragment-path failure it was. Callers must
+/// still treat an empty return as a failure.
+///
+/// STRICTER than the private resolver it wraps, in two ways, because this is the API an
+/// out-of-library subclass gets and the vetting it would need is not installed with it:
+///   - isLocalShaderUrl lives in this library's private internal.h, so a subclass elsewhere
+///     could not pre-vet. Unvetted, an `http://host/x.frag` URL resolves to its path
+///     component, handing QFile an absolute LOCAL path. Both in-tree callers read
+///     Q_PROPERTYs whose setters already vet, so nothing in tree changes.
+///   - a scheme-less RELATIVE url resolves against the process CWD, and SurfaceShaderItem
+///     derives its pack-sibling include dir from the result, which would put a CWD-derived
+///     directory FIRST in a pack's include search list. A qrc path is absolute (it is
+///     ':'-prefixed), so this rejects only genuinely relative answers.
 QString ShaderEffect::localShaderPath(const QUrl& url)
 {
-    return localPathFromShaderUrl(url);
+    if (!isLocalShaderUrl(url)) {
+        return QString();
+    }
+    const QString path = localPathFromShaderUrl(url);
+    if (path.isEmpty() || QFileInfo(path).isRelative()) {
+        return QString();
+    }
+    return path;
 }
 
 void ShaderEffect::setError(const QString& error)
@@ -777,7 +796,9 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
                 } else {
                     QString errorMsg = node->shaderError();
                     if (errorMsg.isEmpty()) {
-                        errorMsg = QStringLiteral("Shader loading failed");
+                        // Same wording as both overrides, which reach a user through their
+                        // hosts' error banners.
+                        errorMsg = QStringLiteral("Shader loading failed because a required file is missing");
                     }
                     qCWarning(lcShaderNode) << "Fragment shader load failed:" << fragPath << "—" << errorMsg;
                     // Drop the node's shader before reporting. On the node-REUSE
@@ -794,8 +815,10 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
                     setError(errorMsg);
                 }
             } else {
-                // The URL passed isLocalShaderUrl() but carries no usable path
-                // (a host-only file:// URL, or a qrc: URL with an empty path).
+                // The URL passed isLocalShaderUrl() but carries no usable path (a host-only
+                // or path-less `file://` URL, or a scheme-less authority-only one like
+                // `//host`). NOT a `qrc:` URL with an empty path: that resolves to ":",
+                // which is non-empty, so it reaches the loader and fails in QFile instead.
                 // m_shaderDirty has already been consumed above, so returning
                 // silently here would pin the item at Status::Loading forever
                 // with an empty errorLog and no retry on any later frame.

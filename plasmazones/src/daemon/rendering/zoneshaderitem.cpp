@@ -382,7 +382,10 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
         if (shaderSourceValid) {
             // The base's resolver, not a local copy. Both overrides had hand-rolled one that
             // dropped its `url.path()` fallback, so a scheme-less URL (which setShaderSource
-            // accepts) resolved to nothing and the empty path went unnoticed below.
+            // accepts) resolved to nothing, and the vertex arm below then reported it as a
+            // missing zone.vert rather than as the fragment-path failure it was. The base's
+            // form is also stricter now (it rejects a non-local scheme and a relative path),
+            // which is why a subclass must not roll its own.
             const QString fragPath = localShaderPath(shaderSource());
 
             // Resolve vertex shader: per-shader zone.vert > zone.vert from the
@@ -416,8 +419,15 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
             // for a fragment-path problem: the zone.vert lookup is keyed on fragPath's own
             // directory, so an empty fragPath makes it fail too and "No vertex shader found
             // for ''" is what the journal would carry.
+            // Set by the two arms that do NOT come from a node call, because those leave the
+            // node's resident shaderError untouched: setVertex/FragmentShaderSource clear the
+            // path and mtime but not the error, and only clearBakedShader clears it, which runs
+            // AFTER the else branch reads it. Without this, a reload whose URL resolves to
+            // nothing reported the PREVIOUS shader's compile error as its reason.
+            QString failureReason;
             if (fragPath.isEmpty()) {
                 qCWarning(PlasmaZones::lcOverlay) << "Shader URL resolved to an empty path:" << shaderSource();
+                failureReason = QStringLiteral("Shader URL resolved to an empty path: ") + shaderSource().toString();
                 loaded = false;
             }
             if (loaded && !vertPath.isEmpty()) {
@@ -429,6 +439,7 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
             } else if (loaded) {
                 qCWarning(PlasmaZones::lcOverlay)
                     << "No vertex shader found for" << fragPath << "(expected zone.vert in shader dir or search paths)";
+                failureReason = QStringLiteral("No vertex shader found for ") + fragPath;
                 loaded = false;
             }
 
@@ -470,11 +481,16 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
                 // would never fire for it.
                 update();
             } else {
-                // Read the node's error BEFORE clearing — clearBakedShader
-                // wipes it along with the resident bake.
-                QString errorMsg = node->shaderError();
+                // An arm that set its OWN reason wins: the node's error belongs to whatever was
+                // baked last, which on those two arms is the PREVIOUS shader. Otherwise read
+                // the node's error BEFORE clearing, since clearBakedShader wipes it along with
+                // the resident bake.
+                QString errorMsg = failureReason;
                 if (errorMsg.isEmpty()) {
-                    errorMsg = QStringLiteral("Shader loading failed: a required file is missing");
+                    errorMsg = node->shaderError();
+                }
+                if (errorMsg.isEmpty()) {
+                    errorMsg = QStringLiteral("Shader loading failed because a required file is missing");
                 }
                 // Drop the partially-set sources and the resident bake
                 // together (same pattern as ShaderEffect::updatePaintNode):

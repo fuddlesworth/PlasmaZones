@@ -112,10 +112,11 @@ vec4 pSurface(vec2 uv) {
         // max() keeps the clamp's hi bound above its lo bound where minHalf * 0.9
         // could fall below 0.1, since GLSL clamp with min > max would collapse
         // edgePx toward 0 (an abs(d)/edgePx that is 0/0 = NaN at the frame centre).
-        // The degenerate-frame guard at the top of pSurface now forces both extents
-        // to at least one device px, so minHalf * 0.9 is at least 0.45 and this
-        // cannot bind on any frame that reaches here. Kept as cover for a
-        // third-party host that calls this helper without that guard.
+        // The degenerate-frame guard at the top of this same pSurface now forces both
+        // extents to at least one device px, so minHalf * 0.9 is at least 0.45 and this
+        // cannot bind on any frame that reaches here. Kept because it costs nothing and
+        // records the precondition that guard supplies, so a third-party pack copying
+        // this line without the guard still cannot invert the clamp.
         float edgePx = clamp(p_edgeWidth * uSurfaceScale, 0.1, max(minHalf * 0.9, 0.1));
         float edgeFactor = 1.0 - clamp(abs(d) / edgePx, 0.0, 1.0);
         float eased = smoothstep(0.0, 1.0, edgeFactor);
@@ -306,8 +307,15 @@ vec4 pSurface(vec2 uv) {
         // contrast, saturation and vibrancy in one call, and glass needs its
         // OKLab saturation BETWEEN the contrast and the vibrancy to keep the
         // reference's order. Folding onto the helper would move that step.
+        // The BAIL threshold is one 8-bit quantum, matching surfaceBackdropGrade's own
+        // premul.a guard, not the 0.0001 floor beside it. Both hosts' blur buffers are
+        // RGBA8, so 1/255 is the smallest non-zero alpha that exists, and at that alpha
+        // the premultiplied rgb is quantised to multiples of 1/255 too — dividing by it
+        // sends every channel to 0 or 1, i.e. a corner of the colour cube rather than
+        // the texel's hue. The max() below only floors the arm this ternary does not
+        // take, so it was never the divisor that was wrong.
         float paneAlpha = max(pane.a, 0.0001);
-        lit = pane.a > 0.0001 ? lit / paneAlpha : vec3(0.0);
+        lit = pane.a > 1.0 / 255.0 ? lit / paneAlpha : vec3(0.0);
 
         // Rim glow + optional edge lighting (reference glassOutline).
         float dim = focusDim(0.55);

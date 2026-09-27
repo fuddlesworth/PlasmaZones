@@ -203,18 +203,25 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
     // must uphold it against each other too, or two modal backdrops stack
     // on one surface with an order-dependent Escape-grab release.
     //
-    // UNLATCHED, unlike the prev-screen hide below, which latches first and says why. The
-    // asymmetry is deliberate but it costs something, so it is written down rather than left
-    // to be rediscovered. hideLayoutPicker emits layoutPickerDismissed, and
+    // UNLATCHED, unlike the prev-screen hide below, which latches first and says why. It
+    // costs two different things, and they are NOT confined alike, so both are written down
+    // rather than left to be rediscovered.
+    //
+    // The GRAB RELEASE is unconditional. hideLayoutPicker emits layoutPickerDismissed BEFORE
+    // it calls hideSlot (deliberately, and it says so there), the connection is direct, and
     // WindowDragAdaptor::releaseCancelOverlayShortcutIfIdle keeps the shared Escape grab only
-    // while isLayoutPickerVisible() || isSnapAssistVisible(); with neither latched yet it
-    // therefore RELEASES the grab, which snapAssistShown then re-binds a few lines later. On
-    // the lib's inline-completion branches the picker's completion also reaches
-    // restoreZoneSelectorAfterHide while m_snapAssistVisible is still false, so a selector on
-    // this same screen is re-shown and hidden again below. Both costs land only on a dead
-    // shell, where hideSlot completes inline; a live shell takes the animator's settle and
-    // sees both latches set. Hoisting the latch would remove the grab churn, and it must not
-    // be done on reasoning alone: it changes when the shared Escape grab is held.
+    // while isLayoutPickerVisible() || isSnapAssistVisible(). Neither is latched at this
+    // point, so the grab is dropped on EVERY cross-modal dismiss, live shell included, and
+    // snapAssistShown re-binds it at the tail of this function.
+    //
+    // The SELECTOR RE-SHOW is the dead-shell one, because it flows through the completion:
+    // only on the lib's inline-completion branches does the picker's completion reach
+    // restoreZoneSelectorAfterHide while m_snapAssistVisible is still false, and only when
+    // the picker sat on THIS screen does the re-shown selector get hidden again below. A
+    // live shell takes the animator's settle and sees the latch set.
+    //
+    // Hoisting the latch would remove the grab churn, and it must not be done on reasoning
+    // alone: it changes when the shared Escape grab is held.
     if (m_layoutPickerVisible) {
         hideLayoutPicker();
     }

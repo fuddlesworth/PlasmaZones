@@ -206,7 +206,7 @@ generate_rpm() {
         fi
         local headfile
         headfile=$(mktemp)
-        sed '/%changelog/q' "$specfile" > "$headfile"
+        sed '/^%changelog/q' "$specfile" > "$headfile"
         cat "$headfile" "$tmpfile" > "$specfile"
         rm -f "$headfile"
         echo "Updated %changelog in $specfile" >&2

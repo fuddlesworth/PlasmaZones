@@ -148,7 +148,12 @@ def dep5_problems(files, *, repo, line_of, tracked_files):
                 )
             )
         blob = " ".join(s["copyright"])
-        for holder in re.findall(r"SPDX-FileCopyrightText:\s*(.+)", head):
+        # `[ \t]*`, not `\s*`, because `\s` crosses a NEWLINE: a tag with an empty value
+        # captured the FOLLOWING line, so a header naming no holder reported its own
+        # SPDX-License-Identifier line as the holder — the exact misquote the raw-holder arm
+        # below exists to prevent. `(.*)` keeps the empty value matching, so it still reaches
+        # the names-no-holder arm rather than vanishing from the scan.
+        for holder in re.findall(r"SPDX-FileCopyrightText:[ \t]*(.*)", head):
             # Drop the comment syntax the header sits inside, drop the address
             # the stanza spells out and the header does not, and drop the leading
             # year span. Then compare on the name alone, which is the only part
@@ -188,13 +193,23 @@ def dep5_problems(files, *, repo, line_of, tracked_files):
             # holder. That separator sits INSIDE the year group on purpose: a name that
             # legitimately opens with a hyphen and carries no year keeps it. `by` sits inside
             # that same group, so it strips only when a YEAR precedes it, which is the one shape
-            # it exists for ("Copyright (c) 2026 by Acme Inc"). Outside the group it also ate the
+            # it exists for ("Copyright (c) 2026 by Acme Inc"). THE MOVE COSTS the year-less
+            # forms: "by Acme Inc", "Copyright by Acme Inc" and "(c) by Acme Inc" keep their
+            # "by" now and would be reported with it. That is accepted, because with no year
+            # "by X" and a company actually named "By X" are textually identical and no
+            # lookahead can separate them, so the alternative is the over-strip direction.
+            # The PREFIX words keep that same whole-word hazard and cannot be moved the same
+            # way ("Copyright" alone is a pinned must-not-fire spelling), which is why
+            # "Copyright Clearance Center" still over-strips and the message quotes the raw
+            # holder below. Outside the group `by` also ate the
             # first word of any name beginning with those letters, and its lookahead does not
             # prevent that: it guards "Bystander" and "byte Foundation", where `by` is a word
             # PREFIX, but not "By The Way Inc", where it is a whole word. Each of the last few
             # rounds closed one sibling of this shape, which is why every spelling is pinned in
-            # the self-test rather than argued about here. Knowingly out of scope: malformed
-            # punctuation after the prefix word, as in "Copyright: 2026 Name".
+            # the self-test rather than argued about here. Knowingly out of scope is punctuation
+            # directly after the prefix WORD, since the lookahead class admits neither: the
+            # malformed "Copyright: 2026 Name", and also the ordinary "Copyright, 2026 Name",
+            # which is a plain spelling rather than a malformed one and is simply not handled.
             #
             # ONLY UNDER-stripping can raise a FALSE POSITIVE, and that is what bounds the risk
             # of every change to this pattern. It is anchored at ^, so whatever survives is a
@@ -212,14 +227,17 @@ def dep5_problems(files, *, repo, line_of, tracked_files):
                 "", name, flags=re.IGNORECASE)
             name = name.strip()
             raw = holder.strip()
-            if not name and raw:
+            if not name:
                 # The holder was nothing but a prefix word, a year, or punctuation, so the
                 # pattern consumed the whole line (the lookahead's `|$` branch is what lets it
                 # eat a bare "Copyright"). An empty survivor cannot be looked up in the stanza,
                 # so this used to fall through in silence, and nothing ELSE in the gate reads
                 # the holder: rule_spdx only checks that the tag is present. A copyright line
-                # naming nobody is a DEP-5 defect of its own, so it is reported here.
-                out.append((f, 0, f"copyright line names no holder, only {raw!r}"))
+                # naming nobody is a DEP-5 defect of its own, so it is reported here. The raw
+                # value can now be EMPTY too, since the capture stops at the line end rather
+                # than running into the next one, so the message has to read either way.
+                out.append((f, 0, "copyright line names no holder"
+                                  + (f", only {raw!r}" if raw else " at all")))
                 continue
             if name and name not in blob:
                 # Quote the RAW holder too when the strip changed it. The strip is anchored

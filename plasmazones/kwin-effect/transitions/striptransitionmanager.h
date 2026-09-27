@@ -157,8 +157,8 @@ public:
     /// hideCursorForPass). Feeds PlasmaZonesEffect::isActive() SEPARATELY
     /// from isRunning(): on the settle path the hide is released only from
     /// the effect's paint hooks (paintOutput's settle frame, postPaintScreen's
-    /// reap; the off-paint kill paths outputRemoved and reset release it
-    /// themselves), and isRunning() goes false the instant the settle fade's
+    /// reap; the off-paint kill paths (notifyLeg's disarm, outputRemoved and
+    /// reset) release it themselves), and isRunning() goes false the instant the settle fade's
     /// window closes.
     /// When that happens between the last fade frame and the next frame's
     /// chain build, an isActive() built on isRunning() alone drops the
