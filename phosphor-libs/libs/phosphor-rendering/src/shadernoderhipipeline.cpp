@@ -60,9 +60,12 @@ void ShaderNodeRhi::requestDepthCreateRetry()
     // failure costs three frames and one message rather than a spin.
     // Spent budget: return before the increment, so the counter STOPS at the bound rather
     // than rising for as long as the driver keeps refusing. That also makes the give-up line
-    // below a one-shot by structure instead of by an equality test a later edit could widen.
-    // m_depthCreateWarned cannot serve as that latch, because the calling arm sets it on the
-    // first failure, so a `!m_depthCreateWarned` gate here would never print at all.
+    // below a one-shot PER RETRY BUDGET, by structure rather than by an equality test a later
+    // edit could widen — not a one-shot per node, because the size gate in ensureBufferTarget
+    // zeroes this count without touching any latch, so a new buffer size earns a fresh budget
+    // and, when it exhausts it, a fresh give-up line. m_depthCreateWarned cannot serve as that
+    // latch either way, because the calling arm sets it on the first failure, so a
+    // `!m_depthCreateWarned` gate here would never print at all.
     if (m_depthCreateRetries >= 3) {
         return;
     }
@@ -121,14 +124,21 @@ bool ShaderNodeRhi::ensureBufferTarget()
         // THE COUNT ONLY, deliberately not clearDepthCreateFailure(). An earlier version
         // called that, which also clears the warning latch — and bufferSize follows
         // m_width/m_height, so during an animated resize it moves nearly every frame. Every
-        // frame then cleared the latch, printed the failure again and reset the count before
-        // it could reach three: the vsync-rate flood the bound exists to stop, reintroduced
-        // by the fix for something else, with the bound never engaging while the size kept
-        // moving. The latch stays owned by the three paths that clear it through
-        // clearDepthCreateFailure (the success path, releaseRhiResources, setUseDepthBuffer).
-        // The cost of that split is one diagnostic per node rather than one per size, which
-        // is the right trade: the message says depth creation is failing, not which size it
-        // failed at.
+        // frame then cleared the latch, printed the FIRST-FAILURE line again and reset the
+        // count before it could reach three: a vsync-rate flood, with the bound never engaging
+        // while the size kept moving. The latch stays owned by the three paths that clear it
+        // through clearDepthCreateFailure (the success path, releaseRhiResources,
+        // setUseDepthBuffer).
+        //
+        // What the split costs, stated exactly, because an earlier version of this sentence
+        // rounded it to "one diagnostic per node": the first-failure line above is one per
+        // node, and requestDepthCreateRetry's give-up line is one per exhausted budget, so a
+        // resize that settles at several sizes while failing prints it once per size. The
+        // trade is deliberate — a new size that cannot allocate is worth one line — and the
+        // give-up text already names the buffer size as a thing that re-arms it. One
+        // consequence the earlier version also missed: m_depthCreateWarned is SHARED between
+        // the texture line and the sampler line, so a sampler failure at a new size is
+        // reported only by the generic give-up line, never by name.
         if (bufferSize != m_depthCreateFailedSize) {
             m_depthCreateRetries = 0;
             m_depthCreateFailedSize = bufferSize;

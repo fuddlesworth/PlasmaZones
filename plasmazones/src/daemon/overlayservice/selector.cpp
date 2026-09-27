@@ -308,6 +308,15 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
     // returning first would leave it (and the C++ STRIP mirror — the zone
     // triple is deliberately kept for the drag-end snap path) alive.
     for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
+        // No key snapshot here, unlike the sibling loop above, and the difference is real
+        // rather than an oversight: this body holds no reference to it.key() and hands the key
+        // to nothing that looks it up again, so the only hazard would be a QML binding
+        // inserting into m_screenStates during a writeQmlProperty. An audit enumerated QML's
+        // entire reach into this class — one context property, one read-only Q_PROPERTY, two
+        // hide slots, no Q_INVOKABLEs — and found no insertion route. Audited-safe, not
+        // structurally safe; the sibling snapshots because it keeps a key across a completion
+        // lambda, which is a different exposure.
+        //
         // screensMatch, not raw !=, matching the mirror clear below and the
         // drop guard's convention. ASSUMPTION: one screen never coexists
         // under two key spellings in m_screenStates while the cursor id
@@ -466,15 +475,18 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
             const QRectF& cardRect = cardIt->rect;
 
             if (cardRect.contains(localX, localY)) {
-                // .at(), not operator[]: the mutable overload detaches, which is a real
-                // cost at the `zones` read below. It is NOT one here, and the claim that it
-                // was has been measured and is false. `layouts` came from
-                // `slot->property(...).toList()`, and whatever the QML engine materialises,
-                // the temporary QVariant that toList() copied from died at the semicolon —
-                // so the list's refcount is 1 by the time this runs and a subscript detaches
-                // nothing. That argument needs no knowledge of the engine, which is why it is
-                // the one recorded here. This spelling is consistency with the site that does
-                // pay, not a saving.
+                // .at(), not operator[]: the mutable overload detaches, which is a real cost at
+                // the `zones` read below. It is NOT one here, and this comment has now been
+                // wrong twice about why. The detach claim itself was false, and its first
+                // replacement argued from the temporary QVariant dying at the semicolon and
+                // called that engine-independent — which it is not: killing the temporary only
+                // leaves refcount 1 if nothing PERSISTENT shares the data, and a C++
+                // QVariantList property or a QObject dynamic property would.
+                //
+                // What makes it true here is the property's KIND. `layouts` is declared in QML
+                // as `property var` (PassiveOverlayShell.qml), a VME property held as a JS
+                // value, so each read materialises a fresh unshared QVariantList. This spelling
+                // is therefore consistency with the site that does pay, not a saving.
                 QVariantMap layoutMap = layouts.at(i).toMap();
                 QString layoutId = layoutMap.value(QLatin1String("id")).toString();
 

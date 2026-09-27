@@ -762,12 +762,13 @@ private Q_SLOTS:
 
         // The FILLER pass, twice, not two Kawase tokens. Every sub-fixture here is about the
         // bufferScales ARRAY, and a Kawase token drags in the blur family's own lints: with
-        // these built from kawase-down-0 + kawase-up-2 each of the six drew three or four
-        // errors, and the two NEGATIVE controls below (`!contains("out of range")` and
+        // these built from kawase-down-0 + kawase-up-2 the six drew between three and six
+        // errors apiece, and the two NEGATIVE controls below (`!contains("out of range")` and
         // `!contains("pass budget")`) were asserting an absence against a pack the validator
-        // rejected four ways, surviving only because none of those messages happened to carry
-        // their substring. The filler reads no channel and declares no parameter, so it draws
-        // nothing of its own.
+        // rejected four and three ways respectively, surviving only because none of those
+        // messages happened to carry their substring. The filler reads no channel and declares
+        // no parameter, so it draws nothing of its own and both controls now assert absence
+        // against a pack the validator ACCEPTS.
         const auto twoPassPack = [](const QString& id) {
             QJsonObject obj = surfacePack(id, QJsonArray{});
             obj.insert(QStringLiteral("multipass"), true);

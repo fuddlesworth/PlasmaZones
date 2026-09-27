@@ -15,7 +15,6 @@
 #include "core/types/zoneselectorlayout.h"
 #include "config/configdefaults.h"
 #include <QScreen>
-#include <QQuickWindow>
 #include <QQuickItem>
 #include <QQmlEngine>
 
@@ -372,9 +371,12 @@ void OverlayService::refreshContextLockState()
         // constFind, not value(): value() copies the whole PerScreenOverlayState struct just
         // to call a one-line accessor. Stated as the preference rather than as settled
         // practice, because it is not: seven sites in this directory still spell it value()
-        // (overlay.cpp x4, screens.cpp x2, lifecycle.cpp), all of them on per-show paths
-        // where the copy costs nothing worth a refactor. An earlier version of this line
-        // claimed the siblings follow it.
+        // (overlay.cpp x4, screens.cpp x2, lifecycle.cpp), on show, hide and screen-change
+        // paths — and one of them, updateOverlayWindow, also runs off the coalesced
+        // layoutModified refresh at up to ~60 Hz while a zone is dragged in the editor. The
+        // copy is three pointers, two QRects, a quint64 and one atomic refcount bump, so none
+        // of them is worth a refactor; an earlier version of this line claimed the siblings
+        // follow the convention, and its replacement called them all per-show.
         const auto pickerIt = m_screenStates.constFind(m_layoutPickerScreenId);
         if (auto* slot = pickerIt != m_screenStates.constEnd() ? pickerIt->layoutPickerSlot() : nullptr) {
             // Per-output virtual desktops (#648): each screen resolves its own desktop.

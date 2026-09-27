@@ -1016,13 +1016,21 @@ private:
     /// which is the same defect m_multiBufferShaderRetries' own comment describes for the
     /// shader load. Retrying UNBOUNDED would spin at frame rate against a driver that keeps
     /// failing, so the count is what makes asking for a frame safe.
-    /// Cleared on the success path and in releaseRhiResources / setUseDepthBuffer.
+    /// Cleared at FOUR sites, and the fourth is what separates this member's lifetime from
+    /// the latch below: the success path, releaseRhiResources and setUseDepthBuffer all go
+    /// through clearDepthCreateFailure, while ensureBufferTarget's size gate zeroes THIS
+    /// COUNT ALONE when the buffer size changes. So a new size gets a fresh budget without
+    /// a fresh warning.
     int m_depthCreateRetries = 0;
 
     /// One-shot latch for the two depth create-failure warnings. ensureBufferTarget is
     /// re-entered from prepare() on every frame while it returns false, so an ANIMATED
     /// depth pack flooded both lines at vsync — the flood the buffer-target and
-    /// buffer-sampler latches above already exist to stop. Cleared with the retry count.
+    /// buffer-sampler latches above already exist to stop. Cleared with the retry count at
+    /// the three clearDepthCreateFailure sites, but NOT by the size gate, which is the whole
+    /// point of the split. Shared between the texture line and the sampler line, so a
+    /// sampler failure that follows a texture failure is reported only by the generic
+    /// give-up line.
     bool m_depthCreateWarned = false;
 
     /// Ask for the frame that retries a failed depth create, while the bound allows it.

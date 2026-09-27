@@ -333,13 +333,16 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // into uStrip is smeared by the pack and never redrawn sharp, since this
     // pass replaces the output's paint. Hidden here, blitted by
     // TransitionPass::drawSceneCursor at the tail. Placed AFTER the compile and
-    // allocation checks above so those two aborts cannot strand the hide. Three
+    // allocation checks above so those two aborts cannot strand the hide. FOUR
     // return-false paths remain below, and each releases the hide itself: the
-    // post-walk re-seat miss through updateCursorHiding, because its entry is
-    // already gone, and the failed capture walk and the failed sharp composite
-    // through releaseCursorHideForForeignPaint, because their entry is still live
-    // and updateCursorHiding would therefore not release it. A pass that abandons
-    // THIS frame paints the normal scene with the cursor still shown.
+    // post-walk re-seat MISS through updateCursorHiding, because its entry is
+    // already gone; and the failed capture walk, the post-walk re-seat with the
+    // entry present but a texture missing, and the failed sharp composite through
+    // releaseCursorHideForForeignPaint, because their entry is still live and
+    // updateCursorHiding would therefore not release it. (Three, before the
+    // re-seat was split into those two arms — the count and the list both missed
+    // the split, while the header's own list was corrected for it.) A pass that
+    // abandons THIS frame paints the normal scene with the cursor still shown.
     hideCursorForPass(screen);
 
     // Render the live scene into the capture. This is the downstream chain
@@ -628,10 +631,11 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
         // And the settle-fade self-pump, for the same reason the failed-capture-walk arm
         // carries it: the tail's `!springLive` addRepaint is this leg's only scheduler once
         // the spring has settled, and this return skips the tail. Without it a mid-fade abort
-        // leaves the entry plus its two output-sized textures resident with no frame
-        // scheduled, because postPaintScreen's reapSettled only erases once the fade has
-        // closed. Arm A above needs none: its entry is already gone, so there is no fade to
-        // pump and nothing holding the textures.
+        // leaves the entry resident with no frame scheduled, because postPaintScreen's
+        // reapSettled only erases once the fade has closed. Not "its two textures" — this arm
+        // is reached precisely when at least one of them is already gone, so what it retains
+        // is the entry, its sampler, and whichever texture survived. Arm A above needs none:
+        // its entry is already gone, so there is no fade to pump and nothing held.
         if (!springLive) {
             KWin::effects->addRepaint(screen->geometry());
         }

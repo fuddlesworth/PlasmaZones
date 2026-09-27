@@ -151,10 +151,14 @@ void OverlayService::updateLabelsTextureForWindow(QQuickItem* slot, const QVaria
     // wins (a layout that hides numbers keeps them hidden).
     //
     // screenId is always the caller's live key now, so the override resolves even on the
-    // not-tracked path above. It could not before: the id came out of a reverse scan for
-    // the slot pointer and was left EMPTY on a miss, which resolved to no override and
-    // silently fell back to the global setting. That is a behaviour change, in the
-    // direction of agreeing with updateOverlayWindow.
+    // not-tracked path above, where the old reverse scan left the id EMPTY on a miss and so
+    // resolved to no override at all. No user-visible verdict changed, though, and an earlier
+    // version of this note calling it a behaviour change was wrong twice over: the not-tracked
+    // arm is unreachable from either caller (one iterates m_screenStates, the other
+    // early-returns because a missing key yields a default state with a null slot), and on the
+    // reachable paths the scan always found the caller's OWN key, since one shell per key means
+    // no two entries can answer the same item pointer. What the parameter removed is a reverse
+    // scan whose miss branch could only have misfired for a caller that does not exist.
     const PhosphorZones::ContextOverlayOverride overlayOverride = overlayOverrideForScreen(m_layoutManager, screenId);
     const bool showNumbers = overlayOverride.showZoneNumbers.value_or(m_settings ? m_settings->showZoneNumbers() : true)
         && (!screenLayout || screenLayout->showZoneNumbers());
@@ -388,7 +392,16 @@ void OverlayService::updateZonesForAllWindows()
     m_zoneDataDirty = false;
 
     for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
-        const QString& screenId = it.key();
+        // A COPY of the key, not a reference into the hash node. The body writes QML
+        // properties, whose bindings evaluate synchronously, and it hands this id to a
+        // function that does its own find() on the same map — so a reference here aliases the
+        // container it is used to look up. No route inserts into m_screenStates from a binding
+        // (QML's whole reach into this class is one context property with one read-only
+        // property and two hide slots, and the one QML call through it sits in a signal
+        // handler), which makes the reference safe BY ENUMERATION rather than by construction.
+        // A copy costs one atomic refcount bump and needs no enumeration, and the sibling loop
+        // in selector.cpp already snapshots keys for exactly this reason.
+        const QString screenId = it.key();
         auto* slot = it.value().mainOverlaySlot();
 
         if (!slot) {

@@ -56,8 +56,10 @@ private Q_SLOTS:
     /// leading blurRadius — so the count is the order lint alone. It used to declare
     /// none of the three and drew FOUR errors behind an `errors > 0`, three of them
     /// nothing to do with ordering. The assertion is the full clause too, because
-    /// "positional" alone is also a substring of the gaussian arm's message and of the
-    /// buffer-array lint's "aligned positionally".
+    /// "positional" alone is also a substring of the buffer-array length lint's "aligned
+    /// positionally". (It used to be a substring of the gaussian arm's message as well; the
+    /// commit that wrote this sentence rewrote both gaussian messages and neither carries the
+    /// word now, so the full clause is right for one reason rather than two.)
     void aReorderedKawaseChainIsLinted()
     {
         QTemporaryDir tmp;
@@ -306,10 +308,12 @@ private Q_SLOTS:
         QVERIFY2(r.report.contains(QStringLiteral("and that is 'roundBottomCorners' here")), qPrintable(r.report));
         QVERIFY2(!r.report.contains(QStringLiteral("needsBackdrop")), qPrintable(r.report));
         // The positional lint fires here too, which is the whole point of it: a lone vertical
-        // half is bufferShaders[0], so every channel it could read is the 1x1 transparent
-        // fallback both hosts bind for a channel at or past the current pass index — it writes
-        // a blank pane. (It does NOT read the FBO it is writing; the fallback is there
-        // precisely to stop that, and an earlier version of this comment said otherwise.)
+        // half is bufferShaders[0], so what it reads is nothing this chain has written — the
+        // 1x1 transparent fallback the hosts bind for a channel at or past the current pass
+        // index, or on the daemon with `bufferFeedback` set the pass's own previous frame — and
+        // it writes a blank pane either way. (It does NOT read the FBO it is writing within the
+        // frame; the fallback is there precisely to stop that, and an earlier version of this
+        // comment said otherwise.)
         QVERIFY2(r.report.contains(QStringLiteral("builtin:gaussian-v is bufferShaders[0]")), qPrintable(r.report));
         QCOMPARE(r.errors, 2);
     }
@@ -357,6 +361,42 @@ private Q_SLOTS:
                                               surfaceBodyReading({QStringLiteral("blurRadius")}));
         QVERIFY2(!ok.report.contains(QStringLiteral("samples iChannel0")), qPrintable(ok.report));
         QCOMPARE(ok.errors, 0);
+    }
+
+    /// BOTH BACKDROP PASSES IN ONE CHAIN, which is the only thing that exercises the backdrop
+    /// message's join. Nothing else in the tree declares a Kawase token AND builtin:gaussian-h
+    /// — no other fixture and no bundled pack — so before this slot the two-name branch could
+    /// be deleted, or left reading "X and Y pass samples", with the whole suite green. An
+    /// untested defensive branch is what this file exists to stop.
+    void aChainDeclaringBothBackdropPassesNamesBothAndAgrees()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(
+            QStringLiteral("sf-both-backdrop"),
+            QJsonArray{surfaceParam(QStringLiteral("blurRadius"), QStringLiteral("float"), 32.0, 0.0, 256.0)});
+        obj.insert(QStringLiteral("multipass"), true);
+        // The gaussian pair in its correct order, then the full pyramid: both kawase-down-0 and
+        // gaussian-h sample the backdrop, and needsBackdrop is deliberately omitted.
+        obj.insert(QStringLiteral("bufferShaders"),
+                   QJsonArray{QStringLiteral("builtin:gaussian-h"), QStringLiteral("builtin:gaussian-v"),
+                              QStringLiteral("builtin:kawase-down-0"), QStringLiteral("builtin:kawase-down-1"),
+                              QStringLiteral("builtin:kawase-down-2"), QStringLiteral("builtin:kawase-down-3"),
+                              QStringLiteral("builtin:kawase-up-0"), QStringLiteral("builtin:kawase-up-1")});
+
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-both-backdrop"), obj,
+                                             surfaceBodyReading({QStringLiteral("blurRadius")}));
+        // Both names, in declaration order, with a PLURAL verb. The message is built from two
+        // predicates rather than a ternary precisely so it can say both.
+        QVERIFY2(r.report.contains(QStringLiteral("builtin:kawase-down-0 and builtin:gaussian-h passes sample")),
+                 qPrintable(r.report));
+        // The Kawase pyramid is incomplete here (up-2 absent), so the order lint fires too —
+        // asserted rather than left as unnamed collateral, since this fixture cannot be made
+        // Kawase-clean while also being gaussian-bearing at index 0.
+        QVERIFY2(r.report.contains(QStringLiteral("are positional and must appear as bufferShaders[0..6]")),
+                 qPrintable(r.report));
+        QCOMPARE(r.errors, 3);
     }
 
     /// THE SHAPE THE FIRST VERSION OF THAT LINT WRONGLY REJECTED, pinned so it cannot be

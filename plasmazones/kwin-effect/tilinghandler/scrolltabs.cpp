@@ -276,7 +276,7 @@ void TilingHandler::invalidateScrollTabTheme()
 
 void TilingHandler::slotScrollTabStripsChanged(const QString& screenId, const QString& stripsJson)
 {
-    if (screenId.isEmpty()) {
+    if (screenId.isEmpty() || !KWin::effects) { // two delivery paths: see wiring.cpp's fetch reply
         return;
     }
     if (stripsJson.isEmpty() || stripsJson == kEmptyPayload) {
@@ -520,7 +520,7 @@ void TilingHandler::queryScrollTabColors(const QString& windowId)
 
 void TilingHandler::slotScrollTabPaintOverridesChanged(const QString& screenId, const QVariantMap& overrides)
 {
-    if (screenId.isEmpty()) {
+    if (screenId.isEmpty() || !KWin::effects) {
         return;
     }
     if (overrides.isEmpty()) {

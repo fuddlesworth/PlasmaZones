@@ -354,10 +354,13 @@ private:
     /// for, so a find-none elsewhere cannot be holding one.
     ///
     /// `snapshotBelowCapture` is the one whose bail is WIDER than a find-none — it also
-    /// returns when the entry exists with a null texture, where a hide may well be held.
-    /// Releasing there would still be wrong, because it runs mid-walk with the capture
-    /// framebuffer pushed, and the post-walk re-seat arm catches that same condition and
-    /// releases after the walk has closed.
+    /// returns on an already-taken snapshot, and on an entry that exists with a null
+    /// texture, where a hide may well be held. Releasing there would still be wrong, and
+    /// for the reason this class's own contract gives above rather than anything about the
+    /// pushed framebuffer: KWin draws its overlay item at the END of the scene walk, so a
+    /// cursor shown mid-walk lands INSIDE the capture and the pack smears it — which is the
+    /// hazard the hide exists for. The post-walk re-seat arm catches the same
+    /// texture-missing condition and releases there, after the walk has closed.
     ///
     /// Grep the name before editing this paragraph again — every wrong version of
     /// it was written from a list someone believed rather than one they ran.

@@ -36,7 +36,16 @@
 
 namespace PlasmaZones {
 
-QString PlasmaZonesEffect::outputScreenId(const KWin::LogicalOutput* output) const
+// @p excluded is left out of the duplicate scan below, and exists for ONE caller:
+// onScreenRemoved's eager rebuild, which runs while KWin still lists the dying output. Without
+// it, unplugging one of two identical monitors resolved the SURVIVOR in its disambiguated
+// baseId/connector form — the twin was still there to collide with — and cached that, and
+// seeded connectedPhysicalIds with it. The daemon, resolving after the unplug with one monitor
+// present, produces the unsuffixed base id, so the two sides disagree about the screen's name:
+// the #724 failure family. The concrete break is scrollTrackedScreenFor, which gates on
+// connectedPhysicalIds().contains(...) and fails OPEN for the paint clip and the input filter
+// when the id misses.
+QString PlasmaZonesEffect::outputScreenId(const KWin::LogicalOutput* output, const KWin::LogicalOutput* excluded) const
 {
     if (!output) {
         return QString();
@@ -78,7 +87,7 @@ QString PlasmaZonesEffect::outputScreenId(const KWin::LogicalOutput* output) con
     // connector-name form and no genuine duplicate pair was ever detected.
     bool hasDuplicate = false;
     for (const auto* other : KWin::effects->screens()) {
-        if (!other || other->name() == connectorName) {
+        if (!other || other == excluded || other->name() == connectorName) {
             continue;
         }
         const QString otherConnector = other->name();
@@ -98,6 +107,10 @@ QString PlasmaZonesEffect::outputScreenId(const KWin::LogicalOutput* output) con
     }
 
     QString result = hasDuplicate ? baseId + QLatin1Char('/') + connectorName : baseId;
+    // An EXCLUDED resolve is cached too, deliberately. The exclusion says that output is going
+    // away, which is permanent, so its answer is the one every later caller should get — and
+    // caching it is what stops an unexcluded caller later in the same teardown cascade
+    // recomputing the suffixed form from a screens() list that still holds the dying twin.
     m_idCaches.screenIdCache.insert(connectorName, result);
     return result;
 }
@@ -676,12 +689,19 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // first caller anywhere in the rest of the cascade would re-insert the
     // connector that is going away. The next add/remove/reconfigure
     // invalidates this again.
+    //
+    // The dying output is excluded from each RESOLVE as well as from the loop, and skipping
+    // only the loop was a real hole: outputScreenId's duplicate scan reads the same still-
+    // populated screens(), so with two identical monitors the survivor came out in its
+    // disambiguated baseId/connector form — and both this set and the id cache kept that
+    // spelling after the twin was gone, while the daemon had moved to the unsuffixed one.
+    // Passing the exclusion makes the resolve answer what the post-unplug world will answer.
     m_idCaches.connectedPhysicalIds.clear();
     for (const auto* other : KWin::effects->screens()) {
         if (other == output) {
             continue;
         }
-        const QString physId = outputScreenId(other);
+        const QString physId = outputScreenId(other, output);
         if (!physId.isEmpty()) {
             m_idCaches.connectedPhysicalIds.insert(physId);
         }

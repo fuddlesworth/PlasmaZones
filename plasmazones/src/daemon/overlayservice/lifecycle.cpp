@@ -22,7 +22,6 @@
 
 #include <QCursor>
 #include <QGuiApplication>
-#include <QQuickWindow>
 #include <QScreen>
 
 #include <PhosphorScreens/Manager.h>

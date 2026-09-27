@@ -470,16 +470,24 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         // the same three computations as the accepted [h, v, X], and [own_h.frag, v], which
         // composes correctly against the pack's own horizontal half.
         //
-        //   (a) gaussian-v at index 0: every channel it could read is the transparent
-        //       fallback, so it writes a blank pane. (NOT a read of the FBO it is writing,
-        //       which is what the fallback exists to prevent.)
+        //   (a) gaussian-v at index 0: nothing earlier in the chain has been written, so what
+        //       it reads is the 1x1 transparent fallback and it writes a blank pane. (NOT a
+        //       read of the FBO it is writing, which is what the fallback exists to prevent.)
+        //       One exception, which does not change the verdict: on the daemon a pack with
+        //       exactly ONE buffer pass and "bufferFeedback" true takes the single-buffer
+        //       ping-pong path, where channel 0 is that pass's own previous frame. The
+        //       compositor never reads the flag, so such a pack diverges between hosts and is
+        //       still wrong — just wrong for a second reason.
         //   (b) gaussian-v declared alongside builtin:gaussian-h that is NOT at index 0: the
         //       author plainly meant the pair, and pass 0 is something else, so the vertical
         //       half cannot be reading the horizontal half's result.
         //
-        // A pack that ships its own horizontal half is deliberately NOT linted: the validator
-        // cannot identify an arbitrary frag as a horizontal Gaussian, so [own_h.frag, v] is
-        // left alone. Same token-only reach as the Kawase arm above.
+        // A pack that ships its own horizontal half is deliberately NOT linted, SO LONG AS it
+        // does not also name the builtin token: the validator cannot identify an arbitrary frag
+        // as a horizontal Gaussian, so [own_h.frag, v] is left alone. Declare both and clause
+        // (b) fires at the builtin's index, which is the right answer for the shape it cannot
+        // distinguish this from ([own_downsample.frag, h, v]) and harmless for this one, where
+        // the builtin h is a wasted pass either way. Same token-only reach as the Kawase arm.
         if (anyGaussianV) {
             // By hand: QJsonArray has no indexOf, and a QJsonValue comparison would match a
             // non-string entry that happens to compare equal.
@@ -497,8 +505,9 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
             if (vIndex == 0) {
                 lints << QStringLiteral(
                     "builtin:gaussian-v is bufferShaders[0], and it samples iChannel0 — buffer pass 0's output, "
-                    "which at pass 0 is the 1x1 transparent fallback both hosts bind. The vertical half has to "
-                    "follow the horizontal one, so declare builtin:gaussian-h as bufferShaders[0]");
+                    "which at pass 0 is nothing this chain has written: the 1x1 transparent fallback, or this "
+                    "pass's own previous frame where the daemon honours \"bufferFeedback\". The vertical half has "
+                    "to follow the horizontal one, so declare builtin:gaussian-h as bufferShaders[0]");
             } else if (anyGaussianH && hIndex != 0) {
                 lints << QStringLiteral(
                              "builtin:gaussian-v samples iChannel0, which is buffer pass 0's output, but "
@@ -536,10 +545,12 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
                 backdropPasses << QStringLiteral("builtin:gaussian-h");
             }
             lints << QStringLiteral(
-                         "this chain's %1 pass samples the backdrop through backdropTexel(), but "
+                         "this chain's %1 %2 the backdrop through backdropTexel(), but "
                          "\"needsBackdrop\" is not true, so nothing is captured and every pass "
                          "composites a transparent pane")
-                         .arg(backdropPasses.join(QLatin1String(" and ")));
+                         .arg(backdropPasses.join(QLatin1String(" and ")),
+                              backdropPasses.size() > 1 ? QStringLiteral("passes sample")
+                                                        : QStringLiteral("pass samples"));
         }
         // THE RADIUS SLOT. Every pass in both builtin blur families reads the radius as
         // customParams[0].x — the Kawase passes, gaussian_h AND gaussian_v — and slots are
@@ -662,7 +673,20 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
             if (!confined) {
                 lints << QStringLiteral("multipass buffer shader path escapes the pack directory: %1").arg(bufName);
             } else if (!QFile::exists(*confined)) {
-                lints << QStringLiteral("multipass buffer shader missing: %1").arg(bufName);
+                // A MIS-CASED or space-prefixed `builtin:` prefix lands here, because the
+                // registry's own prefix test is case-sensitive and exact. Saying "missing" is
+                // true but sends the author looking for a file they never wrote, so name the
+                // spelling instead. The test below is for the DIAGNOSTIC only; the resolver's
+                // test stays exact, since that is what the runtime will do.
+                if (bufName.trimmed().startsWith(QLatin1String("builtin:"), Qt::CaseInsensitive)) {
+                    lints << QStringLiteral(
+                                 "multipass buffer shader '%1' looks like a builtin token with the wrong spelling: "
+                                 "the prefix is matched exactly and in lower case, so write it as 'builtin:' with no "
+                                 "leading space. As declared it is treated as a file path, and there is no such file")
+                                 .arg(bufName);
+                } else {
+                    lints << QStringLiteral("multipass buffer shader missing: %1").arg(bufName);
+                }
             }
         }
         // The runtime caps buffer passes and drops the surplus with only a
@@ -800,6 +824,27 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         lintDaemonOnlyToken(QLatin1String("bufferWraps"), QLatin1String("clamp"));
         lintDaemonOnlyToken(QLatin1String("bufferFilter"), QLatin1String("linear"));
         lintDaemonOnlyToken(QLatin1String("bufferFilters"), QLatin1String("linear"));
+        // The two daemon-only BOOLS, which the four vocabulary arms above cannot cover. Same
+        // divergence class: the compositor's surface fold reads neither key. (Its POINTER
+        // decoration path does honour bufferFeedback, which is why grepping the effect for the
+        // name is misleading — the surface fold is the host that matters here.)
+        if (meta.value(QLatin1String("bufferFeedback")).toBool()) {
+            lints << QStringLiteral(
+                "\"bufferFeedback\": true is honoured by the DAEMON and ignored by the compositor's surface "
+                "fold, so a pass reads its own previous frame in the settings preview and the 1x1 "
+                "transparent fallback on a real window");
+        }
+        // NO halfFloatBuffers ARM HERE, deliberately, and the reason is worth recording because
+        // the divergence is real: the loader reads that key with toBool(TRUE), so a multipass
+        // pack which says nothing gets RGBA16F on the daemon and RGBA8 on the compositor, and
+        // all seven bundled chain packs write false explicitly to avoid it. A lint on it was
+        // written and withdrawn: because the DEFAULT is the divergent value, it fired on every
+        // idiomatic minimal pack rather than on an author mistake — it broke fourteen of the
+        // sixteen blur-chain fixtures, none of which is wrong. A lint whose true positive is the
+        // normal case is reporting a bad default, not a bad pack. The fix belongs at the default
+        // or in the compositor honouring the key, both of which change rendering for existing
+        // third-party packs and so are decisions rather than repairs. bufferFeedback above is
+        // linted because it defaults to FALSE, so only an explicit opt-in trips it.
         // The single-value twin of the per-entry not-a-number lint above. toDouble
         // answers its DEFAULT for a string or a bool, so `"bufferScale": "0.5"`
         // silently loads as 1.0 and the range check below sees nothing wrong.

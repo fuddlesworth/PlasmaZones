@@ -544,7 +544,9 @@ def _dep5_failures() -> list[str]:
     # "2026 <your name>") and reports two by 40. So this literal is the only thing holding the
     # value, in both directions. No file COUNT here on purpose — the first version of this
     # paragraph named one and the commit that wrote it added the file that falsified it, which
-    # is the trap check-conventions.py's own header warns about twice over.
+    # is the trap the note beside check-conventions.py's CODE_SUFFIXES records, with two stale
+    # counts of its own. (The sweep bounds 2, 21, 22 and 40 above are just as falsifiable by a
+    # single commit; they are kept because they are the measurement, not a tally.)
     # The sibling constant SPDX_HEAD_LINES had this closed a round earlier and this one was
     # missed in the same edit.
     if mod.DEP5_HEAD_LINES != 8:
@@ -827,9 +829,9 @@ def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
     #
     # SIX gate globals, plus a table AND a function in two sibling modules. Each was added
     # after a mutation proved the suite green — or worse, red for the wrong reason — without
-    # it, and three of them were added by the very arm they belong to: the wiring arm stubs
-    # `read_error` and wraps `conventions_dep5._dead_stanza_problems`, main() writes
-    # `_SELECTED_RULES`, and the baseline-writer arm stubs `tracked_files`. The last three
+    # it. THREE are written by the arm they belong to (the wiring arm stubs `read_error` and
+    # wraps `conventions_dep5._dead_stanza_problems`, the baseline-writer arm stubs
+    # `tracked_files`) and `_SELECTED_RULES` by the main() the wiring arm drives. All four
     # matter beyond tidiness because a later arm inherits them: rule_license's no-identifier
     # deferral reads _SELECTED_RULES and a license arm runs AFTER the wiring arm, a leaked
     # tracked_files would hand every later rule a temp file list, and a leaked
@@ -837,7 +839,7 @@ def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
     # check under test rather than the leak. conventions_shared_text.SHARED_PARAM_TEXT is
     # redirected by two arms in this file and is the same shape. All of them are compared here
     # rather than left to the arm that set them, because the arm that leaks is not the arm
-    # that fails.
+    # that fails — which is also why none of these messages names a culprit.
     entry_globals = partition_readable.__globals__
     entry_repo, entry_suffixes = entry_globals["REPO"], frozenset(entry_globals["CODE_SUFFIXES"])
     entry_baseline = entry_globals["BASELINE"]
@@ -915,9 +917,9 @@ def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
         failures.append("an arm left conventions_shared_text.SHARED_PARAM_TEXT redirected, so "
                         "rule_shared_param_text would check that arm's table instead of the real one")
     if conventions_dep5._dead_stanza_problems is not entry_dead_stanza:
-        failures.append("the wiring arm left conventions_dep5._dead_stanza_problems wrapped, so the "
-                        "dead-stanza arm runs against its stubbed path lister and fails for a reason "
-                        "that has nothing to do with the dead-stanza check")
+        failures.append("an arm left conventions_dep5._dead_stanza_problems wrapped, so the dead-stanza "
+                        "arm runs against a stubbed path lister and fails for a reason that has nothing "
+                        "to do with the dead-stanza check")
 
     for line in failures:
         print(f"selftest: {line}", file=sys.stderr)

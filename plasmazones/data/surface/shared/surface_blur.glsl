@@ -10,7 +10,10 @@
 // because the builtin:gaussian-h and builtin:gaussian-v passes call it and a
 // third-party pack may still declare those. It is 9 taps spread over a 4-tap
 // reach, so the outermost tap sits at the full radius and the effective sigma is
-// roughly 0.45 of the radius, not the radius/3 this file used to claim. Its
+// 0.42 of the radius, not the radius/3 this file used to claim. That figure is
+// the discrete second moment of the weights below: variance = 2*sum(i^2*w_i) =
+// 2.854 in quarter-radii, so sigma = 1.689 quarter-radii = 0.422 R. (It read
+// 0.45 for several rounds, which overstated it by about 7 per cent.) Its
 // offsets step in canvas UV: the logical-px radius is scaled to device px by
 // uSurfaceScale, normalized by the canvas extent (uSurfaceSize), and spread over
 // the kernel's 4-tap reach.
@@ -45,8 +48,9 @@
 #include <surface_backdrop.glsl>
 #include <surface_multipass.glsl>
 
-// 9-tap Gaussian weights, summing to ~1. See the header for why the effective
-// sigma is about 0.45 of the radius rather than a third of it.
+// 9-tap Gaussian weights, summing to ~1 (0.9999994, so the kernel is a convex
+// combination and cannot break the premultiplied rgb<=a invariant). See the header
+// for why the effective sigma is 0.42 of the radius rather than a third of it.
 const float kSurfaceGaussW0 = 0.227027;
 const float kSurfaceGaussW1 = 0.1945946;
 const float kSurfaceGaussW2 = 0.1216216;
@@ -76,13 +80,16 @@ vec4 surfaceGaussianBackdropH(vec2 uv) {
 
 // Buffer pass 1: VERTICAL half over buffer 0's result (iChannel0, same
 // bufferScale resolution). Together the two passes approximate a full 2D
-// Gaussian; the main pass samples the result as iChannel1.
+// Gaussian; the main pass samples the result as iChannel1 in the canonical
+// two-entry declaration, or as iChannel<this half's index> in any other.
 //
 // iChannel0 is hardcoded, so this half needs the HORIZONTAL one at pass 0. It does
 // not need to be pass 1 itself: iChannelN is pass N's output for every later pass,
 // so [gaussian-h, something, gaussian-v] composes exactly as [gaussian-h,
-// gaussian-v] does. At pass 0 it would read the 1x1 transparent fallback both hosts
-// bind for channels at or past the current pass index, and write a blank pane.
+// gaussian-v] does. At pass 0 it would read nothing this chain has written — the 1x1
+// transparent fallback the hosts bind for a channel at or past the current pass index,
+// or, on the daemon with a single buffer pass and `bufferFeedback` set, that pass's own
+// previous frame — and write a blank pane either way.
 //
 // The offline validator enforces that for the `builtin:` tokens, because a pack
 // declaring them the wrong way round still resolves both and still compiles both

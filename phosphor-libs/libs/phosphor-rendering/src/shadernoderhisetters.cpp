@@ -620,11 +620,18 @@ void ShaderNodeRhi::setBufferShaderPaths(const QStringList& paths)
     //
     // ONE-FRAME CONSEQUENCE on a NON-empty A→B switch, recorded so it is not rediscovered as
     // a regression: syncBaseUniforms runs before ensureBufferTarget in prepare(), so on the
-    // first frame after the switch the new textures do not exist yet, numChannels is 0, and
-    // the armed scene-header upload publishes (1,1) into every iChannelResolution slot where
-    // the hand-rolled teardown left the departed pack's size standing for that frame. Neither
-    // value is the right one, and the same publish already happened on any switch that also
-    // changed a param or a colour, since syncBasePropertiesToNode pushes those first. The
+    // first frame after the switch the new textures do not exist yet and the armed
+    // scene-header upload publishes (1,1) into every iChannelResolution slot, where the
+    // hand-rolled teardown left the departed pack's size standing for that frame.
+    //
+    // Both of syncBaseUniforms' routes land on that (1,1), which is worth spelling out because
+    // an earlier version of this note named only one and named the wrong one for the common
+    // case: with a MULTIPASS B, m_bufferPaths already holds B's list, so numChannels is B's
+    // pass count and the fallback comes from the per-pass null-texture else; numChannels is 0
+    // only when B is single-pass, since this setter clears m_bufferShaderReady.
+    //
+    // Neither value is the right one, and the same publish already happened on any switch that
+    // also changed a param or a colour, since syncBasePropertiesToNode pushes those first. The
     // underlying ordering — channel sizes published before the pass that resolves them — is
     // older than this call and is where a fix would belong.
     resetBufferTargets();

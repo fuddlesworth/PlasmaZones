@@ -28,11 +28,13 @@ namespace PlasmaZones::ShaderValidate {
 /// this line understated how far from pure: the first called it pure outright, the second
 /// listed only half the I/O. The full list is that it stats texture, preview, fragment,
 /// vertex, BUFFER-SHADER and undeclared-sibling-surface.vert paths; canonicalises the pack
-/// directory, the resolved builtin path AND every shared root; resolves builtin buffer tokens
-/// through the registry, which probes QStandardPaths; and probes QStandardPaths directly of
-/// its own accord through packSharedRoots. Its answer therefore depends on what is installed
-/// on the machine, which is exactly what one of its own lints reports. Do not memoise or
-/// reorder it on the strength of a purity claim.
+/// directory, the resolved builtin path, every shared root, and — through confinedPackPath —
+/// the deepest EXISTING ancestor of every declared relative path, with an isSymLink() probe per
+/// component of that chain; resolves builtin buffer tokens through the registry, which probes
+/// QStandardPaths; and probes QStandardPaths directly of its own accord through
+/// packSharedRoots. Its answer therefore depends on what is installed on the machine, which is
+/// exactly what one of its own lints reports. Do not memoise or reorder it on the strength of
+/// a purity claim.
 ///
 /// @p eff must already have had its paths confined to the pack directory. The caller does
 /// that before calling, and refuses the pack outright on an escape, so a path reaching a

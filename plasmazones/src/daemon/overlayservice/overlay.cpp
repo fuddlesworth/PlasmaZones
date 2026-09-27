@@ -695,6 +695,19 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
         // and the slot would keep the last pack's shader payload for the whole
         // non-shader session.
         clearShaderSlotProperties(slot);
+        // And the LABELS payload, which clearShaderSlotProperties deliberately leaves alone
+        // because the shader branch above owns it. Nothing else releases it on this route:
+        // recreateOverlayWindowsOnTypeMismatch reaches createOverlayWindow directly, with no
+        // destroy or dismiss in between, and destroyOverlayWindow's release only covers the
+        // initializeOverlay route through destroyIfTypeMismatch. Without this the last
+        // shader-mode glyph-tile payload stayed pinned on the slot for the whole rectangle
+        // session, in a mode that can never sample it — and a drag-end does not collect it,
+        // because that goes to setIdleForDragPause, which keeps the property on purpose.
+        releaseOverlaySlotTextures(slot);
+        // Required by releaseOverlaySlotTextures' own contract: the hash compare in
+        // updateLabelsTextureForWindow would otherwise short-circuit a later rebuild and leave
+        // the 1x1 placeholder showing with no labels.
+        state->labelsTextureHash = 0;
     }
     writeQmlProperty(slot, QStringLiteral("useShader"), usingShader);
     writeQmlProperty(slot, QStringLiteral("loaded"), false);
@@ -920,13 +933,15 @@ void OverlayService::destroyOverlayWindow(const QString& screenId)
     it->overlayPhysScreen = nullptr;
     it->overlayGeometry = QRect();
     it->overlayGeomConnection = {};
-    // Release the slot's labels payload too. A shader->non-shader
-    // type flip routes through here (destroyIfTypeMismatch) and the
-    // non-shader createOverlayWindow reload does NOT overwrite labelsTexture,
-    // so without this the slot would pin the last shader-mode labels payload for
-    // the screen's whole non-shader session. The screen-teardown callers
-    // immediately destroyPassiveShell, where this is a harmless no-op on an
-    // about-to-be-freed slot. Mirrors dismissOverlayWindow's release.
+    // Release the slot's labels payload too. ONE of the two shader->non-shader flip routes
+    // comes through here, the initializeOverlay one via destroyIfTypeMismatch, and the
+    // non-shader createOverlayWindow reload does NOT overwrite labelsTexture, so without this
+    // the slot would pin the last shader-mode labels payload for the screen's whole non-shader
+    // session. The OTHER route, recreateOverlayWindowsOnTypeMismatch off a live settings edit,
+    // never reaches this function at all and carries the same release at its own site in
+    // createOverlayWindow's non-shader branch. The screen-teardown callers immediately
+    // destroyPassiveShell, where this is a harmless no-op on an about-to-be-freed slot.
+    // Mirrors dismissOverlayWindow's release.
     releaseOverlaySlotTextures(it->mainOverlaySlot());
     it->labelsTextureHash = 0;
 }

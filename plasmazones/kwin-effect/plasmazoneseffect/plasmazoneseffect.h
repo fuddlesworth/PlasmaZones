@@ -882,9 +882,9 @@ private:
      * regardless of which EDID field KWin's Output::serialNumber() returns.
      *
      * Format: "manufacturer:model:serial" — falls back to connector name
-     * when EDID fields are empty.
+     * when EDID fields are empty. @p excluded is left out of the duplicate scan.
      */
-    QString outputScreenId(const KWin::LogicalOutput* output) const;
+    QString outputScreenId(const KWin::LogicalOutput* output, const KWin::LogicalOutput* excluded = nullptr) const;
     /// Report a screen's current virtual desktop to the daemon (Plasma 6.7
     /// per-output virtual desktops). Deduplicates against m_lastScreenDesktop and
     /// only fires when the daemon service is registered.

@@ -14,7 +14,6 @@
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include "core/interfaces/shaderregistry.h"
 #include "core/utils/utils.h"
-#include <QQuickWindow>
 #include <QScreen>
 #include <QTimer>
 
@@ -95,10 +94,12 @@ void OverlayService::setSettings(ISettings* settings)
             // that one of the five knows something the others do not — and it also closes a
             // narrow real window, which is why the guard is not merely cosmetic. hide() clears
             // m_visible and THEN calls dismissOverlayWindow, whose shell-surface path nulls
-            // overlayPhysScreen only in the animator's hide completion. A setting change
-            // landing inside that fade would otherwise have recreated a slot mid-dismiss,
-            // re-arming overlayPhysScreen and overlayGeometry underneath a completion still
-            // pending.
+            // overlayPhysScreen only in the animator's hide completion — so during the fade
+            // that field is still LIVE, which is exactly what lets an unguarded recreate
+            // through recreateOverlayWindowsOnTypeMismatch's `if (!physScreen) continue` gate.
+            // It would rebuild the slot, toggle `loaded` and re-apply the shader, and the
+            // pending completion would then null both fields and hide the fresh slot
+            // underneath it.
             connect(m_settings, &ISettings::overlayDisplayModeChanged, this, [this]() {
                 if (m_visible) {
                     recreateOverlayWindowsOnTypeMismatch();

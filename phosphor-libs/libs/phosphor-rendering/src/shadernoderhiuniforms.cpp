@@ -474,6 +474,17 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 // Re-arm so the next frame publishes the new width.
                 m_uniformsDirty = true;
                 m_sceneDataDirty = true;
+                // AND ask for that frame, which this arm used to leave to the audio producer.
+                // A dirty flag raised inside prepare() on the render thread schedules nothing
+                // by itself — the two sibling re-arm sites say so in as many words and both
+                // call this (createTextureAndRT's success path, and the source-provider
+                // identity change below). A grow published the OLD narrower width for the
+                // frame in hand, because iAudioSpectrumSize is min(bound width, pending bars);
+                // it under-reports rather than over-reads, so the cost was one flattened
+                // frame rather than a bad fetch, and in practice the next spectrum push
+                // covered it. Relying on the producer for correctness of our own republish is
+                // the inconsistency, not the frame count.
+                requestAnotherFrame();
                 resetAllBindingsAndPipelines();
                 if (!ensurePipeline()) {
                     return;

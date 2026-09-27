@@ -3,8 +3,9 @@
 //
 // Fixture helpers shared by every executable in the shadervalidate/ foreach in
 // plasmazones/tests/unit/CMakeLists.txt, which is where the list lives. Named there rather
-// than enumerated here: two earlier versions of this comment carried a list and a count, and
-// both were stale — one of them made stale by the commit that wrote it.
+// than enumerated here: two earlier versions of this comment carried a list, each was correct
+// when written, and both went stale later — the second within a fortnight, when a sixth
+// executable joined the foreach and nobody came back here.
 // Header-only and `inline` so each executable carries one definition and no
 // test-only library has to exist for a handful of small binaries.
 
@@ -200,8 +201,8 @@ inline QJsonArray toArray(const QStringList& values)
 }
 
 // ── surface fixture writers ─────────────────────────────────────────────
-// Shared by every surface test executable — three of them now, and the count is left out on
-// purpose. They were file-local to the first one until the second needed the same writers: a
+// Shared by every surface test executable, deliberately without naming how many.
+// They were file-local to the first one until the second needed the same writers: a
 // per-lint negative slot is only cheap when the fixture is, and two copies of a fixture
 // writer is how two test files start disagreeing about what a valid pack looks like.
 

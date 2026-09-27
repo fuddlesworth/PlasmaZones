@@ -215,6 +215,41 @@ private Q_SLOTS:
         QVERIFY2(r.report.contains(QStringLiteral("trilinear")), qPrintable(r.report));
     }
 
+    /// `bufferFeedback` is DAEMON-ONLY on the surface path: the daemon ping-pongs a single
+    /// buffer pass between two targets so it can read its own previous frame, and the
+    /// compositor's surface fold never reads the key, so the same pass reads a transparent
+    /// fallback there. (The compositor does honour it on the POINTER path, which is why
+    /// grepping the effect for the name is misleading.) It defaults to FALSE, so only an
+    /// explicit opt-in trips this — unlike halfFloatBuffers, whose divergent value IS the
+    /// default and which therefore gets no lint at all; the lints file records why.
+    ///
+    /// The quiet control is in the same slot rather than a shared clean pack, because what
+    /// needs pinning is that the ABSENCE of the key is silent.
+    void aDaemonOnlyBufferFeedbackIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(QStringLiteral("sf-feedback"), QJsonArray{});
+        obj.insert(QStringLiteral("multipass"), true);
+        obj.insert(QStringLiteral("bufferShaders"), QJsonArray{surfaceFillerBufferName()});
+        obj.insert(QStringLiteral("halfFloatBuffers"), false);
+        obj.insert(QStringLiteral("bufferFeedback"), true);
+        const PackResult r =
+            validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-feedback"), obj, surfaceBodyReading({}));
+        QVERIFY2(r.report.contains(QStringLiteral("honoured by the DAEMON and ignored by the compositor's "
+                                                  "surface fold")),
+                 qPrintable(r.report));
+        QCOMPARE(r.errors, 1);
+
+        // Absent, which is the default and the non-divergent state: silent.
+        obj.remove(QStringLiteral("bufferFeedback"));
+        const PackResult quiet =
+            validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-feedback"), obj, surfaceBodyReading({}));
+        QVERIFY2(!quiet.report.contains(QStringLiteral("bufferFeedback")), qPrintable(quiet.report));
+        QCOMPARE(quiet.errors, 0);
+    }
+
     /// The SINGLE bufferScale, out of range at both ends. The per-pass list has
     /// its own slot in the sibling file; this is the pack-wide scalar, which is
     /// what every pass falls back to.

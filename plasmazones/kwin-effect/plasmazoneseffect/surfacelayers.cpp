@@ -736,11 +736,11 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                     pass.shader->setUniform(pass.uHasBackdropLoc, backdropAvailable ? 1.0f : 0.0f);
                 }
                 for (size_t j = 0; j < i && j < static_cast<size_t>(ShaderInternal::kSurfaceChannelCount); ++j) {
-                    glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceFoldChannelBaseUnit + static_cast<int>(j));
-                    bufs[j]->bind();
                     if (pass.iChannelLoc[j] >= 0) {
-                        pass.shader->setUniform(pass.iChannelLoc[j],
-                                                ShaderInternal::kSurfaceFoldChannelBaseUnit + static_cast<int>(j));
+                        const int unit = ShaderInternal::kSurfaceFoldChannelBaseUnit + static_cast<int>(j);
+                        glActiveTexture(GL_TEXTURE0 + unit);
+                        bufs[j]->bind();
+                        pass.shader->setUniform(pass.iChannelLoc[j], unit);
                     }
                     if (j < static_cast<size_t>(ShaderInternal::kSurfaceChannelResolutionSlots)
                         && pass.iChannelResolutionLoc[j] >= 0) {
@@ -749,13 +749,13 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                         pass.shader->setUniform(pass.iChannelResolutionLoc[j], res);
                     }
                 }
-                // Bind a transparent fallback to every channel this pass DECLARES but has
-                // no prior buffer output for — which for the FIRST buffer pass is all of
-                // them, since there is nothing before it. An unset sampler2D reads texture
-                // unit 0, and unit 0 holds the RUNNING COMPOSITE: a pack whose first buffer
-                // pass samples iChannel0 was reading the window back into itself. The main
-                // pass, the audio slot and the user-texture slots all bind a fallback for
-                // exactly this reason; the buffer passes were left out of it.
+                // Both loops key on `iChannelLoc[j] >= 0`, what the pass SAMPLES: the one above
+                // bound unconditionally until it cost the 7-pass chain 21 binds for ~12 sampled
+                // channels a frame. Here, bind a transparent fallback to every channel this pass
+                // DECLARES but has no prior output for — all of them for the FIRST pass. An unset
+                // sampler2D reads texture unit 0, which holds the RUNNING COMPOSITE: such a pack
+                // was reading the window back into itself, which is why the main pass, the audio
+                // slot and the user-texture slots all bind one too.
                 for (size_t j = i; j < static_cast<size_t>(ShaderInternal::kSurfaceChannelCount); ++j) {
                     if (pass.iChannelLoc[j] < 0) {
                         continue; // the pass never samples this channel
