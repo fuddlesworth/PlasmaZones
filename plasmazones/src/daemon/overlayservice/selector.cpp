@@ -676,11 +676,15 @@ void OverlayService::hideZoneSelectorSlotOnScreen(const QString& effectiveId)
     });
 }
 
-// targetGeom BY VALUE, deliberately. Its only caller passes it straight out of the
-// m_screenStates node this function then mutates, so as a reference the geometry term of the
-// short-circuit below compared the member against ITSELF (always equal, so the documented
-// fall-through for a changed geometry was unreachable from that caller), and the parameter
-// aliased storage that updateZoneSelectorWindow overwrites further down. A QRect is 16 bytes.
+// targetGeom BY VALUE, deliberately, and this changes no behaviour. Its only caller passes it
+// straight out of the m_screenStates node this function then mutates, so as a reference the
+// parameter aliased storage updateZoneSelectorWindow overwrites further down. That was never
+// observable (the self-assignment is harmless, every read precedes the overwrite, and no
+// rehash is possible on a key the caller already found), so this is hardening, not a fix.
+// A copy also makes the comparison below stable rather than a compare against live storage —
+// though from the sole caller BOTH terms still compare equal by construction, so the
+// documented fall-through stays reachable only for a future caller supplying values from
+// elsewhere. A QRect is 16 bytes.
 void OverlayService::showZoneSelectorSlotOnScreen(const QString& effectiveId, QScreen* physScreen, QRect targetGeom)
 {
     if (!physScreen) {
@@ -692,6 +696,11 @@ void OverlayService::showZoneSelectorSlotOnScreen(const QString& effectiveId, QS
     // (mid-flight monitor hot-plug, geometry update), fall through
     // to refresh - silently dropping the new args would leave the
     // slot painted with stale geometry.
+    //
+    // WRITTEN FOR A HIDDEN SLOT. The refresh below re-toggles `loaded`, which destroys and
+    // rebuilds ZoneSelectorContent, and re-runs beginShow; on a slot the user is watching
+    // mid-drag that recycles its content rather than nudging it. A future caller that wants
+    // to move a VISIBLE selector needs a narrower path, not this one.
     {
         auto existing = m_screenStates.find(effectiveId);
         if (existing != m_screenStates.end() && existing->zoneSelectorSlot()

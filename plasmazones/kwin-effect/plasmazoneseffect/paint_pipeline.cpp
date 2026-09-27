@@ -658,14 +658,14 @@ bool PlasmaZonesEffect::paintScreenImpl(const KWin::RenderTarget& renderTarget, 
         && m_scrollTabPainter->hasIndicators(screen) && !m_currentPassPaintFailed) {
         paintScrollTabIndicators(renderTarget, viewport, deviceRegion);
     }
-    // The pointer decoration chain composites over the FINISHED frame, so it
-    // is the last thing this override does on the normal path. Reached only
-    // here: a desktop transition or a strip leg replaces the output's paint
-    // and returns above, and the pass gives its cursor hide back at those
-    // sites. The capture guard is defensive only: captures route through
-    // drawWindow and never nest a screen pass today, so the latch is always
-    // false here.
-    if (!m_capturingSnapshot) {
+    // The pointer decoration chain composites over the FINISHED frame, so it is the last
+    // thing this override does on the normal path. Reached only here: a desktop transition or
+    // a strip leg replaces the output's paint and returns above, releasing the hide there.
+    // It is also the SECOND raw-GL consumer the failure comment above names, so it carries
+    // the same latch term as the three pill-blit sites and hands its hide back when it skips.
+    if (!m_capturingSnapshot && m_currentPassPaintFailed) {
+        m_pointerPass.releaseCursorHide(screen); // else nobody draws the sprite
+    } else if (!m_capturingSnapshot) {
         m_pointerPass.paintOutput(renderTarget, viewport, screen, currentPassRenderDevice());
     }
     return true;

@@ -1405,7 +1405,7 @@ private:
     /// retains its captured (physScreen, geometry) state. Centralizes
     /// the symmetric restore pattern used by every slot-hide completion
     /// (onOsdSlotHideCompleted, onSnapAssistSlotHideCompleted,
-    /// onLayoutPickerSlotHideCompleted).
+    /// onLayoutPickerSlotHideCompleted, onCheatsheetSlotHideCompleted).
     void restoreZoneSelectorAfterHide(const QString& effectiveId);
 
     /// Drive the per-screen shell wl_surface map state from slot

@@ -481,7 +481,9 @@ private Q_SLOTS:
         QCOMPARE(e.bufferShaderPaths.last(),
                  QStringLiteral("pass%1.frag").arg(SurfaceShaderEffect::kMaxBufferPasses - 1));
 
-        // Exactly at the budget is accepted whole and warns about nothing.
+        // Exactly at the budget is accepted whole. Only that is asserted: Qt Test does not
+        // fail a slot for an UNEXPECTED qWarning, so the absence of one is not checkable
+        // here and must not be claimed.
         QJsonArray exact;
         for (int i = 0; i < SurfaceShaderEffect::kMaxBufferPasses; ++i) {
             exact.append(QStringLiteral("pass%1.frag").arg(i));

@@ -156,9 +156,10 @@ QString roundBottomCornersParamId()
 /// An EMPTY string stored here squares the chain rather than abstaining, and there is no
 /// empty-vs-null asymmetry to it. Qt 6 dropped the QString::isNull() special case from
 /// QVariant::isNull(), so a default-constructed QString and a `""` both report isNull()
-/// false, both pass this guard, and both convert to false. Any OTHER non-empty one rounds,
-/// per the paragraph above; saying "a string" here contradicted it, and saying "non-empty"
-/// alone contradicts the two exceptions it names.
+/// false, both pass this guard, and both convert to false. Every other string rounds, except
+/// `"0"` and a case-insensitive `"false"`. Spelled out because this sentence has been wrong
+/// twice: "a string" contradicted the paragraph above, and "non-empty" contradicted those two
+/// exceptions. Nothing is trimmed either, so `" false "` and `"00"` round.
 ///
 /// A JSON `null` arrives as std::nullptr_t — valid, isNull() true — and abstains, the
 /// shape the tests pin. A tree PROFILE cannot carry one: DecorationProfile::fromJson

@@ -115,11 +115,12 @@ void OverlayService::reapplyVisiblePopupDecorations()
         // screen's slot, and each of those costs a full decoration-tree parse, since
         // the settings getter carries no parse cache.
         //
-        // Deliberately NOT gated on the slot's own visibility, which is what the OSD
-        // arm below uses: for the zone selector that predicate is documented as wrong,
-        // because a slot hidden under a modal is still logically up and a retune has to
-        // reach it. Using it here would invite the same mistake by symmetry. (The restore
-        // path DOES re-decorate now, which it did not before; that is a separate fix.)
+        // Deliberately NOT gated on the slot's own visibility, which is what the OSD arm
+        // below uses. The reason is no longer that a retune would never reach a hidden slot:
+        // both sites that make this slot visible re-apply first, so a visibility gate would
+        // be repaired on the next show. It is that such a gate would make THIS arm depend on
+        // the restore path in selector.cpp continuing to re-decorate, which is exactly the
+        // coupling that broke once already. Using it here would invite it back.
         if (m_snapAssistVisible && it.key() == m_snapAssistScreenId) {
             applyDecoration(state.snapAssistSlot(), PhosphorSurfaceShaders::decorationPopupSnapAssistPath());
         }
@@ -157,7 +158,7 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
 
     // Helper to leave the slot undecorated: clear the chain so the QML
     // SurfaceDecoration stays inert and the card draws its native chrome.
-    const auto clearDecoration = [this, slot]() {
+    const auto clearDecoration = [this, slot, &surfacePath]() {
         // Padding and backdrop before the chain, matching the write order
         // applyDecoration documents below: the chain write is the load trigger, so
         // everything a stage reads goes first. Inconsequential here (no stage DRAWS
@@ -177,6 +178,14 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
             // slot no longer needs the show/hide hook (applyDecoration re-adds
             // it if the slot is decorated again).
             disconnect(item, &QQuickItem::visibleChanged, this, &OverlayService::syncCavaState);
+        } else {
+            // Say so, for the reason applyDecoration's twin says it: falling silent here
+            // leaves the slot carrying whatever audio flag a previous show set, and the
+            // syncCavaState below would then act on it. Unreachable today, since every
+            // caller hands a slot accessor, but the two halves of one pair must not state
+            // opposite postures.
+            qCWarning(lcOverlay) << "Surface decoration (" << surfacePath
+                                 << "): slot is not a QQuickItem — its audio-reactive flag cannot be cleared";
         }
         syncCavaState();
     };

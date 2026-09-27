@@ -172,16 +172,32 @@ def dep5_problems(files, *, repo, line_of, tracked_files):
             # commonest spelling of all: "Copyright (c) 2026 Name" carries two, and matching
             # one left "(c) 2026 Name" to fail the blob test — a blocking false positive on
             # the exact form an upstream header gets pasted in with.
+            #
+            # The lookahead admits `(` and the sign as well as a space or digit, because
+            # "Copyright(c)" is written without one. The trailing comma group exists because
+            # the year run's own separator only consumes a comma followed by ANOTHER year, so
+            # "2026, Acme Inc" kept its comma and reported ", Acme Inc" as the holder. Three
+            # rounds have now each closed one sibling of this same shape, which is why every
+            # spelling is pinned in the self-test rather than argued about here.
             name = re.sub(r"\s*(-->|\*/|\",?)\s*$", "", holder.strip()).split("<")[0].strip()
             name = re.sub(
-                r"^(?:(?:\(c\)|©|Copyright)(?=\s|\d|$)\s*)*(?:\d{4}(\s*[-–,]\s*(?:\d{4}|present))*)?\s*",
+                r"^(?:(?:\(c\)|©|Copyright)(?=[\s(©\d]|$)\s*)*"
+                r"(?:\d{4}(\s*[-–,]\s*(?:\d{4}|present))*)?\s*,?\s*",
                 "", name, flags=re.IGNORECASE)
             name = name.strip()
             if name and name not in blob:
+                # Quote the RAW holder too when the strip changed it. The strip is anchored
+                # at ^, so what is left is always a suffix of what the file says — and for a
+                # name that legitimately opens with one of the prefix words, "Copyright
+                # Clearance Center" was reported as 'Clearance Center', a string the author
+                # cannot find in their file. Same rule as the non-string description guard in
+                # conventions_shared_text.py: never quote back a value the file does not hold.
+                raw = holder.strip()
+                shown = f"{name!r}" if name == raw else f"{name!r} (the header says {raw!r})"
                 out.append(
                     (f,
                         0,
-                        f"copyright holder {name!r} is not named in the matching "
+                        f"copyright holder {shown} is not named in the matching "
                         f"packaging/debian/copyright stanza ('Files: {pat}')",
                     )
                 )

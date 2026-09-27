@@ -5,8 +5,6 @@
 #include <PhosphorSurface/DecorationProfileTree.h>
 #include <PhosphorSurface/DecorationSupportedPaths.h>
 
-#include <PhosphorShaders/ShaderPresetRegistry.h>
-
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
@@ -81,14 +79,6 @@ private Q_SLOTS:
         // and its dot-children are.
         QVERIFY(!decorationPathIsBaselineIsolated(QStringLiteral("shellfish")));
 
-        // THE POINTER ARM, which had no coverage at all: deleting the whole
-        // `pointer` branch of the predicate left every test green, although the
-        // header spends a paragraph on why a surface baseline must not resolve
-        // onto the cursor. Its three shapes, matching the shell arm's three above.
-        QVERIFY(decorationPathIsBaselineIsolated(decorationPointerPath()));
-        QVERIFY(decorationPathIsBaselineIsolated(decorationPointerPath() + QStringLiteral(".trail")));
-        QVERIFY(!decorationPathIsBaselineIsolated(decorationPointerPath() + QStringLiteral("ish")));
-
         // Engaging a chain on the Decoration → Shell page is the whole shell
         // opt-in, so a baseline chain (the user's global look for their own
         // windows) must never leak onto a shell surface: with no shell-scope
@@ -98,10 +88,6 @@ private Q_SLOTS:
         tree.setBaseline(makeProfile(QStringList{QStringLiteral("border")}, 2.0, QStringLiteral("#112233")));
         QCOMPARE(tree.resolve(QStringLiteral("shell.panel")).chain.value_or(QStringList{}), QStringList{});
         QCOMPARE(tree.resolve(QStringLiteral("shell.appletPopup")).chain.value_or(QStringList{}), QStringList{});
-        // And the same at the TREE level for the pointer, which is what the predicate
-        // exists to produce. Nothing pinned this: a surface baseline resolving onto the
-        // cursor is the outcome the header's paragraph rules out.
-        QCOMPARE(tree.resolve(decorationPointerPath()).chain.value_or(QStringList{}), QStringList{});
         // Non-shell surfaces keep inheriting the baseline unchanged.
         QCOMPARE(tree.resolve(QStringLiteral("window.tiled")).chain, QStringList{QStringLiteral("border")});
 
@@ -119,6 +105,28 @@ private Q_SLOTS:
                           makeProfile(QStringList{QStringLiteral("frost")}, 1.0, QStringLiteral("#445566")));
         const DecorationProfileTree merged = user.withSeedDefaults(seeds);
         QCOMPARE(merged.resolve(QStringLiteral("shell.panel")).chain, QStringList{QStringLiteral("frost")});
+    }
+
+    /// The pointer's own isolation arm, in its own slot so a pointer regression is not
+    /// reported as a shell failure. It had NO coverage at all: deleting the whole `pointer`
+    /// branch of the predicate left every test green, although the header spends a paragraph
+    /// on why a surface baseline must not resolve onto the cursor.
+    void pointer_path_is_baseline_isolated()
+    {
+        // The same three shapes the shell arm above pins: the node, a dot-child (the
+        // prefix guard the header's comment exists for), and a prefix collision.
+        QVERIFY(decorationPathIsBaselineIsolated(decorationPointerPath()));
+        QVERIFY(decorationPathIsBaselineIsolated(decorationPointerPath() + QStringLiteral(".trail")));
+        QVERIFY(!decorationPathIsBaselineIsolated(decorationPointerPath() + QStringLiteral("ish")));
+
+        // And at the TREE level, which is what the predicate exists to produce: with the
+        // arm gone, resolve() starts from the baseline and the cursor inherits its chain.
+        DecorationProfileTree tree;
+        tree.setBaseline(makeProfile(QStringList{QStringLiteral("border")}, 2.0, QStringLiteral("#112233")));
+        QCOMPARE(tree.resolve(decorationPointerPath()).chain.value_or(QStringList{}), QStringList{});
+        // The control: a non-isolated surface does inherit it, so an empty answer above
+        // cannot be resolve() returning empty for everything.
+        QCOMPARE(tree.resolve(QStringLiteral("window.tiled")).chain, QStringList{QStringLiteral("border")});
     }
 
     void shell_isolation_covers_every_baseline_field()

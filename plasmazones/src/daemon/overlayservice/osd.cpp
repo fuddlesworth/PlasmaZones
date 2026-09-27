@@ -719,8 +719,10 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // "Zone %1" copy resolves and the missing-layout bail below must not
     // swallow the feedback.
     //
-    // Resolved lazily and MEMOISED, and it is the memo that earns its keep: the two call
-    // sites below would otherwise walk the provider twice for one OSD. The laziness itself
+    // Resolved lazily and MEMOISED, and it is the memo that earns its keep: on the
+    // needsLayout arm the two call sites below would otherwise walk the provider twice for
+    // one OSD. Off that arm the `&&` short-circuit skips the first call site, so there is one
+    // walk and the memo costs nothing either way. The laziness itself
     // saves nothing now that prepareLayoutOsdWindow, which carries the ensurePassiveShellFor
     // bail, has been hoisted ABOVE this point — nothing between here and the second call
     // site returns early. Every OSD that renders, failures and no-layout actions included,

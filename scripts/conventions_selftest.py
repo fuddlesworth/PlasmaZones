@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Self-test for check-conventions.py's two pure detectors and its two split rules.
+"""Self-test for check-conventions.py's two pure detectors, its two split rules and its
+readability precondition.
 
 Split out of the gate itself, which crossed the 1150-line ceiling when two
 branches each landed a new rule. This is the most separable concern in it: test
@@ -177,7 +178,7 @@ SELFTEST_JSON = json.dumps(
 #
 # WHY THE TWO SECTIONS BELOW EXIST. The prose detector above is pinned; the two rules
 # that were split into their own modules were not, and between them they produced a
-# defect in six consecutive review rounds, every one in code written to fix the
+# defect in consecutive review rounds, every one in code written to fix the
 # previous one. Two patterns recurred and neither was reachable by any gate: a fix
 # applied to ONE SIDE of a symmetric pair, four times over, and a coverage floor that
 # counted the wrong thing four times. Both are exactly what a planted case catches
@@ -410,8 +411,6 @@ def _shared_text_failures() -> list[str]:
     except (OSError, NotImplementedError):
         pass
     else:
-        # "silent no-op" rather than "stale": with the third pack present matched is 2, so it
-        # is the TEXT-HOLDER arm that must fire, which is the half the dedup fixes.
         expect("a pack symlinked to itself twice", symlinked, True, "stale")
         expect("a symlinked pair beside a non-declaring pack", symlinked_with_third, True,
                "silent no-op")
@@ -524,7 +523,12 @@ def _dep5_failures() -> list[str]:
     # a holder the stanza plainly names.
     for spelling in ("COPYRIGHT 2026", "(C) 2026", "copyright 2026",
                      "Copyright (c) 2026", "Copyright (C) 2026", "Copyright \u00a9 2026",
-                     "COPYRIGHT (C) 2026", "Copyright (c)"):
+                     "COPYRIGHT (C) 2026", "Copyright (c)",
+                     # A comma before the NAME, and the prefix written with no space. The year
+                     # run's own separator only consumes a comma followed by another year, so
+                     # the first group kept a leading comma and reported it as the holder.
+                     "2026,", "Copyright (c) 2026,", "Copyright (C) 2024-2026,",
+                     "Copyright(c) 2026", "\u00a92026,"):
         got = run({"src/a.cpp": hdr(year=spelling)}, dep5=bare)
         if got:
             bad.append(f"dep5_problems fired on the holder spelling {spelling!r}: {got}")
@@ -688,9 +692,13 @@ def _precondition_failures(partition_readable) -> list[str]:
     return bad
 
 
-def run_selftest(prose_problems, iter_json_prose, partition_readable=None) -> int:
+def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
     """The detectors and the precondition arrive as arguments, so this module never
-    imports the gate at module scope and the pair cannot form a cycle."""
+    imports the gate at module scope and the pair cannot form a cycle.
+
+    All three are REQUIRED. partition_readable used to default to None with the body
+    guarding on it, so a caller that forgot it lost that coverage in silence rather
+    than failing."""
     failures = []
 
     for text, shape in SELFTEST_PROSE_BAD:
@@ -732,8 +740,7 @@ def run_selftest(prose_problems, iter_json_prose, partition_readable=None) -> in
 
     failures.extend(_shared_text_failures())
     failures.extend(_dep5_failures())
-    if partition_readable is not None:
-        failures.extend(_precondition_failures(partition_readable))
+    failures.extend(_precondition_failures(partition_readable))
 
     for line in failures:
         print(f"selftest: {line}", file=sys.stderr)

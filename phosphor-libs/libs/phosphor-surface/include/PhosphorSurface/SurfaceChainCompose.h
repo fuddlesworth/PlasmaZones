@@ -30,7 +30,7 @@ class SurfaceShaderRegistry;
  * This is deliberately the RAW request: callers clamp it themselves, because
  * they need different types. The compositor's capture canvas is integer
  * device pixels (`qCeil` then an int clamp); the daemon's QML host works in
- * fractional logical px. Both bound the result to
+ * fractional logical px. Every caller bounds the result to
  * `[0, kMaxDecorationOuterPaddingPx]` so a typo'd or hostile pack cannot demand
  * an absurd canvas. The ZERO floor is a caller's job too: a declared default or
  * a stored override may be negative, and this returns such a value verbatim

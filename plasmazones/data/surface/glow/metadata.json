@@ -34,7 +34,7 @@
             "default": 8,
             "min": 0,
             "max": 64,
-            "description": "Corner rounding the halo follows (px). The halo traces this radius on the window frame. A Border pack earlier in the chain paints its band from its own corner radius out to that radius plus its border width, so match this to the sum for the two to meet. At a border radius of 0 the band stays square and nothing sits further out. On an OSD or a popup the host sets this and the border radius to the card's own radius, so at a wide border the halo starts about 0.4 of the border width outside the band's corner, under a pixel at the default width and several at the widest, and you cannot correct it here."
+            "description": "Corner rounding the halo follows (px). The halo traces this radius on the window frame. A Border pack earlier in the chain paints its band from its own corner radius out to that radius plus its border width, so match this to the sum for the two to meet. At a border radius of 0 the band stays square and nothing sits further out. On an OSD or a popup the host sets this and the border radius to the card's own radius, so the halo's falloff reaches about 0.4 of the border width further out at the corners than along the edges, which reads as a slightly fatter halo there, and you cannot correct it here."
         },
         {
             "id": "roundBottomCorners",
@@ -55,7 +55,7 @@
             "name": "Tint with theme background",
             "type": "bool",
             "default": false,
-            "description": "Tint the halo with the system background colour (keeping its alpha) so it tracks the theme instead of a fixed colour."
+            "description": "Tint the halo with the system background colour (keeping its alpha) so it tracks the theme instead of a fixed colour"
         }
     ]
 }
