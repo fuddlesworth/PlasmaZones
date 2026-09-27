@@ -49,13 +49,18 @@ std::chrono::nanoseconds CompositorClock::now() const
     //
     // Reading a latched per-paint timestamp instead is the tempting shape, and it
     // is wrong here for two independent reasons. KWin does not call prePaintScreen
-    // while the effect is inactive (no animations, no drag), so a latch goes stale:
-    // an animation started from a D-Bus signal in that window would take its start
-    // time from the stale value, the next paint would feed a fresh one, and
-    // advance() would see elapsed >> duration and finish the animation in a single
-    // step. And since KWin 6.7 there is no predicted presentTime to latch anyway.
-    // Reading steady_clock directly avoids the staleness and matches what the only
-    // available source would have given us.
+    // while the effect is inactive (no animations, no drag), so a latch goes stale.
+    // The route that stale value reaches a start time by is NOT the obvious one:
+    // AnimatedValue::start() does not read the clock at all, and advance() runs only
+    // from prePaintScreen, which fed the latch in the same pass before stepping — so
+    // an animation on the PAINTING output's clock always saw a fresh value.
+    // advanceAnimations steps every in-flight animation on every output pass though,
+    // including ones bound to a clock that pass never fed, so the first advance()
+    // after an idle period could take its start time from ANOTHER output's stale
+    // latch and the next tick would see elapsed >> duration and finish in one step.
+    // And since KWin 6.7 there is no predicted presentTime to latch anyway.
+    // Reading steady_clock directly avoids both and matches what the only available
+    // source would have given us.
     return std::chrono::steady_clock::now().time_since_epoch();
 }
 

@@ -592,13 +592,21 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // trusting the old address; the tail below reads the sampler, the frame
     // counter and the capture texture through it.
     it = m_active.find(screen);
-    if (it == m_active.end()) {
-        // Unreachable today (nothing inside the walk mutates m_active), but if
-        // it ever happens the recorded list must not outlive the frame — the
+    if (it == m_active.end() || !it->second.captureTex || !it->second.belowTex) {
+        // Unreachable today (nothing inside the walk mutates m_active, and the
+        // allocation block above guarantees both textures), but if it ever
+        // happens the recorded list must not outlive the frame — the
         // unwind guard was dismissed on the assumption the tail consumes it,
         // and that tail is now skipped. No framebuffer has been pushed yet at
         // this point, so there is nothing else to unwind. The hide taken
         // above is released too: the normal scene paints this frame.
+        //
+        // The TEXTURES are tested beside the key, not just the key: the tail
+        // below binds both of them, and re-finding the entry proves only that
+        // some entry exists. Same pair surface_capture.cpp adds before its own
+        // bind, for the same reason — a null texture reaching a bind is a null
+        // deref inside the compositor, and this branch already degrades
+        // correctly by painting the normal scene.
         m_effect->m_stripCaptureSkippedWindows.clear();
         updateCursorHiding();
         return false;

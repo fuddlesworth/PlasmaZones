@@ -251,6 +251,38 @@ def _pack(d: Path, name: str, *, param="roundBottomCorners", desc="Rounds the bo
 _OMIT = object()  # "write no description key at all", distinct from None and from ""
 
 
+def _finite_verbs_failures() -> list[str]:
+    """_FINITE_VERBS' membership, pinned against a literal in BOTH directions.
+
+    The BAD and OK probes above pin the behaviour of a handful of words and nothing pins
+    the SET. A round widened it by fourteen words on a premise that turned out to be false,
+    and only two of the fourteen were caught by any probe: the other twelve could be added
+    or removed with a green suite, and ten of them were plural nouns that made genuine
+    comma-bearing lists into findings. A per-word probe cannot close that — it would need
+    one probe per candidate word, written in advance. A literal can.
+
+    Mirrors how _spdx_suffix_failures pins CODE_SUFFIXES, and for the same reason: neither
+    direction is visible any other way, because the tree contains no prose that distinguishes
+    them. A deliberate change edits this literal in the same commit and says why."""
+    from conventions_prose import _FINITE_VERBS
+
+    bad: list[str] = []
+    expected = frozenset("""is are was were am be been being has have had do does did
+        can cannot could will would shall should may might must
+        isn't aren't wasn't weren't hasn't haven't doesn't don't didn't
+        can't won't wouldn't shouldn't
+        keeps drops sets reads writes runs takes gives makes shows uses needs holds
+        adds stops starts applies returns means covers carries leaves gets goes comes
+        sits lands falls picks sends pushes pulls draws paints binds clears
+        stays allows""".split())
+    for word in sorted(expected - _FINITE_VERBS):
+        bad.append(f"_FINITE_VERBS no longer holds '{word}'")
+    for word in sorted(_FINITE_VERBS - expected):
+        bad.append(f"_FINITE_VERBS gained '{word}' without this selftest's literal being updated; if it is "
+                   f"also a plural noun it can make a genuine list a finding")
+    return bad
+
+
 def _shared_text_failures() -> list[str]:
     import conventions_shared_text as mod
 
@@ -501,6 +533,16 @@ def _dep5_failures() -> list[str]:
         return text[:index].count("\n") + 1
 
     bad: list[str] = []
+    # DEP5_HEAD_LINES' value, pinned to its literal, for the reason SIZE_CEILING and
+    # JS_PRAGMA_WINDOW carry the same pin: the dangerous direction is invisible any other
+    # way. Narrowing it to 2 left BOTH the selftest and a whole-tree run green while every
+    # header whose tags sit on lines 3-8 silently stopped being read, so those files' licences
+    # and holders went unchecked. Widening it is tree-caught; narrowing it was not. The
+    # sibling constant SPDX_HEAD_LINES had this closed a round earlier and this one was
+    # missed in the same edit.
+    if mod.DEP5_HEAD_LINES != 8:
+        bad.append(f"DEP5_HEAD_LINES is {mod.DEP5_HEAD_LINES}, not 8; narrowing it silently stops the rule "
+                   f"reading any header whose tags sit past the new bound")
     # Deliberately shaped like the real packaging/debian/copyright rather than flat: a
     # leading COMMENT, a multi-line Files list, and a CONTINUATION line on Copyright. The
     # flat version left the continuation arm, the comment skip, the final-stanza flush and
@@ -767,17 +809,25 @@ def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
     guarding on it, so a caller that forgot it lost that coverage in silence rather
     than failing."""
     failures = []
-    # Captured for the post-condition at the tail. Four arms now redirect the gate's REPO
-    # (and CODE_SUFFIXES or BASELINE with it) at a temp tree and restore them in a finally,
-    # and several of them no longer run last. The post-condition is what catches a dropped
-    # restore in any of them: a later arm would otherwise run against a deleted directory
-    # and raise, which reads like a broken gate rather than a finding.
+    # Captured for the post-condition at the tail. SIX arms now redirect the gate's REPO
+    # (and CODE_SUFFIXES, BASELINE or read_error with it) at a temp tree and restore them in
+    # a finally, and several of them no longer run last. The post-condition is what catches a
+    # dropped restore in any of them: a later arm would otherwise run against a deleted
+    # directory and raise, which reads like a broken gate rather than a finding.
     # frozenset(), not the set itself: CODE_SUFFIXES is mutable, so binding a reference
     # would compare equal to itself after an arm mutated it IN PLACE, and the comparison
     # could never fire for the one shape nobody would notice.
+    #
+    # FIVE globals, not three. The wiring arm stubs `read_error` and main() writes
+    # `_SELECTED_RULES`, and neither was compared — dropping the read_error restore left the
+    # suite green. _SELECTED_RULES matters beyond tidiness: rule_license's
+    # no-identifier deferral reads it, and a license arm runs AFTER the wiring arm, so a
+    # leaked value is a latent order dependency rather than only a leak.
     entry_globals = partition_readable.__globals__
     entry_repo, entry_suffixes = entry_globals["REPO"], frozenset(entry_globals["CODE_SUFFIXES"])
     entry_baseline = entry_globals["BASELINE"]
+    entry_read_error = entry_globals["read_error"]
+    entry_selected = frozenset(entry_globals["_SELECTED_RULES"])
 
     for text, shape in SELFTEST_PROSE_BAD:
         if not prose_problems(text):
@@ -816,6 +866,7 @@ def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
         if not any(trail is None for trail, _ in pairs):
             failures.append(f"iter_json_prose passes over a malformed JSON file instead of reporting it: {pairs}")
 
+    failures.extend(_finite_verbs_failures())
     failures.extend(_shared_text_failures())
     failures.extend(_dep5_failures())
     # And every fake-tree arm, which lives in its own module: the detector probes above
@@ -830,6 +881,12 @@ def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
         failures.append("an arm left the gate's CODE_SUFFIXES changed")
     if entry_globals["BASELINE"] != entry_baseline:
         failures.append(f"an arm left the gate's BASELINE at {entry_globals['BASELINE']}, not {entry_baseline}")
+    if entry_globals["read_error"] is not entry_read_error:
+        failures.append("an arm left the gate's read_error stubbed, so every later rule reads through it")
+    if frozenset(entry_globals["_SELECTED_RULES"]) != entry_selected:
+        failures.append(f"an arm left the gate's _SELECTED_RULES as "
+                        f"{sorted(entry_globals['_SELECTED_RULES'])}, not {sorted(entry_selected)}; "
+                        f"rule_license's deferral arm reads it, so a later arm inherits the change")
 
     for line in failures:
         print(f"selftest: {line}", file=sys.stderr)

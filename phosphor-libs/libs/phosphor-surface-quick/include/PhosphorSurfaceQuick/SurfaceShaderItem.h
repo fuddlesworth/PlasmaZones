@@ -103,11 +103,12 @@ public:
 
     // Note: setEntryScaffold is inherited and PUBLIC, but this override never delegates to
     // ShaderEffect::updatePaintNode, the only site that pushes the item's own scaffold, so
-    // the scaffold a host sets is never read for rendering. A FIRST call is not inert: the
-    // base setter raises the item's shaderDirty and calls update() unconditionally, and
-    // sets Status::Loading when a shaderSource is set, so it forces a reload and a
-    // statusChanged round trip. A repeat call with the same scaffold early-returns and IS
-    // inert. No in-tree host makes either, and none can from QML: setEntryScaffold is not
+    // the scaffold a host sets is never read for rendering. A call that CHANGES the scaffold
+    // is not inert: the base setter raises shaderDirty and calls update() unconditionally,
+    // and sets Status::Loading when a shaderSource is set, so it forces a reload and a
+    // statusChanged round trip. A call passing the SAME scaffold early-returns and IS inert,
+    // which includes the identity call on a fresh item, since the default is the empty pair.
+    // No in-tree host makes either, and none can from QML: setEntryScaffold is not
     // Q_INVOKABLE and both items are QML-instantiated. The ZoneShaderItem twin carries the
     // same note.
     //

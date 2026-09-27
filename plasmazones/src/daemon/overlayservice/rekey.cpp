@@ -364,29 +364,18 @@ void OverlayService::validateScreenStateInvariant(const QStringList& targetIds) 
             Q_ASSERT_X(false, "OverlayService", "orphaned overlay entry");
         }
     }
-    // A modal singleton's screen id is a key into m_screenStates, and every
-    // path that hides or tears one down looks it up by that key. An id naming
-    // a key that no longer exists is therefore unrecoverable by any normal
-    // route: the slot stays visible, its surface keeps the input grab, and the
-    // visible flag stays set so the toggle no-ops. Nothing in the ordinary
-    // show/hide cycle can produce it, which is exactly why it is worth
-    // asserting here - the ways in are key migrations and teardowns, and those
-    // are the paths that have to remember to carry these three along.
-    const std::pair<const QString&, const char*> modalIds[] = {
-        {m_cheatsheetScreenId, "cheatsheet"},
-        {m_layoutPickerScreenId, "layout picker"},
-        {m_snapAssistScreenId, "snap assist"},
-    };
-    for (const auto& [modalScreenId, modalName] : modalIds) {
-        if (!modalScreenId.isEmpty() && !m_screenStates.contains(modalScreenId)) {
-            qCWarning(lcOverlay) << "validateScreenStateInvariant:" << modalName << "screen id" << modalScreenId
-                                 << "names a key with no screen state";
-            Q_ASSERT_X(false, "OverlayService", "modal singleton id names a dead screen key");
-        }
-    }
 #else
     Q_UNUSED(targetIds);
 #endif
+    // The dead-modal-key check is deliberately NOT in the block above. Both arms up
+    // there are genuine debug-only invariants about cross-side consistency: if one
+    // trips there is nothing to do but tell a developer. A modal id naming a missing
+    // key is different in kind — it is a RECOVERABLE state with a repair function
+    // already in the tree — and its own comment calls the consequence unrecoverable by
+    // any normal route (the slot stays visible, its surface keeps the input grab, and
+    // the visible flag stays set so the toggle no-ops). Leaving the only detection
+    // inside QT_NO_DEBUG meant a release build could neither see it nor repair it. It
+    // runs in both builds now, at the one call site, which is a mutating context.
 }
 
 QMetaObject::Connection OverlayService::installOverlayGeometryWatcher(QScreen* physScreen, const QString& screenId,

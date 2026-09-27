@@ -317,6 +317,25 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
 
     validateScreenStateInvariant(targetIds);
 
+    // SELF-HEALING, and in both builds. A modal singleton's screen id is a key into
+    // m_screenStates and every hide or teardown path looks it up by that key, so an id
+    // naming a key that no longer exists leaves the slot visible with its surface still
+    // holding the input grab and the visible flag still set, which makes the toggle a
+    // no-op — the user cannot dismiss it. The ways in are key migrations and teardowns,
+    // and those are the paths that have to remember to carry these three along. This
+    // check lived inside validateScreenStateInvariant's QT_NO_DEBUG block, so a release
+    // build could neither detect nor repair it; reset is the existing repair, so calling
+    // it here costs one lookup per refresh and closes the unrecoverable case.
+    for (const auto& [modalScreenId, modalName] : {std::pair<QString, const char*>{m_cheatsheetScreenId, "cheatsheet"},
+                                                   {m_layoutPickerScreenId, "layout picker"},
+                                                   {m_snapAssistScreenId, "snap assist"}}) {
+        if (!modalScreenId.isEmpty() && !m_screenStates.contains(modalScreenId)) {
+            qCWarning(lcOverlay) << "modal singleton" << modalName << "named screen key" << modalScreenId
+                                 << "which has no screen state; resetting it so the slot can be dismissed";
+            resetModalSingletonsForDestroyedId(modalScreenId);
+        }
+    }
+
     // Count how many overlay windows actually have a live shell surface.
     // If zero, the transport (phosphorwayland) is unavailable and we must
     // not mark ourselves visible - the caller (e.g. prepareHandlerContext)
@@ -490,7 +509,7 @@ void OverlayService::restampZoneHighlights()
         if (slot->property("useShader").toBool()) {
             int highlightedCount = 0;
             for (const QVariant& z : patched) {
-                if (z.toMap().value(QLatin1String("isHighlighted")).toBool()) {
+                if (z.toMap().value(QLatin1String(::PhosphorZones::ZoneJsonKeys::IsHighlighted)).toBool()) {
                     ++highlightedCount;
                 }
             }
@@ -950,7 +969,8 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
     // Pass previewZones (all zones with relative geometries) only when LayoutPreview mode is active
     bool anyZoneUsesPreview = false;
     for (const QVariant& z : std::as_const(patched)) {
-        if (z.toMap().value(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode).toInt() == 1) {
+        if (z.toMap().value(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode).toInt()
+            == static_cast<int>(OverlayDisplayMode::LayoutPreview)) {
             anyZoneUsesPreview = true;
             break;
         }
@@ -961,7 +981,7 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
     if (windowIsShader && screenUsesShader) {
         int highlightedCount = 0;
         for (const QVariant& z : patched) {
-            if (z.toMap().value(QLatin1String("isHighlighted")).toBool()) {
+            if (z.toMap().value(QLatin1String(::PhosphorZones::ZoneJsonKeys::IsHighlighted)).toBool()) {
                 ++highlightedCount;
             }
         }

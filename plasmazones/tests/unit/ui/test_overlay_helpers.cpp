@@ -296,11 +296,14 @@ private Q_SLOTS:
     }
 };
 
-// Custom main, and NOT because QTEST_MAIN would give us the wrong application
-// type: this target links Qt6::Quick, so QT_GUI_LIB is defined and
-// QTEST_MAIN_SETUP already expands to QGuiApplication. It is here to construct
-// the QGuiApplication QQuickWindow needs without QTEST_MAIN's extra
-// AA_Use96Dpi, which would pin the DPI these geometry tests do not fix.
+// Custom main, and VESTIGIAL: QTEST_MAIN would do the same thing here. This target
+// links Qt6::Quick, so QT_GUI_LIB is defined and QTEST_MAIN_SETUP already expands to
+// QGuiApplication, which is the only application type the QQuickWindow below needs.
+// QTEST_MAIN would additionally set AA_Use96Dpi, and nothing here depends on the DPI:
+// these tests cover QVariantMap key logic, a QObject dynamic property, a QElapsedTimer
+// and an enum switch, and the window is never shown, never sized and never measured.
+// Two earlier versions of this comment each gave a different wrong reason for keeping
+// the custom main. It is kept only because replacing it buys nothing.
 int main(int argc, char* argv[])
 {
     QGuiApplication app(argc, argv);

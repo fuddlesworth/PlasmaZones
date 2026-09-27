@@ -6,17 +6,24 @@ Split from conventions_selftest.py, which crossed the 1150-line ceiling once the
 ratchet, the wiring call sites and the remaining prose-extraction arms got the coverage
 they had been missing. The cut is a real concern boundary rather than a line count:
 
-  * conventions_selftest.py holds the PURE-DETECTOR probes. Test data plus assertions
-    about `prose_problems`, `iter_json_prose` and the shared-text and dep5 detectors,
-    reading no file and building no tree.
-  * this module holds the FAKE-TREE arms. Each builds a temp directory, redirects the
-    gate\x27s REPO (and CODE_SUFFIXES or BASELINE with it) at it, calls the rule, and asserts
-    on what the rule reported. That is where the gate\x27s own blind spots have all been:
-    a detector nobody handed the text to, a rule whose arm could be deleted with a green
-    suite, a helper pinned while its only call site was not.
+  * conventions_selftest.py holds the arms that test a DETECTOR or a constant against
+    data: the prose probes, `iter_json_prose`, the shared-text and dep5 detectors, and the
+    literal pins on _FINITE_VERBS and DEP5_HEAD_LINES. Two of those arms do build a temp
+    tree, so "builds no tree" was the wrong way to state this boundary and said so for a
+    round.
+  * this module holds the arms that reach INTO the gate's own namespace. Each takes
+    `partition_readable.__globals__` and redirects a global there — REPO, CODE_SUFFIXES,
+    BASELINE, tracked_files, read_error — before calling the rule. That is the real
+    criterion. Two arms here (`_precondition_failures`, `_dead_stanza_failures`) pass
+    `repo=` as an argument instead and redirect nothing; they sit here because they belong
+    with the fake-tree work, not because they meet that test.
+
+That is also where the gate's own blind spots have all been: a detector nobody handed the
+text to, a rule whose arm could be deleted with a green suite, a helper pinned while its
+only call site was not, and a constant whose probes were sized relative to itself.
 
 Everything here reaches the gate through `partition_readable.__globals__`, which IS the
-gate\x27s namespace, so the gate grows no line and no export for any of it. Nothing here
+gate's namespace, so the gate grows no line and no export for any of it. Nothing here
 imports the gate, so no cycle is possible.
 """
 from __future__ import annotations
@@ -200,8 +207,16 @@ def _prose_extraction_failures(partition_readable) -> list[str]:
             "Package: plasmazones\n"
             "Description: Window snapping for KDE Plasma\n"
             f" {splice}\n"),
-        # RPM: %description runs to the next % section.
-        "packaging/rpm/x.spec": f"Name: x\nSummary: Fine\n\n%description\n{splice}\n\n%files\n",
+        # RPM: %description runs to the next % section. The INDENTED bullet list is what
+        # pins the bullet strip: without it those markers read as spaced hyphens standing in
+        # for dashes and every bullet becomes a finding, which is what an ordinary reflow of
+        # the live spec would have produced. The live file passes only because its own
+        # markers sit at column 0, so it cannot pin this either — the strip could be deleted
+        # with a green selftest AND a green tree before this probe existed. The splice is
+        # still here, so the arm is asserted to find EXACTLY the planted violation and not
+        # the bullets.
+        "packaging/rpm/x.spec": (f"Name: x\nSummary: Fine\n\n%description\n{splice}\n"
+                                 "  - first feature\n  - second feature\n  * third feature\n\n%files\n"),
         # Nix: description and longDescription.
         "packaging/nix/x.nix": f'{{\n  meta = {{\n    description = "{splice}";\n  }};\n}}\n',
         # Arch: pkgdesc, which the line-oriented PKG_DESC arm reads.
@@ -246,8 +261,16 @@ def _prose_extraction_failures(partition_readable) -> list[str]:
                 p = d / rel
                 p.parent.mkdir(parents=True, exist_ok=True)
                 p.write_text(text, encoding="utf-8")
-                if not rule_prose([rel]):
+                found = rule_prose([rel])
+                if not found:
                     bad.append(f"rule_prose did not extract the planted em-dash splice from {rel}")
+                # EXACTLY one, not at least one. Two of these bodies carry an indented bullet
+                # list beside the splice, and a bullet marker reads as a spaced hyphen unless
+                # the deb822/RPM strip removes it first — so a count is what pins the strip,
+                # while "did it find something" is satisfied by the splice alone.
+                elif len(found) != 1:
+                    bad.append(f"rule_prose reported {len(found)} findings for {rel}, not just the planted "
+                               f"splice: {[v.message for v in found]}")
         finally:
             g["REPO"] = saved_repo
     return bad
@@ -383,6 +406,11 @@ def _wiring_failures(partition_readable) -> list[str]:
         saved_repo = g["REPO"]
         saved_read_error = g["read_error"]
         saved_dead = conventions_dep5._dead_stanza_problems
+        # main() assigns the gate's _SELECTED_RULES, so driving it leaks the whole rule set
+        # into every later arm. rule_license's no-identifier deferral reads that global and a
+        # license arm runs after this one, which makes the leak an order dependency rather
+        # than only untidiness.
+        saved_selected = set(g["_SELECTED_RULES"])
         g["REPO"] = d
         g["read_error"] = lambda path, *, repo=None: (
             "Permission denied" if path.endswith("unreadable.cpp") else saved_read_error(path, repo=repo))
@@ -419,6 +447,7 @@ def _wiring_failures(partition_readable) -> list[str]:
         finally:
             g["REPO"] = saved_repo
             g["read_error"] = saved_read_error
+            g["_SELECTED_RULES"] = saved_selected
             conventions_dep5._dead_stanza_problems = saved_dead
 
         if not any("src/gone.cpp" in m for m in messages):
@@ -498,6 +527,82 @@ def _size_ratchet_failures(partition_readable) -> list[str]:
             bad.append("rule_size reported a baselined file that SHRANK; the ratchet is growth-only")
         if notcode in reported:
             bad.append("rule_size reported a file outside CODE_SUFFIXES")
+    return bad
+
+
+def _baseline_writer_failures(partition_readable) -> list[str]:
+    """update_baseline(), which owns the ratchet's data and had NO coverage at all.
+
+    Every other arm here tests a rule that READS the baseline; nothing tested the function
+    that WRITES it. Two mutations survived both the selftest and a clean whole-tree run:
+    dropping the unreadable-file arm that preserves the prior entry (the exact bug that
+    arm's own comment describes), and relaxing `n > SIZE_CEILING` to `>=`. A broken writer
+    silently drops or inflates entries, and the size rule then mis-grandfathers on the next
+    run — a file whose entry vanished is reported as new-over-ceiling, and one recorded a
+    line too low fails on its very next edit.
+
+    Drives the real function with REPO, BASELINE and tracked_files redirected, then reads
+    back the JSON it wrote."""
+    g = partition_readable.__globals__
+    update_baseline = g["update_baseline"]
+    bad: list[str] = []
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        ceiling = g["SIZE_CEILING"]
+
+        over = "over.cpp"
+        (root / over).write_text("//\n" * (ceiling + 5), encoding="utf-8")
+        at = "at.cpp"
+        (root / at).write_text("//\n" * ceiling, encoding="utf-8")
+        under = "under.cpp"
+        (root / under).write_text("//\n" * 10, encoding="utf-8")
+        notcode = "big.md"
+        (root / notcode).write_text("x\n" * (ceiling + 5), encoding="utf-8")
+        # A file the sweep cannot read, with a PRIOR entry that must survive. A directory
+        # where a file is expected makes read_error report, portably and as any uid —
+        # chmod 000 is a no-op as root, which CI containers run as.
+        unreadable = "unreadable.cpp"
+        (root / unreadable).mkdir()
+
+        (root / "scripts").mkdir()
+        baseline = root / "scripts" / "oversize-baseline.json"
+        baseline.write_text(json.dumps({"files": {unreadable: ceiling + 99, "gone.cpp": ceiling + 1}}),
+                            encoding="utf-8")
+
+        saved = (g["REPO"], g["BASELINE"], g["tracked_files"])
+        g["REPO"] = root
+        g["BASELINE"] = baseline
+        g["tracked_files"] = lambda: [over, at, under, notcode, unreadable]
+        try:
+            import contextlib
+            import io
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                rc = update_baseline()
+            written = json.loads(baseline.read_text(encoding="utf-8"))
+        finally:
+            g["REPO"], g["BASELINE"], g["tracked_files"] = saved
+
+    if rc != 0:
+        bad.append(f"update_baseline returned {rc}, not 0")
+    rec = written.get("files", {})
+    if rec.get(over) != ceiling + 5:
+        bad.append(f"update_baseline did not record a file over the ceiling at its real length: {rec.get(over)}")
+    if at in rec:
+        bad.append(f"update_baseline recorded a file at EXACTLY the ceiling ({ceiling}), which is not an overrun; "
+                   f"the comparison must be > and not >=")
+    if under in rec:
+        bad.append("update_baseline recorded a file under the ceiling")
+    if notcode in rec:
+        bad.append("update_baseline recorded a file outside CODE_SUFFIXES")
+    if rec.get(unreadable) != ceiling + 99:
+        bad.append(f"update_baseline did not preserve the prior entry of an UNREADABLE file "
+                   f"({rec.get(unreadable)}); its entry vanishes and the size rule then reports a grandfathered "
+                   f"file as new-over-ceiling once the mode is fixed")
+    if "gone.cpp" in rec:
+        bad.append("update_baseline kept an entry for a file no longer tracked")
+    if written.get("ceiling") != ceiling:
+        bad.append(f"update_baseline wrote ceiling {written.get('ceiling')}, not {ceiling}")
     return bad
 
 
@@ -658,7 +763,12 @@ def _remaining_rule_failures(partition_readable) -> list[str]:
             i18n = {v.path for v in rule_i18n_cpp(
                 [i18n_include, i18n_call, i18n_comment, i18n_test, i18n_allowed, i18n_member])}
             cfg = {v.path for v in rule_config_keys([cfg_bad, cfg_accessor, cfg_def, cfg_test, cfg_other])}
-            js = {v.path for v in rule_js_pragma(
+            # The MESSAGES too, not just which paths were reported: js_bom is reported by
+            # either of two arms, and membership alone cannot tell them apart. Dropping the
+            # BOM term from the window arithmetic left it reported by the not-alone-on-its-
+            # own-line arm instead, which sends the author to move a line that is already
+            # correct — so the mutation survived a membership-only assertion.
+            js_msg = {v.path: v.message for v in rule_js_pragma(
                 [js_ok, js_missing, js_late, js_commented, js_trailing, js_bom, js_nobom,
                  js_lower, js_multidot, js_nonascii])}
         finally:
@@ -685,35 +795,43 @@ def _remaining_rule_failures(partition_readable) -> list[str]:
             if (path in cfg) != want:
                 bad.append(f"rule_config_keys {'missed' if want else 'reported'} {why}")
 
-        for path, want, why in (
-            (js_ok, False, "a .pragma library on line 1"),
-            (js_missing, True, "a PascalCase .js library with no .pragma library at all"),
-            (js_late, True, f"a .pragma library ending past Qt's {window}-byte window"),
-            (js_commented, True, "a .pragma library that only appears inside a comment"),
-            (js_trailing, True, "a .pragma library trailing another statement on the same line"),
-            (js_bom, True, "a .pragma library pushed past the window by a UTF-8 BOM"),
-            (js_nobom, False, "the same payload WITHOUT a BOM, which fits the window exactly"),
-            (js_lower, False, "a lowercase .js basename, which gets no qmldir entry"),
-            (js_multidot, False, "a multi-dot .js basename, which CMake's EXT test skips"),
-            (js_nonascii, False, "a non-ASCII-initial .js basename, which Qt's ^[A-Z] skips"),
+        js = set(js_msg)
+        # The fourth field is a substring the MESSAGE must carry, for a probe that two arms
+        # can both report. None where membership is enough.
+        for path, want, why, needle in (
+            (js_ok, False, "a .pragma library on line 1", None),
+            (js_missing, True, "a PascalCase .js library with no .pragma library at all", None),
+            (js_late, True, f"a .pragma library ending past Qt's {window}-byte window", None),
+            (js_commented, True, "a .pragma library that only appears inside a comment", None),
+            (js_trailing, True, "a .pragma library trailing another statement on the same line", None),
+            (js_bom, True, "a .pragma library pushed past the window by a UTF-8 BOM", "past Qt's"),
+            (js_nobom, False, "the same payload WITHOUT a BOM, which fits the window exactly", None),
+            (js_lower, False, "a lowercase .js basename, which gets no qmldir entry", None),
+            (js_multidot, False, "a multi-dot .js basename, which CMake's EXT test skips", None),
+            (js_nonascii, False, "a non-ASCII-initial .js basename, which Qt's ^[A-Z] skips", None),
         ):
             if (path in js) != want:
                 bad.append(f"rule_js_pragma {'missed' if want else 'reported'} {why}")
+            elif want and needle and needle not in js_msg[path]:
+                bad.append(f"rule_js_pragma reported {why} through the WRONG ARM: expected a message carrying "
+                           f"{needle!r}, got {js_msg[path]!r}")
     return bad
 
 
 def rule_coverage_failures(partition_readable) -> list[str]:
     """Every fake-tree arm in this module, in one call.
 
-    One entry point rather than six imports, so conventions_selftest.py names this module
-    once and adding an arm here needs no edit there. Order is deliberate: the precondition
-    and the SPDX window first (the cheapest and the most load-bearing), then the wiring,
-    then the two rules with the most history behind them.
+    One entry point rather than nine imports, so conventions_selftest.py names this module
+    once and adding an arm here needs no edit there. Order reads cheapest-first — the
+    precondition and the SPDX window, then the wiring, then the rules — but it is only a
+    reading order: no arm depends on running before or after another, which was checked by
+    running them all in reverse with every redirected global restored.
     """
     return [*_precondition_failures(partition_readable),
             *_spdx_suffix_failures(partition_readable),
             *_wiring_failures(partition_readable),
             *_size_ratchet_failures(partition_readable),
+            *_baseline_writer_failures(partition_readable),
             *_license_tree_failures(partition_readable),
             *_remaining_rule_failures(partition_readable),
             *_dead_stanza_failures(),

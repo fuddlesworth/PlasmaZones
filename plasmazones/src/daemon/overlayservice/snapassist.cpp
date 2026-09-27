@@ -1006,7 +1006,7 @@ void OverlayService::pickerMoveSelection(int dx, int dy)
     if (!m_layoutPickerVisible || m_layoutPickerScreenId.isEmpty()) {
         return;
     }
-    // constFind, not value(): value() copies the whole ScreenState struct
+    // constFind, not value(): value() copies the whole PerScreenOverlayState struct
     // just to call a one-line accessor.
     auto it = m_screenStates.constFind(m_layoutPickerScreenId);
     auto* slot = (it != m_screenStates.constEnd()) ? it->layoutPickerSlot() : nullptr;

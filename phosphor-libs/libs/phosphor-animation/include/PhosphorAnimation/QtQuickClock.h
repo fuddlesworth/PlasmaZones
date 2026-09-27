@@ -68,9 +68,13 @@ namespace PhosphorAnimation {
  *
  * ## Monotonicity
  *
- * `std::chrono::steady_clock` is monotonic by contract, so the
- * `IMotionClock` non-decreasing requirement is satisfied by the source
- * and no clamp is needed.
+ * `std::chrono::steady_clock` is monotonic by contract, so no clamp against a
+ * regressing SOURCE is needed — which is the only thing a sibling clock would
+ * need one for. The `max(prev, …)` in both writers is a different job: it orders
+ * the fallback→cache handoff between the GUI and render threads, so a
+ * slightly-earlier render-thread capture cannot publish below what a GUI reader
+ * already observed. See qtquickclock.cpp; an earlier version of this paragraph
+ * said no clamp existed, which its own .cpp contradicts twice.
  *
  * ## Cross-thread read safety
  *

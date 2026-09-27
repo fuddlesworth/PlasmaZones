@@ -420,13 +420,33 @@ Item {
         item.setProperty("wallpaperTexture", QVariant::fromValue(backdrop));
         QVERIFY(!item.wallpaperTexture().isNull());
 
-        item.setProperty("wallpaperTexture", QVariant());
-        QVERIFY(item.wallpaperTexture().isNull());
+        // SILENTLY, which is what makes each leg pin the arm it names. The image being
+        // null afterwards does NOT distinguish these arms from the fall-through: an
+        // unconvertible value also clears, so deleting either the !isValid() or the
+        // Nullptr test left both legs passing — the setter still ended with a null image,
+        // just via the branch that WARNS first. The absence of a warning is the only
+        // observable difference, so it is the thing to assert.
+        {
+            WarningCapture capture;
+            item.setProperty("wallpaperTexture", QVariant());
+            QVERIFY(item.wallpaperTexture().isNull());
+            QVERIFY2(capture.messages().isEmpty(),
+                     qPrintable(QStringLiteral("an INVALID QVariant is the ordinary no-backdrop state and must "
+                                               "clear silently, but it logged: ")
+                                + capture.messages().join(QLatin1Char('\n'))));
+        }
 
         item.setProperty("wallpaperTexture", QVariant::fromValue(backdrop));
         QVERIFY(!item.wallpaperTexture().isNull());
-        item.setProperty("wallpaperTexture", QVariant::fromValue(nullptr));
-        QVERIFY(item.wallpaperTexture().isNull());
+        {
+            WarningCapture capture;
+            item.setProperty("wallpaperTexture", QVariant::fromValue(nullptr));
+            QVERIFY(item.wallpaperTexture().isNull());
+            QVERIFY2(capture.messages().isEmpty(),
+                     qPrintable(QStringLiteral("a QML null reaches the setter as QMetaType::Nullptr and must "
+                                               "clear silently, but it logged: ")
+                                + capture.messages().join(QLatin1Char('\n'))));
+        }
     }
 
     /// The audioSpectrum twin of the clear test above, and the arm that makes the

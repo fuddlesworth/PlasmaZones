@@ -424,8 +424,14 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                 QJsonArray screens = doc.object().value(QLatin1String("screens")).toArray();
 
                 // Look up the physical output geometry ONCE rather than per VS definition (O(N) vs O(N*M))
+                //
+                // KWin::effects guarded for the same reason WindowAnimator::onRepaintNeeded
+                // is: this body runs from a D-Bus reply at an arbitrary later moment, and
+                // `self` being QPointer-alive says nothing about the global. An empty
+                // `outputs` leaves physGeom invalid, which the arm below already handles
+                // and warns about, so the degrade path exists and costs nothing to reach.
                 QRect physGeom;
-                const auto outputs = KWin::effects->screens();
+                const auto outputs = KWin::effects ? KWin::effects->screens() : decltype(KWin::effects->screens()){};
                 for (const auto* out : outputs) {
                     if (self->outputScreenId(out) == physicalScreenId) {
                         physGeom = out->geometry();

@@ -175,9 +175,10 @@ QVariantMap shaderParametersFor(const PAS::ShaderProfile& resolved, const QStrin
 /// without a registered config fall back to AnimatedValue's library
 /// default (150 ms OutCubic), same as a missing-profile lookup.
 ///
-/// Load-bearing, not documentation, for ONE surface: ZoneOverlay has no
-/// per-role config and genuinely routes through the animator, so this default is
-/// the motion it gets. The registration site below names it.
+/// Load-bearing, not documentation, for TWO surfaces: ZoneOverlay and
+/// ScrollDropIndicator each have no per-role config and genuinely route through the
+/// animator, so this default is the motion they get. The registration site below
+/// names them both, and said two while this said one for a while.
 PAL::SurfaceAnimator::Config buildDefaultConfig()
 {
     return PAL::SurfaceAnimator::Config{};

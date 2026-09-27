@@ -342,13 +342,19 @@ private:
     /// paths that ERASE the entry, since an erase can strand a hide nothing else
     /// would release.
     ///
-    /// NOT on every path that finds no entry, which three rounds of this docblock
-    /// claimed and a fourth disproved: forgetOutput and the capture-below snapshot
-    /// both return straight out of a find-none, and so does the settled branch's
-    /// own early exit. That is correct rather than an omission — a find-none means
-    /// this manager holds nothing for that output, so there is nothing of its to
-    /// release. Do not turn this into a list again; grep the name for the call
-    /// sites. A reported-failure abort leaves
+    /// NOT on every path that finds no entry. Four rounds of this docblock got that
+    /// sentence wrong, the last of them by naming `forgetOutput`, which is not a
+    /// member of this class at all, and the settled branch, which DOES release. The
+    /// four real non-releasing find-none exits are `isRunningForOutput` (a const
+    /// query with nothing to release), `notifyLeg`'s disarm when no entry exists,
+    /// `snapshotBelowCapture`, and `outputRemoved`. That is correct rather than an
+    /// omission: a find-none means this manager holds nothing for that output, and
+    /// `hideCursorForPass` only ever takes a hide for a screen it has a live entry
+    /// for, so a find-none elsewhere cannot be holding one.
+    ///
+    /// Grep the name before editing this paragraph again — every wrong version of
+    /// it was written from a list someone believed rather than one they ran.
+    /// A reported-failure abort leaves
     /// the entry live in m_active, so this call would not release there: the
     /// failed capture walk and the failed sharp composite both go through
     /// releaseCursorHideForForeignPaint instead, which is also the one path

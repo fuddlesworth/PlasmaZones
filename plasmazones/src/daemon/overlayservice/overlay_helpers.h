@@ -14,12 +14,15 @@
 #include <QElapsedTimer>
 #include <QMutex>
 #include <QMutexLocker>
-#include <QQuickWindow>
-#include <QJsonDocument>
-#include <QJsonArray>
-#include <QJsonObject>
-#include <QJsonValue>
-#include <QJsonParseError>
+// No QQuickWindow and no QJson* here. All six were orphaned by the removal of
+// parseZonesJson and the shader-preview helpers, and this header's own body uses none of
+// them. Verified before removal, not after: an audit pass scanned every TU that reaches
+// this header (directly or through internal.h) plus every TU in the two unity targets, with
+// comments AND string literals stripped, and resolved the Qt JSON provision graph — exactly
+// one TU uses a QJson type without its own include and it lands in a different unity batch,
+// so this header was never what satisfied it. A unity build cannot tell an orphan from a
+// load-bearing transitive include, so the removal was checked against a NON-UNITY build with
+// the shell both on and off.
 #include <QQuickItem>
 #include <QRectF>
 #include <QVector>

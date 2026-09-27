@@ -81,6 +81,20 @@ def is_title_separator(s: str) -> bool:
 # acceptable failure here — a splice built from verbs not named reads as a list and
 # is missed, which review has to catch — because silence costs a missed nit and a
 # false positive costs a blocked commit.
+#
+# `stays` is the ONE admitted exception and it is admitted on evidence, not on taste:
+# the noun reading needs a mast or a corset, which this project's prose will not
+# produce, while the verb reading is on 58 CHANGELOG lines and a real splice built
+# from it passed the gate before it was added. `lets` and `follows` went in beside it
+# and cleared neither half of that bar — both are equally ambiguous ("holiday lets",
+# "new follows") and deleting either changed no finding anywhere, so they carried risk
+# for nothing. A future addition that is also a plural noun needs the same two things:
+# a noun reading this project cannot produce, and a measured catch.
+#
+# The membership is pinned against a literal in the selftest, both directions, so an
+# addition or a deletion has to be deliberate. Ten words went in on a false premise
+# and only two of them were ever pinned by a probe; a literal is what makes that
+# impossible rather than merely discouraged.
 _FINITE_VERBS = frozenset(
     """is are was were am be been being has have had do does did
        can cannot could will would shall should may might must
@@ -89,7 +103,7 @@ _FINITE_VERBS = frozenset(
        keeps drops sets reads writes runs takes gives makes shows uses needs holds
        adds stops starts applies returns means covers carries leaves gets goes comes
        sits lands falls picks sends pushes pulls draws paints binds clears
-       stays lets allows follows""".split()
+       stays allows""".split()
 )
 
 
@@ -152,9 +166,11 @@ def prose_problems(s: str) -> list[str]:
     # three-CLAUSE splice.
     #
     # The verb list is a heuristic and it under-catches: a splice built from verbs it
-    # does not name reads as a list and is missed, for review to catch. It cannot
-    # over-catch, because one verbless side exempts the construction and a genuine
-    # list item has no verb — which is what lets the list grow safely.
+    # does not name reads as a list and is missed, for review to catch. It CAN also
+    # over-catch, and a copy of this comment claiming otherwise survived here for a
+    # round after the claim was retracted seventy lines up — see _FINITE_VERBS, which
+    # carries the one criterion that matters: a word that is also a plural noun puts a
+    # "finite verb" inside a genuine list item and both sides then test true.
     # \s* rather than \s+: a splice written without a space after the semicolon is
     # still a splice, and requiring one let "blurred;the border" through.
     for segment in re.split(r"(?<=[.!?])\s+|\n\s*\n", without_code):

@@ -35,10 +35,17 @@ namespace PlasmaZones {
  * the design needed, and the latch was retired rather than kept as cover
  * for an API that has moved away. Every clock reads wall time, and on an
  * N-output desktop advanceAnimations steps every in-flight animation with a
- * real dt N times per vsync. Correctness is unaffected (parametric curves
- * read elapsed/duration off wall time, and Spring::step composes exactly
- * across sub-steps); the per-output pacing is simply not a thing this class
- * does. What is still per-output is the refresh rate and the repaint scope.
+ * real dt N times per vsync. Correctness is unaffected: parametric curves read
+ * elapsed/duration off wall time, and Spring::step is the closed-form solution
+ * of a linear ODE, so N sub-steps summing to dt give the same state as one dt
+ * step (its convergence snap is the one step-count-dependent part, and it only
+ * ever settles EARLIER). The per-output pacing is simply not a thing this class
+ * does.
+ *
+ * What is still per-output is the REPAINT SCOPE — requestFrame's per-output
+ * addRepaint — and that is what earns the per-output clock map now. refreshRate()
+ * is also per-output but has no production consumer anywhere in the tree, so it
+ * is API surface rather than a reason.
  *
  * ## Thread contract
  *

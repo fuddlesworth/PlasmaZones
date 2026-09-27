@@ -73,10 +73,22 @@ void OverlayService::setSettings(ISettings* settings)
             connect(m_settings, &ISettings::settingsChanged, this, refreshZoneSelectors);
 
             // Recreate overlay windows when the overlay display mode changes
-            // (e.g. compact mode can't use shader overlays). Connected to the
+            // (a zone resolving to LayoutPreview, which shader.cpp:292 refuses to
+            // render through a shader pack; there is no "compact mode", which an
+            // earlier version of this line named). Connected to the
             // specific signal instead of settingsChanged to avoid redundant work.
-            connect(m_settings, &ISettings::overlayDisplayModeChanged, this,
-                    &OverlayService::recreateOverlayWindowsOnTypeMismatch);
+            //
+            // BOTH steps, matching the layoutModified path that claims to mirror this one.
+            // The recreate alone is not enough: it early-returns when no screen needs a slot
+            // TYPE flip, which is every screen with no shader pack assigned, and nothing then
+            // re-pushes previewZones or the per-zone mode into a live slot —
+            // refreshFromIdle's updateZonesForAllWindows writes zones, zoneCount and
+            // highlightedCount but not previewZones. A warm overlay that was visible when the
+            // setting landed therefore kept the old rendering until the next full show.
+            connect(m_settings, &ISettings::overlayDisplayModeChanged, this, [this]() {
+                recreateOverlayWindowsOnTypeMismatch();
+                refreshVisibleWindows();
+            });
 
             connect(m_settings, &ISettings::enableAudioVisualizerChanged, this, &OverlayService::syncCavaState);
 

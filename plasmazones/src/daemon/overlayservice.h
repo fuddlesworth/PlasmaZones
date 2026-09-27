@@ -1532,8 +1532,8 @@ private:
     /**
      * @brief Create a PhosphorLayer::Surface for a layer-shell-backed overlay window.
      *
-     * Every surface goes through this single helper: the OSD, picker, selector,
-     * snap assist, cheatsheet, zone overlay and drop indicator. Returns a surface
+     * ONE surface per screen goes through this single helper: the passive shell that
+     * hosts all seven content SLOTS (listed above), not seven surfaces. Returns a surface
      * that has been warmed up (window created, QML loaded, transport attached) but
      * is hidden - callers decide when to call @c surface->show() or keep it warm
      * for pre-warmed OSDs.

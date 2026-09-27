@@ -20,7 +20,7 @@ Item {
     readonly property var safeConfig: config || ({})
     // Idle-quiesce park. Only the daemon overlay host binds this (to its
     // idleParked latch); the settings dialog consumer leaves it false
-    // and reclaim by deactivating their Loader instead. While parked, the
+    // and reclaims by deactivating its Loader instead. While parked, the
     // private layer FBO below is dropped along with the render node's
     // resources — for the overlay host that layer is a screen-sized RGBA8
     // texture which otherwise survives every releaseIdleGraphicsResources()

@@ -6,6 +6,11 @@
 #include <optional>
 
 #include "overlay_helpers.h"
+// Its OWN logging include. applyShaderInfoToWindow below calls qCWarning(lcOverlay), and
+// this header was getting the declaration only through overlay_helpers.h — a masked include
+// across a header boundary, independent of unity builds, and one that inverted that
+// header's stated purpose of depending on nothing.
+#include "core/platform/logging.h"
 #include "core/interfaces/settings_interfaces.h"
 #include "core/interfaces/interfaces.h"
 #include "core/interfaces/shaderregistry.h"

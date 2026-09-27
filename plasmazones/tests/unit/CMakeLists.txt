@@ -3,8 +3,9 @@
 #
 # PlasmaZones Unit Tests
 #
-# FILE-SIZE EXCEPTION (sanctioned): this file is one flat list of test target
-# declarations, and the isolation block at the very bottom is what makes the
+# FILE SIZE (not an exception: .txt is outside CODE_SUFFIXES, so the size rule
+# never reads this file and it has no oversize-baseline entry): this file is one
+# flat list of test target declarations, and the isolation block at the bottom makes the
 # length structural rather than incidental. That block walks
 # `get_property(DIRECTORY . PROPERTY TESTS)`, which is DIRECTORY-scoped, so
 # every target it covers has to be declared in THIS file. Moving a group out

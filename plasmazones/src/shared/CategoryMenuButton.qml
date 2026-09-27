@@ -41,10 +41,17 @@ import org.kde.kirigami as Kirigami
  *
  * ## "None" entry
  *
- * For hosts where clearing the selection is a first-class action (the animation
- * profile editor), set `includeNoneEntry: true` to prepend an explicit `noneText`
- * row. Selecting it emits `selected("")`. The rules action editors and the
- * decoration chain editor leave it off.
+ * Set `includeNoneEntry: true` wherever the EMPTY ID IS A MEANINGFUL WIRE VALUE, so
+ * the user can choose it: the animation profile editor, the rules layout and
+ * overlay-shader action params, and the overlay shader assignment card all do.
+ * Leave it off where the control is an add-picker whose empty state only means
+ * nothing has been chosen yet — the zone-name and pack add-pickers, and ChainEditor.
+ * Selecting the row emits `selected("")`.
+ *
+ * Stated as the rule rather than as a host list on purpose: two earlier versions
+ * enumerated hosts and both were wrong, the last of them by generalising two
+ * `includeNoneEntry: false` line numbers into "the rules action editors", which set
+ * it TRUE at two other sites in the same file.
  *
  * ## Menu lifecycle (Qt 6 use-after-free workaround)
  *

@@ -276,7 +276,16 @@ std::chrono::nanoseconds QtQuickClock::now() const
            && !m_nowCache.compare_exchange_weak(prev, reading, std::memory_order_release, std::memory_order_acquire)) {
         // CAS retry — `prev` updated with the latest seen value.
     }
-    return std::chrono::nanoseconds{reading};
+    // The MONOTONE value, not the raw reading. Returning `reading` closed the hole for the
+    // handoff and left it open between two fallback readers: if another thread has already
+    // published a LATER value, this reader's own earlier sample fails the `reading > prev`
+    // test, is never published, and was still handed back — so this call could observe less
+    // than a concurrent one already had. After the loop `prev` holds the latest value seen,
+    // so the larger of the two is the non-decreasing answer and costs one comparison.
+    // Consequence if it regressed was bounded rather than fatal (AnimatedValue::advance
+    // treats a negative dt as a zero-step, logs once and requests another frame), which is
+    // why it survived unnoticed.
+    return std::chrono::nanoseconds{reading > prev ? reading : prev};
 }
 
 qreal QtQuickClock::refreshRate() const

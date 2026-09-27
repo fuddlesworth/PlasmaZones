@@ -81,9 +81,14 @@ SHADER_SUFFIXES = {".frag", ".vert", ".glsl"}
 # .js is here so rule_spdx and rule_license cover the 17 QML .js libraries. .sh/.cmake/.spec/
 # .desktop joined once every tracked one carried a head header, and .c once the two QPA protocol
 # stubs were found to be the only comment-bearing C sources no rule read. THREE rules read this
-# set, and so does --update-baseline, so .spec also entered the size ratchet. 26 of the 40 tracked
-# suffix VALUES are still outside it (737 of 3830 files), not just the .in/.xml/.txt and data JSON
-# an earlier version of this comment named, .md and .yml among them.
+# set, and so does --update-baseline, so .spec also entered the size ratchet. MOST tracked suffix
+# VALUES are still outside it, not just the .in/.xml/.txt and data JSON an earlier version of this
+# comment named, .md and .yml among them.
+#
+# No file COUNT here on purpose. Two earlier versions carried one and both went stale: "32 tracked
+# suffixes" was wrong when written, and "737 of 3830 files" was off by one the day it landed and by
+# three a commit later, because adding any file moves it. A count that every commit can falsify is
+# worse than no count — check it with `git ls-files` when you actually need the number.
 CODE_SUFFIXES = (CPP_SUFFIXES | QML_SUFFIXES | SHADER_SUFFIXES
                  | {".luau", ".py", ".js", ".sh", ".cmake", ".spec", ".desktop"})
 
