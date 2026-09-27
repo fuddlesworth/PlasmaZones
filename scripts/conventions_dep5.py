@@ -174,15 +174,29 @@ def dep5_problems(files, *, repo, line_of, tracked_files):
             # the exact form an upstream header gets pasted in with.
             #
             # The lookahead admits `(` and the sign as well as a space or digit, because
-            # "Copyright(c)" is written without one. The trailing comma group exists because
-            # the year run's own separator only consumes a comma followed by ANOTHER year, so
-            # "2026, Acme Inc" kept its comma and reported ", Acme Inc" as the holder. Three
-            # rounds have now each closed one sibling of this same shape, which is why every
-            # spelling is pinned in the self-test rather than argued about here.
+            # "Copyright(c)" and "Copyright©2026" are written without one. The year run ends
+            # with an OPTIONAL LONE SEPARATOR because its own repeating separator consumes one
+            # only when another year follows, so "2026, Acme Inc", "2015- Acme Inc" and
+            # "2026 - Acme Inc" each kept their punctuation and reported it as part of the
+            # holder. That separator sits INSIDE the year group on purpose: a name that
+            # legitimately opens with a hyphen and carries no year keeps it. The trailing `by`
+            # covers "Copyright (c) 2026 by Acme Inc", and its lookahead stops it eating the
+            # first word of "Bystander" or "byte Foundation". Each of the last few rounds
+            # closed one sibling of this shape, which is why every spelling is pinned in the
+            # self-test rather than argued about here. Knowingly out of scope: malformed
+            # punctuation after the prefix word, as in "Copyright: 2026 Name".
+            #
+            # ONLY UNDER-stripping can raise a false positive, and that is what bounds the
+            # risk of every change to this pattern. It is anchored at ^, so whatever survives
+            # is a SUFFIX of what the file says, and a stanza that names the same holder
+            # contains that suffix as well. An over-eager strip therefore stays SILENT rather
+            # than firing wrongly; it costs accuracy in the message instead, which is the job
+            # the raw holder below does.
             name = re.sub(r"\s*(-->|\*/|\",?)\s*$", "", holder.strip()).split("<")[0].strip()
             name = re.sub(
                 r"^(?:(?:\(c\)|©|Copyright)(?=[\s(©\d]|$)\s*)*"
-                r"(?:\d{4}(\s*[-–,]\s*(?:\d{4}|present))*)?\s*,?\s*",
+                r"(?:\d{4}(?:\s*[-–,]\s*(?:\d{4}|present))*(?:\s*[-–,])?)?"
+                r"\s*(?:by(?=\s)\s*)?",
                 "", name, flags=re.IGNORECASE)
             name = name.strip()
             if name and name not in blob:

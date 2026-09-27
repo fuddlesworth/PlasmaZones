@@ -321,6 +321,21 @@ vec4 pSurface(vec2 uv) {
     glow += microDust(px, t, clamp(p_dustAmount, 0.0, 1.0), reachPx, dustA);
     alpha += dustA;
 
+    // CANVAS-EDGE FEATHER, the same one haloFalloff gives glow and shadow and the
+    // fireflies sibling carries inline. A mote centre travels to 0.9 of the reach and its
+    // gaussian body reaches further still (sizeI goes to moteSize * 2.38, and a tail tap
+    // 2.35x that again), so on a host granting only the margin this pack asks for the
+    // swarm was cut off in a hard rectangle at the canvas boundary. The micro-dust half
+    // above already tapers on its own; the heads and their tails did not. Applied to BOTH
+    // sides of the premultiplied pair, so the glow <= alpha invariant the clamp below
+    // relies on survives it. Same profile and the same 12-logical-px cap as the shared
+    // helper, so all three fade alike.
+    float edgeDist = min(min(px.x, px.y), min(uSurfaceSize.x - px.x, uSurfaceSize.y - px.y));
+    float feather = max(min(0.35 * reachPx, 12.0 * max(uSurfaceScale, 0.001)), 1e-3);
+    float edgeFade = smoothstep(0.0, feather, edgeDist);
+    glow *= edgeFade;
+    alpha *= edgeFade;
+
     // BOTH sides of the premultiplied pair, not just alpha. glow and alpha are
     // accumulated together above (glow += col * contrib beside alpha += contrib,
     // and every fluxGradient channel is <= 1, so glow <= alpha holds through the

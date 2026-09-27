@@ -52,7 +52,7 @@
             "default": 8,
             "min": 0,
             "max": 64,
-            "description": "Corner rounding the shadow follows (px). The shadow traces this radius on the window frame. A Border pack earlier in the chain paints its band from its own corner radius out to that radius plus its border width, so match this to the sum for the two to meet. At a border radius of 0 the band stays square and nothing sits further out. On an OSD or a popup the host sets this and the border radius to the card's own radius, so the shadow's falloff reaches about 0.4 of the border width further out at the corners than along the edges, which reads as a slightly fatter shadow there, and you cannot correct it here."
+            "description": "Corner rounding the shadow follows (px). The shadow traces this radius on the window frame. A Border pack earlier in the chain paints its band from its own corner radius out to that radius plus its border width, so match this to the sum for the two to meet, as far as the 64 px this control stops at. At a border radius of 0 the band stays square and nothing sits further out. On an OSD or a popup the host sets this and the border radius to the card's own radius, so the shadow's falloff reaches about 0.4 of the border width further out at the corners than along the edges. At a thin border that is under a pixel. At a thick one the corners carry a plainly fatter shadow, and with a small shadow size the shadow stands off the corner instead. You cannot correct it here."
         },
         {
             "id": "roundBottomCorners",

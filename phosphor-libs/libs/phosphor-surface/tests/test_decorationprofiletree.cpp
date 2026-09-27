@@ -707,9 +707,6 @@ private Q_SLOTS:
         QVERIFY(!mergedCustom.directOverride(QStringLiteral("osd")).parameters.has_value());
     }
 
-    /// A parameters-only override at a seeded path is a RETUNE: the seed
-    /// chain injects into the unengaged chain slot while the user's engaged
-    /// parameters map wins wholesale.
     void withSeedDefaults_engagedPresetIdsBlocksTheSeedParameters()
     {
         // A seed carries hard-coded parameter values for the surfaces a decoration set
@@ -802,7 +799,11 @@ private Q_SLOTS:
         seed.parameters = QVariantMap{{QStringLiteral("border"), QVariantMap{{QStringLiteral("borderWidth"), 1}}}};
         seeds.setOverride(QStringLiteral("osd"), seed);
 
-        const auto seededWidth = [&seeds](const QVariantMap& presetIds) {
+        // Returns the pack's whole parameter MAP, not the width read out of it, so the
+        // blocked case below can assert absence. Reading an int out of an absent QVariant
+        // gives 0 either way, which cannot tell a blocked seed from a seed that landed
+        // carrying zero.
+        const auto seededParams = [&seeds](const QVariantMap& presetIds) {
             DecorationProfileTree user;
             DecorationProfile profile;
             profile.presetIds = presetIds;
@@ -811,14 +812,13 @@ private Q_SLOTS:
                 .resolve(QStringLiteral("osd"))
                 .effectiveParameters()
                 .value(QStringLiteral("border"))
-                .toMap()
-                .value(QStringLiteral("borderWidth"))
-                .toInt();
+                .toMap();
         };
-        QCOMPARE(seededWidth(QVariantMap{}), 1);
-        QCOMPARE(seededWidth(QVariantMap{{QStringLiteral("border"), QString()}}), 1);
+        const QString widthKey = QStringLiteral("borderWidth");
+        QCOMPARE(seededParams(QVariantMap{}).value(widthKey).toInt(), 1);
+        QCOMPARE(seededParams(QVariantMap{{QStringLiteral("border"), QString()}}).value(widthKey).toInt(), 1);
         // And a real id still blocks it, so the predicate is specific.
-        QCOMPARE(seededWidth(QVariantMap{{QStringLiteral("border"), QStringLiteral("Thick")}}), 0);
+        QVERIFY(!seededParams(QVariantMap{{QStringLiteral("border"), QStringLiteral("Thick")}}).contains(widthKey));
     }
 
     void withSeedDefaults_injectsTheSeedsOwnPresetIds()
@@ -853,6 +853,9 @@ private Q_SLOTS:
                  QStringLiteral("Mine"));
     }
 
+    /// A parameters-only override at a seeded path is a RETUNE: the seed
+    /// chain injects into the unengaged chain slot while the user's engaged
+    /// parameters map wins wholesale.
     void withSeedDefaults_parametersOnlyOverride_keepsSeedChain()
     {
         DecorationProfileTree seeds;

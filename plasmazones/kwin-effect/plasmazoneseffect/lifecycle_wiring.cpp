@@ -326,7 +326,8 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
         m_packBufferScaleCache.clear(); // metadata cache rides the compile cache's lifetime
         m_anyCompiledPackReadsCursor = false; // re-derived as packs recompile
         m_opacityTintFallbackWarned = false; // re-arm the capture-fallback warning with the fresh compiles
-        m_backdropAllocWarned = false; // and the backdrop-allocation one, for the same reason
+        m_backdropAllocWarned = false; // and the two allocation ones, for the same reason
+        m_surfaceTargetAllocWarned = false;
         // INVALIDATED per entry, not erased, which is what the two sibling clear
         // sites already do and for a reason this one shares. A DELETED window's
         // entry is the intended frame for its close leg, and the composite

@@ -48,6 +48,12 @@ vec2 rippleCoord(vec2 c) {
 }
 
 vec4 pSurface(vec2 uv) {
+    // A degenerate frame rect collapses the slab mask to a dot, and the pane below is
+    // multiplied by it, so the content has to pass through here (see surfaceFrameDegenerate).
+    if (surfaceFrameDegenerate()) {
+        return surfaceTexel(uv);
+    }
+
     float cornerPx = p_cornerRadius * uSurfaceScale;
     SurfaceSlab slab = surfaceSlabOpen(uv, cornerPx, surfaceBottomRadius(cornerPx, p_roundBottomCorners), p_edgeSoftness);
     // Fade the window content over the pane; the translucency it frees is
@@ -98,10 +104,21 @@ vec4 pSurface(vec2 uv) {
         // both the look and the cost, and this pack has not been rendered
         // against the change. The comment is corrected so the next reader does
         // not take the old justification as a reason to keep the value.
+        //
+        // The ZERO-STRENGTH gate below is a different question and changes no
+        // pixel. Both consumers of the gradient are off at their DECLARED
+        // MINIMA: refractionStrength 0 zeroes dispPx and shift (which the
+        // fringe fetches below already test for), and highlightStrength 0
+        // zeroes the glint. With both at 0 the four rippleHeight calls ran over
+        // the whole canvas and could not change a thing. Gated on the params
+        // rather than on the result, so it costs one branch, not the noise.
         const float e = 0.35;
-        vec2 grad = vec2(rippleHeight(q + vec2(e, 0.0), t) - rippleHeight(q - vec2(e, 0.0), t),
-                         rippleHeight(q + vec2(0.0, e), t) - rippleHeight(q - vec2(0.0, e), t))
-            / (2.0 * e);
+        vec2 grad = vec2(0.0);
+        if (p_refractionStrength > 0.0 || p_highlightStrength > 0.0) {
+            grad = vec2(rippleHeight(q + vec2(e, 0.0), t) - rippleHeight(q - vec2(e, 0.0), t),
+                        rippleHeight(q + vec2(0.0, e), t) - rippleHeight(q - vec2(0.0, e), t))
+                / (2.0 * e);
+        }
 
         // Gradient refraction: displace the backdrop sample UP-slope (the
         // gradient points uphill) by at most p_refractionStrength logical px,

@@ -368,6 +368,14 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
     const bool wasDirty = consumeShaderDirty();
     const bool needLoad = wasDirty || freshNode;
     const bool shaderSourceValid = shaderSource().isValid() && !shaderSource().isEmpty();
+    // Set only by a SUCCESSFUL load in this sync, and read by the status block at
+    // the bottom. Mirrors ShaderEffect::updatePaintNode, which this override
+    // replaces rather than delegates to, so the base's latch does not cover it.
+    // Without it a load that just succeeded gets the PREVIOUS shader's resident
+    // bake error stamped over its Ready: invalidateShader() only raises the dirty
+    // flag, and the node clears its error inside prepare()'s bake, which has not
+    // run yet. Fixing a pack's GLSL and reloading would report the old failure.
+    bool loadSucceededThisSync = false;
 
     if (needLoad) {
         if (shaderSourceValid) {
@@ -467,6 +475,15 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
                 node->invalidateBufferShaders();
                 node->invalidateShader(); // Ensure node re-bakes
                 setStatus(Status::Ready);
+                loadSucceededThisSync = true;
+                // One extra frame so prepare()'s bake can report its real outcome,
+                // as the base does. A successful LOAD is not a successful BAKE, and
+                // a decoration stage whose pack is not animated runs with
+                // playing=false (SurfaceDecoration.qml gates it on
+                // stageData.animated), so this is the item's LAST sync: without the
+                // extra frame a compile failure stands as Ready forever and
+                // chainHasError reads false over a stage that draws nothing.
+                update();
             } else {
                 // Read the node's error BEFORE clearing — clearBakedShader
                 // wipes it along with the resident bake.
@@ -502,7 +519,7 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
     // ── Update status based on shader node state ─────────────────────
     if (node->isShaderReady() && status() != Status::Ready) {
         setStatus(Status::Ready);
-    } else if (!node->shaderError().isEmpty() && status() != Status::Error) {
+    } else if (!loadSucceededThisSync && !node->shaderError().isEmpty() && status() != Status::Error) {
         setError(node->shaderError());
     }
 

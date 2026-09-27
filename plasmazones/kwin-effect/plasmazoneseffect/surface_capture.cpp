@@ -156,12 +156,13 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
             // Latched. The state is ERASED on this path, so a per-window flag cannot
             // survive to suppress the repeat: the next frame builds a fresh state and
             // fails again. While VRAM stays short that is one line per window per
-            // frame, which is exactly when the journal is least useful. A
-            // function-local static is the smallest thing that outlives the state,
-            // and it matches the one-shot `explained` latch the pack validator uses.
-            static bool allocFailureWarned = false;
-            if (!allocFailureWarned) {
-                allocFailureWarned = true;
+            // frame, which is exactly when the journal is least useful. An effect
+            // member outlives the erased state just as a function-local static
+            // would, and unlike one it is RE-ARMED at every compile-cache clear,
+            // like the backdrop-allocation latch it sits beside: session-permanent
+            // meant one transient failure silenced every later one for the session.
+            if (!m_surfaceTargetAllocWarned) {
+                m_surfaceTargetAllocWarned = true;
                 qCWarning(lcEffect) << "Surface target allocation failed for" << windowId << "at" << textureSize
                                     << "— dropping this window's decoration (out of VRAM?). This is "
                                        "reported once per session.";

@@ -792,9 +792,9 @@ Item {
                 // No published shaderContentRect (root-as-anchor content like
                 // snap-assist): the frame IS the whole anchor, per this
                 // component's documented fallback. A (0, 0) fallback here
-                // would trip every pack's degenerate-frame guard
-                // (uSurfaceFrameSize < 1 → passthrough) and render nothing on
-                // those surfaces.
+                // would trip the degenerate-frame guard of every pack that reads
+                // the frame rect (uSurfaceFrameSize < 1 → passthrough) and so
+                // draw no decoration at all on those surfaces.
                 surfaceFrameSize: (root.shaderAnchorItem && root.shaderAnchorItem.shaderContentRect !== undefined) ? Qt.size(root.shaderAnchorItem.shaderContentRect.width * root.surfaceScale, root.shaderAnchorItem.shaderContentRect.height * root.surfaceScale) : (root.shaderAnchorItem ? Qt.size(root.shaderAnchorItem.width * root.surfaceScale, root.shaderAnchorItem.height * root.surfaceScale) : Qt.size(0, 0))
 
                 // Pack source + params, per stage. paramPreamble/shaderParams

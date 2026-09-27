@@ -594,11 +594,11 @@ bool PlasmaZonesEffect::paintScreenImpl(const KWin::RenderTarget& renderTarget, 
     // pass's cursor hide back BEFORE that pass runs, not after: the strip
     // pass's own hideCursorForPass refuses when KWin already reports the
     // cursor hidden, so a hide still held here would leave neither pass
-    // drawing the pointer for the length of the leg. Gated on the strip
-    // pass's entry check, which is broader than "will paint": the pass can
-    // still abandon the frame after it (a compile sentinel, a capture that
-    // failed to allocate), costing one frame with both cursors on that path.
-    // Accepted rather than plumbing a will-paint predicate through.
+    // drawing the pointer for the length of the leg. The gate reads the same
+    // frame-pinned clock paintOutput does, so it cannot answer false for a
+    // frame the pass then takes, but it is still broader than "will paint":
+    // the pass can abandon after it (a compile sentinel, a failed capture
+    // allocation), costing one frame with both cursors. Accepted as is.
     if (m_stripTransition.isRunningForOutput(screen)) {
         m_pointerPass.releaseCursorHide(screen);
     }
@@ -658,17 +658,17 @@ bool PlasmaZonesEffect::paintScreenImpl(const KWin::RenderTarget& renderTarget, 
         && m_scrollTabPainter->hasIndicators(screen) && !m_currentPassPaintFailed) {
         paintScrollTabIndicators(renderTarget, viewport, deviceRegion);
     }
-    // The pointer decoration chain composites over the FINISHED frame, so it is the last
-    // thing this override does on the normal path. Reached only here: a desktop transition or
-    // a strip leg replaces the output's paint and returns above, releasing the hide there.
-    // It is also the SECOND raw-GL consumer the failure comment above names, so it carries
-    // the same latch term as the three pill-blit sites and hands its hide back when it skips.
+    // The pointer chain composites over the FINISHED frame, so it is the last thing this override does
+    // on the normal path, reached only here: a foreign paint returns above, releasing the hide there. As
+    // the SECOND raw-GL consumer the failure comment names, it carries the same latch term as the three
+    // pill sites; and no capture nests a screen pass (both setters re-enter drawWindow), so both are inert.
     if (!m_capturingSnapshot && m_currentPassPaintFailed) {
         m_pointerPass.releaseCursorHide(screen); // else nobody draws the sprite
     } else if (!m_capturingSnapshot) {
         m_pointerPass.paintOutput(renderTarget, viewport, screen, currentPassRenderDevice());
     }
-    return true;
+    // A latch set mid-walk skipped both raw-GL consumers above, so this cannot answer true past it.
+    return !m_currentPassPaintFailed;
 }
 
 void PlasmaZonesEffect::postPaintScreen()

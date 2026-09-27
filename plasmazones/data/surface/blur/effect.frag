@@ -29,6 +29,12 @@
 #include <surface_noise.glsl>
 
 vec4 pSurface(vec2 uv) {
+    // A degenerate frame rect collapses the slab mask to a dot, and the pane below is
+    // multiplied by it, so the content has to pass through here (see surfaceFrameDegenerate).
+    if (surfaceFrameDegenerate()) {
+        return surfaceTexel(uv);
+    }
+
     // The raw content sample, the device-px fragment, the frame SDF at the
     // corner radius and the AA slab mask — the shared backdrop-slab open.
     // The slab below stays solid, so translucency reveals the blurred

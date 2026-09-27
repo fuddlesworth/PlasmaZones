@@ -1883,19 +1883,19 @@ private:
     int m_surfacePresentFinalLoc = -1; ///< uFinal sampler location on the present shader
     int m_surfacePresentOpacityLoc = -1; ///< uOpacity (final modulation) location on the present shader
     bool m_surfacePresentFailed = false; ///< latch a failed present-shader compile
-    /// One-shot latch for the capture-time opacity fallback warning (the
-    /// opacity-tint pack failed to compile). The condition is pack-level and
-    /// the fold runs per window per frame, so an unlatched warning would spam
-    /// the journal at vsync rate. Reset alongside the compile cache on a
-    /// registry hot-reload (effectsChanged) so a fixed pack that breaks again
-    /// warns again.
+    /// One-shot latch for the capture-time opacity fallback warning (the opacity-tint pack
+    /// failed to compile). The condition is pack-level and the fold runs per window per frame,
+    /// so an unlatched warning would spam the journal at vsync rate. Reset alongside the compile
+    /// cache on a registry hot-reload (effectsChanged) so a fixed pack that breaks again warns.
     bool m_opacityTintFallbackWarned = false;
-    /// Once-latched journal warning for a backdrop texture or framebuffer that
-    /// failed to allocate (captureWindowBackdrop). The capture retries every
-    /// paint, so an unlatched warning would spam at vsync rate. Re-armed at every
-    /// compile-cache clear, like its two neighbours: session-permanent meant one
-    /// transient failure silenced every later one.
+    /// Once-latched journal warnings for a backdrop texture or framebuffer that failed to
+    /// allocate (captureWindowBackdrop), and for a surface composite target that did
+    /// (ensureSurfaceMultipassTargets). Both retry every paint, so unlatched they would spam at
+    /// vsync rate, and both are re-armed at every compile-cache clear: session-permanent meant
+    /// one transient failure silenced every later one. The second's state is ERASED on the
+    /// failure path, so an effect member is what outlives it; a per-window flag could not.
     bool m_backdropAllocWarned = false;
+    bool m_surfaceTargetAllocWarned = false;
 
     /// Reusable staging buffer for updateShellContentRect's glReadPixels — the
     /// scan runs on the compositor paint path, and a fresh per-scan QByteArray

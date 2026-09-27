@@ -181,8 +181,19 @@ bool StripTransitionManager::isRunningForOutput(KWin::LogicalOutput* screen) con
     if (it == m_active.end()) {
         return false;
     }
-    return m_effect->m_stripViewAnimator->isAnimatingOn(screen)
-        || it->second.motion.holdsAfterSettle(ShaderInternal::shaderClockNowMs());
+    // The FRAME-PINNED clock, the one paintOutput samples, with the same live fallback for a
+    // caller outside a paint bracket. holdsAfterSettle is monotone decreasing in its argument
+    // and the pin is taken at the end of prePaintScreen, so a live sample here reads LATER
+    // than the pass will: the gate could answer "settled" for a frame paintOutput then takes.
+    // paintScreen's cursor-hide pre-release reads this gate, and that disagreement leaves
+    // neither pass drawing the pointer for one frame. The same clock makes the gate a
+    // superset by construction. prePaintScreen's own call sees the PREVIOUS pass's pin, which
+    // errs the safe way: the mask is set for a pass that may not paint.
+    qint64 nowMs = m_effect->m_shaderManager.currentFrameClockMs();
+    if (nowMs < 0) {
+        nowMs = ShaderInternal::shaderClockNowMs();
+    }
+    return m_effect->m_stripViewAnimator->isAnimatingOn(screen) || it->second.motion.holdsAfterSettle(nowMs);
 }
 
 bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,

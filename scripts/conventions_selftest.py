@@ -180,8 +180,8 @@ SELFTEST_JSON = json.dumps(
 # that were split into their own modules were not, and between them they produced a
 # defect in consecutive review rounds, every one in code written to fix the
 # previous one. Two patterns recurred and neither was reachable by any gate: a fix
-# applied to ONE SIDE of a symmetric pair, four times over, and a coverage floor that
-# counted the wrong thing four times. Both are exactly what a planted case catches
+# applied to ONE SIDE of a symmetric pair, and a coverage floor that counted the wrong
+# thing four times. Both are exactly what a planted case catches
 # and no amount of re-reading does.
 #
 # These run against a FAKE TREE in a temporary directory, not the repo, so they pin
@@ -528,19 +528,45 @@ def _dep5_failures() -> list[str]:
                      # run's own separator only consumes a comma followed by another year, so
                      # the first group kept a leading comma and reported it as the holder.
                      "2026,", "Copyright (c) 2026,", "Copyright (C) 2024-2026,",
-                     "Copyright(c) 2026", "\u00a92026,"):
+                     "Copyright(c) 2026", "\u00a92026,",
+                     # The sign directly after the word is the ONLY spelling the `\u00a9` in the
+                     # lookahead class serves; every row above writes it with a space, so the
+                     # class could be narrowed back with the suite still green.
+                     "Copyright\u00a92026",
+                     # An open-ended or spaced range with no second year, and the "by" form
+                     # upstream headers are commonly pasted in with. Both left punctuation or
+                     # a preposition at the front of the reported holder.
+                     "2015-", "2026 -", "2026 by", "Copyright (c) 2026 by"):
         got = run({"src/a.cpp": hdr(year=spelling)}, dep5=bare)
         if got:
             bad.append(f"dep5_problems fired on the holder spelling {spelling!r}: {got}")
     # And the strip must NOT eat the front of a name that merely begins with those letters.
-    # ASSERT THE NAME IN THE MESSAGE, not merely that a finding appeared: without the
-    # lookahead the prefix eats four letters and the rule still fires, on "eous Inc". Both
-    # states produce a finding, so only the quoted name distinguishes them.
+    # ASSERT THE NAME AT THE FRONT OF THE MESSAGE, not merely somewhere inside it: without
+    # the lookahead the prefix eats four letters and the rule still fires, on "eous Inc".
+    # Both states produce a finding, so only the quoted name tells them apart — and a
+    # CONTAINMENT test stopped doing that the round the finding began quoting the raw holder
+    # as well, because "(the header says 'Copyrighteous Inc')" carries the needle whether the
+    # strip ate the name or not. With that, the whole lookahead could be deleted and the
+    # suite stayed green. startswith pins the stripped name and the absence of a raw-holder
+    # suffix together.
     mangled = run({"src/a.cpp": hdr(year="", who="Copyrighteous Inc")}, dep5=bare)
-    if not any("'Copyrighteous Inc'" in m for m in mangled):
+    if not any(m.startswith("copyright holder 'Copyrighteous Inc' is not named") for m in mangled):
         bad.append(f"the prefix strip ate the front of a name that only starts with it: {mangled}")
+    # The `by` arm has the same hazard as the prefix and needs the same lookahead: without
+    # one it eats the first two letters of any name beginning with them. Asserted the same
+    # way, and with no year, so the strip leaves the holder untouched and no raw-holder
+    # suffix is appended to compare against.
+    bystander = run({"src/a.cpp": hdr(year="", who="Bystander Ltd")}, dep5=bare)
+    if not any(m.startswith("copyright holder 'Bystander Ltd' is not named") for m in bystander):
+        bad.append(f"the `by` strip ate the front of a name that only starts with it: {bystander}")
+    # The finding quotes the RAW holder beside the stripped name whenever the strip changed
+    # it, so an author can search for the string their file actually holds. Nothing pinned
+    # that arm: reverting it to the stripped name alone left the suite green.
+    stranger = run({"src/a.cpp": hdr(who="Some Stranger")})
+    if not any("'Some Stranger' (the header says '2026 Some Stranger')" in m for m in stranger):
+        bad.append(f"the finding no longer quotes the raw holder beside the stripped name: {stranger}")
     # It still has to notice a holder the stanza really does not name.
-    if not any("not named" in m for m in run({"src/a.cpp": hdr(who="Some Stranger")})):
+    if not any("not named" in m for m in stranger):
         bad.append("dep5_problems missed a copyright holder absent from the stanza")
     # And the year strip must not swallow the whole holder when the name IS a year-like
     # token, nor fire when a holder legitimately carries a parenthesised project.

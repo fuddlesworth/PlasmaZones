@@ -1403,7 +1403,7 @@ private:
     /// after a sibling slot finished hiding. Re-shows iff the drag is
     /// still logically active (@c m_zoneSelectorVisible) AND the screen
     /// retains its captured (physScreen, geometry) state. Centralizes
-    /// the symmetric restore pattern used by every slot-hide completion
+    /// the symmetric restore pattern used by every MODAL slot-hide completion
     /// (onOsdSlotHideCompleted, onSnapAssistSlotHideCompleted,
     /// onLayoutPickerSlotHideCompleted, onCheatsheetSlotHideCompleted).
     void restoreZoneSelectorAfterHide(const QString& effectiveId);

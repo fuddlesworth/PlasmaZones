@@ -15,7 +15,7 @@
             "default": 14,
             "min": 4,
             "max": 48,
-            "description": "Size of the mosaic cells (px). Larger cells hide more",
+            "description": "Size of the mosaic cells (px). Larger cells hide more.",
             "group": "Mosaic"
         },
         {

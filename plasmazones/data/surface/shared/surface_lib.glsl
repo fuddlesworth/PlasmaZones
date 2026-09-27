@@ -38,11 +38,13 @@ float sdRoundedBox(vec2 p, vec2 b, float r) {
 
 // True before a host has wired a real frame rect. The test is "either side
 // below one device px", not "exactly zero": a sub-pixel frame is degenerate
-// for the same reason and is treated the same. The
-// SDF would otherwise collapse to "edge everywhere", so the border and glow
-// family test this and pass content through untouched. The backdrop-slab packs
-// do NOT: they fall through to a zero-extent frame, whose mask collapses to
-// nothing, so the pane simply does not draw.
+// for the same reason and is treated the same. The SDF would otherwise collapse
+// to "edge everywhere" for the border and glow family. For the backdrop-slab
+// packs it collapses the other way, to a dot at the frame corner (sdRoundedBox
+// with a zero half-size reduces to a distance from one point) — and since each
+// of those multiplies its window sample by that same mask, the SURFACE would
+// vanish rather than pass through. So every pack that reads the frame rect
+// tests this and returns the content untouched.
 bool surfaceFrameDegenerate() {
     return uSurfaceFrameSize.x < 1.0 || uSurfaceFrameSize.y < 1.0;
 }
@@ -325,7 +327,6 @@ BorderBand standardBorderBand(vec2 p, float borderWidth, float cornerRadius) {
 // editor instead of riding the retired SetOpacity rule feed. All eight of the
 // packs above declare it, so it reads as part of the family rather than a
 // frost/glass peculiarity.
-// `cornerRadiusPx` is the pack's p_cornerRadius already scaled to device px.
 struct SurfaceSlab {
     vec4 window;
     vec2 px;
@@ -350,6 +351,8 @@ SurfaceSlab surfaceSlabOpen(vec2 uv, float topRadiusPx, float bottomRadiusPx, fl
     s.window = surfaceTexel(uv) * s.mask;
     return s;
 }
+// `cornerRadiusPx`, like the two radii above it, is the pack's p_cornerRadius
+// already scaled to device px.
 SurfaceSlab surfaceSlabOpen(vec2 uv, float cornerRadiusPx) {
     return surfaceSlabOpen(uv, cornerRadiusPx, cornerRadiusPx, 1.0);
 }

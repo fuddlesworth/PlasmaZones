@@ -359,6 +359,13 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     const bool wasDirty = consumeShaderDirty();
     const bool needLoad = wasDirty || freshNode;
     const bool shaderSourceValid = shaderSource().isValid() && !shaderSource().isEmpty();
+    // Set only by a SUCCESSFUL load in this sync, and read by the status block at the
+    // bottom. Same reason as the SurfaceShaderItem twin: this override replaces
+    // ShaderEffect::updatePaintNode rather than delegating, so the base's latch does not
+    // cover it. Without it a load that just succeeded gets the PREVIOUS shader's resident
+    // bake error stamped over its Ready, because invalidateShader() only raises the dirty
+    // flag and the node clears its error inside prepare()'s bake, which has not run yet.
+    bool loadSucceededThisSync = false;
 
     if (needLoad) {
         if (shaderSourceValid) {
@@ -427,8 +434,15 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
                 node->invalidateBufferShaders();
                 node->invalidateShader(); // Ensure node re-bakes
                 setStatus(Status::Ready);
+                loadSucceededThisSync = true;
                 // Force zone data resync when shader changes successfully
                 m_zoneDataDirty = true;
+                // One extra frame so prepare()'s bake can report its real outcome, as the
+                // base does. A successful LOAD is not a successful BAKE, and an overlay
+                // sitting still schedules no further sync of its own, so without this a
+                // compile failure would stand as Ready and ZoneShaderRenderer's
+                // shaderError signal would never fire for it.
+                update();
             } else {
                 // Read the node's error BEFORE clearing — clearBakedShader
                 // wipes it along with the resident bake.
@@ -571,7 +585,7 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     // ── Update status based on shader node state ─────────────────────
     if (node->isShaderReady() && status() != Status::Ready) {
         setStatus(Status::Ready);
-    } else if (!node->shaderError().isEmpty() && status() != Status::Error) {
+    } else if (!loadSucceededThisSync && !node->shaderError().isEmpty() && status() != Status::Error) {
         setError(node->shaderError());
     }
 

@@ -36,7 +36,7 @@
             "default": 16,
             "min": 2,
             "max": 256,
-            "description": "How strongly the scene behind the glass is blurred (px). Past a display scale of 125% the top of the range stops adding blur, and the lowest setting is already a soft blur rather than none",
+            "description": "How strongly the scene behind the glass is blurred (px). Past a display scale of 125% the top of the range stops adding blur, and the lowest setting is already a soft blur rather than none.",
             "group": "Blur"
         },
         {
@@ -152,7 +152,7 @@
             "default": 1.0,
             "min": 0.0,
             "max": 2.0,
-            "description": "Gain on the finished pane, the refracted scene with the ripple glint already on it. 1.0 leaves it unchanged",
+            "description": "Gain on the finished pane, the refracted scene with the ripple glint already on it. 1.0 leaves it unchanged.",
             "group": "Colour"
         },
         {
@@ -162,7 +162,7 @@
             "default": 1.0,
             "min": 0.0,
             "max": 2.0,
-            "description": "Contrast of the finished pane around mid grey, ripple glint included. 1.0 leaves it unchanged",
+            "description": "Contrast of the finished pane around mid grey, ripple glint included. 1.0 leaves it unchanged.",
             "group": "Colour"
         },
         {
@@ -172,7 +172,7 @@
             "default": 1.0,
             "min": 0.0,
             "max": 2.0,
-            "description": "Colour saturation of the finished pane, ripple glint included. 0 is greyscale and 1.0 leaves it unchanged",
+            "description": "Colour saturation of the finished pane, ripple glint included. 0 is greyscale and 1.0 leaves it unchanged.",
             "group": "Colour"
         },
         {
@@ -192,7 +192,7 @@
             "default": 0.0,
             "min": 0.0,
             "max": 1.0,
-            "description": "Boosts saturation where a colour is already saturated and bright, so muted scenes stay muted. 0 turns it off, and Vibrancy darkness widens it to darker colours",
+            "description": "Boosts saturation where a colour is already saturated and bright, so muted scenes stay muted. 0 turns it off, and Vibrancy darkness widens it to darker colours.",
             "group": "Colour"
         },
         {
@@ -202,7 +202,7 @@
             "default": 0.0,
             "min": 0.0,
             "max": 1.0,
-            "description": "How far the vibrancy boost reaches into darker colours. Does nothing while Vibrancy is 0, which is where it starts",
+            "description": "How far the vibrancy boost reaches into darker colours. Does nothing while Vibrancy is 0, which is where it starts.",
             "group": "Colour"
         },
         {
@@ -210,7 +210,7 @@
             "name": "Mirror at the edge",
             "type": "bool",
             "default": false,
-            "description": "Where the bend reaches past the pane's edge, fold the backdrop back inside. Left off, the bend keeps reading the captured scene beside the pane, which can make the edges look see-through",
+            "description": "Where the bend reaches past the pane's edge, fold the backdrop back inside. Left off, the bend keeps reading the captured scene beside the pane, which can make the edges look see-through.",
             "group": "Refraction"
         }
     ]

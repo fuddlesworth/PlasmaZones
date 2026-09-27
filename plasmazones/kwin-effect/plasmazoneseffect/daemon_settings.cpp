@@ -920,7 +920,8 @@ void PlasmaZonesEffect::loadCachedSettings()
             surfaceState.chainKey.clear();
         }
         m_opacityTintFallbackWarned = false; // re-arm the capture-fallback warning with the fresh compiles
-        m_backdropAllocWarned = false; // and the backdrop-allocation one, for the same reason
+        m_backdropAllocWarned = false; // and the two allocation ones, for the same reason
+        m_surfaceTargetAllocWarned = false;
         // The pointer is a surface in this same tree (path `pointer`), so its
         // chain re-derives here rather than from a config domain of its own.
         // It is baseline-isolated, so a global window chain resolves onto it as

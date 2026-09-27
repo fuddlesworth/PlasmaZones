@@ -483,6 +483,12 @@ private Q_SLOTS:
         QVERIFY2(!params.contains(QStringLiteral("borderWidth")),
                  "friendly param id must not survive into the stage's uploaded params");
         QCOMPARE(params.value(QStringLiteral("customParams1_x")).toDouble(), 5.0);
+        // The preamble VALUE, not just the key: the slot map only binds because a
+        // `#define p_<id>` names the lane, so dropping the preamble leaves every
+        // param-declaring pack failing to compile. basePack() declares no params
+        // and buildParamPreamble({}) returns an empty string, so the presence
+        // assertion elsewhere cannot tell a real preamble from a lost one.
+        QVERIFY(stage.value(QStringLiteral("preamble")).toString().contains(QStringLiteral("#define p_borderWidth")));
     }
 
     /// An unusable pack composes to nothing at all.

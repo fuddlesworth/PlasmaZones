@@ -117,10 +117,12 @@ void OverlayService::reapplyVisiblePopupDecorations()
         //
         // Deliberately NOT gated on the slot's own visibility, which is what the OSD arm
         // below uses. The reason is no longer that a retune would never reach a hidden slot:
-        // both sites that make this slot visible re-apply first, so a visibility gate would
-        // be repaired on the next show. It is that such a gate would make THIS arm depend on
-        // the restore path in selector.cpp continuing to re-decorate, which is exactly the
-        // coupling that broke once already. Using it here would invite it back.
+        // each of these three has exactly ONE site that makes its slot visible, in
+        // showSnapAssist, showLayoutPicker and showCheatsheet, and each re-applies first, so
+        // a visibility gate would be repaired on the next show. It is that such a gate would
+        // make the arm depend on that show path continuing to re-decorate — the coupling
+        // that broke once already on the zone selector, whose restore path is the one site
+        // of its two that did not. Using it here would invite it back.
         if (m_snapAssistVisible && it.key() == m_snapAssistScreenId) {
             applyDecoration(state.snapAssistSlot(), PhosphorSurfaceShaders::decorationPopupSnapAssistPath());
         }
