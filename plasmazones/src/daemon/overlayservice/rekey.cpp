@@ -367,15 +367,19 @@ void OverlayService::validateScreenStateInvariant(const QStringList& targetIds) 
 #else
     Q_UNUSED(targetIds);
 #endif
-    // The dead-modal-key check is deliberately NOT in the block above. Both arms up
-    // there are genuine debug-only invariants about cross-side consistency: if one
-    // trips there is nothing to do but tell a developer. A modal id naming a missing
-    // key is different in kind — it is a RECOVERABLE state with a repair function
-    // already in the tree — and its own comment calls the consequence unrecoverable by
-    // any normal route (the slot stays visible, its surface keeps the input grab, and
-    // the visible flag stays set so the toggle no-ops). Leaving the only detection
-    // inside QT_NO_DEBUG meant a release build could neither see it nor repair it. It
-    // runs in both builds now, at the one call site, which is a mutating context.
+    // The dead-modal-key check is deliberately NOT in the block above. Both arms up there
+    // are debug-only invariants about cross-side consistency: if one trips there is nothing
+    // to do but tell a developer. A modal id naming a missing key differs in that a repair
+    // function for it already exists in the tree, so the check sits at the one call site,
+    // which is a mutating context, and it warns and repairs in both builds while keeping an
+    // assert for debug.
+    //
+    // It is not the unrecoverable state an earlier version of this note called it. The three
+    // hide paths clear the visible flag and the screen id unconditionally and emit their
+    // dismissed signal, so the ordinary toggle recovers it; only the slot hide is behind the
+    // screen-state lookup, and on these paths the slot went with the shell. Repairing it at
+    // the refresh buys the correct bookkeeping and an earlier release of the shared Escape
+    // grab, not a rescue from a stuck sheet.
 }
 
 QMetaObject::Connection OverlayService::installOverlayGeometryWatcher(QScreen* physScreen, const QString& screenId,

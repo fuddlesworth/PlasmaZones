@@ -41,17 +41,21 @@ import org.kde.kirigami as Kirigami
  *
  * ## "None" entry
  *
- * Set `includeNoneEntry: true` wherever the EMPTY ID IS A MEANINGFUL WIRE VALUE, so
- * the user can choose it: the animation profile editor, the rules layout and
- * overlay-shader action params, and the overlay shader assignment card all do.
- * Leave it off where the control is an add-picker whose empty state only means
- * nothing has been chosen yet — the zone-name and pack add-pickers, and ChainEditor.
- * Selecting the row emits `selected("")`.
+ * ONE test, applied in both directions. Set `includeNoneEntry: true` wherever the
+ * EMPTY ID IS A MEANINGFUL WIRE VALUE, so the user can choose it: the animation
+ * profile editor, the rules layout and overlay-shader action params, and the overlay
+ * shader assignment card all do. Leave it off wherever it is not, which covers two
+ * different shapes rather than one. An add-picker whose list shrinks as you pick has
+ * no empty value to send, and a MANDATORY single choice showing a placeholder until
+ * one is made has none either — the event, action-type and match-field pickers are
+ * that second shape, and a reader applying the add-picker half literally would fit
+ * them with a "None" row that wires nothing. Selecting the row emits `selected("")`.
  *
- * Stated as the rule rather than as a host list on purpose: two earlier versions
- * enumerated hosts and both were wrong, the last of them by generalising two
+ * Stated as the rule rather than as a host list on purpose: three earlier versions
+ * enumerated hosts and all three were wrong. One generalised two
  * `includeNoneEntry: false` line numbers into "the rules action editors", which set
- * it TRUE at two other sites in the same file.
+ * it TRUE at two other sites in the same file; the next named add-pickers as the
+ * whole of the false half, which is three of the seven hosts that leave it off.
  *
  * ## Menu lifecycle (Qt 6 use-after-free workaround)
  *

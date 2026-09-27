@@ -85,12 +85,14 @@ void ZoneShaderItem::setLabelsTexture(const PhosphorRendering::ZoneLabelTexture&
 {
     // Emit only on a genuine change (project rule). The daemon's per-frame path
     // dedupes upstream via labelsTextureHash, but three writers do not and all
-    // three reach here: the settings preview, and the daemon's own 1x1 transparent
-    // PLACEHOLDER writes in releaseOverlaySlotTextures (overlay.cpp:58) and
-    // createOverlayWindow's usingShader branch (overlay.cpp:641), which RESET the
-    // hash to 0 rather than consulting it. This guard is what makes a repeated
-    // placeholder write a no-op. The compare short-circuits on size before any
-    // per-tile pixel compare.
+    // three reach here: the settings preview's binding, and the daemon's own 1x1
+    // transparent PLACEHOLDER writes in releaseOverlaySlotTextures and in
+    // createOverlayWindow's usingShader branch, which RESET the hash to 0 rather
+    // than consulting it. Both of those live in overlayservice/overlay.cpp, named
+    // rather than cited by line: the line numbers were wrong twice, each time
+    // because an unrelated hunk in that file shifted them. This guard is what makes
+    // a repeated placeholder write a no-op. The compare short-circuits on size
+    // before any per-tile pixel compare.
     {
         QMutexLocker lock(&m_labelsTextureMutex);
         if (m_labelsTexture == labels) {

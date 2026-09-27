@@ -236,6 +236,41 @@ inline PackResult validateSurface(const QTemporaryDir& tmp, const QString& name,
     return result;
 }
 
+/// The buffer-pass FILLER: a pass that is not one of the nine builtin blur passes.
+///
+/// A fixture whose subject is a buffer-ARRAY lint (a non-numeric scale, a misaligned
+/// length, a daemon-only wrap) still has to declare a buffer pass for the arrays to be
+/// about anything, and every `builtin:` token belongs to the Kawase pyramid or the
+/// separable gaussian pair. The blur lints fire on those BY NAME, so such a fixture drew
+/// two errors with nothing to do with its subject — and several of these slots carried an
+/// `errors > 0` assertion that those two satisfied on their own, leaving the lint under
+/// test unguarded. This pass writes a constant, reads no channel and declares no
+/// parameter, so it draws no lint of its own and composes at any index.
+inline QString surfaceFillerBufferName()
+{
+    return QStringLiteral("filler.frag");
+}
+
+inline QByteArray surfaceFillerBufferBody()
+{
+    return QByteArrayLiteral(
+        "#version 450\n"
+        "layout(location = 0) out vec4 fragColor;\n"
+        "void main() { fragColor = vec4(0.0, 0.0, 0.0, 1.0); }\n");
+}
+
+/// `validateSurface` plus the filler buffer pass written beside the pack, for a fixture
+/// that declares `bufferShaders: [surfaceFillerBufferName()]`.
+inline PackResult validateSurfaceWithFillerPass(const QTemporaryDir& tmp, const QString& name,
+                                                const QJsonObject& metadata, const QString& body)
+{
+    const QString dir = tmp.filePath(name);
+    if (!writePackFile(dir, surfaceFillerBufferName(), surfaceFillerBufferBody())) {
+        return fixtureFailure(QStringLiteral("failed to write the filler buffer pass under ") + dir);
+    }
+    return validateSurface(tmp, name, metadata, body);
+}
+
 /// One surface parameter declaration.
 inline QJsonObject surfaceParam(const QString& id, const QString& type, const QJsonValue& def, double min, double max)
 {

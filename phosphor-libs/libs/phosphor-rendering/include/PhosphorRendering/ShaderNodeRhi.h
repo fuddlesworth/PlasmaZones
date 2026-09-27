@@ -1033,6 +1033,16 @@ private:
     /// than swallowed for the lifetime of the node. Called on the depth success path and
     /// from releaseRhiResources / setUseDepthBuffer.
     void clearDepthCreateFailure();
+
+    /// The buffer size the recorded depth failure was against, so a RESIZE gets a fresh
+    /// budget. The two clears above fire on a setting change and on a resource drop, and
+    /// neither covers a resize: bufferSize follows m_width/m_height, setResolution's changed
+    /// arm arms nothing depth-related, and setBufferScale's resetBufferTargets touches
+    /// neither the depth objects nor the count. So a node that burned its three attempts at
+    /// one size carried a spent budget and a silenced warning into the next. Compared in
+    /// ensureBufferTarget's depth block rather than cleared from setResolution, which fires
+    /// on every frame of an animated resize.
+    QSize m_depthCreateFailedSize;
 };
 
 /** Result of warmShaderBakeCacheForPaths for reporting to UI. */

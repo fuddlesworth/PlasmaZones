@@ -2491,6 +2491,12 @@ add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
 #   test_surface_pack_lints:   the surface metadata lints the file above does not
 #                              reach, one negative slot each, cut from it by
 #                              coverage gap rather than by subject
+#   test_surface_blur_chain_lints: the builtin blur family's lints — the Kawase
+#                              pyramid's positional and base-scale checks, the
+#                              gaussian pair's positional check, needsBackdrop
+#                              and the radius slot. Cut by FAMILY, which is the
+#                              seam this block recommends below, when the surface
+#                              file came within fifteen lines of the ceiling
 #   test_animation_pack_bakes: the animation stage bakes on both hosts, and the
 #                              multipass buffer passes
 #   test_pack_model_detection: the shared/ marker lookup and include roots
@@ -2526,8 +2532,8 @@ set(_pack_validator_arms
     ${CMAKE_SOURCE_DIR}/plasmazones/src/shadervalidate/packvalidator_pointer.cpp
     ${CMAKE_SOURCE_DIR}/plasmazones/src/shadervalidate/packvalidatorcommon.cpp)
 foreach(_pv_test IN ITEMS test_pack_validators test_pack_validator_presets test_pointer_pack_validator
-                          test_surface_pack_validator test_surface_pack_lints test_animation_pack_bakes
-                          test_pack_model_detection)
+                          test_surface_pack_validator test_surface_pack_lints test_surface_blur_chain_lints
+                          test_animation_pack_bakes test_pack_model_detection)
     add_executable(${_pv_test} shadervalidate/${_pv_test}.cpp
                    shadervalidate/packvalidatortesthelpers.h
                    ${_pack_validator_arms})

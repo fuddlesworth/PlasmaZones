@@ -592,23 +592,39 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // trusting the old address; the tail below reads the sampler, the frame
     // counter and the capture texture through it.
     it = m_active.find(screen);
-    if (it == m_active.end() || !it->second.captureTex || !it->second.belowTex) {
-        // Unreachable today (nothing inside the walk mutates m_active, and the
-        // allocation block above guarantees both textures), but if it ever
-        // happens the recorded list must not outlive the frame — the
-        // unwind guard was dismissed on the assumption the tail consumes it,
-        // and that tail is now skipped. No framebuffer has been pushed yet at
-        // this point, so there is nothing else to unwind. The hide taken
-        // above is released too: the normal scene paints this frame.
-        //
-        // The TEXTURES are tested beside the key, not just the key: the tail
-        // below binds both of them, and re-finding the entry proves only that
-        // some entry exists. Same pair surface_capture.cpp adds before its own
-        // bind, for the same reason — a null texture reaching a bind is a null
-        // deref inside the compositor, and this branch already degrades
-        // correctly by painting the normal scene.
+    // Both arms below are unreachable today (nothing inside the walk mutates
+    // m_active, and the allocation block above guarantees both textures), and
+    // both owe the same two things: the recorded list must not outlive the
+    // frame, because the unwind guard was dismissed on the assumption the tail
+    // consumes it and that tail is now skipped; and the hide taken at the top
+    // has to be released, because the normal scene paints this output instead.
+    // No framebuffer is pushed at this point — the capture scope closed with its
+    // popCaptureFbo guard — so there is nothing else to unwind.
+    //
+    // They differ in WHICH release is correct, which is the whole reason they
+    // are two arms. updateCursorHiding() declines to release while any live
+    // entry holds the cursor, so it is the right call only when this output's
+    // entry is gone.
+    if (it == m_active.end()) {
         m_effect->m_stripCaptureSkippedWindows.clear();
         updateCursorHiding();
+        return false;
+    }
+    // The TEXTURES are tested beside the key, not just the key: the tail below
+    // binds both of them, and re-finding the entry proves only that some entry
+    // exists. Same pair surface_capture.cpp adds before its own bind, for the
+    // same reason — a null texture reaching a bind is a null deref inside the
+    // compositor, and painting the normal scene degrades correctly.
+    //
+    // Here the entry IS present and still live (it passed the settle check at
+    // the top to get this far), so updateCursorHiding would walk m_active, find
+    // this very entry holding the cursor, and return without releasing — the
+    // pointer would stay hidden with nobody drawing it, for the rest of the leg.
+    // That is the trap the failed-capture-walk arm above documents, and it takes
+    // the same unconditional per-output release.
+    if (!it->second.captureTex || !it->second.belowTex) {
+        m_effect->m_stripCaptureSkippedWindows.clear();
+        releaseCursorHideForForeignPaint(screen);
         return false;
     }
     pass = &it->second;

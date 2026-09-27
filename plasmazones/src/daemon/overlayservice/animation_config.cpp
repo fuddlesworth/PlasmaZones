@@ -409,9 +409,13 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     // ShellHost::m_surfaceAnimator dangling for the span between the two
     // statements. Nothing calls into the host there today, and this runs once
     // from the ctor, but the window costs nothing to close.
-    if (m_shellHost) {
-        m_shellHost->setSurfaceAnimator(nullptr);
-    }
+    //
+    // Unguarded, because the qFatal precondition at the top of this function has
+    // already established the host — the same reason the deref below is unguarded. The
+    // `if` that used to be here was left behind when that guard moved to the top, and a
+    // dead null test two statements from an unguarded deref reads as disagreement about
+    // whether the precondition holds.
+    m_shellHost->setSurfaceAnimator(nullptr);
     m_surfaceAnimator = std::make_unique<PAL::SurfaceAnimator>(profileRegistry, buildDefaultConfig());
     if (m_animShaderRegistry) {
         m_surfaceAnimator->setAnimationShaderRegistry(m_animShaderRegistry);

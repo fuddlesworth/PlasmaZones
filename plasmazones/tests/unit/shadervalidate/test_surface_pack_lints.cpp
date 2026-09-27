@@ -206,10 +206,11 @@ private Q_SLOTS:
 
         QJsonObject obj = surfacePack(QStringLiteral("sf-vocab"), QJsonArray{});
         obj.insert(QStringLiteral("multipass"), true);
-        obj.insert(QStringLiteral("bufferShaders"), QJsonArray{QStringLiteral("builtin:gaussian-h")});
+        obj.insert(QStringLiteral("bufferShaders"), QJsonArray{surfaceFillerBufferName()});
         obj.insert(QStringLiteral("bufferWrap"), QStringLiteral("wrap-around"));
         obj.insert(QStringLiteral("bufferFilter"), QStringLiteral("trilinear"));
-        const PackResult r = validateSurface(tmp, QStringLiteral("sf-vocab"), obj, surfaceBodyReading({}));
+        const PackResult r =
+            validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-vocab"), obj, surfaceBodyReading({}));
         QVERIFY2(r.report.contains(QStringLiteral("wrap-around")), qPrintable(r.report));
         QVERIFY2(r.report.contains(QStringLiteral("trilinear")), qPrintable(r.report));
     }
@@ -225,9 +226,9 @@ private Q_SLOTS:
         const auto runWithScale = [&tmp](const QString& name, double scale) {
             QJsonObject obj = surfacePack(name, QJsonArray{});
             obj.insert(QStringLiteral("multipass"), true);
-            obj.insert(QStringLiteral("bufferShaders"), QJsonArray{QStringLiteral("builtin:gaussian-h")});
+            obj.insert(QStringLiteral("bufferShaders"), QJsonArray{surfaceFillerBufferName()});
             obj.insert(QStringLiteral("bufferScale"), scale);
-            return validateSurface(tmp, name, obj, surfaceBodyReading({}));
+            return validateSurfaceWithFillerPass(tmp, name, obj, surfaceBodyReading({}));
         };
 
         // KEYED ON THE RANGE LINT'S OWN WORDS, not on the bare key name. A bare

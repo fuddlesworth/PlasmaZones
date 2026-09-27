@@ -85,8 +85,17 @@ void OverlayService::setSettings(ISettings* settings)
             // refreshFromIdle's updateZonesForAllWindows writes zones, zoneCount and
             // highlightedCount but not previewZones. A warm overlay that was visible when the
             // setting landed therefore kept the old rendering until the next full show.
+            //
+            // The m_visible guard as well, which the first version of this lambda dropped
+            // while its own comment claimed to mirror layoutModified. All four paths it
+            // mirrors spell it the same way, and although the recreate is inert while hidden
+            // (a dismissed slot's overlayPhysScreen is null and the per-screen body skips it),
+            // matching them is what stops the next reader concluding that one of the five
+            // knows something the others do not.
             connect(m_settings, &ISettings::overlayDisplayModeChanged, this, [this]() {
-                recreateOverlayWindowsOnTypeMismatch();
+                if (m_visible) {
+                    recreateOverlayWindowsOnTypeMismatch();
+                }
                 refreshVisibleWindows();
             });
 

@@ -201,12 +201,21 @@ def _prose_extraction_failures(partition_readable) -> list[str]:
 
     files = {
         # deb822: a one-line synopsis then a space-indented continuation block.
+        # deb822: the bullets are indented TWICE — one space for the continuation and one for
+        # the indent — exactly as packaging/debian/control writes them, so this probe pins the
+        # deb822 half of the bullet strip the way the .spec probe below pins the RPM half.
+        # The live file does pin this one as well, because its own bullets are indented too;
+        # the probe is here so the pin does not depend on nobody ever reflowing that file.
         "packaging/debian/control": (
             "Source: plasmazones\n"
             "\n"
             "Package: plasmazones\n"
             "Description: Window snapping for KDE Plasma\n"
-            f" {splice}\n"),
+            f" {splice}\n"
+            " .\n"
+            " Features include:\n"
+            "  - first feature\n"
+            "  - second feature\n"),
         # RPM: %description runs to the next % section. The INDENTED bullet list is what
         # pins the bullet strip: without it those markers read as spaced hyphens standing in
         # for dashes and every bullet becomes a finding, which is what an ordinary reflow of
@@ -265,9 +274,10 @@ def _prose_extraction_failures(partition_readable) -> list[str]:
                 if not found:
                     bad.append(f"rule_prose did not extract the planted em-dash splice from {rel}")
                 # EXACTLY one, not at least one. Two of these bodies carry an indented bullet
-                # list beside the splice, and a bullet marker reads as a spaced hyphen unless
-                # the deb822/RPM strip removes it first — so a count is what pins the strip,
-                # while "did it find something" is satisfied by the splice alone.
+                # list beside the splice, one per half of the bullet strip (deb822 and RPM),
+                # and a bullet marker reads as a spaced hyphen unless the strip removes it
+                # first. So a count is what pins the strip, while "did it find something" is
+                # satisfied by the splice alone.
                 elif len(found) != 1:
                     bad.append(f"rule_prose reported {len(found)} findings for {rel}, not just the planted "
                                f"splice: {[v.message for v in found]}")
@@ -768,11 +778,21 @@ def _remaining_rule_failures(partition_readable) -> list[str]:
             # BOM term from the window arithmetic left it reported by the not-alone-on-its-
             # own-line arm instead, which sends the author to move a line that is already
             # correct — so the mutation survived a membership-only assertion.
-            js_msg = {v.path: v.message for v in rule_js_pragma(
+            js_all = rule_js_pragma(
                 [js_ok, js_missing, js_late, js_commented, js_trailing, js_bom, js_nobom,
-                 js_lower, js_multidot, js_nonascii])}
+                 js_lower, js_multidot, js_nonascii])
+            js_msg = {v.path: v.message for v in js_all}
         finally:
             g["REPO"] = saved_repo
+
+        # Keying the messages by path is only sound while the rule reports at most one
+        # violation per file, which is its shape today (the window arm and the not-alone arm
+        # are the two branches of one else). A second violation for one path would overwrite
+        # the first here and the message assertions below would read whichever arm ran last,
+        # so the collision is asserted rather than assumed.
+        if len(js_msg) != len(js_all):
+            bad.append(f"rule_js_pragma reported {len(js_all)} violations across {len(js_msg)} paths, "
+                       f"so a message assertion below reads whichever arm ran last")
 
         for path, want, why in (
             (i18n_include, True, "an #include <KLocalizedString> in C++"),

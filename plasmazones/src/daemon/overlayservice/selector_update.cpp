@@ -297,8 +297,17 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     // baked at attach time (AnchorAll) and never mutated afterwards.
     applyZoneSelectorGeometry(window, screenGeom);
 
-    // Keep stored geometry in sync so hit-testing uses the current value
-    m_screenStates[screenId].zoneSelectorGeometry = screenGeom;
+    // Keep stored geometry in sync so hit-testing uses the current value.
+    //
+    // A mutable find rather than operator[], which re-hashes the key and would INSERT a
+    // default state if it were ever missing — it cannot be, since the constFind at the top
+    // of this function returned early otherwise, and that is exactly why the insert arm is
+    // not wanted: a silent default entry is worse than the crash-free lookup that finds one.
+    // The const iterator from that first lookup is not reused because it cannot write.
+    const auto stateIt = m_screenStates.find(screenId);
+    if (stateIt != m_screenStates.end()) {
+        stateIt->zoneSelectorGeometry = screenGeom;
+    }
 
     // Slot is the QQuickItem hosting ZoneSelectorContent; root traversal
     // starts directly from it (no contentItem() - that's QQuickWindow-only).

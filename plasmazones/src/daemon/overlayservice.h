@@ -836,7 +836,7 @@ private:
     void applyIdleStateForCursor(const QString& activeEffectiveId, bool showOnAllMonitors);
 
     void updateLabelsTextureForWindow(QQuickItem* slot, const QVariantList& patched, QScreen* screen,
-                                      PhosphorZones::Layout* screenLayout);
+                                      PhosphorZones::Layout* screenLayout, const QString& screenId);
     QVariantList buildZonesList(QScreen* screen) const;
     QVariantList buildZonesList(const QString& screenId, QScreen* physScreen) const;
     /// Build the popup / picker layouts list for @p screenId.
@@ -1372,12 +1372,12 @@ private:
     /// onLayoutPickerSlotHideCompleted.
     void onCheatsheetSlotHideCompleted(const QString& effectiveId);
 
-    /// Reset the modal singleton state (snap assist / layout picker /
-    /// cheatsheet) and emit the dismissed signals when the screen that
-    /// owns them is destroyed. Called from every runtime shell-teardown site
-    /// (not the service destructor, where resetting members and emitting
-    /// dismissed signals is moot). Grep the name for the call sites; they
-    /// live in overlayservice/screens.cpp and overlayservice/rekey.cpp.
+    /// Reset the modal singleton state (snap assist / layout picker / cheatsheet)
+    /// and emit the dismissed signals when the screen that owns them is destroyed,
+    /// plus ONE non-teardown site: initializeOverlay's dead-key repair sweep. Not
+    /// the destructor, where resetting and emitting are both moot. Grep the name;
+    /// the callers live in overlayservice/{screens,rekey,overlay}.cpp. Pass the id
+    /// BY VALUE — the body clears the very members a reference could be bound to.
     void resetModalSingletonsForDestroyedId(const QString& id);
 
     /// Animator-driven slot-hide completion for zone-selector.

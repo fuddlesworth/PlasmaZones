@@ -563,11 +563,15 @@ void WindowAnimator::onRepaintNeeded(KWin::EffectWindow*, const QRectF& bounds) 
 {
     // KWin::effects guarded, because this is reachable from a D-Bus reply rather than only
     // from a paint. setEnabled(false) lands from a loadSettingAsync callback and reaps every
-    // live entry, and each reap comes through here. The same lambda that calls it guards the
-    // global two statements later (daemon_settings.cpp), and StripViewAnimator's matching
-    // repaint hook opens with the same test (lifecycle_wiring.cpp) — so both the caller and
-    // the sibling already treat a null global as reachable on this path, and it costs one
-    // comparison folded into a test that was already here.
+    // live entry, and each reap comes through here. The lambda that calls it guards the
+    // global itself further down, for its own strip repaint (daemon_settings.cpp), and
+    // StripViewAnimator's matching repaint hook opens with the same test
+    // (lifecycle_wiring.cpp) — so both the caller and the sibling already treat a null global
+    // as reachable on this path, and it costs one comparison folded into a test that was
+    // already here. Whether a null global is genuinely reachable while the effect object is
+    // still alive is a KWin teardown-ordering question nobody here has answered from KWin's
+    // source; this is cheap insurance, and the tree is not consistent about it (the
+    // daemon-registration path dereferences the same global unguarded).
     if (bounds.isValid() && KWin::effects) {
         KWin::effects->addRepaint(KWin::Rect(bounds.toAlignedRect()));
     }

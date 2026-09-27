@@ -317,23 +317,46 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
 
     validateScreenStateInvariant(targetIds);
 
-    // SELF-HEALING, and in both builds. A modal singleton's screen id is a key into
-    // m_screenStates and every hide or teardown path looks it up by that key, so an id
-    // naming a key that no longer exists leaves the slot visible with its surface still
-    // holding the input grab and the visible flag still set, which makes the toggle a
-    // no-op — the user cannot dismiss it. The ways in are key migrations and teardowns,
-    // and those are the paths that have to remember to carry these three along. This
-    // check lived inside validateScreenStateInvariant's QT_NO_DEBUG block, so a release
-    // build could neither detect nor repair it; reset is the existing repair, so calling
-    // it here costs one lookup per refresh and closes the unrecoverable case.
-    for (const auto& [modalScreenId, modalName] : {std::pair<QString, const char*>{m_cheatsheetScreenId, "cheatsheet"},
-                                                   {m_layoutPickerScreenId, "layout picker"},
-                                                   {m_snapAssistScreenId, "snap assist"}}) {
-        if (!modalScreenId.isEmpty() && !m_screenStates.contains(modalScreenId)) {
-            qCWarning(lcOverlay) << "modal singleton" << modalName << "named screen key" << modalScreenId
-                                 << "which has no screen state; resetting it so the slot can be dismissed";
-            resetModalSingletonsForDestroyedId(modalScreenId);
+    // A modal singleton's screen id is a key into m_screenStates, so an id naming a key that
+    // no longer exists is an invariant violation: the daemon believes a sheet is up on a
+    // screen it has no state for. The ways in are key migrations and teardowns, and those are
+    // the paths that have to remember to carry these three ids along.
+    //
+    // What it is NOT is unrecoverable, which an earlier version of this comment claimed in
+    // order to justify repairing it here. All three hide paths clear the flag and the id
+    // UNCONDITIONALLY before they touch a slot — hideCheatsheet, hideSnapAssist and
+    // hideLayoutPicker each emit their dismissed signal too, which is what drops the shared
+    // Escape grab — and only the hideSlot call sits behind the screen-state lookup. So the
+    // ordinary toggle already recovers this, and the honest value of repairing it here is
+    // narrower: the bookkeeping and the grab are corrected at the next overlay show rather
+    // than waiting for a keypress the user has no reason to make, and the snap-assist
+    // thumbnail caches get their trim armed at the same moment.
+    //
+    // The ASSERT is the part that matters in a debug build, and it is why this runs in both:
+    // the check used to live inside validateScreenStateInvariant's QT_NO_DEBUG block, where
+    // release could neither report nor repair, and a round that moved the repair out here
+    // dropped the assert in the same edit. Without it a future migration path that forgets
+    // the carry self-heals silently in debug too, which is the one build that should stop.
+    //
+    // Pointers rather than copies of the three ids: the repair clears every member matching
+    // the id it is given, so two modals sharing one dead key had the second iteration warn
+    // again off a stale snapshot. Reading through the member means the second sees it empty.
+    for (const auto& [modalIdPtr, modalName] :
+         {std::pair<const QString*, const char*>{&m_cheatsheetScreenId, "cheatsheet"},
+          {&m_layoutPickerScreenId, "layout picker"},
+          {&m_snapAssistScreenId, "snap assist"}}) {
+        if (modalIdPtr->isEmpty() || m_screenStates.contains(*modalIdPtr)) {
+            continue;
         }
+        // A COPY to hand the repair, and that is not tidiness: it takes a const QString&
+        // and CLEARS the members it then goes on to compare against, so a reference bound
+        // to one of them would read as empty from its second arm onwards and could match
+        // another modal's id that is also empty, dismissing a sheet nobody asked about.
+        const QString deadKey = *modalIdPtr;
+        qCWarning(lcOverlay) << "modal singleton" << modalName << "named screen key" << deadKey
+                             << "which has no screen state; resetting it so the slot can be dismissed";
+        Q_ASSERT_X(false, "OverlayService::initializeOverlay", "modal singleton id names a dead screen key");
+        resetModalSingletonsForDestroyedId(deadKey);
     }
 
     // Count how many overlay windows actually have a live shell surface.
@@ -509,7 +532,7 @@ void OverlayService::restampZoneHighlights()
         if (slot->property("useShader").toBool()) {
             int highlightedCount = 0;
             for (const QVariant& z : patched) {
-                if (z.toMap().value(QLatin1String(::PhosphorZones::ZoneJsonKeys::IsHighlighted)).toBool()) {
+                if (z.toMap().value(::PhosphorZones::ZoneJsonKeys::IsHighlighted).toBool()) {
                     ++highlightedCount;
                 }
             }
@@ -981,13 +1004,13 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
     if (windowIsShader && screenUsesShader) {
         int highlightedCount = 0;
         for (const QVariant& z : patched) {
-            if (z.toMap().value(QLatin1String(::PhosphorZones::ZoneJsonKeys::IsHighlighted)).toBool()) {
+            if (z.toMap().value(::PhosphorZones::ZoneJsonKeys::IsHighlighted).toBool()) {
                 ++highlightedCount;
             }
         }
         writeQmlProperty(slot, QString(OverlayQmlPropertyNames::ZoneCount), patched.size());
         writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedCount), highlightedCount);
-        updateLabelsTextureForWindow(slot, patched, physScreen, screenLayout);
+        updateLabelsTextureForWindow(slot, patched, physScreen, screenLayout, screenId);
         // Note: zoneDataVersion is bumped and broadcast to all windows in
         // updateZonesForAllWindows() after all per-screen updates complete. Do not
         // write it here - updateOverlayWindow() is called per-screen, and

@@ -38,8 +38,6 @@
 #include <QString>
 #include <QStringList>
 
-#include <algorithm>
-
 using PhosphorSurfaceShaders::SurfaceShaderEffect;
 using PhosphorSurfaceShaders::SurfaceShaderRegistry;
 
@@ -385,27 +383,31 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
                 "(the passes share one depth attachment, so they all render at bufferScale)");
         }
         bool anyKawase = false;
+        bool anyKawaseDown0 = false;
         bool anyGaussianH = false;
         bool anyGaussianV = false;
         for (const QJsonValue& v : declaredBuffers) {
             const QString tok = v.toString();
             anyKawase = anyKawase || kKawaseChain.contains(tok);
+            anyKawaseDown0 = anyKawaseDown0 || tok == QLatin1String("builtin:kawase-down-0");
             anyGaussianH = anyGaussianH || tok == QLatin1String("builtin:gaussian-h");
             anyGaussianV = anyGaussianV || tok == QLatin1String("builtin:gaussian-v");
         }
         // TWO predicates, because the two builtin blur families read different things and
         // the gaussian pair was uncovered while both of the lints below said "Kawase".
         //
-        // The BACKDROP is read by kawase_down_0 and by gaussian_h, whose only sources are
-        // backdropTexel() (surface_blur.glsl's surfaceKawaseDownBackdrop and
-        // surfaceGaussianBackdropH). gaussian_v is NOT in this set: surfaceGaussianChannelV
-        // samples iChannel0 only, so a pack declaring the vertical half alone reads no
-        // backdrop and must not be told it needs one.
+        // The BACKDROP is read by exactly TWO of the nine passes, and each has
+        // backdropTexel() as its only source: kawase_down_0 through
+        // surfaceKawaseDownBackdrop, and gaussian_h through surfaceGaussianBackdropH. The
+        // other six Kawase passes sample iChannelN, and so does gaussian_v
+        // (surfaceGaussianChannelV reads iChannel0 only). So this tests down-0 rather than
+        // "any Kawase token": a pack declaring only an UP pass reads no backdrop, and telling
+        // it otherwise named a pass that does not sample one. It draws the positional lint
+        // below instead, which is the accurate complaint about that pack.
         //
-        // The RADIUS SLOT is read by every pass in both families, gaussian_v included:
-        // surfaceGaussianChannelV takes customParams[0].x exactly as the horizontal half
-        // and the Kawase passes do.
-        const bool readsBackdrop = anyKawase || anyGaussianH;
+        // The RADIUS SLOT is read by all nine, gaussian_v included: surfaceGaussianChannelV
+        // takes customParams[0].x exactly as the horizontal half and the Kawase passes do.
+        const bool readsBackdrop = anyKawaseDown0 || anyGaussianH;
         const bool readsRadiusSlot = anyKawase || anyGaussianH || anyGaussianV;
 
         if (anyKawase) {
@@ -456,11 +458,40 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
                 }
             }
         }
+        // THE GAUSSIAN PAIR IS POSITIONAL TOO, and for a sharper reason than the pyramid
+        // above: surfaceGaussianChannelV samples iChannel0 — buffer pass 0's output, per
+        // surface_multipass.glsl — and nothing else. So the vertical half only composes when
+        // the horizontal half is pass 0 and it is pass 1, which is the shape
+        // surface_blur.glsl's own header declares ("Buffer pass 1: VERTICAL half over buffer
+        // 0's result"). Written v-then-h, pass 0 samples the FBO it is itself writing; on its
+        // own it does the same. Both validated clean before this lint existed, because every
+        // token still resolved and every frag still compiled.
+        //
+        // Only the V side is checked. A lone builtin:gaussian-h is legitimate: it reads the
+        // backdrop, not a previous pass, so it is a horizontal-only blur that composes
+        // wherever it sits. Linting "one without the other" would reject it.
+        if (anyGaussianV) {
+            const bool pairOk = declaredBuffers.size() >= 2
+                && declaredBuffers.at(0).toString() == QLatin1String("builtin:gaussian-h")
+                && declaredBuffers.at(1).toString() == QLatin1String("builtin:gaussian-v");
+            if (!pairOk) {
+                lints << QStringLiteral(
+                    "builtin:gaussian-v samples iChannel0, which is buffer pass 0's output, so the separable pair "
+                    "is positional: declare builtin:gaussian-h as bufferShaders[0] and builtin:gaussian-v as "
+                    "bufferShaders[1]. As declared, the vertical half blurs something other than the horizontal "
+                    "half's result");
+            }
+        }
         // NEEDS BACKDROP. kawase_down_0 and gaussian_h each have backdropTexel() as their
         // ONLY source, so a chain that omits the flag captures nothing and composites a
         // fully transparent pane. Gated on readsBackdrop rather than on anyKawase: the
         // gaussian pair was uncovered for a round, and a pack declaring it validated OK
         // while rendering blank.
+        //
+        // The message NAMES the pass rather than saying "its first pass". That phrasing was
+        // false for two reachable shapes: a gaussian pair written v-then-h samples the
+        // backdrop in its SECOND pass, and a lone up-pack drew this lint while sampling no
+        // backdrop at all. Both sent the author to inspect a pass that reads nothing.
         //
         // "is not true" rather than "is not declared", because the predicate is toBool()
         // and correctly matches the runtime's toBool(false) — so it also fires for an
@@ -468,9 +499,13 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         // A non-bool additionally draws the kBoolKeys type lint, which is the arm that
         // explains the shape.
         if (readsBackdrop && !meta.value(QLatin1String("needsBackdrop")).toBool()) {
+            const QString backdropPass =
+                anyKawaseDown0 ? QStringLiteral("builtin:kawase-down-0") : QStringLiteral("builtin:gaussian-h");
             lints << QStringLiteral(
-                "the builtin blur chain samples the backdrop in its first pass, but \"needsBackdrop\" is not true, "
-                "so nothing is captured and every pass composites a transparent pane");
+                         "this chain's %1 pass samples the backdrop through backdropTexel(), but "
+                         "\"needsBackdrop\" is not true, so nothing is captured and every pass "
+                         "composites a transparent pane")
+                         .arg(backdropPass);
         }
         // THE RADIUS SLOT. Every pass in both builtin blur families reads the radius as
         // customParams[0].x — the Kawase passes, gaussian_h AND gaussian_v — and slots are
@@ -482,9 +517,24 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         // which this comment used to: the two cited each other for rounds.
         if (readsRadiusSlot) {
             QString firstScalarId;
+            // The DUPLICATE-ID drop, mirrored from the loader. SurfaceShaderEffect::fromJson
+            // keeps the first entry for an id and discards every later one, and
+            // translateSurfaceParams then assigns slots over the survivors — so a raw scan
+            // could name a parameter the preamble never defines. It did: a pack declaring
+            // the same id as a colour and then as a float had this arm name it as the first
+            // scalar while --emit-preamble put it in customColors[0] and wrote no scalar
+            // define at all. Such a pack also draws the duplicate-id lint, so it is rejected
+            // either way; what this fixes is the two outputs of one binary disagreeing.
+            QSet<QString> seenParamIds;
             for (const QJsonValue& pv : parametersValue.toArray()) {
                 const QString pid = pv.toObject().value(QLatin1String("id")).toString();
                 const QString ptype = pv.toObject().value(QLatin1String("type")).toString();
+                if (!pid.isEmpty() && seenParamIds.contains(pid)) {
+                    continue;
+                }
+                if (!pid.isEmpty()) {
+                    seenParamIds.insert(pid);
+                }
                 // paramPreamble's OWN test, "not a color", not a float/int list. A BOOL
                 // pools as a scalar too and takes a sub-slot in declaration order, so a
                 // pack leading with roundBottomCorners blurs by that bool. Invalid ids

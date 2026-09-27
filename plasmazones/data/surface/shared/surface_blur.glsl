@@ -28,9 +28,12 @@
 // pack declares. Reorder the parameters array and the chain silently blurs by
 // whatever the new first scalar is. Note SCALAR, not float: a bool pools as one
 // too, so leading with `roundBottomCorners` puts a corner switch in the radius
-// slot. The offline validator lints all of this, by name, in validateSurfacePack,
-// including a pack that declares no scalar at all, where the chain would blur by
-// 0. Both arms are covered by test_surface_pack_validator.cpp.
+// slot. The offline validator lints all of this, by name, in surfaceMetadataLints
+// (packvalidator_surface_lints.cpp, split out of validateSurfacePack when that file
+// reached its size ceiling), including a pack that declares no scalar at all, where
+// the chain would blur by 0. test_surface_pack_validator.cpp covers the arms: the
+// no-scalar one, the wrong-name one, a bool declared first, a parameter with no
+// type at all, and the gaussian twins of the last two.
 
 #ifndef PLASMAZONES_SURFACE_BLUR_GLSL
 #define PLASMAZONES_SURFACE_BLUR_GLSL
@@ -74,6 +77,11 @@ vec4 surfaceGaussianBackdropH(vec2 uv) {
 // Buffer pass 1: VERTICAL half over buffer 0's result (iChannel0, same
 // bufferScale resolution). Together the two passes approximate a full 2D
 // Gaussian; the main pass samples the result as iChannel1.
+//
+// iChannel0 is hardcoded, so the pair is POSITIONAL in the way the Kawase pyramid
+// is: this half only composes as pass 1 with the horizontal half as pass 0. The
+// offline validator enforces that, because a pack that declares the two the other
+// way round still resolves both tokens and still compiles both frags.
 //
 // The tap reach is measured against the CANVAS, not the buffer: stepUv is
 // radiusPx / (4 * uSurfaceSize.y), so the outermost tap sits a full

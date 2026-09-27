@@ -81,11 +81,12 @@ namespace PhosphorAnimation {
  * The `beforeRendering` slot fires on the Qt Quick render thread; any
  * consumer calling `now()` from a different thread (e.g., a QML scene
  * animation driven from the GUI thread) would otherwise race on a
- * plain 64-bit field. The cached timestamp is held as
- * `std::atomic<int64_t>` with `memory_order_relaxed` load/store so the
- * cross-thread read is well-defined even though the common case (both
- * reader and writer on the render thread) pays only the cost of a
- * plain aligned load/store on x86_64.
+ * plain 64-bit field. The cached timestamp is an atomic
+ * `std::chrono::nanoseconds::rep`, written with release and read with
+ * acquire (see the handoff note below), so the cross-thread read is
+ * well-defined. An earlier version of this paragraph named the wrong
+ * type and claimed relaxed load/store, which the ordering note 60
+ * lines down already contradicted.
  *
  * ## Teardown race
  *
@@ -142,10 +143,11 @@ private:
     // `now()` returns the vsync-aligned reading for the frame being
     // rendered. Written from the render thread by the SignalAdapter;
     // may be read from the GUI thread (QML animation drivers that
-    // don't honour the render-thread-only contract). Stored as
-    // atomic<int64_t>; the writer uses release and the reader uses
-    // acquire so a cross-thread reader sees a well-published value
-    // rather than just a tear-free one.
+    // don't honour the render-thread-only contract). Stored as an atomic
+    // `nanoseconds::rep`, the duration's own representation, so nothing
+    // converts on the way in or out; the writer uses release and the
+    // reader uses acquire so a cross-thread reader sees a well-published
+    // value rather than just a tear-free one.
     //
     // `mutable` because the logically-const `now()` reader CAS-seeds
     // the cache on the pre-handoff fallback path to guarantee
@@ -178,6 +180,14 @@ private:
     std::atomic<bool> m_renderLoopActive{false};
     QPointer<QQuickWindow> m_window;
     std::unique_ptr<SignalAdapter> m_adapter;
+
+    // One-shot latch for the release-build half of `refreshRate()`'s GUI-thread contract.
+    // The Q_ASSERT_X there aborts a debug build; without this a release build would walk
+    // Qt's platform screen list off-thread instead, which is debug-only safety on exported
+    // API. `mutable` because refreshRate() is const, and atomic because the contract it
+    // reports on is precisely that the caller may be on another thread. Latched: a consumer
+    // that gets the thread wrong gets it wrong on every frame.
+    mutable std::atomic<bool> m_refreshRateThreadWarned{false};
 };
 
 } // namespace PhosphorAnimation

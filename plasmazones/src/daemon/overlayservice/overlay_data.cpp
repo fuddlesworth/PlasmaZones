@@ -88,14 +88,14 @@ quint64 hashLabelsTextureInputs(const QVariantList& patched, const QSize& size, 
     mix(::qHash(static_cast<uint>(lfs.fontStrikeout)));
     for (const QVariant& zoneVar : patched) {
         const QVariantMap z = zoneVar.toMap();
-        mix(::qHash(z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::ZoneNumber)).toInt()));
+        mix(::qHash(z.value(::PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt()));
         // PhosphorZones::Zone rects in the overlay use qreal; hash the full bit pattern so
         // sub-pixel geometry changes still produce a distinct key.
         const double fields[4] = {
-            z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::X)).toDouble(),
-            z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::Y)).toDouble(),
-            z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::Width)).toDouble(),
-            z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::Height)).toDouble(),
+            z.value(::PhosphorZones::ZoneJsonKeys::X).toDouble(),
+            z.value(::PhosphorZones::ZoneJsonKeys::Y).toDouble(),
+            z.value(::PhosphorZones::ZoneJsonKeys::Width).toDouble(),
+            z.value(::PhosphorZones::ZoneJsonKeys::Height).toDouble(),
         };
         for (double f : fields) {
             quint64 bits = 0;
@@ -110,7 +110,7 @@ quint64 hashLabelsTextureInputs(const QVariantList& patched, const QSize& size, 
 } // namespace
 
 void OverlayService::updateLabelsTextureForWindow(QQuickItem* slot, const QVariantList& patched, QScreen* screen,
-                                                  PhosphorZones::Layout* screenLayout)
+                                                  PhosphorZones::Layout* screenLayout, const QString& screenId)
 {
     Q_UNUSED(screen)
     if (!slot) {
@@ -128,18 +128,21 @@ void OverlayService::updateLabelsTextureForWindow(QQuickItem* slot, const QVaria
     // wl_output INTEGER buffer scale, which is 2 on a 1.15 output.
     const qreal dpr = slot->window() ? slot->window()->effectiveDevicePixelRatio() : 1.0;
 
-    PerScreenOverlayState* state = nullptr;
-    QString screenId;
-    for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
-        if (it.value().mainOverlaySlot() == slot) {
-            state = &it.value();
-            screenId = it.key();
-            break;
-        }
-    }
+    // The screen id ARRIVES, rather than being recovered by scanning m_screenStates for the
+    // slot pointer. Both callers already hold it, so that scan was an O(n) reverse lookup for
+    // something known, and the warning arm below could fire for a slot that IS tracked simply
+    // because the pointer comparison missed. Now it means what it says.
+    //
+    // What this does NOT change: the lookup is still a mutating one, because the hash write at
+    // the tail needs a mutable handle, and updateZonesForAllWindows calls this while holding
+    // an iterator into the same map. That is safe for one reason worth stating rather than
+    // rediscovering — m_screenStates is never copied anywhere in the tree, so its refcount is
+    // always 1 and the detach a non-const find() would perform never happens.
+    auto stateIt = m_screenStates.find(screenId);
+    PerScreenOverlayState* state = stateIt != m_screenStates.end() ? &stateIt.value() : nullptr;
     if (!state) {
-        qCWarning(lcOverlay) << "updateLabelsTextureForWindow: slot not tracked in m_screenStates - "
-                                "labels-texture cache bypassed";
+        qCWarning(lcOverlay) << "updateLabelsTextureForWindow: screen" << screenId
+                             << "not tracked in m_screenStates - labels-texture cache bypassed";
     }
 
     // A SetOverlayShowZoneNumbers context rule overrides the global setting for this
@@ -395,7 +398,7 @@ void OverlayService::updateZonesForAllWindows()
 
         int highlightedCount = 0;
         for (const QVariant& z : patched) {
-            if (z.toMap().value(QLatin1String(::PhosphorZones::ZoneJsonKeys::IsHighlighted)).toBool()) {
+            if (z.toMap().value(::PhosphorZones::ZoneJsonKeys::IsHighlighted).toBool()) {
                 ++highlightedCount;
             }
         }
@@ -406,7 +409,7 @@ void OverlayService::updateZonesForAllWindows()
 
         if (useShaderForScreen(screenId)) {
             PhosphorZones::Layout* screenLayout = resolveScreenLayout(screenId);
-            updateLabelsTextureForWindow(slot, patched, physScreen, screenLayout);
+            updateLabelsTextureForWindow(slot, patched, physScreen, screenLayout, screenId);
         }
     }
 

@@ -607,26 +607,15 @@ void ShaderNodeRhi::setBufferShaderPaths(const QStringList& paths)
     // anyway. m_bufferShaderDirty=true above is enough to trigger the
     // deferred load on the next prepare().
 
-    m_bufferPipeline.reset();
-    m_bufferSrb.reset();
-    m_bufferSrbB.reset();
-    m_bufferTexture.reset();
-    m_bufferTextureB.reset();
-    m_bufferRenderTarget.reset();
-    m_bufferRenderTargetB.reset();
-    m_bufferRenderPassDescriptor.reset();
-    m_bufferRenderPassDescriptorB.reset();
-    m_bufferFeedbackCleared = false;
-    for (int i = 0; i < kMaxBufferPasses; ++i) {
-        m_multiBufferPipelines[i].reset();
-        m_multiBufferSrbs[i].reset();
-        m_multiBufferTextures[i].reset();
-        m_multiBufferRenderTargets[i].reset();
-        m_multiBufferRenderPassDescriptors[i].reset();
-    }
-    m_pipeline.reset();
-    m_srb.reset();
-    m_srbB.reset();
+    // The shared teardown, not a hand-rolled copy of it. The list this used to spell out was
+    // member-for-member what resetBufferTargets drops, MINUS the two dirty flags it arms —
+    // and those are the point: iChannelResolution is resolved from the live buffer textures
+    // during the UBO upload, which is gated on m_uniformsDirty, so without them a pack
+    // switch left the GPU holding the departed passes' resolutions. The rebuild normally
+    // re-arms them, but it is not reached when the new path list is EMPTY, which is how both
+    // multipass-disable paths call this (surfaceanimator_shaderattach.cpp,
+    // pointerpreviewcontroller.cpp and the shader-render pointer driver all pass {}).
+    resetBufferTargets();
 }
 
 void ShaderNodeRhi::setBufferFeedback(bool enable)
@@ -754,9 +743,9 @@ void ShaderNodeRhi::resetBufferTargets()
     m_bufferSrb.reset();
     m_bufferSrbB.reset();
     // m_pipeline (the image pass) was compiled against m_srb, destroyed just
-    // below — keep them in lockstep like resetAllBindingsAndPipelines and
-    // setBufferShaderPaths do, or the retained pipeline holds a pointer to a
-    // destroyed QRhiShaderResourceBindings across a format/scale flip.
+    // below — keep them in lockstep like resetAllBindingsAndPipelines does, or
+    // the retained pipeline holds a pointer to a destroyed
+    // QRhiShaderResourceBindings across a format/scale flip.
     m_pipeline.reset();
     m_srb.reset();
     m_srbB.reset();

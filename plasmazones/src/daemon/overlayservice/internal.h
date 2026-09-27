@@ -8,8 +8,10 @@
 #include "overlay_helpers.h"
 // Its OWN logging include. applyShaderInfoToWindow below calls qCWarning(lcOverlay), and
 // this header was getting the declaration only through overlay_helpers.h — a masked include
-// across a header boundary, independent of unity builds, and one that inverted that
-// header's stated purpose of depending on nothing.
+// across a header boundary, independent of unity builds, and one that leaned on a header
+// whose stated purpose is to depend on neither ConfigDefaults, ShaderRegistry nor
+// settings_interfaces, so that test TUs can include it directly. That header carries plenty
+// of Qt includes; what it does not carry is a reason for this one, and it no longer does.
 #include "core/platform/logging.h"
 #include "core/interfaces/settings_interfaces.h"
 #include "core/interfaces/interfaces.h"
@@ -26,8 +28,13 @@
 #include <QGuiApplication>
 #include <QMargins>
 #include <QPalette>
-#include <QQuickItem>
-#include <QQuickWindow>
+// No QQuickItem (overlay_helpers.h above supplies it, and this header's own body only
+// takes QQuickItem* through that) and no QQuickWindow: neither token appears anywhere in
+// this file except as an include line. Removed under the same rule and with the same
+// evidence as the six that left overlay_helpers.h, including the non-unity builds with
+// the shell on and off, because a unity build cannot tell an orphan from a load-bearing
+// transitive include. The two TUs in this directory that do use QQuickWindow in code,
+// osd.cpp and priming.cpp, each include it themselves.
 #include <QScreen>
 
 namespace PlasmaZones {

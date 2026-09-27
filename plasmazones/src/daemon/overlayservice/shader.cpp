@@ -21,6 +21,12 @@
 
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/Surface.h>
+// QQuickWindow is LOAD-BEARING here and a token grep cannot see it: updateShaderUniforms
+// calls window->isVisible() on `auto* window = ...->shellWindow()`, so the type name appears
+// nowhere in this file. An audit pass removed it on the strength of exactly that grep, and
+// the unity build accepted it because a batch-mate supplied the header; the non-unity build
+// is what refused. The three QJson includes that sat beside it really were orphans, and the
+// difference is that no QJson type is ever reached through an `auto` here.
 #include <QQuickWindow>
 #include <QScreen>
 #include <QQmlEngine>
@@ -30,9 +36,6 @@
 #include <QImage>
 #include <QGuiApplication>
 #include <QPalette>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonParseError>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
@@ -302,7 +305,7 @@ bool OverlayService::useShaderForScreen(const QString& screenId) const
         int resolved = zone->overlayDisplayMode() >= 0 ? zone->overlayDisplayMode()
             : overlayOverride.style                    ? *overlayOverride.style
                                                        : (layoutMode >= 0 ? layoutMode : globalMode);
-        if (resolved == 1) { // OverlayDisplayMode::LayoutPreview
+        if (resolved == static_cast<int>(OverlayDisplayMode::LayoutPreview)) {
             return false;
         }
     }

@@ -427,22 +427,38 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                 //
                 // KWin::effects guarded for the same reason WindowAnimator::onRepaintNeeded
                 // is: this body runs from a D-Bus reply at an arbitrary later moment, and
-                // `self` being QPointer-alive says nothing about the global. An empty
-                // `outputs` leaves physGeom invalid, which the arm below already handles
-                // and warns about, so the degrade path exists and costs nothing to reach.
+                // `self` being QPointer-alive says nothing about the global. A null global
+                // leaves `outputs` empty, physGeom invalid, and the arm below returns.
                 QRect physGeom;
-                const auto outputs = KWin::effects ? KWin::effects->screens() : decltype(KWin::effects->screens()){};
-                for (const auto* out : outputs) {
-                    if (self->outputScreenId(out) == physicalScreenId) {
-                        physGeom = out->geometry();
-                        break;
+                if (KWin::effects) {
+                    for (const auto* out : KWin::effects->screens()) {
+                        if (self->outputScreenId(out) == physicalScreenId) {
+                            physGeom = out->geometry();
+                            break;
+                        }
                     }
                 }
 
+                // RETURN, which is what the warning has always claimed. Falling through
+                // left every def.geometry default-constructed, so none was admitted below,
+                // `defs` came out empty, and the empty-defs arm REMOVED this monitor's
+                // virtual-screen definitions — a wipe, reported as a skip, followed by a
+                // re-resolve and a full rule-cache invalidate. Nothing re-fetched on
+                // reconnect either, because the stored defs the reconnect would compare
+                // against were gone. The genuine hot-unplug case has its own pruner in
+                // fetchAllVirtualScreenConfigs, which erases defs for physical ids no
+                // longer in screens(), so dropping them here was a second and silent one.
+                //
+                // Shaped like the !isLatest arm above: both side-effect obligations are
+                // discharged, since the gate countdown has to happen on every reply and the
+                // generation-0 ready restore is unconditional.
                 if (!physGeom.isValid()) {
                     qCWarning(lcEffect) << "Physical output" << physicalScreenId
                                         << "not found (hot-unplug?) — skipping VS config update;"
                                         << "will re-fetch on reconnect";
+                    countdownVsGate();
+                    restoreReadyIfLive(false);
+                    return;
                 }
 
                 QVector<EffectVirtualScreenDef> defs;
@@ -453,20 +469,21 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                     EffectVirtualScreenDef def;
                     def.id = obj.value(QLatin1String("id")).toString();
 
-                    // Compute absolute geometry from fractional region within physical screen
-                    if (physGeom.isValid()) {
-                        qreal rx = region.value(QLatin1String("x")).toDouble();
-                        qreal ry = region.value(QLatin1String("y")).toDouble();
-                        qreal rw = region.value(QLatin1String("width")).toDouble();
-                        qreal rh = region.value(QLatin1String("height")).toDouble();
-                        // Edge-consistent rounding: compute edges then derive width/height
-                        // to avoid 1px gaps between abutting virtual screens
-                        int left = physGeom.x() + qRound(rx * physGeom.width());
-                        int top = physGeom.y() + qRound(ry * physGeom.height());
-                        int right = physGeom.x() + qRound((rx + rw) * physGeom.width());
-                        int bottom = physGeom.y() + qRound((ry + rh) * physGeom.height());
-                        def.geometry = QRect(left, top, right - left, bottom - top);
-                    }
+                    // Compute absolute geometry from fractional region within physical
+                    // screen. No isValid() test: the arm above returns on an invalid
+                    // physGeom now, so a guard here would be dead and would re-imply that
+                    // an invalid one reaches this loop.
+                    qreal rx = region.value(QLatin1String("x")).toDouble();
+                    qreal ry = region.value(QLatin1String("y")).toDouble();
+                    qreal rw = region.value(QLatin1String("width")).toDouble();
+                    qreal rh = region.value(QLatin1String("height")).toDouble();
+                    // Edge-consistent rounding: compute edges then derive width/height
+                    // to avoid 1px gaps between abutting virtual screens
+                    int left = physGeom.x() + qRound(rx * physGeom.width());
+                    int top = physGeom.y() + qRound(ry * physGeom.height());
+                    int right = physGeom.x() + qRound((rx + rw) * physGeom.width());
+                    int bottom = physGeom.y() + qRound((ry + rh) * physGeom.height());
+                    def.geometry = QRect(left, top, right - left, bottom - top);
 
                     if (def.geometry.isValid() && !def.id.isEmpty()) {
                         defs.append(def);

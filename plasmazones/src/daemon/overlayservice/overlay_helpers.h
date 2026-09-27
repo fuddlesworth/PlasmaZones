@@ -14,23 +14,27 @@
 #include <QElapsedTimer>
 #include <QMutex>
 #include <QMutexLocker>
-// No QQuickWindow and no QJson* here. All six were orphaned by the removal of
-// parseZonesJson and the shader-preview helpers, and this header's own body uses none of
-// them. Verified before removal, not after: an audit pass scanned every TU that reaches
-// this header (directly or through internal.h) plus every TU in the two unity targets, with
-// comments AND string literals stripped, and resolved the Qt JSON provision graph — exactly
-// one TU uses a QJson type without its own include and it lands in a different unity batch,
-// so this header was never what satisfied it. A unity build cannot tell an orphan from a
-// load-bearing transitive include, so the removal was checked against a NON-UNITY build with
-// the shell both on and off.
+// No QQuickWindow, no QJson* and no logging.h here. The first six were orphaned by the
+// removal of parseZonesJson and the shader-preview helpers; logging.h outlived them by one
+// round, because the edit that dropped the six moved the load-bearing copy into internal.h
+// (which does call qCWarning) and left this one standing. This header's own body uses no
+// qC macro and no category.
+//
+// Verified before removal, not after, and twice over: each pass scanned every TU that
+// reaches this header (directly or through internal.h) plus every TU in the two unity
+// targets, with comments AND string literals stripped, and resolved the provision graph —
+// exactly one TU uses a QJson type without its own include and it lands in a target that
+// compiles nothing reaching this header. A unity build cannot tell an orphan from a
+// load-bearing transitive include, so each removal was checked against a NON-UNITY build
+// with the shell both on and off.
 #include <QQuickItem>
 #include <QRectF>
 #include <QVector>
 #include <atomic>
 
 #include <PhosphorWayland/LayerSurface.h>
+#include <PhosphorZones/ZoneJsonKeys.h>
 #include "qml_property_names.h"
-#include "core/platform/logging.h"
 #include "core/types/enums.h"
 
 namespace PlasmaZones {
@@ -134,7 +138,7 @@ inline QVariantList patchZonesWithHighlight(const QVariantList& zones, QObject* 
     QVariantList out;
     for (const QVariant& z : zones) {
         QVariantMap m = z.toMap();
-        const QString id = m.value(QLatin1String("id")).toString();
+        const QString id = m.value(PhosphorZones::ZoneJsonKeys::Id).toString();
         bool hi = (!id.isEmpty() && id == hid);
         if (!hi) {
             for (const QVariant& v : hids) {
@@ -144,7 +148,7 @@ inline QVariantList patchZonesWithHighlight(const QVariantList& zones, QObject* 
                 }
             }
         }
-        m[QLatin1String("isHighlighted")] = hi;
+        m[PhosphorZones::ZoneJsonKeys::IsHighlighted] = hi;
         out.append(m);
     }
     return out;

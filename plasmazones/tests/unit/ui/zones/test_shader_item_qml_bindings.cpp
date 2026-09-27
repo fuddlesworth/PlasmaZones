@@ -8,8 +8,6 @@
 
 #include <QDir>
 #include <QDirIterator>
-
-#include <algorithm>
 #include <QFile>
 #include <QGuiApplication>
 #include <QImage>
@@ -23,6 +21,9 @@
 #include <QTest>
 #include <QUrl>
 #include <qqml.h>
+
+#include <algorithm>
+#include <memory>
 
 using PhosphorSurfaceQuick::SurfaceShaderItem;
 using PlasmaZones::ZoneShaderItem;

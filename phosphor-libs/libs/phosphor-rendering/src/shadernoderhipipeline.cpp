@@ -58,24 +58,27 @@ void ShaderNodeRhi::requestDepthCreateRetry()
     // an unbounded request would repaint at frame rate for as long as the driver refuses.
     // Modelled on m_multiBufferShaderRetries, including the give-up line, so a permanent
     // failure costs three frames and one message rather than a spin.
+    // Spent budget: return before the increment, so the counter STOPS at the bound rather
+    // than rising for as long as the driver keeps refusing. That also makes the give-up line
+    // below a one-shot by structure instead of by an equality test a later edit could widen.
+    // m_depthCreateWarned cannot serve as that latch, because the calling arm sets it on the
+    // first failure, so a `!m_depthCreateWarned` gate here would never print at all.
+    if (m_depthCreateRetries >= 3) {
+        return;
+    }
     if (++m_depthCreateRetries < 3) {
         requestAnotherFrame();
         return;
     }
-    // Exactly once, on the frame the count CROSSES the bound. m_depthCreateWarned cannot
-    // serve as the latch here: the calling arm sets it on the first failure, so testing it
-    // would print this line every frame from the third onwards. The counter keeps rising,
-    // so equality is the one-shot.
-    if (m_depthCreateRetries == 3) {
-        qCWarning(lcShaderNode) << "Depth texture or sampler creation failed after 3 attempts; giving up until the "
-                                   "depth setting or the node's resources change";
-    }
+    qCWarning(lcShaderNode) << "Depth texture or sampler creation failed after 3 attempts; giving up until the "
+                               "depth setting, the buffer size or the node's resources change";
 }
 
 void ShaderNodeRhi::clearDepthCreateFailure()
 {
     m_depthCreateRetries = 0;
     m_depthCreateWarned = false;
+    m_depthCreateFailedSize = QSize();
 }
 
 bool ShaderNodeRhi::ensureBufferTarget()
@@ -109,6 +112,17 @@ bool ShaderNodeRhi::ensureBufferTarget()
     };
     // Create or resize depth texture before render targets that reference it
     if (m_useDepthBuffer && (!m_depthTexture || m_depthTexture->pixelSize() != bufferSize)) {
+        // A different buffer size is a different GPU request, so it gets its own retry
+        // budget and its own warning. Without this a node that burned all three attempts at
+        // one size carried the spent budget AND the latched warning into the next, so the
+        // new size got one attempt per externally-driven frame, no requested retry, and no
+        // diagnostic. Keyed on the size here rather than cleared from setResolution, because
+        // setResolution fires on every frame of an animated resize and clearing there would
+        // restore the vsync-rate flood the bound exists to stop.
+        if (bufferSize != m_depthCreateFailedSize) {
+            clearDepthCreateFailure();
+            m_depthCreateFailedSize = bufferSize;
+        }
         m_depthTexture.reset(rhi->newTexture(QRhiTexture::R32F, bufferSize, 1, QRhiTexture::RenderTarget));
         if (!m_depthTexture->create()) {
             // Latched: this branch is re-entered from prepare() on every frame while it

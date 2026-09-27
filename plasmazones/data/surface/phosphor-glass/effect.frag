@@ -4,7 +4,7 @@
 // ONE of this pack's declared parameters is never read here: `blurRadius` is
 // consumed POSITIONALLY by the shared buffer passes as customParams[0].x, the
 // first scalar parameter declared. surface_blur.glsl's header carries the slot
-// convention and validateSurfacePack lints it by name. So a reader looking for
+// convention and the offline validator lints it by name. So a reader looking for
 // p_blurRadius below will not find it, and that is not an omission.
 //
 // Phosphor glass surface shader — the Phosphor set's blur pane, and the one

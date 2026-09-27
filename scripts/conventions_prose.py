@@ -82,14 +82,24 @@ def is_title_separator(s: str) -> bool:
 # is missed, which review has to catch — because silence costs a missed nit and a
 # false positive costs a blocked commit.
 #
-# `stays` is the ONE admitted exception and it is admitted on evidence, not on taste:
-# the noun reading needs a mast or a corset, which this project's prose will not
-# produce, while the verb reading is on 58 CHANGELOG lines and a real splice built
-# from it passed the gate before it was added. `lets` and `follows` went in beside it
-# and cleared neither half of that bar — both are equally ambiguous ("holiday lets",
-# "new follows") and deleting either changed no finding anywhere, so they carried risk
-# for nothing. A future addition that is also a plural noun needs the same two things:
-# a noun reading this project cannot produce, and a measured catch.
+# Two entries are admitted although a plural-noun reading exists, and they are admitted
+# on different strengths of evidence, so the distinction is worth keeping straight.
+# `stays` has both halves: the noun reading takes a mast, a corset or a hotel bill,
+# none of which this project's prose produces, and the verb reading is on 58 CHANGELOG
+# lines with a real splice built from it that passed the gate before the word went in.
+# `allows` has only the first half. No probe and no tree finding changes when it is
+# removed, so it is in on the noun test alone: "permit allows" and "parking allows" are
+# the kind of English a planning office writes and this project does not.
+# Neither word is exempt from the mechanism, which is the part earlier versions of this
+# comment kept getting wrong. Fed a list built from the noun reading, the rule fires:
+# "Overnight stays, per guest; day stays, per visit." and "Permit allows, per tenant;
+# parking allows, per unit." are both reported. What keeps them safe is the corpus, not
+# the grammar. `lets` and `follows` went in beside them and cleared neither half — both
+# are equally ambiguous ("holiday lets", "new follows"), and neither carried a measured
+# catch, so they were risk for nothing.
+# A future addition that is also a plural noun needs both halves, and a bare "removing
+# it changes no finding" proves nothing on its own: the tree's prose draws zero findings
+# today, so that is true of nearly every word in this set.
 #
 # The membership is pinned against a literal in the selftest, both directions, so an
 # addition or a deletion has to be deliberate. Ten words went in on a false premise
