@@ -98,8 +98,8 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     if (existing != m_screenStates.end()) {
         existing->shell = nullptr;
         m_screenStates.erase(existing);
-        // That erase destroyed a shell able to host a visible modal, so it is
-        // one of the teardown sites resetModalSingletonsForDestroyedId names.
+        // That erase destroyed a shell able to host a visible modal, so the
+        // modal singletons have to be reset for the key it took with it.
         // The clobber guard above only refuses on a non-null overlayPhysScreen,
         // and that field is written solely by the main-overlay path, never by
         // ensurePassiveShellFor - so a passive-only shell carrying a visible

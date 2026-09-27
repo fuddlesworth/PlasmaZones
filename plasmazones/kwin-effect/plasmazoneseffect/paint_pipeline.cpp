@@ -772,11 +772,11 @@ void PlasmaZonesEffect::postPaintScreen()
     // Time-based shader transitions (window.*) ride a steady-clock
     // timer, not m_windowAnimator, so paintWindow would only fire on
     // surface damage and iTime would stall. Mirror KWin's own
-    // `AnimationEffect::postPaintScreen`: while a time-based transition
-    // is live, inject expanded-geometry layer repaint per active
-    // window so the next vsync runs our paint chain. Animator-driven
-    // transitions (durationMs == 0) are kept alive by
-    // m_windowAnimator->scheduleRepaints above.
+    // `AnimationEffect::postPaintScreen`: while a time-based transition is live, inject an expanded-geometry
+    // layer repaint per active window so the next vsync runs our paint chain. Animator-driven legs
+    // (durationMs == 0) are kept alive by m_windowAnimator->scheduleRepaints above.
+    // `now` is a LIVE clock read, where paintWindow takes the frame PIN for the same transition. Both
+    // measure from one startTimeMs stamp, so the pump and its progress consumer sit on different clocks.
     if (!m_shaderManager.empty()) {
         const qint64 now = shaderClockNowMs();
         for (const auto& [w, transition] : m_shaderManager.shaderTransitions()) {

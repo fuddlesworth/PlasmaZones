@@ -59,8 +59,11 @@ vec4 pSurface(vec2 uv) {
         vec3 rgb = mix(b.rgb, p_tintColor.rgb * b.a, clamp(p_tintStrength, 0.0, 1.0));
         pane = vec4(rgb, b.a) * mask;
     } else {
-        // Original pseudo look with no backdrop: a still tint slab.
-        pane = vec4(p_tintColor.rgb, 1.0) * 0.4 * mask;
+        // Original pseudo look with no backdrop: a still tint slab. Clamped for
+        // the reason faintTintSlab gives: the colour reaches this shader through
+        // QColor and so cannot exceed 1 today, but the premultiplied invariant
+        // rgb <= a should not rest on that.
+        pane = vec4(clamp(p_tintColor.rgb, 0.0, 1.0), 1.0) * 0.4 * mask;
     }
 
     return slabComposite(slab.window, pane);

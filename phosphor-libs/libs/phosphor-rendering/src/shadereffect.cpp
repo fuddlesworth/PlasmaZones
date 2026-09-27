@@ -478,15 +478,18 @@ ShaderNodeRhi* ShaderEffect::createShaderNode()
 ///     CWD-derived directory FIRST in a pack's include search list. The test is on the
 ///     RESOLVED path, so it catches a relative `file:` URL too, not only a scheme-less one;
 ///     since QUrl::fromLocalFile is how every in-tree host builds these, that matters. A qrc
-///     path is absolute (it is ':'-prefixed), so this rejects only genuinely relative answers.
+///     path is never refused here, relative or not, because ':' makes QFileInfo call it
+///     absolute — so `qrc:x.frag` resolves to ":x.frag" and passes.
 ///
 /// NOT a confinement guard: any absolute local path is accepted, so keeping a shader inside
-/// its pack directory remains the caller's job (the three registries do it with
+/// its pack directory remains the caller's job (the pack registries do it with
 /// resolveWithinDirectory). This only stops a URL that was never a local file at all.
 ///
 /// The base's OWN updatePaintNode deliberately keeps the looser private route, so a plain
-/// ShaderEffect still accepts a relative shaderSource. Tightening that would change
-/// behaviour for an out-of-tree host, which is not this function's call to make.
+/// ShaderEffect still accepts a relative shaderSource where a subclass coming through this
+/// helper does not. The two DISAGREE, and that asymmetry is the choice: this route is new
+/// API and carries the strictness from the start, while tightening the base would move an
+/// out-of-tree host's behaviour under it.
 QString ShaderEffect::localShaderPath(const QUrl& url)
 {
     if (!isLocalShaderUrl(url)) {

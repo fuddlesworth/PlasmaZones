@@ -221,10 +221,11 @@ vec3 surfaceVibrancy(vec3 color, float vibrancy, float darkness) {
 // (1, 1, 1, 0, *).
 vec4 surfaceBackdropGrade(vec4 premul, float brightness, float contrast, float saturation, float vibrancy,
                           float vibrancyDarkness) {
-    // One RGBA8 quantum, not an arbitrary epsilon. At 0.001 the guard sat
-    // BELOW the smallest alpha an 8-bit backdrop can carry (1/255 is about
-    // 0.0039), so the one representable near-zero alpha fell through it and
-    // divided the colour by that alpha, scaling it by 255.
+    // One RGBA8 quantum, the smallest alpha a stored texel can hold. At or below it the
+    // sample is returned UNCHANGED rather than graded, since dividing by an alpha that
+    // small scales the colour by up to 255. Note this bounds what a texel STORES, not
+    // what a GL_LINEAR sample of it can carry: a blend of two texels can land between
+    // 0 and one quantum, which is why glass guards its own unpremultiply lower down.
     if (premul.a <= 1.0 / 255.0) {
         return premul;
     }

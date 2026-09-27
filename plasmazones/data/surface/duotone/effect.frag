@@ -67,7 +67,10 @@ vec4 pSurface(vec2 uv) {
         // is at the bottom).
         vec2 fuv = frameUv(slab.px);
         vec3 grad = mix(p_colorA.rgb, p_colorB.rgb, smoothstep(0.0, 1.0, 1.0 - fuv.y));
-        pane = vec4(grad, 1.0) * 0.4 * slab.mask;
+        // Clamped for the reason faintTintSlab gives: the colour params reach
+        // this shader through QColor and so cannot exceed 1 today, but the
+        // premultiplied invariant rgb <= a should not rest on that.
+        pane = vec4(clamp(grad, 0.0, 1.0), 1.0) * 0.4 * slab.mask;
     }
 
     return slabComposite(slab.window, pane);

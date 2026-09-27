@@ -81,8 +81,9 @@ vec4 surfaceGaussianBackdropH(vec2 uv) {
 // It is CLAMP on the compositor unconditionally: the buffer targets are
 // created GL_LINEAR / GL_CLAMP_TO_EDGE and the `bufferWraps` and
 // `bufferFilters` keys are daemon-only, which the fields themselves declare.
-// `halfFloatBuffers` is daemon-only in the same way: the compositor hardcodes
-// GL_RGBA8 and never reads the key, so a pack asking for true gets RGBA16F on
+// `halfFloatBuffers` is daemon-only too, though unlike those two its field does
+// not say so: the compositor hardcodes GL_RGBA8 and never reads the key, so a
+// pack asking for true gets RGBA16F on
 // one host and RGBA8 on the other. Every bundled pack that declares buffer
 // passes declares it false (the seven blur-family packs); the other seventeen
 // declare no buffers at all, so the key never reaches an allocation.
@@ -206,7 +207,7 @@ const float kSurfaceKawaseBaseTexel = 4.0;
 // deliberate steps.
 //
 // 120 -> 121 IS continuous, and that is what the 3.6 floor below buys. The summed
-// tap extent per (o + 0.5) is 14 at depth 2, 38 at depth 3 and 86 at depth 4, so a
+// tap extent per (o + 0.5) is 2 at depth 1, 14 at depth 2, 38 at depth 3 and 86 at depth 4, so a
 // radius of 120 reaches 4.0 x 38 = 152 px. With a 3.0 floor a radius of 121 reached
 // only 1.5125 x 86 = 130 px, i.e. asking for more blur gave LESS. Continuity needs
 // a floor of at least 3.5349; 3.6 clears it and keeps the band monotonic to the top

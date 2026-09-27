@@ -56,9 +56,9 @@ bool probeAndSetGraphicsApi(const QString& backend);
  *
  * Applied on the Vulkan path too, deliberately: DRI_PRIME primarily steers
  * the GL loader, and covers the case where Vulkan falls back to OpenGL.
- * Called by the daemon and editor mains only — the standalone settings app
- * deliberately applies neither the backend nor the GPU pin (it never has;
- * its in-app shader previews are advisory rather than daemon-identical).
+ * Called by the daemon main only. The editor and the standalone settings app
+ * deliberately apply neither the backend nor the GPU pin, so their in-app
+ * shader previews are advisory rather than daemon-identical.
  * (Whether Mesa's Vulkan WSI also consults DRI_PRIME for presentation on
  * hybrid setups is driver-version-dependent; the exported pair names the
  * same device the Vulkan pin selects, so the two cannot disagree.)
@@ -76,8 +76,8 @@ void applyOpenGlGpuPreference(const QString& gpuDevice);
  * child on this process's stale pin — and QT_VK_PHYSICAL_DEVICE_INDEX is an
  * enumeration index only meaningful to the process that computed it. Only
  * variables this process actually set are listed, so scrubbing with this
- * list preserves genuine user-session overrides. The daemon and editor mains
- * publish the list app-wide as the PGpuExportedVarsProperty dynamic property
+ * list preserves genuine user-session overrides. The daemon main
+ * publishes the list app-wide as the PGpuExportedVarsProperty dynamic property
  * (core/types/constants.h) for spawn sites outside this link unit.
  */
 QStringList exportedGpuPreferenceVariables();

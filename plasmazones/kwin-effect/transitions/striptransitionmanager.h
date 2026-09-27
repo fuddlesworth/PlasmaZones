@@ -338,11 +338,14 @@ private:
     /// than blinking it for a frame, and from every postPaintScreen, so a
     /// pointer crossing to a quiet output gets its cursor back within a
     /// frame even though the hidden cursor damages nothing there. Also run
-    /// on every abort path that erases or abandons a pass (notifyLeg's
-    /// disarm, a compile sentinel or allocation failure mid-leg), so a
-    /// hide taken on the previous frame is not carried into a frame the
-    /// normal scene paints. The one path that shows while a pass is still
-    /// live is releaseCursorHideForForeignPaint.
+    /// on the abort paths that ERASE the entry or find none (notifyLeg's
+    /// disarm, a compile sentinel or allocation failure mid-leg, a post-walk
+    /// re-seat miss), so a hide taken on the previous frame is not carried
+    /// into a frame the normal scene paints. A reported-failure abort leaves
+    /// the entry live in m_active, so this call would not release there: the
+    /// failed capture walk and the failed sharp composite both go through
+    /// releaseCursorHideForForeignPaint instead, which is also the one path
+    /// that shows the cursor while a pass is still live.
     void updateCursorHiding();
     bool cursorOnOutput(KWin::LogicalOutput* screen) const;
 

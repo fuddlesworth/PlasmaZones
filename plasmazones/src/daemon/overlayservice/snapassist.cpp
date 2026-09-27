@@ -221,7 +221,9 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
     // NOT the same as a dead shell, which two rounds of this comment got wrong: it covers the
     // lib's benign-no-op branches AND a fully live shell with overlay animations disabled,
     // because SurfaceAnimator::beginHide fires onComplete synchronously when its gate is off.
-    // That gate mirrors a plain user setting, so this is not an exotic path.
+    // That gate is the global animationsEnabled setting (pushed from overlayservice/settings.cpp,
+    // and the same toggle that stops the effect's window animations), so this is not an exotic
+    // path. "Overlay animations disabled" describes the effect, not a setting by that name.
     //
     // Hoisting the latch would remove the grab churn, and it must not be done on reasoning
     // alone: it changes when the shared Escape grab is held.
@@ -811,6 +813,12 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     // every bail above (shell + layouts validated), so a failed request can
     // never leave the drag-time zone selector stuck hidden — same
     // bails-first ordering contract as showSnapAssist.
+    //
+    // This ordering has the selector re-show churn showSnapAssist documents at
+    // length: the hideSnapAssist above can run its completion inline, which
+    // re-shows the selector while m_layoutPickerVisible is still false, and the
+    // call below hides it again. The Escape grab repairs itself the same way,
+    // through the re-register after this function returns.
     hideZoneSelectorSlotOnScreen(resolvedId);
 
     // The picker is a singleton across screens: with the new target fully

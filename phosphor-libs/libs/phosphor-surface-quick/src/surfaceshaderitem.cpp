@@ -468,8 +468,10 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
             } else if (loaded) {
                 qCWarning(lcSurfaceQuick) << "SurfaceShaderItem: no vertex shader found for" << fragPath
                                           << "(expected surface.vert in the pack dir or a search path)";
-                // Carries the journal line's parenthetical too: the banner is the only surface a
-                // user sees, and "expected surface.vert…" is the actionable half.
+                // Carries the journal line's parenthetical too, byte for byte, so the two cannot
+                // drift. No surface host reads errorLog today (SurfaceDecoration exposes only
+                // the boolean chainHasError), so this keeps the text ready for one and matches
+                // the zone twin, whose banner does show it.
                 failureReason = QStringLiteral("No vertex shader found for ") + fragPath
                     + QStringLiteral(" (expected surface.vert in the pack dir or a search path)");
                 loaded = false;

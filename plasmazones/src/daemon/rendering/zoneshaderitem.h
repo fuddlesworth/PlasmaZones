@@ -153,9 +153,9 @@ public:
     // Note: reloadShader() is inherited from ShaderEffect (Q_INVOKABLE). Call
     // that directly from QML / C++ — no zone-specific alias needed.
 
-    // Note: setEntryScaffold is inherited and PUBLIC, but updatePaintNode reinstalls the zone
-    // scaffold on every reload, so a host call to it is discarded. Its SurfaceShaderItem twin
-    // carries the same note. No in-tree host makes one.
+    // Note: setEntryScaffold is inherited and PUBLIC, but this override never delegates to
+    // ShaderEffect::updatePaintNode, the only site that pushes the item's own scaffold, so a
+    // host call to it is never read. Its SurfaceShaderItem twin carries the same note.
     //
     // Note: the inherited vertexShaderUrl property is likewise ignored here. The zone runtime
     // resolves its vertex stage only through resolveZoneVertexPath, which looks for a file

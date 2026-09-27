@@ -6,6 +6,7 @@
 #include <PhosphorRendering/ShaderEffect.h>
 
 #include <QColor>
+#include <QDebug>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QImage>
@@ -16,6 +17,7 @@
 #include <QQmlEngine>
 #include <QSignalSpy>
 #include <QSizeF>
+#include <QStringList>
 #include <QTest>
 #include <QUrl>
 #include <QVariantMap>
@@ -28,13 +30,54 @@ using PhosphorSurfaceQuick::SurfaceShaderItem;
 namespace {
 /// Re-exposes the protected static resolver so its URL contract can be pinned without a
 /// scene graph. A static member needs no instance, so this needs no QQuickWindow and no
-/// Q_OBJECT. Both overrides of updatePaintNode depend on this function, and neither of
-/// them is reachable from a headless test, so this is the only place its behaviour can be
-/// asserted at all.
+/// Q_OBJECT. Any suite that links PhosphorRendering could do the same; the reason it lives
+/// here is that phosphor-rendering ships no test target of its own, so this is the nearest
+/// tier-1 suite that links it.
 struct ShaderPathProbe : PhosphorRendering::ShaderEffect
 {
     using PhosphorRendering::ShaderEffect::localShaderPath;
 };
+
+/// Collects qWarning output for the duration of a scope, so the resolver's three refusal
+/// arms can be told apart. Two of them log a reason and one is deliberately SILENT, and
+/// bare isEmpty() assertions cannot distinguish them: a future edit adding a warning "for
+/// symmetry" to the silent arm would log once per decoration stage per reload, because
+/// every bundled surface pack declares no vertex shader and so takes that arm.
+class WarningCapture
+{
+public:
+    WarningCapture()
+    {
+        s_sink = &m_messages;
+        m_previous = qInstallMessageHandler(&WarningCapture::handler);
+    }
+    ~WarningCapture()
+    {
+        qInstallMessageHandler(m_previous);
+        s_sink = nullptr;
+    }
+    WarningCapture(const WarningCapture&) = delete;
+    WarningCapture& operator=(const WarningCapture&) = delete;
+
+    const QStringList& messages() const
+    {
+        return m_messages;
+    }
+
+private:
+    static void handler(QtMsgType type, const QMessageLogContext& context, const QString& message)
+    {
+        Q_UNUSED(context)
+        if (type == QtWarningMsg && s_sink) {
+            s_sink->append(message);
+        }
+    }
+
+    QStringList m_messages;
+    QtMessageHandler m_previous = nullptr;
+    static QStringList* s_sink;
+};
+QStringList* WarningCapture::s_sink = nullptr;
 } // namespace
 
 /**
@@ -42,7 +85,8 @@ struct ShaderPathProbe : PhosphorRendering::ShaderEffect
  *
  * SurfaceShaderItem is a QQuickItem (requires QGuiApplication). Only the data
  * layer is exercised here: construction, the surface-state property surface,
- * inherited param application, and the shader-source status transition, with
+ * inherited param application, the shader-source status transition, and the
+ * base's static shader-URL resolver, with
  * no scene graph or GPU, so updatePaintNode (where the SurfaceUniformProfile-
  * backed node is actually created) is not driven. The profile wiring is
  * verified structurally: createShaderNode is the only surface-specific node
@@ -82,6 +126,12 @@ private Q_SLOTS:
         // A qrc URL with an EMPTY path resolves to ":" rather than to nothing, so it reaches
         // the loader and fails there instead of in the empty-path arm.
         QCOMPARE(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("qrc:"))), QStringLiteral(":"));
+        // A RELATIVE qrc path is accepted too, for the same ':' reason: the relative refusal
+        // never reaches the qrc family at all, which is why the docblock says so outright.
+        QCOMPARE(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("qrc:x.frag"))), QStringLiteral(":x.frag"));
+        // `file://host` carries an AUTHORITY, which toLocalFile() renders as a UNC-style
+        // "//host" that QFileInfo calls absolute. Accepted, and the docblock says it is.
+        QCOMPARE(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("file://host"))), QStringLiteral("//host"));
     }
 
     void testLocalShaderPath_refusesNonLocalSchemeAndRelativePaths()
@@ -102,6 +152,40 @@ private Q_SLOTS:
         // Vetted, but carrying no usable path at all.
         QVERIFY(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("file://"))).isEmpty());
         QVERIFY(ShaderPathProbe::localShaderPath(QUrl()).isEmpty());
+        // Scheme-less and authority-only: isLocalShaderUrl passes it (empty scheme), and the
+        // resolver's own path() fallback yields nothing, so it takes the same silent arm.
+        QVERIFY(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("//host"))).isEmpty());
+    }
+
+    /// The three refusal arms are NOT interchangeable: two log a reason a user can act on
+    /// and one returns empty in silence, because the silent case is the one every bundled
+    /// surface pack hits on its vertex stage. isEmpty() alone cannot see the difference.
+    void testLocalShaderPath_logsAReasonOnlyWhereItIsActionable()
+    {
+        {
+            WarningCapture capture;
+            QVERIFY(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("http://host/x.frag"))).isEmpty());
+            QCOMPARE(capture.messages().size(), 1);
+            QVERIFY(capture.messages().constFirst().contains(QStringLiteral("non-local shader URL")));
+        }
+        {
+            WarningCapture capture;
+            QVERIFY(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("shaders/x.frag"))).isEmpty());
+            QCOMPARE(capture.messages().size(), 1);
+            QVERIFY(capture.messages().constFirst().contains(QStringLiteral("relative shader path")));
+            // The path AND the URL it came from, since a relative answer is the hardest of
+            // the three to diagnose from the caller's own message.
+            QVERIFY(capture.messages().constFirst().contains(QStringLiteral("shaders/x.frag")));
+        }
+        {
+            // Silent on purpose. SurfaceDecoration binds vertexShaderUrl to an empty QUrl for
+            // every pack declaring no vertex shader, which is all of the bundled ones.
+            WarningCapture capture;
+            QVERIFY(ShaderPathProbe::localShaderPath(QUrl()).isEmpty());
+            QVERIFY(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("file://"))).isEmpty());
+            QVERIFY(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("//host"))).isEmpty());
+            QCOMPARE(capture.messages(), QStringList());
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════

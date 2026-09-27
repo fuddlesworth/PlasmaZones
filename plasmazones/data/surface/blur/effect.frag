@@ -55,16 +55,13 @@ vec4 pSurface(vec2 uv) {
         // and it is applied last so it dithers the tinted result rather than
         // being crushed by the contrast step.
         vec4 blurred = surfaceBlurTexel(uv);
-        // THE SHARED GRADE, not a hand-rolled copy. This ran the divide, the
-        // adjust, the vibrancy and the re-multiply inline, behind its own
-        // `blurred.a > 0.001` guard, and that threshold is the one the SHARED HELPER
-        // corrects to a single RGBA8 quantum. Not "everywhere else": duotone and
-        // phosphor-glass still carry 0.001 on the identical unpremultiply-for-luminance,
-        // bounded there by the same alpha that makes it wrong. 1/255 is about 0.0039, so
-        // 0.001 sits BELOW the smallest alpha an 8-bit backdrop can carry and the
-        // one representable near-zero alpha fell through it and divided the colour
-        // by that alpha. Calling the helper is what stops this pack keeping the
-        // old threshold, and is the reason the swap is worth making at all.
+        // THE SHARED GRADE, not a hand-rolled copy. This ran the divide, the adjust, the
+        // vibrancy and the re-multiply inline behind its own `blurred.a > 0.001` guard,
+        // where the helper guards at one stored RGBA8 quantum instead. Not "everywhere
+        // else": duotone and phosphor-glass still carry 0.001 on the identical
+        // unpremultiply-for-luminance, each bounded by an explicit clamp and by the
+        // alpha they re-multiply with. Calling the helper is what stops this pack keeping
+        // its own threshold, and is the reason the swap is worth making at all.
         vec4 graded = surfaceBackdropGrade(blurred, p_brightness, p_contrast, p_saturation, p_vibrancy,
                                            p_vibrancyDarkness);
         // The tint and grain move into PREMULTIPLIED space, because that is what

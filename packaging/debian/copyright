@@ -199,6 +199,13 @@ Files: debian/*
 Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: GPL-3.0-or-later
 
+# The Arch packaging's own licence file, which is 0BSD rather than GPL-3 and
+# carries no SPDX header, so the conventions gate's dep5 rule cannot see it and
+# the Files: * catch-all was declaring it GPL-3.
+Files: packaging/arch/LICENSE
+Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+License: 0BSD
+
 License: LGPL-2.1-or-later
  This library is free software; you can redistribute it and/or modify
  it under the terms of the GNU Lesser General Public License as published
@@ -262,6 +269,18 @@ License: GPL-3.0-or-later
  .
  On Debian systems, the full text of the GNU General Public License
  version 3 can be found in the file '/usr/share/common-licenses/GPL-3'.
+
+License: 0BSD
+ Permission to use, copy, modify, and/or distribute this software for any
+ purpose with or without fee is hereby granted.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+ REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+ AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+ INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+ LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+ OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+ PERFORMANCE OF THIS SOFTWARE.
 
 License: CC0-1.0
  To the extent possible under law, the author(s) have dedicated all copyright

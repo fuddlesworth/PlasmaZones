@@ -517,10 +517,17 @@ bool ShaderNodeRhi::ensureBufferSampler(QRhi* rhi, int index)
     }
     m_bufferSamplers[index].reset(rhi->newSampler(minF, magF, mipF, addr, addr));
     if (!m_bufferSamplers[index]->create()) {
-        qCWarning(lcShaderNode) << "Failed to create buffer sampler" << index;
+        // Latched for the same reason as the buffer-target failures: a false
+        // return here aborts prepare(), which is re-entered next frame, so an
+        // unlatched warning fills the journal at frame cadence.
+        if (!m_bufferSamplerCreateWarned) {
+            m_bufferSamplerCreateWarned = true;
+            qCWarning(lcShaderNode) << "Failed to create buffer sampler" << index;
+        }
         m_bufferSamplers[index].reset();
         return false;
     }
+    m_bufferSamplerCreateWarned = false;
     return true;
 }
 

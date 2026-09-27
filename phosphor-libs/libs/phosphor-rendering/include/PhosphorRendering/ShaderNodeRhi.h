@@ -846,6 +846,11 @@ private:
         a.fill(QVector4D(-1.0f, -1.0f, -1.0f, -1.0f));
         return a;
     }();
+    /// Seeded WHITE, where ShaderEffect's mirror seeds transparent black. The two
+    /// defaults genuinely disagree, and the disagreement is not observable through
+    /// an item: syncBasePropertiesToNode pushes the item's values before the first
+    /// bake and the first UBO upload is the full one, so an item-driven node never
+    /// reads this seed. Only a node driven without an item would see it.
     std::array<QColor, kMaxCustomColors> m_customColors = []() {
         std::array<QColor, kMaxCustomColors> a;
         a.fill(QColor(Qt::white));
@@ -952,6 +957,10 @@ private:
     /// the next successful create, so a failure that recurs after a genuine
     /// recovery is reported again instead of being swallowed for the session.
     bool m_bufferTargetCreateWarned = false;
+    /// Latch for the buffer SAMPLER create failure, which sits on the same
+    /// re-entered-every-frame path as the target failures above and so needs the
+    /// same one-shot treatment. Cleared on the next successful create.
+    bool m_bufferSamplerCreateWarned = false;
     /// 1×1 transparent fallback texture used when a source provider is set
     /// but has not yet produced a usable QRhiTexture (or its texture lives
     /// on a foreign QRhi). Bound at slot 0 instead of falling through to

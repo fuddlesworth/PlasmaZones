@@ -44,15 +44,14 @@ float sdRoundedBox(vec2 p, vec2 b, float r) {
 // is exactly zero (sdRoundedBox with a zero half-size reduces to a distance
 // from one point), and to a sub-pixel sliver when it is merely under a pixel —
 // a band where ONE extent is sub-pixel, and where both are a sub-pixel blob:
-// a disc once the pack's radius reaches the cap, a square at radius 0, since
+// a disc once the pack's radius reaches the cap, a square at radius 0 and a
+// rounded square between, since
 // frameSdfSplit clamps the radius to the smaller half-extent. Either way each pack
 // multiplies its window sample by that mask, so the SURFACE would vanish or be
 // thinned rather than pass through. So every pack that reads the frame rect
-// tests this and returns the content untouched. WHICH host reaches the merely
-// sub-pixel case is deliberately not named here: two audit rounds each named a
-// candidate and each was refuted (the compositor's shell substitution floors at
-// exactly 1.0 device px, but its ordinary arm multiplies by a scale that does
-// not), so the attribution kept being wrong while the guard was right anyway.
+// tests this and returns the content untouched. No host has been SHOWN to reach
+// the merely sub-pixel case; three audit rounds each named a candidate and each
+// was refuted, so the guard stands on its own and this no longer guesses.
 bool surfaceFrameDegenerate() {
     return uSurfaceFrameSize.x < 1.0 || uSurfaceFrameSize.y < 1.0;
 }

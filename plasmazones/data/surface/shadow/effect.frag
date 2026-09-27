@@ -9,6 +9,11 @@
 // byte-for-byte; the shadow lives in the transparent margin and, on a window
 // whose own body is translucent, in the band within two reaches inside the frame.
 //
+// ONE of this pack's declared parameters is consumed HOST-SIDE and is never
+// read here: p_useThemeTint replaces the shadow colour with the theme colour
+// before the shader runs, in SurfaceThemeResolve. So a reader looking for it
+// below will not find it, and that is not an omission.
+//
 // CAPTURE MARGIN: metadata declares `"paddingParam": "shadowSize"`, so the
 // compositor host inflates the capture canvas by the resolved size. The
 // offset displaces the shadow within that margin; the texture-edge feather

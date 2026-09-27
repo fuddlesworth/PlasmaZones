@@ -66,10 +66,9 @@ namespace PhosphorSurfaceShaders {
  *
  * The kwin-effect compositor compiles and runs the same buffer passes in its
  * composite fold. It degrades to single-pass, with a diagnostic log, only
- * when a buffer pass fails to compile. The two hosts differ in three places,
- * each documented on the field it belongs to: `bufferFeedback` is daemon-only,
- * `vertexShaderPath` does not reach the compositor's buffer passes, and
- * `textures` overrides are daemon-only.
+ * when a buffer pass fails to compile. The two hosts differ in several places,
+ * each documented on the field it belongs to. An enumeration here kept going
+ * stale as fields were added, so the fields are the list.
  *
  * ## Trimmed vs AnimationShaderEffect
  *

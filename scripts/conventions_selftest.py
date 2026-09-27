@@ -769,31 +769,67 @@ def _spdx_suffix_failures(partition_readable) -> list[str]:
     g = partition_readable.__globals__
     rule_spdx, suffixes = g["rule_spdx"], g["CODE_SUFFIXES"]
     bad: list[str] = []
-    # Each of these must be READ by the rule, so a file missing its header is reported.
-    # .py and .js were already in; the other four joined when the packaging headers moved
-    # into the head window, which is the change this pins.
-    for suffix in (".sh", ".cmake", ".spec", ".desktop", ".py", ".js", ".cpp", ".qml"):
-        if suffix not in suffixes:
-            bad.append(f"CODE_SUFFIXES no longer covers {suffix}")
+    # MEMBERSHIP pinned in BOTH directions against the literal below, because neither
+    # direction is visible any other way: every tracked file the set already covers carries
+    # a header, so narrowing it changes no tree finding, and widening it is what quietly
+    # brought .spec into the size ratchet. A deliberate change edits this literal in the
+    # same commit and says so.
+    expected = frozenset({".cc", ".cmake", ".cpp", ".cxx", ".desktop", ".frag", ".glsl",
+                          ".h", ".hpp", ".js", ".luau", ".py", ".qml", ".sh", ".spec", ".vert"})
+    for suffix in sorted(expected - suffixes):
+        bad.append(f"CODE_SUFFIXES no longer covers {suffix}")
+    for suffix in sorted(suffixes - expected):
+        bad.append(f"CODE_SUFFIXES gained {suffix} without this selftest's literal being updated")
     with tempfile.TemporaryDirectory() as tmp:
         d = Path(tmp)
-        named = [f"probe{s}" for s in (".sh", ".cmake", ".spec", ".desktop")]
-        for name in named:
+        (d / "data").mkdir()
+        # A headerless probe PER MEMBER, generated from the set rather than a hand-picked
+        # few, so the reach is pinned for every suffix and not only for the ones an audit
+        # round happened to name. rule_spdx matches the SPDX tags as plain substrings in the
+        # head, so one comment syntax covers every suffix here.
+        headerless = [f"headerless{s}" for s in sorted(suffixes)]
+        for name in headerless:
             (d / name).write_text("# nothing here\n", encoding="utf-8")
-        # A suffix the rule must NOT read, so the arm is not vacuously true: data JSON is
-        # exempt by format, and CLAUDE.md forbids a header on it outright.
-        (d / "probe.json").write_text("{}\n", encoding="utf-8")
-        saved = g["REPO"]
+        # A VALID header must NOT be reported. This is what pins that the rule READS the head
+        # rather than merely matching the suffix: with only the headerless probes, deleting
+        # them entirely left the arm green, because read() answers "" for a missing file and a
+        # headerless read is indistinguishable from an unreadable one.
+        good = "good.sh"
+        (d / good).write_text("# SPDX-FileCopyrightText: 2026 fuddlesworth\n"
+                              "# SPDX-License-Identifier: GPL-3.0-or-later\n", encoding="utf-8")
+        # A copyright line with NO identifier must be reported, which pins the primary arm
+        # separately from the FileCopyrightText one. Disabling either used to leave both green.
+        idless = "idless.sh"
+        (d / idless).write_text("# SPDX-FileCopyrightText: 2026 fuddlesworth\n", encoding="utf-8")
+        # And the mirror, an identifier with no copyright line, which is the only shape that
+        # reaches the SECOND arm. Without it, deleting that arm left the suite green.
+        copyless = "copyless.sh"
+        (d / copyless).write_text("# SPDX-License-Identifier: GPL-3.0-or-later\n", encoding="utf-8")
+        # Data JSON is exempt by FORMAT. .json is added to the set for this call on purpose, so
+        # SPDX_EXEMPT is the thing that skips it — a bare probe.json is skipped by the suffix
+        # filter instead, which tests nothing AND turns the widening that pattern exists for
+        # into a selftest failure. The path needs a data/ segment because the pattern requires
+        # one.
+        exempt = "data/probe.json"
+        (d / exempt).write_text("{}\n", encoding="utf-8")
+        saved_repo, saved_suffixes = g["REPO"], g["CODE_SUFFIXES"]
         g["REPO"] = d
+        g["CODE_SUFFIXES"] = saved_suffixes | {".json"}
         try:
-            reported = {v.path for v in rule_spdx([*named, "probe.json"])}
+            reported = {v.path for v in rule_spdx([*headerless, good, idless, copyless, exempt])}
         finally:
-            g["REPO"] = saved
-        for name in named:
+            g["REPO"], g["CODE_SUFFIXES"] = saved_repo, saved_suffixes
+        for name in headerless:
             if name not in reported:
                 bad.append(f"rule_spdx does not read {name}, so a missing header there is silent")
-        if "probe.json" in reported:
-            bad.append("rule_spdx read a .json file, which is exempt by format")
+        if good in reported:
+            bad.append("rule_spdx reported a file carrying a valid head header")
+        if idless not in reported:
+            bad.append("rule_spdx missed a copyright line with no licence identifier")
+        if copyless not in reported:
+            bad.append("rule_spdx missed an identifier with no copyright line")
+        if exempt in reported:
+            bad.append(f"rule_spdx reported {exempt}, which SPDX_EXEMPT covers by format")
     return bad
 
 
@@ -805,6 +841,13 @@ def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
     guarding on it, so a caller that forgot it lost that coverage in silence rather
     than failing."""
     failures = []
+    # Captured for the post-condition at the tail. _spdx_suffix_failures redirects the
+    # gate's REPO and CODE_SUFFIXES at a temp tree and restores them in a finally, and
+    # nothing would notice a dropped restore while that arm runs LAST. A future arm
+    # appended after it would run against a deleted directory and raise, which reads like
+    # a broken gate rather than a finding.
+    entry_globals = partition_readable.__globals__
+    entry_repo, entry_suffixes = entry_globals["REPO"], entry_globals["CODE_SUFFIXES"]
 
     for text, shape in SELFTEST_PROSE_BAD:
         if not prose_problems(text):
@@ -847,6 +890,11 @@ def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
     failures.extend(_dep5_failures())
     failures.extend(_precondition_failures(partition_readable))
     failures.extend(_spdx_suffix_failures(partition_readable))
+
+    if entry_globals["REPO"] != entry_repo:
+        failures.append(f"an arm left the gate's REPO at {entry_globals['REPO']}, not {entry_repo}")
+    if entry_globals["CODE_SUFFIXES"] != entry_suffixes:
+        failures.append("an arm left the gate's CODE_SUFFIXES changed")
 
     for line in failures:
         print(f"selftest: {line}", file=sys.stderr)

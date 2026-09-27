@@ -391,9 +391,12 @@ void ShaderNodeRhi::setUserTextureWrap(int slot, const QString& wrap)
     // phase, so every one of them already runs inside a sync that dirties at
     // the end, and the item-side setters call update() besides. It is kept
     // because this is an LGPL library and the only thing protecting an
-    // out-of-tree host that forgets that trailing markDirty. The lambda that
-    // fires from QSGTextureProvider::textureChanged is the genuine case, since
-    // that one arrives outside sync.
+    // out-of-tree host that forgets that trailing markDirty. The cover is the
+    // SAMPLER-REBUILD family only (this setter, setBufferWrap/Wraps,
+    // setBufferFilter/Filters, setUseWallpaper, setUseDepthBuffer); the setters
+    // that drop pipelines without rebuilding a sampler do not carry it. The
+    // lambda that fires from QSGTextureProvider::textureChanged is the genuine
+    // case, since that one arrives outside sync.
     markDirty(QSGNode::DirtyMaterial);
 }
 
@@ -940,8 +943,9 @@ void ShaderNodeRhi::setEntryScaffold(const QString& prologue, const QList<Phosph
     m_entryCandidates = candidates;
     // Like setParamPreamble: the scaffold is applied inside loadFragmentShader
     // and folded into the bake-cache key, so a change must force a reload+rebake.
-    // The owning ShaderEffect re-invokes loadFragmentShader on its next dirty
-    // updatePaintNode, which re-assembles with the new scaffold.
+    // This flag is the NODE's, not the item's, so it does not by itself cause a
+    // reload. Callers must pair the call with one, which every in-tree caller
+    // does by setting the scaffold inside the item's own reload block.
     m_shaderDirty = true;
 }
 
@@ -1050,8 +1054,12 @@ void ShaderNodeRhi::setParamPreamble(const QString& preamble)
     // The preamble is spliced inside loadFragmentShader and folded into the
     // bake-cache key, so a change must force a reload+rebake — marking dirty
     // alone (without a re-load) would re-bake the already-spliced cached
-    // source. The owning ShaderEffect re-invokes loadFragmentShader on its
-    // next updatePaintNode when dirty, which re-splices with the new preamble.
+    // source. Callers must pair this with a reload: every in-tree caller sets
+    // the preamble inside the item's own reload block, immediately before
+    // loadFragmentShader. Raising this flag alone re-splices the VERTEX source
+    // at bake time while the FRAGMENT still carries the preamble spliced at its
+    // last load, and stores that mixed pair under a key that folds the NEW
+    // preamble, so a later correctly-spliced load takes the poisoned hit.
     m_shaderDirty = true;
 }
 

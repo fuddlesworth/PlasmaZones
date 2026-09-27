@@ -76,23 +76,25 @@ void clearShaderSlotProperties(QQuickItem* slot)
     if (!slot) {
         return;
     }
+    // Parse-default spellings, not magic values: every buffer default below is
+    // read off a default-constructed ShaderInfo, the same value the parse path
+    // leaves when a pack declares no key, so a future default flip cannot
+    // silently diverge here.
+    const ShaderRegistry::ShaderInfo parseDefaults;
     writeQmlProperty(slot, QStringLiteral("shaderSource"), QUrl());
     writeQmlProperty(slot, QStringLiteral("bufferShaderPath"), QString());
-    writeQmlProperty(slot, QStringLiteral("bufferShaderPaths"), QVariant::fromValue(QStringList()));
-    writeQmlProperty(slot, QStringLiteral("bufferFeedback"), false);
-    writeQmlProperty(slot, QStringLiteral("bufferScale"), 1.0);
-    // Parse-default spelling, not a magic value: keep in lockstep with
-    // ShaderRegistry's absent-key default so a future default flip cannot
-    // silently diverge here.
-    writeQmlProperty(slot, QStringLiteral("halfFloatBuffers"), ShaderRegistry::ShaderInfo{}.halfFloatBuffers);
-    writeQmlProperty(slot, QStringLiteral("bufferWrap"), QStringLiteral("clamp"));
-    writeQmlProperty(slot, QStringLiteral("bufferWraps"), QStringList());
-    writeQmlProperty(slot, QStringLiteral("bufferFilter"), QStringLiteral("linear"));
-    writeQmlProperty(slot, QStringLiteral("bufferFilters"), QStringList());
-    writeQmlProperty(slot, QStringLiteral("useDepthBuffer"), false);
+    writeQmlProperty(slot, QStringLiteral("bufferShaderPaths"), QVariant::fromValue(parseDefaults.bufferShaderPaths));
+    writeQmlProperty(slot, QStringLiteral("bufferFeedback"), parseDefaults.bufferFeedback);
+    writeQmlProperty(slot, QStringLiteral("bufferScale"), parseDefaults.bufferScale);
+    writeQmlProperty(slot, QStringLiteral("halfFloatBuffers"), parseDefaults.halfFloatBuffers);
+    writeQmlProperty(slot, QStringLiteral("bufferWrap"), parseDefaults.bufferWrap);
+    writeQmlProperty(slot, QStringLiteral("bufferWraps"), parseDefaults.bufferWraps);
+    writeQmlProperty(slot, QStringLiteral("bufferFilter"), parseDefaults.bufferFilter);
+    writeQmlProperty(slot, QStringLiteral("bufferFilters"), parseDefaults.bufferFilters);
+    writeQmlProperty(slot, QStringLiteral("useDepthBuffer"), parseDefaults.useDepthBuffer);
     writeQmlProperty(slot, QStringLiteral("shaderParams"), QVariantMap());
     writeQmlProperty(slot, QStringLiteral("paramPreamble"), QString());
-    writeQmlProperty(slot, QStringLiteral("useWallpaper"), false);
+    writeQmlProperty(slot, QStringLiteral("useWallpaper"), parseDefaults.useWallpaper);
     QImage placeholder(1, 1, QImage::Format_ARGB32);
     placeholder.fill(Qt::transparent);
     writeQmlProperty(slot, QStringLiteral("wallpaperTexture"), QVariant::fromValue(placeholder));

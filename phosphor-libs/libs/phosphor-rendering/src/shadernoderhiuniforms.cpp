@@ -785,6 +785,7 @@ void ShaderNodeRhi::releaseRhiResources()
     m_dummyChannelWarned = false;
     m_halfFloatUnsupportedWarned = false;
     m_bufferTargetCreateWarned = false;
+    m_bufferSamplerCreateWarned = false;
     m_userTextureSamplerWarned.fill(false);
     m_transparentFallbackWarned = false;
     m_depthMultiBufferWarned = false;

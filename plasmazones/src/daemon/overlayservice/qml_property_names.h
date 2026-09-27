@@ -22,17 +22,14 @@
  * in either the writer or a reader trips the build (or at least a
  * failing test) instead of producing a runtime no-op.
  *
- * SCOPE, and this set is AD HOC rather than principled. Two earlier versions
- * of this paragraph each stated a membership rule, and both were false in both
- * directions. What is actually here is the names whose spelling has already
- * broken once (see the DecorationReloadGeneration and BackdropTexture notes
- * below, both write-only from C++ and hosted because their spelling fell
- * through to setProperty and became a dead dynamic property), plus the ones a
- * test pins. It is NOT every property the daemon pushes, and it is NOT every
- * property the daemon reads back: roughly a dozen more, `useShader` and
- * `stripVerticalAxis` among them, are read back in C++ and still spelled
- * inline at every site. Adding a name here is an improvement; the absence of
- * one is a gap rather than a decision.
+ * SCOPE, and this set is AD HOC rather than principled. THREE earlier versions
+ * of this paragraph each stated a membership rule and each was false, so it no
+ * longer states one. What can be said: it is NOT every property the daemon
+ * pushes, and it is NOT every property the daemon reads back — roughly a dozen
+ * more, `useShader` and `stripVerticalAxis` among them, are read back in C++ and
+ * still spelled inline at every site. Adding a name here is an improvement; the
+ * absence of one is a gap rather than a decision. The DecorationReloadGeneration
+ * and BackdropTexture notes below record why those two are here.
  */
 namespace PlasmaZones {
 namespace OverlayQmlPropertyNames {

@@ -15,6 +15,11 @@
 // like exp(-x²) profile that is brightest against the edge and gone well
 // before the margin ends.
 //
+// ONE of this pack's declared parameters is consumed HOST-SIDE and is never
+// read here: p_useThemeTint replaces the halo colour with the theme colour
+// before the shader runs, in SurfaceThemeResolve. So a reader looking for it
+// below will not find it, and that is not an omission.
+//
 // CAPTURE MARGIN: metadata declares `"paddingParam": "glowSize"`, so the
 // compositor host inflates the window's capture canvas by the resolved glow
 // size — the halo has real transparent margin to draw into even when the

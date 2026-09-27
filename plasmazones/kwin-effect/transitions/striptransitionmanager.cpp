@@ -90,9 +90,11 @@ void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QStrin
             // capture while a pass holds, and holdsAfterSettle keeps it
             // holding after the spring settles — an erase with no repaint
             // then leaves that capture on the un-damaged regions of the last
-            // presented frame until unrelated damage arrives. The immediate
-            // (heartbeat) path hits this arm on every tick with no live
-            // spring, which is exactly the settled-spring-open-fade shape.
+            // presented frame until unrelated damage arrives. This arm runs at
+            // most once per armed pass: the first non-runnable tick erases the
+            // entry and every later tick finds none. The spring can still be
+            // live at that moment, which is why isAnimatingOn is the first
+            // term rather than holdsAfterSettle on its own.
             const bool wasPresenting = m_effect->m_stripViewAnimator->isAnimatingOn(output)
                 || it->second.motion.holdsAfterSettle(passClockMs());
             // notifyLeg fires from the D-Bus batch path, off the paint

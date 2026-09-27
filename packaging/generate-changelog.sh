@@ -197,7 +197,8 @@ generate_rpm() {
 
     # Replace everything after %changelog in the spec. Without the
     # marker `sed /^%changelog/q` would copy the whole file then append,
-    # silently producing duplicate sections.
+    # silently adding the entries with no directive, and doubling them on
+    # the next run. The grep guard below makes both unreachable.
     if [[ -f "$specfile" ]]; then
         if ! grep -q '^%changelog' "$specfile"; then
             echo "Error: $specfile is missing a %changelog marker — refusing to splice" >&2

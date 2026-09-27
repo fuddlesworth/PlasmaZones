@@ -641,6 +641,11 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
     // TWO ways a window stops, and both must be accounted or the jump returns through
     // whichever was missed:
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+    // Both LIVE reads, deliberately unlike the focus-fade ramp in this same fold, which
+    // takes the frame pin precisely to avoid per-output-pass drift. iTime wants the drift:
+    // it is a wall clock the pack reads, not a quantity two outputs have to agree on. The
+    // comparison against state.lastFoldMs below is live-against-pinned for the same reason,
+    // with a sub-millisecond skew against a 250 ms threshold, erring toward "unpainted".
     const qint64 sharedNowMs = surfaceShaderTimeMs();
     // Well clear of any real frame interval, and well under any gap a person would notice
     // as a phase jump.

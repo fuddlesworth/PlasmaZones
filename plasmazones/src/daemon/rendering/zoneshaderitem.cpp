@@ -444,10 +444,11 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
                     loaded = false;
                 }
             } else if (loaded) {
-                qCWarning(PlasmaZones::lcOverlay)
-                    << "No vertex shader found for" << fragPath << "(expected zone.vert in shader dir or search paths)";
-                // Carries the journal line's parenthetical too: the banner is the only surface a
-                // settings-app user sees, and "expected zone.vert…" is the actionable half.
+                qCWarning(PlasmaZones::lcOverlay) << "No vertex shader found for" << fragPath
+                                                  << "(expected zone.vert in the shader dir or a search path)";
+                // Carries the journal line's parenthetical BYTE FOR BYTE, so a user comparing the
+                // banner against the journal reads one sentence rather than two. The banner is the
+                // surface that matters here: it shows on the live overlay and in the settings app.
                 failureReason = QStringLiteral("No vertex shader found for ") + fragPath
                     + QStringLiteral(" (expected zone.vert in the shader dir or a search path)");
                 loaded = false;

@@ -411,35 +411,34 @@ void ShaderNodeRhi::prepare()
         // Create VBO (fullscreen quad)
         m_vbo.reset(
             rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(RhiConstants::QuadVertices)));
+        // Every failure arm in this block tears down through releaseRhiResources()
+        // rather than its own list of resets. The lists used to be hand-rolled and
+        // had to be kept in step with each other as resources were added; the
+        // helper is a superset of all of them and additionally re-arms the bake
+        // flags, so the retried init does not run against a stale baked shader.
         if (!m_vbo->create()) {
             m_shaderError = QStringLiteral("Failed to create vertex buffer");
-            m_vbo.reset();
+            releaseRhiResources();
             return;
         }
         m_ubo.reset(rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, uboSize));
         if (!m_ubo->create()) {
             m_shaderError = QStringLiteral("Failed to create uniform buffer");
-            m_vbo.reset();
-            m_ubo.reset();
+            releaseRhiResources();
             return;
         }
         // Audio spectrum texture (binding 10): 1x1 dummy when disabled
         m_audioSpectrumTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
         if (!m_audioSpectrumTexture->create()) {
             m_shaderError = QStringLiteral("Failed to create audio spectrum texture");
-            m_vbo.reset();
-            m_ubo.reset();
-            m_audioSpectrumTexture.reset();
+            releaseRhiResources();
             return;
         }
         m_audioSpectrumSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
                                                      QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
         if (!m_audioSpectrumSampler->create()) {
             m_shaderError = QStringLiteral("Failed to create audio spectrum sampler");
-            m_vbo.reset();
-            m_ubo.reset();
-            m_audioSpectrumTexture.reset();
-            m_audioSpectrumSampler.reset();
+            releaseRhiResources();
             return;
         }
         // User texture slots (bindings 11-14): 1x1 dummy textures
@@ -461,14 +460,7 @@ void ShaderNodeRhi::prepare()
             m_userTextureDirty[i] = true;
         }
         if (!userTexturesOk) {
-            m_vbo.reset();
-            m_ubo.reset();
-            m_audioSpectrumTexture.reset();
-            m_audioSpectrumSampler.reset();
-            for (int i = 0; i < kMaxUserTextures; ++i) {
-                m_userTextures[i].reset();
-                m_userTextureSamplers[i].reset();
-            }
+            releaseRhiResources();
             return;
         }
         // Desktop wallpaper texture (binding 15): 1x1 dummy

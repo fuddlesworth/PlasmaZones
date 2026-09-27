@@ -79,8 +79,8 @@ CPP_SUFFIXES = {".cpp", ".cc", ".cxx", ".h", ".hpp"}
 QML_SUFFIXES = {".qml"}
 SHADER_SUFFIXES = {".frag", ".vert", ".glsl"}
 # .js is here so rule_spdx and rule_license cover the 17 QML .js libraries. .sh/.cmake/.spec/
-# .desktop joined once every tracked one carried a head header. FOUR rules read this set, so
-# .spec also entered the size ratchet; most of the tree is still outside it, not just .in/.xml/.yml.
+# .desktop joined once every tracked one carried a head header. THREE rules read it, and so does
+# --update-baseline, so .spec also entered the size ratchet; .in/.xml/.txt and data JSON stay out.
 CODE_SUFFIXES = (CPP_SUFFIXES | QML_SUFFIXES | SHADER_SUFFIXES
                  | {".luau", ".py", ".js", ".sh", ".cmake", ".spec", ".desktop"})
 
@@ -1116,8 +1116,8 @@ def main() -> int:
             if rel.startswith(EXCLUDED_PREFIXES):
                 continue
             if not p.is_file():
-                # Announced, not dropped in silence: a stale list would check NOTHING and exit 0.
-                # FIRES today (symlinks to dirs, a staged-then-removed path). Caller's spelling.
+                # Announced, not dropped in silence: a stale or hand-passed list would check NOTHING.
+                # Only a hand-run reaches it: lefthook drops a non-file staged path. Caller's spelling.
                 print(f"check-conventions: skipping {f} (not a file)", file=sys.stderr)
                 continue
             files.append(rel)

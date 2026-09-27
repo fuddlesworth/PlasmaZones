@@ -148,7 +148,8 @@ inline QVariantList patchZonesWithHighlight(const QVariantList& zones, QObject* 
 }
 
 // Parse zones from JSON array. Returns empty list on parse error or invalid format.
-// Shared by overlayservice_shader.cpp, overlayservice_snapassist.cpp, and tests.
+// No production caller today; the only caller is
+// plasmazones/tests/unit/ui/test_overlay_helpers.cpp.
 inline QVariantList parseZonesJson(const QString& json, const char* context)
 {
     QVariantList zones;

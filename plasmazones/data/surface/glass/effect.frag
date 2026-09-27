@@ -184,7 +184,11 @@ vec4 pSurface(vec2 uv) {
             vec2 size = uSurfaceFrameSize;
             vec4 g = surfaceBlurTexel(glassCoord(surfaceUvFromPixel(topLeft + fG * size)));
             lit = g.rgb;
-            if (fringe > 0.001) {
+            // Second test for the same reason the cheap arm gives below: deeper
+            // into the pane than the bevel `concave` is 0, so shrink is 0 and
+            // fR == fG == fB. Without it these two dependent fetches re-read
+            // the texel already in `g` over most of the pane.
+            if (fringe > 0.001 && shrink > 0.0) {
                 lit.r = surfaceBlurTexel(glassCoord(surfaceUvFromPixel(topLeft + fR * size))).r;
                 lit.b = surfaceBlurTexel(glassCoord(surfaceUvFromPixel(topLeft + fB * size))).b;
             }
@@ -231,7 +235,9 @@ vec4 pSurface(vec2 uv) {
             vec2 shiftG = pxToUv(dirPx * magnitude) + lensShift;
             vec4 g = surfaceBlurTexel(glassCoord(uv + shiftG));
             lit = g.rgb;
-            if (fringe > 0.001) {
+            // Second test as in the other two arms: with magnitude 0 every shift
+            // collapses onto lensShift, which is most of the pane.
+            if (fringe > 0.001 && magnitude > 0.0) {
                 vec2 shiftR = pxToUv(dirPx * (magnitude * (1.0 + fringe))) + lensShift;
                 vec2 shiftB = pxToUv(dirPx * (magnitude * (1.0 - fringe))) + lensShift;
                 lit.r = surfaceBlurTexel(glassCoord(uv + shiftR)).r;
@@ -271,13 +277,14 @@ vec4 pSurface(vec2 uv) {
             vec2 dirUv = pxToUv(inward * strengthUv * paneShortPx);
             vec4 g = surfaceBlurTexel(glassCoord(uv + dirUv));
             lit = g.rgb;
-            // Gated the way the concave and Snell arms already gate theirs. Run
-            // unconditionally these cost two dependent fetches per fragment that
-            // return the texel already in `g` for two separate reasons: at
+            // All three refraction arms gate their fringe fetches the same way.
+            // Run unconditionally these cost two dependent fetches per fragment
+            // that return the texel already in `g` for two separate reasons: at
             // fringing 0 the two offsets collapse onto dirUv, and anywhere
             // deeper into the pane than the bevel `concave` is exactly 0, so
             // strengthUv and dirUv are zero and all three fetches hit one texel.
-            // That second case covers most of the pane at the shipped defaults.
+            // That second case covers most of the pane at the shipped defaults,
+            // which is what makes the second test worth its branch.
             if (fringe > 0.001 && strengthUv > 0.0) {
                 lit.r = surfaceBlurTexel(glassCoord(uv + dirUv * (1.0 + fringe))).r;
                 lit.b = surfaceBlurTexel(glassCoord(uv + dirUv * (1.0 - fringe))).b;
@@ -314,9 +321,9 @@ vec4 pSurface(vec2 uv) {
         // interpolated hue, which raising the threshold replaced with BLACK; and the helper
         // it cited RETURNS THE SAMPLE UNCHANGED at its guard rather than blacking it, so
         // matching the number would have inverted the behaviour. duotone and phosphor-glass
-        // hold the same position at 0.001, and blur's own comment explains why it is safe
-        // there: the error is bounded by the same alpha that makes it wrong, since line 405
-        // re-premultiplies by pane.a.
+        // also guard BELOW one stored quantum, at 0.001, and this sits lower still — it is
+        // the only 0.0001 in the tree, which is worth knowing before anyone unifies them. The
+        // error either way is bounded by the re-premultiply at the end of this branch.
         float paneAlpha = max(pane.a, 0.0001);
         lit = pane.a > 0.0001 ? lit / paneAlpha : vec3(0.0);
 
