@@ -346,6 +346,19 @@ private:
     void updateCursorHiding();
     bool cursorOnOutput(KWin::LogicalOutput* screen) const;
 
+    /// The clock EVERY liveness decision in this class reads: the pass-pinned
+    /// timestamp while a pass is in flight, the live sample otherwise.
+    ///
+    /// holdsAfterSettle is monotone non-increasing in its argument, so two readers
+    /// on different clocks disagree at the settle-fade boundary, and the later
+    /// (live) one calls a fade closed that the pass is still painting on the pinned
+    /// one. Every such disagreement costs a frame: a cursor shown while the pass
+    /// draws its own, a fade truncated one frame early, or direct scanout permitted
+    /// on a frame the pass replaces. The -1 sentinel means no pass is in flight
+    /// (the off-paint-thread D-Bus arms, the teardown hooks), where the live sample
+    /// is both the only answer available and the right one.
+    [[nodiscard]] qint64 passClockMs() const;
+
     /// Draw @p windows sharp onto the current target, bottom to top, each
     /// through the effect's own paintWindow with m_directPaintCapture set.
     /// Used for the above-strip set after the pack's quad.

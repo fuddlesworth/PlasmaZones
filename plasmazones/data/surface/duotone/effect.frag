@@ -51,6 +51,9 @@ vec4 pSurface(vec2 uv) {
         // region doesn't read darker than it is, then re-weight the mapped
         // colour by the capture's own alpha to stay premultiplied.
         float luma = blurred.a > 0.001 ? luma709(blurred.rgb / blurred.a) : 0.0;
+        // 0.05 is a pow() guard against a zero or negative exponent, NOT the parameter's
+        // floor, which is 0.25. Same shape as the guards mosaic, rain-glass and
+        // rippled-glass carry, and it exists for a hand-edited metadata file.
         luma = pow(clamp(luma, 0.0, 1.0), max(p_contrast, 0.05));
         vec3 mapped = mix(p_colorA.rgb, p_colorB.rgb, luma);
         // Driver-stable grain over the two-tone map, which hides the banding

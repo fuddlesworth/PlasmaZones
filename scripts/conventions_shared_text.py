@@ -111,11 +111,14 @@ def shared_param_problems(repo: Path) -> list[tuple[str, str]]:
                 continue
             except ValueError:
                 # rule_prose reports a JSON SYNTAX error, including a BOM read as utf-8,
-                # so this one defers rather than duplicating it. THE DEFERRAL ASSUMES prose
-                # is also selected, which it is on pre-commit and in CI but not under
-                # `--rules shared-param-text` alone; there the dropped participant is named
-                # by nothing. That is the one asymmetry with the OSError arm above, which
-                # reports because nothing else would.
+                # so this one defers rather than duplicating it. THE DEFERRAL HAS TWO GAPS,
+                # and the OSError arm above reports precisely because it shares the second.
+                # First, it assumes prose is also selected, which it is on pre-commit and in
+                # CI but not under `--rules shared-param-text` alone. Second, and in a FULL
+                # run too, rule_prose only ever sees paths in the `files` list, while this
+                # rule GLOBS: a malformed pack directory that is not tracked is reported by
+                # nothing at all. No untracked pack exists today, so this is a live gap
+                # rather than a live defect.
                 continue
             if not isinstance(doc, dict):
                 continue  # a root that parses but is not an object is not a pack

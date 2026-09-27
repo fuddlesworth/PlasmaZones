@@ -458,6 +458,18 @@ ShaderNodeRhi* ShaderEffect::createShaderNode()
     return new ShaderNodeRhi(this);
 }
 
+/// Exposed to subclasses because a subclass that REPLACES updatePaintNode has to redo the
+/// URL resolution, and both in-tree subclasses (SurfaceShaderItem, ZoneShaderItem) had
+/// hand-rolled a copy handling only `qrc:` and toLocalFile(). Both dropped the `url.path()`
+/// fallback, so a SCHEME-LESS url — which setShaderSource accepts, and whose toLocalFile()
+/// is empty — resolved to nothing. Their fragment load was then skipped rather than failed,
+/// and the item reported Ready over a node carrying no fragment source. Callers must still
+/// treat an empty return as a failure.
+QString ShaderEffect::localShaderPath(const QUrl& url)
+{
+    return localPathFromShaderUrl(url);
+}
+
 void ShaderEffect::setError(const QString& error)
 {
     bool changed = false;

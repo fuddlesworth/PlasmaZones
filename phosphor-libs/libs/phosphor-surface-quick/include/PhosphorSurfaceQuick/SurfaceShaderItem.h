@@ -91,8 +91,17 @@ public:
     /// by this item's constructor AND the plasmazones daemon's warm-bake so
     /// the bake-cache key the warm compile writes is guaranteed to be the one
     /// the first live paint looks up — the two paths cannot silently diverge.
+    ///
+    /// The LIVE node is handed one more entry than this returns: updatePaintNode
+    /// prepends the pack's own sibling `shared` dir (withPackSiblingShared). That
+    /// is a no-op for every XDG-installed pack, which is all the warm bake sees,
+    /// and surfaceshaderitem.cpp documents why at that call.
     static QStringList surfaceIncludePaths();
 
+    // Note: setEntryScaffold is inherited and PUBLIC, but updatePaintNode reinstalls the
+    // surface registry's scaffold on every reload, so a host call to it is discarded. No
+    // in-tree host makes one.
+    //
     // Note: shaderSource, paramPreamble, shaderParams, iTime, and the
     // customParams / customColors slots are inherited Q_PROPERTYs from
     // PhosphorRendering::ShaderEffect — the QML host binds them directly. The

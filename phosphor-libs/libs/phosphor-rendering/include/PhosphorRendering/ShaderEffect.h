@@ -900,6 +900,7 @@ protected:
 
     void setError(const QString& error);
     void setStatus(Status newStatus);
+    static QString localShaderPath(const QUrl& url); ///< URL to loader path; see the definition.
 
 private:
     // ── Auto-tick (playing=true) plumbing ────────────────────────────

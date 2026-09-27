@@ -109,10 +109,13 @@ vec4 pSurface(vec2 uv) {
     vec4 pane;
     if (uHasBackdrop >= 0.5) {
         // Bevel profile from the VISUAL-radius distance (reference glass()).
-        // max() keeps the clamp's hi bound above its lo bound on a degenerate
-        // (tiny) frame, where minHalf * 0.9 could fall below 0.1 and GLSL clamp
-        // with min > max would collapse edgePx toward 0 (an abs(d)/edgePx that
-        // is 0/0 = NaN at the frame centre).
+        // max() keeps the clamp's hi bound above its lo bound where minHalf * 0.9
+        // could fall below 0.1, since GLSL clamp with min > max would collapse
+        // edgePx toward 0 (an abs(d)/edgePx that is 0/0 = NaN at the frame centre).
+        // The degenerate-frame guard at the top of pSurface now forces both extents
+        // to at least one device px, so minHalf * 0.9 is at least 0.45 and this
+        // cannot bind on any frame that reaches here. Kept as cover for a
+        // third-party host that calls this helper without that guard.
         float edgePx = clamp(p_edgeWidth * uSurfaceScale, 0.1, max(minHalf * 0.9, 0.1));
         float edgeFactor = 1.0 - clamp(abs(d) / edgePx, 0.0, 1.0);
         float eased = smoothstep(0.0, 1.0, edgeFactor);

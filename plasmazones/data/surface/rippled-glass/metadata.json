@@ -152,7 +152,7 @@
             "default": 1.0,
             "min": 0.0,
             "max": 2.0,
-            "description": "Gain on the finished pane, the refracted scene with the ripple glint already on it. 1.0 leaves it unchanged.",
+            "description": "Gain on the refracted scene, before the ripple glint is added. 1.0 leaves it unchanged.",
             "group": "Colour"
         },
         {
@@ -162,7 +162,7 @@
             "default": 1.0,
             "min": 0.0,
             "max": 2.0,
-            "description": "Contrast of the finished pane around mid grey, ripple glint included. 1.0 leaves it unchanged.",
+            "description": "Contrast of the refracted scene around mid grey, before the ripple glint is added. 1.0 leaves it unchanged.",
             "group": "Colour"
         },
         {
@@ -172,7 +172,7 @@
             "default": 1.0,
             "min": 0.0,
             "max": 2.0,
-            "description": "Colour saturation of the finished pane, ripple glint included. 0 is greyscale and 1.0 leaves it unchanged.",
+            "description": "Colour saturation of the refracted scene, before the ripple glint is added. 0 is greyscale and 1.0 leaves it unchanged.",
             "group": "Colour"
         },
         {
@@ -210,7 +210,7 @@
             "name": "Mirror at the edge",
             "type": "bool",
             "default": false,
-            "description": "Where the bend reaches past the pane's edge, fold the backdrop back inside. Left off, the bend keeps reading the captured scene beside the pane, which can make the edges look see-through.",
+            "description": "Where the bend reaches past the pane's edge, fold the backdrop back inside. Left off, the bend keeps reading the captured scene beside the pane, and stretches the edge pixel once it runs past what was captured.",
             "group": "Refraction"
         }
     ]

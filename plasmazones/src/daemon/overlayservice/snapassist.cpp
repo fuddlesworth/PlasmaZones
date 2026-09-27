@@ -202,6 +202,19 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
     // and enforces this invariant for itself; snap-assist and the picker
     // must uphold it against each other too, or two modal backdrops stack
     // on one surface with an order-dependent Escape-grab release.
+    //
+    // UNLATCHED, unlike the prev-screen hide below, which latches first and says why. The
+    // asymmetry is deliberate but it costs something, so it is written down rather than left
+    // to be rediscovered. hideLayoutPicker emits layoutPickerDismissed, and
+    // WindowDragAdaptor::releaseCancelOverlayShortcutIfIdle keeps the shared Escape grab only
+    // while isLayoutPickerVisible() || isSnapAssistVisible(); with neither latched yet it
+    // therefore RELEASES the grab, which snapAssistShown then re-binds a few lines later. On
+    // the lib's inline-completion branches the picker's completion also reaches
+    // restoreZoneSelectorAfterHide while m_snapAssistVisible is still false, so a selector on
+    // this same screen is re-shown and hidden again below. Both costs land only on a dead
+    // shell, where hideSlot completes inline; a live shell takes the animator's settle and
+    // sees both latches set. Hoisting the latch would remove the grab churn, and it must not
+    // be done on reasoning alone: it changes when the shared Escape grab is held.
     if (m_layoutPickerVisible) {
         hideLayoutPicker();
     }

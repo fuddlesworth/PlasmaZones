@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 # Generate the OBS Debian recipe (plasmazones.dsc) from packaging/debian/control.
 #
 # Usage:
@@ -15,9 +18,6 @@
 # download_files source service, folds in the debian.* files, and regenerates
 # the source package with correct checksums. A hand-written checksum would be
 # both unknowable at commit time and immediately wrong.
-#
-# SPDX-FileCopyrightText: 2026 fuddlesworth
-# SPDX-License-Identifier: GPL-3.0-or-later
 
 set -euo pipefail
 

@@ -1890,7 +1890,7 @@ private:
     bool m_opacityTintFallbackWarned = false;
     /// Once-latched journal warnings for a backdrop texture or framebuffer that failed to
     /// allocate (captureWindowBackdrop), and for a surface composite target that did
-    /// (ensureSurfaceMultipassTargets). Both retry every paint, so unlatched they would spam at
+    /// (ensureSurfaceTargets). Both retry every paint, so unlatched they would spam at
     /// vsync rate, and both are re-armed at every compile-cache clear: session-permanent meant
     /// one transient failure silenced every later one. The second's state is ERASED on the
     /// failure path, so an effect member is what outlives it; a per-window flag could not.
@@ -2592,7 +2592,7 @@ private:
     /// would then report whatever that second walk said, silently swallowing the
     /// first failure whenever the retry happened to succeed.
     ///
-    /// Set at the sites whose failure ABANDONS a pass, cleared in prePaintScreen beside the
+    /// Set wherever a chained paint reports failure, cleared in prePaintScreen beside the
     /// two latches above. Read by paintScreenImpl, by the three IN-PASS pill-blit sites and the
     /// pointer chain, and THREE TIMES in postPaintScreen, which still runs after a failed paint:
     /// it books no blit and skips both glDelete* reaps. The capture walk's blit needs no term.

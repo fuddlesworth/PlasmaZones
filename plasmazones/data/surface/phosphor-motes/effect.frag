@@ -329,7 +329,7 @@ vec4 pSurface(vec2 uv) {
     // above already tapers on its own; the heads and their tails did not. Applied to BOTH
     // sides of the premultiplied pair, so the glow <= alpha invariant the clamp below
     // relies on survives it. Same profile and the same 12-logical-px cap as the shared
-    // helper, so all three fade alike.
+    // helper, so all four fade alike.
     float edgeDist = min(min(px.x, px.y), min(uSurfaceSize.x - px.x, uSurfaceSize.y - px.y));
     float feather = max(min(0.35 * reachPx, 12.0 * max(uSurfaceScale, 0.001)), 1e-3);
     float edgeFade = smoothstep(0.0, feather, edgeDist);

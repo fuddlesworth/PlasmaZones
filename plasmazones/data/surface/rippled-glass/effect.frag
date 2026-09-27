@@ -189,7 +189,7 @@ vec4 pSurface(vec2 uv) {
         lit += glint * g.a;
         lit = mix(lit, tint * g.a, tintStrength);
         lit += surfaceGrain(px, p_noiseStrength) * g.a;
-        pane = vec4(clamp(lit, 0.0, max(g.a, 0.0001)), g.a) * mask;
+        pane = vec4(clamp(lit, 0.0, max(g.a, 0.0)), g.a) * mask;
     } else {
         pane = faintTintSlab(tint, tintStrength, mask);
     }

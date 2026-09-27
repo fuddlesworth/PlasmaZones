@@ -151,7 +151,7 @@ vec4 pSurface(vec2 uv) {
         vec4 blurred = surfaceBackdropGrade(surfaceBlurTexel(uv), p_brightness, p_contrast, p_saturation,
                                             p_vibrancy, p_vibrancyDarkness);
         vec3 color = mix(blurred.rgb, grad * blurred.a, gradStrength);
-        color = clamp(color + vec3(variation) * blurred.a, 0.0, max(blurred.a, 0.0001));
+        color = clamp(color + vec3(variation) * blurred.a, 0.0, max(blurred.a, 0.0));
         color *= vignette;
         pane = vec4(color, blurred.a) * slab.mask;
     } else {

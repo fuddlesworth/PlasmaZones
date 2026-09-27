@@ -140,7 +140,8 @@ def partition_readable(files: list[str], *, repo: Path | None = None) -> tuple[l
     them had seen: "malformed JSON" on well-formed JSON, "missing SPDX header" on a file
     that carries one. This is a PRECONDITION of the gate rather than a convention, so it
     is not in RULES and --rules cannot switch it off; a subset run that could re-admit
-    unreadable paths would bring the false findings back with it.
+    unreadable paths would bring the false findings back with it. Two rules DO reach past
+    this list by design, and each documents why at its own widening.
 
     A function rather than a loop inside main() so it can be pinned: as inline code its
     only caller was main(), which no test invokes, and neutering it left the self-test
@@ -1109,9 +1110,16 @@ def main() -> int:
             try:
                 rel = str(p.relative_to(REPO))
             except ValueError:
+                print(f"check-conventions: skipping {f} (outside the repository)", file=sys.stderr)
                 continue
-            if p.is_file() and not rel.startswith(EXCLUDED_PREFIXES):
-                files.append(rel)
+            if rel.startswith(EXCLUDED_PREFIXES):
+                continue
+            if not p.is_file():
+                # Announced, not dropped in silence: a stale path list would otherwise check
+                # NOTHING and exit 0. Not an error, since --staged hands us staged DELETIONS.
+                print(f"check-conventions: skipping {rel} (not a file)", file=sys.stderr)
+                continue
+            files.append(rel)
     else:
         files = tracked_files()
 

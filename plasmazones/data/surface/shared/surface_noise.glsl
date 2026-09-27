@@ -134,8 +134,10 @@ float hashSin1(float n) {
 // and its own comment saying why.
 //
 // Returns the UN-weighted term. A pack over a premultiplied backdrop multiplies
-// by that alpha itself, which four of the five do and blur does not need to,
-// since it grains an un-premultiplied colour and re-premultiplies after.
+// by that alpha itself, which four of the five do and DUOTONE does not need to,
+// since it grains an un-premultiplied colour and re-premultiplies after. (blur
+// weights by alpha like the other three; it moved into premultiplied space when
+// it adopted surfaceBackdropGrade, and says so at its own call.)
 float surfaceGrain(vec2 px, float strength) {
     return (hash13(px) - 0.5) * 2.0 * clamp(strength, 0.0, 0.2);
 }

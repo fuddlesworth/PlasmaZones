@@ -186,7 +186,7 @@ vec4 pSurface(vec2 uv) {
         // Driver-stable grain over the fog, weighted by its alpha so the
         // cleared off-capture margin stays clear.
         float grain = surfaceGrain(px, p_noiseStrength);
-        pane = vec4(clamp(fog.rgb + (hi + grain) * fog.a, 0.0, max(fog.a, 0.0001)), fog.a) * mask;
+        pane = vec4(clamp(fog.rgb + (hi + grain) * fog.a, 0.0, max(fog.a, 0.0)), fog.a) * mask;
     } else {
         // Original pseudo look with no backdrop: droplets glint over a
         // dark glass slab.

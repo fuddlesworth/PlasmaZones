@@ -341,6 +341,17 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     // syncBasePropertiesToNode pushes user textures (slots 0..3) already.
     syncBasePropertiesToNode(node);
 
+    // The sourceItem texture provider, which syncBasePropertiesToNode deliberately does NOT
+    // push: its docblock makes it the duty of any subclass replacing updatePaintNode, and the
+    // surface twin does the same. No in-tree host calls setSourceItem on a zone item, so this
+    // is the base contract met rather than a live binding. Pushed every paint so a late
+    // setSourceItem is picked up and a torn-down source (QPointer auto-nulls) clears it.
+    if (QQuickItem* src = sourceItem(); src && src->isTextureProvider()) {
+        node->setSourceTextureProvider(src->textureProvider());
+    } else {
+        node->setSourceTextureProvider(nullptr);
+    }
+
     // ── Sync labels texture (zone-specific, not in parent) ───────────
     {
         QMutexLocker lock(&m_labelsTextureMutex);
@@ -369,10 +380,10 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
 
     if (needLoad) {
         if (shaderSourceValid) {
-            QString fragPath = shaderSource().toLocalFile();
-            if (shaderSource().scheme() == QLatin1String("qrc")) {
-                fragPath = QLatin1Char(':') + shaderSource().path();
-            }
+            // The base's resolver, not a local copy. Both overrides had hand-rolled one that
+            // dropped its `url.path()` fallback, so a scheme-less URL (which setShaderSource
+            // accepts) resolved to nothing and the empty path went unnoticed below.
+            const QString fragPath = localShaderPath(shaderSource());
 
             // Resolve vertex shader: per-shader zone.vert > zone.vert from the
             // include paths. Shared with the daemon warm bake via
@@ -401,21 +412,34 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
             node->setFragmentShaderSource(QString());
 
             bool loaded = true;
-            if (!vertPath.isEmpty()) {
+            // Tested BEFORE the vertex arms, which would otherwise blame a missing zone.vert
+            // for a fragment-path problem: the zone.vert lookup is keyed on fragPath's own
+            // directory, so an empty fragPath makes it fail too and "No vertex shader found
+            // for ''" is what the journal would carry.
+            if (fragPath.isEmpty()) {
+                qCWarning(PlasmaZones::lcOverlay) << "Shader URL resolved to an empty path:" << shaderSource();
+                loaded = false;
+            }
+            if (loaded && !vertPath.isEmpty()) {
                 if (!node->loadVertexShader(vertPath)) {
                     qCWarning(PlasmaZones::lcOverlay)
                         << "Failed to load vertex shader:" << vertPath << "error:" << node->shaderError();
                     loaded = false;
                 }
-            } else {
+            } else if (loaded) {
                 qCWarning(PlasmaZones::lcOverlay)
                     << "No vertex shader found for" << fragPath << "(expected zone.vert in shader dir or search paths)";
                 loaded = false;
             }
 
-            // Load fragment shader
-            if (loaded && !fragPath.isEmpty()) {
+            // Load fragment shader. The failure is LOGGED here: neither loadFragmentShader nor
+            // setError writes a journal line, so the commonest failure of all (a pack's own
+            // GLSL, or an include it cannot resolve) was silent from the daemon overlay path,
+            // which reads no stage status. Both vertex arms above already warn.
+            if (loaded) {
                 if (!node->loadFragmentShader(fragPath)) {
+                    qCWarning(PlasmaZones::lcOverlay)
+                        << "Failed to load fragment shader:" << fragPath << "error:" << node->shaderError();
                     loaded = false;
                 }
             }
@@ -437,18 +461,20 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
                 loadSucceededThisSync = true;
                 // Force zone data resync when shader changes successfully
                 m_zoneDataDirty = true;
-                // One extra frame so prepare()'s bake can report its real outcome, as the
-                // base does. A successful LOAD is not a successful BAKE, and an overlay
-                // sitting still schedules no further sync of its own, so without this a
-                // compile failure would stand as Ready and ZoneShaderRenderer's
-                // shaderError signal would never fire for it.
+                // One extra frame so prepare()'s bake can report its real outcome, as the base
+                // does. A successful LOAD is not a successful BAKE. This item never ticks on
+                // its own (playing stays false) and both hosts push iTime instead, each push
+                // calling update() — so what this closes is the narrow case of a load landing
+                // on the last tick before the shader timer stops or the window hides, where a
+                // compile failure would stand as Ready and ZoneShaderRenderer's shaderError
+                // would never fire for it.
                 update();
             } else {
                 // Read the node's error BEFORE clearing — clearBakedShader
                 // wipes it along with the resident bake.
                 QString errorMsg = node->shaderError();
                 if (errorMsg.isEmpty()) {
-                    errorMsg = QStringLiteral("Shader loading failed - missing required files");
+                    errorMsg = QStringLiteral("Shader loading failed: a required file is missing");
                 }
                 // Drop the partially-set sources and the resident bake
                 // together (same pattern as ShaderEffect::updatePaintNode):
@@ -583,9 +609,12 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     }
 
     // ── Update status based on shader node state ─────────────────────
-    if (node->isShaderReady() && status() != Status::Ready) {
+    // One snapshot, as the base takes: two status() calls could straddle a write in principle,
+    // and reading it once is the shape the base documents.
+    const Status currentStatus = status();
+    if (node->isShaderReady() && currentStatus != Status::Ready) {
         setStatus(Status::Ready);
-    } else if (!loadSucceededThisSync && !node->shaderError().isEmpty() && status() != Status::Error) {
+    } else if (!loadSucceededThisSync && !node->shaderError().isEmpty() && currentStatus != Status::Error) {
         setError(node->shaderError());
     }
 

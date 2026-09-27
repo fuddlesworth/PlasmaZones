@@ -92,7 +92,7 @@ void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QStrin
             // (heartbeat) path hits this arm on every tick with no live
             // spring, which is exactly the settled-spring-open-fade shape.
             const bool wasPresenting = m_effect->m_stripViewAnimator->isAnimatingOn(output)
-                || it->second.motion.holdsAfterSettle(ShaderInternal::shaderClockNowMs());
+                || it->second.motion.holdsAfterSettle(passClockMs());
             // notifyLeg fires from the D-Bus batch path, off the paint
             // thread; the erase frees the entry's capture texture.
             ensureGlContextCurrent();
@@ -135,7 +135,7 @@ void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QStrin
     // resuming seamlessly. The retarget arm's baseline compensation is right
     // for this case too: the batch steps the committed value with no time
     // passing either way.
-    const bool settleFadeOpen = pass.motion.holdsAfterSettle(ShaderInternal::shaderClockNowMs());
+    const bool settleFadeOpen = pass.motion.holdsAfterSettle(passClockMs());
     if ((!springLive && !settleFadeOpen) || axisFlipped || pass.effectId != effectId) {
         // Fresh leg on a stale armed entry (spring cleared outside the
         // paint bracket: animations toggled, teardown races), an AXIS FLIP,
@@ -158,9 +158,17 @@ void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QStrin
     TransitionPass::translatePackParams(eff, params, pass.customParams, pass.customColors);
 }
 
+qint64 StripTransitionManager::passClockMs() const
+{
+    const qint64 pinned = m_effect->m_shaderManager.currentFrameClockMs();
+    return pinned < 0 ? ShaderInternal::shaderClockNowMs() : pinned;
+}
+
 bool StripTransitionManager::isRunning() const
 {
-    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+    // blocksDirectScanout reads THIS form from inside the paint bracket, so it has to answer
+    // from the pass clock or it can permit scanout for a frame paintOutput then takes.
+    const qint64 nowMs = passClockMs();
     for (const auto& entry : m_active) {
         if (m_effect->m_stripViewAnimator->isAnimatingOn(entry.first) || entry.second.motion.holdsAfterSettle(nowMs)) {
             return true;
@@ -181,18 +189,14 @@ bool StripTransitionManager::isRunningForOutput(KWin::LogicalOutput* screen) con
     if (it == m_active.end()) {
         return false;
     }
-    // The FRAME-PINNED clock, the one paintOutput samples, with the same live fallback for a
-    // caller outside a paint bracket. holdsAfterSettle is monotone decreasing in its argument
-    // and the pin is taken at the end of prePaintScreen, so a live sample here reads LATER
-    // than the pass will: the gate could answer "settled" for a frame paintOutput then takes.
-    // paintScreen's cursor-hide pre-release reads this gate, and that disagreement leaves
-    // neither pass drawing the pointer for one frame. The same clock makes the gate a
-    // superset by construction. prePaintScreen's own call sees the PREVIOUS pass's pin, which
-    // errs the safe way: the mask is set for a pass that may not paint.
-    qint64 nowMs = m_effect->m_shaderManager.currentFrameClockMs();
-    if (nowMs < 0) {
-        nowMs = ShaderInternal::shaderClockNowMs();
-    }
+    // The pass clock, so this gate and paintOutput cannot disagree inside one bracket.
+    // paintScreen's cursor-hide pre-release reads this gate, and a gate answering "settled" for
+    // a frame paintOutput then took would leave neither pass drawing the pointer. Reading the
+    // same value makes the gate a superset by construction. prePaintScreen's own call precedes
+    // this pass's pin and follows the last one being dropped, so it takes a live sample EARLIER
+    // than the pin, which by that monotonicity errs safe: the mask is set for a pass that may
+    // not paint.
+    const qint64 nowMs = passClockMs();
     return m_effect->m_stripViewAnimator->isAnimatingOn(screen) || it->second.motion.holdsAfterSettle(nowMs);
 }
 
@@ -886,9 +890,9 @@ void StripTransitionManager::updateCursorHiding()
     // paint (paintOutput returns false), so the normal scene draws that
     // output and needs KWin's own cursor back. paintOutput calls this on
     // that settle frame BEFORE the entry is reaped, which is why the armed
-    // set alone cannot be the test. Live clock, same accepted skew as
-    // reapSettled.
-    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+    // set alone cannot be the test. On the pass clock, because the in-bracket
+    // callers that run this decided from that same value.
+    const qint64 nowMs = passClockMs();
     for (const auto& entry : m_active) {
         const bool live =
             m_effect->m_stripViewAnimator->isAnimatingOn(entry.first) || entry.second.motion.holdsAfterSettle(nowMs);
@@ -919,13 +923,12 @@ void StripTransitionManager::releaseCursorHideForForeignPaint(KWin::LogicalOutpu
 void StripTransitionManager::reapSettled()
 {
     bool contextEnsured = false;
-    // LIVE clock, while paintOutput samples the frame-pinned one — a known,
-    // accepted skew (isRunning / isRunningForOutput read live too). The gap
-    // is sub-millisecond, and the worst it can do is reap a fade whose final
-    // frame the pinned clock would still have painted: one truncated fade
-    // frame, cosmetic. Pinning a clock here would need this postPaintScreen
-    // hook threaded into the paint bracket for no visible gain.
-    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+    // The pass clock, which reaches here with no plumbing: the pin is taken at the end of
+    // prePaintScreen and dropped at the end of postPaintScreen, and this hook runs between the
+    // two. It cannot strand an entry either: while the pin says the fade holds, paintOutput
+    // paints that frame and self-pumps the next one (the `!springLive` addRepaint), so the
+    // frame that does the reaping always arrives.
+    const qint64 nowMs = passClockMs();
     for (auto it = m_active.begin(); it != m_active.end();) {
         if (!m_effect->m_stripViewAnimator->isAnimatingOn(it->first) && !it->second.motion.holdsAfterSettle(nowMs)) {
             // The settle frame itself needed no repaint — paintOutput

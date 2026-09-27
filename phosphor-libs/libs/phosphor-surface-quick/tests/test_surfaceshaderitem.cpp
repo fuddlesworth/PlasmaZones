@@ -61,6 +61,9 @@ private Q_SLOTS:
         QCOMPARE(item.surfaceSize(), QSizeF());
         QCOMPARE(item.surfaceFrameTopLeft(), QPointF());
         QCOMPARE(item.surfaceFrameSize(), QSizeF());
+        // The OFF-SURFACE pointer sentinel, not the base's (0,0) default, which a
+        // hover-reactive pack would read as a pointer parked at the top-left corner.
+        QCOMPARE(item.iMouse(), QPointF(-1.0, -1.0));
 
         // No shader assigned yet.
         QCOMPARE(item.status(), SurfaceShaderItem::Status::Null);

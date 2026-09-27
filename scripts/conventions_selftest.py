@@ -196,7 +196,10 @@ def _pack(d: Path, name: str, *, param="roundBottomCorners", desc="Rounds the bo
     p.mkdir(parents=True, exist_ok=True)
     meta = p / "metadata.json"
     if raw is not None:
-        meta.write_text(raw, encoding="utf-8") if isinstance(raw, str) else meta.write_bytes(raw)
+        if isinstance(raw, str):
+            meta.write_text(raw, encoding="utf-8")
+        else:
+            meta.write_bytes(raw)
         return meta
     params = []
     if declare:
@@ -536,7 +539,11 @@ def _dep5_failures() -> list[str]:
                      # An open-ended or spaced range with no second year, and the "by" form
                      # upstream headers are commonly pasted in with. Both left punctuation or
                      # a preposition at the front of the reported holder.
-                     "2015-", "2026 -", "2026 by", "Copyright (c) 2026 by"):
+                     "2015-", "2026 -", "2026 by", "Copyright (c) 2026 by",
+                     # A comma with NO year before it, which the year group's own trailing
+                     # separator cannot reach. The second is the non-obvious one: the sign
+                     # prefix's `\\s*` eats the space, leaving a bare comma.
+                     ",", "© ,"):
         got = run({"src/a.cpp": hdr(year=spelling)}, dep5=bare)
         if got:
             bad.append(f"dep5_problems fired on the holder spelling {spelling!r}: {got}")
@@ -552,13 +559,33 @@ def _dep5_failures() -> list[str]:
     mangled = run({"src/a.cpp": hdr(year="", who="Copyrighteous Inc")}, dep5=bare)
     if not any(m.startswith("copyright holder 'Copyrighteous Inc' is not named") for m in mangled):
         bad.append(f"the prefix strip ate the front of a name that only starts with it: {mangled}")
-    # The `by` arm has the same hazard as the prefix and needs the same lookahead: without
-    # one it eats the first two letters of any name beginning with them. Asserted the same
-    # way, and with no year, so the strip leaves the holder untouched and no raw-holder
-    # suffix is appended to compare against.
-    bystander = run({"src/a.cpp": hdr(year="", who="Bystander Ltd")}, dep5=bare)
-    if not any(m.startswith("copyright holder 'Bystander Ltd' is not named") for m in bystander):
+    # The `by` arm has the same hazard as the prefix and needs the same lookahead: without one
+    # it eats the first two letters of any name beginning with them. It must carry a YEAR to
+    # reach that arm at all, since `by` sits inside the year group, so the message also carries
+    # the raw-holder suffix and the assertion pins both halves.
+    bystander = run({"src/a.cpp": hdr(who="Bystander Ltd")}, dep5=bare)
+    if not any(m.startswith("copyright holder 'Bystander Ltd' (the header says '2026 Bystander Ltd')")
+               for m in bystander):
         bad.append(f"the `by` strip ate the front of a name that only starts with it: {bystander}")
+    # And the lookahead is NOT what protects a name whose first WORD is "By" — it guards `by`
+    # as a word PREFIX only. What protects this is that the `by` arm sits inside the year
+    # group, so it strips nothing when no year precedes it.
+    byword = run({"src/a.cpp": hdr(year="", who="By The Way Inc")}, dep5=bare)
+    if not any(m.startswith("copyright holder 'By The Way Inc' is not named") for m in byword):
+        bad.append(f"the `by` arm ate the first word of a name that begins with it: {byword}")
+    # The year run's LONE trailing separator also sits inside the year group, so a name that
+    # opens with a hyphen and carries no year keeps it. Moving that group outside ate it, and
+    # nothing failed.
+    hyphen = run({"src/a.cpp": hdr(year="", who="-Acme Inc")}, dep5=bare)
+    if not any(m.startswith("copyright holder '-Acme Inc' is not named") for m in hyphen):
+        bad.append(f"the lone year separator ate a hyphen that opens a name: {hyphen}")
+    # A holder that is NOTHING but a prefix word. The lookahead's `|$` branch consumes it and
+    # the survivor is empty, and an empty name cannot be looked up in the stanza, so this used
+    # to fall through in silence. Nothing else in the gate reads the holder, so a copyright
+    # line naming nobody passed entirely.
+    nameless = run({"src/a.cpp": hdr(year="", who="Copyright")}, dep5=bare)
+    if not any("names no holder" in m for m in nameless):
+        bad.append(f"a copyright line naming no holder was not reported: {nameless}")
     # The finding quotes the RAW holder beside the stripped name whenever the strip changed
     # it, so an author can search for the string their file actually holds. Nothing pinned
     # that arm: reverting it to the stripped name alone left the suite green.
@@ -646,8 +673,9 @@ def _dep5_failures() -> list[str]:
     got = run({"src/a.cpp": hdr()}, dep5=noeol)
     if got:
         bad.append(f"the last stanza was dropped when the file had no trailing newline: {got}")
-    # THE TRAILER STRIP. Sixty live headers close with ` -->` and two with `*/`, and no
-    # probe produced either, so the strip that removes them was unpinned.
+    # THE TRAILER STRIP. Sixty live headers close with ` -->` and five with `",`; NONE closes
+    # with `*/`, which the strip covers as forward cover for a C block comment. No probe
+    # produced any of the three, so the strip that removes them was unpinned.
     for tail in (" -->", " */", '",'):
         body = f"<!-- SPDX-FileCopyrightText: 2026 fuddlesworth{tail}\n// SPDX-License-Identifier: GPL-3.0-or-later\n"
         got = run({"src/a.cpp": body})

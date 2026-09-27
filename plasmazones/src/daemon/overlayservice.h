@@ -1403,7 +1403,7 @@ private:
     /// after a sibling slot finished hiding. Re-shows iff the drag is
     /// still logically active (@c m_zoneSelectorVisible) AND the screen
     /// retains its captured (physScreen, geometry) state. Centralizes
-    /// the symmetric restore pattern used by every MODAL slot-hide completion
+    /// the symmetric restore pattern used by every SIBLING slot-hide completion
     /// (onOsdSlotHideCompleted, onSnapAssistSlotHideCompleted,
     /// onLayoutPickerSlotHideCompleted, onCheatsheetSlotHideCompleted).
     void restoreZoneSelectorAfterHide(const QString& effectiveId);
@@ -1447,8 +1447,8 @@ private:
      * @brief Construct the SurfaceAnimator and register per-Role configs.
      *
      * Phase 5 of the phosphor-animation roadmap: a single library-driven
-     * animator drives show/hide across every overlay (LayoutOsd,
-     * NavigationOsd, LayoutPicker, ZoneSelector, SnapAssist) using
+     * animator drives show/hide across every overlay slot (the OSD, picker,
+     * selector, snap assist, cheatsheet, zone overlay and drop indicator) using
      * Profile-resolved curves shared with in-window animations. Called
      * exactly once from the ctor; the animator's lifetime is tied to
      * `*this`.

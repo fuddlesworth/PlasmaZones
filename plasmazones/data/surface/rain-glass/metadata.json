@@ -182,7 +182,7 @@
             "name": "Mirror at the edge",
             "type": "bool",
             "default": false,
-            "description": "Where the bend reaches past the pane's edge, fold the backdrop back inside. Left off, the bend keeps reading the captured scene beside the pane, which can make the edges look see-through.",
+            "description": "Where the bend reaches past the pane's edge, fold the backdrop back inside. Left off, the bend keeps reading the captured scene beside the pane, and stretches the edge pixel once it runs past what was captured.",
             "group": "Refraction"
         }
     ]

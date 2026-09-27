@@ -117,6 +117,13 @@ def dep5_problems(files, *, repo, line_of, tracked_files):
 
     # Editing the DEP-5 file can break any file in the tree, not only the ones
     # staged beside it, so that edit widens the check to everything.
+    #
+    # The widened list deliberately BYPASSES the gate's readability precondition, which
+    # filtered `files` before this rule was called. That is safe here and nowhere else:
+    # dep5_head returns None for a path it cannot read, so an unreadable file is skipped
+    # rather than handed to the rest of this function as an empty string. What the bypass
+    # costs is the `[unreadable]` finding for a file the caller never named, which on a
+    # pre-commit run touching only the DEP-5 file would be noise rather than news.
     targets = tracked_files() if str(dep5.relative_to(repo)) in files else files
 
     out = []
@@ -179,26 +186,41 @@ def dep5_problems(files, *, repo, line_of, tracked_files):
             # only when another year follows, so "2026, Acme Inc", "2015- Acme Inc" and
             # "2026 - Acme Inc" each kept their punctuation and reported it as part of the
             # holder. That separator sits INSIDE the year group on purpose: a name that
-            # legitimately opens with a hyphen and carries no year keeps it. The trailing `by`
-            # covers "Copyright (c) 2026 by Acme Inc", and its lookahead stops it eating the
-            # first word of "Bystander" or "byte Foundation". Each of the last few rounds
-            # closed one sibling of this shape, which is why every spelling is pinned in the
-            # self-test rather than argued about here. Knowingly out of scope: malformed
+            # legitimately opens with a hyphen and carries no year keeps it. `by` sits inside
+            # that same group, so it strips only when a YEAR precedes it, which is the one shape
+            # it exists for ("Copyright (c) 2026 by Acme Inc"). Outside the group it also ate the
+            # first word of any name beginning with those letters, and its lookahead does not
+            # prevent that: it guards "Bystander" and "byte Foundation", where `by` is a word
+            # PREFIX, but not "By The Way Inc", where it is a whole word. Each of the last few
+            # rounds closed one sibling of this shape, which is why every spelling is pinned in
+            # the self-test rather than argued about here. Knowingly out of scope: malformed
             # punctuation after the prefix word, as in "Copyright: 2026 Name".
             #
-            # ONLY UNDER-stripping can raise a false positive, and that is what bounds the
-            # risk of every change to this pattern. It is anchored at ^, so whatever survives
-            # is a SUFFIX of what the file says, and a stanza that names the same holder
-            # contains that suffix as well. An over-eager strip therefore stays SILENT rather
-            # than firing wrongly; it costs accuracy in the message instead, which is the job
-            # the raw holder below does.
+            # ONLY UNDER-stripping can raise a FALSE POSITIVE, and that is what bounds the risk
+            # of every change to this pattern. It is anchored at ^, so whatever survives is a
+            # SUFFIX of what the file says, and a stanza that names the same holder contains
+            # that suffix as well. Over-stripping is not free either, and the cost is NOT
+            # message accuracy: it is SILENT, and it drops a real FINDING, because the
+            # containment test only gets laxer as the survivor shortens and a short enough
+            # survivor turns up inside some longer word of the stanza. The two directions fail
+            # differently and neither is safe to trade away for the other.
             name = re.sub(r"\s*(-->|\*/|\",?)\s*$", "", holder.strip()).split("<")[0].strip()
             name = re.sub(
                 r"^(?:(?:\(c\)|©|Copyright)(?=[\s(©\d]|$)\s*)*"
-                r"(?:\d{4}(?:\s*[-–,]\s*(?:\d{4}|present))*(?:\s*[-–,])?)?"
-                r"\s*(?:by(?=\s)\s*)?",
+                r"(?:\d{4}(?:\s*[-–,]\s*(?:\d{4}|present))*(?:\s*[-–,])?\s*(?:by(?=\s)\s*)?)?"
+                r"\s*,?\s*",
                 "", name, flags=re.IGNORECASE)
             name = name.strip()
+            raw = holder.strip()
+            if not name and raw:
+                # The holder was nothing but a prefix word, a year, or punctuation, so the
+                # pattern consumed the whole line (the lookahead's `|$` branch is what lets it
+                # eat a bare "Copyright"). An empty survivor cannot be looked up in the stanza,
+                # so this used to fall through in silence, and nothing ELSE in the gate reads
+                # the holder: rule_spdx only checks that the tag is present. A copyright line
+                # naming nobody is a DEP-5 defect of its own, so it is reported here.
+                out.append((f, 0, f"copyright line names no holder, only {raw!r}"))
+                continue
             if name and name not in blob:
                 # Quote the RAW holder too when the strip changed it. The strip is anchored
                 # at ^, so what is left is always a suffix of what the file says — and for a
@@ -206,7 +228,6 @@ def dep5_problems(files, *, repo, line_of, tracked_files):
                 # Clearance Center" was reported as 'Clearance Center', a string the author
                 # cannot find in their file. Same rule as the non-string description guard in
                 # conventions_shared_text.py: never quote back a value the file does not hold.
-                raw = holder.strip()
                 shown = f"{name!r}" if name == raw else f"{name!r} (the header says {raw!r})"
                 out.append(
                     (f,

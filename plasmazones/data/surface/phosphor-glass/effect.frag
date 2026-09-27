@@ -130,7 +130,7 @@ vec4 pSurface(vec2 uv) {
         vec3 color = (base + glowCol * response * glowStrength * blurred.a) * vignette;
         // Driver-stable grain, weighted by the backdrop alpha.
         color += surfaceGrain(slab.px, p_noiseStrength) * blurred.a;
-        color = clamp(color, 0.0, max(blurred.a, 0.0001));
+        color = clamp(color, 0.0, max(blurred.a, 0.0));
         pane = vec4(color, blurred.a) * slab.mask;
     } else {
         // No scene behind the surface: a translucent navy slab with the same

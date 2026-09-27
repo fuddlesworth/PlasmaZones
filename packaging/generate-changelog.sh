@@ -1,5 +1,6 @@
 #!/bin/bash
 # SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Generate packaging changelogs from CHANGELOG.md
 #
 # Usage:
@@ -9,7 +10,6 @@
 #   ./generate-changelog.sh all      [version]  - Generate both debian and rpm
 #
 # If version is omitted for debian/rpm/all, all versions are included.
-# SPDX-License-Identifier: GPL-3.0-or-later
 
 set -euo pipefail
 

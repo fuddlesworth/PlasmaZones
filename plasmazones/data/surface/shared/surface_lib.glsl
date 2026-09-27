@@ -40,11 +40,13 @@ float sdRoundedBox(vec2 p, vec2 b, float r) {
 // below one device px", not "exactly zero": a sub-pixel frame is degenerate
 // for the same reason and is treated the same. The SDF would otherwise collapse
 // to "edge everywhere" for the border and glow family. For the backdrop-slab
-// packs it collapses the other way, to a dot at the frame corner (sdRoundedBox
-// with a zero half-size reduces to a distance from one point) — and since each
-// of those multiplies its window sample by that same mask, the SURFACE would
-// vanish rather than pass through. So every pack that reads the frame rect
-// tests this and returns the content untouched.
+// packs it collapses the other way: to a DOT at the frame corner when the rect
+// is exactly zero (sdRoundedBox with a zero half-size reduces to a distance
+// from one point), and to a sub-pixel BAND when it is merely under a pixel,
+// which is the case a shell surface actually reaches. Either way each of those
+// packs multiplies its window sample by that mask, so the SURFACE would vanish
+// or be thinned rather than pass through. So every pack that reads the frame
+// rect tests this and returns the content untouched.
 bool surfaceFrameDegenerate() {
     return uSurfaceFrameSize.x < 1.0 || uSurfaceFrameSize.y < 1.0;
 }

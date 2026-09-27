@@ -21,6 +21,14 @@
  * Hosting them here gives both sides a single source of truth: a typo
  * in either the writer or a reader trips the build (or at least a
  * failing test) instead of producing a runtime no-op.
+ *
+ * SCOPE, so the absence of a name here is not read as an oversight: this
+ * holds the names the daemon also READS BACK, plus the ones a test asserts
+ * on. It is NOT every property the daemon pushes. A name written once and
+ * never read has only one spelling to get wrong, so the round trip this
+ * protects does not exist for it, and the overlay slot code spells those
+ * inline. Moving the write-only names here would be a large mechanical
+ * change with its own typo risk and no round trip to protect.
  */
 namespace PlasmaZones {
 namespace OverlayQmlPropertyNames {

@@ -29,7 +29,8 @@ vec4 pSurface(vec2 uv) {
     vec4 tex = surfaceTexel(uv);
 
     // Identity-decoration state: before a host wires real geometry the frame
-    // rect is degenerate (uSurfaceFrameSize == 0). The SDF below would collapse
+    // rect is degenerate (uSurfaceFrameSize under a device px on either side,
+    // which covers the exactly-zero case). The SDF below would collapse
     // to "edge everywhere" and paint a border over the whole surface, so pass
     // the captured content through untouched until a real frame arrives.
     if (surfaceFrameDegenerate()) {
