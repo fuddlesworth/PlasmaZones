@@ -17,7 +17,11 @@ namespace PhosphorRendering {
 /// Static utility for GLSL → SPIR-V compilation with include resolution and caching.
 ///
 /// Compilation results are cached by source hash to avoid redundant QShaderBaker
-/// invocations. The cache is in-memory only — cleared on process restart.
+/// invocations. Those two caches (source-hash and filename+mtime) are in-memory, but
+/// they sit in front of a content-addressed ON-DISK cache of serialized QShaders under
+/// GenericCacheLocation, keyed by Qt version and pruned at 512 entries, which the disk
+/// read consults BEFORE taking the bake lock. So a compile result normally survives a
+/// process restart. Set PHOSPHOR_DISABLE_SHADER_DISK_CACHE to opt out.
 ///
 /// @par Thread-safety
 /// All methods are safe to call from any thread. Cache reads are lock-free for

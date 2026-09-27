@@ -22,17 +22,17 @@
  * in either the writer or a reader trips the build (or at least a
  * failing test) instead of producing a runtime no-op.
  *
- * SCOPE, so the absence of a name here is not read as an oversight: this
- * holds the names whose spelling has to match a SECOND SITE. That site is
- * usually a C++ read-back, but it can equally be a QML `property`
- * declaration the writer must hit, or a test assertion — see the
- * DecorationReloadGeneration and BackdropTexture notes below, both of which
- * are write-only from C++ and are hosted here precisely because their
- * spelling once fell through to setProperty and became a dead dynamic
- * property. It is NOT every property the daemon pushes: a name with only one
- * site has nothing to disagree with, and the overlay slot code spells those
- * inline. Moving them here would be a large mechanical change with its own
- * typo risk and no second site to protect.
+ * SCOPE, and this set is AD HOC rather than principled. Two earlier versions
+ * of this paragraph each stated a membership rule, and both were false in both
+ * directions. What is actually here is the names whose spelling has already
+ * broken once (see the DecorationReloadGeneration and BackdropTexture notes
+ * below, both write-only from C++ and hosted because their spelling fell
+ * through to setProperty and became a dead dynamic property), plus the ones a
+ * test pins. It is NOT every property the daemon pushes, and it is NOT every
+ * property the daemon reads back: roughly a dozen more, `useShader` and
+ * `stripVerticalAxis` among them, are read back in C++ and still spelled
+ * inline at every site. Adding a name here is an improvement; the absence of
+ * one is a gap rather than a decision.
  */
 namespace PlasmaZones {
 namespace OverlayQmlPropertyNames {

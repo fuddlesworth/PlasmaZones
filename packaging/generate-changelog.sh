@@ -196,7 +196,7 @@ generate_rpm() {
     done < <(parse_changelog) > "$tmpfile"
 
     # Replace everything after %changelog in the spec. Without the
-    # marker `sed /%changelog/q` would copy the whole file then append,
+    # marker `sed /^%changelog/q` would copy the whole file then append,
     # silently producing duplicate sections.
     if [[ -f "$specfile" ]]; then
         if ! grep -q '^%changelog' "$specfile"; then

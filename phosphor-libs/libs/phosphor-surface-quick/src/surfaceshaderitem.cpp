@@ -448,14 +448,15 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
             // for ''" is what the journal would carry.
             // Set by the two arms that do NOT come from a node call, because those leave the
             // node's resident shaderError untouched: setVertex/FragmentShaderSource clear the
-            // path and mtime but not the error, and only clearBakedShader clears it, which runs
-            // AFTER the else branch reads it. Without this, a reload whose URL resolves to
-            // nothing reported the PREVIOUS shader's compile error as its reason.
+            // path and mtime but not the error. The node clears it only inside prepare()'s bake
+            // and in clearBakedShader, neither of which has run when the else branch reads it.
+            // Without this, a reload whose URL resolves to nothing reported the PREVIOUS
+            // shader's compile error as its reason.
             QString failureReason;
             if (fragPath.isEmpty()) {
                 qCWarning(lcSurfaceQuick)
-                    << "SurfaceShaderItem: shader URL resolved to an empty path:" << shaderSource();
-                failureReason = QStringLiteral("Shader URL resolved to an empty path: ") + shaderSource().toString();
+                    << "SurfaceShaderItem: shader URL resolved to no usable path:" << shaderSource();
+                failureReason = QStringLiteral("Shader URL resolved to no usable path: ") + shaderSource().toString();
                 loaded = false;
             }
             if (loaded && !vertPath.isEmpty()) {
@@ -467,7 +468,10 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
             } else if (loaded) {
                 qCWarning(lcSurfaceQuick) << "SurfaceShaderItem: no vertex shader found for" << fragPath
                                           << "(expected surface.vert in the pack dir or a search path)";
-                failureReason = QStringLiteral("No vertex shader found for ") + fragPath;
+                // Carries the journal line's parenthetical too: the banner is the only surface a
+                // user sees, and "expected surface.vert…" is the actionable half.
+                failureReason = QStringLiteral("No vertex shader found for ") + fragPath
+                    + QStringLiteral(" (expected surface.vert in the pack dir or a search path)");
                 loaded = false;
             }
 

@@ -214,11 +214,14 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
     // point, so the grab is dropped on EVERY cross-modal dismiss, live shell included, and
     // snapAssistShown re-binds it at the tail of this function.
     //
-    // The SELECTOR RE-SHOW is the dead-shell one, because it flows through the completion:
-    // only on the lib's inline-completion branches does the picker's completion reach
-    // restoreZoneSelectorAfterHide while m_snapAssistVisible is still false, and only when
-    // the picker sat on THIS screen does the re-shown selector get hidden again below. A
-    // live shell takes the animator's settle and sees the latch set.
+    // The SELECTOR RE-SHOW is the conditional one, because it flows through the completion:
+    // only where hideSlot's completion runs INLINE does the picker's completion reach
+    // restoreZoneSelectorAfterHide while m_snapAssistVisible is still false, and only when the
+    // picker sat on THIS screen does the re-shown selector get hidden again below. Inline is
+    // NOT the same as a dead shell, which two rounds of this comment got wrong: it covers the
+    // lib's benign-no-op branches AND a fully live shell with overlay animations disabled,
+    // because SurfaceAnimator::beginHide fires onComplete synchronously when its gate is off.
+    // That gate mirrors a plain user setting, so this is not an exotic path.
     //
     // Hoisting the latch would remove the grab churn, and it must not be done on reasoning
     // alone: it changes when the shared Escape grab is held.

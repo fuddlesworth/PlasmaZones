@@ -21,9 +21,9 @@ namespace PhosphorSurfaceQuick {
  * @brief QQuickItem for rendering a per-window surface-decoration layer with a
  *        custom shader (border / rounded corners / focus tint / glow).
  *
- * The Qt Quick consumer for the third shader-pack category
- * (`plasmazones/surface`), sibling to the plasmazones ZoneShaderItem (overlay
- * zone backgrounds) and the animation transition runtime. Like ZoneShaderItem it inherits from
+ * The Qt Quick consumer for the `plasmazones/surface` shader-pack category, one
+ * of four beside overlays, animations and pointer, and sibling to the plasmazones
+ * ZoneShaderItem (overlay zone backgrounds). Like ZoneShaderItem it inherits from
  * PhosphorRendering::ShaderEffect, which provides all base shader rendering:
  * Shadertoy uniforms, custom params/colors, user textures, multipass, status,
  * and the createShaderNode() / syncBasePropertiesToNode() seam.

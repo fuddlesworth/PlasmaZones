@@ -153,6 +153,16 @@ public:
     // Note: reloadShader() is inherited from ShaderEffect (Q_INVOKABLE). Call
     // that directly from QML / C++ — no zone-specific alias needed.
 
+    // Note: setEntryScaffold is inherited and PUBLIC, but updatePaintNode reinstalls the zone
+    // scaffold on every reload, so a host call to it is discarded. Its SurfaceShaderItem twin
+    // carries the same note. No in-tree host makes one.
+    //
+    // Note: the inherited vertexShaderUrl property is likewise ignored here. The zone runtime
+    // resolves its vertex stage only through resolveZoneVertexPath, which looks for a file
+    // named zone.vert, and the daemon warm bake and the pack validator both do the same. A
+    // custom-named declaration is deliberately inert for overlay packs, unlike the animation
+    // and surface runtimes, so do not "fix" this into a divergence from the warm bake.
+
     /**
      * @brief Refuse external uniform-extension replacement.
      *

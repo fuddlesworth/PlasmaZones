@@ -473,17 +473,34 @@ ShaderNodeRhi* ShaderEffect::createShaderNode()
 ///     could not pre-vet. Unvetted, an `http://host/x.frag` URL resolves to its path
 ///     component, handing QFile an absolute LOCAL path. Both in-tree callers read
 ///     Q_PROPERTYs whose setters already vet, so nothing in tree changes.
-///   - a scheme-less RELATIVE url resolves against the process CWD, and SurfaceShaderItem
-///     derives its pack-sibling include dir from the result, which would put a CWD-derived
-///     directory FIRST in a pack's include search list. A qrc path is absolute (it is
-///     ':'-prefixed), so this rejects only genuinely relative answers.
+///   - a RELATIVE resolved path, which QFile would then open against the process CWD, and
+///     from which SurfaceShaderItem derives its pack-sibling include dir — putting a
+///     CWD-derived directory FIRST in a pack's include search list. The test is on the
+///     RESOLVED path, so it catches a relative `file:` URL too, not only a scheme-less one;
+///     since QUrl::fromLocalFile is how every in-tree host builds these, that matters. A qrc
+///     path is absolute (it is ':'-prefixed), so this rejects only genuinely relative answers.
+///
+/// NOT a confinement guard: any absolute local path is accepted, so keeping a shader inside
+/// its pack directory remains the caller's job (the three registries do it with
+/// resolveWithinDirectory). This only stops a URL that was never a local file at all.
+///
+/// The base's OWN updatePaintNode deliberately keeps the looser private route, so a plain
+/// ShaderEffect still accepts a relative shaderSource. Tightening that would change
+/// behaviour for an out-of-tree host, which is not this function's call to make.
 QString ShaderEffect::localShaderPath(const QUrl& url)
 {
     if (!isLocalShaderUrl(url)) {
+        qCWarning(lcShaderNode) << "localShaderPath: refusing a non-local shader URL:" << url;
         return QString();
     }
     const QString path = localPathFromShaderUrl(url);
-    if (path.isEmpty() || QFileInfo(path).isRelative()) {
+    if (path.isEmpty()) {
+        return QString();
+    }
+    // Named separately from the empty case, because a well-formed URL that resolves relative
+    // is the hardest of the three refusals to diagnose from the caller's message alone.
+    if (QFileInfo(path).isRelative()) {
+        qCWarning(lcShaderNode) << "localShaderPath: refusing a relative shader path:" << path << "from" << url;
         return QString();
     }
     return path;
@@ -815,19 +832,20 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
                     setError(errorMsg);
                 }
             } else {
-                // The URL passed isLocalShaderUrl() but carries no usable path (a host-only
-                // or path-less `file://` URL, or a scheme-less authority-only one like
-                // `//host`). NOT a `qrc:` URL with an empty path: that resolves to ":",
-                // which is non-empty, so it reaches the loader and fails in QFile instead.
+                // The URL passed isLocalShaderUrl() but carries no usable path (a path-less
+                // `file://` URL, or a scheme-less authority-only one like `//host`). NOT a
+                // host-only `file://host`, whose toLocalFile() is "//host" and so is non-empty,
+                // and NOT a `qrc:` URL with an empty path, which resolves to ":". Both of those
+                // reach the loader and fail in QFile instead.
                 // m_shaderDirty has already been consumed above, so returning
                 // silently here would pin the item at Status::Loading forever
                 // with an empty errorLog and no retry on any later frame.
-                qCWarning(lcShaderNode) << "Shader URL resolved to an empty local path:" << m_shaderSource;
+                qCWarning(lcShaderNode) << "Shader URL resolved to no usable path:" << m_shaderSource;
                 // Same reuse-path clobber as the load-failure arm above: drop
                 // the resident bake so isShaderReady() cannot revert the error.
                 node->setFragmentShaderSource(QString());
                 node->clearBakedShader();
-                setError(QStringLiteral("Shader URL resolved to an empty local path: ") + m_shaderSource.toString());
+                setError(QStringLiteral("Shader URL resolved to no usable path: ") + m_shaderSource.toString());
             }
         } else {
             // Source cleared — stop rendering the old shader. clearBakedShader

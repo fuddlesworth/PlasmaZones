@@ -307,15 +307,18 @@ vec4 pSurface(vec2 uv) {
         // contrast, saturation and vibrancy in one call, and glass needs its
         // OKLab saturation BETWEEN the contrast and the vibrancy to keep the
         // reference's order. Folding onto the helper would move that step.
-        // The BAIL threshold is one 8-bit quantum, matching surfaceBackdropGrade's own
-        // premul.a guard, not the 0.0001 floor beside it. Both hosts' blur buffers are
-        // RGBA8, so 1/255 is the smallest non-zero alpha that exists, and at that alpha
-        // the premultiplied rgb is quantised to multiples of 1/255 too — dividing by it
-        // sends every channel to 0 or 1, i.e. a corner of the colour cube rather than
-        // the texel's hue. The max() below only floors the arm this ternary does not
-        // take, so it was never the divisor that was wrong.
+        // The bail threshold stays BELOW one 8-bit quantum, and deliberately so. An audit
+        // round raised it to 1/255 "to match surfaceBackdropGrade", which was wrong twice:
+        // iChannel6 is sampled with GL_LINEAR (surface_capture.cpp sets the filter), so
+        // bilinear blending produces alphas between 0 and 1/255 and they carry a correctly
+        // interpolated hue, which raising the threshold replaced with BLACK; and the helper
+        // it cited RETURNS THE SAMPLE UNCHANGED at its guard rather than blacking it, so
+        // matching the number would have inverted the behaviour. duotone and phosphor-glass
+        // hold the same position at 0.001, and blur's own comment explains why it is safe
+        // there: the error is bounded by the same alpha that makes it wrong, since line 405
+        // re-premultiplies by pane.a.
         float paneAlpha = max(pane.a, 0.0001);
-        lit = pane.a > 1.0 / 255.0 ? lit / paneAlpha : vec3(0.0);
+        lit = pane.a > 0.0001 ? lit / paneAlpha : vec3(0.0);
 
         // Rim glow + optional edge lighting (reference glassOutline).
         float dim = focusDim(0.55);

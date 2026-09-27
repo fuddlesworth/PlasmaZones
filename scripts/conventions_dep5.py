@@ -193,9 +193,10 @@ def dep5_problems(files, *, repo, line_of, tracked_files):
             # holder. That separator sits INSIDE the year group on purpose: a name that
             # legitimately opens with a hyphen and carries no year keeps it. `by` sits inside
             # that same group, so it strips only when a YEAR precedes it, which is the one shape
-            # it exists for ("Copyright (c) 2026 by Acme Inc"). THE MOVE COSTS the year-less
-            # forms: "by Acme Inc", "Copyright by Acme Inc" and "(c) by Acme Inc" keep their
-            # "by" now and would be reported with it. That is accepted, because with no year
+            # it exists for ("Copyright (c) 2026 by Acme Inc"). THE MOVE COSTS every year-less
+            # form, "by Acme Inc" and "Copyright by Acme Inc" and any prefix stack ahead of
+            # them: each keeps its "by" now and would be reported with it. That is accepted,
+            # because with no year
             # "by X" and a company actually named "By X" are textually identical and no
             # lookahead can separate them, so the alternative is the over-strip direction.
             # The PREFIX words keep that same whole-word hazard and cannot be moved the same
@@ -206,10 +207,12 @@ def dep5_problems(files, *, repo, line_of, tracked_files):
             # prevent that: it guards "Bystander" and "byte Foundation", where `by` is a word
             # PREFIX, but not "By The Way Inc", where it is a whole word. Each of the last few
             # rounds closed one sibling of this shape, which is why every spelling is pinned in
-            # the self-test rather than argued about here. Knowingly out of scope is punctuation
-            # directly after the prefix WORD, since the lookahead class admits neither: the
-            # malformed "Copyright: 2026 Name", and also the ordinary "Copyright, 2026 Name",
-            # which is a plain spelling rather than a malformed one and is simply not handled.
+            # the self-test rather than argued about here. Knowingly out of scope: punctuation
+            # after the prefix WORD. The criterion is the lookahead class, so ":", ",", ";" and
+            # "." directly after it stop the strip dead and the holder survives whole
+            # ("Copyright, 2026 Name" is an ordinary spelling, not a malformed one). A SPACE
+            # then punctuation is worse, because the word then strips and the punctuation does
+            # not: "Copyright - 2026 Name" reports "- 2026 Name".
             #
             # ONLY UNDER-stripping can raise a FALSE POSITIVE, and that is what bounds the risk
             # of every change to this pattern. It is anchored at ^, so whatever survives is a

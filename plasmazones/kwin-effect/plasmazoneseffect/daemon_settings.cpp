@@ -583,16 +583,24 @@ void PlasmaZonesEffect::loadCachedSettings()
             // is safe from this D-Bus reply path; the dropped shader cache
             // recompiles on the next scroll, which is negligible against a
             // settings toggle.
-            m_stripTransition.reset();
             // And damage, which reset() cannot do for itself: a pass killed mid SETTLE FADE
             // was still presenting its decorated capture last frame, and nothing else
-            // repaints it. StripViewAnimator::setEnabled(false) above damages only outputs
-            // whose spring is still animating, which during a fade is none of them, so the
-            // smeared strip frame would persist on the un-damaged regions until unrelated
-            // damage arrived. Same pairing the outputRemoved sites and the daemon-death path
-            // already make; full-output because reset() has dropped the per-output state
-            // that would tell us which ones were presenting.
-            if (KWin::effects) {
+            // repaints it. setEnabled(false) above damages only outputs whose spring is still
+            // animating, which during a fade is none of them, so the smeared strip frame
+            // would persist on the un-damaged regions until unrelated damage arrived. Same
+            // pairing the outputRemoved sites and the daemon-death path already make.
+            //
+            // GATED, and sampled BEFORE reset() while the per-output state still exists. This
+            // callback re-delivers on every settingsChanged, so an ungated repaint damaged
+            // every monitor each time, which is also against this file's own convention that
+            // a full repaint sits behind a change gate. With every spring already cleared,
+            // isRunning() reduces to "some entry's fade is still open", and holdsCursorHide()
+            // covers the one-frame window after it closes where the last presented frame is
+            // still the decorated capture. An output that stopped painting entirely (DPMS)
+            // goes un-damaged, which costs nothing because nothing is visible on it.
+            const bool wasPresenting = m_stripTransition.isRunning() || m_stripTransition.holdsCursorHide();
+            m_stripTransition.reset();
+            if (wasPresenting && KWin::effects) {
                 KWin::effects->addRepaintFull();
             }
         }

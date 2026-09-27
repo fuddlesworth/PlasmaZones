@@ -43,8 +43,9 @@ float sdRoundedBox(vec2 p, vec2 b, float r) {
 // packs it collapses the other way: to a DOT at the frame corner when the rect
 // is exactly zero (sdRoundedBox with a zero half-size reduces to a distance
 // from one point), and to a sub-pixel sliver when it is merely under a pixel —
-// a band where ONE extent is sub-pixel, a dot-sized disc where both are, since
-// the radius clamps to the smaller half-extent. Either way each of those packs
+// a band where ONE extent is sub-pixel, and where both are a sub-pixel blob:
+// a disc once the pack's radius reaches the cap, a square at radius 0, since
+// frameSdfSplit clamps the radius to the smaller half-extent. Either way each pack
 // multiplies its window sample by that mask, so the SURFACE would vanish or be
 // thinned rather than pass through. So every pack that reads the frame rect
 // tests this and returns the content untouched. Which host reaches the merely

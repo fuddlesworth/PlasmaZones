@@ -666,7 +666,9 @@ void ShaderNodeRhi::setBufferScale(qreal scale)
 
 // Shared body for both setBufferScales overloads, templated on how a value is
 // read out of the caller's container. Named distinctively rather than given a
-// generic name because this TU takes part in a unity build.
+// generic name so a later move into a unity-built target cannot collide. This
+// library is NOT unity-built today: the root CMakeLists turns CMAKE_UNITY_BUILD
+// on globally and phosphor-rendering opts out on its own target.
 template<typename Accessor>
 static bool assignBufferPassScales(std::array<qreal, kMaxBufferPasses>& slots, qreal fallback, qsizetype count,
                                    Accessor valueAt)

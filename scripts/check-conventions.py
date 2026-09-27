@@ -78,9 +78,9 @@ class Violation:
 CPP_SUFFIXES = {".cpp", ".cc", ".cxx", ".h", ".hpp"}
 QML_SUFFIXES = {".qml"}
 SHADER_SUFFIXES = {".frag", ".vert", ".glsl"}
-# .js is here so rule_spdx and rule_license cover the 17 QML .js libraries, which
-# rule_js_pragma polices but whose licence split was otherwise unenforced. .sh/.cmake/.spec/
-# .desktop joined once every tracked one carried a head header; .in, .xml, .yml stay exempt.
+# .js is here so rule_spdx and rule_license cover the 17 QML .js libraries. .sh/.cmake/.spec/
+# .desktop joined once every tracked one carried a head header. FOUR rules read this set, so
+# .spec also entered the size ratchet; most of the tree is still outside it, not just .in/.xml/.yml.
 CODE_SUFFIXES = (CPP_SUFFIXES | QML_SUFFIXES | SHADER_SUFFIXES
                  | {".luau", ".py", ".js", ".sh", ".cmake", ".spec", ".desktop"})
 
@@ -1116,9 +1116,9 @@ def main() -> int:
             if rel.startswith(EXCLUDED_PREFIXES):
                 continue
             if not p.is_file():
-                # Announced, not dropped in silence: a stale or hand-passed list would otherwise
-                # check NOTHING and exit 0. Forward cover: lefthook never passes a deleted path.
-                print(f"check-conventions: skipping {rel} (not a file)", file=sys.stderr)
+                # Announced, not dropped in silence: a stale list would check NOTHING and exit 0.
+                # FIRES today (symlinks to dirs, a staged-then-removed path). Caller's spelling.
+                print(f"check-conventions: skipping {f} (not a file)", file=sys.stderr)
                 continue
             files.append(rel)
     else:

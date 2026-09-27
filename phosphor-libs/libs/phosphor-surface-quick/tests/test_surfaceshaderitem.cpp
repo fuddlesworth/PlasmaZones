@@ -3,7 +3,10 @@
 
 #include <PhosphorSurfaceQuick/SurfaceShaderItem.h>
 
+#include <PhosphorRendering/ShaderEffect.h>
+
 #include <QColor>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QImage>
 #include <QPointF>
@@ -21,6 +24,18 @@
 #include <memory>
 
 using PhosphorSurfaceQuick::SurfaceShaderItem;
+
+namespace {
+/// Re-exposes the protected static resolver so its URL contract can be pinned without a
+/// scene graph. A static member needs no instance, so this needs no QQuickWindow and no
+/// Q_OBJECT. Both overrides of updatePaintNode depend on this function, and neither of
+/// them is reachable from a headless test, so this is the only place its behaviour can be
+/// asserted at all.
+struct ShaderPathProbe : PhosphorRendering::ShaderEffect
+{
+    using PhosphorRendering::ShaderEffect::localShaderPath;
+};
+} // namespace
 
 /**
  * @brief Unit tests for SurfaceShaderItem and the org.phosphor.surface module.
@@ -45,6 +60,49 @@ private:
     QQmlEngine m_engine;
 
 private Q_SLOTS:
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // The shared URL resolver both updatePaintNode overrides depend on
+    // ═══════════════════════════════════════════════════════════════════════
+
+    void testLocalShaderPath_acceptsAbsoluteLocalAndQrc()
+    {
+        QCOMPARE(ShaderPathProbe::localShaderPath(QUrl::fromLocalFile(QStringLiteral("/packs/glass/effect.frag"))),
+                 QStringLiteral("/packs/glass/effect.frag"));
+        // Scheme-less ABSOLUTE: the url.path() fallback both overrides used to drop, which
+        // made the fragment load silently skip instead of fail.
+        QCOMPARE(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("/packs/glass/effect.frag"))),
+                 QStringLiteral("/packs/glass/effect.frag"));
+        // qrc maps to the ':'-prefixed resource path, which QFileInfo reports as ABSOLUTE.
+        // That is the only reason the relative refusal below does not eat it, so the Qt
+        // behaviour the resolver rests on is asserted directly rather than assumed.
+        QCOMPARE(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("qrc:/shaders/x.frag"))),
+                 QStringLiteral(":/shaders/x.frag"));
+        QVERIFY(!QFileInfo(QStringLiteral(":/shaders/x.frag")).isRelative());
+        // A qrc URL with an EMPTY path resolves to ":" rather than to nothing, so it reaches
+        // the loader and fails there instead of in the empty-path arm.
+        QCOMPARE(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("qrc:"))), QStringLiteral(":"));
+    }
+
+    void testLocalShaderPath_refusesNonLocalSchemeAndRelativePaths()
+    {
+        // An http URL's path component is an ABSOLUTE local path, so without the scheme vet
+        // it would reach QFile. This is the arm an out-of-library subclass depends on, since
+        // isLocalShaderUrl is not installed with the header that exposes this.
+        QVERIFY(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("http://host/x.frag"))).isEmpty());
+        QVERIFY(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("https://host/x.frag"))).isEmpty());
+        // A relative answer would be opened against the process CWD, and SurfaceShaderItem
+        // derives its pack-sibling include dir from it.
+        QVERIFY(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("shaders/x.frag"))).isEmpty());
+        QVERIFY(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("effect.frag"))).isEmpty());
+        // Including through a `file:` URL, which the test asserts because every in-tree host
+        // builds these with QUrl::fromLocalFile.
+        QVERIFY(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("file:x.frag"))).isEmpty());
+        QVERIFY(ShaderPathProbe::localShaderPath(QUrl::fromLocalFile(QStringLiteral("rel/x.frag"))).isEmpty());
+        // Vetted, but carrying no usable path at all.
+        QVERIFY(ShaderPathProbe::localShaderPath(QUrl(QStringLiteral("file://"))).isEmpty());
+        QVERIFY(ShaderPathProbe::localShaderPath(QUrl()).isEmpty());
+    }
 
     // ═══════════════════════════════════════════════════════════════════════
     // Construction + surface-state defaults

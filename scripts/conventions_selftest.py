@@ -587,8 +587,10 @@ def _dep5_failures() -> list[str]:
     # the survivor is empty, and an empty name cannot be looked up in the stanza, so this used
     # to fall through in silence. Nothing else in the gate reads the holder, so a copyright
     # line naming nobody passed entirely.
+    # Asserted on the QUOTED branch, not just on "names no holder": the message has two arms
+    # and a containment test left the ", only <raw>" one pinned by nothing.
     nameless = run({"src/a.cpp": hdr(year="", who="Copyright")}, dep5=bare)
-    if not any("names no holder" in m for m in nameless):
+    if not any(m.startswith("copyright line names no holder, only 'Copyright'") for m in nameless):
         bad.append(f"a copyright line naming no holder was not reported: {nameless}")
     # An EMPTY tag value, which is what pins the capture to its own LINE. With `\s*` there the
     # capture crossed the newline and quoted the SPDX-License-Identifier line as the holder.
@@ -755,6 +757,46 @@ def _precondition_failures(partition_readable) -> list[str]:
     return bad
 
 
+def _spdx_suffix_failures(partition_readable) -> list[str]:
+    """rule_spdx's CODE_SUFFIXES reach, against a fake tree.
+
+    Reached WITHOUT the gate growing a line, which an audit round wrongly recorded as
+    impossible. partition_readable is already a module-level function of the gate, so
+    its __globals__ IS the gate's namespace: the rule, the suffix set and the REPO the
+    rule resolves against are all reachable from here. That matters because the set is
+    otherwise pinned by nothing at all — every tracked file it covers already carries a
+    header, so narrowing it back changes no tree finding and no existing case."""
+    g = partition_readable.__globals__
+    rule_spdx, suffixes = g["rule_spdx"], g["CODE_SUFFIXES"]
+    bad: list[str] = []
+    # Each of these must be READ by the rule, so a file missing its header is reported.
+    # .py and .js were already in; the other four joined when the packaging headers moved
+    # into the head window, which is the change this pins.
+    for suffix in (".sh", ".cmake", ".spec", ".desktop", ".py", ".js", ".cpp", ".qml"):
+        if suffix not in suffixes:
+            bad.append(f"CODE_SUFFIXES no longer covers {suffix}")
+    with tempfile.TemporaryDirectory() as tmp:
+        d = Path(tmp)
+        named = [f"probe{s}" for s in (".sh", ".cmake", ".spec", ".desktop")]
+        for name in named:
+            (d / name).write_text("# nothing here\n", encoding="utf-8")
+        # A suffix the rule must NOT read, so the arm is not vacuously true: data JSON is
+        # exempt by format, and CLAUDE.md forbids a header on it outright.
+        (d / "probe.json").write_text("{}\n", encoding="utf-8")
+        saved = g["REPO"]
+        g["REPO"] = d
+        try:
+            reported = {v.path for v in rule_spdx([*named, "probe.json"])}
+        finally:
+            g["REPO"] = saved
+        for name in named:
+            if name not in reported:
+                bad.append(f"rule_spdx does not read {name}, so a missing header there is silent")
+        if "probe.json" in reported:
+            bad.append("rule_spdx read a .json file, which is exempt by format")
+    return bad
+
+
 def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
     """The detectors and the precondition arrive as arguments, so this module never
     imports the gate at module scope and the pair cannot form a cycle.
@@ -804,6 +846,7 @@ def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
     failures.extend(_shared_text_failures())
     failures.extend(_dep5_failures())
     failures.extend(_precondition_failures(partition_readable))
+    failures.extend(_spdx_suffix_failures(partition_readable))
 
     for line in failures:
         print(f"selftest: {line}", file=sys.stderr)

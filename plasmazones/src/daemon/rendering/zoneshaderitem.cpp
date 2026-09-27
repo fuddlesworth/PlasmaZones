@@ -36,10 +36,16 @@ namespace PlasmaZones {
 // glue down to parseZoneData. Distinct from PhosphorZones::ZoneJsonKeys
 // (which owns the ON-DISK wire-format keys) — these are runtime-only,
 // PlasmaZones-internal payload keys, not part of the zone/layout file
-// format. Centralising them here keeps the writer (overlay QML setting
-// these via writeQmlProperty) and the reader (parseZoneData below) in
-// lockstep — a typo on either side previously failed silently with the
-// default-value fallback.
+// format.
+//
+// NOT a single source of truth, despite an earlier version of this comment
+// saying so. These serve the READER (parseZoneData below) only. Two writers
+// spell the same ten keys independently: the daemon's zoneToVariantMap, from
+// its own anonymous-namespace copy in overlayservice/overlay_data.cpp, and
+// the preview host's writeZoneAppearance in shaderpreview/shaderpreviewcontroller.cpp,
+// which spells them inline. A typo in any one of the three still fails
+// silently through the default-value fallback, so the three must be kept in
+// step by hand until they are hoisted into one shared header.
 namespace ZoneSnapshotKeys {
 inline constexpr QLatin1String FillR{"fillR"};
 inline constexpr QLatin1String FillG{"fillG"};
@@ -421,13 +427,14 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
             // for ''" is what the journal would carry.
             // Set by the two arms that do NOT come from a node call, because those leave the
             // node's resident shaderError untouched: setVertex/FragmentShaderSource clear the
-            // path and mtime but not the error, and only clearBakedShader clears it, which runs
-            // AFTER the else branch reads it. Without this, a reload whose URL resolves to
-            // nothing reported the PREVIOUS shader's compile error as its reason.
+            // path and mtime but not the error. The node clears it only inside prepare()'s bake
+            // and in clearBakedShader, neither of which has run when the else branch reads it.
+            // Without this, a reload whose URL resolves to nothing reported the PREVIOUS
+            // shader's compile error as its reason.
             QString failureReason;
             if (fragPath.isEmpty()) {
-                qCWarning(PlasmaZones::lcOverlay) << "Shader URL resolved to an empty path:" << shaderSource();
-                failureReason = QStringLiteral("Shader URL resolved to an empty path: ") + shaderSource().toString();
+                qCWarning(PlasmaZones::lcOverlay) << "Shader URL resolved to no usable path:" << shaderSource();
+                failureReason = QStringLiteral("Shader URL resolved to no usable path: ") + shaderSource().toString();
                 loaded = false;
             }
             if (loaded && !vertPath.isEmpty()) {
@@ -439,7 +446,10 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
             } else if (loaded) {
                 qCWarning(PlasmaZones::lcOverlay)
                     << "No vertex shader found for" << fragPath << "(expected zone.vert in shader dir or search paths)";
-                failureReason = QStringLiteral("No vertex shader found for ") + fragPath;
+                // Carries the journal line's parenthetical too: the banner is the only surface a
+                // settings-app user sees, and "expected zone.vert…" is the actionable half.
+                failureReason = QStringLiteral("No vertex shader found for ") + fragPath
+                    + QStringLiteral(" (expected zone.vert in the shader dir or a search path)");
                 loaded = false;
             }
 
