@@ -986,8 +986,8 @@ private:
      * prePaintScreen's election above runs BEFORE the strip view
      * animator advances for the frame, so its answer is one advance behind
      * the paint-path sites mid-leg — the failure is the benign,
-     * already-documented one (one frame with the pills under the second
-     * trigger instead of the first, or none where the skip leaves no anchor).
+     * already-documented one (one frame with the pills under the second trigger
+     * instead of the first, under a strip column, or none where the skip leaves no anchor).
      * A column that scrolls back toward the viewport starts intersecting — the
      * offset is in the rect, re-read every pass — and the sites wake with it.
      *
@@ -2593,9 +2593,9 @@ private:
     /// first failure whenever the retry happened to succeed.
     ///
     /// Set at the sites whose failure ABANDONS a pass, cleared in prePaintScreen beside the
-    /// two latches above. Read by paintScreenImpl (to bail instead of re-walking), by both of
-    /// paintWindowImpl's pill-blit triggers, and by postPaintScreen, which per KWin 6.8's
-    /// contract still runs after a failed paint and must not book a discarded frame as painted.
+    /// two latches above. Read by paintScreenImpl (to bail instead of re-walking), by all three
+    /// pill-blit sites, and THREE TIMES in postPaintScreen, which still runs after a failed
+    /// paint: it books no blit, and skips both glDelete* reaps for want of a current context.
     bool m_currentPassPaintFailed = false;
 
     /// The three paint hooks' actual bodies, version-independent: true when the

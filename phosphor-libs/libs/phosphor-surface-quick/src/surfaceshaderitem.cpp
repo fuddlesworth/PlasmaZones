@@ -378,11 +378,12 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
 
             // Resolve the vertex shader: an explicit per-item vertexShaderUrl
             // wins, then a per-pack `surface.vert` beside the fragment, then a
-            // shared `surface.vert` from the include paths. Surface packs ship
-            // no vertex shader today (the field defaults empty), so this falls
-            // through to the include-path lookup — when the on-screen host
-            // stage ships a shared fullscreen-quad surface.vert it resolves
-            // here without a code change. This resolves the VERTEX stage, which
+            // shared `surface.vert` from the include paths. No bundled surface pack
+            // declares a vertex shader (the field defaults empty), so this lookup is
+            // the LIVE resolution for every decoration stage, not a future
+            // convenience: the fullscreen-quad `surface.vert` in the surface tree's
+            // shared/ dir is what it finds, and the warning branch below is the
+            // pack-tree-misinstalled case rather than an unimplemented one. This resolves the VERTEX stage, which
             // has no entry scaffold and relies on a shared surface.vert for its
             // main(); the FRAGMENT stage does get one (setEntryScaffold below,
             // so a pack may ship only `vec4 pSurface(vec2 uv)`).

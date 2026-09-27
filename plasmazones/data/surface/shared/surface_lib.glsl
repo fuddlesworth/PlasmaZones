@@ -64,11 +64,13 @@ struct FrameSDF {
 //
 // BOTH RADII MUST ALREADY BE <= min(b.x, b.y). Past that cap the value stops being a
 // rounded-box distance whatever the radii are, and it additionally TEARS when the two
-// DIFFER with at least one past the cap: the halves then disagree at y = 0, jumping and
+// DIFFER with at least one past HALF THE PANE'S HEIGHT, which is the cap only when the
+// pane is at least as wide as it is tall: the halves then disagree at y = 0, jumping and
 // at a large enough radius flipping sign, so a level set built on it splits along the
-// pane's midline. Equal radii above the cap still agree at the seam, which is why the
-// precondition is the cap and not the difference. frameSdfSplit and haloFalloff each
-// clamp both ends before calling, which is why no bundled pack can reach either state.
+// pane's midline. The seam is y = 0, so b.y is what governs it, and on a PORTRAIT pane two
+// radii can both sit past the cap and still agree exactly. Equal radii never tear at any
+// radius, which is why the precondition is the cap and not the difference. frameSdfSplit
+// and haloFalloff each clamp both ends before calling, so no bundled pack reaches either.
 float sdRoundedBoxSplit(vec2 p, vec2 b, float rTop, float rBottom) {
     return sdRoundedBox(p, b, p.y < 0.0 ? rTop : rBottom);
 }
@@ -160,7 +162,7 @@ float focusDim(float lo) {
 //
 // `edge` and `insideMask` are coverages in [0,1] and the product is clamped,
 // because above 1 the `1 - ba` term goes NEGATIVE and the composite starts
-// subtracting the content it is supposed to cover. marginComposite one helper
+// subtracting the content it is supposed to cover. marginComposite two helpers
 // down was hardened for exactly this and says so; this one stated no domain at
 // all, and a third-party pack passing a raw unclamped mask is legal input.
 vec4 borderComposite(vec4 tex, vec4 col, float edge, float insideMask) {
@@ -433,7 +435,7 @@ float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float stre
     // MAIN PASS ONLY, because of these two uniforms: the compositor gives a BUFFER
     // pass uSurfaceSize and uSurfaceScale but not the frame rect, so a third-party
     // pack calling this from a buffer pass reads a zero frame there and a real one
-    // on the daemon. focusDim below has the same shape.
+    // on the daemon. focusDim, called below, has the same shape.
     //
     // ROUNDED to the caller's own corner radii, not square, and SPLIT top/bottom
     // so the gate follows the same outline the caller's own FrameSDF does.

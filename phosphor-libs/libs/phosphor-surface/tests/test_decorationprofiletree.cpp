@@ -81,6 +81,14 @@ private Q_SLOTS:
         // and its dot-children are.
         QVERIFY(!decorationPathIsBaselineIsolated(QStringLiteral("shellfish")));
 
+        // THE POINTER ARM, which had no coverage at all: deleting the whole
+        // `pointer` branch of the predicate left every test green, although the
+        // header spends a paragraph on why a surface baseline must not resolve
+        // onto the cursor. Its three shapes, matching the shell arm's three above.
+        QVERIFY(decorationPathIsBaselineIsolated(decorationPointerPath()));
+        QVERIFY(decorationPathIsBaselineIsolated(decorationPointerPath() + QStringLiteral(".trail")));
+        QVERIFY(!decorationPathIsBaselineIsolated(decorationPointerPath() + QStringLiteral("ish")));
+
         // Engaging a chain on the Decoration → Shell page is the whole shell
         // opt-in, so a baseline chain (the user's global look for their own
         // windows) must never leak onto a shell surface: with no shell-scope
@@ -90,6 +98,10 @@ private Q_SLOTS:
         tree.setBaseline(makeProfile(QStringList{QStringLiteral("border")}, 2.0, QStringLiteral("#112233")));
         QCOMPARE(tree.resolve(QStringLiteral("shell.panel")).chain.value_or(QStringList{}), QStringList{});
         QCOMPARE(tree.resolve(QStringLiteral("shell.appletPopup")).chain.value_or(QStringList{}), QStringList{});
+        // And the same at the TREE level for the pointer, which is what the predicate
+        // exists to produce. Nothing pinned this: a surface baseline resolving onto the
+        // cursor is the outcome the header's paragraph rules out.
+        QCOMPARE(tree.resolve(decorationPointerPath()).chain.value_or(QStringList{}), QStringList{});
         // Non-shell surfaces keep inheriting the baseline unchanged.
         QCOMPARE(tree.resolve(QStringLiteral("window.tiled")).chain, QStringList{QStringLiteral("border")});
 

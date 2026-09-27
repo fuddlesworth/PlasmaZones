@@ -1,7 +1,7 @@
 {
     "id": "glow",
     "name": "Glow",
-    "description": "A soft coloured halo that hugs the surface's edge, brightest against the window and fading out over the glow size. It follows the frame's corners, rounded or squared, and dims when the surface loses focus.",
+    "description": "A soft coloured halo that hugs the surface's edge, brightest against the window and fading out over the glow size. It follows the frame's corners, rounded or squared, and draws only where the surface is not fully opaque, so a window with a see-through body picks up a little of it near the edge. It dims when the surface loses focus.",
     "author": "PlasmaZones",
     "version": "1.3",
     "category": "Ambience",
@@ -34,7 +34,7 @@
             "default": 8,
             "min": 0,
             "max": 64,
-            "description": "Corner rounding the halo follows (px). The halo traces this radius on the window frame. A Border pack earlier in the chain paints its band from its own corner radius out to that radius plus its border width, so match this to the sum for the two to meet. At a border radius of 0 the band stays square and nothing sits further out. On an OSD or a popup the host sets this and the border radius to the card's own radius, so at a wide border the halo starts a little outside the band's corner and you cannot correct it here."
+            "description": "Corner rounding the halo follows (px). The halo traces this radius on the window frame. A Border pack earlier in the chain paints its band from its own corner radius out to that radius plus its border width, so match this to the sum for the two to meet. At a border radius of 0 the band stays square and nothing sits further out. On an OSD or a popup the host sets this and the border radius to the card's own radius, so at a wide border the halo starts about 0.4 of the border width outside the band's corner, under a pixel at the default width and several at the widest, and you cannot correct it here."
         },
         {
             "id": "roundBottomCorners",

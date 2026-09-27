@@ -719,11 +719,12 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // "Zone %1" copy resolves and the missing-layout bail below must not
     // swallow the feedback.
     //
-    // Resolved lazily and memoised. What the laziness actually saves is ONE
-    // path: the ensurePassiveShellFor bail below, which returns before the
-    // zones are written. Every OSD that renders — failures and no-layout
-    // actions included — still reaches the zones write and pays the walk
-    // once, because skipping it there would change the zones QML receives.
+    // Resolved lazily and MEMOISED, and it is the memo that earns its keep: the two call
+    // sites below would otherwise walk the provider twice for one OSD. The laziness itself
+    // saves nothing now that prepareLayoutOsdWindow, which carries the ensurePassiveShellFor
+    // bail, has been hoisted ABOVE this point — nothing between here and the second call
+    // site returns early. Every OSD that renders, failures and no-layout actions included,
+    // reaches the zones write and pays the walk exactly once.
     std::optional<QVariantList> scrollZonesCache;
     const auto scrollZonesFor = [this, &scrollZonesCache, &effectiveId]() -> const QVariantList& {
         if (!scrollZonesCache.has_value()) {

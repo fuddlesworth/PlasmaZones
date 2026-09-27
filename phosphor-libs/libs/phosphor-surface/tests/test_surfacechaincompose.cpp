@@ -754,10 +754,11 @@ private Q_SLOTS:
 
         QVERIFY2(!chainRoundBottomCorners(registry, {}, {}).isValid(),
                  "an empty chain states nothing, so the host must inject nothing");
-        // DOCUMENTS a shape, and is not a guard: with one pack the first iteration decides
-        // either way, so no mutation of the resolver makes {border, border} differ from
-        // {border}. Kept because the shape is cheap to state and a reader asks about it,
-        // but the empty-chain case above is the half that bites.
+        // DOCUMENTS two shapes; neither is a guard. With one pack the first iteration decides
+        // either way, so no mutation makes {border, border} differ from {border}; and the
+        // empty chain reaches the same `return declaredFallback` the no-declarer slot already
+        // pins, so only a contrived isEmpty() special case would be caught here alone. Kept
+        // because both shapes are cheap to state and a reader asks about them.
         const QStringList twice{QStringLiteral("border"), QStringLiteral("border")};
         QCOMPARE(chainRoundBottomCorners(registry, twice, {}).toBool(), true);
         const QVariantMap stored{
@@ -767,10 +768,12 @@ private Q_SLOTS:
 
     /// A lone declarer whose default is `"default": null`, with nothing stored, returns an
     /// INVALID answer while still drawing an outline. That is the distinction step 3 of the
-    /// header contract draws, and it had no slot: the two sibling null-default cases each
-    /// pair the null pack with a later declarer, so both end in a VALID answer, and the
-    /// no-declarer case exercises the other side of the distinction. A regression that let
-    /// an absent default vote `false` would pass every one of them and fail only this.
+    /// header contract draws, and it had no slot of its own: the ONE sibling that uses a null
+    /// DEFAULT pairs the null pack with a later declarer, so it ends in a VALID answer and
+    /// cannot exhibit step 3's result. (The other two null slots store a null on a pack whose
+    /// declared default is a real bool, which is a different arm.) A CONTRACT PIN, not a
+    /// unique guard: the mutation that lets an absent default vote `false` is caught by that
+    /// sibling as well, and I found no mutation this slot alone catches.
     void chainRoundBottomCorners_is_invalid_when_the_only_declarer_states_no_default()
     {
         QTemporaryDir tmp;
@@ -805,12 +808,12 @@ private Q_SLOTS:
         // it needs the pack declaring TRUE for the same reason. Put both on one default and
         // one of the halves holds whatever the resolver does, which is what it did.
         QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("border"), false));
-        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("squared"), true));
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("declares-true"), true));
 
         SurfaceShaderRegistry registry;
         registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
         QVERIFY(registry.hasEffect(QStringLiteral("border")));
-        QVERIFY(registry.hasEffect(QStringLiteral("squared")));
+        QVERIFY(registry.hasEffect(QStringLiteral("declares-true")));
 
         const QVariantMap offString{
             {QStringLiteral("border"), QVariantMap{{QStringLiteral("roundBottomCorners"), QStringLiteral("off")}}}};
@@ -818,8 +821,8 @@ private Q_SLOTS:
         // The empty string is the other half: it passes the null guard and converts to
         // false, so it SQUARES rather than abstaining to the pack's declared true.
         const QVariantMap emptyString{
-            {QStringLiteral("squared"), QVariantMap{{QStringLiteral("roundBottomCorners"), QString()}}}};
-        QCOMPARE(chainRoundBottomCorners(registry, {QStringLiteral("squared")}, emptyString).toBool(), false);
+            {QStringLiteral("declares-true"), QVariantMap{{QStringLiteral("roundBottomCorners"), QString()}}}};
+        QCOMPARE(chainRoundBottomCorners(registry, {QStringLiteral("declares-true")}, emptyString).toBool(), false);
     }
 
     /// A pack the registry KNOWS but cannot use gets no vote either. The loader keeps a

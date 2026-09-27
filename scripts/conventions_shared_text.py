@@ -68,12 +68,20 @@ def shared_param_problems(repo: Path) -> list[tuple[str, str]]:
         # Counted on the RESOLVED path. Two glob hits that are the same file through a
         # symlinked pack directory are one piece of evidence, and letting them count as
         # two would satisfy the floor below with no independent coverage at all.
+        #
+        # `canon` carries the same resolution to the TEXT-HOLDER set. Applying it to
+        # `matched` alone was half the fix: one file reached twice still counted as two
+        # independent holders, so a symlinked pair plus one non-declaring pack passed the
+        # floor in silence, comparing a file's text against its own alias.
         real: set[Path] = set()
+        canon: dict[str, Path] = {}
         for path in sorted(repo.glob(pattern)):
             try:
-                real.add(path.resolve())
+                resolved = path.resolve()
             except OSError:
-                real.add(path)
+                resolved = path
+            real.add(resolved)
+            canon[str(path.relative_to(repo))] = resolved
             try:
                 # utf-8-sig so a BOM'd pack still PARTICIPATES. Decoding it as plain
                 # utf-8 raises, and swallowing that below would drop the pack out of the
@@ -183,14 +191,14 @@ def shared_param_problems(repo: Path) -> list[tuple[str, str]]:
         # The question is neither "how many declare it" nor "how many carry text". It is
         # whether there is anything to COMPARE, and that is two buckets OR two text
         # holders, which is what `with_text` counts: HOLDERS OF TEXT, not declarers of the id,
-# since a pack declaring it with an empty description says nothing. Naming that set for
-# the declaration is how two earlier versions of this floor went wrong.
-# One pack with text beside empty ones has two buckets, so it reports.
+        # since a pack declaring it with an empty description says nothing. Naming that set for
+        # the declaration is how two earlier versions of this floor went wrong.
+        # One pack with text beside empty ones has two buckets, so it reports.
         # One pack with text and nothing else in the glob has one of each, so it fires.
         # Twenty agreeing have one bucket and twenty holders, so they stay silent.
         # Real tree: 24 globbed, 20 declaring, 20 with text, no empty bucket at all.
         matched = len(real)
-        with_text = {h for text, holders in seen.items() if text for h in holders}
+        with_text = {canon.get(h, h) for text, holders in seen.items() if text for h in holders}
         if matched < 2:
             out.append((pattern, f"matched {matched} path(s), so there is nothing to compare and "
                                  f"this rule is a silent no-op; the glob has gone stale"))

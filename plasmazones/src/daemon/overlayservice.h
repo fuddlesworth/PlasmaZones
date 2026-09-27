@@ -1344,7 +1344,7 @@ private:
     /// "popup.layoutPicker" / "popup.cheatsheet") and push it onto @p slot's
     /// decoration properties (Stage d). Shared by pushLayoutOsdContent's five call sites
     /// (the layout and locked shows share showLayoutOsdImpl), showNavigationOsd's direct
-    /// call, the four popup shows and the retune sweep below. When no pack resolves it clears
+    /// call, the five popup shows and the retune sweep below. When no pack resolves it clears
     /// the chain, the padding, the backdrop stand-in, the audio flag and the slot's CAVA show/hide hook.
     void applyDecoration(QObject* slot, const QString& surfacePath);
     /// Re-apply the decoration chain to every decorated slot currently up, the OSD
@@ -1396,8 +1396,8 @@ private:
     /// animator. Inverse of hideZoneSelectorSlotOnScreen - used by the
     /// snap-assist / picker dismiss paths to restore the selector
     /// after a temporary slot-hide. Idempotent: bails when the slot is
-    /// already visible.
-    void showZoneSelectorSlotOnScreen(const QString& effectiveId, QScreen* physScreen, const QRect& targetGeom);
+    /// already visible on the same screen and geometry.
+    void showZoneSelectorSlotOnScreen(const QString& effectiveId, QScreen* physScreen, QRect targetGeom);
 
     /// Conditionally restore the zone-selector slot on @p effectiveId
     /// after a sibling slot finished hiding. Re-shows iff the drag is

@@ -63,7 +63,7 @@
             "default": 0.2,
             "min": 0.0,
             "max": 1.0,
-            "description": "How far the neutral border colour sits between the theme background (0) and foreground (1). Only applies when Use neutral theme colour is on"
+            "description": "How far the neutral border colour sits between the theme background (0) and foreground (1). Only applies when Use neutral theme colour is on."
         },
         {
             "id": "activeColor",

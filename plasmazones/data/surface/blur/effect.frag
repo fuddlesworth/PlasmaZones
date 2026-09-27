@@ -51,8 +51,10 @@ vec4 pSurface(vec2 uv) {
         vec4 blurred = surfaceBlurTexel(uv);
         // THE SHARED GRADE, not a hand-rolled copy. This ran the divide, the
         // adjust, the vibrancy and the re-multiply inline, behind its own
-        // `blurred.a > 0.001` guard, and that threshold is the one corrected
-        // everywhere else to a single RGBA8 quantum: 1/255 is about 0.0039, so
+        // `blurred.a > 0.001` guard, and that threshold is the one the SHARED HELPER
+        // corrects to a single RGBA8 quantum. Not "everywhere else": duotone and
+        // phosphor-glass still carry 0.001 on the identical unpremultiply-for-luminance,
+        // bounded there by the same alpha that makes it wrong. 1/255 is about 0.0039, so
         // 0.001 sits BELOW the smallest alpha an 8-bit backdrop can carry and the
         // one representable near-zero alpha fell through it and divided the colour
         // by that alpha. Calling the helper is what stops this pack keeping the

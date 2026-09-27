@@ -676,8 +676,12 @@ void OverlayService::hideZoneSelectorSlotOnScreen(const QString& effectiveId)
     });
 }
 
-void OverlayService::showZoneSelectorSlotOnScreen(const QString& effectiveId, QScreen* physScreen,
-                                                  const QRect& targetGeom)
+// targetGeom BY VALUE, deliberately. Its only caller passes it straight out of the
+// m_screenStates node this function then mutates, so as a reference the geometry term of the
+// short-circuit below compared the member against ITSELF (always equal, so the documented
+// fall-through for a changed geometry was unreachable from that caller), and the parameter
+// aliased storage that updateZoneSelectorWindow overwrites further down. A QRect is 16 bytes.
+void OverlayService::showZoneSelectorSlotOnScreen(const QString& effectiveId, QScreen* physScreen, QRect targetGeom)
 {
     if (!physScreen) {
         return;

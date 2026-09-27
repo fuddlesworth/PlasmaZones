@@ -43,10 +43,12 @@ namespace {
 /// merely tolerated. Two services in one process (test fixtures, a hot restart) do share
 /// this counter, so the second one's first apply writes a value it did not earn. What that
 /// costs is nothing the daemon can observe. The first apply lands on a slot whose chain is
-/// still empty, so there are no stage delegates to notify at all; and even a spurious
-/// reloadShader() on a live stage reads no file, because the bake is keyed on mtime plus
-/// the include fingerprint. It spends one update() and one Loading-to-Ready round trip,
-/// which momentarily drops the QML side's own chainReady, a property nothing here reads.
+/// still empty, so there are no stage delegates to notify at all. On a SECOND service whose
+/// slots are already decorated a spurious reloadShader() does cost one re-read and
+/// re-expansion of the pack's sources in the sync phase, though not a recompile: the SPIR-V
+/// bake is keyed on mtime plus the include fingerprint, so a byte-identical source is served
+/// from the cache. The rest is one update() and one Loading-to-Ready round trip, which
+/// momentarily drops the QML side's own chainReady, a property nothing here reads.
 int s_decorationReloadGeneration = 0;
 
 } // namespace
@@ -114,10 +116,10 @@ void OverlayService::reapplyVisiblePopupDecorations()
         // the settings getter carries no parse cache.
         //
         // Deliberately NOT gated on the slot's own visibility, which is what the OSD
-        // arm below uses: for the zone selector that predicate is documented as wrong
-        // (a slot hidden under a modal is still logically up, and the restore path
-        // re-shows it without re-decorating), and using it here would invite the same
-        // mistake by symmetry.
+        // arm below uses: for the zone selector that predicate is documented as wrong,
+        // because a slot hidden under a modal is still logically up and a retune has to
+        // reach it. Using it here would invite the same mistake by symmetry. (The restore
+        // path DOES re-decorate now, which it did not before; that is a separate fix.)
         if (m_snapAssistVisible && it.key() == m_snapAssistScreenId) {
             applyDecoration(state.snapAssistSlot(), PhosphorSurfaceShaders::decorationPopupSnapAssistPath());
         }
@@ -393,7 +395,9 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     // the flag with one exchange(false) per render sync. Both writes land in the same
     // GUI-thread turn, since writeQmlProperty is a plain QQmlProperty::write and neither
     // binding re-evaluation nor delegate creation pumps the loop, so the flag is raised
-    // twice and consumed once either way. The shell twin writes chain-then-generation and
+    // at least once and consumed once either way — twice when the recomposed chain differs,
+    // once on an in-place source edit, where the chain is byte-identical and setShaderSource
+    // compares equal. The shell twin writes chain-then-generation and
     // is equally correct. Written on every apply, so a slot decorated after a commit
     // starts at the current value.
     writeQmlProperty(slot, QString(OverlayQmlPropertyNames::DecorationReloadGeneration), s_decorationReloadGeneration);

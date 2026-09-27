@@ -49,7 +49,7 @@
             "default": 45.0,
             "min": 0.0,
             "max": 359.0,
-            "description": "Direction of the gradient across the frame (degrees)"
+            "description": "Direction of the gradient across the frame (degrees), measured across the pane rather than on screen. On a diagonal the ramp finishes about 71 per cent of the way to each corner, so the outer stretch beyond that is flat colour"
         },
         {
             "id": "colorA",

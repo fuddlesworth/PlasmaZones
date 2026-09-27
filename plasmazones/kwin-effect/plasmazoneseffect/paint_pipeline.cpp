@@ -262,9 +262,9 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
                 // both ways: a column that unparks this tick is skipped here
                 // though the draw will paint it, and a column that parks this
                 // tick is elected here though the draw will cull it. The cost is one frame
-                // with the pills under the second trigger rather than the first, under a
-                // strip column, or none where the skip leaves no anchor. Moving the
-                // election after advanceAnimations would tighten it, but the anchor must also
+                // with the pills under the second trigger rather than the first, or (for the
+                // unpark) under a strip column, or none where the skip leaves no anchor. Moving
+                // the election after advanceAnimations would tighten it, but the anchor must also
                 // survive the scene's own occlusion culling, which nothing here
                 // can predict, so the fallback has to stay correct regardless.
                 if (scrollParkedOffscreen(sw, getWindowId(sw))) {
@@ -650,12 +650,12 @@ bool PlasmaZonesEffect::paintScreenImpl(const KWin::RenderTarget& renderTarget, 
     // blitting at the anchor's slot. Still requires an
     // anchor: with no strip column on the output there is nothing the pills
     // belong to this pass.
-    // !m_directPaintCapture for symmetry with the two paintWindow triggers, which
-    // both treat the latch as load-bearing. Unreachable today — its one setter's
-    // two callers drive paintWindow directly and never call paintScreen — but the
-    // asymmetry is the kind a future direct-drive caller falls into.
+    // !m_directPaintCapture and !m_currentPassPaintFailed for symmetry with the two
+    // paintWindow triggers, which both treat these latches as load-bearing. The first is
+    // unreachable today (its one setter's two callers drive paintWindow directly and never
+    // call paintScreen); the second is the same raw GL on the same possibly-lost context.
     if (screen && m_scrollTabPaintAnchor && !m_scrollTabPainted && !m_capturingSnapshot && !m_directPaintCapture
-        && m_scrollTabPainter->hasIndicators(screen)) {
+        && m_scrollTabPainter->hasIndicators(screen) && !m_currentPassPaintFailed) {
         paintScrollTabIndicators(renderTarget, viewport, deviceRegion);
     }
     // The pointer decoration chain composites over the FINISHED frame, so it

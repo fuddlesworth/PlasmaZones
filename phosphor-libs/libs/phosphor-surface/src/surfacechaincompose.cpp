@@ -144,7 +144,8 @@ QString roundBottomCornersParamId()
 /// per-surface profile for the override.
 ///
 /// So a WRONG-TYPED stored value is explicitly not covered: QVariant::toBool() is
-/// true for any string that is not empty, "0" or "false", so `"off"` reads as round.
+/// true for any string that is not empty, "0" or a case-insensitive "false", so `"off"`
+/// reads as round.
 /// No code path in the tree produces that today (the settings UI writes a bool and the
 /// flatten copies it verbatim), and the alternative — gating on the declared type —
 /// was rejected for the reason above. A HAND-EDITED profile can, and it gets the value
@@ -155,8 +156,9 @@ QString roundBottomCornersParamId()
 /// An EMPTY string stored here squares the chain rather than abstaining, and there is no
 /// empty-vs-null asymmetry to it. Qt 6 dropped the QString::isNull() special case from
 /// QVariant::isNull(), so a default-constructed QString and a `""` both report isNull()
-/// false, both pass this guard, and both convert to false. A NON-empty one rounds, per
-/// the paragraph above; saying "a string" here contradicted it.
+/// false, both pass this guard, and both convert to false. Any OTHER non-empty one rounds,
+/// per the paragraph above; saying "a string" here contradicted it, and saying "non-empty"
+/// alone contradicts the two exceptions it names.
 ///
 /// A JSON `null` arrives as std::nullptr_t — valid, isNull() true — and abstains, the
 /// shape the tests pin. A tree PROFILE cannot carry one: DecorationProfile::fromJson

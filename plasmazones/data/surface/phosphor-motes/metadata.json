@@ -44,7 +44,7 @@
             "default": 0.5,
             "min": 0.0,
             "max": 2.0,
-            "description": "How fast the dust drifts away from the frame"
+            "description": "How fast the dust drifts away from the frame, where 0 freezes the motes in place"
         },
         {
             "id": "tailLength",

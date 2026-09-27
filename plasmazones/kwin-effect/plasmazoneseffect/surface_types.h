@@ -34,9 +34,6 @@
 #include <memory>
 #include <vector>
 
-namespace KWin {
-}
-
 namespace PlasmaZones {
 
 /// One compiled buffer pass of a multipass SURFACE pack (run in the

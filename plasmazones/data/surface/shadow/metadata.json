@@ -16,7 +16,7 @@
             "default": 28,
             "min": 4,
             "max": 128,
-            "description": "How far the shadow reaches from the edge (px). It also sets the room reserved around the window, which the offsets do not add to"
+            "description": "How far the shadow reaches from the edge (px). It also sets the room reserved around the window, which the offsets do not add to."
         },
         {
             "id": "shadowStrength",
@@ -52,7 +52,7 @@
             "default": 8,
             "min": 0,
             "max": 64,
-            "description": "Corner rounding the shadow follows (px). The shadow traces this radius on the window frame. A Border pack earlier in the chain paints its band from its own corner radius out to that radius plus its border width, so match this to the sum for the two to meet. At a border radius of 0 the band stays square and nothing sits further out. On an OSD or a popup the host sets this and the border radius to the card's own radius, so at a wide border the halo starts a little outside the band's corner and you cannot correct it here."
+            "description": "Corner rounding the shadow follows (px). The shadow traces this radius on the window frame. A Border pack earlier in the chain paints its band from its own corner radius out to that radius plus its border width, so match this to the sum for the two to meet. At a border radius of 0 the band stays square and nothing sits further out. On an OSD or a popup the host sets this and the border radius to the card's own radius, so at a wide border the shadow starts about 0.4 of the border width outside the band's corner, under a pixel at the default width and several at the widest, and you cannot correct it here."
         },
         {
             "id": "roundBottomCorners",

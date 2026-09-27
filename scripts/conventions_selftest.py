@@ -104,17 +104,24 @@ SELFTEST_PROSE_BAD = [
     # THREE parts to one separator string. CLAUDE.md allows a separator "between two nouns",
     # so a chain is outside it; this pins the exact-two test against being loosened.
     ("Alpha — Beta — Gamma", "two separators in one label"),
+    # A SPLICE WITH SUB-THREE-WORD SIDES. The verb test works "at any length", which nothing
+    # pinned: restoring the removed three-word clause floor left the suite green.
+    ("Blur stops; border keeps", "splice whose clauses are two words each"),
 ]
 
 SELFTEST_PROSE_OK = [
-    # A genuine list. THREE items means two semicolons, which is the enumeration
-    # signal the rule returns early on. Pins that early return: without it the final
-    # item, which carries no comma of its own, reads as a clause and is flagged.
+    # Genuine lists, exempt by the FINITE-VERB test and nothing else: the item after each
+    # semicolon is a noun phrase with no verb the list knows, and one verbless side exempts
+    # the construction. Neither of these pins an "enumeration signal" or a "three-word
+    # clause floor" — an earlier version of this comment named both, and the rule implements
+    # neither. The semicolon-count short-circuit is forbidden by the three-clause BAD probe
+    # above, and the word floor was replaced by the verb test "at any length".
     "Sets the width, in pixels; the radius, in pixels; and the colour",
-    # A two-item list, which has only ONE semicolon and so gets no enumeration
-    # signal. It survives on the three-word clause floor, and that is what this entry
-    # pins: drop the floor and a two-word pair reads as a splice.
     "Left, top; right, bottom",
+    # A verbless LEFT side beside a verb-carrying right one, which is the mirror of the
+    # entries below and the half the both-sides test had no probe for: requiring a verb on
+    # the right alone would flag this genuine list item.
+    "Radius, in logical pixels; Strength, a unitless multiplier that keeps the bevel",
     # TWO-ITEM LISTS LONG ENOUGH TO CLEAR THE WORD FLOOR, which CLAUDE.md permits
     # without naming a minimum count and which only the finite-verb test lets
     # through. Neither item carries a verb; both carry the internal comma the
@@ -389,13 +396,25 @@ def _shared_text_failures() -> list[str]:
         link.mkdir(parents=True, exist_ok=True)
         os.symlink(real, link / "metadata.json")
 
+    def symlinked_with_third(d):
+        # The pair PLUS a pack that declares nothing. TWO dedups guard this rule and each
+        # needs its own case: with the pair alone `matched` is 1 and the stale-glob arm fires,
+        # so the TEXT-HOLDER dedup is never reached. With a third path matched is 2, and the
+        # pair's two apparent holders are all that stands between the rule and silence.
+        symlinked(d)
+        _pack(d, "silent", declare=False)
+
     try:
         with tempfile.TemporaryDirectory() as probe:
             os.symlink(probe, Path(probe) / "l")
     except (OSError, NotImplementedError):
         pass
     else:
+        # "silent no-op" rather than "stale": with the third pack present matched is 2, so it
+        # is the TEXT-HOLDER arm that must fire, which is the half the dedup fixes.
         expect("a pack symlinked to itself twice", symlinked, True, "stale")
+        expect("a symlinked pair beside a non-declaring pack", symlinked_with_third, True,
+               "silent no-op")
 
     # AN UNREADABLE PACK IS REPORTED, not dropped. The gate's main() filters unreadable
     # TRACKED paths, but this rule globs its own files, so an untracked pack never passes
@@ -500,7 +519,12 @@ def _dep5_failures() -> list[str]:
             bad.append(f"dep5_problems fired on the holder spelling {spelling!r}: {got}")
     # CASE-INSENSITIVELY, which is what flags=re.IGNORECASE is for. Every spelling above
     # uses the exact case the pattern spells, so the flag itself was unpinned.
-    for spelling in ("COPYRIGHT 2026", "(C) 2026", "copyright 2026"):
+    # The COMBINED spelling, which stacks two prefixes and is the commonest of all. None of
+    # these was covered, so a prefix that matched only once passed the suite while reporting
+    # a holder the stanza plainly names.
+    for spelling in ("COPYRIGHT 2026", "(C) 2026", "copyright 2026",
+                     "Copyright (c) 2026", "Copyright (C) 2026", "Copyright \u00a9 2026",
+                     "COPYRIGHT (C) 2026", "Copyright (c)"):
         got = run({"src/a.cpp": hdr(year=spelling)}, dep5=bare)
         if got:
             bad.append(f"dep5_problems fired on the holder spelling {spelling!r}: {got}")

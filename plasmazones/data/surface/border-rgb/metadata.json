@@ -59,7 +59,7 @@
             "default": 1.0,
             "min": 0.5,
             "max": 4.0,
-            "description": "How many full rainbows wrap around the frame at once"
+            "description": "How many full rainbows wrap around the frame at once. A value that is not a whole number leaves a hue seam at the middle of the left edge, widest at 0.5"
         },
         {
             "id": "saturation",
