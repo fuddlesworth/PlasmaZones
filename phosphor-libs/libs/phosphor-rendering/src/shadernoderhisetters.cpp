@@ -514,6 +514,10 @@ void ShaderNodeRhi::setUseDepthBuffer(bool use)
     m_useDepthBuffer = use;
     m_depthTexture.reset();
     m_depthSampler.reset();
+    // The depth setting itself changed, so an earlier create failure says nothing about
+    // the objects this flip will ask for. Without the clear, a pack that failed three
+    // times and then had depth toggled off and on would start already out of budget.
+    clearDepthCreateFailure();
     // The buffer render targets were created WITH the depth texture as their
     // second colour attachment (createTextureAndRT), and the buffer pipelines'
     // target-blend count is keyed on m_useDepthBuffer. A bare

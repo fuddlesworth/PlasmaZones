@@ -1004,6 +1004,35 @@ private:
     /// re-entered-every-frame path as the target-create failures and so needs the
     /// same one-shot treatment. Cleared on the next successful create.
     bool m_bufferSamplerCreateWarned = false;
+
+    /// Bounded retry for the DEPTH texture and sampler creates, modelled on
+    /// m_bufferShaderRetries / m_multiBufferShaderRetries.
+    ///
+    /// Both depth failure arms drop the pipeline and SRB through resetBufferTargets, so
+    /// render() bails and the item paints nothing — and a pack with no per-frame input
+    /// then has nothing to schedule another prepare(). A STATIC depth pack therefore stayed
+    /// blank after a single transient failure until unrelated damage repainted the window,
+    /// which is the same defect m_multiBufferShaderRetries' own comment describes for the
+    /// shader load. Retrying UNBOUNDED would spin at frame rate against a driver that keeps
+    /// failing, so the count is what makes asking for a frame safe.
+    /// Cleared on the success path and in releaseRhiResources / setUseDepthBuffer.
+    int m_depthCreateRetries = 0;
+
+    /// One-shot latch for the two depth create-failure warnings. ensureBufferTarget is
+    /// re-entered from prepare() on every frame while it returns false, so an ANIMATED
+    /// depth pack flooded both lines at vsync — the flood the buffer-target and
+    /// buffer-sampler latches above already exist to stop. Cleared with the retry count.
+    bool m_depthCreateWarned = false;
+
+    /// Ask for the frame that retries a failed depth create, while the bound allows it.
+    /// Both depth failure arms call this after resetBufferTargets. Non-virtual, so adding
+    /// it changes no member offset.
+    void requestDepthCreateRetry();
+
+    /// Forget a depth create failure, so a later one is retried and reported again rather
+    /// than swallowed for the lifetime of the node. Called on the depth success path and
+    /// from releaseRhiResources / setUseDepthBuffer.
+    void clearDepthCreateFailure();
 };
 
 /** Result of warmShaderBakeCacheForPaths for reporting to UI. */

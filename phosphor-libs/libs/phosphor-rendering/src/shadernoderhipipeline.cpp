@@ -51,6 +51,33 @@ createFullscreenQuadPipeline(QRhi* rhi, QRhiRenderPassDescriptor* rpDesc, const 
 // ensureBufferTarget
 // ============================================================================
 
+void ShaderNodeRhi::requestDepthCreateRetry()
+{
+    // Bounded, because the arm that calls this has just failed a GPU create and the
+    // enclosing branch is re-entered from prepare() on every frame while it keeps failing:
+    // an unbounded request would repaint at frame rate for as long as the driver refuses.
+    // Modelled on m_multiBufferShaderRetries, including the give-up line, so a permanent
+    // failure costs three frames and one message rather than a spin.
+    if (++m_depthCreateRetries < 3) {
+        requestAnotherFrame();
+        return;
+    }
+    // Exactly once, on the frame the count CROSSES the bound. m_depthCreateWarned cannot
+    // serve as the latch here: the calling arm sets it on the first failure, so testing it
+    // would print this line every frame from the third onwards. The counter keeps rising,
+    // so equality is the one-shot.
+    if (m_depthCreateRetries == 3) {
+        qCWarning(lcShaderNode) << "Depth texture or sampler creation failed after 3 attempts; giving up until the "
+                                   "depth setting or the node's resources change";
+    }
+}
+
+void ShaderNodeRhi::clearDepthCreateFailure()
+{
+    m_depthCreateRetries = 0;
+    m_depthCreateWarned = false;
+}
+
 bool ShaderNodeRhi::ensureBufferTarget()
 {
     if (m_width <= 0 || m_height <= 0) {
@@ -84,7 +111,13 @@ bool ShaderNodeRhi::ensureBufferTarget()
     if (m_useDepthBuffer && (!m_depthTexture || m_depthTexture->pixelSize() != bufferSize)) {
         m_depthTexture.reset(rhi->newTexture(QRhiTexture::R32F, bufferSize, 1, QRhiTexture::RenderTarget));
         if (!m_depthTexture->create()) {
-            qCWarning(lcShaderNode) << "Failed to create depth texture";
+            // Latched: this branch is re-entered from prepare() on every frame while it
+            // returns false, so an animated depth pack flooded this line at vsync. Same
+            // one-shot treatment the buffer-target and buffer-sampler failures take.
+            if (!m_depthCreateWarned) {
+                m_depthCreateWarned = true;
+                qCWarning(lcShaderNode) << "Failed to create depth texture";
+            }
             // Drop the failed object for the same reason the sampler below
             // does: this branch is gated on the texture's pixelSize(), which
             // QRhiTexture reports from the requested size whether or not
@@ -106,21 +139,29 @@ bool ShaderNodeRhi::ensureBufferTarget()
             // texture already at passSize(i), rebuilds nothing, and renders into
             // a target whose depth attachment was freed here.
             //
-            // No requestAnotherFrame() paired with it, unlike the other
-            // in-prepare() flag raises in this library. resetBufferTargets
-            // raises m_uniformsDirty and m_sceneDataDirty as a side effect of
-            // its real job here, and nothing reads either before the next
-            // prepare(), so there is no stale value to flush out. Asking for a
-            // frame from an arm that has just failed a create() would repaint at
-            // full frame rate for as long as the driver keeps failing it.
             resetBufferTargets();
+            // AND ask for the frame that retries, up to a bound. resetBufferTargets nulls
+            // the pipeline and SRB, so render() bails and this item paints nothing; with
+            // no per-frame input a static depth pack then had nothing to schedule another
+            // prepare() and stayed blank after a single transient failure until unrelated
+            // damage arrived. An earlier version of this comment argued for NO frame
+            // request on the grounds that one would repaint at full rate against a
+            // persistently failing driver — a false dichotomy, since the bound is what
+            // makes the request safe, and this library already solves the identical shape
+            // three times for the shader loads (see m_multiBufferShaderRetries, whose own
+            // comment describes this exact blank-until-something-else-repaints failure).
+            requestDepthCreateRetry();
             return false;
         }
         if (!m_depthSampler) {
             m_depthSampler.reset(rhi->newSampler(QRhiSampler::Nearest, QRhiSampler::Nearest, QRhiSampler::None,
                                                  QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
             if (!m_depthSampler->create()) {
-                qCWarning(lcShaderNode) << "Failed to create depth sampler";
+                // Latched with its sibling above, and for the same reason.
+                if (!m_depthCreateWarned) {
+                    m_depthCreateWarned = true;
+                    qCWarning(lcShaderNode) << "Failed to create depth sampler";
+                }
                 // Drop the failed object (matching ensureDummyChannelResources
                 // and ensureBufferSampler): the enclosing branch is gated on
                 // the TEXTURE's state, so a latched failed sampler would never
@@ -140,9 +181,9 @@ bool ShaderNodeRhi::ensureBufferTarget()
                 // The depth TEXTURE was already replaced above, so the render
                 // targets and SRBs still installed reference the one it
                 // displaced. Same freed-object draw as the texture failure
-                // path, the same reason it takes the full target reset, and the
-                // same reason it asks for no frame.
+                // path, and the same reason it takes the full target reset.
                 resetBufferTargets();
+                requestDepthCreateRetry();
                 return false;
             }
         }
@@ -160,6 +201,9 @@ bool ShaderNodeRhi::ensureBufferTarget()
         // m_depthTexture or m_depthSampler, so the objects just created here
         // survive it.
         resetBufferTargets();
+        // Both objects exist, so forget any earlier failure: a later one is then retried
+        // and reported again rather than swallowed for the node's lifetime.
+        clearDepthCreateFailure();
     }
 
     if (m_useDepthBuffer && multiBufferMode) {

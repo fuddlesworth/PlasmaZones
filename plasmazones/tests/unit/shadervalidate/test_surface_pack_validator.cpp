@@ -523,7 +523,115 @@ private Q_SLOTS:
         obj.insert(QStringLiteral("bufferScales"), QJsonArray{0.25, 0.125, 0.0625, 0.03125, 0.0625, 0.125, 0.25});
 
         const PackResult r = validateSurface(tmp, QStringLiteral("sf-kawase-nobackdrop"), obj, surfaceBodyReading({}));
-        QVERIFY2(r.report.contains(QStringLiteral("\"needsBackdrop\" is not declared")), qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("\"needsBackdrop\" is not true")), qPrintable(r.report));
+    }
+
+    /// THE GAUSSIAN FAMILY, which both blur lints missed for a round. They were scoped to
+    /// `anyKawase`, and gaussian_h's only source is backdropTexel() exactly as
+    /// kawase_down_0's is — so a pack declaring the gaussian pair without `needsBackdrop`
+    /// validated CLEAN and rendered a transparent pane, which is the very failure the
+    /// backdrop lint was added to prevent, one family over.
+    void aGaussianChainWithoutNeedsBackdropIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(
+            QStringLiteral("sf-gauss-nobackdrop"),
+            QJsonArray{surfaceParam(QStringLiteral("blurRadius"), QStringLiteral("float"), 32.0, 0.0, 256.0)});
+        obj.insert(QStringLiteral("multipass"), true);
+        obj.insert(QStringLiteral("bufferShaders"),
+                   QJsonArray{QStringLiteral("builtin:gaussian-h"), QStringLiteral("builtin:gaussian-v")});
+
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-gauss-nobackdrop"), obj,
+                                             surfaceBodyReading({QStringLiteral("blurRadius")}));
+        QVERIFY2(r.report.contains(QStringLiteral("\"needsBackdrop\" is not true")), qPrintable(r.report));
+    }
+
+    /// The gaussian twin of the bool-first radius slot. BOTH gaussian helpers read
+    /// customParams[0].x as the radius (surfaceGaussianBackdropH and
+    /// surfaceGaussianChannelV), so the whole slot argument applies to them verbatim.
+    void aGaussianChainLeadingWithABoolIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(
+            QStringLiteral("sf-gauss-bool"),
+            QJsonArray{surfaceParam(QStringLiteral("roundBottomCorners"), QStringLiteral("bool"), false, 0.0, 0.0),
+                       surfaceParam(QStringLiteral("blurRadius"), QStringLiteral("float"), 32.0, 0.0, 256.0)});
+        obj.insert(QStringLiteral("multipass"), true);
+        obj.insert(QStringLiteral("bufferShaders"),
+                   QJsonArray{QStringLiteral("builtin:gaussian-h"), QStringLiteral("builtin:gaussian-v")});
+        obj.insert(QStringLiteral("needsBackdrop"), true);
+
+        const PackResult r =
+            validateSurface(tmp, QStringLiteral("sf-gauss-bool"), obj,
+                            surfaceBodyReading({QStringLiteral("roundBottomCorners"), QStringLiteral("blurRadius")}));
+        QVERIFY2(r.report.contains(QStringLiteral("and that is 'roundBottomCorners' here")), qPrintable(r.report));
+    }
+
+    /// gaussian_v ALONE reads iChannel0 and no backdrop, so the backdrop lint must NOT fire
+    /// on it while the radius lint still must. That asymmetry is why there are two
+    /// predicates rather than one, and without this slot the backdrop lint could be widened
+    /// to every buffer token with the suite still green.
+    void aGaussianVerticalOnlyPackTakesTheRadiusLintAndNotTheBackdropOne()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(
+            QStringLiteral("sf-gaussv-only"),
+            QJsonArray{surfaceParam(QStringLiteral("roundBottomCorners"), QStringLiteral("bool"), false, 0.0, 0.0),
+                       surfaceParam(QStringLiteral("blurRadius"), QStringLiteral("float"), 32.0, 0.0, 256.0)});
+        obj.insert(QStringLiteral("multipass"), true);
+        obj.insert(QStringLiteral("bufferShaders"), QJsonArray{QStringLiteral("builtin:gaussian-v")});
+
+        const PackResult r =
+            validateSurface(tmp, QStringLiteral("sf-gaussv-only"), obj,
+                            surfaceBodyReading({QStringLiteral("roundBottomCorners"), QStringLiteral("blurRadius")}));
+        QVERIFY2(r.report.contains(QStringLiteral("and that is 'roundBottomCorners' here")), qPrintable(r.report));
+        QVERIFY2(!r.report.contains(QStringLiteral("needsBackdrop")), qPrintable(r.report));
+    }
+
+    /// THE NOT-FOUND SENTINEL, which a widened predicate broke. The scan used to test the
+    /// first scalar's TYPE for emptiness, sound only while the predicate was float-or-int:
+    /// once it became "not a color", a parameter whose `type` key is MISSING set the id and
+    /// left the type empty, so the lint took the no-scalar arm and told an author whose slot
+    /// 0 was CORRECT that the chain blurs by 0. Two outputs of one binary disagreed —
+    /// --emit-preamble wrote the right slot while -s denied it existed.
+    ///
+    /// Asserts the message the fix makes it print, not merely that something was reported:
+    /// a typeless parameter also trips the unknown-type lint, so `errors > 0` would pass
+    /// with the sentinel still broken.
+    void aKawaseChainLeadingWithATypelessParameterNamesThatParameter()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        // By hand rather than through surfaceParam, which always writes a type.
+        QJsonObject typeless;
+        typeless.insert(QStringLiteral("id"), QStringLiteral("mystery"));
+        typeless.insert(QStringLiteral("name"), QStringLiteral("mystery"));
+        typeless.insert(QStringLiteral("default"), 1.0);
+
+        QJsonObject obj = surfacePack(
+            QStringLiteral("sf-kawase-notype"),
+            QJsonArray{typeless,
+                       surfaceParam(QStringLiteral("blurRadius"), QStringLiteral("float"), 32.0, 0.0, 256.0)});
+        obj.insert(QStringLiteral("multipass"), true);
+        obj.insert(QStringLiteral("bufferShaders"),
+                   QJsonArray{QStringLiteral("builtin:kawase-down-0"), QStringLiteral("builtin:kawase-down-1"),
+                              QStringLiteral("builtin:kawase-down-2"), QStringLiteral("builtin:kawase-down-3"),
+                              QStringLiteral("builtin:kawase-up-0"), QStringLiteral("builtin:kawase-up-1"),
+                              QStringLiteral("builtin:kawase-up-2")});
+        obj.insert(QStringLiteral("bufferScales"), QJsonArray{0.25, 0.125, 0.0625, 0.03125, 0.0625, 0.125, 0.25});
+        obj.insert(QStringLiteral("needsBackdrop"), true);
+
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-kawase-notype"), obj,
+                                             surfaceBodyReading({QStringLiteral("blurRadius")}));
+        QVERIFY2(r.report.contains(QStringLiteral("and that is 'mystery' here")), qPrintable(r.report));
+        QVERIFY2(!r.report.contains(QStringLiteral("blurs by 0")), qPrintable(r.report));
     }
 
     /// THE RADIUS SLOT, no-scalar arm. With no scalar parameter at all the slot reads
@@ -888,6 +996,13 @@ private Q_SLOTS:
         obj.insert(QStringLiteral("multipass"), true);
         obj.insert(QStringLiteral("bufferShaders"),
                    QJsonArray{QStringLiteral("builtin:gaussian-h"), QStringLiteral("builtin:gaussian-v")});
+        // gaussian_h's only source is backdropTexel(), so a chain declaring it needs the
+        // flag or it composites a transparent pane. This slot exists to BAKE the two
+        // shared stages rather than to exercise a lint, so it declares it and keeps the
+        // errors == 0 assertion meaningful. The widened backdrop lint found this fixture
+        // on its first run, which is the whole argument for widening it: the tree's one
+        // gaussian pack was the broken shape.
+        obj.insert(QStringLiteral("needsBackdrop"), true);
         const PackResult r =
             validateSurface(tmp, QStringLiteral("sf-gauss"), obj, surfaceBodyReading({QStringLiteral("blurRadius")}));
 

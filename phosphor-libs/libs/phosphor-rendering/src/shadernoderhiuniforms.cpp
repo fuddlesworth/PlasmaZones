@@ -839,6 +839,9 @@ void ShaderNodeRhi::releaseRhiResources()
     m_multiBufferShadersReady = false;
     m_multiBufferShaderDirty = true;
     m_multiBufferShaderRetries = 0;
+    // Beside its two siblings: the depth objects are released below, so a failure recorded
+    // against the old ones must not spend the retry budget of the next set.
+    clearDepthCreateFailure();
     m_uniformsDirty = true;
     m_timeDirty = true;
     m_timeHiDirty = true;
