@@ -713,7 +713,7 @@ Window {
         // Surface-shader decoration (Stage d). SIBLING of zoneSelectorLoader.
         // Captures the loaded content's PopupFrame shaderAnchor and re-renders it
         // through the resolved "popup.zoneSelector" surface pack. Inert when the
-        // source is empty.
+        // decoration chain is empty.
         PhosphorSurface.SurfaceDecoration {
             anchors.fill: parent
             contentItem: zoneSelectorLoader.item

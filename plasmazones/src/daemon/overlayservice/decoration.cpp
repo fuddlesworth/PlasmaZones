@@ -41,10 +41,12 @@ namespace {
 ///
 /// FILE-SCOPE, where the shell's twin is a member, and that is adequate rather than
 /// merely tolerated. Two services in one process (test fixtures, a hot restart) do share
-/// this counter, so the second one's first apply writes a value it did not earn. That
-/// used to cost a redundant reload on every stage, because the QML side keys on the
-/// CHANGE signal; it no longer can, since applyDecoration writes the generation BEFORE
-/// the chain, and on a fresh slot there are no stage delegates yet to notify.
+/// this counter, so the second one's first apply writes a value it did not earn. What that
+/// costs is nothing the daemon can observe. The first apply lands on a slot whose chain is
+/// still empty, so there are no stage delegates to notify at all; and even a spurious
+/// reloadShader() on a live stage reads no file, because the bake is keyed on mtime plus
+/// the include fingerprint. It spends one update() and one Loading-to-Ready round trip,
+/// which momentarily drops the QML side's own chainReady, a property nothing here reads.
 int s_decorationReloadGeneration = 0;
 
 } // namespace
@@ -264,8 +266,8 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
             // it the first surface to hit a missing pack owned the only log line and
             // the other four skipped silently, so a user whose zone selector lost its
             // border read a warning that named the OSD. Bounded: the five paths this
-            // function is ever called with. Not the supported-path whitelist, which is
-            // seventeen entries — this function only ever sees the OSD and four popups.
+            // function is ever called with. Not the LEAF list, which is seventeen, nor the
+            // supported-path set, which is twenty-one once every ancestor is counted.
             const QString missingKey = surfacePath + QLatin1Char('|') + packId + QLatin1String("|missing");
             if (!m_warnedDecorationPacks.contains(missingKey)) {
                 m_warnedDecorationPacks.insert(missingKey);
@@ -383,13 +385,17 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     const QImage backdrop = chainWantsBackdrop ? PhosphorShaders::ShaderRegistry::loadWallpaperImage() : QImage();
     writeQmlProperty(slot, QString(OverlayQmlPropertyNames::BackdropTexture),
                      backdrop.isNull() ? QVariant() : QVariant::fromValue(backdrop));
-    // BEFORE the chain, which is the load trigger. Written after it, the generation
-    // changed on stages that had just baked, and SurfaceDecoration.qml fires
-    // reloadShader() off the CHANGE signal, so every stage took one redundant bake on
-    // the first apply following any bump. Ordered this way there is nothing to notify:
-    // a slot with no stages yet has no delegates, and a slot with OLD stages is about
-    // to have them replaced. Still written on every apply, so a slot decorated after a
-    // commit starts at the current value.
+    // Before the chain, for symmetry with the padding and backdrop above. The ORDER IS
+    // NOT LOAD-BEARING, and an earlier version of this comment claimed it was: it said a
+    // late generation cost every stage a redundant bake. It does not. SurfaceDecoration's
+    // Connections calls ShaderEffect::reloadShader(), which only sets Loading, raises
+    // m_shaderDirty and calls update(); the bake is in updatePaintNode, which consumes
+    // the flag with one exchange(false) per render sync. Both writes land in the same
+    // GUI-thread turn, since writeQmlProperty is a plain QQmlProperty::write and neither
+    // binding re-evaluation nor delegate creation pumps the loop, so the flag is raised
+    // twice and consumed once either way. The shell twin writes chain-then-generation and
+    // is equally correct. Written on every apply, so a slot decorated after a commit
+    // starts at the current value.
     writeQmlProperty(slot, QString(OverlayQmlPropertyNames::DecorationReloadGeneration), s_decorationReloadGeneration);
     writeQmlProperty(slot, QString(OverlayQmlPropertyNames::DecorationChain), QVariant::fromValue(stages));
 

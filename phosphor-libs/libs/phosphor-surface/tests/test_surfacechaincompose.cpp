@@ -531,8 +531,9 @@ private Q_SLOTS:
         // when the fixture writes metadata the loader rejects and the registry holds
         // nothing at all, which is a different arm entirely (and one
         // chainRoundBottomCorners_ignores_a_pack_the_registry_does_not_know covers).
-        // Named, not numbered: a line reference into a 780-line test file drifts, and
-        // the last one here pointed at a fixture line in the wrong slot.
+        // Named, not numbered: a line reference into a test file this long drifts, and the
+        // last one here pointed at a fixture line in the wrong slot. The sentence that
+        // replaced it quoted a line COUNT, which drifted in the same commit that wrote it.
         QVERIFY(registry.hasEffect(QStringLiteral("fireflies")));
         QVERIFY(registry.hasEffect(QStringLiteral("opacity-tint")));
 
@@ -753,13 +754,37 @@ private Q_SLOTS:
 
         QVERIFY2(!chainRoundBottomCorners(registry, {}, {}).isValid(),
                  "an empty chain states nothing, so the host must inject nothing");
-        // The same pack twice must answer as it does once, and a stored value on it must
-        // still win over its own declared default rather than being read twice.
+        // DOCUMENTS a shape, and is not a guard: with one pack the first iteration decides
+        // either way, so no mutation of the resolver makes {border, border} differ from
+        // {border}. Kept because the shape is cheap to state and a reader asks about it,
+        // but the empty-chain case above is the half that bites.
         const QStringList twice{QStringLiteral("border"), QStringLiteral("border")};
         QCOMPARE(chainRoundBottomCorners(registry, twice, {}).toBool(), true);
         const QVariantMap stored{
             {QStringLiteral("border"), QVariantMap{{QStringLiteral("roundBottomCorners"), false}}}};
         QCOMPARE(chainRoundBottomCorners(registry, twice, stored).toBool(), false);
+    }
+
+    /// A lone declarer whose default is `"default": null`, with nothing stored, returns an
+    /// INVALID answer while still drawing an outline. That is the distinction step 3 of the
+    /// header contract draws, and it had no slot: the two sibling null-default cases each
+    /// pair the null pack with a later declarer, so both end in a VALID answer, and the
+    /// no-declarer case exercises the other side of the distinction. A regression that let
+    /// an absent default vote `false` would pass every one of them and fail only this.
+    void chainRoundBottomCorners_is_invalid_when_the_only_declarer_states_no_default()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        // Valid-but-null selects the `"default": null` shape; see writeSilhouettePack.
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("backdrop"), QVariant::fromValue(nullptr)));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+        // Separates "declares it with no usable default" from "not installed".
+        QVERIFY(registry.hasEffect(QStringLiteral("backdrop")));
+
+        const QVariant answer = chainRoundBottomCorners(registry, {QStringLiteral("backdrop")}, {});
+        QVERIFY2(!answer.isValid(), "a null default states nothing, so the chain has no answer to inject");
     }
 
     /// The DOCUMENTED RESIDUAL: a wrong-typed stored value is honoured, not refused.
@@ -774,22 +799,27 @@ private Q_SLOTS:
     {
         QTemporaryDir tmp;
         QVERIFY(tmp.isValid());
-        // Declares FALSE, so a refusal would fall through to it and the slot would fail.
+        // The two halves need OPPOSITE declared defaults, or neither discriminates. `"off"`
+        // converts to TRUE, so it goes on the pack declaring FALSE: honouring it answers
+        // true, refusing it falls through to false. The empty string converts to FALSE, so
+        // it needs the pack declaring TRUE for the same reason. Put both on one default and
+        // one of the halves holds whatever the resolver does, which is what it did.
         QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("border"), false));
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("squared"), true));
 
         SurfaceShaderRegistry registry;
         registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
         QVERIFY(registry.hasEffect(QStringLiteral("border")));
+        QVERIFY(registry.hasEffect(QStringLiteral("squared")));
 
-        const QStringList chain{QStringLiteral("border")};
         const QVariantMap offString{
             {QStringLiteral("border"), QVariantMap{{QStringLiteral("roundBottomCorners"), QStringLiteral("off")}}}};
-        QCOMPARE(chainRoundBottomCorners(registry, chain, offString).toBool(), true);
-        // And the empty string is the other half of that: it passes the null guard and
-        // converts to false, so it squares rather than abstaining.
+        QCOMPARE(chainRoundBottomCorners(registry, {QStringLiteral("border")}, offString).toBool(), true);
+        // The empty string is the other half: it passes the null guard and converts to
+        // false, so it SQUARES rather than abstaining to the pack's declared true.
         const QVariantMap emptyString{
-            {QStringLiteral("border"), QVariantMap{{QStringLiteral("roundBottomCorners"), QString()}}}};
-        QCOMPARE(chainRoundBottomCorners(registry, chain, emptyString).toBool(), false);
+            {QStringLiteral("squared"), QVariantMap{{QStringLiteral("roundBottomCorners"), QString()}}}};
+        QCOMPARE(chainRoundBottomCorners(registry, {QStringLiteral("squared")}, emptyString).toBool(), false);
     }
 
     /// A pack the registry KNOWS but cannot use gets no vote either. The loader keeps a

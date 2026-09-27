@@ -62,10 +62,13 @@ struct FrameSDF {
 // quadrant's corner, so picking the radius by half and reusing sdRoundedBox is
 // exact (iq's per-corner variant does the same selection).
 //
-// BOTH RADII MUST ALREADY BE <= min(b.x, b.y). Past that cap the two halves stop
-// agreeing at y = 0 and the result is not a distance: it jumps, and can flip sign,
-// so a level set built on it tears along the pane's midline. frameSdfSplit and
-// haloFalloff clamp before calling, which is why no bundled pack can reach it.
+// BOTH RADII MUST ALREADY BE <= min(b.x, b.y). Past that cap the value stops being a
+// rounded-box distance whatever the radii are, and it additionally TEARS when the two
+// DIFFER with at least one past the cap: the halves then disagree at y = 0, jumping and
+// at a large enough radius flipping sign, so a level set built on it splits along the
+// pane's midline. Equal radii above the cap still agree at the seam, which is why the
+// precondition is the cap and not the difference. frameSdfSplit and haloFalloff each
+// clamp both ends before calling, which is why no bundled pack can reach either state.
 float sdRoundedBoxSplit(vec2 p, vec2 b, float rTop, float rBottom) {
     return sdRoundedBox(p, b, p.y < 0.0 ? rTop : rBottom);
 }
@@ -109,7 +112,7 @@ FrameSDF frameSdfSplit(vec2 p, float topRadiusPx, float bottomRadiusPx) {
 // pack repeated. Always clamps the radius (blur previously did not — a
 // pathological radius on a tiny frame is now clamped like every sibling).
 //
-// No bundled pack calls this any more: they all take frameSdfSplit below, since
+// No bundled pack calls this any more: they all take frameSdfSplit above, since
 // every outline pack now follows the chain's bottom-corner answer. Retained as a
 // third-party convenience overload, the way frameMask's one-arg form and
 // surfaceSlabOpen's two-arg form are.
@@ -123,9 +126,6 @@ FrameSDF frameSdf(vec2 p, float radiusPx) {
     return frameSdfSplit(p, radiusPx, radiusPx);
 }
 
-// Slab AA coverage from an SDF distance (±1 px feather). Border packs pass their
-// own feather, defaulting to a tighter 0.7, so this is the slab form only.
-//
 // Slab AA coverage with a caller-chosen feather (device px, ± around the
 // edge). Floored at a hair so a zero feather cannot collapse smoothstep's two
 // edges together (undefined in GLSL), the same guard standardBorderBandSplit uses.
@@ -134,6 +134,9 @@ float frameMask(float d, float aa) {
     return 1.0 - smoothstep(-feather, feather, d);
 }
 
+// Slab AA coverage from an SDF distance, at a fixed ±1 px feather. Border packs pass
+// their own, defaulting to a tighter 0.7, so this is the slab form only.
+//
 // The one-arg form is the third-party convenience overload and is retained for
 // that reason, the way surfaceSlabOpen's two-arg form below is: no bundled
 // pack calls it (they all pass their own feather), but this is an LGPL library

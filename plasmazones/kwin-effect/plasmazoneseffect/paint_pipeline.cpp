@@ -261,10 +261,10 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
                 // At a leg boundary the two can disagree for a single frame,
                 // both ways: a column that unparks this tick is skipped here
                 // though the draw will paint it, and a column that parks this
-                // tick is elected here though the draw will cull it. The cost is one
-                // frame with the pills under the second trigger rather than the first,
-                // or none where the skip leaves no anchor. Moving the election after
-                // advanceAnimations would tighten it, but the anchor must also
+                // tick is elected here though the draw will cull it. The cost is one frame
+                // with the pills under the second trigger rather than the first, under a
+                // strip column, or none where the skip leaves no anchor. Moving the
+                // election after advanceAnimations would tighten it, but the anchor must also
                 // survive the scene's own occlusion culling, which nothing here
                 // can predict, so the fallback has to stay correct regardless.
                 if (scrollParkedOffscreen(sw, getWindowId(sw))) {
@@ -1740,15 +1740,15 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
             paintScrollTabIndicators(renderTarget, viewport, deviceRegion);
         }
     });
-    // Second trigger: the anchor's paint alone is not reliable. The scene
-    // culls a fully occluded anchor — a dialog or a raised floating window
-    // covering the column — and then the guard above never arms. So ALSO blit
-    // just before the first window stacked above the anchor paints — an
-    // occluded anchor implies a visible occluder above it, so one of the two
-    // triggers always fires, and the pills land under that occluder rather
-    // than flickering over it as the anchor's culling comes and goes.
+    // Second trigger: the anchor's paint alone is not reliable. The scene culls a
+    // fully occluded anchor — a dialog or a raised floating window over the column —
+    // and then the guard above never arms. So ALSO blit just before the first window
+    // stacked above the anchor paints: an occluded anchor implies a visible occluder
+    // above it, so one of the two triggers always fires, and the pills land under that
+    // occluder rather than flickering over it as the culling comes and goes. Carries the
+    // guard's failure term too, since this is the same raw GL on the same lost context.
     if (!m_capturingSnapshot && !m_directPaintCapture && w && m_scrollTabPaintAnchor && !m_scrollTabPainted
-        && m_scrollTabAboveAnchor.contains(w)) {
+        && m_scrollTabAboveAnchor.contains(w) && !m_currentPassPaintFailed) {
         paintScrollTabIndicators(renderTarget, viewport, deviceRegion);
     }
 

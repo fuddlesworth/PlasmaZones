@@ -383,6 +383,9 @@ def rule_size(files: list[str]) -> list[Violation]:
 
 def update_baseline() -> int:
     files = tracked_files()
+    # Read once. It was being re-read and re-parsed inside the loop, twice per unreadable
+    # file, for a value that cannot change while the sweep runs.
+    prior = load_baseline()
     rec = {}
     for f in files:
         if Path(f).suffix not in CODE_SUFFIXES:
@@ -395,8 +398,8 @@ def update_baseline() -> int:
         err = read_error(f)
         if err is not None:
             print(f"warning: {f}: cannot be read ({err}); leaving its baseline entry alone", file=sys.stderr)
-            if f in load_baseline():
-                rec[f] = load_baseline()[f]
+            if f in prior:
+                rec[f] = prior[f]
             continue
         n = len(read(f).splitlines())
         if n > SIZE_CEILING:
@@ -618,8 +621,14 @@ def prose_problems(s: str) -> list[str]:
     # must see verbatim. Strip once, up front, and test every arm against the
     # stripped copy.
     without_code = re.sub(r"`[^`]*`", "", s)
-    core = without_code.strip()
-    if "—" in without_code or "&mdash;" in without_code:
+    # NORMALISE the entity before the carve-out, not just before the test that finds it.
+    # The arm below looked for either spelling but is_title_separator splits on the literal
+    # dash only, so "%1 &mdash; %2" yielded ONE part, failed the len==2 test and was
+    # reported — a false positive on a shape CLAUDE.md explicitly allows. The surfaces where
+    # an author reaches for the entity are exactly the XML ones this rule reads, the
+    # AppStream summary and description.
+    core = without_code.replace("&mdash;", "—").strip()
+    if "—" in core:
         if not is_title_separator(core):
             problems.append("em-dash splice; write two sentences or join with a plain word")
     if " - " in without_code:
@@ -654,7 +663,11 @@ def prose_problems(s: str) -> list[str]:
     # \s* rather than \s+: a splice written without a space after the semicolon is
     # still a splice, and requiring one let "blurred;the border" through.
     for segment in re.split(r"(?<=[.!?])\s+|\n\s*\n", without_code):
-        for part in re.finditer(r";\s*(\w+)", segment):
+        # The optional bracket/quote class matters: a second clause opening with one
+        # ("; (the border is not)") had no word character where the arm looked, so it
+        # read as no semicolon at all. Non-capturing, because only the match POSITION
+        # is used and the old group was never read.
+        for part in re.finditer(r";\s*[(\[\"']*\s*\w", segment):
             before = segment[: part.start()]
             after = segment[part.start() + 1 :]
             if _has_finite_verb(before) and _has_finite_verb(after):

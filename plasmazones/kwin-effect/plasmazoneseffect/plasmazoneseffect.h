@@ -2309,13 +2309,13 @@ private:
     /// tree on arrival.
     void seedDecorationTreeBaseline();
 
-    // Constructor wiring, decomposed from the ctor along its original comment
-    // seams. Definitions sit in three files: lifecycle_wiring.cpp (the first two
-    // and connectWindowAndScreenSignals), lifecycle_wiring_drag.cpp
-    // (connectDragTracker) and lifecycle_wiring_daemon.cpp (the last two). Each is
-    // called exactly once, from the ctor, in this declared order. Not public —
-    // pure ctor decomposition, so their bodies keep the ordering guarantees the
-    // inline sequence had (screen signals before initRenderingAndRegistries iterates screens()).
+    // Constructor wiring, decomposed from the ctor along its original comment seams.
+    // Definitions sit in three files: lifecycle_wiring.cpp (the first two and
+    // connectWindowAndScreenSignals), lifecycle_wiring_drag.cpp (connectDragTracker) and
+    // lifecycle_wiring_daemon.cpp (connectDaemonSubscriptions). Each is called exactly
+    // once, from the ctor, in this declared order. Not public — pure ctor decomposition,
+    // so their bodies keep the ordering guarantees the inline sequence had:
+    // initRenderingAndRegistries connects the screen signals before it iterates screens().
     void initRenderingAndRegistries();
     void initTimers();
     void connectDragTracker();
@@ -2592,10 +2592,10 @@ private:
     /// would then report whatever that second walk said, silently swallowing the
     /// first failure whenever the retry happened to succeed.
     ///
-    /// Set at the sites whose failure ABANDONS a pass, cleared in prePaintScreen beside
-    /// the two latches above. Read by paintScreenImpl (to bail instead of
-    /// re-walking) and by postPaintScreen, which per KWin 6.8's contract still
-    /// runs after a failed paint and must not book a discarded frame as painted.
+    /// Set at the sites whose failure ABANDONS a pass, cleared in prePaintScreen beside the
+    /// two latches above. Read by paintScreenImpl (to bail instead of re-walking), by both of
+    /// paintWindowImpl's pill-blit triggers, and by postPaintScreen, which per KWin 6.8's
+    /// contract still runs after a failed paint and must not book a discarded frame as painted.
     bool m_currentPassPaintFailed = false;
 
     /// The three paint hooks' actual bodies, version-independent: true when the

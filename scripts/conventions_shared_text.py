@@ -31,9 +31,11 @@ docstring called it a live wrongness. It is not, and saying so invited a later r
 
 What the decline does not excuse is a rule that compares nothing. Zero coverage, not a
 missing canon, is what actually went wrong the first time, so the coverage floor below is
-the guard that reasoning implies and it is not optional. It took two goes to get right:
-counting globbed FILES alone still passed on two unparseable packs, and on twenty that
-parse while none declares the param. It now counts declarers too.
+the guard that reasoning implies and it is not optional. It took five goes, and the four
+wrong predicates are recorded AT THE FLOOR ITSELF rather than restated here. That is
+deliberate: a second copy of the predicate in this docstring is what let the fourth
+version read as intentional, since the copy still described the second version and nobody
+reconciled them. One statement of it, beside the code, is the whole point.
 """
 from __future__ import annotations
 
@@ -101,7 +103,11 @@ def shared_param_problems(repo: Path) -> list[tuple[str, str]]:
                 continue
             except ValueError:
                 # rule_prose reports a JSON SYNTAX error, including a BOM read as utf-8,
-                # so this one defers rather than duplicating it.
+                # so this one defers rather than duplicating it. THE DEFERRAL ASSUMES prose
+                # is also selected, which it is on pre-commit and in CI but not under
+                # `--rules shared-param-text` alone; there the dropped participant is named
+                # by nothing. That is the one asymmetry with the OSError arm above, which
+                # reports because nothing else would.
                 continue
             if not isinstance(doc, dict):
                 continue  # a root that parses but is not an object is not a pack
@@ -176,18 +182,21 @@ def shared_param_problems(repo: Path) -> list[tuple[str, str]]:
         #
         # The question is neither "how many declare it" nor "how many carry text". It is
         # whether there is anything to COMPARE, and that is two buckets OR two text
-        # holders. One pack with text beside empty ones has two buckets, so it reports.
+        # holders, which is what `with_text` counts: HOLDERS OF TEXT, not declarers of the id,
+# since a pack declaring it with an empty description says nothing. Naming that set for
+# the declaration is how two earlier versions of this floor went wrong.
+# One pack with text beside empty ones has two buckets, so it reports.
         # One pack with text and nothing else in the glob has one of each, so it fires.
         # Twenty agreeing have one bucket and twenty holders, so they stay silent.
         # Real tree: 24 globbed, 20 declaring, 20 with text, no empty bucket at all.
         matched = len(real)
-        declaring = {h for text, holders in seen.items() if text for h in holders}
+        with_text = {h for text, holders in seen.items() if text for h in holders}
         if matched < 2:
             out.append((pattern, f"matched {matched} path(s), so there is nothing to compare and "
                                  f"this rule is a silent no-op; the glob has gone stale"))
             continue
-        if len(seen) <= 1 and len(declaring) <= 1:
-            out.append((pattern, f"matched {matched} path(s) and only {len(declaring)} carries a "
+        if len(seen) <= 1 and len(with_text) <= 1:
+            out.append((pattern, f"matched {matched} path(s) and only {len(with_text)} carries a "
                                  f"'{param}' description, so nothing was compared and this rule is "
                                  f"a silent no-op; either the id is mistyped here or it has left "
                                  f"the packs"))

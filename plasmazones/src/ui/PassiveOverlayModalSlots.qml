@@ -136,7 +136,7 @@ Item {
         // Surface-shader decoration (Stage d). SIBLING of snapAssistLoader.
         // Captures the loaded content's shaderAnchor (the SnapAssistContent root
         // itself carries `shaderAnchor: true`) and re-renders it through the
-        // resolved "popup.snapAssist" surface pack. Inert when the source is empty.
+        // resolved "popup.snapAssist" surface pack. Inert when the chain is empty.
         PhosphorSurface.SurfaceDecoration {
             anchors.fill: parent
             contentItem: snapAssistLoader.item
@@ -277,7 +277,7 @@ Item {
         // Surface-shader decoration (Stage d). SIBLING of layoutPickerLoader.
         // Captures the loaded content's PopupFrame shaderAnchor and re-renders it
         // through the resolved "popup.layoutPicker" surface pack. Inert when the
-        // source is empty.
+        // decoration chain is empty.
         PhosphorSurface.SurfaceDecoration {
             anchors.fill: parent
             contentItem: layoutPickerLoader.item
@@ -380,7 +380,7 @@ Item {
         // Surface-shader decoration (Stage d). SIBLING of cheatsheetLoader.
         // Captures the loaded content's PopupFrame shaderAnchor and
         // re-renders it through the resolved "popup.cheatsheet" surface
-        // pack. Inert when the source is empty.
+        // pack. Inert when the decoration chain is empty.
         PhosphorSurface.SurfaceDecoration {
             anchors.fill: parent
             contentItem: cheatsheetLoader.item

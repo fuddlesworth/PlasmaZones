@@ -84,6 +84,26 @@ SELFTEST_PROSE_BAD = [
     # because the two entries above are carried by the verb and conjunction tests.
     ("Blurs the scene behind the pane — a soft look that lifts saturation for the whole window",
      "unpunctuated em-dash splice caught only by the word cap"),
+    # SENTENCE PUNCTUATION on one side, which is the carve-out's oldest test and was the
+    # only one no probe exercised: both sides here are short, verbless and open with no
+    # conjunction, so the word cap, the verb test and the conjunction test all pass it.
+    ("Blurs the pane — softer edges. Nice.", "em-dash splice whose side carries sentence punctuation"),
+    # THE ENTITY SPELLING. The arm looked for either spelling but the carve-out split on the
+    # literal dash only, so an entity separator was reported and an entity splice was not
+    # distinguishable from it. Both directions are pinned, here and in the OK list.
+    ("Fixed the crash &mdash; it was a null deref", "em-dash splice written as an entity"),
+    # A CAPITALISED leading verb, which is what _has_finite_verb's .lower() is for. Every
+    # other probe's verbs are already lowercase, so the call was unpinned.
+    ("Keeps the pack's default; the loader drops the entry", "semicolon with a capitalised leading verb"),
+    # A RIGHT CLAUSE WHOSE FIRST WORD IS ITS VERB. Pins the slice bounds: consume that word
+    # into the match and the right side reads as verbless, so the splice is exempted.
+    ("The pane is blurred; is the border drawn over it?", "semicolon whose right clause opens with its verb"),
+    # A SECOND CLAUSE OPENING WITH A BRACKET, which the arm's \w requirement skipped
+    # entirely, so it read as no semicolon at all.
+    ("The pane is blurred; (the border is not)", "semicolon whose second clause opens with a bracket"),
+    # THREE parts to one separator string. CLAUDE.md allows a separator "between two nouns",
+    # so a chain is outside it; this pins the exact-two test against being loosened.
+    ("Alpha — Beta — Gamma", "two separators in one label"),
 ]
 
 SELFTEST_PROSE_OK = [
@@ -109,6 +129,9 @@ SELFTEST_PROSE_OK = [
     # cannot start flagging a real label without failing here first.
     "%1 — %2",
     "Column template — %1",
+    # The same separator written as an entity has to stay exempt too, or the fix for the
+    # BAD entity probe above could be a blanket flag.
+    "%1 &mdash; %2",
     "Phosphor Settings — Minimal Demo",
     "Phosphor.Registry — plugin demo + hot-reload",
     # A GENUINE LIST FOLLOWED BY A SENTENCE. Pins the per-segment split, and the order
@@ -147,10 +170,10 @@ SELFTEST_JSON = json.dumps(
 #
 # WHY THE TWO SECTIONS BELOW EXIST. The prose detector above is pinned; the two rules
 # that were split into their own modules were not, and between them they produced a
-# defect in five consecutive review rounds, every one in code written to fix the
+# defect in six consecutive review rounds, every one in code written to fix the
 # previous one. Two patterns recurred and neither was reachable by any gate: a fix
 # applied to ONE SIDE of a symmetric pair, four times over, and a coverage floor that
-# counted the wrong thing three times. Both are exactly what a planted case catches
+# counted the wrong thing four times. Both are exactly what a planted case catches
 # and no amount of re-reading does.
 #
 # These run against a FAKE TREE in a temporary directory, not the repo, so they pin
@@ -271,6 +294,38 @@ def _shared_text_failures() -> list[str]:
     if not any(("first differs" in m) or ("TRUNCATED" in m) or ("EXTENDED" in m) for m in msgs):
         bad.append("shared_param_problems never reported the drift between two real wordings "
                    f"when most packs were silent (the one-sided-pair shape): {msgs}")
+    # THE MESSAGE ITSELF, not just its presence. The index and the quoted excerpt are the
+    # whole point of these arms, and asserting only that one of three words appears left
+    # five mutations alive — including swapping the truncation test, which makes BOTH arms
+    # quote the empty string, the exact defect the arms were written to prevent.
+    ref_text = "Rounds the bottom corners."
+    short = "Rounds the"
+    trunc = [m for _, m in run(lambda d: ([_pack(d, f"full{n}", desc=ref_text) for n in range(3)]
+                                          + [_pack(d, "short", desc=short)]))]
+    if not any("TRUNCATED at 0-based character 10" in m and "it should continue ' bottom corners.'" in m
+               for m in trunc):
+        bad.append(f"the TRUNCATED arm no longer reports the index and the missing tail: {trunc}")
+    ext = [m for _, m in run(lambda d: ([_pack(d, f"short{n}", desc=short) for n in range(3)]
+                                        + [_pack(d, "full", desc=ref_text)]))]
+    if not any("EXTENDED from 0-based character 10" in m and "it adds ' bottom corners.'" in m for m in ext):
+        bad.append(f"the EXTENDED arm no longer reports the index and the added tail: {ext}")
+    # THE REFERENCE-HOLDERS SKIP. Remove `if text == ref: continue` and every pack holding
+    # the reference gets a bogus "EXTENDED ... it adds ''" finding of its own. The agreeing
+    # case returns before this loop, so nothing else notices.
+    two = [m for _, m in run(lambda d: (_pack(d, "a"), _pack(d, "b"), _pack(d, "c", desc="Other.")))]
+    if any("it adds ''" in m for m in two):
+        bad.append(f"a pack holding the reference text was reported against itself: {two}")
+    if len(two) != 1:
+        bad.append(f"expected one finding for one drifting pack among three, got {len(two)}: {two}")
+    # ONE ENTRY PER FILE, so a pack declaring the id twice cannot inflate the count the
+    # message quotes for deciding which side is canonical.
+    ref_twice = ('{"parameters": [{"id": "roundBottomCorners", "description": "Rounds the bottom corners."},'
+                 ' {"id": "roundBottomCorners", "description": "Rounds the bottom corners."}]}')
+    msgs = [m for _, m in run(lambda d: (_pack(d, "a"), _pack(d, "dup", raw=ref_twice),
+                                         _pack(d, "z", desc="Other.")))]
+    if not any("compared against the 2 pack(s)" in m for m in msgs):
+        bad.append(f"a pack declaring the reference text twice inflated the reference tally: {msgs}")
+
     # A FORWARD GUARD, not coverage: that message no longer exists anywhere in the tree,
     # and this asserts the deleted arm does not come back with the defect it carried.
     if any("is the only text here" in m for m in msgs):
@@ -293,12 +348,15 @@ def _shared_text_failures() -> list[str]:
 
     # MALFORMED PACKS PRODUCE FINDINGS, NEVER TRACEBACKS. Each of these escaped the
     # rule once and took every other rule in the invocation down with it.
-    # `parameters` wrong-typed, all four ways, not just null. The guard is an
-    # isinstance(list) test and only the null shape was planted; a number or an object
-    # would raise TypeError out of the rule and take every OTHER rule in the invocation
-    # down with it, which is the exact failure the guard exists to prevent.
-    for shape in ('{"parameters": null}', '{"parameters": 7}', '{"parameters": {"a": 1}}',
-                  '{"parameters": "none"}'):
+    # `parameters` wrong-typed. Only THREE of the four shapes actually reach the
+    # isinstance(list) guard: null, a number and a BOOLEAN each raise TypeError when
+    # iterated, which is the failure the guard prevents. An object and a string do NOT —
+    # they iterate their keys and their characters, and `isinstance(p, dict)` then rejects
+    # every element — so planting those two pinned nothing, and the boolean, which does
+    # reach it, was the one shape missing. Both kept anyway: they cost nothing and they
+    # document that the guard is not what makes them safe.
+    for shape in ('{"parameters": null}', '{"parameters": 7}', '{"parameters": true}',
+                  '{"parameters": {"a": 1}}', '{"parameters": "none"}'):
         expect(f"a pack whose parameters is {shape}",
                lambda d, s=shape: (_pack(d, "a"), _pack(d, "b"), _pack(d, "bad", raw=s)),
                False)
@@ -385,13 +443,21 @@ def _dep5_failures() -> list[str]:
         return text[:index].count("\n") + 1
 
     bad: list[str] = []
+    # Deliberately shaped like the real packaging/debian/copyright rather than flat: a
+    # leading COMMENT, a multi-line Files list, and a CONTINUATION line on Copyright. The
+    # flat version left the continuation arm, the comment skip, the final-stanza flush and
+    # the trailer strip unreachable, and in the real file one holder of mesh_sim.h is
+    # reachable only through a continuation line.
     stanza = (
+        "# a comment the parser must skip\n"
         "Files: *\n"
         "Copyright: 2024-2026 fuddlesworth <fuddlesworth@users.noreply.github.com>\n"
         "License: GPL-3.0-or-later\n"
         "\n"
         "Files: libs/*\n"
+        "  libs/extra/*\n"
         "Copyright: 2024-2026 fuddlesworth <fuddlesworth@users.noreply.github.com>\n"
+        "  2008 Cedric Borgese <cedric@example.invalid>\n"
         "License: LGPL-2.1-or-later\n"
     )
 
@@ -421,6 +487,30 @@ def _dep5_failures() -> list[str]:
         got = run({"src/a.cpp": hdr(year=year)})
         if got:
             bad.append(f"dep5_problems fired on a header dated {year} against a 2024-2026 stanza: {got}")
+    # THE RANGE AND PREFIX SPELLINGS, against a stanza naming the holder with NO year. The
+    # loop above cannot pin them: its stanza blob is "2024-2026 fuddlesworth", so a regex
+    # that strips only the first year leaves "-2026 fuddlesworth", which is still a
+    # substring of that blob and the row passes anyway. Four regex mutations survived on
+    # exactly that accident. With a year-less blob, any leftover year text fails the test.
+    bare = "Files: *\nCopyright: fuddlesworth\nLicense: GPL-3.0-or-later\n"
+    for spelling in ("2024-2026", "2024\u20132026", "2024-present", "2026, 2027",
+                     "(c) 2026", "\u00a9 2026", "Copyright 2026", "(c)", "\u00a9", "Copyright"):
+        got = run({"src/a.cpp": hdr(year=spelling)}, dep5=bare)
+        if got:
+            bad.append(f"dep5_problems fired on the holder spelling {spelling!r}: {got}")
+    # CASE-INSENSITIVELY, which is what flags=re.IGNORECASE is for. Every spelling above
+    # uses the exact case the pattern spells, so the flag itself was unpinned.
+    for spelling in ("COPYRIGHT 2026", "(C) 2026", "copyright 2026"):
+        got = run({"src/a.cpp": hdr(year=spelling)}, dep5=bare)
+        if got:
+            bad.append(f"dep5_problems fired on the holder spelling {spelling!r}: {got}")
+    # And the strip must NOT eat the front of a name that merely begins with those letters.
+    # ASSERT THE NAME IN THE MESSAGE, not merely that a finding appeared: without the
+    # lookahead the prefix eats four letters and the rule still fires, on "eous Inc". Both
+    # states produce a finding, so only the quoted name distinguishes them.
+    mangled = run({"src/a.cpp": hdr(year="", who="Copyrighteous Inc")}, dep5=bare)
+    if not any("'Copyrighteous Inc'" in m for m in mangled):
+        bad.append(f"the prefix strip ate the front of a name that only starts with it: {mangled}")
     # It still has to notice a holder the stanza really does not name.
     if not any("not named" in m for m in run({"src/a.cpp": hdr(who="Some Stranger")})):
         bad.append("dep5_problems missed a copyright holder absent from the stanza")
@@ -441,6 +531,13 @@ def _dep5_failures() -> list[str]:
                run({"src/a.cpp": hdr(lic="GPL-3.0-or-later")},
                    dep5="Files: *\nCopyright: 2026 fuddlesworth\nLicense: GPL-3.0\n")):
         bad.append("dep5_problems missed a stanza licence that is a substring of the header's")
+    # THE MIRROR, because one direction of a substring pair is not the pair. Header inside
+    # stanza is the other real defect: the HEADER under-declares. Pinning only the first
+    # direction left `got not in s["license"]` passing.
+    if not any("declares" in m for m in
+               run({"src/a.cpp": hdr(lic="GPL-3.0")},
+                   dep5="Files: *\nCopyright: 2026 fuddlesworth\nLicense: GPL-3.0-or-later\n")):
+        bad.append("dep5_problems missed a header licence that is a substring of the stanza's")
     if run({"libs/phosphor-x/a.cpp": hdr(lic="LGPL-2.1-or-later")}):
         bad.append("dep5_problems ignored last-match-wins and used the first matching stanza")
 
@@ -448,6 +545,60 @@ def _dep5_failures() -> list[str]:
     if not any("no Files stanza" in m for m in
                run({"src/a.cpp": hdr()}, dep5="Files: other/*\nCopyright: x\nLicense: MIT\n")):
         bad.append("dep5_problems missed a path that no Files stanza matches")
+
+    # THE CONTINUATION LINES, both of them. `libs/extra/*` exists only on a continuation
+    # of the Files list, and the second holder only on a continuation of Copyright, so a
+    # parser that drops continuations matches the wrong stanza for the first and fails to
+    # recognise the second. Reshaping the fixture reached those arms; only these assert on
+    # them.
+    cont = run({"libs/extra/a.cpp": hdr(lic="LGPL-2.1-or-later")})
+    if cont:
+        bad.append(f"a path listed on a continuation of Files did not match its stanza: {cont}")
+    held = run({"libs/phosphor-x/a.cpp": hdr(who="Cedric Borgese", lic="LGPL-2.1-or-later")})
+    if held:
+        bad.append(f"a holder named on a continuation of Copyright was not recognised: {held}")
+    # A COMMENT THAT LOOKS LIKE A FIELD. The fixture's plain comment cannot pin the skip,
+    # because it carries no colon and the field regex rejects it anyway. This one would
+    # open a bogus stanza and swallow every following line.
+    commented = ("# Files: not-a-real-stanza\n"
+                 "Files: *\n"
+                 "Copyright: 2026 fuddlesworth\n"
+                 "License: GPL-3.0-or-later\n")
+    got = run({"src/a.cpp": hdr()}, dep5=commented)
+    if got:
+        bad.append(f"a commented-out Files line was parsed as a stanza: {got}")
+    # A COMMENT THAT THE FIELD REGEX WOULD MATCH, which is the one shape whose removal
+    # from the skip does harm. `# text` cannot match it (the regex wants `\S+:`, and the
+    # space after # breaks that), so dropping the skip is inert for all 80 of the real
+    # file's comments. `#Note:` DOES match, as a field named "#note", which sends the
+    # parser down its else branch and clears `field` — so the CONTINUATION line after it
+    # is dropped instead of joining Copyright, the blob loses that holder, and a header
+    # naming it reports a violation that is not there.
+    #
+    # An INDENTED comment is deliberately not tested: under deb822 a leading space makes
+    # the line a continuation, comment marker or not, so absorbing it is correct and the
+    # skip is not meant to catch it.
+    field_like = ("Files: *\n"
+                  "Copyright: 2026 fuddlesworth\n"
+                  "#Note: a comment the parser must not read as a field\n"
+                  "  Some Stranger\n"
+                  "License: GPL-3.0-or-later\n")
+    got = run({"src/a.cpp": hdr(who="Some Stranger")}, dep5=field_like)
+    if got:
+        bad.append(f"a comment that looks like a field broke the continuation after it: {got}")
+    # A STANZA WITH NO TRAILING NEWLINE, which is the only shape the final flush handles:
+    # with one, the blank-line arm appends the stanza and the flush is dead code.
+    noeol = "Files: *\nCopyright: 2026 fuddlesworth\nLicense: GPL-3.0-or-later"
+    got = run({"src/a.cpp": hdr()}, dep5=noeol)
+    if got:
+        bad.append(f"the last stanza was dropped when the file had no trailing newline: {got}")
+    # THE TRAILER STRIP. Sixty live headers close with ` -->` and two with `*/`, and no
+    # probe produced either, so the strip that removes them was unpinned.
+    for tail in (" -->", " */", '",'):
+        body = f"<!-- SPDX-FileCopyrightText: 2026 fuddlesworth{tail}\n// SPDX-License-Identifier: GPL-3.0-or-later\n"
+        got = run({"src/a.cpp": body})
+        if got:
+            bad.append(f"a header whose holder ends in {tail!r} was not stripped before comparison: {got}")
 
     # Shapes it must pass over rather than choke on: a binary, a file with no SPDX
     # header at all (that is the spdx rule's finding, not this one), and an absent

@@ -156,14 +156,23 @@ def dep5_problems(files, *, repo, line_of, tracked_files):
             # What matters to a redistributor is that every holder named in a
             # file is also named in the stanza that covers it.
             #
-            # The prefix accepts the SPDX-legal spellings, not just a bare year: a
-            # leading "(c)", "©" or "Copyright", and an en-dash range as well as a
-            # hyphen. Every header in the tree today is a bare year or a bare name, so
-            # none of that is exercised here — but each unhandled spelling is a FALSE
-            # POSITIVE waiting for the first file that uses it, which is the same shape
-            # as the year bug itself.
+            # The prefix accepts the SPDX-legal spellings, not just a bare year: a leading
+            # "(c)", "©" or "Copyright" WITH OR WITHOUT a year after it, an en-dash range
+            # as well as a hyphen, and "YYYY-present". Every header in the tree today is a
+            # bare year, a YYYY-YYYY range or a bare name, so none of that is exercised
+            # here — but each unhandled spelling is a FALSE POSITIVE waiting for the first
+            # file that uses it, which is the same shape as the year bug itself.
+            #
+            # BOTH optional groups, and the lookahead, are load-bearing. Requiring the year
+            # meant "(c) fuddlesworth" kept its prefix and then failed the blob test. Making
+            # the year optional WITHOUT the lookahead is worse: the prefix then matches the
+            # leading letters of an ordinary name, and "Copyrighteous Inc" strips to
+            # "eous Inc". The lookahead only lets the prefix go when a space, a digit or the
+            # end follows it, which is what keeps a name that merely starts with those
+            # letters intact.
             name = re.sub(r"\s*(-->|\*/|\",?)\s*$", "", holder.strip()).split("<")[0].strip()
-            name = re.sub(r"^(?:\(c\)|©|Copyright)?\s*\d{4}(\s*[-–,]\s*\d{4})*\s*", "", name, flags=re.IGNORECASE)
+            name = re.sub(r"^(?:(?:\(c\)|©|Copyright)(?=\s|\d|$))?\s*(?:\d{4}(\s*[-–,]\s*(?:\d{4}|present))*)?\s*",
+                          "", name, flags=re.IGNORECASE)
             name = name.strip()
             if name and name not in blob:
                 out.append(

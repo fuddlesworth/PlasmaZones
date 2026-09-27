@@ -709,6 +709,15 @@ void OverlayService::showZoneSelectorSlotOnScreen(const QString& effectiveId, QS
         state->shell->shellWindow()->setHeight(targetGeom.height());
     }
     updateZoneSelectorWindow(effectiveId);
+    // Re-apply the decoration, in the same slot in the sequence showZoneSelector uses.
+    // This path is the zone selector's SECOND re-show entry point, and the only one any
+    // slot has: the hide-completed handler releases the backdrop stand-in on the promise
+    // that "every show runs applyDecoration again", which was true of showZoneSelector
+    // and not of this. Without it a needsBackdrop pack (the glass and blur families) came
+    // back flat for the rest of the drag after any mid-drag OSD or modal, because
+    // SurfaceDecoration gates uHasBackdrop on the texture being non-null and nothing here
+    // rewrote it. updateZoneSelectorWindow touches no decoration property.
+    applyDecoration(slot, PhosphorSurfaceShaders::decorationPopupZoneSelectorPath());
     writeQmlProperty(slot, QStringLiteral("loaded"), false);
     writeQmlProperty(slot, QStringLiteral("loaded"), true);
     cancelSurfacePrime(state->shell->shellSurface());
@@ -759,9 +768,12 @@ void OverlayService::onZoneSelectorSlotHideCompleted(const QString& effectiveId)
     }
     it->zoneSelectorSlot()->setVisible(false);
     writeQmlProperty(it->zoneSelectorSlot(), QStringLiteral("loaded"), false);
-    // Release the backdrop stand-in, matching onOsdSlotHideCompleted: a hidden
-    // slot draws none of it, the image is wallpaper-sized, and every show runs
-    // applyDecoration again, which rewrites it.
+    // Release the backdrop stand-in, matching onOsdSlotHideCompleted: a hidden slot draws
+    // none of it, the image is wallpaper-sized, and every show runs applyDecoration again,
+    // which rewrites it. "Every show" is load-bearing and was briefly untrue: this slot is
+    // the only one with a SECOND re-show entry point (showZoneSelectorSlotOnScreen, for the
+    // restore after a mid-drag OSD or modal), and that path did not re-apply, so the
+    // backdrop stayed released for the rest of the drag. It applies now.
     writeQmlProperty(it->zoneSelectorSlot(), QString(OverlayQmlPropertyNames::BackdropTexture), QVariant());
     syncPassiveShellSurfaceState(effectiveId);
 }

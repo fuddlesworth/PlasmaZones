@@ -849,7 +849,12 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     bool locked = false;
     if (m_settings && m_layoutManager) {
         int curDesktop = currentVirtualDesktopForScreen(resolvedId);
-        QString curActivity = m_layoutManager->currentActivity();
+        // The MIRROR, not m_layoutManager->currentActivity(). refreshContextLockState's
+        // live re-push reads the mirror, and so does the zone selector on both its
+        // paths; this show path was the one site reading the registry, which is the
+        // two-sources split those three comments each warn against. Read from the
+        // registry, a picker's lock badge flips on the first rule edit that re-pushes.
+        QString curActivity = m_currentActivity;
         // Pass the LIVE mode lens (see pickerLockModeFor) — shared with the
         // live lock re-push in refreshContextLockState so the two cannot
         // disagree about which mode's lock the picker is showing.

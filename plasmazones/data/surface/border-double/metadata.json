@@ -15,7 +15,7 @@
             "default": 2,
             "min": 0,
             "max": 20,
-            "description": "Thickness of the outer line (px). At 0 that line is not drawn and the other one still is"
+            "description": "Thickness of the outer line (px). At 0 that line is not drawn and the other one still is."
         },
         {
             "id": "gapWidth",
@@ -33,7 +33,7 @@
             "default": 1,
             "min": 0,
             "max": 20,
-            "description": "Thickness of the inner line (px). At 0 that line is not drawn and the other one still is"
+            "description": "Thickness of the inner line (px). At 0 that line is not drawn and the other one still is."
         },
         {
             "id": "cornerRadius",
