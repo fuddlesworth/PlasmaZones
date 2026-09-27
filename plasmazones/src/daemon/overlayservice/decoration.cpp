@@ -38,6 +38,13 @@ namespace PlasmaZones {
 
 namespace {
 /// Forces the re-bake an in-place source edit cannot get. See qml_property_names.h.
+///
+/// FILE-SCOPE, where the shell's twin is a member, and that is adequate rather than
+/// merely tolerated. Two services in one process (test fixtures, a hot restart) do share
+/// this counter, so the second one's first apply writes a value it did not earn. That
+/// used to cost a redundant reload on every stage, because the QML side keys on the
+/// CHANGE signal; it no longer can, since applyDecoration writes the generation BEFORE
+/// the chain, and on a fresh slot there are no stage delegates yet to notify.
 int s_decorationReloadGeneration = 0;
 
 } // namespace
@@ -256,8 +263,9 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
             // Keyed with the SURFACE PATH too, because the message names it. Without
             // it the first surface to hit a missing pack owned the only log line and
             // the other four skipped silently, so a user whose zone selector lost its
-            // border read a warning that named the OSD. Bounded: the paths are a fixed
-            // five-entry whitelist.
+            // border read a warning that named the OSD. Bounded: the five paths this
+            // function is ever called with. Not the supported-path whitelist, which is
+            // seventeen entries — this function only ever sees the OSD and four popups.
             const QString missingKey = surfacePath + QLatin1Char('|') + packId + QLatin1String("|missing");
             if (!m_warnedDecorationPacks.contains(missingKey)) {
                 m_warnedDecorationPacks.insert(missingKey);
@@ -329,7 +337,9 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
 
         // The chain's silhouette, injected on the same terms as the radius above:
         // unconditionally, because translateSurfaceParams drops the key for a pack
-        // that does not declare it. Invalid means no pack in the chain declared it.
+        // that does not declare it. Invalid means no pack in the chain STATED a usable
+        // answer, which is not the same as none declaring it: a lone declarer with a null
+        // default and nothing stored lands here and still draws an outline.
         if (chainBottomCorners.isValid()) {
             resolvedParams.insert(PhosphorSurfaceShaders::roundBottomCornersParamId(), chainBottomCorners);
         }
@@ -373,9 +383,15 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     const QImage backdrop = chainWantsBackdrop ? PhosphorShaders::ShaderRegistry::loadWallpaperImage() : QImage();
     writeQmlProperty(slot, QString(OverlayQmlPropertyNames::BackdropTexture),
                      backdrop.isNull() ? QVariant() : QVariant::fromValue(backdrop));
-    writeQmlProperty(slot, QString(OverlayQmlPropertyNames::DecorationChain), QVariant::fromValue(stages));
-    // Every apply, so a slot decorated after a commit starts at the current value.
+    // BEFORE the chain, which is the load trigger. Written after it, the generation
+    // changed on stages that had just baked, and SurfaceDecoration.qml fires
+    // reloadShader() off the CHANGE signal, so every stage took one redundant bake on
+    // the first apply following any bump. Ordered this way there is nothing to notify:
+    // a slot with no stages yet has no delegates, and a slot with OLD stages is about
+    // to have them replaced. Still written on every apply, so a slot decorated after a
+    // commit starts at the current value.
     writeQmlProperty(slot, QString(OverlayQmlPropertyNames::DecorationReloadGeneration), s_decorationReloadGeneration);
+    writeQmlProperty(slot, QString(OverlayQmlPropertyNames::DecorationChain), QVariant::fromValue(stages));
 
     // Record whether this slot now carries an audio-reactive pack, then reconcile
     // CAVA: a newly-decorated audio surface may need audio capture started, or a

@@ -651,7 +651,7 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
                              "the builtin Kawase chain needs per-pass bufferScales %1; with none declared every pass "
                              "renders at the pack-wide bufferScale and the pyramid is not a pyramid")
                              .arg(QStringLiteral("[0.25, 0.125, 0.0625, 0.03125, 0.0625, 0.125, 0.25]"));
-            } else if (!kawaseScales.isEmpty() && !qFuzzyCompare(kawaseScales.at(0).toDouble(), kKawaseScales.at(0))) {
+            } else if (!qFuzzyCompare(kawaseScales.at(0).toDouble(), kKawaseScales.at(0))) {
                 lints << QStringLiteral(
                              "bufferScales[0] is %1, but the first Kawase DOWN pass derives its tap spacing from a "
                              "hardcoded 4 canvas px per texel, which is the 0.25 base. Any other first scale "
@@ -1019,13 +1019,11 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
         }
     }
     // The COMPOSITOR branch of the same stage. Outside the exists() guard above:
-    // the helper does its own check, and an absent stage is already linted.
-    {
-        const QStringList compositorIncludePaths = QStringList(packSharedRoots(packDir))
-            << QFileInfo(packDir).absolutePath();
-        errors += bakeCompositorStage(out, eff, eff.fragmentShaderPath, fragLabel, QStringLiteral("frag"),
-                                      compositorIncludePaths, /*scaffold=*/true);
-    }
+    // the helper does its own check, and an absent stage is already linted. Uses the
+    // ONE include-root list built above, per the note on it — this site rebuilt it
+    // byte-identically, which was the drift hazard that note describes.
+    errors += bakeCompositorStage(out, eff, eff.fragmentShaderPath, fragLabel, QStringLiteral("frag"), includePaths,
+                                  /*scaffold=*/true);
 
     // ── multipass buffer passes ──
     // Buffer passes carry their own main() (no entry scaffold, no param preamble)

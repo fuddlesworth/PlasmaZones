@@ -360,7 +360,10 @@ void OverlayService::refreshContextLockState()
     // Open layout picker (re-running showLayoutPicker would rebuild/re-animate
     // it, so push just the lock state to the live slot).
     if (m_layoutPickerVisible && !m_layoutPickerScreenId.isEmpty()) {
-        if (auto* slot = m_screenStates.value(m_layoutPickerScreenId).layoutPickerSlot()) {
+        // constFind, not value(): value() copies the whole PerScreenOverlayState struct just
+        // to call a one-line accessor. The convention its siblings state and follow.
+        const auto pickerIt = m_screenStates.constFind(m_layoutPickerScreenId);
+        if (auto* slot = pickerIt != m_screenStates.constEnd() ? pickerIt->layoutPickerSlot() : nullptr) {
             // Per-output virtual desktops (#648): each screen resolves its own desktop.
             const int curDesktop = currentVirtualDesktopForScreen(m_layoutPickerScreenId);
             // Same Templates lens the picker's show path uses

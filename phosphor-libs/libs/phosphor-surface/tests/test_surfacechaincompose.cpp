@@ -383,8 +383,6 @@ private Q_SLOTS:
         SurfaceShaderEffect e = basePack();
         e.isMultipass = true;
         e.bufferShaderPaths = QStringList{QStringLiteral("/packs/blur/a.frag")};
-        e.bufferScale = 1.0;
-        e.bufferScales = QList<qreal>{1.0};
 
         // A HALF-density pack throughout, deliberately. With a pack at 1.0 the
         // identity answer and the clamped answer are both kMaxBufferScale, so an
@@ -531,7 +529,10 @@ private Q_SLOTS:
         registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
         // Assert the packs really LOADED. Without this the slot passes just as well
         // when the fixture writes metadata the loader rejects and the registry holds
-        // nothing at all, which is a different arm entirely (and one :640 covers).
+        // nothing at all, which is a different arm entirely (and one
+        // chainRoundBottomCorners_ignores_a_pack_the_registry_does_not_know covers).
+        // Named, not numbered: a line reference into a 780-line test file drifts, and
+        // the last one here pointed at a fixture line in the wrong slot.
         QVERIFY(registry.hasEffect(QStringLiteral("fireflies")));
         QVERIFY(registry.hasEffect(QStringLiteral("opacity-tint")));
 
@@ -735,6 +736,60 @@ private Q_SLOTS:
              QVariantMap{{QStringLiteral("roundBottomCorners"), QVariant::fromValue(nullptr)}}}};
         const QStringList fallbackChain{QStringLiteral("backdrop"), QStringLiteral("late")};
         QCOMPARE(chainRoundBottomCorners(registry, fallbackChain, fallbackOnly).toBool(), true);
+    }
+
+    /// An EMPTY chain and a chain naming one pack twice. Neither is a shape a host
+    /// produces today, and both are cheap to get wrong in a scan that carries a
+    /// fallback across iterations, so they are pinned rather than argued about.
+    void chainRoundBottomCorners_handles_an_empty_and_a_duplicated_chain()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("border"), true));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+        QVERIFY(registry.hasEffect(QStringLiteral("border")));
+
+        QVERIFY2(!chainRoundBottomCorners(registry, {}, {}).isValid(),
+                 "an empty chain states nothing, so the host must inject nothing");
+        // The same pack twice must answer as it does once, and a stored value on it must
+        // still win over its own declared default rather than being read twice.
+        const QStringList twice{QStringLiteral("border"), QStringLiteral("border")};
+        QCOMPARE(chainRoundBottomCorners(registry, twice, {}).toBool(), true);
+        const QVariantMap stored{
+            {QStringLiteral("border"), QVariantMap{{QStringLiteral("roundBottomCorners"), false}}}};
+        QCOMPARE(chainRoundBottomCorners(registry, twice, stored).toBool(), false);
+    }
+
+    /// The DOCUMENTED RESIDUAL: a wrong-typed stored value is honoured, not refused.
+    /// QVariant::toBool() is true for any non-empty string that is not "0" or "false",
+    /// so `"off"` rounds. usableBool's docblock spends a paragraph arguing this is
+    /// deliberate — gating on the declared type would refuse a pack a vote while still
+    /// writing the chain's answer into it — and names two ways to reach it, a
+    /// hand-edited profile and a rule's params. A deliberate behaviour with a paragraph
+    /// of rationale and no assertion is what a later tidy-up deletes, so this pins it.
+    /// It endorses nothing: if the policy changes, this slot is the one to change with it.
+    void chainRoundBottomCorners_honours_a_wrong_typed_stored_value()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        // Declares FALSE, so a refusal would fall through to it and the slot would fail.
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("border"), false));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+        QVERIFY(registry.hasEffect(QStringLiteral("border")));
+
+        const QStringList chain{QStringLiteral("border")};
+        const QVariantMap offString{
+            {QStringLiteral("border"), QVariantMap{{QStringLiteral("roundBottomCorners"), QStringLiteral("off")}}}};
+        QCOMPARE(chainRoundBottomCorners(registry, chain, offString).toBool(), true);
+        // And the empty string is the other half of that: it passes the null guard and
+        // converts to false, so it squares rather than abstaining.
+        const QVariantMap emptyString{
+            {QStringLiteral("border"), QVariantMap{{QStringLiteral("roundBottomCorners"), QString()}}}};
+        QCOMPARE(chainRoundBottomCorners(registry, chain, emptyString).toBool(), false);
     }
 
     /// A pack the registry KNOWS but cannot use gets no vote either. The loader keeps a

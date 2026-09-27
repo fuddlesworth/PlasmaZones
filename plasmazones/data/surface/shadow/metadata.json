@@ -34,7 +34,7 @@
             "default": 0,
             "min": -12,
             "max": 12,
-            "description": "Sideways cast of the shadow (px, positive is right)"
+            "description": "Sideways cast of the shadow (px, positive is right). Only Shadow size reserves room around the window, so a large offset on a small shadow can reach the edge of that room and end abruptly"
         },
         {
             "id": "offsetY",
@@ -52,7 +52,7 @@
             "default": 8,
             "min": 0,
             "max": 64,
-            "description": "Corner rounding the shadow follows (px). The shadow traces this radius on the window frame. A Border pack earlier in the chain paints its band from its own corner radius out to that radius plus its border width, so match this to the sum for the two to meet. At a border radius of 0 the band stays square and nothing sits further out."
+            "description": "Corner rounding the shadow follows (px). The shadow traces this radius on the window frame. A Border pack earlier in the chain paints its band from its own corner radius out to that radius plus its border width, so match this to the sum for the two to meet. At a border radius of 0 the band stays square and nothing sits further out. On an OSD or a popup the host sets this and the border radius together from the card, so there is nothing to match by hand."
         },
         {
             "id": "roundBottomCorners",

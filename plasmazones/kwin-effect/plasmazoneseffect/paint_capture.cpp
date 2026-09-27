@@ -380,7 +380,9 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
     m_capturingSnapshot = true;
     // Guard the re-entrancy flag against a throw from the draw chain — a leaked
     // m_capturingSnapshot would corrupt every subsequent paint. Same pattern as
-    // the surface-layer capture sites in surfacelayers.cpp.
+    // captureWindowSurface in surface_capture.cpp, which is where this idiom lives;
+    // surfacelayers.cpp, which an earlier version of this comment cited, uses no
+    // scope guard at all.
     auto resetCapture = qScopeGuard([this] {
         m_capturingSnapshot = false;
     });
@@ -389,6 +391,14 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
         KWin::RenderTarget renderTarget(&fbo);
         KWin::RenderViewport viewport(logicalGeometry, scale, renderTarget, QPoint());
         KWin::GLFramebuffer::pushFramebuffer(&fbo);
+        // And guard the FRAMEBUFFER STACK across the same nested draw, for the worse
+        // consequence its sibling records: an unbalanced stack leaves every LATER frame
+        // in the session rendering into this window's capture FBO, and ScopedGlState does
+        // not cover the framebuffer binding, so nothing else recovers it. The flag was
+        // guarded here and the stack was not, which is the asymmetry rather than the fix.
+        const auto popCaptureTarget = qScopeGuard([] {
+            KWin::GLFramebuffer::popFramebuffer();
+        });
         glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         // Keep the window item renderable for the duration of the capture draw.
@@ -405,7 +415,6 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
         // m_capturingSnapshot and draws the window plainly into this FBO.
         drawn = KWinCompat::drawWindowChecked(renderTarget, viewport, src, captureMask, KWin::Region::infinite(),
                                               captureData);
-        KWin::GLFramebuffer::popFramebuffer();
     }
     resetCapture.dismiss();
     m_capturingSnapshot = false;

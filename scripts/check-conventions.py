@@ -120,13 +120,41 @@ def read(path: str) -> str:
         return ""
 
 
-def read_error(path: str) -> str | None:
-    """The reason a path cannot be read as text, or None when it can be."""
+def read_error(path: str, *, repo: Path | None = None) -> str | None:
+    """The reason a path cannot be read as text, or None when it can be.
+
+    `repo` overrides the tree, which the self-test needs: pinning this against a real
+    tracked file would mean chmod-ing one during a pre-commit hook."""
     try:
-        (REPO / path).read_text(encoding="utf-8", errors="replace")
+        ((repo or REPO) / path).read_text(encoding="utf-8", errors="replace")
     except OSError as exc:
         return exc.strerror or exc.__class__.__name__
     return None
+
+
+def partition_readable(files: list[str], *, repo: Path | None = None) -> tuple[list[str], list[Violation]]:
+    """Split FILES into the ones a rule can read, and one violation per path it cannot.
+
+    A path that cannot be read gets one finding naming why, and is then kept away from
+    the rules. Handing them "" instead made them answer confidently about a file none of
+    them had seen: "malformed JSON" on well-formed JSON, "missing SPDX header" on a file
+    that carries one. This is a PRECONDITION of the gate rather than a convention, so it
+    is not in RULES and --rules cannot switch it off; a subset run that could re-admit
+    unreadable paths would bring the false findings back with it.
+
+    A function rather than a loop inside main() so it can be pinned: as inline code its
+    only caller was main(), which no test invokes, and neutering it left the self-test
+    green. `repo` is here for the same reason read_error's is.
+    """
+    readable: list[str] = []
+    problems: list[Violation] = []
+    for f in files:
+        err = read_error(f, repo=repo)
+        if err is None:
+            readable.append(f)
+        else:
+            problems.append(Violation("unreadable", f, 0, f"cannot be read ({err}), so no rule could check it"))
+    return readable, problems
 
 
 def strip_c_comments(text: str) -> str:
@@ -213,9 +241,17 @@ def line_of(text: str, index: int) -> int:
 
 # Data assets in formats with no comment syntax are exempt. CLAUDE.md names
 # these exactly; adding a header to them makes the file invalid.
+#
+# FORWARD COVER, not a live guard, and the distinction is worth stating because the
+# comment here used to imply otherwise. rule_spdx filters on CODE_SUFFIXES first, and
+# that set holds no .json and no .in, so every path this pattern can match has already
+# been skipped and the exemption cannot fire today. It stays because the day .json joins
+# CODE_SUFFIXES — to check anything at all about a data file — the gate would start
+# demanding a header on the files where one is invalid, and this is what stops it.
+#
 # .search(), not .match(): these are mid-path patterns, and .match() anchors
 # at position 0, so the (^|/) alternation could never fire for a tier-
-# prefixed path and the exemption guarded nothing.
+# prefixed path and the exemption would guard nothing even once it is reachable.
 SPDX_EXEMPT = re.compile(r"(^|/)data/.*\.json$|(^|/)libs/phosphor-registry/tests/.*manifest\.json(\.in)?$")
 
 
@@ -351,6 +387,17 @@ def update_baseline() -> int:
     for f in files:
         if Path(f).suffix not in CODE_SUFFIXES:
             continue
+        # An unreadable file must not be RECORDED. read() gives "", that is zero lines,
+        # the file falls below the ceiling and its baseline entry silently disappears —
+        # and the next run, once the mode is fixed, reports a grandfathered file as a
+        # new one over the ceiling. Warn and keep going: dropping one entry from a
+        # ratchet is worse than an incomplete sweep the operator can see.
+        err = read_error(f)
+        if err is not None:
+            print(f"warning: {f}: cannot be read ({err}); leaving its baseline entry alone", file=sys.stderr)
+            if f in load_baseline():
+                rec[f] = load_baseline()[f]
+            continue
         n = len(read(f).splitlines())
         if n > SIZE_CEILING:
             rec[f] = n
@@ -483,7 +530,19 @@ def is_title_separator(s: str) -> bool:
     CLAUDE.md permits a literal typographic separator between two nouns, the
     canonical case being the "%1 — %2" Layout/Zone format. The test is that
     the string is a label rather than prose: exactly one em-dash, no sentence
-    punctuation on either side, and a short noun phrase each side.
+    punctuation on either side, a short noun phrase each side, no finite verb
+    on either side, and a right side that does not open with a conjunction.
+
+    The sentence-end test alone used to carry this, and every BAD probe in the
+    self-test ends in a period, so the word cap was never exercised: an
+    unpunctuated splice with five words a side was exempted outright. That is the
+    shape of a JSON `name`, a .desktop Comment and a short tr() label.
+
+    STILL UNDER-CATCHES, deliberately, in the same direction as the semicolon
+    arm. A verbless appositive with no conjunction ("Round the corners — a softer
+    look") reads exactly like a label to every test here, and review has to catch
+    it. Erring toward silence is the right way round for a pre-commit gate; the
+    alternative blocks a legitimate "%1 — %2".
     """
     parts = s.split("—")
     if len(parts) != 2:
@@ -494,6 +553,14 @@ def is_title_separator(s: str) -> bool:
             return False
         if len(side.split()) > 5:
             return False
+        if _has_finite_verb(side):
+            return False
+    # A label's second half names a thing. Opening with a coordinating conjunction
+    # makes it a continuation of the first clause, which is the splice CLAUDE.md
+    # forbids rather than the separator it allows.
+    tail = parts[1].strip().split()
+    if tail and tail[0].strip(".,:;!?()[]\"'").lower() in {"and", "but", "or", "so", "nor", "yet"}:
+        return False
     return True
 
 PROSE_STRING_KEYS = {
@@ -584,8 +651,10 @@ def prose_problems(s: str) -> list[str]:
     # does not name reads as a list and is missed, for review to catch. It cannot
     # over-catch, because one verbless side exempts the construction and a genuine
     # list item has no verb — which is what lets the list grow safely.
+    # \s* rather than \s+: a splice written without a space after the semicolon is
+    # still a splice, and requiring one let "blurred;the border" through.
     for segment in re.split(r"(?<=[.!?])\s+|\n\s*\n", without_code):
-        for part in re.finditer(r";\s+(\w+)", segment):
+        for part in re.finditer(r";\s*(\w+)", segment):
             before = segment[: part.start()]
             after = segment[part.start() + 1 :]
             if _has_finite_verb(before) and _has_finite_verb(after):
@@ -968,7 +1037,7 @@ def selftest() -> int:
     _add_script_dir_to_path()
     from conventions_selftest import run_selftest
 
-    return run_selftest(prose_problems, iter_json_prose)
+    return run_selftest(prose_problems, iter_json_prose, partition_readable)
 
 
 def main() -> int:
@@ -994,6 +1063,10 @@ def main() -> int:
     if args.list_rules:
         for name, (_, desc) in RULES.items():
             print(f"{name:18} {desc}")
+        # Listed because it prints findings under a rule name, and a developer who
+        # meets one looks here first. Marked always-on because --rules cannot
+        # select or deselect it: it is a precondition, not a convention.
+        print(f"{'unreadable':18} (always on) every path handed to a rule can be read as text")
         return 0
 
     if args.update_baseline:
@@ -1029,24 +1102,7 @@ def main() -> int:
     else:
         files = tracked_files()
 
-    # A path that cannot be read gets one finding naming why, and is then kept away
-    # from the rules. Handing them "" instead made them answer confidently about a
-    # file none of them had seen: "malformed JSON" on well-formed JSON, "missing SPDX
-    # header" on a file that carries one. This is a precondition of the gate rather
-    # than a convention, so it is not in RULES and --rules cannot switch it off; a
-    # subset run that could re-admit unreadable paths would bring the false findings
-    # back with it.
-    violations: list[Violation] = []
-    readable: list[str] = []
-    for f in files:
-        err = read_error(f)
-        if err is None:
-            readable.append(f)
-        else:
-            violations.append(
-                Violation("unreadable", f, 0, f"cannot be read ({err}), so no rule could check it")
-            )
-    files = readable
+    files, violations = partition_readable(files)
 
     for name in selected:
         violations.extend(RULES[name][0](files))

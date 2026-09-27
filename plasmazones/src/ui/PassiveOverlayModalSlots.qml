@@ -62,7 +62,7 @@ Item {
 
         // Surface-shader decoration (Stage d). C++ OverlayService::applyDecoration
         // resolves the "popup.snapAssist" pack and writes these before each show;
-        // empty source = no decoration (card draws natively). Consumed by the
+        // empty resolution = no decoration (card draws natively). Consumed by the
         // SurfaceDecoration sibling below.
         // Resolved decoration chain: ordered stage list ({source,
         // vertexSource, preamble, params, animated} per pack), plus the
@@ -187,7 +187,7 @@ Item {
 
         // Surface-shader decoration (Stage d). C++ OverlayService::applyDecoration
         // resolves the "popup.layoutPicker" pack and writes these before each
-        // show; empty source = no decoration. Consumed by the SurfaceDecoration
+        // show; empty resolution = no decoration. Consumed by the SurfaceDecoration
         // sibling below.
         // Resolved decoration chain: ordered stage list ({source,
         // vertexSource, preamble, params, animated} per pack), plus the

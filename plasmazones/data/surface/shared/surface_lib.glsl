@@ -47,37 +47,25 @@ bool surfaceFrameDegenerate() {
     return uSurfaceFrameSize.x < 1.0 || uSurfaceFrameSize.y < 1.0;
 }
 
-// Frame geometry + signed distance for a fragment at device-px `p`, with corner
-// radius `radiusPx` (device px) clamped to half the smaller side. One call
-// replaces the centre / half-size / radius-clamp / SDF idiom every decoration
-// pack repeated. Always clamps the radius (blur previously did not — a
-// pathological radius on a tiny frame is now clamped like every sibling).
-//
-// No bundled pack calls this any more: they all take frameSdfSplit below, since
-// every outline pack now follows the chain's bottom-corner answer. Retained as a
-// third-party convenience overload, the way frameMask's one-arg form and
-// surfaceSlabOpen's two-arg form are.
+// Frame geometry for a fragment at device-px `p`. FrameSDF is declared here because
+// every frame helper below returns one.
 struct FrameSDF {
     vec2 center;
     vec2 halfSize;
     float radius;
     float d;
 };
-FrameSDF frameSdf(vec2 p, float radiusPx) {
-    FrameSDF fs;
-    fs.halfSize = 0.5 * uSurfaceFrameSize;
-    fs.center = uSurfaceFrameTopLeft + fs.halfSize;
-    fs.radius = clamp(radiusPx, 0.0, min(fs.halfSize.x, fs.halfSize.y));
-    fs.d = sdRoundedBox(p - fs.center, fs.halfSize, fs.radius);
-    return fs;
-}
-
 // Rounded box with SEPARATE top and bottom corner radii, for a pane that only
 // rounds under a title bar (or only at the bottom). `p` is box-centred in the
 // TOP-DOWN px space surfacePixel yields on both runtimes, so the upper half is
 // y < 0. Within a quadrant the rounded-box distance depends only on that
 // quadrant's corner, so picking the radius by half and reusing sdRoundedBox is
 // exact (iq's per-corner variant does the same selection).
+//
+// BOTH RADII MUST ALREADY BE <= min(b.x, b.y). Past that cap the two halves stop
+// agreeing at y = 0 and the result is not a distance: it jumps, and can flip sign,
+// so a level set built on it tears along the pane's midline. frameSdfSplit and
+// haloFalloff clamp before calling, which is why no bundled pack can reach it.
 float sdRoundedBoxSplit(vec2 p, vec2 b, float rTop, float rBottom) {
     return sdRoundedBox(p, b, p.y < 0.0 ? rTop : rBottom);
 }
@@ -115,24 +103,44 @@ FrameSDF frameSdfSplit(vec2 p, float topRadiusPx, float bottomRadiusPx) {
     return fs;
 }
 
+// Frame geometry + signed distance for a fragment at device-px `p`, with corner
+// radius `radiusPx` (device px) clamped to half the smaller side. One call
+// replaces the centre / half-size / radius-clamp / SDF idiom every decoration
+// pack repeated. Always clamps the radius (blur previously did not — a
+// pathological radius on a tiny frame is now clamped like every sibling).
+//
+// No bundled pack calls this any more: they all take frameSdfSplit below, since
+// every outline pack now follows the chain's bottom-corner answer. Retained as a
+// third-party convenience overload, the way frameMask's one-arg form and
+// surfaceSlabOpen's two-arg form are.
+// FORWARDS rather than re-deriving, so there is one copy of the centre, the
+// half-size and the radius clamp. It used to carry its own, which is two places
+// for a clamp to drift in a header a third party compiles against.
+// sdRoundedBoxSplit(p, b, r, r) reduces exactly to sdRoundedBox(p, b, r): within a
+// quadrant the distance depends only on that quadrant's corner, and both ends here
+// name the same radius.
+FrameSDF frameSdf(vec2 p, float radiusPx) {
+    return frameSdfSplit(p, radiusPx, radiusPx);
+}
+
 // Slab AA coverage from an SDF distance (±1 px feather). Border packs pass their
 // own feather, defaulting to a tighter 0.7, so this is the slab form only.
 //
-// The one-arg form is the third-party convenience overload and is retained for
-// that reason, the way surfaceSlabOpen's two-arg form below is: no bundled
-// pack calls it (they all pass their own feather), but this is an LGPL library
-// header and removing it would be a source break whose failure mode is a
-// swallowed compile error and a flat grey decoration.
-float frameMask(float d) {
-    return 1.0 - smoothstep(-1.0, 1.0, d);
-}
-
 // Slab AA coverage with a caller-chosen feather (device px, ± around the
 // edge). Floored at a hair so a zero feather cannot collapse smoothstep's two
 // edges together (undefined in GLSL), the same guard standardBorderBandSplit uses.
 float frameMask(float d, float aa) {
     float feather = max(aa, 1e-3);
     return 1.0 - smoothstep(-feather, feather, d);
+}
+
+// The one-arg form is the third-party convenience overload and is retained for
+// that reason, the way surfaceSlabOpen's two-arg form below is: no bundled
+// pack calls it (they all pass their own feather), but this is an LGPL library
+// header and removing it would be a source break whose failure mode is a
+// swallowed compile error and a flat grey decoration.
+float frameMask(float d) {
+    return frameMask(d, 1.0);
 }
 
 // Focus dim: `lo` when unfocused, ramping to 1.0 focused, cross-faded on the
@@ -234,8 +242,15 @@ BorderBand standardBorderBandSplit(vec2 p, float borderWidth, float cornerRadius
     // family's common.glsl.
     if (borderWidth <= 0.0) {
         BorderBand off;
+        // `fs` IS live on this path: five packs read fs.center and fs.halfSize for
+        // framePerimeter even with no band. `insideMask` is not, and is left at zero
+        // rather than computed: borderComposite multiplies it by `edge`, which is 0
+        // here, so every consumer discards it and computing it cost one smoothstep per
+        // fragment. Note fs.radius carries the UNDILATED radius here where the banded
+        // path below reports the dilated OUTER one, so a third-party pack reading it
+        // gets two meanings from one field depending on a width the host may inject.
         off.fs = frameSdfSplit(p, cornerRadius * uSurfaceScale, bottomRadius * uSurfaceScale);
-        off.insideMask = 1.0 - smoothstep(-feather, feather, off.fs.d);
+        off.insideMask = 0.0;
         off.edge = 0.0;
         return off;
     }

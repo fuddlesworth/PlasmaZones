@@ -135,7 +135,7 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
         auto* slot = state->zoneSelectorSlot();
         // Stage d: resolve + push the zone-selector surface-shader decoration
         // (same SurfaceDecoration host the OSD uses, retargeted to the
-        // "popup.zoneSelector" surface path). Empty source = no decoration.
+        // "popup.zoneSelector" surface path). Empty resolution = no decoration.
         applyDecoration(slot, PhosphorSurfaceShaders::decorationPopupZoneSelectorPath());
         // OSD-style content lifecycle: toggle `loaded` false→true so the
         // Loader re-instantiates ZoneSelectorContent fresh per show.

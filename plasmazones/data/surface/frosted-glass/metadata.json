@@ -47,7 +47,7 @@
             "min": 0,
             "max": 64,
             "group": "Shape",
-            "description": "Corner rounding of the pane (px)"
+            "description": "Corner rounding of the pane (px, 0 for square)"
         },
         {
             "id": "contentOpacity",

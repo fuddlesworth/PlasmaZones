@@ -15,7 +15,7 @@
             "default": 2,
             "min": 0,
             "max": 20,
-            "description": "Thickness of the outer line (px)"
+            "description": "Thickness of the outer line (px). At 0 that line is not drawn and the other one still is"
         },
         {
             "id": "gapWidth",
@@ -33,7 +33,7 @@
             "default": 1,
             "min": 0,
             "max": 20,
-            "description": "Thickness of the inner line (px)"
+            "description": "Thickness of the inner line (px). At 0 that line is not drawn and the other one still is"
         },
         {
             "id": "cornerRadius",
@@ -58,7 +58,7 @@
             "default": 0.7,
             "min": 0.1,
             "max": 2.0,
-            "description": "Anti-alias feather of both lines and the pane edge, in device pixels, so it does not grow with display scaling. Lower is a crisper hairline."
+            "description": "Anti-alias feather of both lines and the pane edge, in device pixels, so it does not grow with display scaling. Lower is crisper."
         },
         {
             "id": "colorA",

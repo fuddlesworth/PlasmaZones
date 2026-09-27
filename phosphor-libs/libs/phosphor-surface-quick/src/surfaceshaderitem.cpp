@@ -43,13 +43,20 @@ namespace {
 /// from the pack's own fragment path and puts it FIRST, ahead of every registry
 /// root, which is also what the validator probes first.
 ///
-/// Two things that costs, both real. A pack outside the XDG roots (a development
-/// tree, a vendored pack set) has its sibling helpers unreachable here while they
-/// resolve fine on the compositor and in the validator, so it compiles in two
-/// places and fails in the third. And where a pack's own root is not the
+/// Two things the STATIC LIST ALONE costs, both real. A pack outside the XDG roots
+/// (a development tree, a vendored pack set) has its sibling helpers unreachable
+/// while they resolve fine on the compositor and in the validator, so it compiles in
+/// two places and fails in the third. And where a pack's own root is not the
 /// highest-priority one, the daemon takes another root's copy of a shared header
 /// while the compositor takes the pack's, which is the body-from-one-tree,
 /// contract-from-another split the compositor comment already describes.
+///
+/// THIS FUNCTION closes the first of those for the live node path, which applies it
+/// before handing the result to setShaderIncludePaths. It is the reason this exists,
+/// so describing the cost as unqualified was reading past the fix. The daemon's warm
+/// bake still uses the unwrapped list, harmlessly: its registry only ever sees packs
+/// under an XDG root, where this prepend is a no-op because the root's `shared/` is
+/// already in @p base. The second cost stands, and is not this function's to fix.
 ///
 /// Prepended to @p base rather than replacing it, so a caller that set its own
 /// include paths keeps them.

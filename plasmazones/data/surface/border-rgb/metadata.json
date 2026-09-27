@@ -41,7 +41,7 @@
             "default": 0.7,
             "min": 0.1,
             "max": 2.0,
-            "description": "Anti-alias feather of the border and the pane edge, in device pixels, so it does not grow with display scaling. Lower is a crisper hairline."
+            "description": "Anti-alias feather of the border and the pane edge, in device pixels, so it does not grow with display scaling. Lower is crisper."
         },
         {
             "id": "cycleSpeed",

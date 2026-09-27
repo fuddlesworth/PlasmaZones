@@ -692,7 +692,9 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         PhosphorSurfaceShaders::resolveThemeParamColors(eff, packOverrides, themeColors);
         // The chain's silhouette, injected unconditionally: resolveSurfaceParamValues
         // builds a value only for a parameter the pack declares, so the key is
-        // dropped for packs that draw no outline. Invalid means no pack declared it.
+        // dropped for packs that draw no outline. Invalid means no pack STATED a usable
+        // answer, which is not the same as no pack declaring it: a lone declarer with a
+        // null default and nothing stored lands here and still draws an outline.
         if (chainBottomCorners.isValid()) {
             packOverrides.insert(PhosphorSurfaceShaders::roundBottomCornersParamId(), chainBottomCorners);
         }

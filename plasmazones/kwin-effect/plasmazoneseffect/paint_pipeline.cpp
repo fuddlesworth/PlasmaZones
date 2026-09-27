@@ -261,9 +261,9 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
                 // At a leg boundary the two can disagree for a single frame,
                 // both ways: a column that unparks this tick is skipped here
                 // though the draw will paint it, and a column that parks this
-                // tick is elected here though the draw will cull it. Neither
-                // costs more than one frame with the pills under the second
-                // trigger instead of the first. Moving the election after
+                // tick is elected here though the draw will cull it. The cost is one
+                // frame with the pills under the second trigger rather than the first,
+                // or none where the skip leaves no anchor. Moving the election after
                 // advanceAnimations would tighten it, but the anchor must also
                 // survive the scene's own occlusion culling, which nothing here
                 // can predict, so the fallback has to stay correct regardless.
@@ -651,8 +651,8 @@ bool PlasmaZonesEffect::paintScreenImpl(const KWin::RenderTarget& renderTarget, 
     // anchor: with no strip column on the output there is nothing the pills
     // belong to this pass.
     // !m_directPaintCapture for symmetry with the two paintWindow triggers, which
-    // both treat the latch as load-bearing. Unreachable today — both of its
-    // setters drive paintWindow directly and never call paintScreen — but the
+    // both treat the latch as load-bearing. Unreachable today — its one setter's
+    // two callers drive paintWindow directly and never call paintScreen — but the
     // asymmetry is the kind a future direct-drive caller falls into.
     if (screen && m_scrollTabPaintAnchor && !m_scrollTabPainted && !m_capturingSnapshot && !m_directPaintCapture
         && m_scrollTabPainter->hasIndicators(screen)) {

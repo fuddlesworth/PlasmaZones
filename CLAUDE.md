@@ -228,7 +228,15 @@ ctest --test-dir build --output-on-failure
 # license and copyright holders, and that a chain-resolved shader param's
 # DESCRIPTION reads identically on every pack that offers it (the twenty
 # roundBottomCorners copies; the check and its data live in
-# scripts/conventions_shared_text.py). Stdlib only.
+# scripts/conventions_shared_text.py). Stdlib only, spread over four files:
+# the entry point plus conventions_dep5.py, conventions_shared_text.py and
+# conventions_selftest.py.
+#
+# It also enforces one PRECONDITION that is not a rule and that --rules cannot
+# switch off: every path handed to a rule must be readable as text. An unreadable
+# one gets a single `[unreadable]` finding naming the errno instead of being fed
+# to the rules as an empty string, which used to make them report a false cause
+# ("malformed JSON" on well-formed JSON, "missing SPDX" on a file that has one).
 #
 # The prose rule reaches data JSON, tr()/i18n(), settings-schema descriptions,
 # .desktop, AppStream, packaging, .github/workflows/*.yml (through the pkgdesc

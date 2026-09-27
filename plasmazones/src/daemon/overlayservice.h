@@ -165,8 +165,8 @@ public:
     void setSurfaceShaderRegistry(PhosphorSurfaceShaders::SurfaceShaderRegistry* registry);
     /// Borrowed preset registry, turning an assignment's `presetId` into the
     /// parameters it stands for. Same lifetime contract as the two registries above,
-    /// but OPTIONAL unlike them: with none injected every assignment resolves to its
-    /// own parameters, which is what one carrying no preset already does.
+    /// but OPTIONAL unlike them: with none injected an assignment keeps its own
+    /// parameters UNCLAMPED, since the flatten also enforces a pack's declared range.
     void setPresetRegistry(PhosphorShaders::ShaderPresetRegistry* registry);
     void updateGeometries() override;
 
@@ -1348,8 +1348,8 @@ private:
     /// the chain, the padding, the backdrop stand-in, the audio flag and the slot's CAVA show/hide hook.
     void applyDecoration(QObject* slot, const QString& surfacePath);
     /// Re-apply the decoration chain to every decorated slot currently up, the OSD
-    /// included: the four popups key on their service flag, the OSD on the item's own
-    /// visibility since it has no flag. A chain is resolved at show time, so a retune (a
+    /// included: the popups key on their flag (three on a recorded screen id too), the OSD on the
+    /// item's own visibility since it has no flag. A chain is resolved at show time, so a retune (a
     /// tree edit, a preset change, a pack reload) has to reach the slots already up.
     void reapplyVisiblePopupDecorations();
 

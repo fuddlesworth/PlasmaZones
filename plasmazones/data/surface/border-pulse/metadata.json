@@ -16,7 +16,7 @@
             "default": 2,
             "min": 0,
             "max": 20,
-            "description": "Thickness of the pulsing border (px)"
+            "description": "Thickness of the pulsing border (px). At 0 the pack draws nothing at all and the window keeps its own corners, so use a backdrop pack if you want rounding without a band"
         },
         {
             "id": "cornerRadius",
@@ -41,7 +41,7 @@
             "default": 0.7,
             "min": 0.1,
             "max": 2.0,
-            "description": "Anti-alias feather of the border and the pane edge, in device pixels, so it does not grow with display scaling. Lower is a crisper hairline."
+            "description": "Anti-alias feather of the border and the pane edge, in device pixels, so it does not grow with display scaling. Lower is crisper."
         },
         {
             "id": "pulseSpeed",

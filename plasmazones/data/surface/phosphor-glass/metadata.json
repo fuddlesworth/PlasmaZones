@@ -46,7 +46,7 @@
             "default": 8,
             "min": 0,
             "max": 64,
-            "description": "Roundness of the pane corners (px, 0 for square)",
+            "description": "Corner rounding of the pane (px, 0 for square)",
             "group": "Shape"
         },
         {

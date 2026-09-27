@@ -131,7 +131,10 @@ Contract flags (declare honestly, the hosts key behaviour on them):
   (fireflies, phosphor-motes). Note the second route needs no backdrop: neither pack declares
   `needsBackdrop`, and `window` there is `surfaceTexel`, not the capture. Every border, glass
   and tint pack leaves it false.
-- `roundBottomCorners` (bool, default true): ANY pack that resolves the frame through a corner
+- `roundBottomCorners` (bool, default true): a PARAMETER, not a top-level key. It goes in the
+  `parameters` array beside `cornerRadius`; the top-level key set above is
+  `additionalProperties: false`, so writing it at the root fails validation and the pack is
+  skipped. ANY pack that resolves the frame through a corner
   radius MUST declare this, whatever else it declares. It is not a `providesBorder` concern —
   ten of the twenty bundled declarers are blur, glass, glow and shadow packs. The host resolves
   ONE answer per chain and injects it into every pack that declares it, so a pack that omits it
@@ -139,9 +142,12 @@ Contract flags (declare honestly, the hosts key behaviour on them):
   chain-wide answer exists to remove. A pack that places content around the frame RECT with no
   corner radius at all has no silhouette to reconcile and correctly omits it: phosphor-motes
   does that through `framePerimeter`, fireflies from its own half-size and centre.
-- `edgeSoftness` (float): the anti-alias feather of the edge, and like the switch above it is
+- `edgeSoftness` (float): also a PARAMETER rather than a top-level key, same as the switch
+  above. The anti-alias feather of the edge, and like that switch it is
   not a `providesBorder` concern — the eight Blur declarers set no such flag. The Borders
-  family declares default 0.7 over 0.1–2.0, the Blur family default 1.0 over 0.1–3.0.
+  family declares default 0.7 over 0.1–2.0, the Blur family default 1.0 over 0.1–3.0. Unlike
+  `roundBottomCorners` it has no chain-wide vote, so a mixed chain still feathers one
+  silhouette two ways. That is known and unfixed, not a licence to drift the ranges.
 - `providesBorder`: declare params `borderWidth` and `cornerRadius` (ints, px). Settings seeds
   four ids from the plain border setting (`borderWidth`, `cornerRadius`, `activeColor`,
   `inactiveColor`), by exact id, skipping silently when one is absent. A multi-band pack may

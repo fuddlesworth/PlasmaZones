@@ -20,9 +20,14 @@ here was considered and declined, because it would pin whatever sentence was cur
 the time, right or wrong, against a resolver this script cannot read — the very failure
 it would look like it prevented — and it would need editing in lockstep with twenty data
 files for every legitimate reword. Checking the sentence against the resolver is review's
-job. There IS a live instance: a later pack's STORED value beats an earlier pack's
-declared default, so "the one earliest in the chain wins" holds for two stored values
-and inverts in the mixed case.
+job, and the resolver's order is worth stating here because it is easy to get backwards:
+a usable STORED value on ANY pack returns immediately, and only an all-silent chain falls
+back to the FIRST declarer's default. So a later pack's stored value does beat an earlier
+pack's declared default. The shipped sentence, "where two packs have it set differently
+the one earliest in the chain wins", is about two packs that have it SET, and for two
+stored values earliest really does win, so it is accurate. An earlier version of this
+docstring called it a live wrongness. It is not, and saying so invited a later round to
+"fix" a sentence that was right.
 
 What the decline does not excuse is a rule that compares nothing. Zero coverage, not a
 missing canon, is what actually went wrong the first time, so the coverage floor below is
@@ -150,9 +155,7 @@ def shared_param_problems(repo: Path) -> list[tuple[str, str]]:
         # param, both give matched >= 2 with nothing compared. The likelier real shape is
         # the second — rename the id across the packs, or mistype the key in
         # SHARED_PARAM_TEXT, and the rule goes quiet forever. So count the packs that
-        # actually DECLARED it too. On this tree that is 20 of 24 globbed, so the floor has
-        # 18 to spare and can only fire once the entry has gone stale, which is when it
-        # should be deleted rather than trusted.
+        # actually DECLARED it too.
         # Counting DECLARERS was still not enough, which is the third version of this
         # floor. Twenty packs can declare the id and every one omit the description: the
         # schema requires only id/name/type/default, so dropping it is schema-LEGAL and
@@ -160,14 +163,22 @@ def shared_param_problems(repo: Path) -> list[tuple[str, str]]:
         # "" bucket, len(seen) == 1, and the rule goes quiet. So the floor has to reach
         # declared TEXT and not just declared ids.
         #
-        # The fourth version splits what the third conflated. "Fewer than two packs carry
-        # text" was one test doing two jobs, and it threw away a real finding to do the
-        # second: one pack with text beside four that declare the id and omit it is not a
-        # rule with nothing to compare, it is the drift this rule exists for, and the
-        # floor swallowed it while reporting "compared against nothing" — which was also
-        # untrue, since seen held two buckets. The two questions are now separate. Too few
-        # paths means the glob is stale. No text anywhere means the id is mistyped or the
-        # description has left the tree. Either is a dead rule. One pack with text is not.
+        # THE FOURTH VERSION WAS A REGRESSION, and this is the fifth. The third asked
+        # "fewer than two packs carry text", which was one test doing two jobs, and it
+        # threw away a real finding to do the second: one pack with text beside four that
+        # declare the id and omit it is the drift this rule exists for, and the floor
+        # swallowed it while reporting "compared against nothing" with two buckets in hand.
+        # The fourth fixed that symptom by dropping the declarer threshold to ZERO, which
+        # was the wrong predicate: it re-admitted three dead states the third had caught.
+        # Rename the id on all but one pack, or leave one declarer beside packs that
+        # declare nothing or fail to parse, and you get one bucket, one declarer, nothing
+        # compared, and silence. Verified against both versions over the same fake trees.
+        #
+        # The question is neither "how many declare it" nor "how many carry text". It is
+        # whether there is anything to COMPARE, and that is two buckets OR two text
+        # holders. One pack with text beside empty ones has two buckets, so it reports.
+        # One pack with text and nothing else in the glob has one of each, so it fires.
+        # Twenty agreeing have one bucket and twenty holders, so they stay silent.
         # Real tree: 24 globbed, 20 declaring, 20 with text, no empty bucket at all.
         matched = len(real)
         declaring = {h for text, holders in seen.items() if text for h in holders}
@@ -175,10 +186,11 @@ def shared_param_problems(repo: Path) -> list[tuple[str, str]]:
             out.append((pattern, f"matched {matched} path(s), so there is nothing to compare and "
                                  f"this rule is a silent no-op; the glob has gone stale"))
             continue
-        if not declaring:
-            out.append((pattern, f"matched {matched} path(s) and not one carries a '{param}' "
-                                 f"description, so this rule is a silent no-op; either the id is "
-                                 f"mistyped here or the description has left the packs"))
+        if len(seen) <= 1 and len(declaring) <= 1:
+            out.append((pattern, f"matched {matched} path(s) and only {len(declaring)} carries a "
+                                 f"'{param}' description, so nothing was compared and this rule is "
+                                 f"a silent no-op; either the id is mistyped here or it has left "
+                                 f"the packs"))
             continue
         if len(seen) <= 1:
             continue
@@ -194,8 +206,8 @@ def shared_param_problems(repo: Path) -> list[tuple[str, str]]:
         # fifth defect of one shape in this file — a fix applied to one side of a pair —
         # so this one is structural rather than another arm. Every empty holder now routes
         # to the `not text` arm below, and the arm that answered for an empty reference is
-        # gone because no reference can be empty: the floor above guarantees a non-empty
-        # text exists before this line runs.
+        # gone because no reference can be empty: reaching this line needs len(seen) >= 2,
+        # and "" is a single key, so at most one bucket is empty and at least one is not.
         ref = max((t for t in seen if t), key=lambda k: len(seen[k]))
         for text, holders in sorted(seen.items()):
             if text == ref:

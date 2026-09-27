@@ -1605,10 +1605,10 @@ add_test(NAME test_scrolling_behavior_controller COMMAND test_scrolling_behavior
 # Pure string helpers behind AlgorithmService::createNewAlgorithm. Compiled
 # directly because they live in the plasmazones-settings executable rather than
 # plasmazones_core. Split by surface: the template splice / metadata rewrite
-# here, the shapes it refuses in _rejects, the blank scaffold next door. They
-# share no fixture beyond a copyright line.
+# here, the shapes it refuses in _rejects, the blank scaffold next door, and the
+# copy-suffix naming in _copy_suffix. They share no fixture beyond a copyright line.
 #
-# All three targets compile algorithmscaffold.cpp, which reads AutotileConstants.h's
+# All four targets compile algorithmscaffold.cpp, which reads AutotileConstants.h's
 # ScriptedDefaultMaxWindows and DefaultSplitRatio so a generated algorithm
 # matches the engine's own fallbacks - header-only constants, no .so coupling
 # beyond the include path. Linking PhosphorTiles rather than hand-listing paths

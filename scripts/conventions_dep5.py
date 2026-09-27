@@ -33,9 +33,15 @@ DEP5_HEAD_LINES = 8
 def dep5_head(rel: str, repo) -> str | None:
     """The first DEP5_HEAD_LINES lines, or None for anything without a readable
     text head. This rule is the one that walks EVERY tracked path rather than a
-    suffix-filtered subset, so it meets what the others never see: the symlinked
-    skill directories under .agents/, and binary assets. Reading a bounded slice
-    also keeps a whole-tree run cheap."""
+    suffix-filtered subset, so it meets what the others never see: binary assets.
+
+    It does NOT meet the symlinked skill directories under .agents/, which an
+    earlier version of this docstring claimed. tracked_files() filters on
+    is_file(), and all five tracked symlinks point at directories, so they never
+    reach this function by either route — whole-tree or the widened one, which
+    also goes through tracked_files(). The is_file() guard below is therefore
+    defensive on every production path. Reading a bounded slice keeps a
+    whole-tree run cheap."""
     p = repo / rel
     try:
         if not p.is_file():
@@ -149,8 +155,16 @@ def dep5_problems(files, *, repo, line_of, tracked_files):
             # year that has merely fallen out of date is not a licensing defect.
             # What matters to a redistributor is that every holder named in a
             # file is also named in the stanza that covers it.
+            #
+            # The prefix accepts the SPDX-legal spellings, not just a bare year: a
+            # leading "(c)", "©" or "Copyright", and an en-dash range as well as a
+            # hyphen. Every header in the tree today is a bare year or a bare name, so
+            # none of that is exercised here — but each unhandled spelling is a FALSE
+            # POSITIVE waiting for the first file that uses it, which is the same shape
+            # as the year bug itself.
             name = re.sub(r"\s*(-->|\*/|\",?)\s*$", "", holder.strip()).split("<")[0].strip()
-            name = re.sub(r"^\d{4}(\s*[-,]\s*\d{4})*\s*", "", name).strip()
+            name = re.sub(r"^(?:\(c\)|©|Copyright)?\s*\d{4}(\s*[-–,]\s*\d{4})*\s*", "", name, flags=re.IGNORECASE)
+            name = name.strip()
             if name and name not in blob:
                 out.append(
                     (f,

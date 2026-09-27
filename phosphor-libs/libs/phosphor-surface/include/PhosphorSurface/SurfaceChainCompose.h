@@ -116,17 +116,23 @@ PHOSPHORSURFACE_EXPORT QVariantMap composeStageMap(const SurfaceShaderEffect& ef
  * stage, the way the daemon overlay path already injects its card corner radius.
  * In order:
  *
- *   1. the value stored against the FIRST pack in chain order that carries a
- *      USABLE one. Where two packs both carry a stored value they disagree with
- *      no right answer, and chain order is what keeps the result deterministic
- *      rather than dependent on map iteration. An explicitly-null or absent
- *      entry is not a choice, so it falls through to that pack's own default.
+ *   1. the value stored against the FIRST pack in chain order that DECLARES the
+ *      control and carries a USABLE one. The declaration is a precondition here
+ *      as well as in step 2: a stored value on a pack that never declared the
+ *      control is not that pack's opinion about it, and does not vote. Where two
+ *      declaring packs both carry a stored value they disagree with no right
+ *      answer, and chain order is what keeps the result deterministic rather
+ *      than dependent on map iteration. An explicitly-null or absent entry is
+ *      not a choice, so it falls through to that pack's own default.
  *   2. otherwise the declared default of the first pack that declares the
  *      control WITH a default, which is what settles a third-party pack shipping
  *      a different default from the bundled ones. A pack declaring the control
  *      and no default abstains rather than voting false.
- *   3. otherwise an invalid QVariant, meaning no pack in this chain draws an
- *      outline at all and the host injects nothing.
+ *   3. otherwise an invalid QVariant: no pack in this chain states a usable
+ *      answer, and the host injects nothing. That is NOT the same as no pack
+ *      declaring the control — a chain whose only declarer declares it with
+ *      `"default": null` and stores nothing lands here while still drawing an
+ *      outline, which is the case step 2's usability test exists for.
  *
  * @p allPackParams is the post-flatten `effectiveParameters()` map, shaped
  * { packId -> { paramId -> value } }. It carries whatever a user or a preset set,
@@ -156,7 +162,9 @@ PHOSPHORSURFACE_EXPORT QVariant chainRoundBottomCorners(const SurfaceShaderRegis
                                                         const QVariantMap& allPackParams);
 
 /// The parameter id `chainRoundBottomCorners` resolves and hosts inject under.
-/// Shared so the four call sites cannot drift on the spelling.
+/// Shared so the three injecting hosts and the resolver cannot drift on the
+/// spelling. Spelled that way rather than as a count, because a count here has to
+/// be re-argued every time a test adds a use.
 PHOSPHORSURFACE_EXPORT QString roundBottomCornersParamId();
 
 } // namespace PhosphorSurfaceShaders

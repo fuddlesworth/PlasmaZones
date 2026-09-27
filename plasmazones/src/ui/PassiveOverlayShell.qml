@@ -233,7 +233,7 @@ Window {
 
         // Surface-shader decoration (Stage d). C++ OverlayService::applyDecoration
         // resolves the "osd" pack from DecorationProfileTree and writes these
-        // before each show; empty source = no decoration (card draws natively).
+        // before each show; empty resolution = no decoration (card draws natively).
         // Consumed by the SurfaceDecoration sibling below, which captures the
         // loaded card's PopupFrame shaderAnchor and re-renders it rounded.
         // Resolved decoration chain: ordered stage list ({source,
@@ -389,7 +389,7 @@ Window {
         // card's PopupFrame shaderAnchor and re-renders it through the resolved
         // "osd" surface pack (rounded corners + border), suppressing the card's
         // own square-cornered direct draw via the snapshot's hideSource. Inert
-        // when decorationShaderSource is empty — the card then draws natively.
+        // when the decoration chain is empty, and the card then draws natively.
         PhosphorSurface.SurfaceDecoration {
             anchors.fill: parent
             contentItem: osdLoader.item
@@ -587,7 +587,7 @@ Window {
 
         // Surface-shader decoration (Stage d). C++ OverlayService::applyDecoration
         // resolves the "popup.zoneSelector" pack and writes these before each
-        // show; empty source = no decoration. Consumed by the SurfaceDecoration
+        // show; empty resolution = no decoration. Consumed by the SurfaceDecoration
         // sibling below.
         // Resolved decoration chain: ordered stage list ({source,
         // vertexSource, preamble, params, animated} per pack), plus the

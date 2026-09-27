@@ -6,7 +6,6 @@
 #include "PhosphorSurface/SurfaceShaderEffect.h"
 #include "PhosphorSurface/SurfaceShaderRegistry.h"
 
-#include <QLatin1String>
 #include <QUrl>
 #include <QVariant>
 
@@ -91,33 +90,33 @@ QVariantMap composeStageMap(const SurfaceShaderEffect& effect, const QVariantMap
     if (!effect.isValid()) {
         return stageMap;
     }
-    stageMap.insert(QLatin1String("source"), QUrl::fromLocalFile(effect.fragmentShaderPath));
-    stageMap.insert(QLatin1String("vertexSource"),
+    stageMap.insert(QStringLiteral("source"), QUrl::fromLocalFile(effect.fragmentShaderPath));
+    stageMap.insert(QStringLiteral("vertexSource"),
                     effect.vertexShaderPath.isEmpty() ? QUrl() : QUrl::fromLocalFile(effect.vertexShaderPath));
-    stageMap.insert(QLatin1String("preamble"), SurfaceShaderRegistry::paramPreamble(effect));
-    stageMap.insert(QLatin1String("params"), SurfaceShaderRegistry::translateSurfaceParams(effect, resolvedParams));
-    stageMap.insert(QLatin1String("animated"), effect.animated);
+    stageMap.insert(QStringLiteral("preamble"), SurfaceShaderRegistry::paramPreamble(effect));
+    stageMap.insert(QStringLiteral("params"), SurfaceShaderRegistry::translateSurfaceParams(effect, resolvedParams));
+    stageMap.insert(QStringLiteral("animated"), effect.animated);
 
     // See the header: the emptiness half of this gate is what keeps a pack
     // whose builtin: buffer failed to resolve on the single-pass path.
     const bool stageMultipass = effect.isMultipass && !effect.bufferShaderPaths.isEmpty();
-    stageMap.insert(QLatin1String("multipass"), stageMultipass);
+    stageMap.insert(QStringLiteral("multipass"), stageMultipass);
     if (stageMultipass) {
-        stageMap.insert(QLatin1String("bufferShaderPaths"), QVariant::fromValue(effect.bufferShaderPaths));
-        stageMap.insert(QLatin1String("bufferFeedback"), effect.bufferFeedback);
-        stageMap.insert(QLatin1String("bufferScale"), clampedScale(effect.bufferScale));
+        stageMap.insert(QStringLiteral("bufferShaderPaths"), QVariant::fromValue(effect.bufferShaderPaths));
+        stageMap.insert(QStringLiteral("bufferFeedback"), effect.bufferFeedback);
+        stageMap.insert(QStringLiteral("bufferScale"), clampedScale(effect.bufferScale));
         QVariantList scales;
         scales.reserve(effect.bufferScales.size());
         for (qreal s : effect.bufferScales) {
             scales.append(clampedScale(s));
         }
-        stageMap.insert(QLatin1String("bufferScales"), scales);
-        stageMap.insert(QLatin1String("bufferWrap"), effect.bufferWrap);
-        stageMap.insert(QLatin1String("bufferWraps"), QVariant::fromValue(effect.bufferWraps));
-        stageMap.insert(QLatin1String("bufferFilter"), effect.bufferFilter);
-        stageMap.insert(QLatin1String("bufferFilters"), QVariant::fromValue(effect.bufferFilters));
-        stageMap.insert(QLatin1String("useDepthBuffer"), effect.useDepthBuffer);
-        stageMap.insert(QLatin1String("halfFloatBuffers"), effect.halfFloatBuffers);
+        stageMap.insert(QStringLiteral("bufferScales"), scales);
+        stageMap.insert(QStringLiteral("bufferWrap"), effect.bufferWrap);
+        stageMap.insert(QStringLiteral("bufferWraps"), QVariant::fromValue(effect.bufferWraps));
+        stageMap.insert(QStringLiteral("bufferFilter"), effect.bufferFilter);
+        stageMap.insert(QStringLiteral("bufferFilters"), QVariant::fromValue(effect.bufferFilters));
+        stageMap.insert(QStringLiteral("useDepthBuffer"), effect.useDepthBuffer);
+        stageMap.insert(QStringLiteral("halfFloatBuffers"), effect.halfFloatBuffers);
     }
     return stageMap;
 }
@@ -153,20 +152,24 @@ QString roundBottomCornersParamId()
 /// verbatim, so a string survives it. A rule can carry one too, since paramsBlobIsSane
 /// refuses arrays and over-long strings but accepts an ordinary one.
 ///
-/// A STRING stored here squares the chain rather than abstaining, and there is no
+/// An EMPTY string stored here squares the chain rather than abstaining, and there is no
 /// empty-vs-null asymmetry to it. Qt 6 dropped the QString::isNull() special case from
 /// QVariant::isNull(), so a default-constructed QString and a `""` both report isNull()
-/// false, both pass this guard, and both convert to false.
+/// false, both pass this guard, and both convert to false. A NON-empty one rounds, per
+/// the paragraph above; saying "a string" here contradicted it.
 ///
 /// A JSON `null` arrives as std::nullptr_t — valid, isNull() true — and abstains, the
 /// shape the tests pin. A tree PROFILE cannot carry one: DecorationProfile::fromJson
 /// drops nulls at both levels, and says why. That is the profile's own parameters map
-/// and nothing else, so it does NOT make the arm dead. Every tree read that has a preset
-/// registry flattens through withPresetsResolved, and a USER preset file keeps its nulls:
+/// and nothing else, so it does NOT make the arm dead. Every tree read whose PARAMETERS
+/// are consumed flattens through withPresetsResolved when it has a preset registry, and
+/// the chain-only reads that never look at a parameter do not need to. A USER preset
+/// file keeps its nulls:
 /// ShaderPreset::fromJson raw-converts, overlayPresetDeltas copies verbatim, and
 /// clampToBounds skips anything non-numeric. A pack-DECLARED preset does drop them, so
 /// the asymmetry is the user file. A rule's params (shader_resolve.cpp) and a pack's own
-/// `"default": null` reach here too. Three producers, so the arm is live on every host.
+/// `"default": null` reach here too. Three producers. The rule arm is compositor-only, so
+/// it is the other two that make the arm live on every host.
 static bool usableBool(const QVariant& value, bool* out)
 {
     if (!value.isValid() || value.isNull()) {

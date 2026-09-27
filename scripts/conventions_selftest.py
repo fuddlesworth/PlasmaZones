@@ -69,6 +69,21 @@ SELFTEST_PROSE_BAD = [
     # shipped in five schema descriptions, so the verb list has to reach past the
     # copulas far enough to see it.
     ("so it keeps the pack's default; the loader drops the entry", "semicolon between two lexical-verb clauses"),
+    # NO SPACE after the semicolon. The arm required one, so this read as no
+    # semicolon at all.
+    ("The pane is blurred;the border is not.", "semicolon with no following space"),
+    # AN UNPUNCTUATED em-dash splice, which is the shape of a JSON name or a short
+    # label. Every other em-dash probe here ends in a period, and the title-separator
+    # carve-out exempts anything with no sentence punctuation and five words a side,
+    # so without this entry the word cap and the verb test are both unexercised.
+    ("Fixed the crash — it was a null deref", "unpunctuated em-dash splice"),
+    ("Blurs the pane — and lifts saturation", "unpunctuated em-dash splice opening with a conjunction"),
+    # An unpunctuated splice that ONLY the word cap catches: no finite verb the list
+    # knows, no leading conjunction, no sentence punctuation, and more than five words
+    # a side. Without it the cap can be widened to 50 with everything still green,
+    # because the two entries above are carried by the verb and conjunction tests.
+    ("Blurs the scene behind the pane — a soft look that lifts saturation for the whole window",
+     "unpunctuated em-dash splice caught only by the word cap"),
 ]
 
 SELFTEST_PROSE_OK = [
@@ -89,8 +104,21 @@ SELFTEST_PROSE_OK = [
     # A "#"-led line is a shell comment in pasteable terminal text, which CLAUDE.md
     # puts out of scope along with the rest of the code. Pins the skip.
     "Run it like this:\n# plasmazones --rules a - b\nThen restart.",
-    # A literal separator between two nouns, which CLAUDE.md allows.
+    # A literal separator between two nouns, which CLAUDE.md allows. The three below
+    # it are the shapes that actually ship in this tree, so tightening the carve-out
+    # cannot start flagging a real label without failing here first.
     "%1 — %2",
+    "Column template — %1",
+    "Phosphor Settings — Minimal Demo",
+    "Phosphor.Registry — plugin demo + hot-reload",
+    # A GENUINE LIST FOLLOWED BY A SENTENCE. Pins the per-segment split, and the order
+    # matters: the verb that would falsely pair with the list has to sit in a DIFFERENT
+    # sentence on the far side of the semicolon. Judged as one string, "Sets" before it
+    # and "keeps" after it make both sides read as clauses and the list is flagged.
+    # Segmented, the list's second item carries no verb and it passes. A leading
+    # sentence instead of a trailing one does not pin anything, because the item after
+    # the semicolon is still verbless either way.
+    "Sets the width, in pixels; the radius, in logical pixels. It blurs the pane and keeps the border.",
     # Semicolons inside backticked code.
     "Run `a = 1; b = 2` first.",
     # A spaced hyphen inside backticked code.
@@ -191,22 +219,37 @@ def _shared_text_failures() -> list[str]:
     expect("a glob matching one path", lambda d: _pack(d, "only"), True, "stale")
     expect("three packs declaring the id and none describing it",
            lambda d: [_pack(d, n, desc=_OMIT) for n in ("a", "b", "c")],
-           True, "not one carries")
+           True, "silent no-op")
     expect("packs that declare nothing at all",
            lambda d: [_pack(d, n, declare=False) for n in ("a", "b", "c")],
-           True, "not one carries")
+           True, "silent no-op")
+    # THE CASE WHOSE ABSENCE LET A REGRESSION THROUGH. One declarer left after the id was
+    # renamed on every other pack is a dead rule: one bucket, one holder, nothing compared.
+    # The third floor caught it, the fourth dropped its threshold to zero and passed it, and
+    # no case here noticed. The two siblings below are the same dead state reached by the
+    # other two routes, a pack that declares nothing and a pack that will not parse.
+    expect("one declarer left after the id was renamed on the rest",
+           lambda d: [_pack(d, "kept")] + [_pack(d, n, param="roundBottomCornersNew")
+                                           for n in ("a", "b", "c")],
+           True, "silent no-op")
+    expect("one declarer beside packs that declare nothing",
+           lambda d: [_pack(d, "kept")] + [_pack(d, n, declare=False) for n in ("a", "b", "c")],
+           True, "silent no-op")
+    expect("one declarer beside packs that will not parse",
+           lambda d: [_pack(d, "kept")] + [_pack(d, n, raw="{not json") for n in ("a", "b", "c")],
+           True, "silent no-op")
 
     # `"description": null`. str()-ing it made the bucket key the literal word "None",
     # which counted as text and let an all-null set pass the floor. This is the one case
     # in this file's history that a written test caught before review did.
     expect("three packs whose description is JSON null",
            lambda d: [_pack(d, n, desc=None) for n in ("a", "b", "c")],
-           True, "not one carries")
+           True, "silent no-op")
     # And whitespace-only, which `not text` used to pass straight into the drift arms
     # so that " " was quoted back as a competing wording.
     expect("three packs whose description is a single space",
            lambda d: [_pack(d, n, desc="   ") for n in ("a", "b", "c")],
-           True, "not one carries")
+           True, "silent no-op")
 
     # THE ONE-SIDED PAIR, fifth instance of that shape and the reason the reference is
     # now chosen among packs that say something. Ten silent packs outvoted two real
@@ -228,6 +271,8 @@ def _shared_text_failures() -> list[str]:
     if not any(("first differs" in m) or ("TRUNCATED" in m) or ("EXTENDED" in m) for m in msgs):
         bad.append("shared_param_problems never reported the drift between two real wordings "
                    f"when most packs were silent (the one-sided-pair shape): {msgs}")
+    # A FORWARD GUARD, not coverage: that message no longer exists anywhere in the tree,
+    # and this asserts the deleted arm does not come back with the defect it carried.
     if any("is the only text here" in m for m in msgs):
         bad.append("shared_param_problems still tells a pack it is the only text while another "
                    f"pack holds different text: {msgs}")
@@ -248,22 +293,31 @@ def _shared_text_failures() -> list[str]:
 
     # MALFORMED PACKS PRODUCE FINDINGS, NEVER TRACEBACKS. Each of these escaped the
     # rule once and took every other rule in the invocation down with it.
-    expect("a pack whose parameters is null",
-           lambda d: (_pack(d, "a"), _pack(d, "b"), _pack(d, "bad", raw='{"parameters": null}')),
-           False)
+    # `parameters` wrong-typed, all four ways, not just null. The guard is an
+    # isinstance(list) test and only the null shape was planted; a number or an object
+    # would raise TypeError out of the rule and take every OTHER rule in the invocation
+    # down with it, which is the exact failure the guard exists to prevent.
+    for shape in ('{"parameters": null}', '{"parameters": 7}', '{"parameters": {"a": 1}}',
+                  '{"parameters": "none"}'):
+        expect(f"a pack whose parameters is {shape}",
+               lambda d, s=shape: (_pack(d, "a"), _pack(d, "b"), _pack(d, "bad", raw=s)),
+               False)
     expect("a pack whose root is an array",
            lambda d: (_pack(d, "a"), _pack(d, "b"), _pack(d, "bad", raw="[]")),
            False)
     expect("a pack with a non-string description",
            lambda d: (_pack(d, "a"), _pack(d, "b"), _pack(d, "num", desc=7)),
            True, "non-string")
-    # A BOM'd pack must PARTICIPATE, not drop out: read as plain utf-8 it raises, and
-    # swallowing that lowers the count the message reports.
-    expect("a BOM'd pack that agrees",
+    # A BOM'd pack must PARTICIPATE, not drop out: read as plain utf-8 json.loads raises,
+    # and the ValueError arm then skips it silently. The BOM'd pack therefore has to
+    # DISAGREE — an agreeing one was the first version of this case and it asserted
+    # nothing, because "no findings" is also what a silently dropped pack produces, so
+    # swapping utf-8-sig for utf-8 left the selftest green.
+    expect("a BOM'd pack that disagrees",
            lambda d: (_pack(d, "a"),
                       _pack(d, "bom", raw='﻿{"parameters": [{"id": "roundBottomCorners", '
-                                          '"description": "Rounds the bottom corners."}]}')),
-           False)
+                                          '"description": "Rounds the bottom corners TOO."}]}')),
+           True, "first differs")
     expect("a pack that is not valid UTF-8",
            lambda d: (_pack(d, "a"), _pack(d, "b"),
                       _pack(d, "raw", raw=b'{"parameters": [{"id": "x", "description": "\xff\xfe"}]}')),
@@ -379,6 +433,14 @@ def _dep5_failures() -> list[str]:
     # declared after * and governs.
     if not any("declares" in m for m in run({"src/a.cpp": hdr(lic="LGPL-2.1-or-later")})):
         bad.append("dep5_problems missed a header/stanza licence mismatch")
+    # A SUBSTRING mismatch, which is the one an `in` test would miss. GPL-3.0 against a
+    # GPL-3.0-or-later header is a real DEP-5 defect (the stanza under-declares the
+    # licence), and the only mismatch planted above has neither string inside the other,
+    # so relaxing `!=` to `not in` left the suite green.
+    if not any("declares" in m for m in
+               run({"src/a.cpp": hdr(lic="GPL-3.0-or-later")},
+                   dep5="Files: *\nCopyright: 2026 fuddlesworth\nLicense: GPL-3.0\n")):
+        bad.append("dep5_problems missed a stanza licence that is a substring of the header's")
     if run({"libs/phosphor-x/a.cpp": hdr(lic="LGPL-2.1-or-later")}):
         bad.append("dep5_problems ignored last-match-wins and used the first matching stanza")
 
@@ -390,8 +452,17 @@ def _dep5_failures() -> list[str]:
     # Shapes it must pass over rather than choke on: a binary, a file with no SPDX
     # header at all (that is the spdx rule's finding, not this one), and an absent
     # DEP-5 file, which means the check cannot run rather than that everything failed.
-    if run({"data/x.png": b"\x89PNG\r\n\x1a\n\x00\x01"}):
-        bad.append("dep5_problems reported a binary asset")
+    # The binary must carry SPDX bytes AFTER a NUL, or it passes for the wrong reason:
+    # a plain PNG has no SPDX text, so the "no identifier, skip" arm handles it and
+    # deleting the NUL test entirely leaves this green. Asserting on dep5_head directly
+    # pins the test that is actually meant to fire.
+    if run({"data/x.png": b"\x89PNG\r\n\x1a\n\x00SPDX-License-Identifier: MIT\n"}):
+        bad.append("dep5_problems reported a binary asset whose bytes happen to spell an SPDX tag")
+    with tempfile.TemporaryDirectory() as tmp:
+        d = Path(tmp)
+        (d / "x.png").write_bytes(b"\x89PNG\x00SPDX-License-Identifier: MIT\n")
+        if mod.dep5_head("x.png", d) is not None:
+            bad.append("dep5_head returns a text head for a file containing a NUL byte")
     if run({"src/plain.cpp": "int main() { return 0; }\n"}):
         bad.append("dep5_problems reported a file carrying no SPDX header")
     if run({"src/a.cpp": hdr(lic="MIT")}, dep5=None):
@@ -407,9 +478,44 @@ def _dep5_failures() -> list[str]:
     return bad
 
 
-def run_selftest(prose_problems, iter_json_prose) -> int:
-    """The two detectors arrive as arguments, so this module never imports the
-    gate at module scope and the pair cannot form a cycle."""
+def _precondition_failures(partition_readable) -> list[str]:
+    """The gate's unreadable-path precondition, against a fake tree.
+
+    Pinned here because it is the one thing its round added without a test, and
+    neutering it left everything green: its only caller is main(), which nothing
+    invokes. Against a temp dir rather than the repo, so a pre-commit run never
+    chmods a tracked file."""
+    bad: list[str] = []
+    with tempfile.TemporaryDirectory() as tmp:
+        d = Path(tmp)
+        (d / "ok.cpp").write_text("// SPDX-FileCopyrightText: 2026 fuddlesworth\n", encoding="utf-8")
+        locked = d / "locked.cpp"
+        locked.write_text("// SPDX-FileCopyrightText: 2026 fuddlesworth\n", encoding="utf-8")
+        locked.chmod(0o000)
+        try:
+            locked.read_text(encoding="utf-8")
+        except OSError:
+            root = False
+        else:
+            root = True  # running as root, where the mode is not enforced
+        if not root:
+            readable, problems = partition_readable(["ok.cpp", "locked.cpp"], repo=d)
+            if readable != ["ok.cpp"]:
+                bad.append(f"partition_readable let an unreadable path through to the rules: {readable}")
+            msgs = [v.message for v in problems]
+            if not any("cannot be read" in m for m in msgs):
+                bad.append(f"partition_readable did not report why a path could not be read: {msgs}")
+            if len(problems) != 1:
+                bad.append(f"partition_readable reported {len(problems)} problems for one unreadable path")
+            if problems and problems[0].rule != "unreadable":
+                bad.append(f"the precondition's violations are filed under {problems[0].rule!r}")
+        locked.chmod(0o600)
+    return bad
+
+
+def run_selftest(prose_problems, iter_json_prose, partition_readable=None) -> int:
+    """The detectors and the precondition arrive as arguments, so this module never
+    imports the gate at module scope and the pair cannot form a cycle."""
     failures = []
 
     for text, shape in SELFTEST_PROSE_BAD:
@@ -439,8 +545,20 @@ def run_selftest(prose_problems, iter_json_prose) -> int:
         if any("notprose" in trail for trail in seen):
             failures.append("iter_json_prose yields strings under a non-prose key")
 
+    # A malformed data JSON must be REPORTED, not passed over: returning quietly made it
+    # indistinguishable from a file with no prose in it. The walker yields (None, message)
+    # for that, which is the shape rule_prose turns into a finding.
+    with tempfile.TemporaryDirectory() as d:
+        broken = Path(d) / "broken.json"
+        broken.write_text('{"description": ', encoding="utf-8")
+        pairs = list(iter_json_prose(str(broken)))
+        if not any(trail is None for trail, _ in pairs):
+            failures.append(f"iter_json_prose passes over a malformed JSON file instead of reporting it: {pairs}")
+
     failures.extend(_shared_text_failures())
     failures.extend(_dep5_failures())
+    if partition_readable is not None:
+        failures.extend(_precondition_failures(partition_readable))
 
     for line in failures:
         print(f"selftest: {line}", file=sys.stderr)

@@ -267,7 +267,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
 
     // Stage d: resolve + push the snap-assist surface-shader decoration (same
     // SurfaceDecoration host the OSD uses, retargeted to the "popup.snapAssist"
-    // surface path). Empty source = no decoration (card draws natively).
+    // surface path). Empty resolution = no decoration (card draws natively).
     // Runs on the in-place refresh path too, so a shader/rule edit made
     // while snap-assist is up takes effect on the next continuation rather
     // than only on the next full show.
@@ -862,7 +862,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
 
     // Stage d: resolve + push the layout-picker surface-shader decoration (same
     // SurfaceDecoration host the OSD uses, retargeted to the "popup.layoutPicker"
-    // surface path). Empty source = no decoration (card draws natively).
+    // surface path). Empty resolution = no decoration (card draws natively).
     applyDecoration(slot, PhosphorSurfaceShaders::decorationPopupLayoutPickerPath());
 
     if (shellWindow) {

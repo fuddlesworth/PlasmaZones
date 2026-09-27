@@ -987,9 +987,9 @@ private:
      * animator advances for the frame, so its answer is one advance behind
      * the paint-path sites mid-leg — the failure is the benign,
      * already-documented one (one frame with the pills under the second
-     * trigger instead of the first). A column that scrolls back toward the
-     * viewport starts intersecting — the view offset is part of the rect,
-     * re-read every pass — and the paint-path sites wake in the same frame.
+     * trigger instead of the first, or none where the skip leaves no anchor).
+     * A column that scrolls back toward the viewport starts intersecting — the
+     * offset is in the rect, re-read every pass — and the sites wake with it.
      *
      * Snapshot captures must NOT consult this: a parked column's offscreen
      * capture (close snapshot, decoration capture) is legitimate work on an
@@ -1605,10 +1605,10 @@ private:
     /// A few other sites erase m_surfaceMultipass directly, and each is deliberate:
     ///   - lifecycle_wiring.cpp's windowDeleted backstop, which runs after the window is gone
     ///     and there is nothing left to animate;
-    ///   - surface_capture.cpp's ensureSurfaceTargets, which on an allocation failure
-    ///     erases the half-built state it just failed to allocate and returns false;
-    ///     its caller abandons the fold immediately, so a transition loses its layer
-    ///     for one frame rather than sampling a freed texture.
+    ///   - surface_capture.cpp's ensureSurfaceTargets, TWICE: an allocation failure, and a
+    ///     pack that lost its buffer passes while sampling an iChannel. Each erases the state
+    ///     it could not build and returns false, and its caller abandons the fold at once, so
+    ///     a transition loses its layer for one frame rather than sampling a freed texture.
     /// Nothing else may. The per-entry loops that walk m_surfaceMultipass on a settings
     /// or registry change INVALIDATE and erase nothing, for the reason their own sites
     /// give: a corpse's entry is the frame its close leg needs. No count, it drifts.
@@ -2310,12 +2310,12 @@ private:
     void seedDecorationTreeBaseline();
 
     // Constructor wiring, decomposed from the ctor along its original comment
-    // seams (definitions in lifecycle_wiring.cpp, except connectDaemonSubscriptions
-    // which is in lifecycle_wiring_daemon.cpp). Each is called exactly once,
-    // from the ctor, in this declared order. Not part of the public surface —
+    // seams. Definitions sit in three files: lifecycle_wiring.cpp (the first two
+    // and connectWindowAndScreenSignals), lifecycle_wiring_drag.cpp
+    // (connectDragTracker) and lifecycle_wiring_daemon.cpp (the last two). Each is
+    // called exactly once, from the ctor, in this declared order. Not public —
     // pure ctor decomposition, so their bodies keep the ordering guarantees the
-    // inline sequence had (notably: connect the screen signals before iterating
-    // the current screens() in initRenderingAndRegistries).
+    // inline sequence had (screen signals before initRenderingAndRegistries iterates screens()).
     void initRenderingAndRegistries();
     void initTimers();
     void connectDragTracker();
