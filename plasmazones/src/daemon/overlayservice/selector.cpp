@@ -467,7 +467,7 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
 
             if (cardRect.contains(localX, localY)) {
                 QVariantMap layoutMap = layouts[i].toMap();
-                QString layoutId = layoutMap[QStringLiteral("id")].toString();
+                QString layoutId = layoutMap.value(QLatin1String("id")).toString();
 
                 // Skip non-active layouts when screen is locked — a LockContext
                 // rule (checked first) or a manual lock on either mode.
@@ -499,7 +499,7 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                 // overlapping layouts. Reading the delegates keeps this in step
                 // with QML by construction — the same reason the card walk above
                 // reads back rendered geometry instead of predicting origins.
-                QVariantList zones = layoutMap[QStringLiteral("zones")].toList();
+                QVariantList zones = layoutMap.value(QLatin1String("zones")).toList();
 
                 // Keyed by each delegate's own `index`, for the same reason the
                 // card walk above is: collectQmlItemsByName descends the whole

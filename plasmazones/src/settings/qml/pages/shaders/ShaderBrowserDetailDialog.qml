@@ -1076,7 +1076,7 @@ Kirigami.Dialog {
                     }
 
                     // T3.2: surface the live preview's actual GLSL compile error
-                    // in-app (shared with the editor preview). The renderer is
+                    // in-app. The renderer is
                     // recreated per shader, so its Error is always THIS shader's.
                     PZCommon.ShaderErrorBanner {
                         anchors.centerIn: parent

@@ -25,9 +25,20 @@ namespace PlasmaZones {
  * output (maintained via `screenAdded` / `screenRemoved` signals) plus a
  * fallback unbound clock for the bootstrap-before-screens-populate and
  * null-screen() migration windows. Each `prePaintScreen` feeds the
- * presentTime to the clock matching `data.screen`; animations bound to
- * that output tick on that clock, animations bound to other outputs
- * step with dt=0 (correct — they tick when their own output paints).
+ * presentTime to the clock matching `data.screen`.
+ *
+ * THE PER-OUTPUT PHASE-LOCK IS NOT CURRENTLY IN EFFECT, and an earlier version of
+ * this paragraph claimed it was — that animations bound to other outputs "step with
+ * dt=0". They do not. `now()` returns max(latched presentTime, wall), and since KWin
+ * 6.7 dropped the predicted presentTime the only thing fed to the latch is our own
+ * `duration_cast<milliseconds>(steady_clock::now())`, which TRUNCATES. The latched
+ * value is therefore never above the wall time it was sampled at, and steady_clock
+ * is non-decreasing, so the max always selects wall. Every clock reads wall time,
+ * and on an N-output desktop advanceAnimations steps every in-flight animation with
+ * a real dt N times per vsync. Correctness survives that (parametric curves read
+ * elapsed/duration off wall time, and Spring::step composes exactly across
+ * sub-steps), but the beat-free per-output pacing this class was built for is not
+ * happening. See the latch in updatePresentTime for what it would take to restore.
  *
  * ## Driver contract
  *

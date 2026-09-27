@@ -274,7 +274,7 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QS
     // Bounded like the shader keys further down. Zone::fromJson deliberately
     // does not clamp, so a legacy layout can hold a per-zone border wider than
     // any surface now offers; without this the Rectangle-based overlays and
-    // snap assist would draw it while the shader overlay and the editor
+    // snap assist would draw it while the shader overlay and the settings
     // preview drew the clamped value.
     map[::PhosphorZones::ZoneJsonKeys::BorderWidth] = qBound(0, zone->borderWidth(), ConfigDefaults::borderWidthMax());
     map[::PhosphorZones::ZoneJsonKeys::BorderRadius] =

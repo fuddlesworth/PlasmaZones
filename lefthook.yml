@@ -80,9 +80,13 @@ pre-commit:
         # was written to prevent.
         # `sh` and `cmake` for the same reason: three rules read those suffixes, and
         # without an entry the 16 tracked files outside packaging/ (cmake/*.cmake, the
-        # nested-session helpers, plasmazones-report.sh) matched no glob at all, so
+        # nested-session helpers, plasmazones-report.sh, docs/media/videos/convert.sh)
+        # matched no glob at all, so
         # editing one ran no pre-commit check. `c` covers the two QPA protocol stubs.
-        - "*.{c,cpp,cc,cxx,h,hpp,qml,luau,py,frag,vert,glsl,js,sh,cmake}"
+        # `spec` is in CODE_SUFFIXES too. Today the only tracked one lives under
+        # packaging/, which the entry below already covers, so this closes the shape
+        # rather than a live gap.
+        - "*.{c,cpp,cc,cxx,h,hpp,qml,luau,py,frag,vert,glsl,js,sh,cmake,spec}"
         - "plasmazones/data/**/*.json"
         # `plasmazones/data/**/*.json` does not match a file sitting directly
         # in data/, and whatsnew.json is a prose surface CLAUDE.md names, so
@@ -106,7 +110,7 @@ pre-commit:
       # Only when the gate itself is edited. A rule that narrows reports a clean
       # tree, so the whole-tree run above cannot catch its own blind spots.
       #
-      # The gate is FOUR files now, not one: watching only the entry point meant a
+      # The gate is FIVE files now, not one: watching only the entry point meant a
       # commit that broke conventions_selftest.py ran no selftest at all, because
       # this glob did not match it and the `conventions` hook only imports the
       # sibling under --selftest. CI was the sole net.

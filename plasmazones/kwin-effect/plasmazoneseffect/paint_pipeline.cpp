@@ -157,12 +157,12 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     const auto presentTime =
         std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch());
 
-    // Feed presentTime to the clock for THIS output so animations
-    // bound to other outputs' clocks read stale `now` on their
-    // AnimatedValue::advance() calls this tick and step with dt=0
-    // (correct: they tick when their own output paints, not when any
-    // output paints).
-    //
+    // Feed presentTime to the clock for THIS output. This does NOT currently
+    // phase-lock anything, and an earlier version of this comment claimed it did:
+    // the sample above is ms-TRUNCATED wall time, so CompositorClock::now()'s
+    // max(latched, wall) always selects wall and every clock reads wall time. Other
+    // outputs' animations step with a real dt, not dt=0. See CompositorClock's
+    // class docblock for the whole derivation.
     // The fallback clock is intentionally NOT fed per-output presentTime
     // here. It self-drives from std::chrono::steady_clock — on an
     // N-output desktop, prePaintScreen fires N× per vsync, and pushing

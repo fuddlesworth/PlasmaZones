@@ -274,13 +274,23 @@ def dep5_problems(files, *, repo, line_of, tracked_files):
     return out
 
 
+def _git_ls_files(repo) -> list[str]:
+    """Every path git knows about, unfiltered. Injectable so the self-test can reach
+    _dead_stanza_problems: its arms run in a bare temp directory, where a real git call
+    exits 128 and every pattern reads as dead."""
+    raw = subprocess.run(["git", "ls-files"], cwd=repo, capture_output=True, text=True,
+                         check=True).stdout.split("\n")
+    return [p for p in raw if p]
+
+
 # `debian/` is the assembled source package's own layout, not this repo's: dpkg reads
 # debian/copyright from the unpacked tree, where packaging/debian/ has been moved to
 # debian/. A stanza naming it is correct and permanently unmatched here.
 DEP5_BUILD_TIME_PREFIXES = ("debian/",)
 
 
-def _dead_stanza_problems(stanzas: list[dict], dep5, repo) -> list[tuple[str, int, str]]:
+def _dead_stanza_problems(stanzas: list[dict], dep5, repo, *,
+                          list_paths=_git_ls_files) -> list[tuple[str, int, str]]:
     """Every Files: pattern that matches no path git knows about.
 
     Compares against the RAW `git ls-files`, not the gate's tracked_files(): that one
@@ -288,15 +298,18 @@ def _dead_stanza_problems(stanzas: list[dict], dep5, repo) -> list[tuple[str, in
     tarballs have legitimate stanzas that would otherwise read as dead. This check is
     about whether a pattern can ever match, which is a different question from whether
     the rules should police what it matches.
+
+    `list_paths` is injectable for the self-test, which had no way to reach this at all:
+    its temp tree is not a git repo, so the real call exited 128 and the only arm it could
+    ever hit was the error one below — the check went in to close a hole and had no check
+    behind itself.
     """
     try:
-        raw = subprocess.run(["git", "ls-files"], cwd=repo, capture_output=True, text=True,
-                             check=True).stdout.split("\n")
+        known = list_paths(repo)
     except (OSError, subprocess.CalledProcessError) as exc:
         # Not a licensing finding, and not silent either: the check simply cannot run.
         return [(str(dep5.relative_to(repo)), 0, f"cannot list tracked paths to check for dead "
                                                  f"Files stanzas ({exc})")]
-    known = [p for p in raw if p]
     out = []
     for s in stanzas:
         for pat in s["files"]:

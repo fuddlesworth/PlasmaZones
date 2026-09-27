@@ -43,7 +43,7 @@ REPO = Path(__file__).resolve().parent.parent
 
 
 def _add_script_dir_to_path() -> None:
-    """Make this file's directory importable for its two lazily-imported siblings.
+    """Make this file's directory importable for its sibling modules.
 
     Idempotent, because a bare insert grew sys.path on every call.
     """
@@ -83,7 +83,7 @@ SHADER_SUFFIXES = {".frag", ".vert", ".glsl"}
 # stubs were found to be the only comment-bearing C sources no rule read. THREE rules read this
 # set, and so does --update-baseline, so .spec also entered the size ratchet. MOST of the tree is
 # still outside it, not just the .in/.xml/.txt and data JSON an earlier version of this comment
-# named: 32 tracked suffixes are, .md and .yml among them.
+# named, .md and .yml among them.
 CODE_SUFFIXES = (CPP_SUFFIXES | QML_SUFFIXES | SHADER_SUFFIXES
                  | {".luau", ".py", ".js", ".sh", ".cmake", ".spec", ".desktop"})
 
@@ -260,9 +260,11 @@ def line_of(text: str, index: int) -> int:
 SPDX_EXEMPT = re.compile(r"(^|/)data/.*\.json$|(^|/)libs/phosphor-registry/tests/.*manifest\.json(\.in)?$")
 
 # How far in a header may sit. Named because TWO rules read it and because the message
-# quotes the number: widening it silently turns "in the first 6 lines" into a lie. Six is
-# what the deepest header in the tree needs — a shebang, a blank, and a two-tag block
-# under a short comment. The selftest pins it in both directions.
+# quotes the number: widening it silently turns "in the first 6 lines" into a lie. FIVE is
+# what the deepest header in the tree needs (packaging/arch/update-aur.sh: a shebang, two
+# comment lines, then the two tags on 4 and 5), so six gives one line of slack. The
+# selftest pins 4 and below through the tree and 8 and above through its toodeep probe;
+# 5 and 7 are unpinned, so the band is not closed.
 SPDX_HEAD_LINES = 6
 
 
@@ -557,8 +559,6 @@ PROSE_STRING_KEYS = {
     "highlights",
     "label",
 }
-
-
 
 
 def iter_json_prose(path: str):
@@ -942,9 +942,11 @@ RULES = {
 #
 # The data and the checks live in conventions_selftest.py. This file crossed the
 # 1150-line ceiling when two branches each added a rule, and the self-test is the
-# one section that depends on nothing but the two pure detectors, so it is what
-# moved. Imported inside the function, not at module scope: that module imports
-# this one back for those detectors.
+# one section that depends on nothing but what it is handed, so it is what
+# moved. It imports NOTHING from this file — the two detectors and the readability
+# precondition are passed in as arguments, which is what keeps the pair acyclic.
+# Still imported inside the function rather than at module scope, so a run that
+# never asks for the self-test does not pay for parsing it.
 
 
 def selftest() -> int:

@@ -5,8 +5,10 @@ readability precondition.
 
 Split out of the gate itself, which crossed the 1150-line ceiling when two
 branches each landed a new rule. This is the most separable concern in it: test
-DATA plus one function, depending on nothing but `prose_problems` and
-`iter_json_prose`.
+DATA plus one function, depending on nothing it is not handed: the two detectors
+(`prose_problems`, `iter_json_prose`) and the readability precondition
+(`partition_readable`), through whose `__globals__` the arms that need the gate's own
+namespace reach `rule_spdx`, `CODE_SUFFIXES`, `SPDX_HEAD_LINES` and `REPO`.
 
 Imported lazily by the gate's `--selftest` arm rather than importing it at module
 scope, so the two files cannot form a cycle. The gate keeps the flag, because
@@ -93,7 +95,19 @@ SELFTEST_PROSE_BAD = [
     # literal dash only, so an entity separator was reported and an entity splice was not
     # distinguishable from it. Both directions are pinned, here and in the OK list.
     ("Fixed the crash &mdash; it was a null deref", "em-dash splice written as an entity"),
-    # A CAPITALISED leading verb, which is what _has_finite_verb's .lower() is for. Every
+    # The two NUMERIC references, which are the spellings that are well-formed XML. The
+    # AppStream files declare no entities, so `&mdash;` there would be ill-formed and these
+    # are what an author would actually end up with. Both went unnormalised.
+    ("Fixed the crash &#8212; it was a null deref", "em-dash splice as a decimal reference"),
+    ("Fixed the crash &#x2014; it was a null deref", "em-dash splice as a hex reference"),
+    # A SPLICE WHOSE ONLY VERB IS ONE THE LIST DID NOT NAME. `stays` is used on 57 CHANGELOG
+    # lines and 31 pack descriptions, and this exact sentence passed the gate before it was
+    # added — the verb list under-catching is the detector's one failure direction, and this
+    # is a measured instance of it rather than a hypothetical.
+    ("A radius of 0 now stays square at both ends; the band mitres the corner the way a "
+     "drawing program would.", "semicolon whose left verb is 'stays'"),
+    # A CAPITALISED leading verb, which is what conventions_prose._has_finite_verb's
+    # .lower() is for (the detector moved out of the gate). Every
     # other probe's verbs are already lowercase, so the call was unpinned.
     ("Keeps the pack's default; the loader drops the entry", "semicolon with a capitalised leading verb"),
     # A RIGHT CLAUSE WHOSE FIRST WORD IS ITS VERB. Pins the slice bounds: consume that word
@@ -138,8 +152,10 @@ SELFTEST_PROSE_OK = [
     "%1 — %2",
     "Column template — %1",
     # The same separator written as an entity has to stay exempt too, or the fix for the
-    # BAD entity probe above could be a blanket flag.
+    # BAD entity probes above could be a blanket flag. All three spellings.
     "%1 &mdash; %2",
+    "%1 &#8212; %2",
+    "%1 &#x2014; %2",
     "Phosphor Settings — Minimal Demo",
     "Phosphor.Registry — plugin demo + hot-reload",
     # A GENUINE LIST FOLLOWED BY A SENTENCE. Pins the per-segment split, and the order
@@ -661,7 +677,7 @@ def _dep5_failures() -> list[str]:
         bad.append(f"a commented-out Files line was parsed as a stanza: {got}")
     # A COMMENT THAT THE FIELD REGEX WOULD MATCH, which is the one shape whose removal
     # from the skip does harm. `# text` cannot match it (the regex wants `\S+:`, and the
-    # space after # breaks that), so dropping the skip is inert for all 80 of the real
+    # space after # breaks that), so dropping the skip is inert for every one of the real
     # file's comments. `#Note:` DOES match, as a field named "#note", which sends the
     # parser down its else branch and clears `field` — so the CONTINUATION line after it
     # is dropped instead of joining Copyright, the blob loses that holder, and a header
@@ -851,6 +867,182 @@ def _spdx_suffix_failures(partition_readable) -> list[str]:
     return bad
 
 
+def _prose_extraction_failures(partition_readable) -> list[str]:
+    """rule_prose's EXTRACTION arms, one planted violation per surface.
+
+    The detector itself is well pinned (every arm of prose_problems has a probe), but the
+    code that decides WHICH text reaches it was covered for `iter_json_prose` alone.
+    Breaking DEB_DESC, RPM_DESC, PKG_DESC, the `packaging/` prefix gate or the
+    CHANGELOG.md name gate all left the suite green, so five surfaces each worked and none
+    could be kept working. Every plant below is an em-dash splice, which the detector
+    catches unconditionally, so a failure here is always the extraction and never the
+    detector."""
+    g = partition_readable.__globals__
+    rule_prose = g["rule_prose"]
+    bad: list[str] = []
+    splice = "Blurs the pane — and lifts saturation."
+
+    files = {
+        # deb822: a one-line synopsis then a space-indented continuation block.
+        "packaging/debian/control": (
+            "Source: plasmazones\n"
+            "\n"
+            "Package: plasmazones\n"
+            "Description: Window snapping for KDE Plasma\n"
+            f" {splice}\n"),
+        # RPM: %description runs to the next % section.
+        "packaging/rpm/x.spec": f"Name: x\nSummary: Fine\n\n%description\n{splice}\n\n%files\n",
+        # Nix: description and longDescription.
+        "packaging/nix/x.nix": f'{{\n  meta = {{\n    description = "{splice}";\n  }};\n}}\n',
+        # Arch: pkgdesc, which the line-oriented PKG_DESC arm reads.
+        "packaging/arch/PKGBUILD": f'pkgdesc="{splice}"\n',
+        # CHANGELOG entry BODY, after the Keep-a-Changelog bold lead-in.
+        "CHANGELOG.md": f"## [1.0.0]\n\n- **Thing**: {splice}\n",
+        # .desktop Name/GenericName/Comment.
+        "x.desktop": f"[Desktop Entry]\nName=Fine\nComment={splice}\n",
+        # AppStream summary.
+        "x.metainfo.xml": f"<component>\n  <summary>{splice}</summary>\n</component>\n",
+    }
+
+    saved_repo = g["REPO"]
+    with tempfile.TemporaryDirectory() as tmp:
+        d = Path(tmp)
+        g["REPO"] = d
+        try:
+            for rel, text in files.items():
+                p = d / rel
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(text, encoding="utf-8")
+                if not rule_prose([rel]):
+                    bad.append(f"rule_prose did not extract the planted em-dash splice from {rel}")
+        finally:
+            g["REPO"] = saved_repo
+    return bad
+
+
+def _dead_stanza_failures() -> list[str]:
+    """The dead-stanza arm of the dep5 rule, in both directions.
+
+    It had NO positive coverage when it was written: deleting it, inverting its any(), or
+    widening DEP5_BUILD_TIME_PREFIXES to ("",) all left the suite green, because the only
+    arm reachable from a temp tree was the git-failed one and the caller's assertion did
+    not look at it. That is the same shape as the defect the check was added to fix.
+    """
+    from conventions_dep5 import _dead_stanza_problems, parse_dep5
+
+    bad: list[str] = []
+    with tempfile.TemporaryDirectory() as tmp:
+        d = Path(tmp)
+        dep5 = d / "packaging" / "debian" / "copyright"
+        dep5.parent.mkdir(parents=True)
+        dep5.write_text(
+            "Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/\n"
+            "\n"
+            "Files: *\n"
+            "Copyright: 2026 fuddlesworth\n"
+            "License: GPL-3.0-or-later\n"
+            "\n"
+            "Files: src/live.cpp\n"
+            "Copyright: 2026 fuddlesworth\n"
+            "License: MIT\n"
+            "\n"
+            "Files: src/typo.cpp\n"
+            "Copyright: 2026 fuddlesworth\n"
+            "License: MIT\n"
+            "\n"
+            "Files: debian/rules\n"
+            "Copyright: 2026 fuddlesworth\n"
+            "License: GPL-3.0-or-later\n",
+            encoding="utf-8")
+        stanzas = parse_dep5(dep5)
+        # Only src/live.cpp exists, so src/typo.cpp is the dead stanza. `debian/rules` is
+        # the build-time prefix and must stay silent even though it matches nothing.
+        problems = _dead_stanza_problems(stanzas, dep5, d, list_paths=lambda _repo: ["src/live.cpp"])
+        messages = [m for _p, _l, m in problems]
+        if not any("src/typo.cpp" in m for m in messages):
+            bad.append(f"the dead-stanza check missed a Files pattern matching nothing: {messages}")
+        if any("src/live.cpp" in m for m in messages):
+            bad.append("the dead-stanza check reported a Files pattern that DOES match a tracked path")
+        if any("debian/rules" in m for m in messages):
+            bad.append("the dead-stanza check reported a build-time-only path (DEP5_BUILD_TIME_PREFIXES)")
+        if any("Files: *" in m for m in messages):
+            bad.append("the dead-stanza check reported the catch-all")
+        # And the error arm still has to report rather than pass silently.
+        def boom(_repo):
+            raise OSError("no git here")
+
+        if not any("cannot list tracked paths" in m
+                   for _p, _l, m in _dead_stanza_problems(stanzas, dep5, d, list_paths=boom)):
+            bad.append("the dead-stanza check swallows a failure to list tracked paths")
+    return bad
+
+
+def _license_tree_failures(partition_readable) -> list[str]:
+    """rule_license's per-tier split, against a fake tree.
+
+    The LGPL half was entirely unpinned: replacing its `libs/phosphor-` test with `if
+    False:` produced ZERO findings and a green suite, because without that arm the two
+    library trees match none of the GPL-3 prefixes either, so `expected_license` returns
+    None and both are SKIPPED rather than misreported. CLAUDE.md calls the split out by
+    name ("Never 'fix' a lib header to GPL-3 without understanding the split"), and half
+    the machine check for it could be deleted invisibly.
+
+    Reaches the rule the same way _spdx_suffix_failures does, by redirecting the gate's
+    REPO, so it adds no line to the gate."""
+    g = partition_readable.__globals__
+    rule_license = g["rule_license"]
+    bad: list[str] = []
+    lgpl = "LGPL-2.1-or-later"
+    gpl3 = "GPL-3.0-or-later"
+
+    def header(ident: str) -> str:
+        return f"// SPDX-FileCopyrightText: 2026 fuddlesworth\n// SPDX-License-Identifier: {ident}\n"
+
+    # (path, identifier in the header, must it be reported?)
+    cases = [
+        # A library tree with a GPL-3 header is the defect the LGPL arm exists to catch.
+        ("phosphor-libs/libs/phosphor-x/src/a.cpp", gpl3, True),
+        ("phosphor-libs/libs/phosphor-x/src/a.cpp", lgpl, False),
+        # A library's own TESTS follow the library, not the app-tier rule.
+        ("phosphor-libs/libs/phosphor-x/tests/test_a.cpp", gpl3, True),
+        ("phosphor-libs/libs/phosphor-x/tests/test_a.cpp", lgpl, False),
+        # The shell-libs tree takes the same arm.
+        ("phosphor-shell-libs/libs/phosphor-y/src/b.cpp", gpl3, True),
+        # The app tier is the mirror: LGPL there is the defect.
+        ("plasmazones/src/a.cpp", lgpl, True),
+        ("plasmazones/src/a.cpp", gpl3, False),
+        ("phosphor-shell/src/b.cpp", lgpl, True),
+        ("scripts/x.py", lgpl, True),
+        # The shell-libs EXAMPLES are app-tier, unlike its libs.
+        ("phosphor-shell-libs/examples/demo/c.cpp", lgpl, True),
+        # The two data trees are deliberately ungoverned: the licence follows the
+        # incorporated content, so neither identifier may be reported.
+        ("plasmazones/data/surface/glass/effect.frag", gpl3, False),
+        ("plasmazones/data/surface/glass/effect.frag", lgpl, False),
+        ("phosphor-libs/data/schemas/x.frag", gpl3, False),
+        # A tests/**/data/ path is NOT one of those trees — the anchor is what keeps it
+        # governed, and an unanchored pattern used to swallow it.
+        ("plasmazones/tests/unit/data/d.cpp", lgpl, True),
+    ]
+
+    saved_repo = g["REPO"]
+    with tempfile.TemporaryDirectory() as tmp:
+        d = Path(tmp)
+        g["REPO"] = d
+        try:
+            for rel, ident, want_reported in cases:
+                p = d / rel
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(header(ident), encoding="utf-8")
+                reported = bool(rule_license([rel]))
+                if reported != want_reported:
+                    verb = "did not report" if want_reported else "reported"
+                    bad.append(f"rule_license {verb} {rel} carrying {ident}")
+        finally:
+            g["REPO"] = saved_repo
+    return bad
+
+
 def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
     """The detectors and the precondition arrive as arguments, so this module never
     imports the gate at module scope and the pair cannot form a cycle.
@@ -911,6 +1103,9 @@ def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
     failures.extend(_dep5_failures())
     failures.extend(_precondition_failures(partition_readable))
     failures.extend(_spdx_suffix_failures(partition_readable))
+    failures.extend(_license_tree_failures(partition_readable))
+    failures.extend(_dead_stanza_failures())
+    failures.extend(_prose_extraction_failures(partition_readable))
 
     if entry_globals["REPO"] != entry_repo:
         failures.append(f"an arm left the gate's REPO at {entry_globals['REPO']}, not {entry_repo}")

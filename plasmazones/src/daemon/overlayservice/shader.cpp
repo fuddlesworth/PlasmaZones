@@ -293,7 +293,10 @@ bool OverlayService::useShaderForScreen(const QString& screenId) const
     // If any zone resolves to LayoutPreview mode, fall back to standard overlay for this screen.
     // A context rule's style override slots between the per-zone override and the
     // layout value: zone > rule > layout > global.
-    int globalMode = m_settings ? static_cast<int>(m_settings->overlayDisplayMode()) : 0;
+    // ConfigDefaults for the null-settings fallback, not a literal: the default lives in
+    // one place and the sibling clamp below already routes through it.
+    int globalMode =
+        m_settings ? static_cast<int>(m_settings->overlayDisplayMode()) : ConfigDefaults::overlayDisplayMode();
     int layoutMode = screenLayout->overlayDisplayMode();
     for (const auto* zone : screenLayout->zones()) {
         int resolved = zone->overlayDisplayMode() >= 0 ? zone->overlayDisplayMode()

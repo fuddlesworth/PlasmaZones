@@ -351,8 +351,10 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 // Defensive: if no granular flags set, do full base upload.
                 // Per the dirty-flag invariants documented above, this
                 // branch is normally unreachable when m_uniformsDirty=true
-                // (every setter that dirties m_uniformsDirty also dirties
-                // at least one granular flag), but a future setter that
+                // (the two writers that raise it with NO granular flag,
+                // setUniformExtension and prepare()'s retarget detection,
+                // both clear m_didFullUploadOnce and so take the full-upload
+                // arm above), but a future setter that
                 // forgets the granular flag would silently skip the GPU
                 // write entirely without this safety net. Symmetric with
                 // the !m_didFullUploadOnce path above: if we fall back

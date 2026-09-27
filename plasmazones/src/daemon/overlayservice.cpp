@@ -419,16 +419,11 @@ OverlayService::~OverlayService()
     m_shellHost.reset();
     m_screenStates.clear();
 
-    // Singleton surfaces (layout picker, shader preview) are QObject
-    // children of `this`, so the QObject parent-child system would
-    // destroy them AFTER our own destructor body runs - i.e. after
-    // the member destructors. Schedule their deletion now so
-    // SurfaceManager's drain loop picks them up before the engine is
-    // destroyed. Snap-assist post-shell-migration is an Item slot
-    // inside the per-screen passive shell - its lifetime is the
-    // shell's, no separate cleanup here.
-    // Picker post-shell-migration is also a slot in the per-screen
-    // passive shell - no separate surface cleanup.
+    // No singleton surfaces are scheduled for deletion here any more. Snap
+    // assist and the layout picker are both Item slots inside the per-screen
+    // passive shell, so their lifetime is the shell's. The block that used to
+    // sit here justified code that has since been removed, and named a shader
+    // preview this service never hosted.
 
     // Drain deferred-delete events NOW, while all OverlayService members are
     // still alive. Surface destructors may touch m_screenStates, m_shaderRegistry,

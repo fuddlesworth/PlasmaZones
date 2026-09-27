@@ -753,7 +753,7 @@ private Q_SLOTS:
 private:
     // Sync CAVA service state (start/stop/reconfigure) with current settings AND
     // whether the overlay is actually displaying content — CAVA runs only while
-    // the overlay (un-idled) or shader preview is on screen.
+    // the overlay (un-idled) or an audio-reactive decoration is on screen.
     void syncCavaState();
     // Decoration slots (OSD / popups, across screens) that are visible AND carry
     // an audio-reactive surface pack right now. Drives CAVA gating + the
@@ -761,8 +761,8 @@ private:
     // for the common case (no audio decoration), so it adds nothing then.
     QList<QQuickItem*> visibleAudioDecorationSlots() const;
     // Whether the overlay is actively displaying content right now: visible and
-    // not in the warm-idled drag-pause/drag-end state (or the shader preview is
-    // up). The overlay QQuickWindows are kept alive across drags to dodge an
+    // not in the warm-idled drag-pause/drag-end state. There is no third term.
+    // The overlay QQuickWindows are kept alive across drags to dodge an
     // NVIDIA teardown deadlock, so "visible" alone stays true at rest — this is
     // the predicate that gates the 60 Hz shader render loop + CAVA.
     bool isOverlayDisplaying() const;
@@ -1532,8 +1532,8 @@ private:
     /**
      * @brief Create a PhosphorLayer::Surface for a layer-shell-backed overlay window.
      *
-     * Every overlay, OSD, zone selector, snap assist, layout picker, and shader
-     * preview in OverlayService goes through this single helper. Returns a surface
+     * Every overlay, OSD, zone selector, snap assist and layout picker in
+     * OverlayService goes through this single helper. Returns a surface
      * that has been warmed up (window created, QML loaded, transport attached) but
      * is hidden - callers decide when to call @c surface->show() or keep it warm
      * for pre-warmed OSDs.

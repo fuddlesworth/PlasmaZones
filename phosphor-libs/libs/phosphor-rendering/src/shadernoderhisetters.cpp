@@ -731,7 +731,10 @@ void ShaderNodeRhi::setHalfFloatBuffers(bool enable)
 
 // Shared teardown for any change that invalidates the buffer-pass targets:
 // size via setBufferScale or setBufferScales, texel format via
-// setHalfFloatBuffers, and the depth attachment via setUseDepthBuffer. Drops
+// setHalfFloatBuffers, the depth attachment via setUseDepthBuffer, and mip-ness
+// via setBufferFilter / setBufferFilters (see the block that explains why a
+// filter flip has to drop the textures). ensureBufferTarget's depth block calls
+// it too, because its render targets hold the depth texture raw. Drops
 // textures, render targets, pass descriptors, the pipelines compiled against
 // them, and every SRB that references a buffer texture. ensureBufferTarget
 // rebuilds lazily on the next frame.

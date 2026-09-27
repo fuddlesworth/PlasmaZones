@@ -603,10 +603,12 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             // blur radius as customParams[0].x, and slots are assigned by
             // DECLARATION ORDER (buildParamPreamble), so the chain blurs by
             // whatever the pack's first scalar parameter happens to be. Nothing
-            // enforced that: surface_blur.glsl's own header calls it out as "the
-            // part a pack author has to carry" and says no validator lint and no
-            // test covers it. Reorder the parameters array and the pack still
-            // compiles, still loads, and blurs by a corner radius.
+            // enforced that until this lint; surface_blur.glsl documents the slot
+            // convention and test_surface_pack_validator.cpp covers both arms.
+            // Do NOT re-quote that header: this comment used to, the quoted line
+            // is gone, and the two spent rounds citing each other as authority.
+            // Reorder the parameters array and the pack still compiles, still
+            // loads, and blurs by a corner radius.
             //
             // The first SCALAR, not the first parameter: colours and images live
             // in their own pools, so a pack may lead with a colour and still have

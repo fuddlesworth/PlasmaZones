@@ -97,7 +97,15 @@ bool ShaderNodeRhi::ensureBufferTarget()
             // pointers to it. prepare() bails on this false, but render() only
             // gates on "is there a pipeline and an srb?" — both non-null here —
             // so without this the next frame draws against freed GPU objects.
-            resetAllBindingsAndPipelines();
+            //
+            // resetBufferTargets, not resetAllBindingsAndPipelines: the buffer
+            // RENDER TARGETS hold the depth texture as a raw second colour
+            // attachment (see createTextureAndRT), and the bindings-only reset
+            // leaves them installed. They would then survive to a later frame
+            // that recreates the depth texture successfully, finds every colour
+            // texture already at passSize(i), rebuilds nothing, and renders into
+            // a target whose depth attachment was freed here.
+            resetBufferTargets();
             return false;
         }
         if (!m_depthSampler) {
@@ -121,23 +129,22 @@ bool ShaderNodeRhi::ensureBufferTarget()
                 // SPIR-V. Resetting it makes the next frame re-enter and try
                 // again.
                 m_depthTexture.reset();
-                // The depth TEXTURE was already replaced above, so the SRBs
-                // still installed reference the one it displaced. Same
-                // freed-object draw as the texture failure path.
-                resetAllBindingsAndPipelines();
+                // The depth TEXTURE was already replaced above, so the render
+                // targets and SRBs still installed reference the one it
+                // displaced. Same freed-object draw as the texture failure
+                // path, and the same reason it takes the full target reset.
+                resetBufferTargets();
                 return false;
             }
         }
-        m_pipeline.reset();
-        m_bufferPipeline.reset();
-        m_bufferSrb.reset();
-        m_bufferSrbB.reset();
-        m_srb.reset();
-        m_srbB.reset();
-        for (int i = 0; i < kMaxBufferPasses; ++i) {
-            m_multiBufferPipelines[i].reset();
-            m_multiBufferSrbs[i].reset();
-        }
+        // The whole dependent set, not just the bindings: every buffer render
+        // target created while the OLD depth texture was installed holds it as a
+        // raw attachment. On the success path this is close to free — a depth
+        // resize changes bufferSize, which is what passSize() returns for every
+        // pass when m_useDepthBuffer, so each target was going to be rebuilt in
+        // this same call regardless. It does not touch m_depthTexture or
+        // m_depthSampler, so the objects just created here survive it.
+        resetBufferTargets();
     }
 
     if (m_useDepthBuffer && multiBufferMode) {
@@ -307,15 +314,14 @@ bool ShaderNodeRhi::ensureBufferTarget()
             // pyramid is the whole point of the feature), so a log naming only
             // m_bufferScale describes a pass count it does not have and makes
             // a mis-scaled pyramid impossible to read off the journal.
-            QStringList passSizes;
-            passSizes.reserve(n);
-            for (int i = 0; i < n; ++i) {
-                const QSize s = passSize(i);
-                passSizes.append(QStringLiteral("%1:%2x%3").arg(i).arg(s.width()).arg(s.height()));
-            }
-            qCInfo(lcShaderNode) << "Creating multi-buffer textures:"
-                                 << "m_width=" << m_width << "m_height=" << m_height << "bufferScale=" << m_bufferScale
-                                 << "passes=" << n << "sizes=" << passSizes.join(QLatin1Char(' '));
+            //
+            // Recorded as the loop runs and logged AFTER it, so the line reports what was
+            // actually rebuilt and goes silent when the loop bails. Logged BEFORE, it fired
+            // on every frame a pass kept failing — needCreate stays true while any pass is
+            // missing — and built a QStringList plus n formatted QStrings each time, on the
+            // render thread inside prepare(). `info` is live on a bare install, so being
+            // qCDebug elsewhere in this function did not cover it.
+            QStringList rebuilt;
             for (int i = 0; i < n; ++i) {
                 // PER-INDEX, not the whole set. The scan above only asks whether
                 // ANY pass needs rebuilding; recreating the ones that already
@@ -342,7 +348,12 @@ bool ShaderNodeRhi::ensureBufferTarget()
                     qCDebug(lcShaderNode) << "Failed to create multi-buffer texture" << i << "at" << passSize(i);
                     return false;
                 }
+                const QSize s = passSize(i);
+                rebuilt.append(QStringLiteral("%1:%2x%3").arg(i).arg(s.width()).arg(s.height()));
             }
+            qCInfo(lcShaderNode) << "Rebuilt multi-buffer textures:"
+                                 << "m_width=" << m_width << "m_height=" << m_height << "bufferScale=" << m_bufferScale
+                                 << "passes=" << n << "rebuilt=" << rebuilt.join(QLatin1Char(' '));
             for (int i = 0; i < kMaxBufferPasses; ++i) {
                 m_multiBufferPipelines[i].reset();
                 m_multiBufferSrbs[i].reset();
@@ -540,10 +551,11 @@ bool ShaderNodeRhi::ensureBufferSampler(QRhi* rhi, int index)
         // Latched because a false return here aborts prepare(), which is
         // re-entered next frame, so an unlatched warning fills the journal at
         // frame cadence. The clear below cannot be reached for a sampler that
-        // already exists (the early return above takes it), and samplers are
-        // freed only by resetBufferTargets and releaseRhiResources, so in a
-        // persistent mixed failure the clear fires once and the failing index
-        // stays silent.
+        // already exists (the early return above takes it), so in a persistent
+        // mixed failure the clear fires once and the failing index stays silent.
+        // That early return is the whole argument; an earlier version of this
+        // comment named the wrong freers, and resetBufferTargets is not one of
+        // them at all.
         if (!m_bufferSamplerCreateWarned) {
             m_bufferSamplerCreateWarned = true;
             qCWarning(lcShaderNode) << "Failed to create buffer sampler" << index;

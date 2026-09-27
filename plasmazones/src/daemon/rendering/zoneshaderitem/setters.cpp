@@ -84,7 +84,7 @@ PhosphorRendering::ZoneLabelTexture ZoneShaderItem::labelsTexture() const
 void ZoneShaderItem::setLabelsTexture(const PhosphorRendering::ZoneLabelTexture& labels)
 {
     // Emit only on a genuine change (project rule). The daemon overlay path
-    // already dedupes upstream via labelsTextureHash, but the editor/settings
+    // already dedupes upstream via labelsTextureHash, but the settings
     // preview + placeholder paths don't, so guard here. The compare short-
     // circuits on size before any per-tile pixel compare.
     {

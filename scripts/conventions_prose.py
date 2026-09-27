@@ -81,7 +81,9 @@ _FINITE_VERBS = frozenset(
        can't won't wouldn't shouldn't
        keeps drops sets reads writes runs takes gives makes shows uses needs holds
        adds stops starts applies returns means covers carries leaves gets goes comes
-       sits lands falls picks sends pushes pulls draws paints binds clears""".split()
+       sits lands falls picks sends pushes pulls draws paints binds clears
+       stays remains lets allows follows treats wins counts names points works
+       scales fades bends""".split()
 )
 
 
@@ -106,10 +108,15 @@ def prose_problems(s: str) -> list[str]:
     # NORMALISE the entity before the carve-out, not just before the test that finds it.
     # The arm below looked for either spelling but is_title_separator splits on the literal
     # dash only, so "%1 &mdash; %2" yielded ONE part, failed the len==2 test and was
-    # reported — a false positive on a shape CLAUDE.md explicitly allows. The surfaces where
-    # an author reaches for the entity are exactly the XML ones this rule reads, the
-    # AppStream summary and description.
-    core = without_code.replace("&mdash;", "—").strip()
+    # reported — a false positive on a shape CLAUDE.md explicitly allows.
+    #
+    # THREE spellings, because `&mdash;` is an HTML entity and the AppStream XML this rule
+    # reads declares no entities, so that spelling would actually make the document
+    # ill-formed and appstreamcli would reject it. The two spellings that ARE well-formed
+    # XML are the numeric references, and they were the ones going unnormalised. None of
+    # the three occurs in the tree today; this is forward cover, and the selftest carries a
+    # bad probe per spelling so it stays cover rather than becoming decoration.
+    core = without_code.replace("&mdash;", "—").replace("&#8212;", "—").replace("&#x2014;", "—").strip()
     if "—" in core:
         if not is_title_separator(core):
             problems.append("em-dash splice; write two sentences or join with a plain word")

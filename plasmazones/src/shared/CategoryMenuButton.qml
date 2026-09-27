@@ -10,7 +10,7 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief Reusable button that opens a cascading category menu.
  *
- * Drives the editor/settings shader choosers and the rule editor's match-
+ * Drives the settings app's shader choosers and its rule editor's match-
  * field / action-type pickers. The host owns the data: pass in a flat
  * `items` list (each entry: `{ id, name, category? }`), bind `currentId`,
  * and react to `selected(id)`.

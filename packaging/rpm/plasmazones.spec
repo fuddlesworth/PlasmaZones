@@ -23,7 +23,7 @@ Summary:        Window snapping, tiling and scrolling for KDE Plasma
 # and daemon, LGPL-2.1-or-later the Phosphor component libraries. MIT and
 # BSD-2-Clause come from the vendored Luau runtime and valijson headers, which
 # are compiled into the shipped objects (see the bundled() provides below).
-License:        GPL-3.0-or-later AND LGPL-2.1-or-later AND MIT AND BSD-2-Clause
+License:        GPL-3.0-or-later AND LGPL-2.1-or-later AND MIT AND BSD-2-Clause AND CC0-1.0
 URL:            https://github.com/fuddlesworth/PlasmaZones
 Source0:        %{url}/archive/refs/tags/v%{version}/%{name}-%{version}.tar.gz
 

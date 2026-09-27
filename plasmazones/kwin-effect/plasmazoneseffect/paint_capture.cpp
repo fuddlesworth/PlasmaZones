@@ -40,13 +40,16 @@ namespace PlasmaZones {
 
 namespace {
 // Which corner of a source quad carries texcoord 0, per axis. KWin does not promise a
-// vertex ORDER, so the extreme-position vertices are found first and the handedness read
-// off their texcoords; a window on a rotated or flipped output comes through mirrored.
+// vertex ORDER, so the extreme-position vertices are found first and the handedness is
+// read off their texcoords rather than assumed.
 //
 // Extracted because this was written out three times, byte-identical in the first two,
-// and the three copies had to be kept in step by hand. The caller owns the caching —
-// each site has its own `...HandednessCached` latch, because the search is per-quad and
-// would otherwise be paid every frame for the life of the effect.
+// and the three copies had to be kept in step by hand. The CALLER owns the caching, and
+// there are three call sites against TWO latches: the two padded-present branches share
+// `presentHandednessCached` on the decoration entry (deliberately — both want the
+// handedness of KWin's natural window quad, keyed the same way), and the surface-extent
+// branch has its own `handednessCached` on the transition. The search is per-quad, so
+// without a latch it would be paid every frame for the life of the effect.
 void quadTexcoordHandedness(const KWin::WindowQuad& srcQuad, double& uAtLeft, double& uAtRight, double& vAtTop,
                             double& vAtBottom)
 {

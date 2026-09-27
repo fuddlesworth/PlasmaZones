@@ -84,14 +84,13 @@ Item {
     property bool _idled: false
     // Set while the idle quiesce has parked the shader stack. Gates the
     // renderer's layer FBO (screen-sized, otherwise immortal) and its
-    // visibility. Cleared on EVERY wake path, and each host has a live one:
-    // on the daemon overlay the un-idle flip covers the warm resume
-    // (lifecycle.cpp writes _idled both ways) and the slot Item's visibility
-    // toggle covers a plain show() after a full hide; on the editor preview
-    // the Window folds its own visibility into _idled (RenderNodeOverlay
-    // binds _idled to root._idled || !root.visible), so the show itself
-    // fires the un-idle flip. All of these run before the next painted
-    // frame, which is the renderer's contract for re-enabling the layer.
+    // visibility. Cleared on EVERY wake path, and the daemon overlay — the only
+    // host that instantiates this component — has two: the un-idle flip covers
+    // the warm resume (lifecycle.cpp writes _idled both ways) and the slot
+    // Item's visibility toggle covers a plain show() after a full hide. Both run
+    // before the next painted frame, which is the renderer's contract for
+    // re-enabling the layer. An earlier version of this note also credited an
+    // editor preview and a RenderNodeOverlay.qml; neither exists.
     property bool idleParked: false
     on_IdledChanged: if (!root._idled)
         root.idleParked = false
@@ -293,7 +292,7 @@ Item {
             visible: root.shaderSource.toString() !== "" && zoneShaderRenderer.status === ZoneShaderItem.Error
             anchors.centerIn: parent
             // gridUnit multiple rather than a raw px cap, matching the
-            // ShaderErrorBanner sites' sizing convention.
+            // ShaderErrorBanner site's sizing convention.
             width: Math.min(parent.width * 0.5, Kirigami.Units.gridUnit * 22)
             height: shaderErrorText.implicitHeight + Kirigami.Units.gridUnit * 2
             color: Kirigami.Theme.backgroundColor

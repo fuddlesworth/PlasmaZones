@@ -158,7 +158,9 @@ public:
     ///                the legacy overlay/animation UBO (BaseUniforms, currently
     ///                672 bytes) unchanged. The surface-decoration runtime passes
     ///                a SurfaceUniformProfile here to reuse the engine with the
-    ///                leaner surface UBO. UBO size is always profile-defined
+    ///                DISTINCT surface UBO — a different 672-byte layout, not a
+    ///                smaller one; both static_assert to the same size and the
+    ///                members do not line up. UBO size is always profile-defined
     ///                (m_uboProfile->baseSize()), never hard-coded.
     explicit ShaderNodeRhi(QQuickItem* item, std::unique_ptr<PhosphorShaders::IUboProfile> profile = nullptr);
     ~ShaderNodeRhi() override;
@@ -515,7 +517,10 @@ private:
     /// Drop every buffer-pass target and everything compiled against it
     /// (render targets, pass descriptors, pipelines, SRBs). Shared by every
     /// setter that invalidates a target: setBufferScale, setBufferScales,
-    /// setHalfFloatBuffers and setUseDepthBuffer. ensureBufferTarget rebuilds.
+    /// setHalfFloatBuffers, setUseDepthBuffer, and setBufferFilter /
+    /// setBufferFilters on a mip-ness flip. Also by ensureBufferTarget's own
+    /// depth block, whose render targets hold the depth texture as a raw
+    /// attachment. ensureBufferTarget rebuilds.
     void resetBufferTargets();
     /// Snapshot the node's live members into a UboFrameState and hand it to the
     /// installed UBO profile's fill(). @p rhi supplies the NDC Y-orientation

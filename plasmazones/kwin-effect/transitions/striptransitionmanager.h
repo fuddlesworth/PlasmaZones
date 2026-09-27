@@ -335,16 +335,15 @@ private:
     /// covers the pointer: the leg settled, the output went away, or the
     /// pointer moved to an output with no pass. Runs from paintOutput's
     /// settle frame, so that frame's normal scene paints the cursor rather
-    /// than blinking it for a frame, and from every postPaintScreen, so a
+    /// than blinking it for a frame, and from every postPaintScreen that did
+    /// not report a failed paint (reapSettled is gated on that), so a
     /// pointer crossing to a quiet output gets its cursor back within a
-    /// frame even though the hidden cursor damages nothing there. Also run
-    /// on the abort paths that ERASE the entry or find none (notifyLeg's
-    /// disarm, a compile sentinel or allocation failure mid-leg, reset(), and
-    /// the post-walk re-seat miss, which is structural and unreachable today),
-    /// so a hide taken on the previous frame is not carried
-    /// into a frame the normal scene paints. The one exit that does NOT touch
-    /// the hide is paintOutput's null-output guard, which KWin does not reach
-    /// on Wayland. A reported-failure abort leaves
+    /// frame even though the hidden cursor damages nothing there. Also run on
+    /// every path that ERASES the entry or finds none — deliberately not
+    /// enumerated here, because three rounds of this docblock named a list
+    /// that was missing a member; grep the name for the call sites.
+    /// The one exit that does NOT touch the hide is paintOutput's
+    /// null-output guard. A reported-failure abort leaves
     /// the entry live in m_active, so this call would not release there: the
     /// failed capture walk and the failed sharp composite both go through
     /// releaseCursorHideForForeignPaint instead, which is also the one path

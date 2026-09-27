@@ -808,16 +808,15 @@ Item {
                 vertexShaderUrl: stage.stageData.vertexSource !== undefined ? stage.stageData.vertexSource : ""
                 shaderSource: stage.stageData.source !== undefined ? stage.stageData.source : ""
 
-                // Multipass buffer passes, forwarded from the composer's stage
-                // map VERBATIM. Inherited wholesale from ShaderEffect, and that
-                // is a real difference from the compositor rather than a shared
-                // design: the compositor folds the user's decoration
-                // blur-scale multiplier into every declared scale
-                // (clampedBufferScale, applied to the per-pass array too),
-                // and nothing on this path reads that setting at all. So a
-                // daemon-hosted decoration and a window decoration render the
-                // same pack at different buffer densities whenever the
-                // multiplier is not 1. `multipass` is false for every single-pass pack, so
+                // Multipass buffer passes, forwarded from the composer's stage map
+                // VERBATIM, and that includes the user's decoration blur-scale
+                // multiplier: composeStageMap folds it into bufferScale and into
+                // every bufferScales entry, and bounds the product, so this path
+                // and the compositor's clampedBufferScale share one chokepoint.
+                // Do NOT fold it again here. An earlier version of this comment
+                // said the two hosts diverged on buffer density, which was true
+                // before the composer took the multiplier and is not now.
+                // `multipass` is false for every single-pass pack, so
                 // the empty-list / default arms below keep those stages on the
                 // classic single-pass path.
                 bufferShaderPaths: stage.stageData.multipass === true && stage.stageData.bufferShaderPaths !== undefined ? Array.from(stage.stageData.bufferShaderPaths) : []

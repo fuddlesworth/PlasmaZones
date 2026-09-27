@@ -52,9 +52,8 @@ class PLASMAZONES_RENDERING_EXPORT ZoneShaderItem : public PhosphorRendering::Sh
     // test. QML_ELEMENT here would be inert (no qt_add_qml_module target
     // exists) and misleading.
     //
-    // NOT the editor, despite ZoneShaderRenderer.qml describing itself as
-    // shared by the overlay and the editor preview. plasmazones-editor links
-    // plasmazones_shared_qml, so it SHIPS that wrapper, but it does not link
+    // NOT the editor. plasmazones-editor links
+    // plasmazones_shared_qml, so it SHIPS ZoneShaderRenderer.qml, but it does not link
     // plasmazones_rendering and calls no qmlRegisterType, so an editor .qml
     // instantiating it would fail at load with "PlasmaZones is not installed".
     // Nothing in the editor does today. Wiring the preview up means linking

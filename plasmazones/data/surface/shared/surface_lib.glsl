@@ -390,9 +390,6 @@ vec4 faintTintSlab(vec3 tint, float tintStrength, float mask) {
     return vec4(clamp(tint, 0.0, 1.0) * a, a);
 }
 
-// Glow/shadow outer-margin falloff (the ~12 lines glow and shadow shared): the
-// exp(-4t²) reach profile from SDF distance `d`, feathered to zero just inside
-// the texture edge so a thin capture margin fades out instead of clipping in a
 // Fade to zero just inside the CANVAS edge, so a reach wider than the captured
 // margin tapers out instead of clipping in a hard rectangle. Returns the scalar; the
 // caller decides what it multiplies, which is why this is not folded into haloFalloff.
@@ -410,10 +407,12 @@ float surfaceCanvasEdgeFade(vec2 edgePx, float reachPx) {
     return smoothstep(0.0, feather, edgeDist);
 }
 
+// Glow/shadow outer-margin falloff (the ~12 lines glow and shadow shared): the
+// exp(-4t²) reach profile from SDF distance `d`, feathered to zero just inside
+// the texture edge so a thin capture margin fades out instead of clipping in a
 // hard rectangle, held to where the surface is not opaque (1 - baseAlpha) AND to
 // within two reaches inside the frame at full value for the first, and scaled by
-// `strength` and the focus dim
-// at floor `focusFloor`. `edgePx` is the
+// `strength` and the focus dim at floor `focusFloor`. `edgePx` is the
 // REAL (undisplaced) fragment position for the edge feather — the shadow pack
 // evaluates `d` against a displaced frame but feathers on the true position.
 // `gateCornerTopPx` / `gateCornerBottomPx` are the caller's own corner radii in

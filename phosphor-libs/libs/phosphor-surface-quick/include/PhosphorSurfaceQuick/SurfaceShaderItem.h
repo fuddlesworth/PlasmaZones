@@ -35,8 +35,9 @@ namespace PhosphorSurfaceQuick {
  * live window surface; it has no zones, no per-zone glyph labels, and no
  * consumer escape-hatch int slots. The ONLY thing that differs from the base
  * render path is the UBO: the node is created with a
- * PhosphorSurfaceShaders::SurfaceUniformProfile so it uploads the leaner
- * 672-byte surface UBO instead of the overlay UBO. createShaderNode() supplies
+ * PhosphorSurfaceShaders::SurfaceUniformProfile so it uploads the DISTINCT
+ * 672-byte surface UBO instead of the overlay one. Distinct, not smaller: both
+ * layouts static_assert to 672 bytes and their members do not line up. createShaderNode() supplies
  * that profile to a stock PhosphorRendering::ShaderNodeRhi — there is no
  * SurfaceShaderItem-specific node subclass.
  *

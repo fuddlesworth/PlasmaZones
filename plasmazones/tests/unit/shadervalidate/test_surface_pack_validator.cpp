@@ -393,10 +393,12 @@ private Q_SLOTS:
     /// must NOT trip the order lint, or the lint would fail every blur pack.
     ///
     /// The pack declares a real `blurRadius` FIRST. It used to pass an empty
-    /// parameters array, which tripped the no-scalar radius lint below — so the
-    /// test's name promised a clean pack while the pack it built was linted, and
-    /// the single `!contains("positional")` assertion could not see the
-    /// difference. A positive control has to be clean on every arm it controls.
+    /// parameters array, which tripped the no-scalar radius lint below. Then it
+    /// declared no bufferScales, tripping the pyramid lint in that same block.
+    /// Both times the name promised a clean pack, the pack WAS linted, and the
+    /// substring assertions could not see it because each named a different arm.
+    /// A positive control has to be clean on every arm it controls, and counting
+    /// errors is the only assertion that holds that without being re-audited.
     void theCorrectKawaseChainIsNotLinted()
     {
         QTemporaryDir tmp;
@@ -411,10 +413,18 @@ private Q_SLOTS:
                               QStringLiteral("builtin:kawase-down-2"), QStringLiteral("builtin:kawase-down-3"),
                               QStringLiteral("builtin:kawase-up-0"), QStringLiteral("builtin:kawase-up-1"),
                               QStringLiteral("builtin:kawase-up-2")});
+        // The canonical pyramid, because the SAME `if (anyKawase)` block lints a
+        // chain that declares none ("every pass renders at the pack-wide
+        // bufferScale and the pyramid is not a pyramid").
+        obj.insert(QStringLiteral("bufferScales"), QJsonArray{0.25, 0.125, 0.0625, 0.03125, 0.0625, 0.125, 0.25});
 
         const PackResult r = validateSurface(tmp, QStringLiteral("sf-kawase-ok"), obj, surfaceBodyReading({}));
         QVERIFY2(!r.report.contains(QStringLiteral("positional")), qPrintable(r.report));
         QVERIFY2(!r.report.contains(QStringLiteral("customParams[0].x")), qPrintable(r.report));
+        // COUNT the errors, do not grep for the arms you remembered. Both earlier
+        // versions of this control built a linted pack and passed anyway, because
+        // each asserted the absence of arms other than the one it tripped.
+        QCOMPARE(r.errors, 0);
     }
 
     /// THE RADIUS SLOT, wrong-name arm. The builtin passes read the radius as

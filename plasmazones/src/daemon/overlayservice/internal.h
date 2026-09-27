@@ -172,19 +172,11 @@ inline VsLayerPlacement layerPlacementForVs(const QRect& vsGeom, const QRect& ph
             QMargins(clamped.x() - physGeom.x(), clamped.y() - physGeom.y(), 0, 0)};
 }
 
-/// Resolve anchors + margins for a floating surface whose absolute top-left
-/// should land at @p topLeft within the physical screen @p physGeom. Always
-/// Top|Left-anchored with margins relative to the physical origin.
-/// Used by shader-preview paths that position the preview window at a
-/// caller-chosen absolute coordinate inside the monitor (rather than at a
-/// virtual-screen sub-region). Separate from layerPlacementForVs because the
-/// VS variant treats "topLeft == physGeom.topLeft" as "fullscreen → AnchorAll",
-/// which would drop the margins a floating preview needs.
-inline VsLayerPlacement layerPlacementAt(const QPoint& topLeft, const QRect& physGeom)
-{
-    return {PhosphorLayer::Anchors{PhosphorLayer::Anchor::Top, PhosphorLayer::Anchor::Left},
-            QMargins(qMax(0, topLeft.x() - physGeom.x()), qMax(0, topLeft.y() - physGeom.y()), 0, 0)};
-}
+// layerPlacementAt was removed here. It had no caller anywhere in the tree, and
+// its docblock attributed it to "shader-preview paths" the daemon does not host:
+// there is no preview role in PhosphorRoles, and the preview lives in the
+// settings app. Same shape as parseZonesJson in overlay_helpers.h — an unused
+// inline helper whose comment named a consumer that does not exist.
 
 /// Resolve target screen geometry for a screen ID (virtual or physical).
 /// For virtual screens (format "physicalId/vs:N"), returns the virtual screen
@@ -384,7 +376,7 @@ inline void writeColorSettings(QObject* window, const IZoneVisualizationSettings
                      ov && ov->inactiveOpacity ? *ov->inactiveOpacity : settings->inactiveOpacity());
 }
 
-// writeQmlProperty, patchZonesWithHighlight, parseZonesJson, ensureShaderTimerStarted,
+// writeQmlProperty, patchZonesWithHighlight, ensureShaderTimerStarted,
 // getAnchorsForPosition, findQmlItemByName, collectQmlItemsByName, mapVisibleRectToItem
 // are defined in overlay_helpers.h (included above)
 

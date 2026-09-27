@@ -392,8 +392,9 @@ void ShaderEffect::releaseIdleGraphicsResources()
     //   • Recovery is node-side: releaseRhiResources() retains the shader
     //     sources and re-arms the node's own dirty flags, so the next painted
     //     frame re-bakes from cached source. That is free of file I/O for the
-    //     single-buffer case; a MULTI-buffer pack has its per-pass sources
-    //     cleared on release, so those passes are re-read. The item-side
+    //     single-buffer case; a MULTI-buffer pack re-reads every buffer pass from
+    //     disk, because bakeBufferShaders keeps no per-pass source cache at all.
+    //     The item-side
     //     m_shaderDirty is deliberately NOT raised here — that would force
     //     updatePaintNode's needLoad branch, a synchronous QFile read +
     //     include expansion in the sync phase on the first frame of the next

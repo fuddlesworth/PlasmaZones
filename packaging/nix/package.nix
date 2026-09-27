@@ -259,7 +259,11 @@ stdenv.mkDerivation (finalAttrs: {
     homepage = "https://github.com/fuddlesworth/PlasmaZones";
     # GPL-3.0-or-later for the app, daemon, editor, settings and KCM;
     # LGPL-2.1-or-later for the bundled Phosphor component libraries.
-    license = with licenses; [ gpl3Plus lgpl21Plus ];
+    # MIT and BSD-2-Clause for the vendored Luau runtime and valijson headers, which
+    # are compiled into the shipped objects, and CC0-1.0 for the two AppStream
+    # metainfo files the package installs. Same set the RPM spec's License tag names,
+    # and for the same reason it records there.
+    license = with licenses; [ gpl3Plus lgpl21Plus mit bsd2 cc0 ];
     maintainers = [ ];   # Add your nixpkgs handle here when submitting upstream
     platforms = [ "x86_64-linux" "aarch64-linux" ];
 

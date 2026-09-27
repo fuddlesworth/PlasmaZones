@@ -4,12 +4,13 @@
 # Generate packaging changelogs from CHANGELOG.md
 #
 # Usage:
-#   ./generate-changelog.sh debian   [version]  - Generate packaging/debian/changelog
-#   ./generate-changelog.sh rpm      [version]  - Update %changelog in RPM spec
-#   ./generate-changelog.sh notes    <version>  - Print GitHub release notes to stdout
-#   ./generate-changelog.sh all      [version]  - Generate both debian and rpm
+#   ./generate-changelog.sh debian   [version] [revision]  - Generate packaging/debian/changelog
+#   ./generate-changelog.sh rpm      [version] [revision]  - Update %changelog in RPM spec
+#   ./generate-changelog.sh notes    <version>             - Print GitHub release notes to stdout
+#   ./generate-changelog.sh all      [version] [revision]  - Generate both debian and rpm
 #
 # If version is omitted for debian/rpm/all, all versions are included.
+# Revision defaults to 1 and is the packaging revision (-r<N>) for a rebuild.
 
 set -euo pipefail
 

@@ -599,7 +599,10 @@ void PlasmaZonesEffect::loadCachedSettings()
             // painting takes neither paintOutput's settle release nor postPaintScreen's reap,
             // so the hide is still held while isRunning() already reads false. On a desktop
             // with another live output that output's own postPaintScreen reaps and releases,
-            // so the term is silent there. The cheap term covers both cases either way.
+            // so the term is silent there. It is NOT a general "was presenting" test either
+            // way: hideCursorForPass only ever takes a hide when the pointer was on the
+            // presenting output and no other effect already held one, so an output that
+            // presented without the pointer never sets it.
             // Otherwise a closed fade rests on paintOutput's unconditional !springLive
             // addRepaint, which leaves damage pending for that output on every fade frame it
             // presents. Full rather than per-output because this repaint is a once-per-toggle

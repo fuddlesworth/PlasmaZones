@@ -147,10 +147,8 @@ inline QVariantList patchZonesWithHighlight(const QVariantList& zones, QObject* 
     return out;
 }
 
-// parseZonesJson was removed here. It had no production caller left — the zone
-// payload travels as a QVariantList, not as a JSON string — and the only thing
-// exercising it was a test that existed because the function did. Three audit
-// rounds spent findings on its comment naming callers that did not exist.
+// parseZonesJson was removed: the zone payload travels as a QVariantList, not as a
+// JSON string, so it had no production caller left.
 
 // Initialize shader timer if not already running. Prevents large iTimeDelta jumps
 // by only starting if invalid. Replaces 3 occurrences of mutex-guarded timer init.

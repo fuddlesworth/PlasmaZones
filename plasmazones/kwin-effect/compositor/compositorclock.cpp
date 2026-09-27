@@ -82,6 +82,19 @@ std::chrono::nanoseconds CompositorClock::now() const
     // animation instantly. Returning max(latched, wall) ensures now()
     // never falls behind wall time, so the first advance() after an
     // idle period latches a current start time and progresses normally.
+    //
+    // As things stand the max ALWAYS selects wall, so this is wall time with an
+    // inert first term. KWin 6.7 dropped the predicted presentTime, so the only
+    // feed is the effect's own ms-truncated steady_clock sample: truncation puts
+    // the latched value at or below the wall time it was taken from, and
+    // steady_clock is non-decreasing, so wall has caught up by every later read.
+    // The ctor's full-precision seed can tie on the same nanosecond, never win.
+    //
+    // KEPT rather than simplified to `return wall`, as forward cover: the latch
+    // and this max are what a KWin that resumes passing a real predicted
+    // presentTime would need, and the idle-staleness hazard above is the reason
+    // the wall term has to stay in the expression either way. Retiring the latch
+    // means deciding that question, not just deleting the dead half.
     return std::max(m_latestPresentTime, std::chrono::duration_cast<std::chrono::nanoseconds>(wall));
 }
 
@@ -188,6 +201,11 @@ void CompositorClock::updatePresentTime(std::chrono::milliseconds presentTime, K
     // cross-check" opt-out (default arg) used by tests driving a
     // bound clock without a real output; we skip validation in that
     // case.
+    // VACUOUS while the feed is the effect's own wall-clock sample: a mis-routed
+    // push would latch a value now() never returns (see now()), so the failure
+    // mode described above cannot occur today. Kept with the latch it guards, for
+    // the same forward-cover reason, and it would become load-bearing again the
+    // moment a real per-output presentTime is fed.
     Q_ASSERT_X(!paintingOutput || paintingOutput == m_output, "CompositorClock::updatePresentTime",
                "presentTime routed to the wrong clock — this clock is bound to a different output");
 

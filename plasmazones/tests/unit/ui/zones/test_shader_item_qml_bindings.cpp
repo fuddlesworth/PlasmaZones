@@ -346,7 +346,7 @@ Item {
     }
 
     /// The same for the zone labels, which reach the item as a QImage from the
-    /// settings and editor previews and rely on the registered converter. The
+    /// settings preview and relies on the registered converter. The
     /// converter never runs, because there is no image left to convert by the
     /// time the setter sees the value.
     void testZoneShaderItem_aBindingElementWipesGoodLabels()
@@ -379,7 +379,7 @@ Item {
 
     /// The zone labels must survive the trip through QML too, from BOTH shapes
     /// the hosts produce: the daemon passes a ZoneLabelTexture payload, while
-    /// the settings and editor shader previews pass a full QImage and rely on
+    /// the settings shader preview passes a full QImage and relies on
     /// the QImage→ZoneLabelTexture converter registered in the item.
     ///
     /// The payload happens to survive a Binding element; a QImage does not, so

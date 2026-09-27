@@ -25,8 +25,8 @@
 // pack declares. Reorder the parameters array and the chain silently blurs by
 // whatever the new first scalar is. The offline validator DOES lint this, by
 // name, in validateSurfacePack — and it lints a pack that declares no scalar at
-// all, where the chain would blur by 0. Neither lint arm has a test, so a
-// mutation deleting either would not fail one. This paragraph said the opposite
+// all, where the chain would blur by 0. Both arms are covered by
+// test_surface_pack_validator.cpp. This paragraph said the opposite
 // for several rounds, and the validator's own comment cites it as the reason
 // that lint was written, so the two had gone circular. Offsets step in canvas
 // UV: the logical-px radius is

@@ -22,9 +22,10 @@ using namespace PlasmaZones;
  * - ensureShaderTimerStarted: idempotency
  * - getAnchorsForPosition: all positions
  *
- * These are pure/inline functions from internal.h. They are replicated here
- * because internal.h has include dependencies that only resolve in unity builds.
- * The function bodies are exact copies and must stay in sync.
+ * These are the real inline definitions from overlay_helpers.h, included above.
+ * Nothing is replicated here and nothing has to be kept in sync — an earlier
+ * version of this docblock said otherwise, contradicting the include note at the
+ * top of the file.
  */
 class TestOverlayHelpers : public QObject
 {

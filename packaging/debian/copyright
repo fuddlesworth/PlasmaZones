@@ -313,6 +313,11 @@ License: CC0-1.0
 # incorporate this code ship under the licence their own stanza declares, and these
 # exist because BSD-3 clause 1 and the MIT licence each require their condition list
 # and disclaimer to travel with a source redistribution.
+#
+# The `Expat` paragraph below is BYTE-IDENTICAL to the `MIT` one further up and must
+# stay so. Two names for one text is legal DEP-5 and deliberate here — MIT is the
+# luau tarball's own declared identifier, Expat is the retained notice for the
+# gl-transitions ports — but nothing machine-checks that the two copies agree.
 
 License: BSD-3-Clause
  Redistribution and use in source and binary forms, with or without
