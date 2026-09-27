@@ -353,6 +353,12 @@ private:
     /// `hideCursorForPass` only ever takes a hide for a screen it has a live entry
     /// for, so a find-none elsewhere cannot be holding one.
     ///
+    /// `snapshotBelowCapture` is the one whose bail is WIDER than a find-none — it also
+    /// returns when the entry exists with a null texture, where a hide may well be held.
+    /// Releasing there would still be wrong, because it runs mid-walk with the capture
+    /// framebuffer pushed, and the post-walk re-seat arm catches that same condition and
+    /// releases after the walk has closed.
+    ///
     /// Grep the name before editing this paragraph again — every wrong version of
     /// it was written from a list someone believed rather than one they ran.
     ///
@@ -360,9 +366,11 @@ private:
     /// not release there: it walks m_active and returns as soon as a live entry holds
     /// the cursor, which is that very entry. Those paths go through
     /// releaseCursorHideForForeignPaint instead, which is unconditional for one output
-    /// and so is the one call that shows the cursor while a pass is still live. Three
-    /// sites need it: the failed capture walk, the failed sharp composite, and the
-    /// post-walk re-seat when the entry is still there but its textures are not.
+    /// and so is the one call that shows the cursor while a pass is still live. FOUR
+    /// sites need it, three here and one outside this class: the failed capture walk,
+    /// the failed sharp composite, the post-walk re-seat when the entry is still there
+    /// but its textures are not, and the desktop-switch foreign paint, which replaces
+    /// this output's frame from paint_pipeline.cpp while a strip leg is still live.
     void updateCursorHiding();
     bool cursorOnOutput(KWin::LogicalOutput* screen) const;
 

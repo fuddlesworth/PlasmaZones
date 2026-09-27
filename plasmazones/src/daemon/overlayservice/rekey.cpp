@@ -371,8 +371,14 @@ void OverlayService::validateScreenStateInvariant(const QStringList& targetIds) 
     // are debug-only invariants about cross-side consistency: if one trips there is nothing
     // to do but tell a developer. A modal id naming a missing key differs in that a repair
     // function for it already exists in the tree, so the check sits at the one call site,
-    // which is a mutating context, and it warns and repairs in both builds while keeping an
-    // assert for debug.
+    // which is a mutating context. It WARNS in both builds, repairs in release, and aborts
+    // in debug: the assert precedes the repair, so a debug build never reaches it. That is
+    // the intent rather than an oversight. The condition is unreachable through every route
+    // that exists today — every m_screenStates key removal is paired with the reset or with
+    // the rekey id remap — so the only thing that can trip it is a NEW migration path that
+    // forgot to carry the three ids, and self-healing that away in the one build a developer
+    // runs is how it would stay forgotten. The consequence to know: the repair arm therefore
+    // executes only in a release build.
     //
     // It is not the unrecoverable state an earlier version of this note called it. The three
     // hide paths clear the visible flag and the screen id unconditionally and emit their

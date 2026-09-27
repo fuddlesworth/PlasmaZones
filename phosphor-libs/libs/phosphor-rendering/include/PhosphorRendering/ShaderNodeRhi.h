@@ -19,6 +19,7 @@
 #include <QQuickItem>
 #include <QSGRenderNode>
 #include <QSGTextureProvider>
+#include <QSize>
 #include <QString>
 #include <QStringList>
 #include <QVector>
@@ -1035,13 +1036,18 @@ private:
     void clearDepthCreateFailure();
 
     /// The buffer size the recorded depth failure was against, so a RESIZE gets a fresh
-    /// budget. The two clears above fire on a setting change and on a resource drop, and
-    /// neither covers a resize: bufferSize follows m_width/m_height, setResolution's changed
-    /// arm arms nothing depth-related, and setBufferScale's resetBufferTargets touches
-    /// neither the depth objects nor the count. So a node that burned its three attempts at
-    /// one size carried a spent budget and a silenced warning into the next. Compared in
-    /// ensureBufferTarget's depth block rather than cleared from setResolution, which fires
-    /// on every frame of an animated resize.
+    /// retry budget. The clears above fire on a setting change, a resource drop and a
+    /// success, and none of them covers a resize: bufferSize follows m_width/m_height,
+    /// setResolution's changed arm arms nothing depth-related, and setBufferScale's
+    /// resetBufferTargets touches neither the depth objects nor the count. So a node that
+    /// burned its three attempts at one size carried a spent budget into the next. Compared
+    /// in ensureBufferTarget's depth block rather than cleared from setResolution, which
+    /// fires on every frame of an animated resize.
+    ///
+    /// That block resets the COUNT alone on a size change and leaves m_depthCreateWarned to
+    /// clearDepthCreateFailure. Clearing both there re-armed the warning every frame of a
+    /// resize and reset the count before it could reach the bound, which is the flood the
+    /// bound exists to prevent.
     QSize m_depthCreateFailedSize;
 };
 

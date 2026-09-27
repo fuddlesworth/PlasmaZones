@@ -161,7 +161,12 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
     // next frame republishes the settled width. The pending count mirrors the
     // audio block's own `uploadBars` (raw size clamped to the device limit).
     const int boundAudioWidth = m_audioSpectrumTexture ? m_audioSpectrumTexture->pixelSize().width() : 0;
-    const int audioDeviceMax = rhi ? rhi->resourceLimit(QRhi::TextureSizeMax) : 0;
+    // Unguarded, matching the isYUpInNDC() deref at the top of this function: the only
+    // caller is uploadDirtyTextures, which receives rhi from prepare() after prepare's own
+    // null check, so the pointer is never null here. The `rhi ? … : 0` this replaces was
+    // dead, and two different spellings of one precondition in one function leave a reader
+    // unable to tell which states it.
+    const int audioDeviceMax = rhi->resourceLimit(QRhi::TextureSizeMax);
     const int rawAudioBars = static_cast<int>(m_audioSpectrum.size());
     const int pendingAudioBars = (audioDeviceMax > 0) ? qMin(rawAudioBars, audioDeviceMax) : rawAudioBars;
     state.audioSpectrumSize = qMin(boundAudioWidth, pendingAudioBars);

@@ -73,10 +73,13 @@ void OverlayService::setSettings(ISettings* settings)
             connect(m_settings, &ISettings::settingsChanged, this, refreshZoneSelectors);
 
             // Recreate overlay windows when the overlay display mode changes
-            // (a zone resolving to LayoutPreview, which shader.cpp:292 refuses to
-            // render through a shader pack; there is no "compact mode", which an
-            // earlier version of this line named). Connected to the
-            // specific signal instead of settingsChanged to avoid redundant work.
+            // (a zone resolving to LayoutPreview, which useShaderForScreen in shader.cpp
+            // refuses to render through a shader pack; there is no "compact mode", which an
+            // earlier version of this line named). Named rather than cited by line: the
+            // citation this replaces had already been shifted by an unrelated hunk in that
+            // file, which is why the two in zoneshaderitem/setters.cpp were named too.
+            // Connected to the specific signal instead of settingsChanged to avoid
+            // redundant work.
             //
             // BOTH steps, matching the layoutModified path that claims to mirror this one.
             // The recreate alone is not enough: it early-returns when no screen needs a slot
@@ -88,10 +91,14 @@ void OverlayService::setSettings(ISettings* settings)
             //
             // The m_visible guard as well, which the first version of this lambda dropped
             // while its own comment claimed to mirror layoutModified. All four paths it
-            // mirrors spell it the same way, and although the recreate is inert while hidden
-            // (a dismissed slot's overlayPhysScreen is null and the per-screen body skips it),
-            // matching them is what stops the next reader concluding that one of the five
-            // knows something the others do not.
+            // mirrors spell it the same way, so matching them stops the next reader concluding
+            // that one of the five knows something the others do not — and it also closes a
+            // narrow real window, which is why the guard is not merely cosmetic. hide() clears
+            // m_visible and THEN calls dismissOverlayWindow, whose shell-surface path nulls
+            // overlayPhysScreen only in the animator's hide completion. A setting change
+            // landing inside that fade would otherwise have recreated a slot mid-dismiss,
+            // re-arming overlayPhysScreen and overlayGeometry underneath a completion still
+            // pending.
             connect(m_settings, &ISettings::overlayDisplayModeChanged, this, [this]() {
                 if (m_visible) {
                     recreateOverlayWindowsOnTypeMismatch();

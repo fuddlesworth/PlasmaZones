@@ -539,11 +539,14 @@ def _dep5_failures() -> list[str]:
     # way. Narrowing it to 2 left BOTH the selftest and a whole-tree run green while every
     # header whose tags sit on lines 3-8 silently stopped being read, so those files' licences
     # and holders went unchecked. NEITHER direction is tree-caught anywhere near the current
-    # value: rule_dep5 over all 3826 tracked files reports zero findings for every value from
-    # 2 to 21, first catches a widening at 22 (a scaffold fixture whose copyright line reads
+    # value: rule_dep5 over every tracked file reports zero findings for every value from 2 to
+    # 21, first catches a widening at 22 (a scaffold fixture whose copyright line reads
     # "2026 <your name>") and reports two by 40. So this literal is the only thing holding the
-    # value, in both directions. The sibling constant SPDX_HEAD_LINES had this closed a round
-    # earlier and this one was missed in the same edit.
+    # value, in both directions. No file COUNT here on purpose — the first version of this
+    # paragraph named one and the commit that wrote it added the file that falsified it, which
+    # is the trap check-conventions.py's own header warns about twice over.
+    # The sibling constant SPDX_HEAD_LINES had this closed a round earlier and this one was
+    # missed in the same edit.
     if mod.DEP5_HEAD_LINES != 8:
         bad.append(f"DEP5_HEAD_LINES is {mod.DEP5_HEAD_LINES}, not 8; narrowing it silently stops the rule "
                    f"reading any header whose tags sit past the new bound")
@@ -822,24 +825,30 @@ def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
     # would compare equal to itself after an arm mutated it IN PLACE, and the comparison
     # could never fire for the one shape nobody would notice.
     #
-    # SIX gate globals, plus one table in a sibling module. Each one was added after a
-    # mutation proved the suite green without it, and the two most recent were both added by
-    # the same arm they belong to: the wiring arm stubs `read_error`, main() writes
-    # `_SELECTED_RULES`, and the baseline-writer arm stubs `tracked_files`. _SELECTED_RULES
-    # and tracked_files matter beyond tidiness, because a later arm inherits them:
-    # rule_license's no-identifier deferral reads the first and a license arm runs AFTER the
-    # wiring arm, while a leaked tracked_files would hand every later rule a temp file list.
-    # conventions_shared_text.SHARED_PARAM_TEXT is redirected by two arms in this file and is
-    # the same shape, so it is compared here rather than left to the arm that set it.
+    # SIX gate globals, plus a table AND a function in two sibling modules. Each was added
+    # after a mutation proved the suite green — or worse, red for the wrong reason — without
+    # it, and three of them were added by the very arm they belong to: the wiring arm stubs
+    # `read_error` and wraps `conventions_dep5._dead_stanza_problems`, main() writes
+    # `_SELECTED_RULES`, and the baseline-writer arm stubs `tracked_files`. The last three
+    # matter beyond tidiness because a later arm inherits them: rule_license's no-identifier
+    # deferral reads _SELECTED_RULES and a license arm runs AFTER the wiring arm, a leaked
+    # tracked_files would hand every later rule a temp file list, and a leaked
+    # _dead_stanza_problems makes the dead-stanza arm report TWO failures that both accuse the
+    # check under test rather than the leak. conventions_shared_text.SHARED_PARAM_TEXT is
+    # redirected by two arms in this file and is the same shape. All of them are compared here
+    # rather than left to the arm that set them, because the arm that leaks is not the arm
+    # that fails.
     entry_globals = partition_readable.__globals__
     entry_repo, entry_suffixes = entry_globals["REPO"], frozenset(entry_globals["CODE_SUFFIXES"])
     entry_baseline = entry_globals["BASELINE"]
     entry_read_error = entry_globals["read_error"]
     entry_selected = frozenset(entry_globals["_SELECTED_RULES"])
     entry_tracked = entry_globals["tracked_files"]
+    import conventions_dep5
     import conventions_shared_text
 
     entry_shared_text = conventions_shared_text.SHARED_PARAM_TEXT
+    entry_dead_stanza = conventions_dep5._dead_stanza_problems
 
     for text, shape in SELFTEST_PROSE_BAD:
         if not prose_problems(text):
@@ -905,6 +914,10 @@ def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
     if conventions_shared_text.SHARED_PARAM_TEXT is not entry_shared_text:
         failures.append("an arm left conventions_shared_text.SHARED_PARAM_TEXT redirected, so "
                         "rule_shared_param_text would check that arm's table instead of the real one")
+    if conventions_dep5._dead_stanza_problems is not entry_dead_stanza:
+        failures.append("the wiring arm left conventions_dep5._dead_stanza_problems wrapped, so the "
+                        "dead-stanza arm runs against its stubbed path lister and fails for a reason "
+                        "that has nothing to do with the dead-stanza check")
 
     for line in failures:
         print(f"selftest: {line}", file=sys.stderr)

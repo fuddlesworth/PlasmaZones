@@ -4,16 +4,17 @@
 // The offline pack validator's SURFACE arm, which until this file had no test
 // harness at all.
 //
-// That absence was structural rather than accidental. The validator has four
-// production arms, and the executables beside this one reached only three of
-// them: test_pack_validators covers animation and overlay, test_pointer_pack_-
-// validator covers pointer, test_animation_pack_bakes and test_pack_model_-
-// detection cover the animation stage bakes and the shared/ marker lookup, and
-// surface had nothing at all. Each executable compiles ALL FOUR arms, so a lint
-// removed from the surface arm alone broke no test and failed no link either.
-// Nothing in the topology made a missing family visible. The split that produced
-// it was made when the shared file passed the file-size ceiling, so the cut
-// followed line count rather than the family boundary.
+// That absence WAS structural rather than accidental, in the past tense this paragraph
+// now needs. The validator has four production arms, and at the time this file was written
+// the executables beside it reached only three: animation and overlay in
+// test_pack_validators, pointer in test_pointer_pack_validator, the animation stage bakes
+// and the shared/ marker lookup in test_animation_pack_bakes and test_pack_model_detection,
+// and surface nothing at all. Each executable compiles ALL FOUR arms, so a lint removed
+// from the surface arm alone broke no test and failed no link either, and nothing in the
+// topology made a missing family visible. That cut had followed line count rather than the
+// family boundary. Two files have since joined on the family boundary instead —
+// test_surface_pack_lints.cpp and test_surface_blur_chain_lints.cpp — so the sentence
+// describes how the gap arose, not how the directory is laid out today.
 //
 // The bundled-pack gate (shader_validate_surface) only proves the shipped packs
 // are clean; it cannot show that a BROKEN pack is caught. These slots build
@@ -362,7 +363,13 @@ private Q_SLOTS:
         // states the default explicitly is not nagged for it.
         obj.insert(QStringLiteral("bufferWraps"), QJsonArray{QStringLiteral("clamp")});
         obj.insert(QStringLiteral("bufferFilter"), QStringLiteral("linear"));
-        r = validateSurface(tmp, QStringLiteral("sf-wrap"), obj, surfaceBodyReading({}));
+        // The filler-writing helper again, not plain validateSurface: this second call would
+        // otherwise rest on the first one having written filler.frag into the same pack
+        // directory. It works either way today, but a reorder or a deletion of the first call
+        // would leave the pack declaring a buffer shader that is not there — which reports
+        // "multipass buffer shader missing" and makes the absence assertion below pass
+        // vacuously. The helper is idempotent, so calling it twice costs one rewrite.
+        r = validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-wrap"), obj, surfaceBodyReading({}));
         QVERIFY2(!r.report.contains(QStringLiteral("the compositor ignores")), qPrintable(r.report));
     }
 
@@ -753,11 +760,19 @@ private Q_SLOTS:
         QTemporaryDir tmp;
         REQUIRE_SURFACE_FIXTURE(tmp);
 
+        // The FILLER pass, twice, not two Kawase tokens. Every sub-fixture here is about the
+        // bufferScales ARRAY, and a Kawase token drags in the blur family's own lints: with
+        // these built from kawase-down-0 + kawase-up-2 each of the six drew three or four
+        // errors, and the two NEGATIVE controls below (`!contains("out of range")` and
+        // `!contains("pass budget")`) were asserting an absence against a pack the validator
+        // rejected four ways, surviving only because none of those messages happened to carry
+        // their substring. The filler reads no channel and declares no parameter, so it draws
+        // nothing of its own.
         const auto twoPassPack = [](const QString& id) {
             QJsonObject obj = surfacePack(id, QJsonArray{});
             obj.insert(QStringLiteral("multipass"), true);
             obj.insert(QStringLiteral("bufferShaders"),
-                       QJsonArray{QStringLiteral("builtin:kawase-down-0"), QStringLiteral("builtin:kawase-up-2")});
+                       QJsonArray{surfaceFillerBufferName(), surfaceFillerBufferName()});
             return obj;
         };
 
@@ -765,7 +780,8 @@ private Q_SLOTS:
         {
             QJsonObject obj = twoPassPack(QStringLiteral("sf-scales-len"));
             obj.insert(QStringLiteral("bufferScales"), QJsonArray{0.25});
-            const PackResult r = validateSurface(tmp, QStringLiteral("sf-scales-len"), obj, surfaceBodyReading({}));
+            const PackResult r =
+                validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-scales-len"), obj, surfaceBodyReading({}));
             QVERIFY2(r.report.contains(QStringLiteral("bufferScales has 1 entries for 2 buffer shaders")),
                      qPrintable(r.report));
         }
@@ -775,7 +791,8 @@ private Q_SLOTS:
         {
             QJsonObject obj = twoPassPack(QStringLiteral("sf-scales-type"));
             obj.insert(QStringLiteral("bufferScales"), QJsonArray{0.25, QStringLiteral("0.125")});
-            const PackResult r = validateSurface(tmp, QStringLiteral("sf-scales-type"), obj, surfaceBodyReading({}));
+            const PackResult r =
+                validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-scales-type"), obj, surfaceBodyReading({}));
             QVERIFY2(r.report.contains(QStringLiteral("bufferScales entry 1 is not a number")), qPrintable(r.report));
             // Entry 0 is fine and must draw nothing, or the arm would be firing
             // on the array rather than on the entry.
@@ -788,7 +805,8 @@ private Q_SLOTS:
             QJsonObject obj = twoPassPack(QStringLiteral("sf-scales-range"));
             obj.insert(QStringLiteral("bufferScales"),
                        QJsonArray{PhosphorShaders::kMinBufferScale / 2.0, PhosphorShaders::kMaxBufferScale * 2.0});
-            const PackResult r = validateSurface(tmp, QStringLiteral("sf-scales-range"), obj, surfaceBodyReading({}));
+            const PackResult r =
+                validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-scales-range"), obj, surfaceBodyReading({}));
             QVERIFY2(r.report.contains(QStringLiteral("bufferScales entry 0 out of range")), qPrintable(r.report));
             QVERIFY2(r.report.contains(QStringLiteral("bufferScales entry 1 out of range")), qPrintable(r.report));
             QVERIFY2(r.report.contains(QStringLiteral("clamped at load")), qPrintable(r.report));
@@ -801,7 +819,8 @@ private Q_SLOTS:
             QJsonObject obj = twoPassPack(QStringLiteral("sf-scales-edge"));
             obj.insert(QStringLiteral("bufferScales"),
                        QJsonArray{PhosphorShaders::kMinBufferScale, PhosphorShaders::kMaxBufferScale});
-            const PackResult r = validateSurface(tmp, QStringLiteral("sf-scales-edge"), obj, surfaceBodyReading({}));
+            const PackResult r =
+                validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-scales-edge"), obj, surfaceBodyReading({}));
             QVERIFY2(!r.report.contains(QStringLiteral("out of range")), qPrintable(r.report));
         }
 
@@ -814,12 +833,13 @@ private Q_SLOTS:
             QJsonArray passes;
             QJsonArray scales;
             for (int i = 0; i < PhosphorShaders::kMaxBufferPasses + 1; ++i) {
-                passes.append(QStringLiteral("builtin:kawase-down-0"));
+                passes.append(surfaceFillerBufferName());
                 scales.append(0.25);
             }
             obj.insert(QStringLiteral("bufferShaders"), passes);
             obj.insert(QStringLiteral("bufferScales"), scales);
-            const PackResult r = validateSurface(tmp, QStringLiteral("sf-scales-cap"), obj, surfaceBodyReading({}));
+            const PackResult r =
+                validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-scales-cap"), obj, surfaceBodyReading({}));
             QVERIFY2(
                 r.report.contains(
                     QStringLiteral("past the %1-pass budget").arg(static_cast<int>(PhosphorShaders::kMaxBufferPasses))),
@@ -835,12 +855,13 @@ private Q_SLOTS:
             QJsonArray passes;
             QJsonArray scales;
             for (int i = 0; i < PhosphorShaders::kMaxBufferPasses; ++i) {
-                passes.append(QStringLiteral("builtin:kawase-down-0"));
+                passes.append(surfaceFillerBufferName());
                 scales.append(0.25);
             }
             obj.insert(QStringLiteral("bufferShaders"), passes);
             obj.insert(QStringLiteral("bufferScales"), scales);
-            const PackResult r = validateSurface(tmp, QStringLiteral("sf-scales-atcap"), obj, surfaceBodyReading({}));
+            const PackResult r =
+                validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-scales-atcap"), obj, surfaceBodyReading({}));
             QVERIFY2(!r.report.contains(QStringLiteral("pass budget")), qPrintable(r.report));
         }
     }

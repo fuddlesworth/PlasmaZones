@@ -458,28 +458,54 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
                 }
             }
         }
-        // THE GAUSSIAN PAIR IS POSITIONAL TOO, and for a sharper reason than the pyramid
-        // above: surfaceGaussianChannelV samples iChannel0 — buffer pass 0's output, per
-        // surface_multipass.glsl — and nothing else. So the vertical half only composes when
-        // the horizontal half is pass 0 and it is pass 1, which is the shape
-        // surface_blur.glsl's own header declares ("Buffer pass 1: VERTICAL half over buffer
-        // 0's result"). Written v-then-h, pass 0 samples the FBO it is itself writing; on its
-        // own it does the same. Both validated clean before this lint existed, because every
-        // token still resolved and every frag still compiled.
+        // THE VERTICAL GAUSSIAN HALF NEEDS THE HORIZONTAL ONE AT PASS 0.
+        // surfaceGaussianChannelV samples iChannel0 and nothing else, and iChannelN is buffer
+        // pass N's output for EVERY later pass, not only for pass 1 — both hosts bind
+        // channels 0..i-1 to the prior outputs and a 1x1 transparent fallback to channel i
+        // and beyond (ShaderNodeRhi's multi-buffer SRB build, and the compositor's surface
+        // fold). kawase_up_2 is the in-tree proof: it sits at index 6 and reads iChannel0.
         //
-        // Only the V side is checked. A lone builtin:gaussian-h is legitimate: it reads the
-        // backdrop, not a previous pass, so it is a horizontal-only blur that composes
-        // wherever it sits. Linting "one without the other" would reject it.
+        // So only TWO shapes are provably broken, and an earlier version of this lint was
+        // wider than that — it demanded index 1 exactly and rejected [h, X, v], which runs
+        // the same three computations as the accepted [h, v, X], and [own_h.frag, v], which
+        // composes correctly against the pack's own horizontal half.
+        //
+        //   (a) gaussian-v at index 0: every channel it could read is the transparent
+        //       fallback, so it writes a blank pane. (NOT a read of the FBO it is writing,
+        //       which is what the fallback exists to prevent.)
+        //   (b) gaussian-v declared alongside builtin:gaussian-h that is NOT at index 0: the
+        //       author plainly meant the pair, and pass 0 is something else, so the vertical
+        //       half cannot be reading the horizontal half's result.
+        //
+        // A pack that ships its own horizontal half is deliberately NOT linted: the validator
+        // cannot identify an arbitrary frag as a horizontal Gaussian, so [own_h.frag, v] is
+        // left alone. Same token-only reach as the Kawase arm above.
         if (anyGaussianV) {
-            const bool pairOk = declaredBuffers.size() >= 2
-                && declaredBuffers.at(0).toString() == QLatin1String("builtin:gaussian-h")
-                && declaredBuffers.at(1).toString() == QLatin1String("builtin:gaussian-v");
-            if (!pairOk) {
+            // By hand: QJsonArray has no indexOf, and a QJsonValue comparison would match a
+            // non-string entry that happens to compare equal.
+            int vIndex = -1;
+            int hIndex = -1;
+            for (int i = 0; i < declaredBuffers.size(); ++i) {
+                const QString tok = declaredBuffers.at(i).toString();
+                if (vIndex < 0 && tok == QLatin1String("builtin:gaussian-v")) {
+                    vIndex = i;
+                }
+                if (hIndex < 0 && tok == QLatin1String("builtin:gaussian-h")) {
+                    hIndex = i;
+                }
+            }
+            if (vIndex == 0) {
                 lints << QStringLiteral(
-                    "builtin:gaussian-v samples iChannel0, which is buffer pass 0's output, so the separable pair "
-                    "is positional: declare builtin:gaussian-h as bufferShaders[0] and builtin:gaussian-v as "
-                    "bufferShaders[1]. As declared, the vertical half blurs something other than the horizontal "
-                    "half's result");
+                    "builtin:gaussian-v is bufferShaders[0], and it samples iChannel0 — buffer pass 0's output, "
+                    "which at pass 0 is the 1x1 transparent fallback both hosts bind. The vertical half has to "
+                    "follow the horizontal one, so declare builtin:gaussian-h as bufferShaders[0]");
+            } else if (anyGaussianH && hIndex != 0) {
+                lints << QStringLiteral(
+                             "builtin:gaussian-v samples iChannel0, which is buffer pass 0's output, but "
+                             "builtin:gaussian-h is declared at bufferShaders[%1] rather than [0], so the vertical "
+                             "half blurs pass 0's result instead of the horizontal half's. Move "
+                             "builtin:gaussian-h to bufferShaders[0]")
+                             .arg(hIndex);
             }
         }
         // NEEDS BACKDROP. kawase_down_0 and gaussian_h each have backdropTexel() as their
@@ -499,13 +525,21 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         // A non-bool additionally draws the kBoolKeys type lint, which is the arm that
         // explains the shape.
         if (readsBackdrop && !meta.value(QLatin1String("needsBackdrop")).toBool()) {
-            const QString backdropPass =
-                anyKawaseDown0 ? QStringLiteral("builtin:kawase-down-0") : QStringLiteral("builtin:gaussian-h");
+            // BOTH names when both hold, not a ternary that picks one: a chain can declare the
+            // gaussian pair and the Kawase pyramid together, and naming only the first sends
+            // the author to a pass that is not the one they are looking at.
+            QStringList backdropPasses;
+            if (anyKawaseDown0) {
+                backdropPasses << QStringLiteral("builtin:kawase-down-0");
+            }
+            if (anyGaussianH) {
+                backdropPasses << QStringLiteral("builtin:gaussian-h");
+            }
             lints << QStringLiteral(
                          "this chain's %1 pass samples the backdrop through backdropTexel(), but "
                          "\"needsBackdrop\" is not true, so nothing is captured and every pass "
                          "composites a transparent pane")
-                         .arg(backdropPass);
+                         .arg(backdropPasses.join(QLatin1String(" and ")));
         }
         // THE RADIUS SLOT. Every pass in both builtin blur families reads the radius as
         // customParams[0].x — the Kawase passes, gaussian_h AND gaussian_v — and slots are
@@ -513,7 +547,7 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         // whatever the pack's first scalar parameter happens to be. Reorder the parameters
         // array and the pack still compiles, still loads, and blurs by a corner radius.
         // surface_blur.glsl documents the slot convention and
-        // test_surface_pack_validator.cpp covers the arms. Do NOT re-quote that header,
+        // test_surface_blur_chain_lints.cpp covers the arms. Do NOT re-quote that header,
         // which this comment used to: the two cited each other for rounds.
         if (readsRadiusSlot) {
             QString firstScalarId;

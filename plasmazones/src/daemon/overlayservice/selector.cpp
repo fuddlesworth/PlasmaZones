@@ -468,10 +468,13 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
             if (cardRect.contains(localX, localY)) {
                 // .at(), not operator[]: the mutable overload detaches, which is a real
                 // cost at the `zones` read below. It is NOT one here, and the claim that it
-                // was has been measured and is false — `layouts` is read back off a QML
-                // `property var`, and that read materialises a FRESH unshared QVariantList
-                // every time, so its refcount is 1 and a subscript detaches nothing. This
-                // spelling is consistency with the site that does pay, not a saving.
+                // was has been measured and is false. `layouts` came from
+                // `slot->property(...).toList()`, and whatever the QML engine materialises,
+                // the temporary QVariant that toList() copied from died at the semicolon —
+                // so the list's refcount is 1 by the time this runs and a subscript detaches
+                // nothing. That argument needs no knowledge of the engine, which is why it is
+                // the one recorded here. This spelling is consistency with the site that does
+                // pay, not a saving.
                 QVariantMap layoutMap = layouts.at(i).toMap();
                 QString layoutId = layoutMap.value(QLatin1String("id")).toString();
 
@@ -537,8 +540,10 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
 
                     // .at() and here it genuinely earns it: `zones` was taken out of
                     // layoutMap, which is still alive, so the list's refcount is 2 and a
-                    // mutable subscript would deep-copy every zone map on every cursor tick.
-                    // Plain COW, provable without knowing anything about QML.
+                    // mutable subscript would reallocate the handle array and re-reference
+                    // every zone map, on every cursor tick. Not a deep copy — the inner maps
+                    // stay COW-shared — but plain COW, provable without knowing anything
+                    // about QML.
                     QVariantMap zoneMap = zones.at(z).toMap();
                     // Relative geometry for m_selectedZoneRelGeo, which backs
                     // getSelectedZoneGeometry's fallback path at drop time.

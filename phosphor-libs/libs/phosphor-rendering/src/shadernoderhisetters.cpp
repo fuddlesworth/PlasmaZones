@@ -612,9 +612,21 @@ void ShaderNodeRhi::setBufferShaderPaths(const QStringList& paths)
     // and those are the point: iChannelResolution is resolved from the live buffer textures
     // during the UBO upload, which is gated on m_uniformsDirty, so without them a pack
     // switch left the GPU holding the departed passes' resolutions. The rebuild normally
-    // re-arms them, but it is not reached when the new path list is EMPTY, which is how both
-    // multipass-disable paths call this (surfaceanimator_shaderattach.cpp,
-    // pointerpreviewcontroller.cpp and the shader-render pointer driver all pass {}).
+    // re-arms them, but it is not reached when the new path list is EMPTY, and all THREE
+    // multipass-disable paths pass {} — surfaceanimator_shaderattach.cpp,
+    // pointerpreviewcontroller.cpp and the shader-render pointer driver. Each pushes it
+    // through ShaderEffect::setBufferShaderPaths, which reaches this node setter from
+    // syncBasePropertiesToNode rather than directly.
+    //
+    // ONE-FRAME CONSEQUENCE on a NON-empty A→B switch, recorded so it is not rediscovered as
+    // a regression: syncBaseUniforms runs before ensureBufferTarget in prepare(), so on the
+    // first frame after the switch the new textures do not exist yet, numChannels is 0, and
+    // the armed scene-header upload publishes (1,1) into every iChannelResolution slot where
+    // the hand-rolled teardown left the departed pack's size standing for that frame. Neither
+    // value is the right one, and the same publish already happened on any switch that also
+    // changed a param or a colour, since syncBasePropertiesToNode pushes those first. The
+    // underlying ordering — channel sizes published before the pass that resolves them — is
+    // older than this call and is where a fix would belong.
     resetBufferTargets();
 }
 

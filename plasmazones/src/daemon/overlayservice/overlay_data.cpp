@@ -147,9 +147,14 @@ void OverlayService::updateLabelsTextureForWindow(QQuickItem* slot, const QVaria
 
     // A SetOverlayShowZoneNumbers context rule overrides the global setting for this
     // screen, matching the QML `showNumbers` property set in updateOverlayWindow so
-    // both the property and the label-texture path agree. An empty screenId (slot
-    // untracked) resolves to no override, i.e. the global setting. The per-layout
-    // hide still wins (a layout that hides numbers keeps them hidden).
+    // both the property and the label-texture path agree. The per-layout hide still
+    // wins (a layout that hides numbers keeps them hidden).
+    //
+    // screenId is always the caller's live key now, so the override resolves even on the
+    // not-tracked path above. It could not before: the id came out of a reverse scan for
+    // the slot pointer and was left EMPTY on a miss, which resolved to no override and
+    // silently fell back to the global setting. That is a behaviour change, in the
+    // direction of agreeing with updateOverlayWindow.
     const PhosphorZones::ContextOverlayOverride overlayOverride = overlayOverrideForScreen(m_layoutManager, screenId);
     const bool showNumbers = overlayOverride.showZoneNumbers.value_or(m_settings ? m_settings->showZoneNumbers() : true)
         && (!screenLayout || screenLayout->showZoneNumbers());

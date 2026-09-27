@@ -29,11 +29,11 @@
 // whatever the new first scalar is. Note SCALAR, not float: a bool pools as one
 // too, so leading with `roundBottomCorners` puts a corner switch in the radius
 // slot. The offline validator lints all of this, by name, in surfaceMetadataLints
-// (packvalidator_surface_lints.cpp, split out of validateSurfacePack when that file
-// reached its size ceiling), including a pack that declares no scalar at all, where
-// the chain would blur by 0. test_surface_pack_validator.cpp covers the arms: the
-// no-scalar one, the wrong-name one, a bool declared first, a parameter with no
-// type at all, and the gaussian twins of the last two.
+// (packvalidator_surface_lints.cpp, split out of packvalidator_surface.cpp when that
+// FILE reached its size ceiling), including a pack that declares no scalar at all,
+// where the chain would blur by 0. test_surface_blur_chain_lints.cpp covers the arms:
+// the no-scalar one, the wrong-name one, a bool declared first, a parameter with no
+// type at all, and the gaussian twin of the bool-first one.
 
 #ifndef PLASMAZONES_SURFACE_BLUR_GLSL
 #define PLASMAZONES_SURFACE_BLUR_GLSL
@@ -78,10 +78,16 @@ vec4 surfaceGaussianBackdropH(vec2 uv) {
 // bufferScale resolution). Together the two passes approximate a full 2D
 // Gaussian; the main pass samples the result as iChannel1.
 //
-// iChannel0 is hardcoded, so the pair is POSITIONAL in the way the Kawase pyramid
-// is: this half only composes as pass 1 with the horizontal half as pass 0. The
-// offline validator enforces that, because a pack that declares the two the other
-// way round still resolves both tokens and still compiles both frags.
+// iChannel0 is hardcoded, so this half needs the HORIZONTAL one at pass 0. It does
+// not need to be pass 1 itself: iChannelN is pass N's output for every later pass,
+// so [gaussian-h, something, gaussian-v] composes exactly as [gaussian-h,
+// gaussian-v] does. At pass 0 it would read the 1x1 transparent fallback both hosts
+// bind for channels at or past the current pass index, and write a blank pane.
+//
+// The offline validator enforces that for the `builtin:` tokens, because a pack
+// declaring them the wrong way round still resolves both and still compiles both
+// frags. A pack shipping its own copies is on its own: an arbitrary frag cannot be
+// identified as a horizontal Gaussian, so it is left unlinted rather than guessed at.
 //
 // The tap reach is measured against the CANVAS, not the buffer: stepUv is
 // radiusPx / (4 * uSurfaceSize.y), so the outermost tap sits a full

@@ -625,6 +625,16 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     if (!it->second.captureTex || !it->second.belowTex) {
         m_effect->m_stripCaptureSkippedWindows.clear();
         releaseCursorHideForForeignPaint(screen);
+        // And the settle-fade self-pump, for the same reason the failed-capture-walk arm
+        // carries it: the tail's `!springLive` addRepaint is this leg's only scheduler once
+        // the spring has settled, and this return skips the tail. Without it a mid-fade abort
+        // leaves the entry plus its two output-sized textures resident with no frame
+        // scheduled, because postPaintScreen's reapSettled only erases once the fade has
+        // closed. Arm A above needs none: its entry is already gone, so there is no fade to
+        // pump and nothing holding the textures.
+        if (!springLive) {
+            KWin::effects->addRepaint(screen->geometry());
+        }
         return false;
     }
     pass = &it->second;

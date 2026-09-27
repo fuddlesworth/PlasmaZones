@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Fixture helpers shared by the offline pack validator's five test executables:
-// test_pack_validators, test_pointer_pack_validator, test_surface_pack_validator,
-// test_animation_pack_bakes and test_pack_model_detection.
+// Fixture helpers shared by every executable in the shadervalidate/ foreach in
+// plasmazones/tests/unit/CMakeLists.txt, which is where the list lives. Named there rather
+// than enumerated here: two earlier versions of this comment carried a list and a count, and
+// both were stale — one of them made stale by the commit that wrote it.
 // Header-only and `inline` so each executable carries one definition and no
-// test-only library has to exist for five small binaries.
+// test-only library has to exist for a handful of small binaries.
 
 #pragma once
 
@@ -199,10 +200,10 @@ inline QJsonArray toArray(const QStringList& values)
 }
 
 // ── surface fixture writers ─────────────────────────────────────────────
-// Shared by the surface validator's two test executables. They were file-local
-// to the first one until the second needed the same writers: a per-lint negative
-// slot is only cheap when the fixture is, and two copies of a fixture writer is
-// how two test files start disagreeing about what a valid pack looks like.
+// Shared by every surface test executable — three of them now, and the count is left out on
+// purpose. They were file-local to the first one until the second needed the same writers: a
+// per-lint negative slot is only cheap when the fixture is, and two copies of a fixture
+// writer is how two test files start disagreeing about what a valid pack looks like.
 
 /// The surface twin of `validate`. Writes the pack plus a `pSurface` entry body,
 /// which the validator assembles into a full TU exactly as the daemon and the
@@ -402,9 +403,9 @@ inline bool reportLineHasWithout(const QString& report, const QString& stage, co
 
 /// The surface twin, and the reason it did not exist until now is the finding it
 /// closes: the SURFACE arm of the validator had no test harness at all. Four
-/// production arms (animation, pointer, surface, overlay) and, before this macro,
-/// four of the five executables listed at the top of this file, between them
-/// reaching only three of those arms. Each executable compiles all four, so a
+/// production arms (animation, pointer, surface, overlay) and, before this macro, every
+/// executable then in the shadervalidate/ foreach reaching only three of them
+/// between them. Each executable compiles all four, so a
 /// lint deleted from the surface arm alone
 /// broke no test and failed no link. The topology was an artifact of the file-size
 /// ceiling rather than of the family boundary, which is why the gap went unnoticed.

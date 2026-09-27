@@ -28,13 +28,18 @@
 #include <QGuiApplication>
 #include <QMargins>
 #include <QPalette>
-// No QQuickItem (overlay_helpers.h above supplies it, and this header's own body only
-// takes QQuickItem* through that) and no QQuickWindow: neither token appears anywhere in
-// this file except as an include line. Removed under the same rule and with the same
-// evidence as the six that left overlay_helpers.h, including the non-unity builds with
-// the shell on and off, because a unity build cannot tell an orphan from a load-bearing
-// transitive include. The two TUs in this directory that do use QQuickWindow in code,
-// osd.cpp and priming.cpp, each include it themselves.
+// No QQuickItem and no QQuickWindow: neither token appears anywhere in this file except as
+// an include line, and this header's own helpers take QObject* rather than QQuickItem*.
+// overlay_helpers.h above still supplies QQuickItem for the TUs that do want it. Removed
+// under the same rule and with the same evidence as the six that left overlay_helpers.h,
+// including the non-unity builds with the shell on and off, because a unity build cannot
+// tell an orphan from a load-bearing transitive include.
+//
+// The evidence is "every TU in this directory that reaches a QQuickWindow member includes
+// <QQuickWindow> itself", which is a dozen of them, not the two an earlier version of this
+// comment named. The three that do not include it reach no such member and no `auto` route
+// to one — and an `auto` route is exactly what a token grep cannot see, which is how this
+// same removal was got wrong once in shader.cpp.
 #include <QScreen>
 
 namespace PlasmaZones {

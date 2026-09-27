@@ -370,7 +370,11 @@ void OverlayService::refreshContextLockState()
     // it, so push just the lock state to the live slot).
     if (m_layoutPickerVisible && !m_layoutPickerScreenId.isEmpty()) {
         // constFind, not value(): value() copies the whole PerScreenOverlayState struct just
-        // to call a one-line accessor. The convention its siblings state and follow.
+        // to call a one-line accessor. Stated as the preference rather than as settled
+        // practice, because it is not: seven sites in this directory still spell it value()
+        // (overlay.cpp x4, screens.cpp x2, lifecycle.cpp), all of them on per-show paths
+        // where the copy costs nothing worth a refactor. An earlier version of this line
+        // claimed the siblings follow it.
         const auto pickerIt = m_screenStates.constFind(m_layoutPickerScreenId);
         if (auto* slot = pickerIt != m_screenStates.constEnd() ? pickerIt->layoutPickerSlot() : nullptr) {
             // Per-output virtual desktops (#648): each screen resolves its own desktop.

@@ -113,14 +113,24 @@ bool ShaderNodeRhi::ensureBufferTarget()
     // Create or resize depth texture before render targets that reference it
     if (m_useDepthBuffer && (!m_depthTexture || m_depthTexture->pixelSize() != bufferSize)) {
         // A different buffer size is a different GPU request, so it gets its own retry
-        // budget and its own warning. Without this a node that burned all three attempts at
-        // one size carried the spent budget AND the latched warning into the next, so the
-        // new size got one attempt per externally-driven frame, no requested retry, and no
-        // diagnostic. Keyed on the size here rather than cleared from setResolution, because
-        // setResolution fires on every frame of an animated resize and clearing there would
-        // restore the vsync-rate flood the bound exists to stop.
+        // budget: without this a node that burned all three attempts at one size carried the
+        // spent budget into the next and got one attempt per externally-driven frame with no
+        // requested retry. Keyed on the size here rather than cleared from setResolution,
+        // which fires on every frame of an animated resize.
+        //
+        // THE COUNT ONLY, deliberately not clearDepthCreateFailure(). An earlier version
+        // called that, which also clears the warning latch — and bufferSize follows
+        // m_width/m_height, so during an animated resize it moves nearly every frame. Every
+        // frame then cleared the latch, printed the failure again and reset the count before
+        // it could reach three: the vsync-rate flood the bound exists to stop, reintroduced
+        // by the fix for something else, with the bound never engaging while the size kept
+        // moving. The latch stays owned by the three paths that clear it through
+        // clearDepthCreateFailure (the success path, releaseRhiResources, setUseDepthBuffer).
+        // The cost of that split is one diagnostic per node rather than one per size, which
+        // is the right trade: the message says depth creation is failing, not which size it
+        // failed at.
         if (bufferSize != m_depthCreateFailedSize) {
-            clearDepthCreateFailure();
+            m_depthCreateRetries = 0;
             m_depthCreateFailedSize = bufferSize;
         }
         m_depthTexture.reset(rhi->newTexture(QRhiTexture::R32F, bufferSize, 1, QRhiTexture::RenderTarget));
