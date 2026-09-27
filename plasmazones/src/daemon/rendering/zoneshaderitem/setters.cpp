@@ -127,7 +127,7 @@ void ZoneShaderItem::setLabelsTextureVariant(const QVariant& labels)
     }
 
     // The payload as-is, or a QImage through the converter registered in the
-    // constructor (the settings and editor previews still produce one).
+    // constructor (the settings preview still produces one).
     if (unwrapped.canConvert<PhosphorRendering::ZoneLabelTexture>()) {
         setLabelsTexture(unwrapped.value<PhosphorRendering::ZoneLabelTexture>());
         return;

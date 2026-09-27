@@ -104,9 +104,7 @@ vec4 pSurface(vec2 uv) {
     // shared halo exists to prevent. The phosphor-motes sibling carries the same
     // block for the same reason. Same profile and the same 12-logical-px cap as
     // the shared helper, so all four fade alike.
-    float edgeDist = min(min(px.x, px.y), min(uSurfaceSize.x - px.x, uSurfaceSize.y - px.y));
-    float feather = max(min(0.35 * reach, 12.0 * max(uSurfaceScale, 0.001)), 1e-3);
-    float edgeFade = smoothstep(0.0, feather, edgeDist);
+    float edgeFade = surfaceCanvasEdgeFade(px, reach);
     glow *= edgeFade;
     alpha *= edgeFade;
 

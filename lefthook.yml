@@ -78,7 +78,11 @@ pre-commit:
         # a pragma drifting past Qt's 128-byte window would only ever fire in
         # CI, which is the wall-of-warnings-from-files-nobody-edited case it
         # was written to prevent.
-        - "*.{cpp,cc,cxx,h,hpp,qml,luau,py,frag,vert,glsl,js}"
+        # `sh` and `cmake` for the same reason: three rules read those suffixes, and
+        # without an entry the 16 tracked files outside packaging/ (cmake/*.cmake, the
+        # nested-session helpers, plasmazones-report.sh) matched no glob at all, so
+        # editing one ran no pre-commit check. `c` covers the two QPA protocol stubs.
+        - "*.{c,cpp,cc,cxx,h,hpp,qml,luau,py,frag,vert,glsl,js,sh,cmake}"
         - "plasmazones/data/**/*.json"
         # `plasmazones/data/**/*.json` does not match a file sitting directly
         # in data/, and whatsnew.json is a prose surface CLAUDE.md names, so

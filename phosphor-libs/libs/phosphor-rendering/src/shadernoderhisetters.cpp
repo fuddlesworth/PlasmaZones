@@ -391,12 +391,18 @@ void ShaderNodeRhi::setUserTextureWrap(int slot, const QString& wrap)
     // phase, so every one of them already runs inside a sync that dirties at
     // the end, and the item-side setters call update() besides. It is kept
     // because this is an LGPL library and the only thing protecting an
-    // out-of-tree host that forgets that trailing markDirty. The cover is the
-    // SAMPLER-REBUILD family only (this setter, setBufferWrap/Wraps,
-    // setBufferFilter/Filters, setUseWallpaper, setUseDepthBuffer); the setters
-    // that drop pipelines without rebuilding a sampler do not carry it. The
-    // lambda that fires from QSGTextureProvider::textureChanged is the genuine
-    // case, since that one arrives outside sync.
+    // out-of-tree host that forgets that trailing markDirty. Exactly seven
+    // setters carry it — this one, setBufferWrap/Wraps, setBufferFilter/Filters,
+    // setUseWallpaper and setUseDepthBuffer — plus the textureChanged lambda.
+    // That set is HISTORICAL, not principled: no property distinguishes it.
+    // setUseWallpaper rebuilds no sampler at all (its own comment two hundred
+    // lines down says the wallpaper texture and sampler are deliberately NOT
+    // freed on the OFF flip), and setUniformExtension, setExtraBinding,
+    // setSourceTextureProvider, setGridSubdivisions, setBufferFeedback,
+    // setBufferScale(s) and setHalfFloatBuffers all drop pipelines or bindings
+    // and carry none. The lambda that fires from
+    // QSGTextureProvider::textureChanged is the genuine case, since that one
+    // arrives outside sync.
     markDirty(QSGNode::DirtyMaterial);
 }
 

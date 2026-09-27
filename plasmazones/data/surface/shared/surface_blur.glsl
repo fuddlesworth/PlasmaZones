@@ -19,14 +19,17 @@
 // validator. Each skips the preamble deliberately, and a pack that referenced a
 // p_<id> from a buffer pass would fail on every path it ships on.
 //
-// NOTHING ENFORCES THE SLOT, which is the part a pack author has to carry. The
-// builtin passes read the radius as customParams[0].x, and slots are assigned
-// by DECLARATION ORDER (see buildParamPreamble), so the convention is that
-// `blurRadius` is the FIRST scalar parameter a blur-family pack declares.
-// Reorder the parameters array and the chain silently blurs by whatever the
-// new first scalar is; no validator lint and no test covers it, and this file
-// is the only place the convention is written down outside the authoring
-// skill. Offsets step in canvas UV: the logical-px radius is
+// THE RADIUS SLOT. The builtin passes read the radius as customParams[0].x, and
+// slots are assigned by DECLARATION ORDER (see buildParamPreamble), so the
+// convention is that `blurRadius` is the FIRST scalar parameter a blur-family
+// pack declares. Reorder the parameters array and the chain silently blurs by
+// whatever the new first scalar is. The offline validator DOES lint this, by
+// name, in validateSurfacePack — and it lints a pack that declares no scalar at
+// all, where the chain would blur by 0. Neither lint arm has a test, so a
+// mutation deleting either would not fail one. This paragraph said the opposite
+// for several rounds, and the validator's own comment cites it as the reason
+// that lint was written, so the two had gone circular. Offsets step in canvas
+// UV: the logical-px radius is
 // scaled to device px by uSurfaceScale, normalized by the canvas extent
 // (uSurfaceSize), and spread over the kernel's 4-tap reach.
 
@@ -81,12 +84,12 @@ vec4 surfaceGaussianBackdropH(vec2 uv) {
 // It is CLAMP on the compositor unconditionally: the buffer targets are
 // created GL_LINEAR / GL_CLAMP_TO_EDGE and the `bufferWraps` and
 // `bufferFilters` keys are daemon-only, which the fields themselves declare.
-// `halfFloatBuffers` is daemon-only too, though unlike those two its field does
-// not say so: the compositor hardcodes GL_RGBA8 and never reads the key, so a
-// pack asking for true gets RGBA16F on
-// one host and RGBA8 on the other. Every bundled pack that declares buffer
-// passes declares it false (the seven blur-family packs); the other seventeen
-// declare no buffers at all, so the key never reaches an allocation.
+// `halfFloatBuffers` is daemon-only in the same way, and its field says so too:
+// the compositor hardcodes GL_RGBA8 and never reads the key, so a pack asking
+// for true gets RGBA16F on one host and RGBA8 on the other. Every bundled pack
+// that declares buffer passes declares it false (the seven blur-family packs);
+// the other seventeen declare no buffers at all, so the key never reaches an
+// allocation.
 // So a big radius on a small surface smears the edge texel rather than
 // blurring, identically on both hosts at the default wrap. Do NOT "fix" that
 // by clamping uv here; that changes the Gaussian's edge behaviour everywhere.
@@ -218,8 +221,11 @@ const float kSurfaceKawaseBaseTexel = 4.0;
 // the step is the lesser evil.
 //
 // 15 -> 16 is left as a step for a different reason: depth 1 IS the quarter-res
-// floor. Closing it would need an offset near 6.9 at quarter resolution, which is
-// the square Kawase ghosting this calibration exists to avoid.
+// floor. Closing it would need a RETURNED tap offset near 6.9 at quarter
+// resolution — a kwinOffset near 14.8, not the 6.9 an OffsetMin entry would
+// take — which is the square Kawase ghosting this calibration exists to avoid.
+// The two bullets above use "offset" for the kwinOffset scale; this one means
+// the value surfaceKawaseOffset returns.
 const vec4 kSurfaceKawaseReach = vec4(15.0, 40.0, 120.0, 320.0);
 const vec4 kSurfaceKawaseOffsetMin = vec4(1.0, 2.0, 3.0, 3.6);
 const vec4 kSurfaceKawaseOffsetMax = vec4(3.0, 5.0, 8.0, 8.0);

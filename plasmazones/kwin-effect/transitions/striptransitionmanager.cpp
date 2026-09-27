@@ -209,9 +209,13 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
 {
     // As on the desktop pass: the damage region does not participate, because
     // prePaintScreen sets PAINT_SCREEN_TRANSFORMED for a running output, which makes
-    // KWin paint the whole output whatever the region says. There is NO per-frame
-    // strip repaint pump: StripViewAnimator::scheduleRepaints is never called from
-    // postPaintScreen, unlike the window, desktop and pointer passes.
+    // KWin paint the whole output whatever the region says. No strip pump runs from
+    // postPaintScreen: StripViewAnimator::scheduleRepaints is never called from there,
+    // unlike the window, desktop and pointer passes. A LIVE leg pumps its own frames
+    // one level down, through its AnimatedValue's clock->requestFrame, which
+    // CompositorClock turns into a per-output addRepaint (see the scheduleRepaints
+    // docblock). The settle fade pumps through this function's own !springLive
+    // addRepaint below.
     Q_UNUSED(deviceRegion)
     if (!screen) {
         return false;
@@ -329,11 +333,13 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // into uStrip is smeared by the pack and never redrawn sharp, since this
     // pass replaces the output's paint. Hidden here, blitted by
     // TransitionPass::drawSceneCursor at the tail. Placed AFTER the compile and
-    // allocation checks above so no reachable return-false path between the hide
-    // and the tail exists (the re-seat miss after the capture is structural and
-    // releases the hide itself): a pass that abandons this frame paints the
-    // normal scene with the cursor still shown, and a pass that abandons a LATER frame
-    // releases the hide it took (the abort arms above).
+    // allocation checks above so those two aborts cannot strand the hide. Three
+    // return-false paths remain below, and each releases the hide itself: the
+    // post-walk re-seat miss through updateCursorHiding, because its entry is
+    // already gone, and the failed capture walk and the failed sharp composite
+    // through releaseCursorHideForForeignPaint, because their entry is still live
+    // and updateCursorHiding would therefore not release it. A pass that abandons
+    // THIS frame paints the normal scene with the cursor still shown.
     hideCursorForPass(screen);
 
     // Render the live scene into the capture. This is the downstream chain

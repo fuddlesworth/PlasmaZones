@@ -44,7 +44,7 @@ public:
         return renderingBackendOptions().contains(normalized) ? normalized : renderingBackend();
     }
 
-    /// GPU the daemon (and editor) render on. "auto" = whatever the driver /
+    /// GPU the daemon renders on. "auto" = whatever the driver /
     /// Qt picks; otherwise a lowercase hex PCI "vendor:device" pair (e.g.
     /// "1002:164e"). Not an enum — the legal set is whatever GPUs the machine
     /// has, so the schema stores a free string and the picker enumerates DRM

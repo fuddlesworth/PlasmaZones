@@ -17,12 +17,9 @@
 // uniform itself and repaints the window continuously while decorated.
 
 // Four-stop brand gradient, t in [0, 1]: cyan → blue → purple → rose.
+// Local name for the shared ramp, so this pack's own p_color* params reach it.
 vec3 fluxGradient(float t) {
-    t = clamp(t, 0.0, 1.0) * 3.0;
-    vec3 c = mix(p_colorCyan.rgb, p_colorBlue.rgb, clamp(t, 0.0, 1.0));
-    c = mix(c, p_colorPurple.rgb, clamp(t - 1.0, 0.0, 1.0));
-    c = mix(c, p_colorRose.rgb, clamp(t - 2.0, 0.0, 1.0));
-    return c;
+    return surfaceFluxGradient(p_colorCyan.rgb, p_colorBlue.rgb, p_colorPurple.rgb, p_colorRose.rgb, t);
 }
 
 vec4 pSurface(vec2 uv) {

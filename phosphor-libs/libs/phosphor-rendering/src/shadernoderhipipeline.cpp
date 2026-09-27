@@ -317,6 +317,26 @@ bool ShaderNodeRhi::ensureBufferTarget()
                                  << "m_width=" << m_width << "m_height=" << m_height << "bufferScale=" << m_bufferScale
                                  << "passes=" << n << "sizes=" << passSizes.join(QLatin1Char(' '));
             for (int i = 0; i < n; ++i) {
+                // PER-INDEX, not the whole set. The scan above only asks whether
+                // ANY pass needs rebuilding; recreating the ones that already
+                // match costs a needless destroy/create of their texture and
+                // render target, and it DEFEATS the create-failure latch:
+                // createTextureAndRT clears the latch on success, so a healthy
+                // pass 0 cleared it on every frame a later pass kept failing,
+                // and warnCreateFailed then warned once per frame — exactly the
+                // frame-cadence flood the latch exists to stop. A failing pass
+                // resets its own texture, so needCreate is true again next frame
+                // and the sequence repeated for as long as the condition lasted.
+                //
+                // Safe to skip a matching pass even with a depth attachment:
+                // passSize() returns the shared bufferSize for every pass when
+                // m_useDepthBuffer, so a depth resize changes every pass's size
+                // and nothing is skipped, and a depth FLIP comes through
+                // setUseDepthBuffer, which drops the whole set via
+                // resetBufferTargets before this runs.
+                if (m_multiBufferTextures[i] && m_multiBufferTextures[i]->pixelSize() == passSize(i)) {
+                    continue;
+                }
                 if (!createTextureAndRT(m_multiBufferTextures[i], m_multiBufferRenderTargets[i],
                                         m_multiBufferRenderPassDescriptors[i], passSize(i), wantsMips(i))) {
                     qCDebug(lcShaderNode) << "Failed to create multi-buffer texture" << i << "at" << passSize(i);
@@ -517,9 +537,13 @@ bool ShaderNodeRhi::ensureBufferSampler(QRhi* rhi, int index)
     }
     m_bufferSamplers[index].reset(rhi->newSampler(minF, magF, mipF, addr, addr));
     if (!m_bufferSamplers[index]->create()) {
-        // Latched for the same reason as the buffer-target failures: a false
-        // return here aborts prepare(), which is re-entered next frame, so an
-        // unlatched warning fills the journal at frame cadence.
+        // Latched because a false return here aborts prepare(), which is
+        // re-entered next frame, so an unlatched warning fills the journal at
+        // frame cadence. The clear below cannot be reached for a sampler that
+        // already exists (the early return above takes it), and samplers are
+        // freed only by resetBufferTargets and releaseRhiResources, so in a
+        // persistent mixed failure the clear fires once and the failing index
+        // stays silent.
         if (!m_bufferSamplerCreateWarned) {
             m_bufferSamplerCreateWarned = true;
             qCWarning(lcShaderNode) << "Failed to create buffer sampler" << index;

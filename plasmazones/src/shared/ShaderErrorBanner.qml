@@ -14,8 +14,10 @@ import org.kde.kirigami as Kirigami
  * monospaced) error log. The log is a glslang compile log on a bake failure,
  * but most of the reachable messages are LOAD failures (an unusable URL, a
  * missing zone.vert, a fragment file that will not open), so the heading
- * deliberately says load rather than compile. Shared by the editor preview
- * and the settings shader browser so both surface the same in-app feedback.
+ * deliberately says load rather than compile. Its one production consumer is
+ * the settings shader browser. The live daemon overlay shows the same errorLog
+ * text through its own inline card in RenderNodeOverlayContent.qml rather than
+ * through this component.
  *
  * The host sets `errorLog` (typically `ZoneShaderItem.errorLog`) and positions
  * this with anchors; it self-hides when the log is empty.

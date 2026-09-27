@@ -242,19 +242,23 @@ void ShaderNodeRhi::uploadExtensionToUbo(QRhiResourceUpdateBatch* batch)
 // with no compiler error. The inline restoration is just a safety net for the
 // image pass; the full prepare() sequence does the real work.
 //
-// Dirty-flag invariants (who sets what). The lists below name the SETTERS. Four
+// Dirty-flag invariants (who sets what). The lists below name the SETTERS. SIX
 // non-setter paths also raise m_sceneDataDirty, and a future setter author would
 // not think to look for them: resetBufferTargets(), ensureBufferTarget()'s
 // create-success path, the audio-spectrum resize re-arm inside uploadDirtyTextures
-// itself, and releaseRhiResources(). Each publishes iChannelResolution or
-// iAudioSpectrumSize from live textures:
+// itself, releaseRhiResources(), the source-provider identity-change branch inside
+// uploadDirtyTextures, and invalidateUniforms(). Each publishes iChannelResolution
+// or iAudioSpectrumSize from live textures:
 //   m_timeDirty       ← setTime, setTimeDelta, setFrame, setBufferFeedback
-//                        (toggle), prepare() on feedback-buffer clear
-//   m_timeHiDirty     ← setTime (wrap-offset crossing)
+//                        (toggle), prepare() on feedback-buffer clear,
+//                        invalidateUniforms, releaseRhiResources
+//   m_timeHiDirty     ← setTime (wrap-offset crossing), invalidateUniforms,
+//                        releaseRhiResources
 //   m_sceneDataDirty  ← setResolution, setMousePosition, setCustomParams,
 //                        setCustomColor, setAudioSpectrum, setUserTexture,
 //                        setIsReversed, setWallpaperTexture, setUseWallpaper,
-//                        setBackdropRect, and the surface-contract setters
+//                        setBackdropRect, setSourceTextureProvider (the
+//                        provider-cleared arm), and the surface-contract setters
 //                        (setSurfaceOpacity, setSurfaceScale, setSurfaceFocused,
 //                        setSurfaceSize, setSurfaceFrameTopLeft,
 //                        setSurfaceFrameSize)

@@ -69,7 +69,7 @@ ZoneShaderItem::ZoneShaderItem(QQuickItem* parent)
 {
     // Register the labels payload metatype + a QImage→ZoneLabelTexture converter
     // once per process. The daemon overlay path assigns a sparse payload
-    // directly, but the editor/settings shader previews still hand a full QImage
+    // directly, but the settings shader preview still hands a full QImage
     // to the (now ZoneLabelTexture-typed) labelsTexture property; the converter
     // wraps such an image as a single full-size tile so those paths keep working
     // unchanged. Done here so any process that uses ZoneShaderItem gets it
@@ -447,8 +447,9 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
                 qCWarning(PlasmaZones::lcOverlay) << "No vertex shader found for" << fragPath
                                                   << "(expected zone.vert in the shader dir or a search path)";
                 // Carries the journal line's parenthetical BYTE FOR BYTE, so a user comparing the
-                // banner against the journal reads one sentence rather than two. The banner is the
-                // surface that matters here: it shows on the live overlay and in the settings app.
+                // on-screen text against the journal reads one sentence rather than two. The text
+                // is what matters here: it reaches the live overlay's own inline card
+                // (RenderNodeOverlayContent) and the settings browser's ShaderErrorBanner.
                 failureReason = QStringLiteral("No vertex shader found for ") + fragPath
                     + QStringLiteral(" (expected zone.vert in the shader dir or a search path)");
                 loaded = false;

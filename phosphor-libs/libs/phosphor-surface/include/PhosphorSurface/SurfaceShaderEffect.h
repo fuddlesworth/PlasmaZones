@@ -55,14 +55,11 @@ namespace PhosphorSurfaceShaders {
  *
  * On the daemon side the fields below reach a `SurfaceShaderItem`, which
  * inherits the whole multipass property set from
- * `PhosphorRendering::ShaderEffect`. Four hosts forward them through
- * `composeStageMap`: the overlay decoration host
- * (phosphor-surface-quick's `SurfaceDecoration.qml`, via `OverlayService::applyDecoration`),
- * the OSD (`osd.cpp`), the settings decoration preview
- * (`plasmazones/src/settings/pages/decorationpreviewcontroller.cpp`) and the shell chrome
- * (`phosphor-shell/src/shellchrome.cpp`). A multipass stage is layered
- * (`layer.enabled`) because the render node drives its own passes and needs a
- * target isolated from the scene graph's batch renderer.
+ * `PhosphorRendering::ShaderEffect`. The hosts that forward them through
+ * `composeStageMap` are enumerated once, in `SurfaceChainCompose.h` beside the
+ * function itself, rather than a second time here. The `layer.enabled` policy
+ * for a multipass stage belongs to `SurfaceDecoration.qml`, which states it at
+ * length and records what an earlier theory about it cost.
  *
  * The kwin-effect compositor compiles and runs the same buffer passes in its
  * composite fold. It degrades to single-pass, with a diagnostic log, only

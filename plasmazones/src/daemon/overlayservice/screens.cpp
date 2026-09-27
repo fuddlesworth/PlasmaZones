@@ -224,8 +224,10 @@ void OverlayService::resetModalSingletonsForDestroyedId(const QString& id)
     // release off those signals, and a stale visible=true would swallow
     // the next toggle press showing nothing. Signals fire even though the
     // slot never animated out — dismissal-on-teardown is part of each
-    // signal's documented contract. Called from every teardown site that
-    // destroys a shell able to host a visible modal: whichever runs first
+    // signal's documented contract. Called from every RUNTIME teardown site
+    // that destroys a shell able to host a visible modal, and deliberately NOT
+    // from ~OverlayService, where resetting members and emitting dismissed
+    // signals is moot. Whichever site runs first
     // removes the m_screenStates keys or zeroes the ShellState, so each site
     // must reset for the ids it destroys rather than relying on another.
     // Idempotent, so the first call clears the

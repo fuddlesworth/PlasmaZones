@@ -43,10 +43,11 @@ float sdRoundedBox(vec2 p, vec2 b, float r) {
 // packs it collapses the other way: to a DOT at the frame corner when the rect
 // is exactly zero (sdRoundedBox with a zero half-size reduces to a distance
 // from one point), and to a sub-pixel sliver when it is merely under a pixel —
-// a band where ONE extent is sub-pixel, and where both are a sub-pixel blob:
-// a disc once the pack's radius reaches the cap, a square at radius 0 and a
-// rounded square between, since
-// frameSdfSplit clamps the radius to the smaller half-extent. Either way each pack
+// a band where ONE extent is sub-pixel, and where both are a sub-pixel blob
+// whose exact shape depends on the extents and the pack's radius (frameSdfSplit
+// clamps that radius to the smaller half-extent) and carries no consequence
+// here. Two rounds enumerated the shapes and both enumerations were right only
+// for an EQUAL-extent rect. Either way each pack
 // multiplies its window sample by that mask, so the SURFACE would vanish or be
 // thinned rather than pass through. So every pack that reads the frame rect
 // tests this and returns the content untouched. No host has been SHOWN to reach
@@ -392,6 +393,23 @@ vec4 faintTintSlab(vec3 tint, float tintStrength, float mask) {
 // Glow/shadow outer-margin falloff (the ~12 lines glow and shadow shared): the
 // exp(-4t²) reach profile from SDF distance `d`, feathered to zero just inside
 // the texture edge so a thin capture margin fades out instead of clipping in a
+// Fade to zero just inside the CANVAS edge, so a reach wider than the captured
+// margin tapers out instead of clipping in a hard rectangle. Returns the scalar; the
+// caller decides what it multiplies, which is why this is not folded into haloFalloff.
+//
+// Three sites carried this by hand — haloFalloff itself plus fireflies and
+// phosphor-motes, whose own comments each said they were replicating the shared
+// helper's profile "so all four fade alike". They now share it rather than assert it.
+//
+// The feather is FLOORED so edge0 != edge1: smoothstep is undefined when they are
+// equal, and a zero reach collapsed them. With the floor a zero reach is wholly safe
+// rather than half-guarded.
+float surfaceCanvasEdgeFade(vec2 edgePx, float reachPx) {
+    float edgeDist = min(min(edgePx.x, edgePx.y), min(uSurfaceSize.x - edgePx.x, uSurfaceSize.y - edgePx.y));
+    float feather = max(min(0.35 * reachPx, 12.0 * max(uSurfaceScale, 0.001)), 1e-3);
+    return smoothstep(0.0, feather, edgeDist);
+}
+
 // hard rectangle, held to where the surface is not opaque (1 - baseAlpha) AND to
 // within two reaches inside the frame at full value for the first, and scaled by
 // `strength` and the focus dim
@@ -477,12 +495,7 @@ float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float stre
                                     clamp(gateCornerTopPx, 0.0, gateCap),
                                     clamp(gateCornerBottomPx, 0.0, gateCap));
     halo *= smoothstep(-2.0 * r, -r, dBody);
-    float edgeDist = min(min(edgePx.x, edgePx.y), min(uSurfaceSize.x - edgePx.x, uSurfaceSize.y - edgePx.y));
-    // Floored so edge0 != edge1: smoothstep is undefined when they are equal, and
-    // a zero reach collapsed them. With this, a zero reach is wholly safe rather
-    // than half-guarded.
-    float feather = max(min(0.35 * reach, 12.0 * max(uSurfaceScale, 0.001)), 1e-3);
-    halo *= smoothstep(0.0, feather, edgeDist);
+    halo *= surfaceCanvasEdgeFade(edgePx, reach);
     halo *= (1.0 - baseAlpha);
     halo *= strength * focusDim(focusFloor);
     return halo;
@@ -586,6 +599,21 @@ float framePerimeter(vec2 p, vec2 center, vec2 halfSize) {
         return 0.0;
     }
     return atan(rel.y, rel.x) / TAU;
+}
+
+// The Phosphor set's four-stop cyan → blue → purple → rose ramp, @p t in [0,1].
+//
+// The colours come in as ARGUMENTS for the reason surfaceBottomRadius and surfaceBendUv
+// do: `p_colorCyan` and friends are per-pack generated names a shared header cannot see.
+// Three packs (border-phosphor, phosphor-glass, phosphor-motes) each carried a
+// byte-identical copy of this body and had to be kept in step by hand; each now keeps a
+// one-line local wrapper under its own name so its call sites are unchanged.
+vec3 surfaceFluxGradient(vec3 cyan, vec3 blue, vec3 purple, vec3 rose, float t) {
+    t = clamp(t, 0.0, 1.0) * 3.0;
+    vec3 c = mix(cyan, blue, clamp(t, 0.0, 1.0));
+    c = mix(c, purple, clamp(t - 1.0, 0.0, 1.0));
+    c = mix(c, rose, clamp(t - 2.0, 0.0, 1.0));
+    return c;
 }
 
 #endif // PLASMAZONES_SURFACE_LIB_GLSL

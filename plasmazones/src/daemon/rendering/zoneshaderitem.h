@@ -107,8 +107,8 @@ public:
     /// QVariant rather than the payload type.
     ///
     /// The payload itself survives a QML `Binding`, but a QImage does not, and
-    /// the settings and editor shader previews hand this property a full
-    /// QImage and lean on the registered QImage→ZoneLabelTexture converter
+    /// the settings shader preview hands this property a full
+    /// QImage and leans on the registered QImage→ZoneLabelTexture converter
     /// (see the converter's registration in the constructor). Through a
     /// Binding element that image arrived as an invalid QVariant and the
     /// labels silently vanished, so those previews drew their zones with no
@@ -154,8 +154,11 @@ public:
     // that directly from QML / C++ — no zone-specific alias needed.
 
     // Note: setEntryScaffold is inherited and PUBLIC, but this override never delegates to
-    // ShaderEffect::updatePaintNode, the only site that pushes the item's own scaffold, so a
-    // host call to it is never read. Its SurfaceShaderItem twin carries the same note.
+    // ShaderEffect::updatePaintNode, the only site that pushes the item's own scaffold, so
+    // the scaffold a host sets is never read for rendering. The call is not inert, though:
+    // the base setter still sets Status::Loading, raises the item's shaderDirty and calls
+    // update(), so it forces a reload and a statusChanged round trip. Its SurfaceShaderItem
+    // twin carries the same note.
     //
     // Note: the inherited vertexShaderUrl property is likewise ignored here. The zone runtime
     // resolves its vertex stage only through resolveZoneVertexPath, which looks for a file

@@ -957,10 +957,6 @@ private:
     /// the next successful create, so a failure that recurs after a genuine
     /// recovery is reported again instead of being swallowed for the session.
     bool m_bufferTargetCreateWarned = false;
-    /// Latch for the buffer SAMPLER create failure, which sits on the same
-    /// re-entered-every-frame path as the target failures above and so needs the
-    /// same one-shot treatment. Cleared on the next successful create.
-    bool m_bufferSamplerCreateWarned = false;
     /// 1×1 transparent fallback texture used when a source provider is set
     /// but has not yet produced a usable QRhiTexture (or its texture lives
     /// on a foreign QRhi). Bound at slot 0 instead of falling through to
@@ -990,6 +986,17 @@ private:
     std::unique_ptr<QRhiTexture> m_wallpaperTexture;
     std::unique_ptr<QRhiSampler> m_wallpaperSampler;
     bool m_wallpaperDirty = false;
+
+    // ── Appended members ───────────────────────────────────────────────
+    // New members go HERE, at the end, even at SOVERSION 0: this is an installed
+    // header, and inserting one mid-class shifts every later member's offset for
+    // anything already compiled against it. Grouped by concern above only for the
+    // members that shipped together.
+
+    /// Latch for the buffer SAMPLER create failure, which sits on the same
+    /// re-entered-every-frame path as the target-create failures and so needs the
+    /// same one-shot treatment. Cleared on the next successful create.
+    bool m_bufferSamplerCreateWarned = false;
 };
 
 /** Result of warmShaderBakeCacheForPaths for reporting to UI. */

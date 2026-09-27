@@ -1,6 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
+// ONE of this pack's declared parameters is never read here: `blurRadius` is
+// consumed POSITIONALLY by the shared buffer passes as customParams[0].x, the
+// first scalar parameter declared. surface_blur.glsl's header carries the slot
+// convention and validateSurfacePack lints it by name. So a reader looking for
+// p_blurRadius below will not find it, and that is not an omission.
+//
 // Phosphor glass surface shader — the Phosphor set's blur pane, and the one
 // pack that takes the project name literally: the glass behaves like a
 // phosphor screen. The scene behind the surface is blurred by the dual Kawase chain and sunk
@@ -34,12 +40,9 @@
 #include <surface_color.glsl>
 
 // Four-stop brand gradient, t in [0, 1]: cyan → blue → purple → rose.
+// Local name for the shared ramp, so this pack's own p_color* params reach it.
 vec3 fluxGradient(float t) {
-    t = clamp(t, 0.0, 1.0) * 3.0;
-    vec3 c = mix(p_colorCyan.rgb, p_colorBlue.rgb, clamp(t, 0.0, 1.0));
-    c = mix(c, p_colorPurple.rgb, clamp(t - 1.0, 0.0, 1.0));
-    c = mix(c, p_colorRose.rgb, clamp(t - 2.0, 0.0, 1.0));
-    return c;
+    return surfaceFluxGradient(p_colorCyan.rgb, p_colorBlue.rgb, p_colorPurple.rgb, p_colorRose.rgb, t);
 }
 
 // Seamless ping-pong of an unbounded coordinate into [0, 1].
@@ -69,8 +72,8 @@ vec4 pSurface(vec2 uv) {
     // ── Recharge sweep: a soft diagonal band drifting across the pane on a
     // slow clock. It boosts the phosphor response as it passes, so the glass
     // visibly re-energises rather than sitting at a steady glow. ──
-    // sweepSpeed is the whole recharge clock, gating the band AND the
-    // persistence breathing at :99, so that its declared minimum of 0 stills
+    // sweepSpeed is the whole recharge clock, gating the band AND the `persist`
+    // term below, so that its declared minimum of 0 stills
     // the pack. Dropping the iTime term alone does not: sweepPhase becomes a
     // function of position, exp() peaks at diag = 0.714, and the pane keeps a
     // permanently bright diagonal band that only Glow strength 0 could remove,

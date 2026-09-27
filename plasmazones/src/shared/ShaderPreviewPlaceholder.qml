@@ -9,7 +9,7 @@ import org.kde.kirigami as Kirigami
  * "Preview unavailable" stand-in for a live shader preview that is not showing
  * yet.
  *
- * Sibling of ShaderCompileErrorBanner, which reports a FAILED preview with the
+ * Sibling of ShaderErrorBanner, which reports a FAILED preview with the
  * compiler's own message. This one covers a preview that has not finished
  * arriving, and says so in one translation entry rather than each browser route
  * growing its own wording.

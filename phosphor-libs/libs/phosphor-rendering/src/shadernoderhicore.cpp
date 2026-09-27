@@ -191,6 +191,14 @@ ShaderNodeRhi::ShaderNodeRhi(QQuickItem* item, std::unique_ptr<PhosphorShaders::
     , m_uboProfile(profile ? std::move(profile) : std::make_unique<PhosphorShaders::BaseUniformProfile>())
 {
     Q_ASSERT(item != nullptr);
+    // Release-build pair for the assert. Without it a null item compiles the
+    // assert out and every dereference site bails through its own
+    // `m_itemValid && m_item` guard, so prepare() returns at qCDebug level and
+    // the node silently never paints — fail-safe, but voiceless at default log
+    // levels, which is the hardest shape to diagnose from a bug report.
+    if (item == nullptr) {
+        qCWarning(lcShaderNode) << "ShaderNodeRhi constructed with a null item; this node will never paint";
+    }
     // Arm the liveness block the tracking ShaderEffect reads. No lock needed
     // here: nothing else can hold a reference to the block until
     // registerRenderNode() publishes it, which happens after construction.
@@ -412,10 +420,20 @@ void ShaderNodeRhi::prepare()
         m_vbo.reset(
             rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(RhiConstants::QuadVertices)));
         // Every failure arm in this block tears down through releaseRhiResources()
-        // rather than its own list of resets. The lists used to be hand-rolled and
-        // had to be kept in step with each other as resources were added; the
-        // helper is a superset of all of them and additionally re-arms the bake
-        // flags, so the retried init does not run against a stale baked shader.
+        // rather than its own list of resets. The lists were hand-rolled, five of
+        // them, and had to be kept in step with each other as resources were
+        // added; the helper is a superset of all of them. It does NOT clear
+        // m_shaderError, so the message each arm sets just above survives to the
+        // item's status block.
+        //
+        // It costs more than the lists did, and the cost is real rather than
+        // theoretical: the helper also drops the baked shaders and re-arms every
+        // bake flag, so a transient init failure throws away a valid bake. The
+        // main pair re-bakes from retained sources, but a MULTI-buffer pack
+        // re-READS every buffer pass from disk on the render thread, because
+        // bakeBufferShaders has no per-pass source cache. Bounded, and only on an
+        // already-degraded path. Do NOT justify this by "a stale baked shader":
+        // there is no reachable state where an init failure was exposed to one.
         if (!m_vbo->create()) {
             m_shaderError = QStringLiteral("Failed to create vertex buffer");
             releaseRhiResources();

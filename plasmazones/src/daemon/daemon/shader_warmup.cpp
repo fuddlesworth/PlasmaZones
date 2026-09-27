@@ -250,9 +250,16 @@ void Daemon::setupShaderWarmBakes()
 
     // Re-init guard: m_shaderRegistry is ctor-owned and survives stop(), so a
     // stop() → init() cycle would stack a second shadersChanged handler here
-    // and double-schedule every zone bake from then on. The animation and
-    // surface connections escape this only because their registries are
-    // recreated each init.
+    // and double-schedule every zone bake from then on.
+    //
+    // The animation and surface connections are NOT held, and the argument that
+    // their registries are recreated each init is the same one setupShaderPresets
+    // refuses a hundred lines above: it is true only because init() happens to
+    // call setupAnimationShaderEffects and setupSurfaceShaderEffects immediately
+    // before this, and nothing enforces that ordering. Left unheld deliberately
+    // rather than by oversight, because the cost of a double-connect here is
+    // bounded: shouldScheduleBake's fingerprint map absorbs the duplicate, so it
+    // buys one extra catalog walk per emit, not a second bake.
     if (m_zoneWarmBakeConnection) {
         disconnect(m_zoneWarmBakeConnection);
     }

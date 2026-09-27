@@ -199,7 +199,7 @@ Requires(post): /usr/bin/update-mime-database
 %endif
 
 %description
-PlasmaZones is a window placement tool for KDE Plasma 6. It gives every
+PlasmaZones is a window placement tool for KDE Plasma 6.7+. It gives every
 monitor one of three placement modes. Snapping drops windows into zones
 you drew, tiling places them automatically with a scripted algorithm,
 and scrolling arranges them as columns on an endless strip.
@@ -210,9 +210,11 @@ Features:
 - Scrolling columns with width presets, tabs, and strip templates
 - A mode per monitor, virtual desktop, and activity
 - Multi-monitor support and virtual screen subdivision
+- KWin effect for visual feedback during window dragging
 - Keyboard navigation with rebindable shortcuts throughout
 - Per-application window rules
-- GLSL shader overlays, window decoration packs, and window animations
+- GLSL shader overlays, decoration packs, and window animations
+- System Settings integration (KCM)
 - Wayland-native using Layer Shell
 
 %prep

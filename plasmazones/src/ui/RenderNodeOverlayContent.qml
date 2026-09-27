@@ -293,7 +293,7 @@ Item {
             visible: root.shaderSource.toString() !== "" && zoneShaderRenderer.status === ZoneShaderItem.Error
             anchors.centerIn: parent
             // gridUnit multiple rather than a raw px cap, matching the
-            // ShaderCompileErrorBanner sites' sizing convention.
+            // ShaderErrorBanner sites' sizing convention.
             width: Math.min(parent.width * 0.5, Kirigami.Units.gridUnit * 22)
             height: shaderErrorText.implicitHeight + Kirigami.Units.gridUnit * 2
             color: Kirigami.Theme.backgroundColor
@@ -305,7 +305,11 @@ Item {
             Text {
                 id: shaderErrorText
 
-                Accessible.name: i18n("Shader error details")
+                // Accessible.DESCRIPTION, not name: the Text's own text is the error log, and
+                // that is the default accessible name. Overriding the name would hide the
+                // actual error from assistive technology, which is what the settings app's
+                // ShaderErrorBanner documents for the same card.
+                Accessible.description: i18nc("@info:whatsthis", "Shader error details")
                 anchors.centerIn: parent
                 text: zoneShaderRenderer.errorLog || i18n("Shader error")
                 color: Kirigami.Theme.textColor

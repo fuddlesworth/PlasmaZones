@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import fnmatch
 import re
+import subprocess
 
 
 # The Debian DEP-5 file tells every downstream redistributor what each shipped
@@ -255,6 +256,58 @@ def dep5_problems(files, *, repo, line_of, tracked_files):
                         0,
                         f"copyright holder {shown} is not named in the matching "
                         f"packaging/debian/copyright stanza ('Files: {pat}')",
+                    )
+                )
+
+    # DEAD STANZAS, checked from the other direction. Everything above walks FILES and
+    # asks which stanza covers them, so it can only see a file that carries an SPDX
+    # identifier — and a licence-text file carries none. That left a whole class of
+    # defect invisible: a stanza written for a path that does not exist silently does
+    # nothing, and the file it was meant to cover falls back to the `Files: *`
+    # catch-all. A misspelled path is the dangerous shape, because it looks right and
+    # reinstates the very declaration the stanza was added to correct.
+    #
+    # Only on a run that already widened to the whole tree: on a staged subset
+    # `targets` is not the tracked list and every pattern would look dead.
+    if targets is not files:
+        out += _dead_stanza_problems(stanzas, dep5, repo)
+    return out
+
+
+# `debian/` is the assembled source package's own layout, not this repo's: dpkg reads
+# debian/copyright from the unpacked tree, where packaging/debian/ has been moved to
+# debian/. A stanza naming it is correct and permanently unmatched here.
+DEP5_BUILD_TIME_PREFIXES = ("debian/",)
+
+
+def _dead_stanza_problems(stanzas: list[dict], dep5, repo) -> list[tuple[str, int, str]]:
+    """Every Files: pattern that matches no path git knows about.
+
+    Compares against the RAW `git ls-files`, not the gate's tracked_files(): that one
+    drops the vendored trees because they are not ours to police, and the two vendored
+    tarballs have legitimate stanzas that would otherwise read as dead. This check is
+    about whether a pattern can ever match, which is a different question from whether
+    the rules should police what it matches.
+    """
+    try:
+        raw = subprocess.run(["git", "ls-files"], cwd=repo, capture_output=True, text=True,
+                             check=True).stdout.split("\n")
+    except (OSError, subprocess.CalledProcessError) as exc:
+        # Not a licensing finding, and not silent either: the check simply cannot run.
+        return [(str(dep5.relative_to(repo)), 0, f"cannot list tracked paths to check for dead "
+                                                 f"Files stanzas ({exc})")]
+    known = [p for p in raw if p]
+    out = []
+    for s in stanzas:
+        for pat in s["files"]:
+            if pat == "*" or pat.startswith(DEP5_BUILD_TIME_PREFIXES):
+                continue
+            if not any(fnmatch.fnmatchcase(p, pat) for p in known):
+                out.append(
+                    (str(dep5.relative_to(repo)),
+                        0,
+                        f"'Files: {pat}' matches no tracked path, so the stanza is dead and "
+                        f"anything it was meant to cover falls back to an earlier stanza",
                     )
                 )
     return out

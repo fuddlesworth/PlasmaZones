@@ -75,12 +75,15 @@ class Violation:
 # Source helpers
 # --------------------------------------------------------------------------
 
-CPP_SUFFIXES = {".cpp", ".cc", ".cxx", ".h", ".hpp"}
+CPP_SUFFIXES = {".c", ".cpp", ".cc", ".cxx", ".h", ".hpp"}
 QML_SUFFIXES = {".qml"}
 SHADER_SUFFIXES = {".frag", ".vert", ".glsl"}
 # .js is here so rule_spdx and rule_license cover the 17 QML .js libraries. .sh/.cmake/.spec/
-# .desktop joined once every tracked one carried a head header. THREE rules read it, and so does
-# --update-baseline, so .spec also entered the size ratchet; .in/.xml/.txt and data JSON stay out.
+# .desktop joined once every tracked one carried a head header, and .c once the two QPA protocol
+# stubs were found to be the only comment-bearing C sources no rule read. THREE rules read this
+# set, and so does --update-baseline, so .spec also entered the size ratchet. MOST of the tree is
+# still outside it, not just the .in/.xml/.txt and data JSON an earlier version of this comment
+# named: 32 tracked suffixes are, .md and .yml among them.
 CODE_SUFFIXES = (CPP_SUFFIXES | QML_SUFFIXES | SHADER_SUFFIXES
                  | {".luau", ".py", ".js", ".sh", ".cmake", ".spec", ".desktop"})
 
@@ -256,6 +259,12 @@ def line_of(text: str, index: int) -> int:
 # prefixed path and the exemption would guard nothing even once it is reachable.
 SPDX_EXEMPT = re.compile(r"(^|/)data/.*\.json$|(^|/)libs/phosphor-registry/tests/.*manifest\.json(\.in)?$")
 
+# How far in a header may sit. Named because TWO rules read it and because the message
+# quotes the number: widening it silently turns "in the first 6 lines" into a lie. Six is
+# what the deepest header in the tree needs — a shebang, a blank, and a two-tag block
+# under a short comment. The selftest pins it in both directions.
+SPDX_HEAD_LINES = 6
+
 
 def rule_spdx(files: list[str]) -> list[Violation]:
     out = []
@@ -268,11 +277,13 @@ def rule_spdx(files: list[str]) -> list[Violation]:
         # is passed explicitly, honour the documented exemption.
         if Path(f).name == "p_generated.glsl":
             continue
-        head = "\n".join(read(f).split("\n")[:6])
+        head = "\n".join(read(f).split("\n")[:SPDX_HEAD_LINES])
         if "SPDX-License-Identifier" not in head:
-            out.append(Violation("spdx", f, 1, "missing SPDX-License-Identifier in the first 6 lines"))
+            out.append(Violation("spdx", f, 1,
+                                 f"missing SPDX-License-Identifier in the first {SPDX_HEAD_LINES} lines"))
         elif "SPDX-FileCopyrightText" not in head:
-            out.append(Violation("spdx", f, 1, "missing SPDX-FileCopyrightText in the first 6 lines"))
+            out.append(Violation("spdx", f, 1,
+                                 f"missing SPDX-FileCopyrightText in the first {SPDX_HEAD_LINES} lines"))
     return out
 
 
@@ -318,7 +329,7 @@ def rule_license(files: list[str]) -> list[Violation]:
         want = expected_license(f)
         if want is None:
             continue
-        head = "\n".join(read(f).split("\n")[:6])
+        head = "\n".join(read(f).split("\n")[:SPDX_HEAD_LINES])
         m = re.search(r"SPDX-License-Identifier:\s*(\S+)", head)
         if not m:
             # Normally the spdx rule reports this. Defer only when that rule is
@@ -524,49 +535,15 @@ def rule_config_keys(files: list[str]) -> list[Violation]:
 # Rule: prose
 # --------------------------------------------------------------------------
 
-# A literal typographic separator between two nouns is explicitly allowed (the
-# "%1 — %2" Layout/Zone display format), and so are settings-path breadcrumbs.
-SENTENCE_END = re.compile(r"[.!?](?:\s|$)")
-
-
-def is_title_separator(s: str) -> bool:
-    """True for the allowed "<noun phrase> — <noun phrase>" display format.
-
-    CLAUDE.md permits a literal typographic separator between two nouns, the
-    canonical case being the "%1 — %2" Layout/Zone format. The test is that
-    the string is a label rather than prose: exactly one em-dash, no sentence
-    punctuation on either side, a short noun phrase each side, no finite verb
-    on either side, and a right side that does not open with a conjunction.
-
-    The sentence-end test alone used to carry this, and every BAD probe in the
-    self-test ends in a period, so the word cap was never exercised: an
-    unpunctuated splice with five words a side was exempted outright. That is the
-    shape of a JSON `name`, a .desktop Comment and a short tr() label.
-
-    STILL UNDER-CATCHES, deliberately, in the same direction as the semicolon
-    arm. A verbless appositive with no conjunction ("Round the corners — a softer
-    look") reads exactly like a label to every test here, and review has to catch
-    it. Erring toward silence is the right way round for a pre-commit gate; the
-    alternative blocks a legitimate "%1 — %2".
-    """
-    parts = s.split("—")
-    if len(parts) != 2:
-        return False
-    for side in parts:
-        side = side.strip()
-        if not side or SENTENCE_END.search(side):
-            return False
-        if len(side.split()) > 5:
-            return False
-        if _has_finite_verb(side):
-            return False
-    # A label's second half names a thing. Opening with a coordinating conjunction
-    # makes it a continuation of the first clause, which is the splice CLAUDE.md
-    # forbids rather than the separator it allows.
-    tail = parts[1].strip().split()
-    if tail and tail[0].strip(".,:;!?()[]\"'").lower() in {"and", "but", "or", "so", "nor", "yet"}:
-        return False
-    return True
+# The DETECTOR lives in conventions_prose.py; what stays here is the RULE that decides
+# which files it reaches and how each surface's strings are extracted. This file hit the
+# 1150-line hard ceiling, and CLAUDE.md says to split past it: three rounds running had
+# to pay for a line-neutral rewrite just to correct a comment. The detector is the most
+# separable concern left, because it is one pure function over a string that reads no
+# file and imports nothing from here. Imported at module scope, unlike the three rule
+# siblings, because it cannot import this file back, and selftest() passes it on.
+_add_script_dir_to_path()
+from conventions_prose import prose_problems  # noqa: E402  (needs the sys.path insert)
 
 PROSE_STRING_KEYS = {
     "name",
@@ -582,100 +559,6 @@ PROSE_STRING_KEYS = {
 }
 
 
-# Finite-verb forms, for "does this segment read as a CLAUSE rather than a list
-# item". Auxiliaries and copulas, plus the third-person-singular lexical verbs this
-# project's prose actually uses.
-#
-# A LONGER LIST CANNOT CREATE A FALSE POSITIVE HERE, which is why it can afford to
-# grow: the semicolon rule requires a finite verb on BOTH sides, and a genuine
-# comma-bearing list item is a noun phrase with no verb at all, so one verbless side
-# is enough to exempt the whole construction. The list only affects how many real
-# splices get caught. It is still a heuristic and still under-catches — a splice
-# built from verbs not named here reads as a list and is missed, which review has to
-# catch — but it errs toward silence rather than toward blocking a legitimate
-# sentence, which is the right way round for a pre-commit gate.
-_FINITE_VERBS = frozenset(
-    """is are was were am be been being has have had do does did
-       can cannot could will would shall should may might must
-       isn't aren't wasn't weren't hasn't haven't doesn't don't didn't
-       can't won't wouldn't shouldn't
-       keeps drops sets reads writes runs takes gives makes shows uses needs holds
-       adds stops starts applies returns means covers carries leaves gets goes comes
-       sits lands falls picks sends pushes pulls draws paints binds clears""".split()
-)
-
-
-def _has_finite_verb(segment: str) -> bool:
-    """Whether `segment` reads as a CLAUSE rather than a list item."""
-    return any(w.strip(".,:;!?()[]\"'").lower() in _FINITE_VERBS for w in segment.split())
-
-
-def prose_problems(s: str) -> list[str]:
-    problems = []
-    # A "#"-led line inside a translatable string is a shell comment in
-    # pasteable terminal text, not prose. CLAUDE.md puts code comments out of
-    # scope, and that does not stop being true because the snippet is rendered
-    # in a label.
-    s = "\n".join(ln for ln in s.split("\n") if not ln.lstrip().startswith("#"))
-    # Backticked code is out of scope for ALL THREE punctuation arms, not just
-    # the semicolon one: CLAUDE.md puts code out of scope generally, and a
-    # `--flag - value` or an em-dash inside a quoted command is code the reader
-    # must see verbatim. Strip once, up front, and test every arm against the
-    # stripped copy.
-    without_code = re.sub(r"`[^`]*`", "", s)
-    # NORMALISE the entity before the carve-out, not just before the test that finds it.
-    # The arm below looked for either spelling but is_title_separator splits on the literal
-    # dash only, so "%1 &mdash; %2" yielded ONE part, failed the len==2 test and was
-    # reported — a false positive on a shape CLAUDE.md explicitly allows. The surfaces where
-    # an author reaches for the entity are exactly the XML ones this rule reads, the
-    # AppStream summary and description.
-    core = without_code.replace("&mdash;", "—").strip()
-    if "—" in core:
-        if not is_title_separator(core):
-            problems.append("em-dash splice; write two sentences or join with a plain word")
-    if " - " in without_code:
-        problems.append("spaced hyphen used as a dash; rewrite the sentence")
-    # CLAUSE-SPLICING SEMICOLON. CLAUDE.md forbids one joining two independent
-    # clauses and permits one "separating genuine comma-bearing list items", naming
-    # no minimum item count, so the test has to tell those two shapes apart directly.
-    #
-    # SEGMENT FIRST. The pair this rule judges is the one around THIS semicolon, and
-    # testing against the whole string meant anything found anywhere in a
-    # multi-paragraph block (an RPM %description, a Nix longDescription, a CHANGELOG
-    # entry) decided the verdict for every sentence in it.
-    #
-    # Then, inside a segment, key on a FINITE VERB present on BOTH sides. A clause
-    # has one; a list item is a noun phrase and has none, which is why "Sets the
-    # width, in pixels; the radius, in logical pixels" is a list — its second item
-    # carries no verb at all.
-    #
-    # That replaces two heuristics that stood in for it. A COMMA test cannot tell a
-    # list item from a clause with a parenthetical: "The pane, when focused, is
-    # blurred; the border is not." has a comma on each side and is a textbook splice,
-    # and so did a real description that shipped. A WORD-COUNT floor guarded against
-    # a short fragment reading as a clause, which the verb test now does directly at
-    # any length. A SEMICOLON-COUNT short-circuit, exempting anything with two or
-    # more, bought a three-item list its exemption at the price of never seeing a
-    # three-CLAUSE splice.
-    #
-    # The verb list is a heuristic and it under-catches: a splice built from verbs it
-    # does not name reads as a list and is missed, for review to catch. It cannot
-    # over-catch, because one verbless side exempts the construction and a genuine
-    # list item has no verb — which is what lets the list grow safely.
-    # \s* rather than \s+: a splice written without a space after the semicolon is
-    # still a splice, and requiring one let "blurred;the border" through.
-    for segment in re.split(r"(?<=[.!?])\s+|\n\s*\n", without_code):
-        # The optional bracket/quote class matters: a second clause opening with one
-        # ("; (the border is not)") had no word character where the arm looked, so it
-        # read as no semicolon at all. Non-capturing, because only the match POSITION
-        # is used and the old group was never read.
-        for part in re.finditer(r";\s*[(\[\"']*\s*\w", segment):
-            before = segment[: part.start()]
-            after = segment[part.start() + 1 :]
-            if _has_finite_verb(before) and _has_finite_verb(after):
-                problems.append("clause-splicing semicolon; split into sentences or use \"and\"")
-                return problems
-    return problems
 
 
 def iter_json_prose(path: str):
@@ -770,6 +653,18 @@ NIX_LONG_DESC_ESCAPE = re.compile(r"^\s*longDescription\s*=\s*''(?:(?!'').)*''(?
 # lookahead simply fails and the whole block is skipped, which would let a
 # subpackage description appended at EOF go ungated.
 RPM_DESC = re.compile(r"^%description[^\n]*\n(.*?)(?=^%\w|\Z)", re.M | re.S)
+
+# deb822's Description field: a one-line synopsis then a continuation block, every line
+# of which begins with a single space. PKG_DESC catches only the synopsis, so the body
+# `apt show` prints was ungated — the odd one out, since the RPM and Nix bodies each got
+# their own arm. `^\S` ends it, which is the next field or the blank line between
+# paragraphs, so the pattern stops at the field rather than running into the next one.
+DEB_DESC = re.compile(r"^Description:[^\n]*\n((?:[ \t]+[^\n]*\n)+)", re.M)
+
+# deb822 continuation-line markers, stripped before the prose test. A "  - " bullet is a
+# LIST MARKER in this format, not a spaced hyphen standing in for a dash, and leaving it
+# in reported every bullet in the file.
+DEB_DESC_BULLET = re.compile(r"^[ \t]*[-*]\s+", re.M)
 
 
 def rule_prose(files: list[str]) -> list[Violation]:
@@ -873,6 +768,14 @@ def rule_prose(files: list[str]) -> list[Violation]:
                     for p in prose_problems(m.group(1)):
                         out.append(Violation("prose", f, line_of(body, m.start()),
                                              f"{p} -> {m.group(1).strip()[:80]!r}"))
+            # debian/control has no suffix, so it is matched by NAME. CLAUDE.md lists the
+            # "Debian Description" among the surfaces these rules govern.
+            if Path(f).name == "control":
+                for m in DEB_DESC.finditer(body):
+                    para = DEB_DESC_BULLET.sub("", m.group(1))
+                    for p in prose_problems(para):
+                        out.append(Violation("prose", f, line_of(body, m.start()),
+                                             f"{p} -> {para.strip()[:80]!r}"))
             continue
 
         if f.startswith("plasmazones/data/algorithms/") and suffix == ".luau":
@@ -1117,7 +1020,8 @@ def main() -> int:
                 continue
             if not p.is_file():
                 # Announced, not dropped in silence: a stale or hand-passed list would check NOTHING.
-                # Only a hand-run reaches it: lefthook drops a non-file staged path. Caller's spelling.
+                # A hand-run or another runner reaches it; lefthook drops a non-file staged path
+                # (verified against lefthook 2.1.14) and its globs match no tracked symlink anyway.
                 print(f"check-conventions: skipping {f} (not a file)", file=sys.stderr)
                 continue
             files.append(rel)

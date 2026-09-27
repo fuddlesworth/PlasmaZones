@@ -76,10 +76,11 @@ void clearShaderSlotProperties(QQuickItem* slot)
     if (!slot) {
         return;
     }
-    // Parse-default spellings, not magic values: every buffer default below is
-    // read off a default-constructed ShaderInfo, the same value the parse path
-    // leaves when a pack declares no key, so a future default flip cannot
-    // silently diverge here.
+    // Parse-default spellings, not magic values: every buffer default that
+    // ShaderInfo DECLARES is read off a default-constructed one, the same value
+    // the parse path leaves when a pack declares no key, so a future default
+    // flip cannot silently diverge here. `bufferShaderPath` (singular) is not
+    // among them — ShaderInfo has no such field, only the list form.
     const ShaderRegistry::ShaderInfo parseDefaults;
     writeQmlProperty(slot, QStringLiteral("shaderSource"), QUrl());
     writeQmlProperty(slot, QStringLiteral("bufferShaderPath"), QString());

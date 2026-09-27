@@ -1376,8 +1376,8 @@ private:
     /// cheatsheet) and emit the dismissed signals when the screen that
     /// owns them is destroyed. Called from every runtime shell-teardown site
     /// (not the service destructor, where resetting members and emitting
-    /// dismissed signals is moot) — the definition in
-    /// overlayservice/screens.cpp keeps the current list.
+    /// dismissed signals is moot). Grep the name for the call sites; they
+    /// live in overlayservice/screens.cpp and overlayservice/rekey.cpp.
     void resetModalSingletonsForDestroyedId(const QString& id);
 
     /// Animator-driven slot-hide completion for zone-selector.

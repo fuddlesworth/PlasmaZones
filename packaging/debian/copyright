@@ -206,6 +206,17 @@ Files: packaging/arch/LICENSE
 Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: 0BSD
 
+# The two FSF licence texts we SHIP (the RPM spec lists both under %license).
+# They are Free Software Foundation documents, not ours, and their own terms are
+# verbatim-copying-only rather than the licence they happen to contain — so
+# declaring COPYING.LESSER as GPL-3.0-or-later was wrong twice over. Like the
+# file above they carry no SPDX tag, so the dep5 rule is blind to them and the
+# catch-all had been asserting our copyright over someone else's document.
+Files: COPYING.LESSER
+       LICENSE
+Copyright: 1991-2007 Free Software Foundation, Inc. <https://fsf.org/>
+License: FSF-verbatim
+
 License: LGPL-2.1-or-later
  This library is free software; you can redistribute it and/or modify
  it under the terms of the GNU Lesser General Public License as published
@@ -269,6 +280,10 @@ License: GPL-3.0-or-later
  .
  On Debian systems, the full text of the GNU General Public License
  version 3 can be found in the file '/usr/share/common-licenses/GPL-3'.
+
+License: FSF-verbatim
+ Everyone is permitted to copy and distribute verbatim copies of this license
+ document, but changing it is not allowed.
 
 License: 0BSD
  Permission to use, copy, modify, and/or distribute this software for any

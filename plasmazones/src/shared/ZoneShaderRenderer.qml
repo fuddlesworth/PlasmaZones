@@ -5,7 +5,10 @@ import PlasmaZones 1.0
 import QtQuick
 
 /**
- * Shared ZoneShaderItem wrapper for overlay and editor preview.
+ * Shared ZoneShaderItem wrapper for the overlay and the settings preview.
+ * NOT the editor: plasmazones-editor ships this file (it links
+ * plasmazones_shared_qml) but registers no ZoneShaderItem, so instantiating it
+ * there fails at load. See zoneshaderitem.h for what wiring it up would take.
  * Accepts a config object and delegates to ZoneShaderItem with consistent bindings.
  * Single source of truth for bufferShaderPaths, shader params, and zone data.
  */
@@ -115,7 +118,7 @@ Item {
     // QVariant to the setter. The image does not survive the trip through
     // Binding's own `value` property, and nothing is logged. That silently
     // emptied the wallpaper for every pack that samples it, and emptied the
-    // labels for the settings and editor previews, which hand a full QImage to
+    // labels for the settings preview, which hands a full QImage to
     // labelsTexture and rely on the registered converter. The daemon's own
     // labels were spared only because it passes the ZoneLabelTexture payload,
     // which does survive.

@@ -646,7 +646,8 @@ target_link_libraries(plasmazonesd
         # Named directly, not left to plasmazones_core's PUBLIC edge: eleven daemon TUs
         # include <PhosphorSurface/...> and daemon/overlayservice/decoration.cpp calls its
         # exported chain-compose helpers, so a future demotion of that edge to PRIVATE
-        # would break them. The other two chain hosts (kwin-effect, phosphor-shell) both
+        # would break them. The other chain hosts (kwin-effect, phosphor-shell, and the
+        # settings app's decoration preview) all
         # name it explicitly already.
         PhosphorSurface::PhosphorSurface  # SurfaceChainCompose / registry / DecorationSupportedPaths
         PhosphorServiceIdle::PhosphorServiceIdle  # ext-idle-notify-v1; the daemon owns session-idle detection and pushes it to the KWin effect (a compositor SERVES that protocol, it cannot consume it)

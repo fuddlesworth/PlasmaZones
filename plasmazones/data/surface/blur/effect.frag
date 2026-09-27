@@ -1,6 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
+// ONE of this pack's declared parameters is never read here: `blurRadius` is
+// consumed POSITIONALLY by the shared buffer passes as customParams[0].x, the
+// first scalar parameter declared. surface_blur.glsl's header carries the slot
+// convention and validateSurfacePack lints it by name. So a reader looking for
+// p_blurRadius below will not find it, and that is not an omission.
+//
 // Blur pack, main pass: composite the window's own pixels OVER the blurred
 // backdrop (the Kawase chain's last pass, iChannel6), clipped to the frame
 // rect with rounded corners. The blur shows through wherever the window

@@ -816,9 +816,11 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     //
     // This ordering has the selector re-show churn showSnapAssist documents at
     // length: the hideSnapAssist above can run its completion inline, which
-    // re-shows the selector while m_layoutPickerVisible is still false, and the
-    // call below hides it again. The Escape grab repairs itself the same way,
-    // through the re-register after this function returns.
+    // re-shows the selector while m_layoutPickerVisible is still false. The call
+    // below hides it again only WHEN SNAP ASSIST SAT ON THIS SCREEN, because it
+    // hides on resolvedId alone — a re-show on another screen stands. The Escape
+    // grab repairs itself the same way, through the re-register after this
+    // function returns.
     hideZoneSelectorSlotOnScreen(resolvedId);
 
     // The picker is a singleton across screens: with the new target fully

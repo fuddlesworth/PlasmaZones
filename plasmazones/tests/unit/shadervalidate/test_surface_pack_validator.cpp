@@ -391,12 +391,20 @@ private Q_SLOTS:
 
     /// The positive control for the slot above: the chain in its declared order
     /// must NOT trip the order lint, or the lint would fail every blur pack.
+    ///
+    /// The pack declares a real `blurRadius` FIRST. It used to pass an empty
+    /// parameters array, which tripped the no-scalar radius lint below — so the
+    /// test's name promised a clean pack while the pack it built was linted, and
+    /// the single `!contains("positional")` assertion could not see the
+    /// difference. A positive control has to be clean on every arm it controls.
     void theCorrectKawaseChainIsNotLinted()
     {
         QTemporaryDir tmp;
         REQUIRE_SURFACE_FIXTURE(tmp);
 
-        QJsonObject obj = surfacePack(QStringLiteral("sf-kawase-ok"), QJsonArray{});
+        QJsonObject obj = surfacePack(
+            QStringLiteral("sf-kawase-ok"),
+            QJsonArray{surfaceParam(QStringLiteral("blurRadius"), QStringLiteral("float"), 32.0, 0.0, 256.0)});
         obj.insert(QStringLiteral("multipass"), true);
         obj.insert(QStringLiteral("bufferShaders"),
                    QJsonArray{QStringLiteral("builtin:kawase-down-0"), QStringLiteral("builtin:kawase-down-1"),
@@ -406,6 +414,54 @@ private Q_SLOTS:
 
         const PackResult r = validateSurface(tmp, QStringLiteral("sf-kawase-ok"), obj, surfaceBodyReading({}));
         QVERIFY2(!r.report.contains(QStringLiteral("positional")), qPrintable(r.report));
+        QVERIFY2(!r.report.contains(QStringLiteral("customParams[0].x")), qPrintable(r.report));
+    }
+
+    /// THE RADIUS SLOT, wrong-name arm. The builtin passes read the radius as
+    /// customParams[0].x, which is the first SCALAR declared, so a pack that
+    /// leads with some other scalar blurs by that control instead. Untested until
+    /// now: a mutation deleting the lint failed nothing.
+    void aKawaseChainNotLeadingWithBlurRadiusIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(
+            QStringLiteral("sf-kawase-slot"),
+            QJsonArray{surfaceParam(QStringLiteral("cornerRadius"), QStringLiteral("float"), 8.0, 0.0, 32.0),
+                       surfaceParam(QStringLiteral("blurRadius"), QStringLiteral("float"), 32.0, 0.0, 256.0)});
+        obj.insert(QStringLiteral("multipass"), true);
+        obj.insert(QStringLiteral("bufferShaders"),
+                   QJsonArray{QStringLiteral("builtin:kawase-down-0"), QStringLiteral("builtin:kawase-down-1"),
+                              QStringLiteral("builtin:kawase-down-2"), QStringLiteral("builtin:kawase-down-3"),
+                              QStringLiteral("builtin:kawase-up-0"), QStringLiteral("builtin:kawase-up-1"),
+                              QStringLiteral("builtin:kawase-up-2")});
+
+        const PackResult r =
+            validateSurface(tmp, QStringLiteral("sf-kawase-slot"), obj,
+                            surfaceBodyReading({QStringLiteral("cornerRadius"), QStringLiteral("blurRadius")}));
+        QVERIFY2(r.report.contains(QStringLiteral("customParams[0].x")), qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("cornerRadius")), qPrintable(r.report));
+    }
+
+    /// THE RADIUS SLOT, no-scalar arm. With no float or int parameter at all the
+    /// slot reads 0 and the chain blurs by nothing, which looks like a broken
+    /// pack rather than a misdeclared one. Also untested until now.
+    void aKawaseChainWithNoScalarParameterIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(QStringLiteral("sf-kawase-noscalar"), QJsonArray{});
+        obj.insert(QStringLiteral("multipass"), true);
+        obj.insert(QStringLiteral("bufferShaders"),
+                   QJsonArray{QStringLiteral("builtin:kawase-down-0"), QStringLiteral("builtin:kawase-down-1"),
+                              QStringLiteral("builtin:kawase-down-2"), QStringLiteral("builtin:kawase-down-3"),
+                              QStringLiteral("builtin:kawase-up-0"), QStringLiteral("builtin:kawase-up-1"),
+                              QStringLiteral("builtin:kawase-up-2")});
+
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-kawase-noscalar"), obj, surfaceBodyReading({}));
+        QVERIFY2(r.report.contains(QStringLiteral("blurs by 0")), qPrintable(r.report));
     }
 
     /// Boolean keys are read with toBool(default), which answers the DEFAULT for

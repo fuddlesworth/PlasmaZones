@@ -21,8 +21,9 @@ namespace PhosphorRendering {
 /// they sit in front of a content-addressed ON-DISK cache of serialized QShaders under
 /// GenericCacheLocation, keyed by Qt version, which the disk read consults BEFORE
 /// taking the bake lock. So a compile result normally survives a process restart.
-/// The disk cache is pruned to 512 entries once per process, on the first write, so a
-/// long-lived daemon is not capped within its own lifetime. Set
+/// The disk cache is pruned once per process, on the first write, when it exceeds 512
+/// entries and then down to about 90% of that, so a long-lived daemon is not capped
+/// within its own lifetime. Set
 /// PHOSPHOR_DISABLE_SHADER_DISK_CACHE to opt out.
 ///
 /// @par Thread-safety

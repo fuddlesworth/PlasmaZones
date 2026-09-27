@@ -2,6 +2,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
+// ONE of this pack's declared parameters is never read here: `blurRadius` is
+// consumed POSITIONALLY by the shared buffer passes as customParams[0].x, the
+// first scalar parameter declared. surface_blur.glsl's header carries the slot
+// convention and validateSurfacePack lints it by name. So a reader looking for
+// p_blurRadius below will not find it, and that is not an omission.
+//
 // The first copyright line is there because this file says, two paragraphs down,
 // that it is a FULL PORT of kwin-effects-glass, and names that project's own
 // glass.glsl, snells-glass.glsl and oklab.glsl. CLAUDE.md's rule for the
@@ -321,11 +327,15 @@ vec4 pSurface(vec2 uv) {
         // interpolated hue, which raising the threshold replaced with BLACK; and the helper
         // it cited RETURNS THE SAMPLE UNCHANGED at its guard rather than blacking it, so
         // matching the number would have inverted the behaviour. duotone and phosphor-glass
-        // also guard BELOW one stored quantum, at 0.001, and this sits lower still — it is
-        // the only 0.0001 in the tree, which is worth knowing before anyone unifies them. The
-        // error either way is bounded by the re-premultiply at the end of this branch.
-        float paneAlpha = max(pane.a, 0.0001);
-        lit = pane.a > 0.0001 ? lit / paneAlpha : vec3(0.0);
+        // also guard BELOW one stored quantum, at 0.001, and this sits lower still, which is
+        // worth knowing before anyone unifies them. The error either way is bounded by the
+        // re-premultiply at the end of this branch.
+        //
+        // No max() floor on the divisor: the ternary already excludes every alpha the floor
+        // would have raised, so max(pane.a, 0.0001) was provably equal to pane.a in the arm
+        // that reads it and unread in the other. It was carried for two rounds with a
+        // paragraph explaining it was a no-op.
+        lit = pane.a > 0.0001 ? lit / pane.a : vec3(0.0);
 
         // Rim glow + optional edge lighting (reference glassOutline).
         float dim = focusDim(0.55);

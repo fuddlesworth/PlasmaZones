@@ -39,6 +39,34 @@
 namespace PlasmaZones {
 
 namespace {
+// Which corner of a source quad carries texcoord 0, per axis. KWin does not promise a
+// vertex ORDER, so the extreme-position vertices are found first and the handedness read
+// off their texcoords; a window on a rotated or flipped output comes through mirrored.
+//
+// Extracted because this was written out three times, byte-identical in the first two,
+// and the three copies had to be kept in step by hand. The caller owns the caching —
+// each site has its own `...HandednessCached` latch, because the search is per-quad and
+// would otherwise be paid every frame for the life of the effect.
+void quadTexcoordHandedness(const KWin::WindowQuad& srcQuad, double& uAtLeft, double& uAtRight, double& vAtTop,
+                            double& vAtBottom)
+{
+    int topIdx = 0, bottomIdx = 0, leftIdx = 0, rightIdx = 0;
+    for (int i = 1; i < 4; ++i) {
+        if (srcQuad[i].y() < srcQuad[topIdx].y())
+            topIdx = i;
+        if (srcQuad[i].y() > srcQuad[bottomIdx].y())
+            bottomIdx = i;
+        if (srcQuad[i].x() < srcQuad[leftIdx].x())
+            leftIdx = i;
+        if (srcQuad[i].x() > srcQuad[rightIdx].x())
+            rightIdx = i;
+    }
+    uAtLeft = (srcQuad[leftIdx].u() <= srcQuad[rightIdx].u()) ? 0.0 : 1.0;
+    uAtRight = 1.0 - uAtLeft;
+    vAtTop = (srcQuad[topIdx].v() <= srcQuad[bottomIdx].v()) ? 0.0 : 1.0;
+    vAtBottom = 1.0 - vAtTop;
+}
+
 // Snapshot texture sizing shared by the raw capture and the tab-swap seed.
 // The snapshot is sampled by normalised uv, so downscaling via a reduced
 // capture scale costs only resolution (no distortion) — the cap keeps the
@@ -781,21 +809,7 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
             // the surface-extent transitions' handedness cache below.
             if (!bit->presentHandednessCached) {
                 const KWin::WindowQuad& srcQuad = quads.first();
-                int topIdx = 0, bottomIdx = 0, leftIdx = 0, rightIdx = 0;
-                for (int i = 1; i < 4; ++i) {
-                    if (srcQuad[i].y() < srcQuad[topIdx].y())
-                        topIdx = i;
-                    if (srcQuad[i].y() > srcQuad[bottomIdx].y())
-                        bottomIdx = i;
-                    if (srcQuad[i].x() < srcQuad[leftIdx].x())
-                        leftIdx = i;
-                    if (srcQuad[i].x() > srcQuad[rightIdx].x())
-                        rightIdx = i;
-                }
-                bit->uAtLeft = (srcQuad[leftIdx].u() <= srcQuad[rightIdx].u()) ? 0.0 : 1.0;
-                bit->uAtRight = 1.0 - bit->uAtLeft;
-                bit->vAtTop = (srcQuad[topIdx].v() <= srcQuad[bottomIdx].v()) ? 0.0 : 1.0;
-                bit->vAtBottom = 1.0 - bit->vAtTop;
+                quadTexcoordHandedness(srcQuad, bit->uAtLeft, bit->uAtRight, bit->vAtTop, bit->vAtBottom);
                 bit->presentHandednessCached = true;
             }
 
@@ -850,21 +864,7 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
             // Same replicated-handedness cache the padded present uses.
             if (!bit->presentHandednessCached) {
                 const KWin::WindowQuad& srcQuad = quads.first();
-                int topIdx = 0, bottomIdx = 0, leftIdx = 0, rightIdx = 0;
-                for (int i = 1; i < 4; ++i) {
-                    if (srcQuad[i].y() < srcQuad[topIdx].y())
-                        topIdx = i;
-                    if (srcQuad[i].y() > srcQuad[bottomIdx].y())
-                        bottomIdx = i;
-                    if (srcQuad[i].x() < srcQuad[leftIdx].x())
-                        leftIdx = i;
-                    if (srcQuad[i].x() > srcQuad[rightIdx].x())
-                        rightIdx = i;
-                }
-                bit->uAtLeft = (srcQuad[leftIdx].u() <= srcQuad[rightIdx].u()) ? 0.0 : 1.0;
-                bit->uAtRight = 1.0 - bit->uAtLeft;
-                bit->vAtTop = (srcQuad[topIdx].v() <= srcQuad[bottomIdx].v()) ? 0.0 : 1.0;
-                bit->vAtBottom = 1.0 - bit->vAtTop;
+                quadTexcoordHandedness(srcQuad, bit->uAtLeft, bit->uAtRight, bit->vAtTop, bit->vAtBottom);
                 bit->presentHandednessCached = true;
             }
 
@@ -1039,23 +1039,9 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     // that handle instead of paying a second lookup.
     if (!st->handednessCached) {
         const KWin::WindowQuad& srcQuad = quads.first();
-        int topIdx = 0, bottomIdx = 0, leftIdx = 0, rightIdx = 0;
-        for (int i = 1; i < 4; ++i) {
-            if (srcQuad[i].y() < srcQuad[topIdx].y())
-                topIdx = i;
-            if (srcQuad[i].y() > srcQuad[bottomIdx].y())
-                bottomIdx = i;
-            if (srcQuad[i].x() < srcQuad[leftIdx].x())
-                leftIdx = i;
-            if (srcQuad[i].x() > srcQuad[rightIdx].x())
-                rightIdx = i;
-        }
         // The surface quad spans the whole output, so its texcoords are the
         // full 0..1 range; only the handedness comes from the source quad.
-        st->uAtLeft = (srcQuad[leftIdx].u() <= srcQuad[rightIdx].u()) ? 0.0 : 1.0;
-        st->uAtRight = 1.0 - st->uAtLeft;
-        st->vAtTop = (srcQuad[topIdx].v() <= srcQuad[bottomIdx].v()) ? 0.0 : 1.0;
-        st->vAtBottom = 1.0 - st->vAtTop;
+        quadTexcoordHandedness(srcQuad, st->uAtLeft, st->uAtRight, st->vAtTop, st->vAtBottom);
         st->handednessCached = true;
     }
     const double uAtLeft = st->uAtLeft;

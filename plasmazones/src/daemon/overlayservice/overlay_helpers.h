@@ -147,37 +147,10 @@ inline QVariantList patchZonesWithHighlight(const QVariantList& zones, QObject* 
     return out;
 }
 
-// Parse zones from JSON array. Returns empty list on parse error or invalid format.
-// No production caller today; the only caller is
-// plasmazones/tests/unit/ui/test_overlay_helpers.cpp.
-inline QVariantList parseZonesJson(const QString& json, const char* context)
-{
-    QVariantList zones;
-    if (json.isEmpty()) {
-        return zones;
-    }
-    QJsonParseError parseError;
-    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError) {
-        qCWarning(lcOverlay) << context << "invalid zones JSON:" << parseError.errorString();
-        return zones;
-    }
-    if (!doc.isArray()) {
-        qCWarning(lcOverlay) << context << "zones JSON is not an array";
-        return zones;
-    }
-    for (const QJsonValue& v : doc.array()) {
-        if (v.isObject()) {
-            QVariantMap m;
-            const QJsonObject o = v.toObject();
-            for (auto it = o.begin(); it != o.end(); ++it) {
-                m.insert(it.key(), it.value().toVariant());
-            }
-            zones.append(m);
-        }
-    }
-    return zones;
-}
+// parseZonesJson was removed here. It had no production caller left — the zone
+// payload travels as a QVariantList, not as a JSON string — and the only thing
+// exercising it was a test that existed because the function did. Three audit
+// rounds spent findings on its comment naming callers that did not exist.
 
 // Initialize shader timer if not already running. Prevents large iTimeDelta jumps
 // by only starting if invalid. Replaces 3 occurrences of mutex-guarded timer init.

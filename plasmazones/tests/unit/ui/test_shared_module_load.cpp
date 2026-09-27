@@ -95,9 +95,9 @@ private Q_SLOTS:
     {
         loadType(QStringLiteral("CapabilityBadgeRow"));
     }
-    void loadsShaderCompileErrorBanner()
+    void loadsShaderErrorBanner()
     {
-        loadType(QStringLiteral("ShaderCompileErrorBanner"));
+        loadType(QStringLiteral("ShaderErrorBanner"));
     }
     void loadsShaderPreviewPlaceholder()
     {

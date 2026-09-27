@@ -48,13 +48,20 @@ class WarningCapture
 public:
     WarningCapture()
     {
+        // The previous SINK is saved, not just the previous handler. Nulling the
+        // sink in the destructor while restoring an outer instance's handler
+        // leaves WarningCapture::handler installed over a null sink, which
+        // swallows every later message silently — the outer capture sees nothing
+        // and neither does stderr. The file does not nest today; this keeps a
+        // future nested scope from going quiet instead of failing.
+        m_previousSink = s_sink;
         s_sink = &m_messages;
         m_previous = qInstallMessageHandler(&WarningCapture::handler);
     }
     ~WarningCapture()
     {
         qInstallMessageHandler(m_previous);
-        s_sink = nullptr;
+        s_sink = m_previousSink;
     }
     WarningCapture(const WarningCapture&) = delete;
     WarningCapture& operator=(const WarningCapture&) = delete;
@@ -75,6 +82,7 @@ private:
 
     QStringList m_messages;
     QtMessageHandler m_previous = nullptr;
+    QStringList* m_previousSink = nullptr;
     static QStringList* s_sink;
 };
 QStringList* WarningCapture::s_sink = nullptr;

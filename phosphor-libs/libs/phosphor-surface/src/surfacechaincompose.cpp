@@ -60,8 +60,8 @@ double paddingRequest(const SurfaceShaderEffect& effect, const QVariantMap& frie
     // Per-surface override wins over the declared default, but only when it is
     // actually a number: an unusable override falls through to the default
     // rather than collapsing the margin to zero.
-    const auto override = friendlyParams.constFind(effect.paddingParam);
-    if (override != friendlyParams.constEnd() && usablePadding(*override, &value)) {
+    const auto stored = friendlyParams.constFind(effect.paddingParam);
+    if (stored != friendlyParams.constEnd() && usablePadding(*stored, &value)) {
         return value;
     }
     return usablePadding(declared->defaultValue, &value) ? value : 0.0;

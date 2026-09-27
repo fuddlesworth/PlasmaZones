@@ -594,14 +594,16 @@ void PlasmaZonesEffect::loadCachedSettings()
             // callback re-delivers on every settingsChanged, so an ungated repaint damaged
             // every monitor each time, which is also against this file's own convention that
             // a full repaint sits behind a change gate. With every spring already cleared,
-            // isRunning() reduces to "some entry's fade is still open". holdsCursorHide() is
-            // a second belt rather than a second window: a pass whose output never had the
-            // pointer never took a hide, so the term is silent on exactly the frames a
-            // closed fade would need it. What really covers a closed fade is paintOutput's
-            // unconditional !springLive addRepaint, which leaves damage pending for that
-            // output on every fade frame it presents, including one that then went to sleep.
-            // Full rather than per-output because this repaint is a once-per-toggle belt
-            // over that pending damage, not the thing keeping the strip off the screen.
+            // isRunning() reduces to "some entry's fade is still open". holdsCursorHide() also
+            // catches an entry whose fade closed with NO settle frame: an output that stopped
+            // painting takes neither paintOutput's settle release nor postPaintScreen's reap,
+            // so the hide is still held while isRunning() already reads false. On a desktop
+            // with another live output that output's own postPaintScreen reaps and releases,
+            // so the term is silent there. The cheap term covers both cases either way.
+            // Otherwise a closed fade rests on paintOutput's unconditional !springLive
+            // addRepaint, which leaves damage pending for that output on every fade frame it
+            // presents. Full rather than per-output because this repaint is a once-per-toggle
+            // belt over that pending damage, not the thing keeping the strip off the screen.
             const bool wasPresenting = m_stripTransition.isRunning() || m_stripTransition.holdsCursorHide();
             m_stripTransition.reset();
             if (wasPresenting && KWin::effects) {
