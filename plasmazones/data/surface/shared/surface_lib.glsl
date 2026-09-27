@@ -48,11 +48,11 @@ float sdRoundedBox(vec2 p, vec2 b, float r) {
 // frameSdfSplit clamps the radius to the smaller half-extent. Either way each pack
 // multiplies its window sample by that mask, so the SURFACE would vanish or be
 // thinned rather than pass through. So every pack that reads the frame rect
-// tests this and returns the content untouched. Which host reaches the merely
-// sub-pixel case is NOT settled: the compositor's shell-surface substitution
-// divides and re-multiplies by the same capture scale, so its floor is exactly
-// 1.0 device px; the daemon's QML anchor arm builds a QSizeF from a float item
-// width and is the only candidate, unconfirmed on a live host.
+// tests this and returns the content untouched. WHICH host reaches the merely
+// sub-pixel case is deliberately not named here: two audit rounds each named a
+// candidate and each was refuted (the compositor's shell substitution floors at
+// exactly 1.0 device px, but its ordinary arm multiplies by a scale that does
+// not), so the attribution kept being wrong while the guard was right anyway.
 bool surfaceFrameDegenerate() {
     return uSurfaceFrameSize.x < 1.0 || uSurfaceFrameSize.y < 1.0;
 }
