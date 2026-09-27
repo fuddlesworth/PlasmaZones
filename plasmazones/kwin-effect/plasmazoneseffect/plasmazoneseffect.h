@@ -2538,9 +2538,9 @@ private:
     // pre-split cold-start behaviour.
     bool m_snapAssistFeatureEnabled = false;
     bool m_snapAssistBehaviorEnabled = false;
-    // Per-output motion clocks. One `CompositorClock` per `LogicalOutput`
-    // so mixed refresh-rate displays (e.g., 60 Hz + 144 Hz) phase-lock
-    // independently — see IMotionClock docs. Populated on construction
+    // Per-output motion clocks. One `CompositorClock` per `LogicalOutput`,
+    // which scopes refreshRate() and requestFrame() to that output but NOT
+    // the clock reading — see its docblock. Populated on construction
     // from `KWin::effects->screens()` and maintained via the
     // screenAdded/screenRemoved signals. A fallback unbound clock is
     // always present for the degenerate no-output / migrated-window

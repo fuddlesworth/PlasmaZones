@@ -17,28 +17,6 @@ namespace PlasmaZones {
 
 CompositorClock::CompositorClock(KWin::LogicalOutput* output)
     : m_output(output)
-    // Seed `m_latestPresentTime` from `std::chrono::steady_clock::now()`
-    // so `now()` returns a sensible timestamp BEFORE the first
-    // `updatePresentTime` call. Leaving it at zero produces a
-    // cross-output rebind hazard: a window migrating to a newly-added
-    // output mid-animation calls `AnimatedValue::rebindClock(newClock)`,
-    // which rebases `m_startTime` by
-    // `newClock->now() - oldClock->now()`. With a zero-initialised
-    // latch, new clock's `now()` = 0 while old clock's `now()` ≈ 10⁹ ns,
-    // producing `delta ≈ -10⁹ ns` and shoving `m_startTime` deep into
-    // the past. The next advance computes `elapsed ≫ duration` and the
-    // animation snaps to completion instantly. Seeding from the same
-    // `std::chrono::steady_clock` source that `updatePresentTime` feeds
-    // (KWin's presentTime is steady_clock-backed) keeps the rebase
-    // delta bounded by the freshness gap between the two clocks'
-    // last observation — small and benign.
-    //
-    // The fallback clock never reads `m_latestPresentTime` (its `now()`
-    // goes directly to `steady_clock`), so the initial value is unused
-    // there — but seeding it keeps the two construction paths
-    // symmetric and avoids a "why is the bound branch different?"
-    // puzzle on future reads.
-    , m_latestPresentTime(std::chrono::steady_clock::now().time_since_epoch())
     , m_wasBound(output != nullptr)
 {
 }
@@ -48,8 +26,8 @@ CompositorClock::~CompositorClock() = default;
 namespace {
 
 /// Shared main-thread contract check. `CompositorClock`'s state
-/// (m_latestPresentTime, m_output's QPointer dispatch) is read and
-/// written without synchronisation; every access must come from the
+/// (the log-rate-limit latches, m_output's QPointer dispatch) is read
+/// and written without synchronisation; every access must come from the
 /// compositor thread. Kept as an inline free function rather than a
 /// macro — gives a real symbol in stack traces, avoids
 /// macro-pollution, and nothing about `Q_ASSERT`'s compile-out
@@ -67,35 +45,18 @@ inline void assertMainThread()
 std::chrono::nanoseconds CompositorClock::now() const
 {
     assertMainThread();
-    const auto wall = std::chrono::steady_clock::now().time_since_epoch();
-    if (!m_wasBound) {
-        return wall;
-    }
-    // Return the greater of the latched presentTime and the current wall
-    // time. When the effect is inactive (no animations, no drag), KWin
-    // does not call prePaintScreen, so m_latestPresentTime goes stale.
-    // An animation started via a D-Bus signal (float/unfloat, rotate)
-    // while the effect is inactive would latch m_startTime from the stale
-    // clock value. The next prePaintScreen (triggered by requestFrame)
-    // feeds a fresh presentTime, and advance() computes
-    // elapsed = freshTime - staleStartTime >> duration, completing the
-    // animation instantly. Returning max(latched, wall) ensures now()
-    // never falls behind wall time, so the first advance() after an
-    // idle period latches a current start time and progresses normally.
+    // Wall time, read fresh on every call, for both the bound and unbound clock.
     //
-    // As things stand the max ALWAYS selects wall, so this is wall time with an
-    // inert first term. KWin 6.7 dropped the predicted presentTime, so the only
-    // feed is the effect's own ms-truncated steady_clock sample: truncation puts
-    // the latched value at or below the wall time it was taken from, and
-    // steady_clock is non-decreasing, so wall has caught up by every later read.
-    // The ctor's full-precision seed can tie on the same nanosecond, never win.
-    //
-    // KEPT rather than simplified to `return wall`, as forward cover: the latch
-    // and this max are what a KWin that resumes passing a real predicted
-    // presentTime would need, and the idle-staleness hazard above is the reason
-    // the wall term has to stay in the expression either way. Retiring the latch
-    // means deciding that question, not just deleting the dead half.
-    return std::max(m_latestPresentTime, std::chrono::duration_cast<std::chrono::nanoseconds>(wall));
+    // Reading a latched per-paint timestamp instead is the tempting shape, and it
+    // is wrong here for two independent reasons. KWin does not call prePaintScreen
+    // while the effect is inactive (no animations, no drag), so a latch goes stale:
+    // an animation started from a D-Bus signal in that window would take its start
+    // time from the stale value, the next paint would feed a fresh one, and
+    // advance() would see elapsed >> duration and finish the animation in a single
+    // step. And since KWin 6.7 there is no predicted presentTime to latch anyway.
+    // Reading steady_clock directly avoids the staleness and matches what the only
+    // available source would have given us.
+    return std::chrono::steady_clock::now().time_since_epoch();
 }
 
 qreal CompositorClock::refreshRate() const
@@ -113,7 +74,7 @@ qreal CompositorClock::refreshRate() const
 
 void CompositorClock::requestFrame()
 {
-    // Main-thread only — same contract as `now()` / `updatePresentTime`.
+    // Main-thread only — same contract as `now()` and `refreshRate()`.
     // `m_output` (QPointer) and `KWin::effects` are both main-thread-
     // bound state; a cross-thread caller mirroring the QtQuickClock
     // pattern of "requestFrame is thread-safe" would race against
@@ -178,57 +139,6 @@ void CompositorClock::requestFrame()
     KWin::effects->addRepaintFull();
 }
 
-void CompositorClock::updatePresentTime(std::chrono::milliseconds presentTime, KWin::LogicalOutput* paintingOutput)
-{
-    // Contract: compositor (main) thread only — the `now()` read path
-    // is unsynchronised, so every mutator must come from the same
-    // thread as the readers. Every in-tree caller (prePaintScreen)
-    // satisfies this; the assertion catches future drift cheaply.
-    // Same assertion is applied on now() / refreshRate() via the
-    // shared macro above.
-    assertMainThread();
-
-    // Per-output isolation cross-check. The effect routes presentTime
-    // by output via `m_motionClocksByOutput.find(data.screen)` so each
-    // bound clock only sees its own output's samples. Mis-plumbing
-    // (a future refactor that iterates all clocks per prePaintScreen,
-    // or a test harness feeding two clocks the same sample) would
-    // silently latch the wrong output's presentTime and step
-    // animations ahead of their own vsync — a correctness bug with
-    // no user-visible failure mode below 10 ms per frame. Debug-only
-    // assertion catches the mis-plumbing at its source; release
-    // builds are unaffected. `paintingOutput == nullptr` is the "no
-    // cross-check" opt-out (default arg) used by tests driving a
-    // bound clock without a real output; we skip validation in that
-    // case.
-    // VACUOUS while the feed is the effect's own wall-clock sample: a mis-routed
-    // push would latch a value now() never returns (see now()), so the failure
-    // mode described above cannot occur today. Kept with the latch it guards, for
-    // the same forward-cover reason, and it would become load-bearing again the
-    // moment a real per-output presentTime is fed.
-    Q_ASSERT_X(!paintingOutput || paintingOutput == m_output, "CompositorClock::updatePresentTime",
-               "presentTime routed to the wrong clock — this clock is bound to a different output");
-
-    if (!m_wasBound) {
-        // Fallback clock self-drives from steady_clock in now(); ignore
-        // per-output presentTime pushes. The effect still calls this
-        // unconditionally today, but the call is a no-op for the
-        // fallback so N-output paint cadence cannot double-advance it.
-        return;
-    }
-
-    const auto asNs = std::chrono::duration_cast<std::chrono::nanoseconds>(presentTime);
-    // Monotonicity latch — KWin's presentTime is normally monotonic
-    // (std::chrono::steady_clock-backed) but output hotplug / DPMS can
-    // rarely reset it. The IMotionClock contract mandates non-
-    // decreasing `now()`; downstream AnimatedValue<T> derives `dt`
-    // from (now() - lastNow), and a negative dt would step the curve
-    // backwards. Clamp here instead of propagating the reset.
-    if (asNs > m_latestPresentTime) {
-        m_latestPresentTime = asNs;
-    }
-}
-
 KWin::LogicalOutput* CompositorClock::output() const
 {
     return m_output.data();
@@ -236,10 +146,10 @@ KWin::LogicalOutput* CompositorClock::output() const
 
 const void* CompositorClock::epochIdentity() const
 {
-    // KWin's presentTime is sourced from std::chrono::steady_clock, so
-    // this clock is rebind-compatible with any other steady_clock-backed
-    // IMotionClock (notably QtQuickClock for shells that drive both
-    // compositor- and QML-side animations on the same AnimatedValue).
+    // now() reads std::chrono::steady_clock, so this clock is
+    // rebind-compatible with any other steady_clock-backed IMotionClock
+    // (notably QtQuickClock for shells that drive both compositor- and
+    // QML-side animations on the same AnimatedValue).
     return IMotionClock::steadyClockEpoch();
 }
 

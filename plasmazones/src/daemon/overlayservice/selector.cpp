@@ -466,7 +466,10 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
             const QRectF& cardRect = cardIt->rect;
 
             if (cardRect.contains(localX, localY)) {
-                QVariantMap layoutMap = layouts[i].toMap();
+                // .at(), not operator[]: the mutable overload detaches, and `layouts`
+                // shares its data with the QML property's list, so a subscript here
+                // deep-copies the whole layout model on every cursor tick.
+                QVariantMap layoutMap = layouts.at(i).toMap();
                 QString layoutId = layoutMap.value(QLatin1String("id")).toString();
 
                 // Skip non-active layouts when screen is locked — a LockContext
@@ -529,7 +532,9 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                         continue;
                     }
 
-                    QVariantMap zoneMap = zones[z].toMap();
+                    // .at() for the same reason as `layouts` above: `zones` shares
+                    // with layoutMap's element, so a subscript detaches the zone list.
+                    QVariantMap zoneMap = zones.at(z).toMap();
                     // Relative geometry for m_selectedZoneRelGeo, which backs
                     // getSelectedZoneGeometry's fallback path at drop time.
                     //
@@ -541,7 +546,7 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                     // every rx/ry/rw/rh come out as 0 once LayoutPreview became
                     // the canonical wire format, handing the drop path a
                     // zero-sized zone rect.
-                    const QVariantMap relGeo = zoneMap.value(QStringLiteral("relativeGeometry")).toMap();
+                    const QVariantMap relGeo = zoneMap.value(QLatin1String("relativeGeometry")).toMap();
                     auto coord = [&](QLatin1String flatKey, QLatin1String nestedKey) {
                         const QVariant flat = zoneMap.value(flatKey);
                         if (flat.isValid() && !flat.isNull()) {

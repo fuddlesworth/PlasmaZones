@@ -995,6 +995,16 @@ void StripTransitionManager::outputRemoved(KWin::LogicalOutput* screen)
 
 void StripTransitionManager::reset()
 {
+    // Nothing held, nothing to release. The animations-master-toggle reply in
+    // daemon_settings.cpp calls this, and that callback RE-DELIVERS on every
+    // settingsChanged, so without the early return a desktop with animations off made a
+    // GL context current from a D-Bus reply path once per delivery to clear two empty
+    // maps. m_cursorHidden is in the test because it is a manager-level latch rather
+    // than a per-entry one: m_active can be empty while a hide is still held, and
+    // updateCursorHiding below is the only thing that releases it.
+    if (m_active.empty() && m_shaderCache.empty() && !m_cursorHidden) {
+        return;
+    }
     // Teardown path (compositor reset / plugin unload). Clearing the shader
     // cache HERE — not leaving it for the destructor, which deliberately
     // can't make a context current — is what makes this the real "release GL

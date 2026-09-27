@@ -66,14 +66,21 @@ def is_title_separator(s: str) -> bool:
 # item". Auxiliaries and copulas, plus the third-person-singular lexical verbs this
 # project's prose actually uses.
 #
-# A LONGER LIST CANNOT CREATE A FALSE POSITIVE HERE, which is why it can afford to
-# grow: the semicolon rule requires a finite verb on BOTH sides, and a genuine
-# comma-bearing list item is a noun phrase with no verb at all, so one verbless side
-# is enough to exempt the whole construction. The list only affects how many real
-# splices get caught. It is still a heuristic and still under-catches — a splice
-# built from verbs not named here reads as a list and is missed, which review has to
-# catch — but it errs toward silence rather than toward blocking a legitimate
-# sentence, which is the right way round for a pre-commit gate.
+# GROWING THIS LIST IS NOT FREE, and a previous version of this comment claimed it
+# was ("A LONGER LIST CANNOT CREATE A FALSE POSITIVE HERE"). The argument was that
+# the semicolon rule needs a finite verb on BOTH sides and a genuine comma-bearing
+# list item is a verbless noun phrase, so one verbless side exempts the whole
+# construction. That holds only while every entry is unambiguously a verb. An entry
+# that is ALSO a plural noun puts a "finite verb" inside a legitimate list item, and
+# then both sides test true and the gate blocks a correct sentence. A round of
+# widening added ten such words (counts, names, points, works, scales, treats, bends,
+# fades, remains, wins) and made "Corner names, as shown in the picker; tab counts,
+# per column" a finding. They are gone; SELFTEST_PROSE_OK now carries that shape.
+#
+# So: add a word only if it cannot be read as a plural noun. Under-catching is the
+# acceptable failure here — a splice built from verbs not named reads as a list and
+# is missed, which review has to catch — because silence costs a missed nit and a
+# false positive costs a blocked commit.
 _FINITE_VERBS = frozenset(
     """is are was were am be been being has have had do does did
        can cannot could will would shall should may might must
@@ -82,8 +89,7 @@ _FINITE_VERBS = frozenset(
        keeps drops sets reads writes runs takes gives makes shows uses needs holds
        adds stops starts applies returns means covers carries leaves gets goes comes
        sits lands falls picks sends pushes pulls draws paints binds clears
-       stays remains lets allows follows treats wins counts names points works
-       scales fades bends""".split()
+       stays lets allows follows""".split()
 )
 
 

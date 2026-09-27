@@ -73,7 +73,15 @@ uniform float uSurfaceFocused;
 
 // Continuously-increasing seconds, for ANIMATED packs (pulsing glow, shimmer,
 // …) — the same role iTime plays in the overlay / animation categories. The
-// host captures an epoch at first use so this begins near 0 (float precision).
+// host captures an epoch at first use so this begins near 0, and nothing
+// rebases or wraps it after that: the compositor accumulates animated time and
+// only subtracts the spans a window was NOT animating, so a continuously
+// decorated window's clock grows without bound. That matters at binary32: the
+// ULP is 7.8 ms at one day of accumulated animation (invisible), 62.5 ms at
+// about twelve days, and half a second at about three months. Every animated
+// pack reads iTime through fract() or sin(), so the quantisation lands in the
+// phase and a periodic effect reads steppy rather than wrong. Closing it means
+// rebasing the epoch host-side, not changing any pack.
 // The linker drops it for a static pack (e.g. the border). iTime is not the only
 // repaint driver, though: a pack that reads the audio spectrum or iMouse is
 // driven by those instead, so "references no iTime" means free only for a pack

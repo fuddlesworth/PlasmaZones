@@ -27,8 +27,8 @@ namespace PhosphorAnimation {
  *
  * Bound to one `QQuickWindow` per instance. Multi-window QML shells
  * construct one `QtQuickClock` per top-level window and route their
- * `AnimatedValue<T>` instances through the matching clock — same
- * per-output phase-locking rationale as `CompositorClock`.
+ * `AnimatedValue<T>` instances through the matching clock, so each
+ * window's motion is latched from its own `beforeRendering` pass.
  *
  * ## One clock per window
  *
@@ -68,9 +68,9 @@ namespace PhosphorAnimation {
  *
  * ## Monotonicity
  *
- * `std::chrono::steady_clock` is monotonic by contract, so the clamp
- * `CompositorClock` applies for KWin's (rarely) regressing presentTime
- * is unnecessary here.
+ * `std::chrono::steady_clock` is monotonic by contract, so the
+ * `IMotionClock` non-decreasing requirement is satisfied by the source
+ * and no clamp is needed.
  *
  * ## Cross-thread read safety
  *

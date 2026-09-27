@@ -81,9 +81,9 @@ SHADER_SUFFIXES = {".frag", ".vert", ".glsl"}
 # .js is here so rule_spdx and rule_license cover the 17 QML .js libraries. .sh/.cmake/.spec/
 # .desktop joined once every tracked one carried a head header, and .c once the two QPA protocol
 # stubs were found to be the only comment-bearing C sources no rule read. THREE rules read this
-# set, and so does --update-baseline, so .spec also entered the size ratchet. MOST of the tree is
-# still outside it, not just the .in/.xml/.txt and data JSON an earlier version of this comment
-# named, .md and .yml among them.
+# set, and so does --update-baseline, so .spec also entered the size ratchet. 26 of the 40 tracked
+# suffix VALUES are still outside it (737 of 3830 files), not just the .in/.xml/.txt and data JSON
+# an earlier version of this comment named, .md and .yml among them.
 CODE_SUFFIXES = (CPP_SUFFIXES | QML_SUFFIXES | SHADER_SUFFIXES
                  | {".luau", ".py", ".js", ".sh", ".cmake", ".spec", ".desktop"})
 
@@ -262,9 +262,11 @@ SPDX_EXEMPT = re.compile(r"(^|/)data/.*\.json$|(^|/)libs/phosphor-registry/tests
 # How far in a header may sit. Named because TWO rules read it and because the message
 # quotes the number: widening it silently turns "in the first 6 lines" into a lie. FIVE is
 # what the deepest header in the tree needs (packaging/arch/update-aur.sh: a shebang, two
-# comment lines, then the two tags on 4 and 5), so six gives one line of slack. The
-# selftest pins 4 and below through the tree and 8 and above through its toodeep probe;
-# 5 and 7 are unpinned, so the band is not closed.
+# comment lines, then the two tags on 4 and 5), so six gives one line of slack. The band is
+# closed INSIDE the selftest from both sides: the deep_ok probe puts its tags on 5 and 6 and
+# must not be reported, which fails at 4 or 5, and the toodeep probe puts its tags past the
+# window and must be reported, which fails at 7 or more. A whole-tree run independently
+# rejects 4 and below (update-aur.sh). Only 6 survives all three.
 SPDX_HEAD_LINES = 6
 
 
@@ -765,9 +767,16 @@ def rule_prose(files: list[str]) -> list[Violation]:
                                                  f"{p} -> {m.group(1).strip()[:80]!r}"))
             if suffix == ".spec":
                 for m in RPM_DESC.finditer(body):
-                    for p in prose_problems(m.group(1)):
+                    # Same bullet strip as the deb822 body below. An RPM %description is
+                    # free-form, so its feature list is indistinguishable from prose to
+                    # this rule: the live one passes only because its `-` markers sit at
+                    # column 0, and an ordinary reflow that indented them turned every
+                    # bullet into "spaced hyphen used as a dash" and blocked the commit,
+                    # while the identical indented list in debian/control reported nothing.
+                    para = DEB_DESC_BULLET.sub("", m.group(1))
+                    for p in prose_problems(para):
                         out.append(Violation("prose", f, line_of(body, m.start()),
-                                             f"{p} -> {m.group(1).strip()[:80]!r}"))
+                                             f"{p} -> {para.strip()[:80]!r}"))
             # debian/control has no suffix, so it is matched by NAME. CLAUDE.md lists the
             # "Debian Description" among the surfaces these rules govern.
             if Path(f).name == "control":

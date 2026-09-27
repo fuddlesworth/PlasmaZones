@@ -105,6 +105,14 @@ bool ShaderNodeRhi::ensureBufferTarget()
             // that recreates the depth texture successfully, finds every colour
             // texture already at passSize(i), rebuilds nothing, and renders into
             // a target whose depth attachment was freed here.
+            //
+            // No requestAnotherFrame() paired with it, unlike the other
+            // in-prepare() flag raises in this library. resetBufferTargets
+            // raises m_uniformsDirty and m_sceneDataDirty as a side effect of
+            // its real job here, and nothing reads either before the next
+            // prepare(), so there is no stale value to flush out. Asking for a
+            // frame from an arm that has just failed a create() would repaint at
+            // full frame rate for as long as the driver keeps failing it.
             resetBufferTargets();
             return false;
         }
@@ -132,18 +140,25 @@ bool ShaderNodeRhi::ensureBufferTarget()
                 // The depth TEXTURE was already replaced above, so the render
                 // targets and SRBs still installed reference the one it
                 // displaced. Same freed-object draw as the texture failure
-                // path, and the same reason it takes the full target reset.
+                // path, the same reason it takes the full target reset, and the
+                // same reason it asks for no frame.
                 resetBufferTargets();
                 return false;
             }
         }
         // The whole dependent set, not just the bindings: every buffer render
         // target created while the OLD depth texture was installed holds it as a
-        // raw attachment. On the success path this is close to free — a depth
-        // resize changes bufferSize, which is what passSize() returns for every
+        // raw attachment. On the success path it costs nothing on either arm of
+        // the enclosing gate, for two different reasons. On a depth RESIZE,
+        // bufferSize moved, and bufferSize is what passSize() returns for every
         // pass when m_useDepthBuffer, so each target was going to be rebuilt in
-        // this same call regardless. It does not touch m_depthTexture or
-        // m_depthSampler, so the objects just created here survive it.
+        // this same call regardless. On the depth-texture-ABSENT arm nothing
+        // would otherwise have been rebuilt, but every site that nulls
+        // m_depthTexture drops the targets in the same breath
+        // (setUseDepthBuffer, releaseRhiResources, and both failure arms above),
+        // so there is nothing left here to drop. It does not touch
+        // m_depthTexture or m_depthSampler, so the objects just created here
+        // survive it.
         resetBufferTargets();
     }
 
@@ -249,6 +264,17 @@ bool ShaderNodeRhi::ensureBufferTarget()
         // against an uncreated texture and render target.
         if (!tex->create()) {
             tex.reset();
+            // The caller's render target and pass descriptor go with it. They
+            // were built against the texture the reset above destroyed and now
+            // hold a raw pointer to it, exactly as the render-target failure arm
+            // below clears all three together. Nothing draws them today
+            // (prepare() bails on this false, render() gates on a pipeline the
+            // reset below drops, and the two remaining derefs read only the
+            // RT's renderPassDescriptor()), but an installed target must never
+            // point at a freed attachment, which is the invariant
+            // ZoneShaderNodeRhi's destructor orders its teardown around.
+            rt.reset();
+            rpd.reset();
             warnCreateFailed(QStringLiteral("texture"), size, wantMips);
             // The caller's old texture is already gone (the reset above
             // replaced it before create() was attempted), and any SRB or
@@ -319,10 +345,12 @@ bool ShaderNodeRhi::ensureBufferTarget()
             // actually rebuilt and goes silent when the loop bails. Logged BEFORE, it fired
             // on every frame a pass kept failing — needCreate stays true while any pass is
             // missing — and built a QStringList plus n formatted QStrings each time, on the
-            // render thread inside prepare(). `info` is live on a bare install, so being
-            // qCDebug elsewhere in this function did not cover it.
+            // render thread inside prepare(). Note the failing-pass early return can still
+            // discard a partly built list, which is a strict improvement on building the
+            // whole thing unconditionally rather than a promise of zero allocations.
             QStringList rebuilt;
             for (int i = 0; i < n; ++i) {
+                const QSize sz = passSize(i);
                 // PER-INDEX, not the whole set. The scan above only asks whether
                 // ANY pass needs rebuilding; recreating the ones that already
                 // match costs a needless destroy/create of their texture and
@@ -340,16 +368,15 @@ bool ShaderNodeRhi::ensureBufferTarget()
                 // and nothing is skipped, and a depth FLIP comes through
                 // setUseDepthBuffer, which drops the whole set via
                 // resetBufferTargets before this runs.
-                if (m_multiBufferTextures[i] && m_multiBufferTextures[i]->pixelSize() == passSize(i)) {
+                if (m_multiBufferTextures[i] && m_multiBufferTextures[i]->pixelSize() == sz) {
                     continue;
                 }
                 if (!createTextureAndRT(m_multiBufferTextures[i], m_multiBufferRenderTargets[i],
-                                        m_multiBufferRenderPassDescriptors[i], passSize(i), wantsMips(i))) {
-                    qCDebug(lcShaderNode) << "Failed to create multi-buffer texture" << i << "at" << passSize(i);
+                                        m_multiBufferRenderPassDescriptors[i], sz, wantsMips(i))) {
+                    qCDebug(lcShaderNode) << "Failed to create multi-buffer texture" << i << "at" << sz;
                     return false;
                 }
-                const QSize s = passSize(i);
-                rebuilt.append(QStringLiteral("%1:%2x%3").arg(i).arg(s.width()).arg(s.height()));
+                rebuilt.append(QStringLiteral("%1:%2x%3").arg(i).arg(sz.width()).arg(sz.height()));
             }
             qCInfo(lcShaderNode) << "Rebuilt multi-buffer textures:"
                                  << "m_width=" << m_width << "m_height=" << m_height << "bufferScale=" << m_bufferScale

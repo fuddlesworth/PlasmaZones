@@ -10,7 +10,10 @@
 // because the builtin:gaussian-h and builtin:gaussian-v passes call it and a
 // third-party pack may still declare those. It is 9 taps spread over a 4-tap
 // reach, so the outermost tap sits at the full radius and the effective sigma is
-// roughly 0.45 of the radius, not the radius/3 this file used to claim.
+// roughly 0.45 of the radius, not the radius/3 this file used to claim. Its
+// offsets step in canvas UV: the logical-px radius is scaled to device px by
+// uSurfaceScale, normalized by the canvas extent (uSurfaceSize), and spread over
+// the kernel's 4-tap reach.
 //
 // BUFFER-PASS CONVENTION: buffer shaders compile WITHOUT the generated p_<id>
 // parameter preamble, so parameters are read by their RAW contract slot. THREE
@@ -23,15 +26,11 @@
 // slots are assigned by DECLARATION ORDER (see buildParamPreamble), so the
 // convention is that `blurRadius` is the FIRST scalar parameter a blur-family
 // pack declares. Reorder the parameters array and the chain silently blurs by
-// whatever the new first scalar is. The offline validator DOES lint this, by
-// name, in validateSurfacePack — and it lints a pack that declares no scalar at
-// all, where the chain would blur by 0. Both arms are covered by
-// test_surface_pack_validator.cpp. This paragraph said the opposite
-// for several rounds, and the validator's own comment cites it as the reason
-// that lint was written, so the two had gone circular. Offsets step in canvas
-// UV: the logical-px radius is
-// scaled to device px by uSurfaceScale, normalized by the canvas extent
-// (uSurfaceSize), and spread over the kernel's 4-tap reach.
+// whatever the new first scalar is. Note SCALAR, not float: a bool pools as one
+// too, so leading with `roundBottomCorners` puts a corner switch in the radius
+// slot. The offline validator lints all of this, by name, in validateSurfacePack,
+// including a pack that declares no scalar at all, where the chain would blur by
+// 0. Both arms are covered by test_surface_pack_validator.cpp.
 
 #ifndef PLASMAZONES_SURFACE_BLUR_GLSL
 #define PLASMAZONES_SURFACE_BLUR_GLSL

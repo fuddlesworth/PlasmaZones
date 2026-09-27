@@ -41,10 +41,10 @@ import org.kde.kirigami as Kirigami
  *
  * ## "None" entry
  *
- * For hosts where clearing the selection is a first-class action (animation
- * settings), set `includeNoneEntry: true` to prepend an explicit `noneText`
- * row. Selecting it emits `selected("")`. The editor leaves it off
- * because its dialog uses a separate "Enable effect" checkbox.
+ * For hosts where clearing the selection is a first-class action (the animation
+ * profile editor), set `includeNoneEntry: true` to prepend an explicit `noneText`
+ * row. Selecting it emits `selected("")`. The rules action editors and the
+ * decoration chain editor leave it off.
  *
  * ## Menu lifecycle (Qt 6 use-after-free workaround)
  *

@@ -201,7 +201,7 @@ inline QRect resolveScreenGeometry(PhosphorScreens::ScreenManager* mgr, const QS
 // Write all shader-config properties from ShaderInfo to a QML window (every
 // buffer/wallpaper/param field ShaderInfo carries, plus the generated param
 // preamble - see the writes below rather than an enumeration that rots).
-// Replaces 3 occurrences of the shader-info-to-window property push pattern.
+// Replaces the shader-info-to-window property push pattern at its call sites.
 //
 // @p vsGeom / @p physGeom identify the target screen. When they differ (i.e.
 // the overlay covers a virtual screen that is a sub-rect of the physical

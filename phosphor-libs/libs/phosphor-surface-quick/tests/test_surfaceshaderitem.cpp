@@ -402,6 +402,15 @@ Item {
     /// The no-backdrop state is ordinary, not an error: a host with nothing
     /// behind its surface passes null, and that must resolve to a null image
     /// rather than warning or leaving a stale one in place.
+    ///
+    /// BOTH arms, because the setter distinguishes them and only one was covered.
+    /// `QVariant()` is INVALID, which is what the `!unwrapped.isValid()` half of
+    /// setWallpaperTextureVariant's clear test answers; a QML `null` arrives as a
+    /// nullptr_t and needs the `QMetaType::Nullptr` half. Nothing reached that
+    /// half, so it could be deleted from both variant setters with a green suite,
+    /// and for setAudioSpectrumVariant that is a real behaviour change (a nullptr
+    /// is not convertible to QVariantList, so a QML `null` would go from "clear
+    /// the spectrum" to "warn and keep the previous one").
     void testSurfaceShaderItem_aNullValueClearsTheWallpaperImage()
     {
         QImage backdrop(4, 4, QImage::Format_RGBA8888);
@@ -413,6 +422,37 @@ Item {
 
         item.setProperty("wallpaperTexture", QVariant());
         QVERIFY(item.wallpaperTexture().isNull());
+
+        item.setProperty("wallpaperTexture", QVariant::fromValue(backdrop));
+        QVERIFY(!item.wallpaperTexture().isNull());
+        item.setProperty("wallpaperTexture", QVariant::fromValue(nullptr));
+        QVERIFY(item.wallpaperTexture().isNull());
+    }
+
+    /// The audioSpectrum twin of the clear test above, and the arm that makes the
+    /// Nullptr half load-bearing rather than tidy: a nullptr_t cannot convert to
+    /// QVariantList, so without that half a QML `null` warns and keeps the last
+    /// spectrum instead of clearing it.
+    void testSurfaceShaderItem_aNullValueClearsTheAudioSpectrum()
+    {
+        // audioSpectrumVariant() answers QVariant::fromValue(QVector<float>), so read
+        // it back through value<QVector<float>>(); toList() on that variant is empty
+        // whatever the spectrum holds and would pass either way.
+        const auto spectrumOf = [](const SurfaceShaderItem& it) {
+            return it.audioSpectrumVariant().value<QVector<float>>();
+        };
+
+        SurfaceShaderItem item;
+        item.setProperty("audioSpectrum", QVariant::fromValue(QVariantList{0.25, 0.5, 0.75}));
+        QCOMPARE(spectrumOf(item).size(), 3);
+
+        item.setProperty("audioSpectrum", QVariant::fromValue(nullptr));
+        QVERIFY(spectrumOf(item).isEmpty());
+
+        item.setProperty("audioSpectrum", QVariant::fromValue(QVariantList{0.25, 0.5, 0.75}));
+        QCOMPARE(spectrumOf(item).size(), 3);
+        item.setProperty("audioSpectrum", QVariant());
+        QVERIFY(spectrumOf(item).isEmpty());
     }
 
     // ═══════════════════════════════════════════════════════════════════════

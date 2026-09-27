@@ -9,9 +9,9 @@ import org.phosphor.animation
 import org.plasmazones.common 1.0
 
 /**
- * Shader-mode zone overlay content body — Item version of the legacy
- * RenderNodeOverlay.qml, hosted inside the unified PassiveOverlayShell's
- * mainOverlay slot when shader rendering is enabled for the screen.
+ * Shader-mode zone overlay content body, hosted inside the unified
+ * PassiveOverlayShell's mainOverlay slot when shader rendering is enabled for
+ * the screen.
  */
 Item {
     id: root
@@ -89,8 +89,7 @@ Item {
     // the warm resume (lifecycle.cpp writes _idled both ways) and the slot
     // Item's visibility toggle covers a plain show() after a full hide. Both run
     // before the next painted frame, which is the renderer's contract for
-    // re-enabling the layer. An earlier version of this note also credited an
-    // editor preview and a RenderNodeOverlay.qml; neither exists.
+    // re-enabling the layer.
     property bool idleParked: false
     on_IdledChanged: if (!root._idled)
         root.idleParked = false

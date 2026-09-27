@@ -223,16 +223,12 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     }
     const QString fragLabel = QFileInfo(eff.fragmentShaderPath).fileName();
 
-    // RAW counts, not the parsed sizes. fromJson silently drops what it cannot
-    // use (a malformed entry, anything past a cap), so the parsed size is what
-    // SURVIVED rather than what the author WROTE, while every lint below counts
-    // the raw array. The header therefore used to contradict the lint three
-    // lines under it: "3 textures" followed by "too many textures: 5 declared".
-    // The author's own file says 5, so 5 is the number the header owes them.
-    //
-    // A non-array value counts 0, which is honest: toArray() gives an empty
-    // array and there is nothing the author declared AS a parameter list. The
-    // separate type lint is what reports the wrong shape.
+    // RAW counts, not the parsed sizes. fromJson silently drops what it cannot use
+    // (a malformed entry, anything past a cap), so the parsed size is what SURVIVED
+    // rather than what the author WROTE, while every lint below counts the raw
+    // array. The header owes the author the number in their own file, or it reads
+    // "3 textures" three lines above "too many textures: 5 declared". A non-array
+    // value counts 0, which is honest, and the separate type lint reports the shape.
     const qsizetype rawParamCount = doc.object().value(QLatin1String("parameters")).toArray().size();
     const qsizetype rawTextureCount = doc.object().value(QLatin1String("textures")).toArray().size();
     out << name << "  (" << rawParamCount << " param" << (rawParamCount == 1 ? "" : "s") << ", " << rawTextureCount
@@ -370,10 +366,9 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             }
         }
     }
-    // A `textures` that is not an array at all used to lint completely clean:
-    // toArray() answers empty for a string, a number or an object, the loop
-    // below never runs, and the pack passed with its texture list silently
-    // ignored. Say so rather than validating a list the author did not write.
+    // A `textures` that is not an array lints clean without this: toArray() answers
+    // empty for a string, a number or an object, the loop below never runs, and the
+    // pack passes with its texture list silently ignored.
     const QJsonValue texturesValue = doc.object().value(QLatin1String("textures"));
     if (!texturesValue.isUndefined() && !texturesValue.isNull() && !texturesValue.isArray()) {
         lints << QStringLiteral("`textures` is not an array (the whole list is ignored at load)");
@@ -570,11 +565,10 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
             QStringLiteral("builtin:kawase-up-0"),   QStringLiteral("builtin:kawase-up-1"),
             QStringLiteral("builtin:kawase-up-2")};
         // A depth pack pins every pass to the single bufferScale on the daemon,
-        // because the passes share one depth attachment and a render target's
-        // colour and depth attachments must agree in size. That runtime
-        // behaviour is correct and documented in place; what was missing is the
-        // diagnostic, so a pack declaring both shipped green with its whole
-        // pyramid flattened at load.
+        // because the passes share one depth attachment and a render target's colour
+        // and depth attachments must agree in size. The runtime behaviour is correct
+        // and documented in place, so this is purely the missing diagnostic: without
+        // it a pack declaring both passes green with its pyramid flattened at load.
         if (doc.object().value(QLatin1String("depthBuffer")).toBool()
             && !doc.object().value(QLatin1String("bufferScales")).toArray().isEmpty()) {
             lints << QStringLiteral(
@@ -599,27 +593,33 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
                              "[0..6] in the order %1")
                              .arg(kKawaseChain.join(QLatin1String(", ")));
             }
-            // THE RADIUS SLOT. kawase_down_0 and every pass after it read the
-            // blur radius as customParams[0].x, and slots are assigned by
-            // DECLARATION ORDER (buildParamPreamble), so the chain blurs by
-            // whatever the pack's first scalar parameter happens to be. Nothing
-            // enforced that until this lint; surface_blur.glsl documents the slot
-            // convention and test_surface_pack_validator.cpp covers both arms.
-            // Do NOT re-quote that header: this comment used to, the quoted line
-            // is gone, and the two spent rounds citing each other as authority.
-            // Reorder the parameters array and the pack still compiles, still
-            // loads, and blurs by a corner radius.
-            //
-            // The first SCALAR, not the first parameter: colours and images live
-            // in their own pools, so a pack may lead with a colour and still have
-            // its radius in slot 0.
+            // NEEDS BACKDROP. The chain's first pass has backdropTexel() as its only
+            // source, so omitting the flag composites a fully transparent pane.
+            if (!doc.object().value(QLatin1String("needsBackdrop")).toBool()) {
+                lints << QStringLiteral(
+                    "the builtin Kawase chain samples the backdrop in its first pass, but \"needsBackdrop\" is not "
+                    "declared, so nothing is captured and every pass composites a transparent pane");
+            }
+            // THE RADIUS SLOT. kawase_down_0 and every pass after it read the blur
+            // radius as customParams[0].x, and slots are assigned by DECLARATION
+            // ORDER (buildParamPreamble), so the chain blurs by whatever the pack's
+            // first scalar parameter happens to be. Reorder the parameters array and
+            // the pack still compiles, still loads, and blurs by a corner radius.
+            // surface_blur.glsl documents the slot convention and
+            // test_surface_pack_validator.cpp covers both arms. Do NOT re-quote that
+            // header, which this comment used to: the two cited each other for rounds.
             {
                 QString firstScalarId;
                 QString firstScalarType;
                 for (const QJsonValue& pv : parametersValue.toArray()) {
+                    const QString pid = pv.toObject().value(QLatin1String("id")).toString();
                     const QString ptype = pv.toObject().value(QLatin1String("type")).toString();
-                    if (ptype == QLatin1String("float") || ptype == QLatin1String("int")) {
-                        firstScalarId = pv.toObject().value(QLatin1String("id")).toString();
+                    // paramPreamble's OWN test, "not a color", not a float/int list.
+                    // A BOOL pools as a scalar too and takes a sub-slot in
+                    // declaration order, so a pack leading with roundBottomCorners
+                    // blurs by that bool. Invalid ids skipped as both runtimes do.
+                    if (ptype != QLatin1String("color") && PhosphorShaders::isValidParamId(pid)) {
+                        firstScalarId = pid;
                         firstScalarType = ptype;
                         break;
                     }
@@ -627,11 +627,11 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
                 if (firstScalarType.isEmpty()) {
                     lints << QStringLiteral(
                         "the builtin Kawase passes read the blur radius as customParams[0].x, but this pack declares "
-                        "no float or int parameter, so the chain blurs by 0");
+                        "no scalar parameter, so the chain blurs by 0");
                 } else if (firstScalarId != QLatin1String("blurRadius")) {
-                    // A name check, deliberately, and the message says why rather
-                    // than pretending the name itself is load-bearing: the SLOT is
-                    // what matters and the name is the only thing decidable here.
+                    // A name check, and the message says why rather than pretending
+                    // the name is load-bearing: the SLOT is what matters and the
+                    // name is the only thing decidable here.
                     lints << QStringLiteral(
                                  "the builtin Kawase passes read the blur radius as customParams[0].x, which is the "
                                  "FIRST scalar parameter declared, and that is '%1' here. Every bundled chain pack "

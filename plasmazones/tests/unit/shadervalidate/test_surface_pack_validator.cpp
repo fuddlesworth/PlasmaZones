@@ -417,8 +417,18 @@ private Q_SLOTS:
         // chain that declares none ("every pass renders at the pack-wide
         // bufferScale and the pyramid is not a pyramid").
         obj.insert(QStringLiteral("bufferScales"), QJsonArray{0.25, 0.125, 0.0625, 0.03125, 0.0625, 0.125, 0.25});
+        // And the backdrop flag, for the same reason: without it the chain's first
+        // pass samples a backdrop nothing captured, which that block also lints.
+        // Leaving it off made this a "correct" pack that renders a transparent pane.
+        obj.insert(QStringLiteral("needsBackdrop"), true);
 
-        const PackResult r = validateSurface(tmp, QStringLiteral("sf-kawase-ok"), obj, surfaceBodyReading({}));
+        // The body READS blurRadius, which is surfaceBodyReading's stated purpose ("so the
+        // declared-but-unread sweep stays quiet"). Passing {} against a pack that declares
+        // one is harmless today, because the surface arm has no declared-but-unread sweep,
+        // and it would fail loudly the day one is added — which is the right failure, but
+        // only if the control is asking the question the helper is for.
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-kawase-ok"), obj,
+                                             surfaceBodyReading({QStringLiteral("blurRadius")}));
         QVERIFY2(!r.report.contains(QStringLiteral("positional")), qPrintable(r.report));
         QVERIFY2(!r.report.contains(QStringLiteral("customParams[0].x")), qPrintable(r.report));
         // COUNT the errors, do not grep for the arms you remembered. Both earlier
@@ -446,17 +456,79 @@ private Q_SLOTS:
                               QStringLiteral("builtin:kawase-down-2"), QStringLiteral("builtin:kawase-down-3"),
                               QStringLiteral("builtin:kawase-up-0"), QStringLiteral("builtin:kawase-up-1"),
                               QStringLiteral("builtin:kawase-up-2")});
+        obj.insert(QStringLiteral("needsBackdrop"), true);
 
         const PackResult r =
             validateSurface(tmp, QStringLiteral("sf-kawase-slot"), obj,
                             surfaceBodyReading({QStringLiteral("cornerRadius"), QStringLiteral("blurRadius")}));
         QVERIFY2(r.report.contains(QStringLiteral("customParams[0].x")), qPrintable(r.report));
-        QVERIFY2(r.report.contains(QStringLiteral("cornerRadius")), qPrintable(r.report));
+        // The full clause, not the bare id: this fixture declares cornerRadius and
+        // no roundBottomCorners, which trips a separate NOTE naming cornerRadius, so
+        // a bare-id assertion passed with the lint's .arg() deleted.
+        QVERIFY2(r.report.contains(QStringLiteral("and that is 'cornerRadius' here")), qPrintable(r.report));
     }
 
-    /// THE RADIUS SLOT, no-scalar arm. With no float or int parameter at all the
-    /// slot reads 0 and the chain blurs by nothing, which looks like a broken
-    /// pack rather than a misdeclared one. Also untested until now.
+    /// THE RADIUS SLOT, bool-first. paramPreamble pools everything that is not a
+    /// "color" as a scalar, so a BOOL takes customParams[0].x in declaration order
+    /// exactly as a float would and the chain blurs by it. The lint used to test
+    /// `type == "float" || type == "int"`, skip the bool, and then report the SECOND
+    /// declaration as "the first scalar" — so a pack leading with roundBottomCorners,
+    /// the likeliest bool an author reaches for, validated clean and blurred by a
+    /// corner switch. The validator's own slot-budget block counted bool as a scalar
+    /// the whole time.
+    void aKawaseChainLeadingWithABoolIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(
+            QStringLiteral("sf-kawase-bool"),
+            QJsonArray{surfaceParam(QStringLiteral("roundBottomCorners"), QStringLiteral("bool"), false, 0.0, 0.0),
+                       surfaceParam(QStringLiteral("blurRadius"), QStringLiteral("float"), 32.0, 0.0, 256.0)});
+        obj.insert(QStringLiteral("multipass"), true);
+        obj.insert(QStringLiteral("bufferShaders"),
+                   QJsonArray{QStringLiteral("builtin:kawase-down-0"), QStringLiteral("builtin:kawase-down-1"),
+                              QStringLiteral("builtin:kawase-down-2"), QStringLiteral("builtin:kawase-down-3"),
+                              QStringLiteral("builtin:kawase-up-0"), QStringLiteral("builtin:kawase-up-1"),
+                              QStringLiteral("builtin:kawase-up-2")});
+        obj.insert(QStringLiteral("bufferScales"), QJsonArray{0.25, 0.125, 0.0625, 0.03125, 0.0625, 0.125, 0.25});
+        obj.insert(QStringLiteral("needsBackdrop"), true);
+
+        const PackResult r =
+            validateSurface(tmp, QStringLiteral("sf-kawase-bool"), obj,
+                            surfaceBodyReading({QStringLiteral("roundBottomCorners"), QStringLiteral("blurRadius")}));
+        QVERIFY2(r.report.contains(QStringLiteral("and that is 'roundBottomCorners' here")), qPrintable(r.report));
+    }
+
+    /// THE BACKDROP FLAG. kawase_down_0 has backdropTexel() as its only source, so a
+    /// chain pack that omits `needsBackdrop` captures nothing and every pass
+    /// composites a fully transparent pane. kawase_down_0.frag names the flag as one
+    /// of the keys opting in, and it was the one key in that list with no lint:
+    /// `multipass` and `bufferShaders` are checked in both directions and the pyramid
+    /// is checked per index, while this went to the shipped-pack convention alone.
+    void aKawaseChainWithoutNeedsBackdropIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(
+            QStringLiteral("sf-kawase-nobackdrop"),
+            QJsonArray{surfaceParam(QStringLiteral("blurRadius"), QStringLiteral("float"), 32.0, 0.0, 256.0)});
+        obj.insert(QStringLiteral("multipass"), true);
+        obj.insert(QStringLiteral("bufferShaders"),
+                   QJsonArray{QStringLiteral("builtin:kawase-down-0"), QStringLiteral("builtin:kawase-down-1"),
+                              QStringLiteral("builtin:kawase-down-2"), QStringLiteral("builtin:kawase-down-3"),
+                              QStringLiteral("builtin:kawase-up-0"), QStringLiteral("builtin:kawase-up-1"),
+                              QStringLiteral("builtin:kawase-up-2")});
+        obj.insert(QStringLiteral("bufferScales"), QJsonArray{0.25, 0.125, 0.0625, 0.03125, 0.0625, 0.125, 0.25});
+
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-kawase-nobackdrop"), obj, surfaceBodyReading({}));
+        QVERIFY2(r.report.contains(QStringLiteral("\"needsBackdrop\" is not declared")), qPrintable(r.report));
+    }
+
+    /// THE RADIUS SLOT, no-scalar arm. With no scalar parameter at all the slot reads
+    /// 0 and the chain blurs by nothing, which looks like a broken pack rather than a
+    /// misdeclared one. Also untested until now.
     void aKawaseChainWithNoScalarParameterIsLinted()
     {
         QTemporaryDir tmp;
@@ -469,6 +541,7 @@ private Q_SLOTS:
                               QStringLiteral("builtin:kawase-down-2"), QStringLiteral("builtin:kawase-down-3"),
                               QStringLiteral("builtin:kawase-up-0"), QStringLiteral("builtin:kawase-up-1"),
                               QStringLiteral("builtin:kawase-up-2")});
+        obj.insert(QStringLiteral("needsBackdrop"), true);
 
         const PackResult r = validateSurface(tmp, QStringLiteral("sf-kawase-noscalar"), obj, surfaceBodyReading({}));
         QVERIFY2(r.report.contains(QStringLiteral("blurs by 0")), qPrintable(r.report));

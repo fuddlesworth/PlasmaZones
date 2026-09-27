@@ -39,9 +39,13 @@
 namespace PlasmaZones {
 
 namespace {
-// Which corner of a source quad carries texcoord 0, per axis. KWin does not promise a
-// vertex ORDER, so the extreme-position vertices are found first and the handedness is
-// read off their texcoords rather than assumed.
+// Which corner of a source quad carries texcoord 0, per axis. KWin DOES document the
+// vertex order (itemgeometry.h: "expects the (original) vertices to be in the clockwise
+// order starting from topleft", which the output quad below relies on). What it does not
+// promise is which corner carries texcoord 0 on either axis, and that is the question
+// here: a Y-flipped source has the same vertex order with v inverted. So the
+// extreme-POSITION vertices are found first and the handedness is read off their
+// texcoords rather than inferred from where they sit.
 //
 // Extracted because this was written out three times, byte-identical in the first two,
 // and the three copies had to be kept in step by hand. The CALLER owns the caching, and

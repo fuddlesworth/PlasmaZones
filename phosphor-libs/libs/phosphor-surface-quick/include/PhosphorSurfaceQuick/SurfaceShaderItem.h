@@ -37,9 +37,11 @@ namespace PhosphorSurfaceQuick {
  * render path is the UBO: the node is created with a
  * PhosphorSurfaceShaders::SurfaceUniformProfile so it uploads the DISTINCT
  * 672-byte surface UBO instead of the overlay one. Distinct, not smaller: both
- * layouts static_assert to 672 bytes and their members do not line up. createShaderNode() supplies
- * that profile to a stock PhosphorRendering::ShaderNodeRhi — there is no
- * SurfaceShaderItem-specific node subclass.
+ * layouts static_assert to 672 bytes, and past the shared qt_Matrix / qt_Opacity
+ * lead (offsets 0 and 64, plus iTextureResolution at 592) the members do not line
+ * up. createShaderNode() supplies that profile to a stock
+ * PhosphorRendering::ShaderNodeRhi — there is no SurfaceShaderItem-specific node
+ * subclass.
  *
  * The surface-state inputs below (scale / focus / geometry) map to the
  * surface-only fields of PhosphorShaders::UboFrameState that
@@ -101,10 +103,13 @@ public:
 
     // Note: setEntryScaffold is inherited and PUBLIC, but this override never delegates to
     // ShaderEffect::updatePaintNode, the only site that pushes the item's own scaffold, so
-    // the scaffold a host sets is never read for rendering. The call is not inert, though:
-    // the base setter still sets Status::Loading, raises the item's shaderDirty and calls
-    // update(), so it forces a reload and a statusChanged round trip. No in-tree host makes
-    // one. The ZoneShaderItem twin carries the same note.
+    // the scaffold a host sets is never read for rendering. A FIRST call is not inert: the
+    // base setter raises the item's shaderDirty and calls update() unconditionally, and
+    // sets Status::Loading when a shaderSource is set, so it forces a reload and a
+    // statusChanged round trip. A repeat call with the same scaffold early-returns and IS
+    // inert. No in-tree host makes either, and none can from QML: setEntryScaffold is not
+    // Q_INVOKABLE and both items are QML-instantiated. The ZoneShaderItem twin carries the
+    // same note.
     //
     // Note: shaderSource, paramPreamble, shaderParams, iTime, and the
     // customParams / customColors slots are inherited Q_PROPERTYs from

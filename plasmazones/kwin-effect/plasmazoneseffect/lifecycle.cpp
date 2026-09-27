@@ -59,10 +59,11 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     , m_screenChangeHandler(std::make_unique<ScreenChangeHandler>(this))
     , m_snapAssistHandler(std::make_unique<SnapAssistHandler>(this))
     // Phase 3: per-output motion clocks drive every AnimatedValue in the
-    // controller. One `CompositorClock` per `LogicalOutput` so mixed
-    // refresh-rate displays (60 Hz + 144 Hz being the common case)
-    // phase-lock independently instead of beating against a shared
-    // process-wide clock. Populated below via effects->screens() and
+    // controller. One `CompositorClock` per `LogicalOutput`, which scopes
+    // refreshRate() and requestFrame() to that output. It does NOT scope the
+    // clock reading: now() reads steady_clock on every clock, so nothing is
+    // phase-locked per output. CompositorClock's docblock has the history of
+    // the latch this used to describe. Populated below via effects->screens() and
     // maintained via the screenAdded/screenRemoved signals. The
     // fallback unbound clock covers: (a) the bootstrap window before
     // screens() populates, (b) windows whose `screen()` is null

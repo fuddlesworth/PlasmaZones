@@ -206,9 +206,13 @@ QVariantList OverlayService::buildZonesList(const QString& screenId, QScreen* ph
         return zonesList;
     }
 
-    const QRect overlayGeom = (m_screenStates.contains(screenId) && m_screenStates[screenId].overlayGeometry.isValid()
-                                   ? m_screenStates[screenId].overlayGeometry
-                                   : physScreen->geometry());
+    // One constFind, not contains() plus two const operator[] reads: each of those
+    // returns a PerScreenOverlayState by VALUE, so the old form copied the whole
+    // per-screen state twice on a path that runs per zone-data update.
+    const auto stateIt = m_screenStates.constFind(screenId);
+    const QRect overlayGeom =
+        (stateIt != m_screenStates.constEnd() && stateIt->overlayGeometry.isValid() ? stateIt->overlayGeometry
+                                                                                    : physScreen->geometry());
     qCDebug(lcOverlay) << "buildZonesList: screenId=" << screenId << "overlayGeom=" << overlayGeom
                        << "layout=" << screenLayout->name() << "zones=" << screenLayout->zones().size();
 
@@ -287,7 +291,7 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QS
     // layout value, mirroring the precedence useShaderForScreen applies. The override
     // is screen-invariant across zones, so the caller resolves it once and passes it
     // in rather than re-resolving (and re-deriving the cache key) per zone.
-    int resolvedDisplayMode = 0; // default: ZoneRectangles
+    int resolvedDisplayMode = ConfigDefaults::overlayDisplayMode();
     if (zone->overlayDisplayMode() >= 0) {
         resolvedDisplayMode = zone->overlayDisplayMode();
     } else if (overlayOverride.style) {
@@ -383,13 +387,15 @@ void OverlayService::updateZonesForAllWindows()
             continue;
         }
 
-        QScreen* physScreen = m_screenStates.value(screenId).overlayPhysScreen;
+        // The loop already holds the iterator; value(screenId) would re-hash and copy
+        // the whole PerScreenOverlayState to read one pointer out of it.
+        QScreen* physScreen = it.value().overlayPhysScreen;
         QVariantList zones = buildZonesList(screenId, physScreen);
         QVariantList patched = patchZonesWithHighlight(zones, slot);
 
         int highlightedCount = 0;
         for (const QVariant& z : patched) {
-            if (z.toMap().value(QLatin1String("isHighlighted")).toBool()) {
+            if (z.toMap().value(QLatin1String(::PhosphorZones::ZoneJsonKeys::IsHighlighted)).toBool()) {
                 ++highlightedCount;
             }
         }

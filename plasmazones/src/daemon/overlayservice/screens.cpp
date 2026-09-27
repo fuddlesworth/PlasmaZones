@@ -186,10 +186,10 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
         }
     }
 
-    // Snap-assist + layout picker post-shell-migration are Item slots
-    // inside the per-screen passive shell - destroying the shell
-    // (above, via destroyPassiveShell) tears the slots down with
-    // it. No separate cleanup needed.
+    // All three modal singletons post-shell-migration (snap assist, layout
+    // picker, cheatsheet) are Item slots inside the per-screen passive shell -
+    // destroying the shell (above, via destroyPassiveShell) tears the slots
+    // down with it. No separate cleanup needed.
 
     const QString physId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
     clearShellFailuresForPhysicalScreen(physId);

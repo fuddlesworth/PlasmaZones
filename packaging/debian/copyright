@@ -309,15 +309,16 @@ License: CC0-1.0
  On Debian systems the full text of the CC0 1.0 Universal license can be found
  in /usr/share/common-licenses/CC0-1.0.
 
-# Retained upstream notices. Neither paragraph is a Files stanza: the files that
-# incorporate this code ship under the licence their own stanza declares, and these
-# exist because BSD-3 clause 1 and the MIT licence each require their condition list
-# and disclaimer to travel with a source redistribution.
+# Retained upstream notice. Not a Files stanza: the files that incorporate this code
+# ship under the licence their own stanza declares, and this exists because BSD-3
+# clause 1 requires its condition list and disclaimer to travel with a source
+# redistribution. The MIT paragraph further up does the same job for the luau tarball
+# and for the gl-transitions ports, whose own stanza declares LGPL-2.1-or-later.
 #
-# The `Expat` paragraph below is BYTE-IDENTICAL to the `MIT` one further up and must
-# stay so. Two names for one text is legal DEP-5 and deliberate here — MIT is the
-# luau tarball's own declared identifier, Expat is the retained notice for the
-# gl-transitions ports — but nothing machine-checks that the two copies agree.
+# There used to be a second copy of that text here under the name `Expat`, with a
+# comment saying the two must stay byte-identical. Nothing referenced it and nothing
+# checked the identity, so it was an obligation with no check behind it rather than a
+# notice anyone reads. One paragraph, one name.
 
 License: BSD-3-Clause
  Redistribution and use in source and binary forms, with or without
@@ -345,21 +346,3 @@ License: BSD-3-Clause
  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-License: Expat
- Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated documentation files (the "Software"), to deal
- in the Software without restriction, including without limitation the rights
- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- copies of the Software, and to permit persons to whom the Software is
- furnished to do so, subject to the following conditions:
- .
- The above copyright notice and this permission notice shall be included in all
- copies or substantial portions of the Software.
- .
- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- SOFTWARE.

@@ -17,6 +17,13 @@ lefthook and CI both invoke it by name.
 The two sibling rule modules are imported DIRECTLY rather than passed in, which the
 detectors above cannot be. Neither imports the gate, so there is no cycle to avoid,
 and being importable at all was the point of splitting them out.
+
+WHAT IS HERE AND WHAT IS NOT. This file holds the PURE-DETECTOR probes: test data plus
+assertions about `prose_problems`, `iter_json_prose` and the shared-text and dep5
+detectors, none of which builds a tree. The arms that drive a real RULE over a fake tree
+live in conventions_selftest_rules.py and arrive through one `rule_coverage_failures`
+call. They were split out when this file crossed the 1150-line ceiling, along the line
+those two concerns already fell on.
 """
 from __future__ import annotations
 
@@ -25,6 +32,8 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+
+from conventions_selftest_rules import rule_coverage_failures
 
 
 #
@@ -100,10 +109,13 @@ SELFTEST_PROSE_BAD = [
     # are what an author would actually end up with. Both went unnormalised.
     ("Fixed the crash &#8212; it was a null deref", "em-dash splice as a decimal reference"),
     ("Fixed the crash &#x2014; it was a null deref", "em-dash splice as a hex reference"),
-    # A SPLICE WHOSE ONLY VERB IS ONE THE LIST DID NOT NAME. `stays` is used on 57 CHANGELOG
+    # A SPLICE WHOSE ONLY VERB IS ONE THE LIST DID NOT NAME. `stays` is used on 58 CHANGELOG
     # lines and 31 pack descriptions, and this exact sentence passed the gate before it was
     # added — the verb list under-catching is the detector's one failure direction, and this
-    # is a measured instance of it rather than a hypothetical.
+    # is a measured instance of it rather than a hypothetical. It is also the only one of the
+    # fourteen words added with it that survived: the other thirteen were pinned by nothing,
+    # and ten of them were plural nouns that made genuine lists fail (see the OK entries and
+    # _FINITE_VERBS' own comment).
     ("A radius of 0 now stays square at both ends; the band mitres the corner the way a "
      "drawing program would.", "semicolon whose left verb is 'stays'"),
     # A CAPITALISED leading verb, which is what conventions_prose._has_finite_verb's
@@ -143,6 +155,15 @@ SELFTEST_PROSE_OK = [
     # carve-out is written for. Drop the verb test and both are flagged.
     "Sets the width, in pixels; the radius, in logical pixels",
     "Radius, in logical pixels; Strength, a unitless multiplier",
+    # GENUINE LISTS WHOSE ITEMS ARE PLURAL NOUNS THAT DOUBLE AS VERBS. These three were
+    # findings for one round, because _FINITE_VERBS had been widened with `counts`, `names`,
+    # `points`, `works`, `scales`, `treats`, `bends`, `fades`, `remains` and `wins` on the
+    # since-retracted premise that the list could not produce a false positive. Each puts a
+    # "finite verb" on BOTH sides of the semicolon while being a plain enumeration, so they
+    # pin the narrowing: re-add any of those ten and these fail.
+    "Corner names, as shown in the picker; tab counts, per column",
+    "Sets the tab names, in order; the column counts, per strip",
+    "Sets the bend counts, in pixels; the corner scales, in logical units",
     # A "#"-led line is a shell comment in pasteable terminal text, which CLAUDE.md
     # puts out of scope along with the rest of the code. Pins the skip.
     "Run it like this:\n# plasmazones --rules a - b\nThen restart.",
@@ -738,311 +759,6 @@ def _dep5_failures() -> list[str]:
     return bad
 
 
-def _precondition_failures(partition_readable) -> list[str]:
-    """The gate's unreadable-path precondition, against a fake tree.
-
-    Pinned here because it is the one thing its round added without a test, and
-    neutering it left everything green: its only caller is main(), which nothing
-    invokes. Against a temp dir rather than the repo, so a pre-commit run never
-    chmods a tracked file."""
-    bad: list[str] = []
-    with tempfile.TemporaryDirectory() as tmp:
-        d = Path(tmp)
-        (d / "ok.cpp").write_text("// SPDX-FileCopyrightText: 2026 fuddlesworth\n", encoding="utf-8")
-        locked = d / "locked.cpp"
-        locked.write_text("// SPDX-FileCopyrightText: 2026 fuddlesworth\n", encoding="utf-8")
-        locked.chmod(0o000)
-        try:
-            locked.read_text(encoding="utf-8")
-        except OSError:
-            root = False
-        else:
-            root = True  # running as root, where the mode is not enforced
-        if not root:
-            readable, problems = partition_readable(["ok.cpp", "locked.cpp"], repo=d)
-            if readable != ["ok.cpp"]:
-                bad.append(f"partition_readable let an unreadable path through to the rules: {readable}")
-            msgs = [v.message for v in problems]
-            if not any("cannot be read" in m for m in msgs):
-                bad.append(f"partition_readable did not report why a path could not be read: {msgs}")
-            if len(problems) != 1:
-                bad.append(f"partition_readable reported {len(problems)} problems for one unreadable path")
-            if problems and problems[0].rule != "unreadable":
-                bad.append(f"the precondition's violations are filed under {problems[0].rule!r}")
-        locked.chmod(0o600)
-    return bad
-
-
-def _spdx_suffix_failures(partition_readable) -> list[str]:
-    """rule_spdx's CODE_SUFFIXES reach, against a fake tree.
-
-    Reached WITHOUT the gate growing a line, which an audit round wrongly recorded as
-    impossible. partition_readable is already a module-level function of the gate, so
-    its __globals__ IS the gate's namespace: the rule, the suffix set and the REPO the
-    rule resolves against are all reachable from here. That matters because the set is
-    otherwise pinned by nothing at all — every tracked file it covers already carries a
-    header, so narrowing it back changes no tree finding and no existing case."""
-    g = partition_readable.__globals__
-    rule_spdx, suffixes = g["rule_spdx"], g["CODE_SUFFIXES"]
-    bad: list[str] = []
-    # MEMBERSHIP pinned in BOTH directions against the literal below, because neither
-    # direction is visible any other way: every tracked file the set already covers carries
-    # a header, so narrowing it changes no tree finding, and widening it is what quietly
-    # brought .spec into the size ratchet. A deliberate change edits this literal in the
-    # same commit and says so.
-    expected = frozenset({".c", ".cc", ".cmake", ".cpp", ".cxx", ".desktop", ".frag", ".glsl",
-                          ".h", ".hpp", ".js", ".luau", ".py", ".qml", ".sh", ".spec", ".vert"})
-    for suffix in sorted(expected - suffixes):
-        bad.append(f"CODE_SUFFIXES no longer covers {suffix}")
-    for suffix in sorted(suffixes - expected):
-        bad.append(f"CODE_SUFFIXES gained {suffix} without this selftest's literal being updated")
-    with tempfile.TemporaryDirectory() as tmp:
-        d = Path(tmp)
-        # TIER-PREFIXED, not a bare data/: the exemption pattern is a MID-PATH one and the
-        # gate explains at length why it uses .search() rather than .match(). A probe at
-        # data/probe.json starts at position 0, so .match() would match it too and that
-        # reasoning stayed unpinned — every real data JSON in the tree is tier-prefixed,
-        # so with .match() the forward cover would guard nothing.
-        (d / "plasmazones" / "data").mkdir(parents=True)
-        # A headerless probe PER MEMBER, generated from the set rather than a hand-picked
-        # few, so the reach is pinned for every suffix and not only for the ones an audit
-        # round happened to name. rule_spdx matches the SPDX tags as plain substrings in the
-        # head, so one comment syntax covers every suffix here.
-        headerless = [f"headerless{s}" for s in sorted(suffixes)]
-        if len(headerless) != len(suffixes):
-            bad.append("the headerless probes are no longer generated one per member")
-        for name in headerless:
-            (d / name).write_text("# nothing here\n", encoding="utf-8")
-        # A VALID header must NOT be reported. This is what pins that the rule READS the head
-        # rather than merely matching the suffix: with only the headerless probes, deleting
-        # them entirely left the arm green, because read() answers "" for a missing file and a
-        # headerless read is indistinguishable from an unreadable one.
-        good = "good.sh"
-        (d / good).write_text("# SPDX-FileCopyrightText: 2026 fuddlesworth\n"
-                              "# SPDX-License-Identifier: GPL-3.0-or-later\n", encoding="utf-8")
-        # A copyright line with NO identifier must be reported, which pins the primary arm
-        # separately from the FileCopyrightText one. Disabling either used to leave both green.
-        idless = "idless.sh"
-        (d / idless).write_text("# SPDX-FileCopyrightText: 2026 fuddlesworth\n", encoding="utf-8")
-        # And the mirror, an identifier with no copyright line, which is the only shape that
-        # reaches the SECOND arm. Without it, deleting that arm left the suite green.
-        copyless = "copyless.sh"
-        (d / copyless).write_text("# SPDX-License-Identifier: GPL-3.0-or-later\n", encoding="utf-8")
-        # A header one line PAST the window must be reported, which pins SPDX_HEAD_LINES in
-        # the WIDENING direction. Narrowing it was already caught by good.sh, whose identifier
-        # sits on line 2; widening it to 60 or to the whole file left the suite green, and a
-        # wider window makes both rules laxer while the message still says "the first 6".
-        toodeep = "toodeep.sh"
-        (d / toodeep).write_text("#\n" * 6
-                                 + "# SPDX-FileCopyrightText: 2026 fuddlesworth\n"
-                                   "# SPDX-License-Identifier: GPL-3.0-or-later\n", encoding="utf-8")
-        # Data JSON is exempt by FORMAT. .json is added to the set for this call on purpose, so
-        # SPDX_EXEMPT is the thing that skips it — a bare probe.json is skipped by the suffix
-        # filter instead, which tests nothing AND turns the widening that pattern exists for
-        # into a selftest failure. The path needs a data/ segment because the pattern requires
-        # one.
-        exempt = "plasmazones/data/probe.json"
-        (d / exempt).write_text("{}\n", encoding="utf-8")
-        saved_repo, saved_suffixes = g["REPO"], g["CODE_SUFFIXES"]
-        g["REPO"] = d
-        g["CODE_SUFFIXES"] = saved_suffixes | {".json"}
-        try:
-            reported = {v.path for v in rule_spdx([*headerless, good, idless, copyless, toodeep, exempt])}
-        finally:
-            g["REPO"], g["CODE_SUFFIXES"] = saved_repo, saved_suffixes
-        for name in headerless:
-            if name not in reported:
-                bad.append(f"rule_spdx does not read {name}, so a missing header there is silent")
-        if good in reported:
-            bad.append("rule_spdx reported a file carrying a valid head header")
-        if idless not in reported:
-            bad.append("rule_spdx missed a copyright line with no licence identifier")
-        if copyless not in reported:
-            bad.append("rule_spdx missed an identifier with no copyright line")
-        if toodeep not in reported:
-            bad.append(f"rule_spdx read a header past line {g['SPDX_HEAD_LINES']}, so the window has widened "
-                       f"and the message's line count is now wrong")
-        if exempt in reported:
-            bad.append(f"rule_spdx reported {exempt}, which SPDX_EXEMPT covers by format")
-    return bad
-
-
-def _prose_extraction_failures(partition_readable) -> list[str]:
-    """rule_prose's EXTRACTION arms, one planted violation per surface.
-
-    The detector itself is well pinned (every arm of prose_problems has a probe), but the
-    code that decides WHICH text reaches it was covered for `iter_json_prose` alone.
-    Breaking DEB_DESC, RPM_DESC, PKG_DESC, the `packaging/` prefix gate or the
-    CHANGELOG.md name gate all left the suite green, so five surfaces each worked and none
-    could be kept working. Every plant below is an em-dash splice, which the detector
-    catches unconditionally, so a failure here is always the extraction and never the
-    detector."""
-    g = partition_readable.__globals__
-    rule_prose = g["rule_prose"]
-    bad: list[str] = []
-    splice = "Blurs the pane — and lifts saturation."
-
-    files = {
-        # deb822: a one-line synopsis then a space-indented continuation block.
-        "packaging/debian/control": (
-            "Source: plasmazones\n"
-            "\n"
-            "Package: plasmazones\n"
-            "Description: Window snapping for KDE Plasma\n"
-            f" {splice}\n"),
-        # RPM: %description runs to the next % section.
-        "packaging/rpm/x.spec": f"Name: x\nSummary: Fine\n\n%description\n{splice}\n\n%files\n",
-        # Nix: description and longDescription.
-        "packaging/nix/x.nix": f'{{\n  meta = {{\n    description = "{splice}";\n  }};\n}}\n',
-        # Arch: pkgdesc, which the line-oriented PKG_DESC arm reads.
-        "packaging/arch/PKGBUILD": f'pkgdesc="{splice}"\n',
-        # CHANGELOG entry BODY, after the Keep-a-Changelog bold lead-in.
-        "CHANGELOG.md": f"## [1.0.0]\n\n- **Thing**: {splice}\n",
-        # .desktop Name/GenericName/Comment.
-        "x.desktop": f"[Desktop Entry]\nName=Fine\nComment={splice}\n",
-        # AppStream summary.
-        "x.metainfo.xml": f"<component>\n  <summary>{splice}</summary>\n</component>\n",
-    }
-
-    saved_repo = g["REPO"]
-    with tempfile.TemporaryDirectory() as tmp:
-        d = Path(tmp)
-        g["REPO"] = d
-        try:
-            for rel, text in files.items():
-                p = d / rel
-                p.parent.mkdir(parents=True, exist_ok=True)
-                p.write_text(text, encoding="utf-8")
-                if not rule_prose([rel]):
-                    bad.append(f"rule_prose did not extract the planted em-dash splice from {rel}")
-        finally:
-            g["REPO"] = saved_repo
-    return bad
-
-
-def _dead_stanza_failures() -> list[str]:
-    """The dead-stanza arm of the dep5 rule, in both directions.
-
-    It had NO positive coverage when it was written: deleting it, inverting its any(), or
-    widening DEP5_BUILD_TIME_PREFIXES to ("",) all left the suite green, because the only
-    arm reachable from a temp tree was the git-failed one and the caller's assertion did
-    not look at it. That is the same shape as the defect the check was added to fix.
-    """
-    from conventions_dep5 import _dead_stanza_problems, parse_dep5
-
-    bad: list[str] = []
-    with tempfile.TemporaryDirectory() as tmp:
-        d = Path(tmp)
-        dep5 = d / "packaging" / "debian" / "copyright"
-        dep5.parent.mkdir(parents=True)
-        dep5.write_text(
-            "Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/\n"
-            "\n"
-            "Files: *\n"
-            "Copyright: 2026 fuddlesworth\n"
-            "License: GPL-3.0-or-later\n"
-            "\n"
-            "Files: src/live.cpp\n"
-            "Copyright: 2026 fuddlesworth\n"
-            "License: MIT\n"
-            "\n"
-            "Files: src/typo.cpp\n"
-            "Copyright: 2026 fuddlesworth\n"
-            "License: MIT\n"
-            "\n"
-            "Files: debian/rules\n"
-            "Copyright: 2026 fuddlesworth\n"
-            "License: GPL-3.0-or-later\n",
-            encoding="utf-8")
-        stanzas = parse_dep5(dep5)
-        # Only src/live.cpp exists, so src/typo.cpp is the dead stanza. `debian/rules` is
-        # the build-time prefix and must stay silent even though it matches nothing.
-        problems = _dead_stanza_problems(stanzas, dep5, d, list_paths=lambda _repo: ["src/live.cpp"])
-        messages = [m for _p, _l, m in problems]
-        if not any("src/typo.cpp" in m for m in messages):
-            bad.append(f"the dead-stanza check missed a Files pattern matching nothing: {messages}")
-        if any("src/live.cpp" in m for m in messages):
-            bad.append("the dead-stanza check reported a Files pattern that DOES match a tracked path")
-        if any("debian/rules" in m for m in messages):
-            bad.append("the dead-stanza check reported a build-time-only path (DEP5_BUILD_TIME_PREFIXES)")
-        if any("Files: *" in m for m in messages):
-            bad.append("the dead-stanza check reported the catch-all")
-        # And the error arm still has to report rather than pass silently.
-        def boom(_repo):
-            raise OSError("no git here")
-
-        if not any("cannot list tracked paths" in m
-                   for _p, _l, m in _dead_stanza_problems(stanzas, dep5, d, list_paths=boom)):
-            bad.append("the dead-stanza check swallows a failure to list tracked paths")
-    return bad
-
-
-def _license_tree_failures(partition_readable) -> list[str]:
-    """rule_license's per-tier split, against a fake tree.
-
-    The LGPL half was entirely unpinned: replacing its `libs/phosphor-` test with `if
-    False:` produced ZERO findings and a green suite, because without that arm the two
-    library trees match none of the GPL-3 prefixes either, so `expected_license` returns
-    None and both are SKIPPED rather than misreported. CLAUDE.md calls the split out by
-    name ("Never 'fix' a lib header to GPL-3 without understanding the split"), and half
-    the machine check for it could be deleted invisibly.
-
-    Reaches the rule the same way _spdx_suffix_failures does, by redirecting the gate's
-    REPO, so it adds no line to the gate."""
-    g = partition_readable.__globals__
-    rule_license = g["rule_license"]
-    bad: list[str] = []
-    lgpl = "LGPL-2.1-or-later"
-    gpl3 = "GPL-3.0-or-later"
-
-    def header(ident: str) -> str:
-        return f"// SPDX-FileCopyrightText: 2026 fuddlesworth\n// SPDX-License-Identifier: {ident}\n"
-
-    # (path, identifier in the header, must it be reported?)
-    cases = [
-        # A library tree with a GPL-3 header is the defect the LGPL arm exists to catch.
-        ("phosphor-libs/libs/phosphor-x/src/a.cpp", gpl3, True),
-        ("phosphor-libs/libs/phosphor-x/src/a.cpp", lgpl, False),
-        # A library's own TESTS follow the library, not the app-tier rule.
-        ("phosphor-libs/libs/phosphor-x/tests/test_a.cpp", gpl3, True),
-        ("phosphor-libs/libs/phosphor-x/tests/test_a.cpp", lgpl, False),
-        # The shell-libs tree takes the same arm.
-        ("phosphor-shell-libs/libs/phosphor-y/src/b.cpp", gpl3, True),
-        # The app tier is the mirror: LGPL there is the defect.
-        ("plasmazones/src/a.cpp", lgpl, True),
-        ("plasmazones/src/a.cpp", gpl3, False),
-        ("phosphor-shell/src/b.cpp", lgpl, True),
-        ("scripts/x.py", lgpl, True),
-        # The shell-libs EXAMPLES are app-tier, unlike its libs.
-        ("phosphor-shell-libs/examples/demo/c.cpp", lgpl, True),
-        # The two data trees are deliberately ungoverned: the licence follows the
-        # incorporated content, so neither identifier may be reported.
-        ("plasmazones/data/surface/glass/effect.frag", gpl3, False),
-        ("plasmazones/data/surface/glass/effect.frag", lgpl, False),
-        ("phosphor-libs/data/schemas/x.frag", gpl3, False),
-        # A tests/**/data/ path is NOT one of those trees — the anchor is what keeps it
-        # governed, and an unanchored pattern used to swallow it.
-        ("plasmazones/tests/unit/data/d.cpp", lgpl, True),
-    ]
-
-    saved_repo = g["REPO"]
-    with tempfile.TemporaryDirectory() as tmp:
-        d = Path(tmp)
-        g["REPO"] = d
-        try:
-            for rel, ident, want_reported in cases:
-                p = d / rel
-                p.parent.mkdir(parents=True, exist_ok=True)
-                p.write_text(header(ident), encoding="utf-8")
-                reported = bool(rule_license([rel]))
-                if reported != want_reported:
-                    verb = "did not report" if want_reported else "reported"
-                    bad.append(f"rule_license {verb} {rel} carrying {ident}")
-        finally:
-            g["REPO"] = saved_repo
-    return bad
-
-
 def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
     """The detectors and the precondition arrive as arguments, so this module never
     imports the gate at module scope and the pair cannot form a cycle.
@@ -1051,16 +767,17 @@ def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
     guarding on it, so a caller that forgot it lost that coverage in silence rather
     than failing."""
     failures = []
-    # Captured for the post-condition at the tail. _spdx_suffix_failures redirects the
-    # gate's REPO and CODE_SUFFIXES at a temp tree and restores them in a finally, and
-    # nothing would notice a dropped restore while that arm runs LAST. A future arm
-    # appended after it would run against a deleted directory and raise, which reads like
-    # a broken gate rather than a finding.
+    # Captured for the post-condition at the tail. Four arms now redirect the gate's REPO
+    # (and CODE_SUFFIXES or BASELINE with it) at a temp tree and restore them in a finally,
+    # and several of them no longer run last. The post-condition is what catches a dropped
+    # restore in any of them: a later arm would otherwise run against a deleted directory
+    # and raise, which reads like a broken gate rather than a finding.
     # frozenset(), not the set itself: CODE_SUFFIXES is mutable, so binding a reference
     # would compare equal to itself after an arm mutated it IN PLACE, and the comparison
     # could never fire for the one shape nobody would notice.
     entry_globals = partition_readable.__globals__
     entry_repo, entry_suffixes = entry_globals["REPO"], frozenset(entry_globals["CODE_SUFFIXES"])
+    entry_baseline = entry_globals["BASELINE"]
 
     for text, shape in SELFTEST_PROSE_BAD:
         if not prose_problems(text):
@@ -1101,16 +818,18 @@ def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
 
     failures.extend(_shared_text_failures())
     failures.extend(_dep5_failures())
-    failures.extend(_precondition_failures(partition_readable))
-    failures.extend(_spdx_suffix_failures(partition_readable))
-    failures.extend(_license_tree_failures(partition_readable))
-    failures.extend(_dead_stanza_failures())
-    failures.extend(_prose_extraction_failures(partition_readable))
+    # And every fake-tree arm, which lives in its own module: the detector probes above
+    # read no file and build no tree, while each of those drives a real rule over a temp
+    # directory with the gate's REPO redirected at it. One call, so adding an arm there
+    # needs no edit here.
+    failures.extend(rule_coverage_failures(partition_readable))
 
     if entry_globals["REPO"] != entry_repo:
         failures.append(f"an arm left the gate's REPO at {entry_globals['REPO']}, not {entry_repo}")
     if entry_globals["CODE_SUFFIXES"] != entry_suffixes:
         failures.append("an arm left the gate's CODE_SUFFIXES changed")
+    if entry_globals["BASELINE"] != entry_baseline:
+        failures.append(f"an arm left the gate's BASELINE at {entry_globals['BASELINE']}, not {entry_baseline}")
 
     for line in failures:
         print(f"selftest: {line}", file=sys.stderr)

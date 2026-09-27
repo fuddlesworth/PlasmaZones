@@ -1080,7 +1080,14 @@ add_test(NAME test_shader_node_teardown COMMAND test_shader_node_teardown)
 # binding, the only shape that reproduces the silent write failure.
 add_executable(test_shader_item_qml_bindings ui/zones/test_shader_item_qml_bindings.cpp)
 target_link_libraries(test_shader_item_qml_bindings PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::GuiPrivate plasmazones_rendering PhosphorSurfaceQuick::PhosphorSurfaceQuick)
-target_compile_definitions(test_shader_item_qml_bindings PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+# P_SURFACE_QUICK_QML_DIR as well as P_SOURCE_DIR: the guarded properties are
+# declared on ShaderEffect and their hosts are spread across tiers, so a sweep
+# scoped to plasmazones/src misses SurfaceDecoration.qml — which is the file the
+# silent-Binding regression this test exists for actually lived in. A read of
+# another tier's QML, recorded as a test input in plasmazones/moon.yml rather
+# than a dependency, which is what CLAUDE.md prescribes for a cross-tier read.
+target_compile_definitions(test_shader_item_qml_bindings PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\""
+                                                                 "P_SURFACE_QUICK_QML_DIR=\"${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-surface-quick/qml\"")
 add_test(NAME test_shader_item_qml_bindings COMMAND test_shader_item_qml_bindings)
 
 # Pure-data byte-layout test for the zone UBO extension. No GPU / scene graph

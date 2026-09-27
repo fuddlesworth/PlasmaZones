@@ -260,22 +260,31 @@ generate_notes() {
 # Without a revision bump apt/dnf/zypper see the same NEVR and offer no
 # upgrade, so the rebuild never reaches anyone. Mirrors Arch's pkgrel.
 REVISION="${3:-1}"
-if [[ ! "$REVISION" =~ ^[1-9][0-9]*$ ]]; then
-    echo "Error: revision must be a positive integer, got: $REVISION" >&2
-    exit 1
-fi
+# Validated inside the arms that USE it, not before the case. `notes` documents itself
+# as taking no revision and ignores $3, so validating up front rejected
+# `generate-changelog.sh notes 3.3.8 x` with an error about a revision that command does
+# not have.
+require_revision() {
+    if [[ ! "$REVISION" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Error: revision must be a positive integer, got: $REVISION" >&2
+        exit 1
+    fi
+}
 
 case "${1:-}" in
     debian)
+        require_revision
         generate_debian "${2:-}" "$REVISION"
         ;;
     rpm)
+        require_revision
         generate_rpm "${2:-}" "$REVISION"
         ;;
     notes)
         generate_notes "${2:-}"
         ;;
     all)
+        require_revision
         generate_debian "${2:-}" "$REVISION"
         generate_rpm "${2:-}" "$REVISION"
         ;;

@@ -47,8 +47,8 @@ float sdRoundedBox(vec2 p, vec2 b, float r) {
 // whose exact shape depends on the extents and the pack's radius (frameSdfSplit
 // clamps that radius to the smaller half-extent) and carries no consequence
 // here. Two rounds enumerated the shapes and both enumerations were right only
-// for an EQUAL-extent rect. Either way each pack
-// multiplies its window sample by that mask, so the SURFACE would vanish or be
+// for an EQUAL-extent rect. Either way each pack multiplies its window sample by
+// that mask, so the SURFACE would vanish or be
 // thinned rather than pass through. So every pack that reads the frame rect
 // tests this and returns the content untouched. No host has been SHOWN to reach
 // the merely sub-pixel case; three audit rounds each named a candidate and each
@@ -249,8 +249,8 @@ BorderBand standardBorderBandSplit(vec2 p, float borderWidth, float cornerRadius
     // helper. The other two are border-double's, which builds its bands from
     // frameSdfSplit directly and so carries its own copy of this test, added after the
     // same phantom line was found live there. For the six, without this guard zero
-    // does not mean no line: width
-    // collapses to 0, the edge term becomes smoothstep(-feather, +feather, d),
+    // does not mean no line: width collapses to 0, the edge term becomes
+    // smoothstep(-feather, +feather, d),
     // and that paints a band about two feathers wide straddling the frame edge
     // at up to a quarter of the colour's alpha. The user turns the border off
     // and still sees one. Same guard, same reason, as softBorder in the overlay

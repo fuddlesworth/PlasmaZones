@@ -1532,8 +1532,8 @@ private:
     /**
      * @brief Create a PhosphorLayer::Surface for a layer-shell-backed overlay window.
      *
-     * Every overlay, OSD, zone selector, snap assist and layout picker in
-     * OverlayService goes through this single helper. Returns a surface
+     * Every surface goes through this single helper: the OSD, picker, selector,
+     * snap assist, cheatsheet, zone overlay and drop indicator. Returns a surface
      * that has been warmed up (window created, QML loaded, transport attached) but
      * is hidden - callers decide when to call @c surface->show() or keep it warm
      * for pre-warmed OSDs.
@@ -1545,8 +1545,8 @@ private:
     /**
      * @brief Create a warmed OSD-style surface and wire its dismiss signal.
      *
-     * Common pattern for ensurePassiveShellFor (and the LayoutPicker
-     * surface in snapassist.cpp): (1) caller builds a per-instance
+     * Common pattern for ensurePassiveShellFor, its only caller today:
+     * (1) caller builds a per-instance
      * scope-prefixed Role via @ref PhosphorRoles::makePerInstanceRole,
      * (2) this helper calls createLayerSurface with keepMappedOnHide
      * gated on effects (kept mapped only while shaders or animations

@@ -17,8 +17,9 @@ namespace PhosphorSurfaceShaders {
 /// classic default-block branch instead and never touches this layout.
 ///
 /// This is a DIFFERENT layout from PhosphorShaders::BaseUniforms
-/// (overlay/animation), not a smaller one — both are 672 bytes, and the
-/// members do not line up. Surface decoration needs only geometry +
+/// (overlay/animation), not a smaller one — both are 672 bytes, and past the
+/// shared qt_Matrix / qt_Opacity lead (and iTextureResolution, at 592 in both)
+/// the members do not line up. Surface decoration needs only geometry +
 /// focus + time + the pack parameter slots, and it binds its samplers
 /// differently (uTexture0 at binding 11, iChannel0-7 at bindings 2-9 — none of
 /// which are UBO members; only iChannelResolution sizes live here).

@@ -19,10 +19,19 @@ Version:        0.0.0
 Release:        1%{?dist}
 Summary:        Window snapping, tiling and scrolling for KDE Plasma
 
-# The effective licence of the built binaries. GPL-3.0-or-later covers the app
-# and daemon, LGPL-2.1-or-later the Phosphor component libraries. MIT and
-# BSD-2-Clause come from the vendored Luau runtime and valijson headers, which
-# are compiled into the shipped objects (see the bundled() provides below).
+# Every licence this package INSTALLS, not only the ones in its binaries.
+# GPL-3.0-or-later covers the app and daemon, LGPL-2.1-or-later the Phosphor
+# component libraries. MIT and BSD-2-Clause come from the vendored Luau runtime and
+# valijson headers, which are compiled into the shipped objects (see the bundled()
+# provides below). CC0-1.0 covers the two AppStream metainfo files installed under
+# %{_datadir}/metainfo, which carry it in their own SPDX headers: the usual licence
+# for distro metadata, so downstreams can redistribute and translate it freely.
+#
+# BSD-3-Clause is deliberately absent. The one BSD-3-derived body in the tree
+# (data/surface/shared/surface_color.glsl's Hyprland vibrancy block) declares
+# LGPL-2.1-or-later as its own identifier and reasons in its header why that is
+# compatible, and the DEP-5 file agrees, so the tag follows the identifier. 0BSD is
+# absent because packaging/arch/LICENSE is not installed.
 License:        GPL-3.0-or-later AND LGPL-2.1-or-later AND MIT AND BSD-2-Clause AND CC0-1.0
 URL:            https://github.com/fuddlesworth/PlasmaZones
 Source0:        %{url}/archive/refs/tags/v%{version}/%{name}-%{version}.tar.gz

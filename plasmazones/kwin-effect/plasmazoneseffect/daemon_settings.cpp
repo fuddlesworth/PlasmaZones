@@ -593,7 +593,9 @@ void PlasmaZonesEffect::loadCachedSettings()
             // GATED, and sampled BEFORE reset() while the per-output state still exists. This
             // callback re-delivers on every settingsChanged, so an ungated repaint damaged
             // every monitor each time, which is also against this file's own convention that
-            // a full repaint sits behind a change gate. With every spring already cleared,
+            // a full repaint sits behind a change gate. reset() stays UNGATED because it now
+            // gates itself: it early-returns when nothing is held, so a re-delivery no longer
+            // makes a GL context current for an empty teardown. With every spring already cleared,
             // isRunning() reduces to "some entry's fade is still open". holdsCursorHide() also
             // catches an entry whose fade closed with NO settle frame: an output that stopped
             // painting takes neither paintOutput's settle release nor postPaintScreen's reap,

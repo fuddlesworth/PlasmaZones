@@ -419,11 +419,11 @@ OverlayService::~OverlayService()
     m_shellHost.reset();
     m_screenStates.clear();
 
-    // No singleton surfaces are scheduled for deletion here any more. Snap
-    // assist and the layout picker are both Item slots inside the per-screen
-    // passive shell, so their lifetime is the shell's. The block that used to
-    // sit here justified code that has since been removed, and named a shader
-    // preview this service never hosted.
+    // No singleton surfaces are scheduled for deletion here any more. Snap assist,
+    // the layout picker and the cheatsheet are all Item slots inside the per-screen
+    // passive shell, so their lifetime is the shell's. The block that used to sit
+    // here justified code that has since been removed, and named a shader preview
+    // this service never hosted.
 
     // Drain deferred-delete events NOW, while all OverlayService members are
     // still alive. Surface destructors may touch m_screenStates, m_shaderRegistry,
@@ -447,7 +447,7 @@ OverlayService::~OverlayService()
     // every prime-tracked surface is destroyed, so most Connections are
     // already retired by sender-destruction; this loop is defensive
     // against any future path that adds prime-tracked surfaces outside
-    // of m_screenStates / the three explicit singletons.
+    // of m_screenStates, which is the only source of them today.
     for (const auto& conn : std::as_const(m_primingFrameConnections)) {
         QObject::disconnect(conn);
     }
@@ -570,14 +570,13 @@ PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLay
         return nullptr;
     }
 
-    // Post-shell-migration: per-content auto-dismiss is wired through
-    // the shell window's per-slot signals (`osdDismissRequested`,
-    // `snapAssistDismissRequested`, `layoutPickerDismissRequested`),
-    // each routed by ensurePassiveShellFor to a slot-specific
-    // animator-driven hide rather than a whole-surface hide. There's
-    // no generic `dismissRequested` signal on PassiveOverlayShell.qml
-    // anymore - wiring one would unmap the shell on any per-slot
-    // auto-dismiss timer.
+    // Post-shell-migration: per-content auto-dismiss is wired through the shell
+    // window's per-slot signals (`osdDismissRequested`, `snapAssistDismissRequested`,
+    // `layoutPickerDismissRequested`, `cheatsheetDismissRequested`), each routed by
+    // ensurePassiveShellFor to a slot-specific animator-driven hide rather than a
+    // whole-surface hide. There's no generic `dismissRequested` signal on
+    // PassiveOverlayShell.qml anymore - wiring one would unmap the shell on any
+    // per-slot auto-dismiss timer.
     return surface;
 }
 

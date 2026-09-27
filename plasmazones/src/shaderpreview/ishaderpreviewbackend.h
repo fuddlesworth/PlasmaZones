@@ -14,13 +14,15 @@ namespace PlasmaZones {
 
 /// App-specific data source for ShaderPreviewController.
 ///
-/// The only part of the zone-shader live preview that differs between the
-/// editor and the settings app is *where the shader metadata comes from* and
-/// *which zones / screen / audio config to feed*. The editor backs this with
-/// D-Bus to the daemon's registry and the edited layout; the settings app backs
-/// it with its local ShaderRegistry and a sensible default screen. Everything
-/// downstream (geometry transform, p_<id> preamble, label/wallpaper textures,
-/// CAVA audio capture) is shared in the controller.
+/// This is the whole host-specific surface of the zone-shader live preview:
+/// *where the shader metadata comes from* and *which zones / screen / audio config
+/// to feed*. Everything downstream (geometry transform, p_<id> preamble,
+/// label/wallpaper textures, CAVA audio capture) is shared in the controller.
+///
+/// Currently implemented only by the settings app, whose
+/// RegistryShaderPreviewBackend reads its local ShaderRegistry and a default
+/// screen. The per-method notes below describe what the interface promises, not a
+/// second implementation.
 ///
 /// Implementations are borrowed by the controller — the owner must keep the
 /// backend alive for the controller's lifetime.
@@ -39,27 +41,24 @@ public:
     /// preview uploads to the exact lanes the generated p_<id> defines read.
     virtual QVariantMap translateParams(const QString& shaderId, const QVariantMap& params) const = 0;
 
-    /// Raw zone maps the preview renders over. The editor returns the live
-    /// layout so the preview matches what the user is editing; the settings app
-    /// returns the shipped master-stack layout as a representative stand-in.
-    /// An empty list makes the controller fall back to a
-    /// single full-area zone.
+    /// Raw zone maps the preview renders over. The settings app returns the shipped
+    /// master-stack layout as a representative stand-in. An empty list makes the
+    /// controller fall back to a single full-area zone.
     virtual QVariantList previewZones() const = 0;
 
     /// Target screen size used to convert fixed-geometry pixel coordinates into
-    /// preview space. The editor returns the edited screen; the settings app a
-    /// default.
+    /// preview space. The settings app returns a default.
     virtual QSize targetScreenSize() const = 0;
 
-    /// Whether audio-reactive preview is enabled (CAVA spectrum). The editor
-    /// reads this over D-Bus; the settings app from ISettings directly.
+    /// Whether audio-reactive preview is enabled (CAVA spectrum). The settings app
+    /// reads it from ISettings directly.
     virtual bool audioVisualizerEnabled() const = 0;
 
     /// The full CAVA analysis parameter set the preview's capture runs with
     /// (only consulted when audioVisualizerEnabled()). Backed by the user's
     /// configured Shaders.Audio settings so the preview's bar motion matches
-    /// the live daemon and effect output; the editor assembles it over D-Bus,
-    /// the settings app from ISettings directly.
+    /// the live daemon and effect output. The settings app reads it from ISettings
+    /// directly.
     virtual PhosphorAudio::SpectrumOptions audioOptions() const = 0;
 };
 

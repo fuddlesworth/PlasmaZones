@@ -338,12 +338,17 @@ private:
     /// than blinking it for a frame, and from every postPaintScreen that did
     /// not report a failed paint (reapSettled is gated on that), so a
     /// pointer crossing to a quiet output gets its cursor back within a
-    /// frame even though the hidden cursor damages nothing there. Also run on
-    /// every path that ERASES the entry or finds none — deliberately not
-    /// enumerated here, because three rounds of this docblock named a list
-    /// that was missing a member; grep the name for the call sites.
-    /// The one exit that does NOT touch the hide is paintOutput's
-    /// null-output guard. A reported-failure abort leaves
+    /// frame even though the hidden cursor damages nothing there. Also run on the
+    /// paths that ERASE the entry, since an erase can strand a hide nothing else
+    /// would release.
+    ///
+    /// NOT on every path that finds no entry, which three rounds of this docblock
+    /// claimed and a fourth disproved: forgetOutput and the capture-below snapshot
+    /// both return straight out of a find-none, and so does the settled branch's
+    /// own early exit. That is correct rather than an omission — a find-none means
+    /// this manager holds nothing for that output, so there is nothing of its to
+    /// release. Do not turn this into a list again; grep the name for the call
+    /// sites. A reported-failure abort leaves
     /// the entry live in m_active, so this call would not release there: the
     /// failed capture walk and the failed sharp composite both go through
     /// releaseCursorHideForForeignPaint instead, which is also the one path

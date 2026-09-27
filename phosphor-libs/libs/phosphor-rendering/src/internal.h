@@ -7,8 +7,8 @@
  * @file internal.h
  * @brief Shared constants and helper declarations for ShaderNodeRhi TUs
  *
- * Provides RhiConstants (quad vertices, component indices) and compile-time
- * limits for the multipass buffer system.
+ * Provides RhiConstants (quad vertices, component indices). The multipass
+ * compile-time limits live on ShaderNodeRhi.h, not here.
  */
 
 #include <PhosphorRendering/ShaderNodeRhi.h>

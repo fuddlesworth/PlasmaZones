@@ -45,7 +45,6 @@
 #include <QVector2D>
 #include <QVector4D>
 
-#include <chrono>
 #include <type_traits>
 
 #include "compositor/stripviewanimator.h"
@@ -150,29 +149,11 @@ KWin::RenderDevice* PlasmaZonesEffect::currentPassRenderDevice() const
 
 void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
 {
-    // KWin 6.7 no longer passes a presentTime; sample the steady clock
-    // ourselves. CompositorClock's epoch is steady_clock by contract, so a
-    // current-time sample is the correct (and only available) source — KWin's
-    // own effects likewise read "now" rather than the target present time.
-    const auto presentTime =
-        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch());
-
-    // Feed presentTime to the clock for THIS output. This does NOT currently
-    // phase-lock anything, and an earlier version of this comment claimed it did:
-    // the sample above is ms-TRUNCATED wall time, so CompositorClock::now()'s
-    // max(latched, wall) always selects wall and every clock reads wall time. Other
-    // outputs' animations step with a real dt, not dt=0. See CompositorClock's
-    // class docblock for the whole derivation.
-    // The fallback clock is intentionally NOT fed per-output presentTime
-    // here. It self-drives from std::chrono::steady_clock — on an
-    // N-output desktop, prePaintScreen fires N× per vsync, and pushing
-    // presentTime into the fallback every call would step fallback-bound
-    // animations N× per frame. Fallback's now() reads steady_clock
-    // directly so it advances once per wall-clock moment regardless of
-    // how many outputs painted. See CompositorClock::now()/updatePresentTime
-    // for the fallback branch; epoch identity is shared (both rooted at
-    // steady_clock) so rebinds between per-output and fallback remain
-    // compatible.
+    // No presentTime is sampled or pushed to a clock here. KWin 6.7 stopped
+    // passing one, and CompositorClock now reads steady_clock in now() for
+    // every output, so there is nothing per-output to feed. See
+    // CompositorClock's class docblock for why the per-output latch was
+    // retired rather than fed from our own wall-clock sample.
     m_currentPassOutput = data.screen;
     // Latched with the output, cleared with it: the view is this pass's route to
     // the RenderDevice its ItemRenderer belongs to (see m_currentPassView).
@@ -307,24 +288,11 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
             m_scrollTabAboveAnchor.clear();
         }
     }
-    if (data.screen) {
-        auto it = m_motionClocksByOutput.find(data.screen);
-        if (it != m_motionClocksByOutput.end()) {
-            // Pass `data.screen` so the clock can cross-check in debug
-            // builds that it is being fed presentTime only for the
-            // output it was constructed against. The map lookup above
-            // already guarantees this by construction, but the extra
-            // argument makes the invariant explicit at the call site —
-            // a future refactor that stops keying by output will fire
-            // the assertion instead of silently latching another
-            // output's timestamps.
-            it->second->updatePresentTime(presentTime, data.screen);
-        }
-    }
-
-    // advanceAnimations iterates all animations regardless of which
-    // clock was just updated; each animation reads its own clock's
-    // `now()` in AnimatedValue::advance and steps with its own dt.
+    // advanceAnimations iterates every animation, whichever output is
+    // painting; each one reads its own clock's `now()` in
+    // AnimatedValue::advance and steps with its own dt. On an N-output
+    // desktop that means N steps per vsync, which parametric curves and
+    // Spring::step both absorb exactly (see CompositorClock's docblock).
     // Cost is O(#animations) per prePaintScreen — typical paths see
     // single-digit counts.
     m_windowAnimator->advanceAnimations();
@@ -677,9 +645,9 @@ void PlasmaZonesEffect::postPaintScreen()
     // in prePaintScreen: this function ends in an unconditional
     // `KWin::effects->postPaintScreen()`, so it cannot complete with a null
     // global under any circumstances and a per-site guard would only hide that
-    // from the reader. The ONE guard below sits in the park-reap timer's
-    // callback, which is not part of this bracket — it fires later, from the
-    // event loop, and can genuinely land after compositor teardown.
+    // from the reader. The TWO guards below are both in singleShot callbacks (the
+    // scroll-tab hover re-evaluation and the park-reap timer), outside this bracket:
+    // each fires later, from the event loop, and can land after compositor teardown.
     //
     // Pass over. Defensive hygiene: every capture path in this tree reaches
     // paintWindow from INSIDE the pass (before this runs), so the clear only

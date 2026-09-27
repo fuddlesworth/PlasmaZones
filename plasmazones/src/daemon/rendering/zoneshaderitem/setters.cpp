@@ -85,8 +85,8 @@ void ZoneShaderItem::setLabelsTexture(const PhosphorRendering::ZoneLabelTexture&
 {
     // Emit only on a genuine change (project rule). The daemon overlay path
     // already dedupes upstream via labelsTextureHash, but the settings
-    // preview + placeholder paths don't, so guard here. The compare short-
-    // circuits on size before any per-tile pixel compare.
+    // preview does not, so guard here. The compare short-circuits on size
+    // before any per-tile pixel compare.
     {
         QMutexLocker lock(&m_labelsTextureMutex);
         if (m_labelsTexture == labels) {

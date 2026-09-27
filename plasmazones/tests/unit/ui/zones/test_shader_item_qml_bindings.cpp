@@ -186,15 +186,24 @@ QStringList guardedProperties()
     return sorted;
 }
 
-/// Every shipping .qml under src/, so a new host cannot be added outside the
-/// sweep's sight.
+/// Every shipping .qml that can host a shader item, so a new host cannot be added
+/// outside the sweep's sight.
+///
+/// TWO roots, because the guarded properties are declared on ShaderEffect and its
+/// hosts do not all live in one tier. plasmazones/src holds the daemon and settings
+/// hosts; phosphor-surface-quick's qml/ holds SurfaceDecoration.qml, the only
+/// library host that drives a guarded property, and the file the silent-Binding
+/// regression this test exists for actually lived in. Scoped to plasmazones/src
+/// alone the sweep stayed green while that file could reintroduce it, and three
+/// comments in the tree named the sweep as the guard against exactly that.
 QStringList shippingQmlFiles()
 {
     QStringList files;
-    QDirIterator it(QStringLiteral(P_SOURCE_DIR "/src"), QStringList{QStringLiteral("*.qml")}, QDir::Files,
-                    QDirIterator::Subdirectories);
-    while (it.hasNext())
-        files.append(it.next());
+    for (const QString& root : {QStringLiteral(P_SOURCE_DIR "/src"), QStringLiteral(P_SURFACE_QUICK_QML_DIR)}) {
+        QDirIterator it(root, QStringList{QStringLiteral("*.qml")}, QDir::Files, QDirIterator::Subdirectories);
+        while (it.hasNext())
+            files.append(it.next());
+    }
     files.sort();
     return files;
 }
@@ -209,8 +218,9 @@ QStringList shippingQmlFiles()
  * phosphor-surface-quick) take an image through a QVariant-typed property, and
  * a QML Binding element hands that setter an invalid variant. The item-level
  * unit tests live beside each item; this test owns the cross-item contract:
- * the source sweep over every .qml under plasmazones/src, and the pinned
- * demonstrations of the shape that wipes a good payload.
+ * the source sweep over every host .qml in either tier (plasmazones/src plus
+ * phosphor-surface-quick's qml/), and the pinned demonstrations of the shape
+ * that wipes a good payload.
  */
 class TestShaderItemQmlBindings : public QObject
 {
@@ -346,7 +356,7 @@ Item {
     }
 
     /// The same for the zone labels, which reach the item as a QImage from the
-    /// settings preview and relies on the registered converter. The
+    /// settings preview and rely on the registered converter. The
     /// converter never runs, because there is no image left to convert by the
     /// time the setter sees the value.
     void testZoneShaderItem_aBindingElementWipesGoodLabels()

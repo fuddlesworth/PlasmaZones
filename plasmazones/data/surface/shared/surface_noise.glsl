@@ -24,9 +24,10 @@
 //     goes flat rather than wrong.
 //   • vnoise and voronoi floor() and add 1.0, so they collapse to a constant
 //     at |p| >= 2^24.
-//   • hexLocal is the only path that can produce a NaN, because mod() is a
-//     cancelling subtraction quantised to ULP(uv); it stair-steps well before
-//     that. Keep its input bounded.
+//   • hexLocal is the only path that can leave its own cell range, because mod()
+//     is a cancelling subtraction quantised to ULP(uv), so it stair-steps and can
+//     land outside [0, r). Not a NaN route: mod(x, r) with a finite x and a
+//     non-zero constant r is always finite. Keep its input bounded anyway.
 //   • Both integer hashes return exactly 0 at the EXACT ORIGIN, p == vec2(0),
 //     and only there. A hash result reads like a value in (0, 1), so using one
 //     as a divisor, a pow base or a smoothstep edge is idiomatic and each is

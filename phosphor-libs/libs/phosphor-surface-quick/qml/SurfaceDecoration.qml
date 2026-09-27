@@ -639,7 +639,9 @@ Item {
                 // all. The property is a QVariant now (see
                 // ShaderEffect::setWallpaperTextureVariant), so a host with
                 // nothing to show can pass null or undefined straight through
-                // without the guard that broke it.
+                // without the guard that broke it. What stops it coming back is
+                // the QML-source sweep in test_shader_item_qml_bindings, which
+                // reads this directory as well as plasmazones/src.
                 useWallpaper: root.backdropTexture !== null && root.backdropTexture !== undefined
                 wallpaperTexture: root.backdropTexture
 
@@ -812,8 +814,9 @@ Item {
                 // VERBATIM, and that includes the user's decoration blur-scale
                 // multiplier: composeStageMap folds it into bufferScale and into
                 // every bufferScales entry, and bounds the product, so this path
-                // and the compositor's clampedBufferScale share one chokepoint.
-                // Do NOT fold it again here. An earlier version of this comment
+                // folds it exactly once, as the compositor's clampedBufferScale
+                // does on its own side (two mirrored implementations, and each
+                // says so). Do NOT fold it again here. An earlier version of this comment
                 // said the two hosts diverged on buffer density, which was true
                 // before the composer took the multiplier and is not now.
                 // `multipass` is false for every single-pass pack, so

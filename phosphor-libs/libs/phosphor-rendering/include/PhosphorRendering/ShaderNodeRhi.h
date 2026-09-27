@@ -159,8 +159,10 @@ public:
     ///                672 bytes) unchanged. The surface-decoration runtime passes
     ///                a SurfaceUniformProfile here to reuse the engine with the
     ///                DISTINCT surface UBO — a different 672-byte layout, not a
-    ///                smaller one; both static_assert to the same size and the
-    ///                members do not line up. UBO size is always profile-defined
+    ///                smaller one. Both static_assert to the same size, and past
+    ///                the shared qt_Matrix / qt_Opacity lead (and
+    ///                iTextureResolution, also at 592 in both) the members do not
+    ///                line up. UBO size is always profile-defined
     ///                (m_uboProfile->baseSize()), never hard-coded.
     explicit ShaderNodeRhi(QQuickItem* item, std::unique_ptr<PhosphorShaders::IUboProfile> profile = nullptr);
     ~ShaderNodeRhi() override;
@@ -515,7 +517,7 @@ private:
     void uploadDummyChannelTexture(QRhi* rhi, QRhiCommandBuffer* cb);
     bool ensureBufferSampler(QRhi* rhi, int index);
     /// Drop every buffer-pass target and everything compiled against it
-    /// (render targets, pass descriptors, pipelines, SRBs). Shared by every
+    /// (textures, render targets, pass descriptors, pipelines, SRBs). Shared by every
     /// setter that invalidates a target: setBufferScale, setBufferScales,
     /// setHalfFloatBuffers, setUseDepthBuffer, and setBufferFilter /
     /// setBufferFilters on a mip-ness flip. Also by ensureBufferTarget's own

@@ -259,7 +259,7 @@ void OverlayService::setLayoutManager(PhosphorZones::IZoneLayoutRegistry* layout
                 });
         // Observe newly-created layouts so edits reach the overlay before
         // the layout is ever activated/assigned (e.g. user creates a new
-        // layout in the editor and immediately tweaks its shader).
+        // layout in the editor and immediately changes its overlay display mode).
         connect(m_layoutManager, &PhosphorZones::IZoneLayoutRegistry::layoutAdded, this,
                 [this](PhosphorZones::Layout* layout) {
                     observeLayoutForLiveEdits(layout);
@@ -276,7 +276,7 @@ void OverlayService::setLayoutManager(PhosphorZones::IZoneLayoutRegistry* layout
         // A per-screen-assigned layout loaded from disk at startup never
         // triggers activeLayoutChanged / layoutAssigned, so its
         // layoutModified signal would otherwise be invisible to us:
-        // editor edits to its shader/zones required a daemon restart to
+        // editor edits to its zones required a daemon restart to
         // take effect. Observing the whole set is cheap (one signal
         // connection per layout) and idempotent thanks to the dedupe
         // pass in observeLayoutForLiveEdits.
@@ -335,8 +335,8 @@ void OverlayService::observeLayoutForLiveEdits(PhosphorZones::Layout* layout)
         // into one refresh.
         QTimer::singleShot(16, this, [this]() {
             m_refreshCoalescePending = false;
-            // A layout shaderId edit can flip a screen between rectangle and
-            // shader overlay modes (none↔shader). refreshVisibleWindows alone
+            // A layout overlayDisplayMode edit can flip a screen between rectangle
+            // and shader overlay modes. refreshVisibleWindows alone
             // can't apply that flip: updateOverlayWindow's shader-apply branch
             // is gated on the slot's CURRENT useShader mode, so a newly-enabled
             // shader is skipped and the overlay keeps drawing rectangles until
@@ -406,9 +406,9 @@ void OverlayService::syncCavaState()
     // spectrum; running it while nothing is displayed burns CPU on capture AND
     // on per-frame overlay repaints. Run it only while audio-viz is enabled AND
     // something that reacts to audio is on screen: the overlay (un-idled), or a
-    // decoration surface (OSD / popup) carrying an
-    // audio-reactive pack. A plain decoration never starts audio (it declares no
-    // `audio` flag, so visibleAudioDecorationSlots() ignores it).
+    // decoration surface (OSD / popup) carrying an audio-reactive pack. A plain
+    // decoration never starts audio (it declares no `audio` flag, so
+    // visibleAudioDecorationSlots() ignores it).
     const bool wantRun =
         m_settings->enableAudioVisualizer() && (isOverlayDisplaying() || !visibleAudioDecorationSlots().isEmpty());
 

@@ -606,12 +606,17 @@ void PlasmaZonesEffect::onScreenAdded(KWin::LogicalOutput* output)
     // scrollTrackedScreenFor's liveness gate answers from the pre-plug set
     // for the whole cascade.
     clearScreenIdCache();
-    // Construct a bound clock for this output. Idempotent: if the same
-    // output arrives twice (rare, but possible on some compositors'
-    // hotplug sequences) we keep the existing clock rather than
-    // replacing it — the old clock's latched presentTime would be
-    // lost and any in-flight animations bound to it would see a dt
-    // jump.
+    // Construct a bound clock for this output. Idempotent: if the same output
+    // arrives twice (rare, but possible on some compositors' hotplug
+    // sequences) the early return keeps the existing clock and skips the
+    // re-raster below. The map is already safe from a double-add on its own,
+    // because unordered_map::emplace does not overwrite an existing key; what
+    // this guard must never be "simplified" into is an assigning insert. Every
+    // in-flight AnimatedValue holds its clock as a RAW `IMotionClock*` in its
+    // spec and dereferences it on every advance and requestFrame
+    // (AnimatedValue.h:98, 194, 252, 262, 277, 378), so replacing the
+    // unique_ptr would free the clock out from under them — a use-after-free
+    // in the compositor, not a recoverable timing glitch.
     if (m_motionClocksByOutput.find(output) != m_motionClocksByOutput.end()) {
         return;
     }

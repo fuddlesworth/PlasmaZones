@@ -645,9 +645,10 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
     // takes the frame pin precisely to avoid per-output-pass drift. iTime wants the drift:
     // it is a wall clock the pack reads, not a quantity two outputs have to agree on. The
     // comparison against state.lastFoldMs below is live-against-pinned for the same reason,
-    // with a skew bounded by TWO paint passes against a 250 ms threshold (this pass's
-    // live-minus-pin plus the previous pass's fold-minus-pin), erring toward "unpainted"
-    // because both offsets push the difference up.
+    // with a skew bounded by ONE paint pass against a 250 ms threshold: lastFoldMs is
+    // stamped FROM the pin (`pinnedFoldMs >= 0 ? pinnedFoldMs : live`), so the previous
+    // pass contributes nothing and only this pass's live-minus-pin is in play. It errs
+    // toward "unpainted", because that offset can only push the difference up.
     const qint64 sharedNowMs = surfaceShaderTimeMs();
     // Well clear of any real frame interval, and well under any gap a person would notice
     // as a phase jump.

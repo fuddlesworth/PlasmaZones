@@ -218,10 +218,11 @@ Window {
         // Overlay glyph for the disabled-style card. The card is
         // refusal-only (overlayservice.h documents the design), so the
         // daemon restates this same literal per show; the QML default only
-        // covers the never-shown pre-first-write state. One of four copies
+        // covers the never-shown pre-first-write state. One of five copies
         // of the literal: LayoutOsdContent.qml's default, the write in
-        // src/daemon/overlayservice/osd.cpp, and daemon/osd.cpp's text-OSD
-        // fallback for the same message — change one and change all four.
+        // src/daemon/overlayservice/osd.cpp, and the text-OSD fallbacks for
+        // the same message in daemon/osd.cpp and daemon/cheatsheet.cpp —
+        // change one and change all five.
         property string disabledIcon: "dialog-cancel"
         property bool success: true
         property string action: ""
