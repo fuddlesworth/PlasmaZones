@@ -128,6 +128,7 @@ class TestWindowsProvider : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void nativeWindowsKeepStableIdsAndRejectClosedWindows();
     void aNullModelIsInertRatherThanFatal();
     void aModelWithoutTheRoleIsRefused();
     void anEmptyQueryListsEveryWindow();
@@ -241,6 +242,33 @@ void TestWindowsProvider::activationSwitchesToTheWindowTheIdNames()
     QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("window is gone")));
     QVERIFY(!provider.activate(QStringLiteral("999"), Activation::Primary));
     QCOMPARE(second->activations, 1);
+}
+
+void TestWindowsProvider::nativeWindowsKeepStableIdsAndRejectClosedWindows()
+{
+    FakeToplevelModel source;
+    source.append(QStringLiteral("Protocol window"), QStringLiteral("other"));
+    WindowsProvider provider(&source);
+    const QVariantMap native{{QStringLiteral("windowId"), QStringLiteral("kate|uuid")},
+                             {QStringLiteral("title"), QStringLiteral("Shell.qml")},
+                             {QStringLiteral("appId"), QStringLiteral("org.kde.kate")},
+                             {QStringLiteral("subtitle"), QStringLiteral("Kate · Develop")}};
+    provider.setNativeWindows({native});
+    provider.setQuery(QStringLiteral("shell"));
+    QCOMPARE(provider.results().size(), 1);
+    QCOMPARE(provider.results().first().id, QStringLiteral("kate|uuid"));
+    QCOMPARE(provider.results().first().subtitle, QStringLiteral("Kate · Develop"));
+    QSignalSpy activated(&provider, &WindowsProvider::nativeWindowActivated);
+    QVERIFY(provider.activate(QStringLiteral("kate|uuid"), Activation::Primary));
+    QCOMPARE(activated.count(), 1);
+    QCOMPARE(activated.first().first().toString(), QStringLiteral("kate|uuid"));
+    QSignalSpy changed(&provider, &WindowsProvider::resultsChanged);
+    provider.setNativeWindows({native});
+    QCOMPARE(changed.count(), 0);
+    provider.setNativeWindows({});
+    QVERIFY(provider.results().isEmpty());
+    QVERIFY(!provider.activate(QStringLiteral("kate|uuid"), Activation::Primary));
+    QCOMPARE(activated.count(), 1);
 }
 
 QTEST_GUILESS_MAIN(TestWindowsProvider)

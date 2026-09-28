@@ -15,8 +15,12 @@
 #include "BarController.h"
 #include "QmlComponentBarWidgetFactory.h"
 
+#include <QGuiApplication>
+#include <QPointF>
 #include <QQmlEngine>
 #include <QQuickItem>
+#include <QQuickWindow>
+#include <QScreen>
 #include <QSignalSpy>
 #include <QRegularExpression>
 #include <QStringList>
@@ -41,8 +45,14 @@ private Q_SLOTS:
     void registryChangesRefreshTheIdSet();
     void relaysActivationWithItsRegistryId();
     void activateWidgetWithoutALiveWidgetIsRefused();
+    void activationStaysOnTheRequestedScreen();
     void activationWithoutAnIdIsRefused();
     void aDynamicPropertyWriteReportsFailureButStoresTheValue();
+    void screenOfANullItemFallsBackToPrimary();
+    void screenOfAWindowlessItemFallsBackToPrimary();
+    void namedScreenRequiresAnExactLiveOutput();
+    void anchorCenterForAnUnresolvableItemIsNegative();
+    void anchorCenterForAWindowedItemIsItsScreenLocalCentre();
 };
 
 namespace {
@@ -66,6 +76,26 @@ Q_SIGNALS:
     void activated();
 };
 
+class FakeTriggerFactory : public PhosphorRegistry::IBarWidgetFactory
+{
+public:
+    QString id() const override
+    {
+        return QStringLiteral("test-trigger");
+    }
+    QString displayName() const override
+    {
+        return QStringLiteral("Test trigger");
+    }
+    QQuickItem* createWidget(QQmlEngine*, QObject* parent) override
+    {
+        auto* widget = new FakeTriggerWidget;
+        widget->setParent(parent);
+        widget->setParentItem(qobject_cast<QQuickItem*>(parent));
+        return widget;
+    }
+};
+
 } // namespace
 
 void TestBarController::registersEveryBuiltin()
@@ -77,11 +107,12 @@ void TestBarController::registersEveryBuiltin()
     // builtinWidgets() so that adding or dropping a widget has to be a
     // deliberate edit in two places.
     const QStringList expected{
-        QStringLiteral("audio"),         QStringLiteral("battery"),       QStringLiteral("bluetooth"),
-        QStringLiteral("clock"),         QStringLiteral("controlcenter"), QStringLiteral("focusedapp"),
-        QStringLiteral("media"),         QStringLiteral("network"),       QStringLiteral("notification"),
-        QStringLiteral("placementmap"),  QStringLiteral("power"),         QStringLiteral("spacer"),
-        QStringLiteral("systemmetrics"), QStringLiteral("tray"),
+        QStringLiteral("appearance"), QStringLiteral("audio"),        QStringLiteral("battery"),
+        QStringLiteral("bluetooth"),  QStringLiteral("clock"),        QStringLiteral("controlcenter"),
+        QStringLiteral("focusedapp"), QStringLiteral("launcher"),     QStringLiteral("media"),
+        QStringLiteral("network"),    QStringLiteral("notification"), QStringLiteral("placementmap"),
+        QStringLiteral("power"),      QStringLiteral("spacer"),       QStringLiteral("systemmetrics"),
+        QStringLiteral("tray"),       QStringLiteral("workspaces"),
     };
 
     QCOMPARE(ids.size(), expected.size());
@@ -231,6 +262,24 @@ void TestBarController::activateWidgetWithoutALiveWidgetIsRefused()
     QCOMPARE(spy.count(), 0);
 }
 
+void TestBarController::activationStaysOnTheRequestedScreen()
+{
+    BarController controller;
+    QVERIFY(controller.registry().registerFactory(std::make_shared<FakeTriggerFactory>()));
+    QQmlEngine engine;
+    QQuickWindow window;
+    QQuickItem parent(window.contentItem());
+    QQmlEngine::setContextForObject(&parent, engine.rootContext());
+    auto* widget = controller.createWidgetFor(QStringLiteral("test-trigger"), &parent);
+    QVERIFY(widget);
+    QSignalSpy spy(&controller, &BarController::widgetActivated);
+    QVERIFY(!controller.activateWidgetForScreen(QStringLiteral("test-trigger"), QStringLiteral("missing-output")));
+    QCOMPARE(spy.count(), 0);
+    QVERIFY(controller.activateWidgetForScreen(QStringLiteral("test-trigger"), window.screen()->name()));
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(qvariant_cast<QQuickItem*>(spy.first().at(1)), widget);
+}
+
 void TestBarController::activationWithoutAnIdIsRefused()
 {
     // Reachable only if a delegate declares its own property of that name and
@@ -268,6 +317,74 @@ void TestBarController::aDynamicPropertyWriteReportsFailureButStoresTheValue()
              "Qt started returning true for a dynamic property write; "
              "revisit createWidgetFor, which is written around this returning false");
     QCOMPARE(widget.property("_barWidgetId").toString(), id);
+}
+
+// The screen resolvers. Both fall back rather than returning null, because
+// a null targetScreen leaves the popout transport with no bar to hang from;
+// anchorCenterFor is the opposite and returns a SENTINEL, because 0 is a
+// valid left-edge anchor and cannot carry "unknown".
+
+void TestBarController::namedScreenRequiresAnExactLiveOutput()
+{
+    BarController controller;
+    auto* screen = QGuiApplication::primaryScreen();
+    QVERIFY(screen);
+    QCOMPARE(controller.screenNamed(screen->name()), screen);
+    QCOMPARE(QQmlEngine::objectOwnership(screen), QQmlEngine::CppOwnership);
+    QCOMPARE(controller.screenNamed(QStringLiteral("missing-output")), nullptr);
+}
+
+void TestBarController::screenOfANullItemFallsBackToPrimary()
+{
+    BarController controller;
+    QCOMPARE(controller.screenOf(nullptr), QGuiApplication::primaryScreen());
+}
+
+void TestBarController::screenOfAWindowlessItemFallsBackToPrimary()
+{
+    // An item built but never shown has no window, which is the state every
+    // bar widget is in between construction and its first frame.
+    BarController controller;
+    QQuickItem orphan;
+    QCOMPARE(controller.screenOf(&orphan), QGuiApplication::primaryScreen());
+}
+
+void TestBarController::anchorCenterForAnUnresolvableItemIsNegative()
+{
+    BarController controller;
+    QVERIFY(controller.anchorCenterFor(nullptr) < 0);
+
+    QQuickItem orphan;
+    orphan.setWidth(40);
+    // No window, so no screen to be local to. -1 rather than 0: the caller
+    // has to be able to tell "could not resolve" from "at the left edge",
+    // and a 0 here would silently pin every such popout to the edge.
+    QVERIFY(controller.anchorCenterFor(&orphan) < 0);
+}
+
+void TestBarController::anchorCenterForAWindowedItemIsItsScreenLocalCentre()
+{
+    BarController controller;
+
+    QQuickWindow window;
+    window.resize(200, 50);
+    QQuickItem chip(window.contentItem());
+    chip.setX(60);
+    chip.setWidth(20);
+    chip.setHeight(20);
+
+    const QScreen* screen = window.screen();
+    QVERIFY(screen);
+
+    // The window's own origin plus the chip's centre within it, expressed
+    // relative to the screen. Derived from the same three hops the accessor
+    // makes rather than hard-coded, so the case pins the SCREEN-LOCAL part
+    // (the subtraction that a multi-head desktop needs) without depending on
+    // where the test's window manager happened to put the window.
+    const QPointF sceneCentre = chip.mapToScene(QPointF(chip.width() / 2.0, chip.height() / 2.0));
+    const qreal expected = window.mapToGlobal(sceneCentre).x() - screen->geometry().x();
+
+    QCOMPARE(controller.anchorCenterFor(&chip), expected);
 }
 
 QTEST_MAIN(TestBarController)

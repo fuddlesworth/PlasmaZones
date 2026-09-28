@@ -15,6 +15,8 @@
 #include <QUuid>
 #include <QHash>
 #include <optional>
+#include <functional>
+#include <utility>
 
 namespace PhosphorScreens {
 class ScreenManager;
@@ -65,6 +67,10 @@ public:
     void setVirtualDesktopManager(PhosphorWorkspaces::VirtualDesktopManager* vdm);
     void setActivityManager(PhosphorWorkspaces::ActivityManager* am);
     void setSettings(ISettings* settings);
+    void setLayoutsAvailableResolver(std::function<bool(const QString&)> resolver)
+    {
+        m_layoutsAvailableResolver = std::move(resolver);
+    }
 
     /// Inject the daemon-owned tile-algorithm registry — required for
     /// autotile entries in @ref getLayoutList and @ref getLayout.
@@ -707,6 +713,7 @@ private:
     PhosphorWorkspaces::ActivityManager* m_activityManager = nullptr;
     PhosphorScreens::ScreenManager* m_screenManager = nullptr;
     ISettings* m_settings = nullptr;
+    std::function<bool(const QString&)> m_layoutsAvailableResolver;
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives adaptor
     PhosphorLayout::ILayoutSource* m_layoutSource = nullptr;
     /// Autotile-specific source used for buildUnifiedLayoutList preview-cache reuse.

@@ -70,6 +70,10 @@ Files: plasmazones/src/editor/org.plasmazones.editor.metainfo.xml
 Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
 License: CC0-1.0
 
+Files: docs/phosphor-shell-design/lambent-icon/*
+Copyright: 2026 fuddlesworth <fuddlesworth@users.noreply.github.com>
+License: CC-BY-SA-4.0
+
 # Bundled shader packs. PlasmaZones-original shaders are LGPL so a third-party
 # pack or tool can build on them; data/overlays is still GPL throughout and is
 # covered by the Files: * stanza above. DEP-5 is last-match-wins, so the
@@ -274,6 +278,11 @@ License: CC0-1.0
  .
  On Debian systems the full text of the CC0 1.0 Universal license can be found
  in /usr/share/common-licenses/CC0-1.0.
+
+License: CC-BY-SA-4.0
+ Licensed under the Creative Commons Attribution-ShareAlike 4.0 International
+ license. The full license text is available at
+ <https://creativecommons.org/licenses/by-sa/4.0/legalcode>.
 
 # Retained upstream notices. Neither paragraph is a Files stanza: the files that
 # incorporate this code ship under the licence their own stanza declares, and these

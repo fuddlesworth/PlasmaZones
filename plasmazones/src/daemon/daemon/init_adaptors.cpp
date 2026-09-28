@@ -152,6 +152,10 @@ void Daemon::initCoreAdaptors()
         new LayoutAdaptor(m_layoutManager.get(), m_virtualDesktopManager.get(), m_screenManager.get(), this);
     m_layoutAdaptor->setActivityManager(m_activityManager.get());
     m_layoutAdaptor->setSettings(m_settings.get());
+    m_layoutAdaptor->setLayoutsAvailableResolver([this](const QString& screenId) {
+        return !m_shuttingDown && anyModeEnabled()
+            && layoutSupportForScreen(screenId) != PhosphorEngine::IPlacementEngine::LayoutSupport::None;
+    });
     m_layoutAdaptor->setAlgorithmRegistry(m_algorithmRegistry.get());
     m_layoutAdaptor->setLayoutSource(m_layoutSources.composite());
     // Thread the bundle-owned autotile source through the adaptor's

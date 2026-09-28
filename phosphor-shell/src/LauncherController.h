@@ -8,6 +8,9 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <QVariantList>
+#include <QHash>
+#include <QSet>
 
 #include <functional>
 
@@ -17,10 +20,14 @@ class ClipboardService;
 
 namespace PhosphorShell {
 class Toplevels;
+class PlacementMap;
+class PlacementMapScreen;
 }
 
 namespace PhosphorShellLauncher {
 class LauncherModel;
+class AppsProvider;
+class WindowsProvider;
 }
 
 namespace PhosphorShellApp {
@@ -65,18 +72,33 @@ private:
 class LauncherController : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(QVariantList pinnedApplications READ pinnedApplications NOTIFY pinnedApplicationsChanged)
 
 public:
     explicit LauncherController(QObject* parent = nullptr);
     ~LauncherController() override;
 
     [[nodiscard]] PhosphorShellLauncher::LauncherModel* model() const;
+    [[nodiscard]] QVariantList pinnedApplications() const;
+    Q_INVOKABLE bool launchPinned(const QString& id);
+    Q_INVOKABLE bool isPinned(const QString& id) const;
+    Q_INVOKABLE void togglePinned(const QString& id);
+
+Q_SIGNALS:
+    void pinnedApplicationsChanged();
 
 private:
     PhosphorRegistry::Registry<PhosphorRegistry::ILauncherProviderFactory> m_registry;
     PhosphorServiceClipboard::ClipboardService* m_clipboard = nullptr;
     PhosphorShell::Toplevels* m_toplevels = nullptr;
     PhosphorShellLauncher::LauncherModel* m_model = nullptr;
+    PhosphorShellLauncher::AppsProvider* m_apps = nullptr;
+    PhosphorShellLauncher::WindowsProvider* m_windows = nullptr;
+    PhosphorShell::PlacementMap* m_placement = nullptr;
+    QHash<QString, PhosphorShell::PlacementMapScreen*> m_windowMaps;
+    QSet<PhosphorShell::PlacementMapScreen*> m_watchedMaps;
+    QStringList m_pinnedIds;
+    void refreshNativeWindows();
 };
 
 } // namespace PhosphorShellApp

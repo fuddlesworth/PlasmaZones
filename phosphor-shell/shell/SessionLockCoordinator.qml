@@ -21,7 +21,10 @@ import Phosphor.Service.Session
 QtObject {
     id: coordinator
 
-    property SessionHost session: SessionHost {}
+    property SessionHost session: SessionHost {
+        // An external polkit prompt cannot appear over ext-session-lock.
+        interactive: !coordinator.lock.locked
+    }
     property LockService lock: LockService {}
 
     property Connections sessionConnections: Connections {

@@ -84,30 +84,84 @@ set(_phosphor_bar_qml_files
     qml/Phosphor/Bar/Slot.qml
     qml/Phosphor/Bar/Widgets/BarIconButton.qml
     qml/Phosphor/Bar/Widgets/BarWidget.qml
+    qml/Phosphor/Bar/Widgets/LauncherButton.qml
+    qml/Phosphor/Bar/Widgets/AppearanceButton.qml
+    qml/Phosphor/Bar/Widgets/WorkspaceButtons.qml
     qml/Phosphor/Bar/Widgets/Clock.qml
     qml/Phosphor/Bar/Widgets/FocusedApp.qml
     qml/Phosphor/Bar/Widgets/PlacementMap.qml
     qml/Phosphor/Bar/Widgets/DropProxyGeometry.js
     qml/Phosphor/Bar/MapPane.qml
     qml/Phosphor/Bar/Widgets/SystemMetrics.qml
+    qml/Phosphor/Bar/Stats/StatsModel.qml
+    qml/Phosphor/Bar/Stats/StatsChart.qml
+    qml/Phosphor/Bar/Stats/StatsReadout.qml
+    qml/Phosphor/Bar/Stats/StatsCard.qml
+    qml/Phosphor/Bar/Stats/StatsMemoryMeter.qml
+    qml/Phosphor/Bar/Stats/StatsFacts.qml
+    qml/Phosphor/Bar/Stats/StatsDrives.qml
+    qml/Phosphor/Bar/Stats/StatsOverview.qml
+    qml/Phosphor/Bar/Stats/StatsHistory.qml
+    qml/Phosphor/Bar/Stats/StatsDetails.qml
+    qml/Phosphor/Bar/Stats/StatsWidgetSettings.qml
+    qml/Phosphor/Bar/Stats/StatsPanel.qml
     qml/Phosphor/Bar/Widgets/Network.qml
     qml/Phosphor/Bar/Widgets/Bluetooth.qml
     qml/Phosphor/Bar/Widgets/Audio.qml
     qml/Phosphor/Bar/Widgets/Battery.qml
     qml/Phosphor/Bar/Widgets/Tray.qml
+    qml/Phosphor/Bar/Tray/TrayModel.qml
+    qml/Phosphor/Bar/Tray/TrayIcon.qml
+    qml/Phosphor/Bar/Tray/TrayButton.qml
+    qml/Phosphor/Bar/Tray/TrayTile.qml
+    qml/Phosphor/Bar/Tray/TrayMenu.qml
+    qml/Phosphor/Bar/Tray/TraySettings.qml
+    qml/Phosphor/Bar/Tray/TrayDrawer.qml
+    qml/Phosphor/Bar/Tray/TrayPanel.qml
     qml/Phosphor/Bar/Widgets/Media.qml
     qml/Phosphor/Bar/Widgets/ControlCenterButton.qml
     qml/Phosphor/Bar/Widgets/NotificationButton.qml
     qml/Phosphor/Bar/Widgets/PowerButton.qml
     qml/Phosphor/Bar/Widgets/Spacer.qml
+    # The click affordance a status chip overlays on itself to become a
+    # panel trigger.
+    qml/Phosphor/Bar/Widgets/ChipTrigger.qml
+    # The panels the status chips open (Phase 4.3). Shared chrome plus one
+    # per domain; each binds its own service host, the same way the chips
+    # do. Registered as flat types in Phosphor.Bar by the alias loop below,
+    # so shell.qml instantiates them by bare name.
+    qml/Phosphor/Bar/Panels/PanelFrame.qml
+    qml/Phosphor/Bar/Panels/PanelRow.qml
+    qml/Phosphor/Bar/Panels/PanelToggle.qml
+    qml/Phosphor/Bar/Panels/ValueRow.qml
+    qml/Phosphor/Bar/Panels/QuickDetailFrame.qml
+    qml/Phosphor/Bar/Panels/DetailText.qml
+    qml/Phosphor/Bar/Panels/DetailList.qml
+    qml/Phosphor/Bar/Panels/DetailVolume.qml
+    qml/Phosphor/Bar/Panels/DetailCard.qml
+    qml/Phosphor/Bar/Panels/DetailDeviceRow.qml
+    qml/Phosphor/Bar/Panels/DetailEmptyState.qml
+    qml/Phosphor/Bar/Panels/DetailSectionHeading.qml
+    qml/Phosphor/Bar/Panels/DetailNotice.qml
+    qml/Phosphor/Bar/Panels/DetailSwitch.qml
+    qml/Phosphor/Bar/Panels/NetworkPanel.qml
+    qml/Phosphor/Bar/Panels/BluetoothPanel.qml
+    qml/Phosphor/Bar/Panels/AudioPanel.qml
+    qml/Phosphor/Bar/Panels/BatteryPanel.qml
+    qml/Phosphor/Bar/Panels/MediaPanel.qml
+    qml/Phosphor/Bar/Panels/NotificationPanel.qml
+    qml/Phosphor/Bar/Panels/CalendarPanel.qml
+    qml/Phosphor/Bar/Panels/AppearancePanel.qml
+    qml/Phosphor/Bar/Panels/BarLayoutEditor.qml
+    qml/Phosphor/Bar/BarRegion.qml
     # The wire from a chip to its engine-placed pane (A2 §4.3): pure
     # routing math plus the two segments it draws.
     qml/Phosphor/Bar/PaneTether.qml
 )
 
 # Pin each QML file's resource alias to its basename so import resolution
-# doesn't see a doubled path segment, and so the Widgets/ source-tree
-# subdir does not leak into the registered type name (the delegates must
+# doesn't see a doubled path segment, and so the Widgets/ and Panels/
+# source-tree subdirs do not leak into the registered type name (the delegates must
 # register as flat types Clock/Battery/... in Phosphor.Bar so the
 # IBarWidgetFactory URI-by-name lookup resolves them). Same pattern as the
 # sibling libs.
@@ -122,6 +176,9 @@ endforeach()
 # Directory-scope suppression of -Wmissing-include-dirs for the targets
 # qt_add_qml_module generates here. Full rationale: plasmazones/src/shared/CMakeLists.txt.
 set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dirs")
+
+set_source_files_properties(qml/Phosphor/Bar/Stats/StatsModel.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(qml/Phosphor/Bar/Tray/TrayModel.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 qt_add_qml_module(PhosphorShellBarQml
     URI Phosphor.Bar
@@ -139,6 +196,7 @@ qt_add_qml_module(PhosphorShellBarQml
     DEPENDENCIES
         Phosphor.Theme
         Phosphor.Widgets
+        Phosphor.Notifications
         QtQuick.Layouts
         org.kde.kirigami
     SOURCES
@@ -151,13 +209,11 @@ add_library(PhosphorShellBar::PhosphorShellBarQml ALIAS PhosphorShellBarQml)
 
 target_compile_features(PhosphorShellBarQml PUBLIC cxx_std_20)
 
-# No Qt6::QuickShapes here: the bar QML imports no QtQuick.Shapes itself. The
-# Shapes usage lives in Phosphor.Widgets' PhosphorRipple; that module's own
-# target links Qt6::QuickShapes and propagates it through the PUBLIC link
-# below.
+# Stats charts use vector paths from QtQuick.Shapes.
 target_link_libraries(PhosphorShellBarQml
     PUBLIC
         Qt6::Core
+        Qt6::QuickShapes
         Qt6::Gui
         Qt6::Qml
         Qt6::Quick
@@ -187,6 +243,11 @@ endif()
 # the shell process, not by the phosphor-shell QML module. The only type
 # that module's registrar provides is PerScreen.qml, which the bar does not
 # use, so it is deliberately NOT linked here.
+
+# The notification panel uses the same rich card module as arrival popups.
+if(TARGET PhosphorShellNotificationsQml)
+    target_link_libraries(PhosphorShellBarQml PUBLIC PhosphorShellNotificationsQml PhosphorShellNotificationsQmlplugin)
+endif()
 
 # No install rules: PhosphorShellBarQml is a STATIC, in-tree-only QML
 # module (like PhosphorShellWidgetsQml / PhosphorShellOsdQml). It is linked

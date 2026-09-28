@@ -6,6 +6,8 @@
 #include <PhosphorDBus/Client.h>
 
 #include <QDBusConnection>
+#include <QDBusArgument>
+#include <QDBusObjectPath>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QLoggingCategory>
@@ -15,6 +17,10 @@ Q_LOGGING_CATEGORY(lcNetworkDevice, "phosphor.service.network.device")
 namespace {
 constexpr auto kService = "org.freedesktop.NetworkManager";
 constexpr auto kDeviceIface = "org.freedesktop.NetworkManager.Device";
+// The Wi-Fi association lives on a SEPARATE interface from the generic
+// device one, so a device that is Wifi is watched on both. A non-Wi-Fi
+// device never subscribes to this and reports an empty active path.
+constexpr auto kWirelessIface = "org.freedesktop.NetworkManager.Device.Wireless";
 constexpr auto kPropsIface = "org.freedesktop.DBus.Properties";
 
 // NetworkManager's DeviceType / State are sparse wire enums; map only the
@@ -89,6 +95,18 @@ public:
     DeviceType deviceType = Unknown;
     DeviceState state = UnknownState;
     bool managed = false;
+    QString activeAccessPointPath;
+    uint stateReason = 0;
+    uint bitrate = 0;
+    QString ipAddress;
+    QString ipConfigPath;
+    qint64 lastScan = -1;
+    quint64 ipGeneration = 0;
+    // Whether the Wireless-interface subscription has been made. Guarded
+    // because DeviceType arrives in an async GetAll reply and again in
+    // every PropertiesChanged, so without this the same match rule would
+    // be installed repeatedly for the life of the device.
+    bool wirelessWatched = false;
 
     template<typename T, typename Signal>
     void setField(T& field, T val, Signal signal)
@@ -122,6 +140,96 @@ public:
         });
     }
 
+    // Subscribe to, and fetch, the Wireless interface. Called once, when
+    // the device is first known to be Wi-Fi.
+    void watchWireless()
+    {
+        if (wirelessWatched)
+            return;
+        wirelessWatched = true;
+        // The PropertiesChanged subscription made in the constructor is
+        // path-scoped and NOT interface-scoped, so it already delivers the
+        // Wireless interface's changes; _q_onPropertiesChanged routes them
+        // by the `iface` argument. Only the initial fetch is needed here.
+        fetchWireless();
+    }
+
+    // The GetAll itself, separate from the one-shot subscription guard so
+    // an invalidated property can be re-fetched. Folding the two together
+    // made the re-fetch a no-op, since the guard had already latched.
+    void fetchWireless()
+    {
+        if (!bus.isConnected())
+            return;
+        PhosphorDBus::Client client(bus, QLatin1String(kService), path, &lcNetworkDevice());
+        auto* watcher = new QDBusPendingCallWatcher(
+            client.asyncCall(QLatin1String(kPropsIface), QStringLiteral("GetAll"), {QLatin1String(kWirelessIface)}),
+            owner);
+        QObject::connect(watcher, &QDBusPendingCallWatcher::finished, owner, [this](QDBusPendingCallWatcher* call) {
+            call->deleteLater();
+            const QDBusPendingReply<QVariantMap> reply = *call;
+            if (reply.isError()) {
+                qCDebug(lcNetworkDevice) << "Wireless GetAll failed for" << path << ":" << reply.error().message();
+                return;
+            }
+            applyWirelessProps(reply.value());
+        });
+    }
+
+    // Applies a Wireless-interface property map, from a GetAll reply or a
+    // partial PropertiesChanged. NM sends ActiveAccessPoint as an object
+    // path, and "/" is its idiom for "none" — mapped to an empty string so
+    // a consumer comparing against a real access point's path cannot
+    // accidentally match the placeholder.
+    void applyWirelessProps(const QVariantMap& props)
+    {
+        if (props.contains(QLatin1String("ActiveAccessPoint"))) {
+            QString apPath = qvariant_cast<QDBusObjectPath>(props.value(QLatin1String("ActiveAccessPoint"))).path();
+            if (apPath == QLatin1String("/"))
+                apPath.clear();
+            setField(activeAccessPointPath, apPath, &NetworkDevice::activeAccessPointPathChanged);
+        }
+        if (props.contains(QLatin1String("Bitrate")))
+            setField(bitrate, props.value(QLatin1String("Bitrate")).toUInt(), &NetworkDevice::detailsChanged);
+        if (props.contains(QLatin1String("LastScan")))
+            setField(lastScan, props.value(QLatin1String("LastScan")).toLongLong(), &NetworkDevice::detailsChanged);
+    }
+
+    void fetchAddress()
+    {
+        const auto generation = ++ipGeneration;
+        if (ipConfigPath.isEmpty() || ipConfigPath == QLatin1String("/")) {
+            setField(ipAddress, QString{}, &NetworkDevice::detailsChanged);
+            return;
+        }
+        auto* watcher = new QDBusPendingCallWatcher(
+            PhosphorDBus::Client(bus, QLatin1String(kService), ipConfigPath, &lcNetworkDevice())
+                .asyncCall(QLatin1String(kPropsIface), QStringLiteral("GetAll"),
+                           {QStringLiteral("org.freedesktop.NetworkManager.IP4Config")}),
+            owner);
+        QObject::connect(watcher, &QDBusPendingCallWatcher::finished, owner,
+                         [this, generation](QDBusPendingCallWatcher* call) {
+                             call->deleteLater();
+                             const QDBusPendingReply<QVariantMap> reply = *call;
+                             if (generation != ipGeneration || reply.isError())
+                                 return;
+                             QString address;
+                             const auto value = reply.value().value(QStringLiteral("AddressData"));
+                             if (value.canConvert<QDBusArgument>()) {
+                                 const auto arg = value.value<QDBusArgument>();
+                                 arg.beginArray();
+                                 while (!arg.atEnd()) {
+                                     QVariantMap entry;
+                                     arg >> entry;
+                                     if (address.isEmpty())
+                                         address = entry.value(QStringLiteral("address")).toString();
+                                 }
+                                 arg.endArray();
+                             }
+                             setField(ipAddress, address, &NetworkDevice::detailsChanged);
+                         });
+    }
+
     // Applies a device-interface property map. Works for both a full
     // GetAll reply and a partial PropertiesChanged `changed` map; every
     // field is gated on isValid().
@@ -134,8 +242,34 @@ public:
 
         if ((v = val("Interface")).isValid())
             setField(interfaceName, v.toString(), &NetworkDevice::interfaceNameChanged);
-        if ((v = val("DeviceType")).isValid())
+        if ((v = val("DeviceType")).isValid()) {
             setField(deviceType, deviceTypeFromRaw(v.toUInt()), &NetworkDevice::deviceTypeChanged);
+            if (deviceType == Wifi)
+                watchWireless();
+        }
+        if ((v = val("StateReason")).isValid() && v.canConvert<QDBusArgument>()) {
+            const auto arg = v.value<QDBusArgument>();
+            uint rawState = 0, reason = 0;
+            arg.beginStructure();
+            arg >> rawState >> reason;
+            arg.endStructure();
+            setField(stateReason, reason, &NetworkDevice::detailsChanged);
+        }
+        if ((v = val("Ip4Config")).isValid()) {
+            const auto nextPath = qvariant_cast<QDBusObjectPath>(v).path();
+            if (nextPath != ipConfigPath) {
+                if (!ipConfigPath.isEmpty() && ipConfigPath != QLatin1String("/"))
+                    bus.disconnect(QLatin1String(kService), ipConfigPath, QLatin1String(kPropsIface),
+                                   QStringLiteral("PropertiesChanged"), owner,
+                                   SLOT(_q_onIpChanged(QString, QVariantMap, QStringList)));
+                ipConfigPath = nextPath;
+                if (!ipConfigPath.isEmpty() && ipConfigPath != QLatin1String("/"))
+                    bus.connect(QLatin1String(kService), ipConfigPath, QLatin1String(kPropsIface),
+                                QStringLiteral("PropertiesChanged"), owner,
+                                SLOT(_q_onIpChanged(QString, QVariantMap, QStringList)));
+            }
+            fetchAddress();
+        }
         if ((v = val("State")).isValid())
             setField(state, deviceStateFromRaw(v.toUInt()), &NetworkDevice::stateChanged);
         if ((v = val("Managed")).isValid())
@@ -188,10 +322,38 @@ bool NetworkDevice::managed() const
 {
     return d->managed;
 }
+QString NetworkDevice::activeAccessPointPath() const
+{
+    return d->activeAccessPointPath;
+}
+
+uint NetworkDevice::stateReason() const
+{
+    return d->stateReason;
+}
+uint NetworkDevice::bitrate() const
+{
+    return d->bitrate;
+}
+QString NetworkDevice::ipAddress() const
+{
+    return d->ipAddress;
+}
+qint64 NetworkDevice::lastScan() const
+{
+    return d->lastScan;
+}
 
 void NetworkDevice::_q_onPropertiesChanged(const QString& iface, const QVariantMap& changed,
                                            const QStringList& invalidated)
 {
+    if (iface == QLatin1String(kWirelessIface)) {
+        d->applyWirelessProps(changed);
+        // An invalidated ActiveAccessPoint carries no value; re-fetch.
+        if (!invalidated.isEmpty())
+            d->fetchWireless();
+        return;
+    }
     if (iface != QLatin1String(kDeviceIface))
         return;
     d->applyProps(changed);
@@ -199,6 +361,12 @@ void NetworkDevice::_q_onPropertiesChanged(const QString& iface, const QVariantM
     // asynchronously to pick them up.
     if (!invalidated.isEmpty())
         d->requestAll();
+}
+
+void NetworkDevice::_q_onIpChanged(const QString& iface, const QVariantMap&, const QStringList&)
+{
+    if (iface == QLatin1String("org.freedesktop.NetworkManager.IP4Config"))
+        d->fetchAddress();
 }
 
 } // namespace PhosphorServiceNetwork

@@ -32,7 +32,7 @@ OSDCard {
 
                 // Speaker body (cone + box).
                 ShapePath {
-                    fillColor: Theme.on_surface
+                    fillColor: Appearance.text
                     strokeColor: "transparent"
 
                     PathSvg {
@@ -42,7 +42,7 @@ OSDCard {
                 // Sound wave, hidden when muted.
                 ShapePath {
                     fillColor: "transparent"
-                    strokeColor: osd.value > 0 ? Theme.on_surface : "transparent"
+                    strokeColor: osd.value > 0 ? Appearance.text : "transparent"
                     strokeWidth: 2
                     capStyle: ShapePath.RoundCap
 

@@ -5,9 +5,9 @@
 // every desktop's placement map at once, so a screen needs a view of a
 // desktop that is not current. The daemon resolves mode and snapping
 // layout per (screen, desktop), and WindowTracking.getWindowStatesForDesktop
-// says which windows are there; neither engine replays the tiles or the
-// strip of a desktop it is not showing, so those modes draw what is known
-// (the window count as equal columns). The live screen (forScreen) stays
+// supplies snapping occupancy. Native window snapshots supply inactive
+// tiling geometry and scrolling window counts; neither engine replays the
+// tiles or strip of a desktop it is not showing. The live screen (forScreen) stays
 // the current desktop's view and the singleton hands it back for the
 // current index, so a dashboard cell never draws a stale copy of the
 // desktop the user is on.

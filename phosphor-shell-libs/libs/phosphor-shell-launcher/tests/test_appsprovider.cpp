@@ -40,6 +40,7 @@ private Q_SLOTS:
     void scansTheFixtureTreeOnConstruction();
     void anInstallIntoAVendorSubdirectoryIsNoticed();
     void nothingOnAnEmptyQuery();
+    void hostsCanEnableAnApplicationGrid();
     void nameMatchOutranksKeywordMatchForTheSameText();
     void keywordsAndGenericNameStillMatch();
     void capsTheResultCount();
@@ -272,6 +273,23 @@ void TestAppsProvider::activateRefusesUnknownAndAlternate()
                           {QStringLiteral("KDE")});
     QVERIFY(!provider.activate(QStringLiteral("no-such-app"), ILauncherProvider::Activation::Primary));
     QVERIFY(!provider.activate(QStringLiteral("firefox"), ILauncherProvider::Activation::Alternate));
+}
+
+void TestAppsProvider::hostsCanEnableAnApplicationGrid()
+{
+    AppsProvider provider({kFixtures}, QStringLiteral("en_US"), {});
+    provider.setListOnEmptyQuery(true);
+    QVERIFY(provider.listsOnEmptyQuery());
+    QVERIFY(!provider.results().isEmpty());
+    for (const auto& result : provider.results()) {
+        QVERIFY(result.score < 0);
+    }
+    provider.setQuery(QStringLiteral("unlikely-nonexistent-application"));
+    QVERIFY(provider.results().isEmpty());
+    provider.setQuery(QString());
+    QVERIFY(!provider.results().isEmpty());
+    provider.setListOnEmptyQuery(false);
+    QVERIFY(provider.results().isEmpty());
 }
 
 QTEST_GUILESS_MAIN(TestAppsProvider)

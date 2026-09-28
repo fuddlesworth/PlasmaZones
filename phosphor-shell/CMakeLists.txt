@@ -45,6 +45,10 @@ add_executable(phosphor-shell
     src/layerpopouttransport.cpp
     src/QmlComponentBarWidgetFactory.h
     src/qmlcomponentbarwidgetfactory.cpp
+    src/DesktopStyleController.h
+    src/desktopstylecontroller.cpp
+    src/QuickSettingsController.h
+    src/quicksettingscontroller.cpp
     src/ControlCenterController.h
     src/controlcentercontroller.cpp
     src/QmlComponentTileFactory.h
@@ -88,6 +92,13 @@ add_executable(phosphor-shell
     src/qmlcomponentosdfactory.cpp
     src/ToastController.h
     src/toastcontroller.cpp
+    # The notification centre: the org.freedesktop.Notifications server
+    # this process owns, plus the retained list the bar's notification
+    # panel reads as the NotificationRegistry context property. The
+    # server's own model tracks only LIVE notifications, so the centre
+    # keeps its own snapshots (see the header).
+    src/NotificationController.h
+    src/notificationcontroller.cpp
     # The PolicyKit agent owner (registers the shell as the session's
     # agent, starts each PAM conversation, carries the requester's pid
     # and the prompt's placement) and the picker strip's open state:
@@ -100,7 +111,11 @@ add_executable(phosphor-shell
 
 target_link_libraries(phosphor-shell
     PRIVATE
+        Qt6::QuickControls2
         PhosphorShell::PhosphorShell
+        # KPluginMetaData, for DesktopStyleController's probe of the
+        # installed window decoration plugin.
+        KF6::CoreAddons
         # Registry core (Registry<IBarWidgetFactory> + RegistryNotifier)
         # for BarController, and the Phosphor.Bar QML module + its plugin
         # registrar so the bar delegates resolve at runtime.
@@ -227,11 +242,21 @@ endif()
 
 install(TARGETS phosphor-shell DESTINATION ${KDE_INSTALL_BINDIR})
 
-install(FILES icons/hicolor/scalable/apps/phosphor-shell.svg
-    DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/scalable/apps
-)
-install(FILES icons/hicolor-light/scalable/apps/phosphor-shell.svg
-    DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor-light/scalable/apps
+# Phosphor's own mark is installed from the same assets used by its QML module.
+set(_phosphor_mark_dir ${CMAKE_SOURCE_DIR}/phosphor-shell-libs/libs/phosphor-shell-widgets/assets)
+foreach(_icon_theme hicolor hicolor-light)
+    install(FILES ${_phosphor_mark_dir}/phosphor-mark.svg
+        DESTINATION ${KDE_INSTALL_ICONDIR}/${_icon_theme}/scalable/apps
+        RENAME phosphor-shell.svg
+    )
+    install(FILES ${_phosphor_mark_dir}/phosphor-mark-symbolic.svg
+        DESTINATION ${KDE_INSTALL_ICONDIR}/${_icon_theme}/scalable/apps
+        RENAME phosphor-shell-symbolic.svg
+    )
+endforeach()
+install(FILES ${_phosphor_mark_dir}/phosphor-mark-512.png
+    DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/512x512/apps
+    RENAME phosphor-shell.png
 )
 
 if(BUILD_TESTING)

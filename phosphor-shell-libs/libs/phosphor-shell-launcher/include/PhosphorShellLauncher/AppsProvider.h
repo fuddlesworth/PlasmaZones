@@ -61,6 +61,11 @@ public:
     [[nodiscard]] QString displayName() const override;
     [[nodiscard]] QString iconName() const override;
 
+    [[nodiscard]] bool listsOnEmptyQuery() const override
+    {
+        return m_listOnEmptyQuery;
+    }
+    void setListOnEmptyQuery(bool enabled);
     void setQuery(const QString& query) override;
     [[nodiscard]] QList<PhosphorRegistry::LauncherResult> results() const override;
     [[nodiscard]] bool activate(const QString& resultId, Activation activation) override;
@@ -116,6 +121,9 @@ public:
     /// launch something this provider never offered.
     [[nodiscard]] static bool launch(const DesktopEntry& entry);
 
+Q_SIGNALS:
+    void entriesChanged();
+
 private:
     // Shared body for both public constructors. `deferFirstScan` decides
     // whether the initial walk runs inline or is posted to the event loop.
@@ -137,6 +145,7 @@ private:
     QString m_query;
     QList<PhosphorRegistry::LauncherResult> m_results;
     int m_maximumResults = 24;
+    bool m_listOnEmptyQuery = false;
 };
 
 } // namespace PhosphorShellLauncher

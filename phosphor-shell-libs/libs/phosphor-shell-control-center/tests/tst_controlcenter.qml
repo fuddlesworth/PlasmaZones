@@ -144,6 +144,21 @@ TestCase {
         compare(closed, ["network"], "closing an already-closed panel announces nothing");
     }
 
+    function test_hiding_cached_surface_closes_detail() {
+        // TestCase itself is hidden; mount this lifecycle check in its window.
+        const cc = createTemporaryObject(controlCenterComp, testCase.parent, {
+            "provider": fakeProvider,
+            "tileIds": ["network"]
+        });
+        cc.openDetail("network");
+        compare(cc.detailTileId, "network");
+        compare(cc.visible, true);
+        cc.visible = false;
+        compare(cc.detailTileId, "", "cached hidden panes release their detail tasks");
+        cc.visible = true;
+        compare(cc.detailTileId, "", "reopening starts at quick settings");
+    }
+
     function test_rebuild_drops_the_open_detail_view() {
         const cc = createTemporaryObject(controlCenterComp, testCase, {
             "provider": fakeProvider,

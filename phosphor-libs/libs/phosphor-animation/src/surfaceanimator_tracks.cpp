@@ -13,7 +13,6 @@
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorRendering/ShaderEffect.h>
-
 #include <PhosphorLayer/Surface.h>
 
 #include <QQuickItem>

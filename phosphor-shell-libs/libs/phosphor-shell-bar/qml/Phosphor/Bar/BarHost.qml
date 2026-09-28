@@ -1,65 +1,24 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// Phosphor.Bar.BarHost, the spectrum-rail bar surface.
-//
-// One layer-shell PanelWindow per output painting the bar of
-// docs/phosphor-shell-design/05-visual-identity.md: a 2 px spectrum rail
-// on the screen edge (the screen's x-axis painted cyan → rose) over a
-// 26 px band of navy, 0 inset, no radius, no shadow. Widgets are bare
-// content on the band, arranged in three slots (left / center / right)
-// mounted through the shell's IBarWidgetFactory registry (the
-// `BarRegistry` context property), so the bar owns no widget code.
-//
-// A popout hangs from the bar as a PANE tied to the rail by a 2 px tether
-// in the rail's hue at the chip's x (A2 §4.3). Two forms:
-//
-//   - ENGINE-PLACED (`paneExternal`): the pane is a real toplevel the
-//     placement engine positions (A2 §4.1). The bar draws only the tether,
-//     routed along the rail to wherever the placement map says the pane
-//     landed (`paneScreenRect`), and the pane's own surface draws the rest.
-//   - FLOATING FALLBACK (A2 §4.2, last row): a surface drawn 0 px under
-//     the band at the chip's x, inside the bar's own PanelWindow, for an
-//     output with no placement engine.
-//
-// Both share `_paneProgress`, so the open/close choreography (A2 §4.4)
-// is one animation either way: tether first, content after; content
-// releases first, tether retracts last.
-//
-// The bar has one pane of its own besides the host's: the EXPANDED
-// PLACEMENT MAP (A2 §1.1), opened by a long-press or right-click on the
-// map chip and drawn inline under it (`mapPaneOpen`). It uses the same
-// tether and choreography, anchored to "placementmap". At most one pane
-// per screen (A2 §4.7): the host's pane opening closes the map pane, and
-// the map pane does not open while the host's is up.
-//
-// Urgency (A2 §3.3, §6): while any cell on this screen's map demands
-// attention, the rail over the map chip thickens 2 → 4 px in white,
-// entering over 200 ms and pulsing with the cell.
-//
-//   BarHost { }   // defaults match mockups-v2/bar-widgets.svg
-//
-// The centre slot anchors to the bar's true centre while the side slots
-// anchor to the edges, so the clock stays optically centred.
+// Floating bar with registry-owned widgets and a bounded placement pane.
+// Surface geometry is rebuilt by ShellEngine when appearance dimensions change.
 
 import QtQuick
 import Phosphor.Theme
 import Phosphor.Widgets
 import Phosphor.Shell
+import Phosphor.Shell as Shell
 
 PanelWindow {
     id: panel
 
-    edge: PanelWindow.Top
+    edge: Appearance.bottom ? PanelWindow.Bottom : PanelWindow.Top
     panelLayer: PanelWindow.LayerTop
-    // The exclusive zone is the whole bar: rail plus band. The engines'
-    // own outer gap separates windows from the band.
+    // Reserve the floating band and its inset, keeping tiled windows clear.
     thickness: Tokens.bar_thickness
     alignment: PanelWindow.Fill
-    // The bar never wants keyboard focus (Plasma-panel behaviour); a pane
-    // painted inside it inherits this, so keyboard handling in pane
-    // content is inert on a real screen until the pane is its own
-    // surface (phase 2). Pointer interaction is unaffected.
-    keyboardFocus: PanelWindow.None
+    // Navigation keys work immediately, including when opened from a shortcut.
+    keyboardFocus: mapPaneOpen ? PanelWindow.Exclusive : PanelWindow.None
 
     // ─── Pane (the bar-anchored popout) ─────────────────────────────────
     //
@@ -78,17 +37,36 @@ PanelWindow {
     // Open when the map chip was long-pressed or right-clicked. Toggled
     // by the chip; closed by the pane's own close row or by the host's
     // pane opening.
+    signal overviewRequested
     property bool mapPaneOpen: false
+    function closeMapPane(restoreFocus: bool): void {
+        const windows = panel.placementMap ? (panel.placementMap.windows ?? []) : [];
+        const previous = windows.find(window => window.focused);
+        panel.mapPaneOpen = false;
+        if (restoreFocus && previous)
+            panel.placementMap.activateNavigationWindow(previous.windowId);
+    }
+    Connections {
+        target: panel.Window.window
+        function onActiveChanged(): void {
+            if (panel.mapPaneOpen && !panel.Window.window.active)
+                panel.mapPaneOpen = false;
+        }
+    }
     // Opened on its menu section (a right-click).
     property bool mapPaneMenuFocused: false
-    property int mapPaneWidth: 360
+    property int mapPaneWidth: 700
+    readonly property rect mapBlurRect: mapPaneOpen ? Qt.rect(pane.x, pane.y, pane.width, pane.height) : Qt.rect(0, 0, 0, 0)
 
     // What the pane machinery below actually shows: the host's pane, or
     // the map pane when that is the one open.
     readonly property bool _paneOpenEff: panel.paneOpen || panel.mapPaneOpen
     readonly property bool _paneExternalEff: panel.mapPaneOpen ? false : panel.paneExternal
     readonly property string _paneAnchorEff: panel.mapPaneOpen ? "placementmap" : panel.paneAnchor
-    readonly property int _paneWidthEff: panel.mapPaneOpen ? panel.mapPaneWidth : panel.paneWidth
+    // Keep the map width through its close animation. `mapPaneOpen` drops
+    // before the inline surface is gone, so using it here would make the
+    // map abruptly adopt the narrower host-pane width on the way out.
+    readonly property int _paneWidthEff: panel._mapPaneDisplayed ? panel.mapPaneWidth : panel.paneWidth
 
     // The map chip, once its slot has mounted it, for the expand request
     // and the urgency thickening.
@@ -100,15 +78,43 @@ PanelWindow {
         return c && c.widget ? c.widget : null;
     }
 
+    function requestOverview(): void {
+        if (panel.mapPaneOpen)
+            panel.mapPaneOpen = false;
+        panel.overviewRequested();
+    }
+
+    Binding {
+        target: rightSlot.cellFor("clock")?.widget ?? centerSlot.cellFor("clock")?.widget ?? leftSlot.cellFor("clock")?.widget ?? null
+        property: "expanded"
+        value: BarRegistry.openPanelId === "clock"
+        when: target !== null
+    }
+    Binding {
+        target: {
+            void leftSlot.mountedCount;
+            void centerSlot.mountedCount;
+            void rightSlot.mountedCount;
+            return rightSlot.cellFor("tray")?.widget ?? centerSlot.cellFor("tray")?.widget ?? leftSlot.cellFor("tray")?.widget ?? null;
+        }
+        property: "expanded"
+        value: BarRegistry.openPanelId === "tray"
+        when: target !== null
+    }
+
     Connections {
         target: panel._mapWidget
 
         function onExpandRequested(menu: bool): void {
+            if (Appearance.stage && !menu) {
+                panel.requestOverview();
+                return;
+            }
             // One pane per screen: the host's pane wins while it is up.
             if (panel.paneOpen)
                 return;
             if (panel.mapPaneOpen && !menu) {
-                panel.mapPaneOpen = false;
+                panel.closeMapPane(true);
                 return;
             }
             panel.mapPaneMenuFocused = menu;
@@ -130,7 +136,7 @@ PanelWindow {
     // The surface pack on the band (A1 §2.4): the host's decoration
     // Component, instantiated over the band with `shell.phosphor.bar`.
     property Component decoration: null
-    readonly property rect bandRect: Qt.rect(0, Tokens.rail_thickness, panel.width, Tokens.bar_thickness - Tokens.rail_thickness)
+    readonly property rect bandRect: Qt.rect(band.x, band.y, band.width, band.height)
 
     // Where the engine put the external pane, in this screen's pixels, or
     // an empty rect while unknown. A Wayland client is never told where
@@ -188,8 +194,8 @@ PanelWindow {
     // left below the bar, whichever is less, so a short display never gets
     // a surface the compositor clips.
     readonly property int _usablePaneDepth: {
-        const available = (panel.screen ? panel.screen.height : 0) - Tokens.bar_thickness - Tokens.spacing_xl;
-        return available > 0 ? Math.min(panel.paneDepth, available) : panel.paneDepth;
+        const available = (panel.screen ? panel.screen.geometry.height : 0) - Tokens.bar_thickness - 40;
+        return available > 0 ? Math.min(Math.max(panel.paneDepth, 720), available) : panel.paneDepth;
     }
     // Surface reserved below the band for the pane. Reserved ONCE at
     // materialization: ShellEngine snapshots `thickness + shadowSize` when
@@ -205,6 +211,22 @@ PanelWindow {
     // first, content enters after, and on close the content leaves first
     // and the tether retracts.
     property real _paneProgress: panel._paneOpenEff ? 1 : 0
+
+    // A transient's tether. The pane state above only ever describes the
+    // engine-placed pane; a transient is a layer surface the shell composes
+    // and the bar never sees it, so the shell names the chip that owns it
+    // (BarRegistry.openPanelId) and this drops a wire from that chip to the
+    // band's edge. PaneTether already handles an unlocated surface that way
+    // — it is the same wire, just without a rect to run along.
+    readonly property bool _panelOpenHere: BarRegistry.openPanelId !== "" && BarRegistry.openPanelAnchorX >= 0 && (BarRegistry.openPanelScreen === "" || !panel.screen || BarRegistry.openPanelScreen === panel.screen.name)
+    property real _panelProgress: panel._panelOpenHere ? 1 : 0
+
+    Behavior on _panelProgress {
+        NumberAnimation {
+            duration: panel._panelOpenHere ? Motion.duration_reveal : Motion.duration_dismiss
+            easing: panel._panelOpenHere ? Motion.reveal : Motion.release
+        }
+    }
 
     Behavior on _paneProgress {
         NumberAnimation {
@@ -229,9 +251,14 @@ PanelWindow {
 
     // Bar layout: each slot is a list of groups; each group is an array of
     // widget ids separated from its neighbours by a hairline.
-    property var leftGroups: [["placementmap"], ["focusedapp"]]
-    property var centerGroups: [["clock"]]
-    property var rightGroups: [["systemmetrics"], ["media"], ["tray"], ["audio", "network", "bluetooth", "battery"], ["notification", "controlcenter", "power"]]
+    // Compare the layout value before replacing delegate models. Theme or
+    // tray preference changes must not destroy the widgets anchoring popups.
+    readonly property string _leftGroupsJson: JSON.stringify(Appearance.settings.barLayout.left.map(group => group.filter(id => panel.width >= 1100 || (id !== "focusedapp" && id !== "media"))).filter(group => group.length))
+    readonly property string _centerGroupsJson: JSON.stringify(Appearance.settings.barLayout.center.map(group => group.filter(id => panel.width >= 1100 || (id !== "focusedapp" && id !== "media"))).filter(group => group.length))
+    readonly property string _rightGroupsJson: JSON.stringify(Appearance.settings.barLayout.right.map(group => group.filter(id => panel.width >= 1100 || (id !== "focusedapp" && id !== "media"))).filter(group => group.length))
+    property var leftGroups: JSON.parse(_leftGroupsJson)
+    property var centerGroups: JSON.parse(_centerGroupsJson)
+    property var rightGroups: JSON.parse(_rightGroupsJson)
 
     // This screen's placement map, shared by the rail (which binds its
     // slice to the strip on a scrolling screen) and the map widget.
@@ -239,27 +266,23 @@ PanelWindow {
     readonly property bool _scrolling: panel.placementMap ? panel.placementMap.mode === 2 : false
     readonly property var _lens: panel.placementMap && panel._scrolling ? panel.placementMap.lens : null
 
-    // ─── The band ───────────────────────────────────────────────────────
-    Rectangle {
+    // Floating bar. Its transparent inset stays outside the input region.
+    ShellSurface {
         id: band
-
-        // The pack's capture item: a decoration wraps the band, and the
-        // widgets stay above it as siblings.
         property bool shaderAnchor: true
-
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: parent.top
-        anchors.topMargin: Tokens.rail_thickness
-        height: Tokens.bar_thickness - Tokens.rail_thickness
-        // phosphor-glass as the pack defines it for the bar (A2 §3.2):
-        // the navy tint at its 0.55 depth over a real backdrop blur, glow
-        // and sweep off. The blur is the compositor's, requested behind
-        // `bandRect` by the host (ShellEffects), since a client cannot
-        // sample what lies behind its own surface; this rectangle is the
-        // tint. Without a blur backend it reads as a plain navy tint.
-        color: Theme.surface
-        opacity: 0.55
+        x: Appearance.barInset
+        y: Appearance.bottom ? panel.height - Appearance.barOffset - Appearance.barHeight : Appearance.barOffset
+        width: panel.width - 2 * Appearance.barInset
+        height: Appearance.barHeight
+        accented: true
+        barSurface: true
+        radius: Appearance.stage ? Appearance.radius : Appearance.radius * 0.65
+    }
+    inputRegion: {
+        const areas = [panel.bandRect];
+        if (pane.visible && pane.enabled)
+            areas.push(Qt.rect(pane.x, pane.y, pane.width, pane.height));
+        return areas;
     }
 
     // The band's pack, between the band and everything drawn on it.
@@ -273,18 +296,19 @@ PanelWindow {
     // ─── The rail ───────────────────────────────────────────────────────
     SpectrumRail {
         id: rail
+        visible: false
 
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: parent.top
-        gleam: true
+        x: band.x + band.radius
+        y: band.y
+        width: band.width - 2 * band.radius
+        gleam: Appearance.glow && Appearance.motion
         // Bound axis on a scrolling screen: the rail shows the same slice
         // of the strip's gradient as the lens (A2 §3.3). The lens is the
         // viewport's fraction of the strip from Scrolling.stripModelJson,
         // so it narrows as columns pile up off screen; against an older
         // daemon the visible-cut fallback gives a full-width lens.
-        sliceStart: panel._lens && panel._lens.x !== undefined ? panel._lens.x : 0
-        sliceEnd: panel._lens && panel._lens.w !== undefined ? panel._lens.x + panel._lens.w : 1
+        sliceStart: panel._lens ? (panel._lens.vertical ? panel._lens.y : panel._lens.x) ?? 0 : 0
+        sliceEnd: panel._lens ? sliceStart + ((panel._lens.vertical ? panel._lens.h : panel._lens.w) ?? 1) : 1
     }
 
     // Overflow ends: on a scrolling screen with columns beyond an edge the
@@ -295,9 +319,9 @@ PanelWindow {
             required property int index
             readonly property bool _left: index === 0
             readonly property int _count: panel.placementMap ? (_left ? panel.placementMap.overflowLeft : panel.placementMap.overflowRight) : 0
-            visible: panel._scrolling && _count > 0
-            x: _left ? 0 : panel.width - width
-            y: 0
+            visible: false
+            x: _left ? band.x + band.radius : band.x + band.width - band.radius - width
+            y: rail.y
             width: 48
             height: Tokens.rail_thickness + 1
             color: Spectrum.at(_left ? Math.max(0, rail.sliceStart - 0.05) : Math.min(1, rail.sliceEnd + 0.05))
@@ -308,6 +332,7 @@ PanelWindow {
     // opacity, the same gradient sampled at the same x.
     Item {
         id: railHighlight
+        y: rail.y
 
         readonly property Item _cell: leftSlot.hoveredCell || centerSlot.hoveredCell || rightSlot.hoveredCell || _anchorCell
         readonly property Item _anchorCell: panel._paneProgress > 0.01 ? panel._anchorCell : null
@@ -355,7 +380,7 @@ PanelWindow {
             panel._trackCell(_cell);
             return _cell ? _cell.mapToItem(panel.contentItem, 0, 0).x : 0;
         }
-        y: 0
+        y: rail.y
         width: _cell ? _cell.width : 0
         height: active ? Tokens.rail_thickness * 2 : 0
         color: Spectrum.focus
@@ -396,35 +421,38 @@ PanelWindow {
     }
 
     // ─── Slots ──────────────────────────────────────────────────────────
-    Slot {
+    BarRegion {
         id: leftSlot
 
         anchors.left: parent.left
-        anchors.leftMargin: Tokens.spacing_m
+        anchors.leftMargin: Appearance.barInset + 12
         anchors.verticalCenter: band.verticalCenter
+        maximumWidth: Math.max(0, (panel.width - centerSlot.width) / 2 - Appearance.barInset - 24)
         groups: panel.leftGroups
         registry: BarRegistry
         screenWidth: panel.width
         screenName: panel.screen ? panel.screen.name : ""
     }
 
-    Slot {
+    BarRegion {
         id: centerSlot
 
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.verticalCenter: band.verticalCenter
+        maximumWidth: Math.max(0, panel.width * 0.32 - Appearance.barInset)
         groups: panel.centerGroups
         registry: BarRegistry
         screenWidth: panel.width
         screenName: panel.screen ? panel.screen.name : ""
     }
 
-    Slot {
+    BarRegion {
         id: rightSlot
 
         anchors.right: parent.right
-        anchors.rightMargin: Tokens.spacing_m
+        anchors.rightMargin: Appearance.barInset + 12
         anchors.verticalCenter: band.verticalCenter
+        maximumWidth: Math.max(0, (panel.width - centerSlot.width) / 2 - Appearance.barInset - 24)
         groups: panel.rightGroups
         registry: BarRegistry
         screenWidth: panel.width
@@ -446,6 +474,9 @@ PanelWindow {
     // its slot, and the centre slot moves with its width).
     function _trackCell(c: Item): void {
         void panel.width;
+        void leftSlot.scrollOffset;
+        void centerSlot.scrollOffset;
+        void rightSlot.scrollOffset;
         void leftSlot.x;
         void leftSlot.width;
         void centerSlot.x;
@@ -480,13 +511,21 @@ PanelWindow {
         const p = c.mapToItem(panel.contentItem, 0, 0);
         return Qt.rect(p.x, p.y, c.width, c.height);
     }
-    readonly property real _paneW: Math.min(panel._paneWidthEff, panel.width)
+    readonly property real _paneW: Math.min(panel._paneWidthEff, panel.width - 2 * Appearance.gap)
+    // Keep the map pane's geometry latched while its close animation is in
+    // flight. `mapPaneOpen` is cleared synchronously when the close starts,
+    // but the surface remains visible until `_paneProgress` reaches zero.
+    // Using the kept Loader state here prevents the pane from re-evaluating
+    // as a bar-anchored host pane for the final frames (which made it jump
+    // to the right before disappearing).
+    readonly property bool _mapPaneDisplayed: mapContent.showing
     // The map pane is as deep as its content; the host's pane takes the
-    // reserved depth.
-    readonly property int _paneDepthEff: panel.mapPaneOpen && mapContent.item && mapContent.item.implicitHeight > 0 ? Math.min(panel._usablePaneDepth, Math.round(mapContent.item.implicitHeight) + Tokens.rail_thickness) : panel._usablePaneDepth
-    // Right-aligned under the chip, clamped to the screen: a trailing chip
-    // gets a pane that ends where the chip ends.
-    readonly property real _paneX: Math.max(0, Math.min(panel.width - panel._paneW, panel._anchorCenterX + Tokens.spacing_l - panel._paneW))
+    // reserved depth. Keep the map content height through close as well as
+    // open so the collapsing surface does not resize underneath it.
+    readonly property int _paneDepthEff: panel._mapPaneDisplayed && mapContent.item && mapContent.item.implicitHeight > 0 ? Math.min(panel._usablePaneDepth, Math.round(mapContent.item.implicitHeight)) : panel._usablePaneDepth
+    // Center the map pane while it is displayed (including its close
+    // animation). A host pane remains right-aligned under its chip.
+    readonly property real _paneX: panel._mapPaneDisplayed ? Math.round((panel.width - panel._paneW) / 2) : Math.max(Appearance.gap, Math.min(panel.width - panel._paneW - Appearance.gap, panel._anchorCenterX + Tokens.spacing_l - panel._paneW))
     readonly property real _paneT: Spectrum.tForX(panel._paneX + panel._paneW / 2, panel.width)
 
     // The tether: rail hue at the chip's x, dropping from the rail to the
@@ -497,6 +536,7 @@ PanelWindow {
     // for an external pane not yet located, it drops to the band's edge.
     PaneTether {
         id: tether
+        visible: false
 
         anchors.fill: parent
         anchorX: panel._anchorCenterX
@@ -507,47 +547,50 @@ PanelWindow {
         sliceEnd: rail.sliceEnd
     }
 
+    // The transient's tether. Its own instance rather than a shared one
+    // because the two can be up at once — a status panel over the pane —
+    // and they hang from different chips.
+    PaneTether {
+        id: panelTether
+        visible: false
+
+        anchors.fill: parent
+        anchorX: BarRegistry.openPanelAnchorX
+        screenWidth: panel.width
+        progress: panel._panelProgress
+        sliceStart: rail.sliceStart
+        sliceEnd: rail.sliceEnd
+    }
+
+    Rectangle {
+        x: Math.round(panel.width / 2) - 1
+        y: Appearance.bottom ? band.y - 14 : band.y + band.height + 2
+        width: 2
+        height: 12
+        color: Appearance.accent
+        visible: panel.mapPaneOpen
+        opacity: panel._paneProgress
+    }
+
     // The pane.
     Item {
         id: pane
 
         x: panel._paneX
-        y: Tokens.bar_thickness
+        y: Appearance.bottom ? band.y - 14 - height : band.y + band.height + 14
         width: panel._paneW
         height: Math.max(0, panel._paneDepthEff * Math.max(0, Math.min(1, (panel._paneProgress - 0.2) / 0.8)))
-        clip: true
+        clip: false
         // Never for an external pane: the toplevel is the pane then.
         visible: height > 0 && !panel._paneExternalEff
         // Gate input the instant a close starts: an opacity-0 Item is still
         // hit-testable, and the collapse outlasts the fade.
         enabled: panel._paneOpenEff && !panel._paneExternalEff
 
-        Rectangle {
+        ShellSurface {
             anchors.fill: parent
-            radius: Tokens.radius_tile
-            color: Theme.surface_container
-            opacity: 0.96
-        }
-        SpectrumStroke {
-            anchors.fill: parent
-            radius: Tokens.radius_tile
-            t: panel._paneT
-            active: panel._paneOpenEff
-        }
-        // The pane's top edge carries the rail gradient over its own
-        // x-range, so it matches the bar above it in hue.
-        Item {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-            height: Tokens.rail_thickness
-            clip: true
-            SpectrumRail {
-                x: -pane.x
-                width: panel.width
-                height: Tokens.rail_thickness
-                opacity: 1
-            }
+            railT: panel._paneT
+            accented: panel.mapPaneOpen
         }
 
         // Latched by a plain flag rather than the Loader reading its own
@@ -614,15 +657,19 @@ PanelWindow {
             }
 
             anchors.fill: parent
-            anchors.topMargin: Tokens.rail_thickness
+            anchors.topMargin: 0
+            clip: true
             opacity: pane._p
             anchors.bottomMargin: -4 * (1 - pane._p)
             active: showing
             visible: showing
             sourceComponent: MapPane {
                 map: panel.placementMap
+                workspaces: Shell.Workspaces
+                mapFor: index => Shell.PlacementMap.forScreenDesktop(panel.screen ? panel.screen.name : "", index)
                 menuFocused: panel.mapPaneMenuFocused
-                onCloseRequested: panel.mapPaneOpen = false
+                onCloseRequested: restoreFocus => panel.closeMapPane(restoreFocus)
+                onOverviewRequested: panel.requestOverview()
             }
         }
     }

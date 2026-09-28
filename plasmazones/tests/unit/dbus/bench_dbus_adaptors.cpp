@@ -94,9 +94,7 @@ private Q_SLOTS:
     // Must use a value that StubSettings actually returns from its
     // getter — the stub ignores setters, so priming has no effect and
     // the guard only engages if we supply the stub's default.
-    // See StubSettings::adjacentThreshold() which returns 20. (Gaps are now
-    // read-only / setter-less, so a gap key would only ever measure the
-    // key-not-found early return — use a writable scalar instead.)
+    // See StubSettings::adjacentThreshold() which returns 20.
     // ─────────────────────────────────────────────────────────────────
     void benchSetSetting_unchanged()
     {

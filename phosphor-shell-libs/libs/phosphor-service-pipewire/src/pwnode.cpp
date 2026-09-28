@@ -19,6 +19,9 @@ public:
     quint32 channelCount = 0;
     QList<qreal> volumes;
     bool muted = false;
+    bool running = false;
+    bool hasTarget = false;
+    QString target;
 };
 
 PwNode::PwNode(quint32 id, QString mediaClass, PipeWireConnection* parent)
@@ -66,6 +69,52 @@ QString PwNode::nick() const
 QString PwNode::description() const
 {
     return d->description;
+}
+
+bool PwNode::running() const
+{
+    return d->running;
+}
+QString PwNode::mediaName() const
+{
+    return d->properties.value(QStringLiteral("media.name"));
+}
+void PwNode::applyRunning(bool running)
+{
+    if (d->running == running)
+        return;
+    d->running = running;
+    Q_EMIT infoChanged();
+}
+QString PwNode::applicationName() const
+{
+    return d->properties.value(QStringLiteral("application.name"));
+}
+QString PwNode::iconName() const
+{
+    return d->properties.value(QStringLiteral("application.icon-name"),
+                               d->properties.value(QStringLiteral("device.icon-name")));
+}
+QString PwNode::serial() const
+{
+    return d->properties.value(QStringLiteral("object.serial"));
+}
+QString PwNode::targetName() const
+{
+    return d->hasTarget ? d->target : d->properties.value(QStringLiteral("target.object"));
+}
+bool PwNode::canMove() const
+{
+    const auto value = d->properties.value(QStringLiteral("node.dont-move"));
+    return value != QLatin1String("true") && value != QLatin1String("1");
+}
+void PwNode::applyTarget(const QString& target, bool present)
+{
+    if (d->target == target && d->hasTarget == present)
+        return;
+    d->target = target;
+    d->hasTarget = present;
+    Q_EMIT infoChanged();
 }
 
 QString PwNode::mediaClass() const

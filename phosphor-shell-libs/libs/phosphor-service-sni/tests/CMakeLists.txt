@@ -30,7 +30,7 @@ else()
     endfunction()
 endif()
 function(_phosphorservicesni_test target source)
-    add_executable(${target} ${source})
+    qt_add_executable(${target} ${source})
     target_link_libraries(${target}
         PRIVATE
             Qt6::Test
@@ -53,6 +53,9 @@ _phosphorservicesni_test(test_phosphorservicesni_smoke test_smoke.cpp)
 # StatusNotifierItemModel lifecycle (host attach/detach, role names
 # as public contract, invalid-row no-ops).
 _phosphorservicesni_test(test_phosphorservicesni_itemmodel test_itemmodel.cpp)
+
+_phosphorservicesni_test(test_phosphorservicesni_trayitems test_trayitems.cpp)
+_phosphorservicesni_test(test_phosphorservicesni_watcherlifecycle test_watcherlifecycle.cpp)
 
 # DBusMenuModel without a real DBus source: just contract + no-op
 # invariants. Live-source coverage requires a fake session bus + a

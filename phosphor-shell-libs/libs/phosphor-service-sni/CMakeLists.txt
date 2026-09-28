@@ -30,12 +30,14 @@ if(NOT PROJECT_VERSION)
     set(CMAKE_CXX_STANDARD 20)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
     set(CMAKE_CXX_EXTENSIONS OFF)
-    set(CMAKE_AUTOMOC ON)
 endif()
 
 include(GenerateExportHeader)
 
 find_package(Qt6 ${PHOSPHORSERVICESNI_QT_MIN} REQUIRED COMPONENTS Core Gui Qml DBus)
+if(CMAKE_PROJECT_NAME STREQUAL "PhosphorServiceSni")
+    qt_standard_project_setup()
+endif()
 
 # The icon-theme resolver + image provider live in their own library
 # post Phase 2.0. SNI hands raw IconPixmap blobs to the image
@@ -96,6 +98,7 @@ set(phosphorservicesni_public_HDRS
     include/PhosphorServiceSni/QmlRegistration.h
     include/PhosphorServiceSni/StatusNotifierItem.h
     include/PhosphorServiceSni/StatusNotifierItemModel.h
+    include/PhosphorServiceSni/TrayItems.h
     include/PhosphorServiceSni/StatusNotifierHost.h
     include/PhosphorServiceSni/DBusMenuModel.h
 )
@@ -107,11 +110,12 @@ set(phosphorservicesni_SRCS
     src/statusnotifierhost.cpp
     src/statusnotifieritem.cpp
     src/statusnotifieritemmodel.cpp
+    src/trayitems.cpp
     src/dbusmenuhelpers.cpp
     src/dbusmenumodel.cpp
 )
 
-add_library(PhosphorServiceSni SHARED
+qt_add_library(PhosphorServiceSni SHARED
     ${phosphorservicesni_public_HDRS}
     ${phosphorservicesni_SRCS}
     ${phosphorservicesni_DBUS_GENERATED}

@@ -30,6 +30,9 @@ public:
     QString id;
     QString uuid;
     QString connectionType;
+    QString ssid;
+    QString security;
+    bool autoConnect = true;
 
     template<typename T, typename Signal>
     void setField(T& field, T val, Signal signal)
@@ -73,7 +76,10 @@ public:
 
     void applySettings(const QDBusArgument& arg)
     {
-        // a{sa{sv}}
+        // a{sa{sv}}. Read the wireless identity; profile names need not match SSIDs.
+        QString ssidValue;
+        QString securityValue;
+        bool autoValue = true;
         arg.beginMap();
         while (!arg.atEnd()) {
             arg.beginMapEntry();
@@ -86,13 +92,17 @@ public:
                 setField(uuid, dict.value(QStringLiteral("uuid")).toString(), &NetworkConnection::uuidChanged);
                 setField(connectionType, dict.value(QStringLiteral("type")).toString(),
                          &NetworkConnection::connectionTypeChanged);
-                // The "connection" group is the only one we read; stop here
-                // rather than demarshalling the remaining (often large)
-                // ipv4/ipv6/security dicts only to discard them.
-                break;
+                autoValue = dict.value(QStringLiteral("autoconnect"), true).toBool();
+            } else if (group == QLatin1String("802-11-wireless")) {
+                ssidValue = QString::fromUtf8(dict.value(QStringLiteral("ssid")).toByteArray());
+            } else if (group == QLatin1String("802-11-wireless-security")) {
+                securityValue = dict.value(QStringLiteral("key-mgmt")).toString();
             }
         }
         arg.endMap();
+        setField(ssid, ssidValue, &NetworkConnection::settingsChanged);
+        setField(security, securityValue, &NetworkConnection::settingsChanged);
+        setField(autoConnect, autoValue, &NetworkConnection::settingsChanged);
     }
 };
 
@@ -132,6 +142,19 @@ QString NetworkConnection::uuid() const
 QString NetworkConnection::connectionType() const
 {
     return d->connectionType;
+}
+
+QString NetworkConnection::ssid() const
+{
+    return d->ssid;
+}
+QString NetworkConnection::security() const
+{
+    return d->security;
+}
+bool NetworkConnection::autoConnect() const
+{
+    return d->autoConnect;
 }
 
 void NetworkConnection::_q_onUpdated()

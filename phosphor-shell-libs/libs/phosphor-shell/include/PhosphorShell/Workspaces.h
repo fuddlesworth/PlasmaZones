@@ -120,6 +120,7 @@ class PHOSPHORSHELL_EXPORT Workspaces : public QObject
     Q_PROPERTY(QAbstractListModel* model READ model CONSTANT)
     /// Identifier of the current workspace, or empty when unsupported.
     Q_PROPERTY(QString activeId READ activeId NOTIFY activeChanged)
+    Q_PROPERTY(QString activeName READ activeName NOTIFY activeChanged)
     /// 1-based position of the current workspace, for a plain numeric
     /// readout. Do NOT use it to address a workspace — see the class docs.
     Q_PROPERTY(int activeIndex READ activeIndex NOTIFY activeChanged)
@@ -135,6 +136,7 @@ public:
 
     [[nodiscard]] QAbstractListModel* model() const;
     [[nodiscard]] QString activeId() const;
+    [[nodiscard]] QString activeName() const;
     [[nodiscard]] int activeIndex() const;
     [[nodiscard]] int count() const;
     [[nodiscard]] bool isSupported() const;
@@ -159,6 +161,7 @@ private:
     // Last-published values, so the notifications are change-gated rather
     // than mirroring every refresh the manager performs.
     QString m_activeId;
+    QString m_activeName;
     int m_activeIndex = 0;
     int m_count = 0;
 };

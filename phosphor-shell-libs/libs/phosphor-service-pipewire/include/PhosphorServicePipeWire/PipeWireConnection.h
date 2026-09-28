@@ -146,6 +146,9 @@ public Q_SLOTS:
     void setDefaultSink(const QString& nodeName);
     /// As above for the audio source.
     void setDefaultSource(const QString& nodeName);
+    /// Set a playback stream's WirePlumber target. Empty name follows the
+    /// default output. Targets are validated again on the PipeWire loop.
+    void setStreamTarget(quint32 streamId, const QString& nodeName);
     /// Asynchronously write a per-channel volume array to the node
     /// with the given PipeWire global id. The write is dispatched onto
     /// the loop thread; consumers observe completion via the node's
@@ -170,6 +173,7 @@ public Q_SLOTS:
     void writeMuted(quint32 nodeId, bool muted);
 
 Q_SIGNALS:
+    void operationFailed(const QString& message);
     void connectedChanged();
     void daemonAvailableChanged();
     void defaultSinkNameChanged();

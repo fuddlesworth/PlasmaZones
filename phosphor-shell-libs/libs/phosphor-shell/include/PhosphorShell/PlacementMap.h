@@ -82,6 +82,7 @@ class PHOSPHORSHELL_EXPORT PlacementMapScreen : public QObject
     Q_PROPERTY(qreal aspect READ aspect NOTIFY aspectChanged)
     Q_PROPERTY(QRect workArea READ workArea NOTIFY workAreaChanged)
     Q_PROPERTY(QVariantList cells READ cells NOTIFY cellsChanged)
+    Q_PROPERTY(QVariantList windows READ windows NOTIFY windowsChanged)
     Q_PROPERTY(QVariantMap lens READ lens NOTIFY lensChanged)
     Q_PROPERTY(int overflowLeft READ overflowLeft NOTIFY overflowChanged)
     Q_PROPERTY(int overflowRight READ overflowRight NOTIFY overflowChanged)
@@ -90,6 +91,7 @@ class PHOSPHORSHELL_EXPORT PlacementMapScreen : public QObject
     Q_PROPERTY(int currentDesktop READ currentDesktop NOTIFY currentDesktopChanged)
     Q_PROPERTY(bool urgent READ isUrgent NOTIFY urgentChanged)
     Q_PROPERTY(QVariantList menuModel READ menuModel NOTIFY menuModelChanged)
+    Q_PROPERTY(bool layoutsAvailable READ layoutsAvailable NOTIFY layoutsAvailableChanged)
     Q_PROPERTY(int pinnedDesktop READ pinnedDesktop CONSTANT)
 
 public:
@@ -112,9 +114,16 @@ public:
     [[nodiscard]] QString screenName() const;
     [[nodiscard]] QString screenId() const;
     [[nodiscard]] int mode() const;
+    [[nodiscard]] bool layoutsAvailable() const;
     [[nodiscard]] qreal aspect() const;
     [[nodiscard]] QRect workArea() const;
     [[nodiscard]] QVariantList cells() const;
+    [[nodiscard]] QVariantList windows() const;
+    /// Activate a window from the complete navigation model.
+    Q_INVOKABLE void activateNavigationWindow(const QString& windowId);
+    /// Move any window in the navigation model, including offscreen columns.
+    Q_INVOKABLE void moveNavigationWindowToDesktop(const QString& windowId, int index);
+    Q_INVOKABLE void placeNavigationWindowInZone(const QString& windowId, const QString& zoneId);
     [[nodiscard]] QVariantMap lens() const;
     [[nodiscard]] int overflowLeft() const;
     [[nodiscard]] int overflowRight() const;
@@ -162,6 +171,7 @@ public:
     /// Re-fetch `menuModel` for the current mode. Async; `menuModelChanged`
     /// fires when the list is in.
     Q_INVOKABLE void refreshMenu();
+    Q_INVOKABLE void setPlacementMode(int mode);
     /// Apply one `menuModel` entry: assign the layout / algorithm /
     /// template to this screen and desktop, or run the verb.
     Q_INVOKABLE void applyMenuChoice(const QString& kind, const QString& id);
@@ -182,7 +192,7 @@ public:
     /// Re-read the mode for the current (screen, desktop, activity).
     void refreshMode();
     /// Re-read the work area.
-    void refreshGeometry();
+    Q_INVOKABLE void refreshGeometry();
     /// Occupancy (snapping) or focus (any mode) changed upstream.
     void occupancyChanged();
     /// A `windowsTileRequested` batch arrived; ignored unless it names us.
@@ -203,9 +213,11 @@ public:
 Q_SIGNALS:
     void screenIdChanged();
     void modeChanged();
+    void layoutsAvailableChanged();
     void aspectChanged();
     void workAreaChanged();
     void cellsChanged();
+    void windowsChanged();
     void lensChanged();
     void overflowChanged();
     void stripExtentChanged();
@@ -218,6 +230,12 @@ Q_SIGNALS:
 
 private:
     void resolveScreenId();
+    void initializeNavigation();
+    void fetchNavigation();
+private Q_SLOTS:
+    void requestNavigation();
+
+private:
     void fetchModeData();
     void fetchSnappingLayout();
     void fetchStrip();
@@ -307,8 +325,15 @@ private:
 
     // Source data, before occupancy and focus are layered on.
     QList<PlacementMapParser::Cell> m_source;
+    QList<PlacementMapParser::Cell> m_sourceWindows;
+    QList<PlacementMapParser::Cell> m_resolvedWindows;
+    QList<PlacementMapParser::Cell> m_nativeWindows;
+    QTimer m_navigationRefresh;
+    bool m_nativeAvailable = false;
+    int m_navigationGeneration = 0;
     QList<PlacementMapParser::TileRect> m_lastBatch;
     QRectF m_sourceLens;
+    bool m_sourceVertical = false;
     int m_sourceOverflowLeft = 0;
     int m_sourceOverflowRight = 0;
     int m_sourceStripExtentPx = 0;
@@ -318,6 +343,7 @@ private:
 
     // Published values, change-gated.
     QVariantList m_cells;
+    QVariantList m_windows;
     QVariantMap m_lens;
     QRect m_publishedWorkArea;
     qreal m_aspect = 0.0;

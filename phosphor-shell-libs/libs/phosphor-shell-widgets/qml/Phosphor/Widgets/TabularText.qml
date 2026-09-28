@@ -24,7 +24,7 @@ Text {
     font.features: ({
             "tnum": 1
         })
-    color: Theme.on_surface
+    color: Appearance.text
 
     onTextChanged: {
         if (tickOnChange)

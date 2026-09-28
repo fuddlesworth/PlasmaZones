@@ -1,0 +1,84 @@
+{
+    "id": "top-rail",
+    "name": "Top Rail",
+    "description": "A slim focus-aware accent rail along the top edge of the window. Its height, inset, softness, corner alignment and focused colours are independently riceable.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Borders",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "activeHeight",
+            "name": "Focused height",
+            "type": "int",
+            "default": 2,
+            "min": 1,
+            "max": 8,
+            "description": "Rail thickness while the window is focused (px)"
+        },
+        {
+            "id": "inactiveHeight",
+            "name": "Unfocused height",
+            "type": "int",
+            "default": 1,
+            "min": 1,
+            "max": 8,
+            "description": "Rail thickness while the window is unfocused (px)"
+        },
+        {
+            "id": "cornerRadius",
+            "name": "Corner alignment",
+            "type": "int",
+            "default": 18,
+            "min": 0,
+            "max": 64,
+            "description": "Keeps the rail ends aligned with the window's top corners (px)"
+        },
+        {
+            "id": "railInset",
+            "name": "Horizontal inset",
+            "type": "int",
+            "default": 0,
+            "min": 0,
+            "max": 32,
+            "description": "Additional inset from each corner-aligned end (px)"
+        },
+        {
+            "id": "edgeSoftness",
+            "name": "Edge softness",
+            "type": "float",
+            "default": 0.7,
+            "min": 0.1,
+            "max": 2.0,
+            "description": "Anti-aliased softness of the rail edges (px)"
+        },
+        {
+            "id": "squareWhenMaximized",
+            "name": "Square when maximized",
+            "type": "bool",
+            "default": true,
+            "description": "Remove the corner alignment inset while the window is maximized or fullscreen"
+        },
+        {
+            "id": "activeColor",
+            "name": "Focused colour",
+            "type": "color",
+            "default": "#e63daee9",
+            "description": "Rail colour at the ends of the focused window"
+        },
+        {
+            "id": "activeCenterColor",
+            "name": "Focused highlight",
+            "type": "color",
+            "default": "#e6ffffff",
+            "description": "Rail colour at the centre of the focused window"
+        },
+        {
+            "id": "inactiveColor",
+            "name": "Unfocused colour",
+            "type": "color",
+            "default": "#735c6370",
+            "description": "Rail colour while the window is unfocused"
+        }
+    ]
+}

@@ -43,7 +43,7 @@ private Q_SLOTS:
         QVERIFY(WallpaperCandidates::isImageFile(QStringLiteral("a.JPG")));
         QVERIFY(WallpaperCandidates::isImageFile(QStringLiteral("a.webp")));
         QVERIFY(!WallpaperCandidates::isImageFile(QStringLiteral("a.txt")));
-        QVERIFY(!WallpaperCandidates::isImageFile(QStringLiteral("a.svg")));
+        QVERIFY(WallpaperCandidates::isImageFile(QStringLiteral("a.svg")));
         QVERIFY(!WallpaperCandidates::isImageFile(QStringLiteral("noext")));
     }
 

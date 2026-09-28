@@ -397,11 +397,11 @@ QString LayoutAdaptor::getScreenStates()
         const int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
         const auto entry = m_layoutManager->assignmentEntryForScreen(screenId, desktop, activity);
 
-        QJsonObject obj;
-        obj[QLatin1String("screenId")] = screenId;
-        obj[QLatin1String("virtualDesktop")] = desktop;
-        obj[QLatin1String("activity")] = activity;
-        obj[QLatin1String("mode")] = static_cast<int>(entry.mode);
+        QJsonObject obj{{QLatin1String("screenId"), screenId},
+                        {QLatin1String("virtualDesktop"), desktop},
+                        {QLatin1String("activity"), activity},
+                        {QLatin1String("mode"), static_cast<int>(entry.mode)}};
+        obj[QLatin1String("layoutsAvailable")] = m_layoutsAvailableResolver && m_layoutsAvailableResolver(screenId);
 
         // Snapping layout — use the resolved layout (includes the default
         // fallback), EXCEPT when the default is suppressed for this context

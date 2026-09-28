@@ -651,5 +651,9 @@ target_link_libraries(plasmazones-settings
         KF6::Kirigami
 )
 
+if(BUILD_PHOSPHOR_SHELL)
+    target_link_libraries(plasmazones-settings PRIVATE plasmazones_shellappearance)
+endif()
+
 install(TARGETS plasmazones-settings DESTINATION ${KDE_INSTALL_BINDIR})
 install(FILES org.plasmazones.settings.desktop DESTINATION ${KDE_INSTALL_APPDIR})

@@ -5,8 +5,7 @@
 #
 #  - test_phosphor_shell_lock: a QtQuickTest harness. Cases live in the
 #    tst_*.qml files; tst_lock.cpp is the QUICK_TEST_MAIN entry point. It
-#    covers the largest-empty-region function (LockRegion.js), the outline
-#    count of LockLayout, and the auth field's phase transitions against a
+#    covers responsive layout, shared input, and auth phase transitions against a
 #    fake LockService.
 #  - test_phosphor_shell_lock_surface: a Qt Test binary for the
 #    LockSurface window's one hard rule, that it refuses to exist while no
@@ -87,3 +86,8 @@ target_link_libraries(test_phosphor_shell_lock_surface
 )
 add_test(NAME test_phosphor_shell_lock_surface COMMAND test_phosphor_shell_lock_surface)
 phosphorshelllock_isolate_test(test_phosphor_shell_lock_surface)
+
+add_executable(test_phosphor_lock_keyboard test_lockkeyboard.cpp)
+target_link_libraries(test_phosphor_lock_keyboard PRIVATE ${_phosphorshelllock_test_libs} Qt6::Test Qt6::DBus)
+add_test(NAME test_phosphor_lock_keyboard COMMAND test_phosphor_lock_keyboard)
+phosphorshelllock_isolate_test(test_phosphor_lock_keyboard)

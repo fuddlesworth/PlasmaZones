@@ -14,6 +14,7 @@
 
 import QtQuick
 import QtTest
+import Phosphor.Theme
 import Phosphor.Launcher
 
 TestCase {
@@ -272,6 +273,94 @@ TestCase {
         });
         keyClick(Qt.Key_Escape);
         compare(dismissed.count, 1, "Escape emits dismissed");
+    }
+
+    Component {
+        id: fakeCatalog
+        QtObject {
+            property var pinnedApplications: [
+                {
+                    id: "kate",
+                    name: "Kate",
+                    iconName: "org.kde.kate"
+                }
+            ]
+            property string launched: ""
+            function launchPinned(id) {
+                launched = id;
+                return true;
+            }
+            function isPinned(id) {
+                return id === "kate";
+            }
+            function togglePinned(id) {
+            }
+        }
+    }
+    Component {
+        id: fakeWorkspace
+        QtObject {
+            property var windows: [
+                {
+                    windowId: "kate|one",
+                    title: "Shell.qml",
+                    appId: "org.kde.kate"
+                },
+                {
+                    windowId: "dolphin|two",
+                    title: "Files",
+                    appId: "org.kde.dolphin"
+                }
+            ]
+            property string activated: ""
+            function activateNavigationWindow(id) {
+                activated = id;
+            }
+        }
+    }
+    function test_wide_layout_uses_workspace_ids_and_pins() {
+        const previous = Appearance.settings.presentation;
+        AppearanceStore.setValue("presentation", "stage");
+        try {
+            const catalog = createTemporaryObject(fakeCatalog, testCase);
+            const map = createTemporaryObject(fakeWorkspace, testCase);
+            const t = makeLauncher();
+            t.launcher.wide = true;
+            t.launcher.catalog = catalog;
+            t.launcher.map = map;
+            tryCompare(t.launcher, "stageHome", true);
+            keyClick(Qt.Key_Down);
+            keyClick(Qt.Key_Return);
+            compare(map.activated, "dolphin|two");
+            keyClick(Qt.Key_Left);
+            keyClick(Qt.Key_Return);
+            compare(catalog.launched, "kate");
+            keyClick(Qt.Key_Tab);
+            compare(t.results.providerFilter, "windows");
+            compare(t.launcher.stageHome, false);
+        } finally {
+            AppearanceStore.setValue("presentation", previous);
+        }
+    }
+
+    function test_overview_style_does_not_move_or_expand_launcher() {
+        const previous = Appearance.settings.presentation;
+        try {
+            AppearanceStore.setValue("presentation", "navigator");
+            const t = makeLauncher();
+            t.launcher.catalog = createTemporaryObject(fakeCatalog, testCase);
+            const initialWidth = t.launcher.implicitWidth;
+            const initialHeight = t.launcher.implicitHeight;
+            AppearanceStore.setValue("presentation", "stage");
+            wait(0);
+            compare(t.launcher.implicitWidth, initialWidth);
+            compare(t.launcher.implicitHeight, initialHeight);
+            compare(t.launcher.stageHome, false);
+            compare(t.launcher.popoutTopInset, 145);
+            compare(t.launcher.popoutBottomInset, undefined);
+        } finally {
+            AppearanceStore.setValue("presentation", previous);
+        }
     }
 
     Component {

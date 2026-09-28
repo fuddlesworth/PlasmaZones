@@ -74,6 +74,8 @@ public:
     Q_INVOKABLE void removeDevice(const QString& devicePath);
 
 Q_SIGNALS:
+    /// Completion of a write request; state follows BlueZ properties.
+    void operationFinished(const QString& operation, const QString& errorName);
     void addressChanged();
     void nameChanged();
     void aliasChanged();

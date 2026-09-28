@@ -79,9 +79,8 @@ ControlCenterController::ControlCenterController(PhosphorServiceIdle::IdleServic
         m_tileIds.append(spec.id);
     };
 
-    // Order here is the order they appear in the grid. The two sliders sit
-    // last because they span the full width, so the three half-width
-    // toggles (network, bluetooth, idle) pack cleanly above them.
+    // Connection tiles precede the levels. QuickSettingsSurface filters idle
+    // because its Focus control manages notification quiet mode separately.
     reg({.id = QStringLiteral("network"),
          .displayName = QStringLiteral("Wi-Fi"),
          .typeName = QStringLiteral("NetworkTile"),
@@ -242,6 +241,18 @@ QQuickItem* ControlCenterController::createTile(const QString& id, QQuickItem* p
         return nullptr;
     }
     return factory->createTile(engine, parent);
+}
+
+void ControlCenterController::requestPanel(const QString& panelId)
+{
+    if (!panelId.isEmpty())
+        Q_EMIT panelRequested(panelId);
+}
+
+void ControlCenterController::requestControlCenter(const QString& panelId)
+{
+    if (!panelId.isEmpty())
+        Q_EMIT controlCenterRequested(panelId);
 }
 
 } // namespace PhosphorShellApp

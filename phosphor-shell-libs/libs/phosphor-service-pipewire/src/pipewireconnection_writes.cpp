@@ -51,7 +51,7 @@ int PipeWireConnection::Private::dispatchDefaultWrite(struct spa_loop* loop, boo
 void PipeWireConnection::Private::doDefaultWrite(const DefaultWriteRequest& req)
 {
     if (!defaultMetadata) {
-        qCDebug(lcPipeWire) << "default-write before metadata bind; dropping" << req.key;
+        reportOperationFailure(PipeWireConnection::tr("The audio session manager isn’t available."));
         return;
     }
     // Reject empty-string node names: WirePlumber's interpretation of
@@ -82,8 +82,44 @@ void PipeWireConnection::Private::doDefaultWrite(const DefaultWriteRequest& req)
     // for parity with the loop-dispatch failure path so a dropped
     // default-write isn't completely invisible.
     if (rc < 0) {
-        qCDebug(lcPipeWire) << "pw_metadata_set_property failed for key" << req.key << "rc" << rc;
+        reportOperationFailure(PipeWireConnection::tr("Couldn’t change the default audio device."));
     }
+}
+
+void PipeWireConnection::Private::reportOperationFailure(const QString& message)
+{
+    QMetaObject::invokeMethod(
+        q,
+        [owner = q, message] {
+            Q_EMIT owner->operationFailed(message);
+        },
+        Qt::QueuedConnection);
+}
+int PipeWireConnection::Private::dispatchRouteWrite(struct spa_loop*, bool, uint32_t, const void*, size_t, void* data)
+{
+    std::unique_ptr<RouteWriteRequest> request(static_cast<RouteWriteRequest*>(data));
+    request->owner->doRouteWrite(*request);
+    return 0;
+}
+void PipeWireConnection::Private::doRouteWrite(const RouteWriteRequest& request)
+{
+    const auto stream = loopNodes.find(request.streamId);
+    bool targetPresent = request.targetName.isEmpty();
+    for (const auto& [id, node] : loopNodes) {
+        Q_UNUSED(id);
+        if (node->mediaClass == QLatin1String("Audio/Sink") && node->serial == request.targetSerial)
+            targetPresent = true;
+    }
+    if (!defaultMetadata || stream == loopNodes.end() || stream->second->serial != request.streamSerial
+        || !targetPresent) {
+        reportOperationFailure(PipeWireConnection::tr("The stream or output device is no longer available."));
+        return;
+    }
+    const auto value = request.targetName.isEmpty() ? QByteArray("-1") : request.targetName.toUtf8();
+    if (pw_metadata_set_property(reinterpret_cast<pw_metadata*>(defaultMetadata), request.streamId, "target.object",
+                                 "Spa:String", value.constData())
+        < 0)
+        reportOperationFailure(PipeWireConnection::tr("Couldn’t change this app’s output device."));
 }
 
 template<typename Req>
@@ -294,6 +330,34 @@ void PipeWireConnection::setDefaultSource(const QString& nodeName)
         .nodeName = nodeName,
     });
     d->submitLoopRequest(std::move(req), &Private::dispatchDefaultWrite, "setDefaultSource");
+}
+
+void PipeWireConnection::setStreamTarget(quint32 streamId, const QString& nodeName)
+{
+    auto* stream = d->guiNodes.value(streamId, nullptr);
+    if (!stream || stream->mediaClass() != QLatin1String("Stream/Output/Audio") || !stream->canMove()) {
+        Q_EMIT operationFailed(tr("This app’s audio stream cannot be moved."));
+        return;
+    }
+    QString targetSerial;
+    for (auto* node : std::as_const(d->guiNodes)) {
+        if (node->name() == nodeName && node->mediaClass() == QLatin1String("Audio/Sink")) {
+            targetSerial = node->serial();
+            break;
+        }
+    }
+    if ((!nodeName.isEmpty() && targetSerial.isEmpty()) || stream->serial().isEmpty()) {
+        Q_EMIT operationFailed(tr("The stream or output device is no longer available."));
+        return;
+    }
+    auto request = std::make_unique<Private::RouteWriteRequest>();
+    request->owner = d.get();
+    request->streamId = streamId;
+    request->streamSerial = stream->serial();
+    request->targetName = nodeName;
+    request->targetSerial = targetSerial;
+    if (!d->submitLoopRequest(std::move(request), &Private::dispatchRouteWrite, "setStreamTarget"))
+        Q_EMIT operationFailed(tr("The audio service isn’t available."));
 }
 
 // submitLoopRequest is instantiated implicitly for ParamWriteRequest

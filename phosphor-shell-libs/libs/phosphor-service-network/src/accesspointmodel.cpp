@@ -252,4 +252,9 @@ void AccessPointModel::_q_onAccessPointRemoved(const QDBusObjectPath& path)
     removeAccessPoint(path.path());
 }
 
+AccessPoint* AccessPointModel::accessPointAt(int index) const
+{
+    return index >= 0 && index < m_rows.size() ? m_rows.at(index) : nullptr;
+}
+
 } // namespace PhosphorServiceNetwork

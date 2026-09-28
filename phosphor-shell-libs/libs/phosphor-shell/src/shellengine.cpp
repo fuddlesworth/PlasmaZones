@@ -4,25 +4,11 @@
 #include <PhosphorShell/ShellEngine.h>
 
 #include <PhosphorShell/Environment.h>
-#include <PhosphorShell/FileView.h>
-#include <PhosphorShell/FloatingWindow.h>
-#include <PhosphorShell/LazyLoader.h>
-#include <PhosphorShell/Toplevels.h>
-#include <PhosphorShell/PlacementMap.h>
-#include <PhosphorShell/Workspaces.h>
 #include <PhosphorShell/PanelWindow.h>
-#include <PhosphorShell/PerScreenPanels.h>
 #include <PhosphorShell/PersistentProperties.h>
-#include <PhosphorShell/PopupWindow.h>
 #include <PhosphorShell/QmlRegistration.h>
-#include <PhosphorShell/Process.h>
 #include <PhosphorShell/ScreenModel.h>
 #include <PhosphorShell/ShellGlobal.h>
-#include <PhosphorShell/SystemClock.h>
-#include <PhosphorShell/SystemUsage.h>
-#include <PhosphorShell/Variants.h>
-
-#include <PhosphorWayland/IdleInhibitor.h>
 
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/IScreenProvider.h>
@@ -30,7 +16,6 @@
 #include <PhosphorLayer/Surface.h>
 #include <PhosphorLayer/SurfaceConfig.h>
 #include <PhosphorLayer/SurfaceFactory.h>
-#include <PhosphorRendering/ShaderEffect.h>
 
 #include <QPointer>
 #include <QRect>
@@ -51,7 +36,6 @@
 #include <algorithm>
 #include <cmath>
 #include <memory>
-#include <mutex>
 
 namespace {
 // Coalescing window for a rebuild. It serves TWO requirements, which is worth
@@ -71,64 +55,6 @@ Q_LOGGING_CATEGORY(lcShellEngine, "phosphorshell.engine")
 } // namespace
 
 namespace PhosphorShell {
-
-void registerQmlTypes()
-{
-    // QML type registration is process-global (Qt's registry, not per-
-    // engine). Guard with std::call_once so multiple ShellEngines in
-    // the same process (sequential tests, future multi-shell daemon)
-    // don't trip Qt's "type already registered" warning on the second
-    // construction. The registrations themselves are unchanged.
-    static std::once_flag s_qmlRegistered;
-    std::call_once(s_qmlRegistered, [] {
-        qmlRegisterType<PanelWindow>("Phosphor.Shell", 1, 0, "PanelWindow");
-        qmlRegisterType<PopupWindow>("Phosphor.Shell", 1, 0, "PopupWindow");
-        qmlRegisterType<FloatingWindow>("Phosphor.Shell", 1, 0, "FloatingWindow");
-        qmlRegisterType<Variants>("Phosphor.Shell", 1, 0, "Variants");
-        // One panel per screen. Distinct from Variants and PerScreen
-        // because materializePanels() takes ownership of what it finds:
-        // instances must be QObject children to be discovered at all, and
-        // their creator must never destroy them afterwards. See the class
-        // docs for why the stock instantiators cannot satisfy both.
-        qmlRegisterType<PerScreenPanels>("Phosphor.Shell", 1, 0, "PerScreenPanels");
-        qmlRegisterType<LazyLoader>("Phosphor.Shell", 1, 0, "LazyLoader");
-        qmlRegisterType<Process>("Phosphor.Shell", 1, 0, "Process");
-        qmlRegisterType<FileView>("Phosphor.Shell", 1, 0, "FileView");
-        qmlRegisterType<PersistentProperties>("Phosphor.Shell", 1, 0, "PersistentProperties");
-        qmlRegisterType<PhosphorRendering::ShaderEffect>("Phosphor.Shell", 1, 0, "ShaderBackground");
-        // ForeignToplevel is uncreatable from QML — it's only ever vended by
-        // Toplevels via the toplevelAdded signal / toplevels list. Registering
-        // it as uncreatable lets QML resolve `PhosphorWayland.ForeignToplevel`
-        // type names in delegates (`required property var modelData` doesn't
-        // need the registration, but `as ForeignToplevel` casts do).
-        qmlRegisterUncreatableType<PhosphorWayland::ForeignToplevel>(
-            "Phosphor.Shell", 1, 0, "ForeignToplevel",
-            QStringLiteral("ForeignToplevel is owned by Toplevels and cannot be constructed from QML"));
-        qmlRegisterType<SystemClock>("Phosphor.Shell", 1, 0, "SystemClock");
-        // CPU / memory sampling. Kept in C++ rather than parsed from
-        // /proc in QML: the jiffy-delta arithmetic and the malformed-layout
-        // handling are logic, not presentation.
-        qmlRegisterType<SystemUsage>("Phosphor.Shell", 1, 0, "SystemUsage");
-        // Surface-bound idle inhibition (zwp-idle-inhibit-v1): a QML window keeps
-        // its own output awake while visible. This stays a foundation primitive.
-        // Session-wide idle monitoring (ext-idle-notify-v1) is NOT registered here:
-        // it is owned by Phosphor.Service.Idle's IdleService (a multi-stage timeout
-        // policy + surface-less inhibition), registered in phosphor-shell/src/main.cpp, so a
-        // single monitor arms each timeout.
-        qmlRegisterType<PhosphorWayland::IdleInhibitor>("Phosphor.Shell", 1, 0, "IdleInhibitor");
-        qmlRegisterSingletonType<Toplevels>("Phosphor.Shell", 1, 0, "Toplevels", &Toplevels::create);
-        // Compositor workspaces (KWin's virtual desktops today). A
-        // singleton for the same reason Toplevels is one: the underlying
-        // manager holds one D-Bus subscription per process.
-        qmlRegisterSingletonType<Workspaces>("Phosphor.Shell", 1, 0, "Workspaces", &Workspaces::create);
-        // The placement engine's geometry per screen (the bar's live map).
-        // One set of daemon subscriptions per engine, screens vended by
-        // forScreen() under C++ ownership.
-        qmlRegisterSingletonType<PlacementMap>("Phosphor.Shell", 1, 0, "PlacementMap", &PlacementMap::create);
-        qmlRegisterUncreatableType<PlacementMapScreen>("Phosphor.Shell", 1, 0, "PlacementMapScreen",
-                                                       QStringLiteral("Vended by PlacementMap.forScreen()"));
-    });
-}
 
 ShellEngine::ShellEngine(Deps deps, QObject* parent)
     : QObject(parent)
@@ -358,45 +284,6 @@ void ShellEngine::teardown()
     m_engine.reset();
 }
 
-void ShellEngine::setupWatcher()
-{
-    // A qrc: shell URL has no local file to watch, and it is a reachable case
-    // (ShellLoader falls back to the bundled example). Without this the two
-    // addPath calls below would each log "path is empty" at every startup.
-    if (!m_shellUrl.isLocalFile()) {
-        qCDebug(lcShellEngine) << "shell URL is not a local file; hot reload disabled";
-        return;
-    }
-    if (m_watcher) {
-        return;
-    }
-
-    m_watcher = new QFileSystemWatcher(this);
-
-    // Both returns are checked. When the per-user inotify watch limit is
-    // exhausted these fail, and hot reload then stops working for the life of
-    // the process with nothing logged at any level: the re-arm below can only
-    // run from a reload, and the missing watch is what would have caused one.
-    const QString filePath = m_shellUrl.toLocalFile();
-    if (!m_watcher->addPath(filePath)) {
-        qCWarning(lcShellEngine) << "could not watch" << filePath
-                                 << "— hot reload is disabled (inotify watch limit reached?)";
-    }
-
-    const QString dir = QFileInfo(filePath).absolutePath();
-    if (!m_watcher->addPath(dir)) {
-        qCWarning(lcShellEngine) << "could not watch" << dir << "— an atomic-rename save will not trigger a reload";
-    }
-
-    auto kickReload = [this]() {
-        m_reloadTimer->start();
-    };
-    connect(m_watcher, &QFileSystemWatcher::fileChanged, this, kickReload);
-    connect(m_watcher, &QFileSystemWatcher::directoryChanged, this, kickReload);
-
-    qCDebug(lcShellEngine) << "Watching for changes:" << filePath;
-}
-
 void ShellEngine::onScreensChanged()
 {
     // Coalesce bursts of screen-topology events (KVM switches, lid toggles,
@@ -407,6 +294,11 @@ void ShellEngine::onScreensChanged()
     // in the constructor and lives as long as `this`, so no null-guard
     // is needed.
     qCDebug(lcShellEngine) << "Screen topology changed, scheduling shell reload";
+    m_reloadTimer->start();
+}
+
+void ShellEngine::requestReload()
+{
     m_reloadTimer->start();
 }
 
@@ -652,25 +544,12 @@ bool ShellEngine::materializePanels(QString* failureReason)
 
         PhosphorLayer::Role role;
         role = role.withAnchors(anchors).withScopePrefix(QStringLiteral("phosphor-shell"));
-        // Per-panel keyboard interactivity from the QML property —
-        // defaults to None so clicking the panel doesn't steal focus
-        // from the user's active app (matches Plasma's panel
-        // behaviour). Popups attached to the panel still get their
-        // own xdg_popup grab and can receive keyboard input even
-        // when the parent panel is None.
-        PhosphorLayer::KeyboardInteractivity interactivity = PhosphorLayer::KeyboardInteractivity::None;
-        switch (panel->keyboardFocus()) {
-        case PanelWindow::None:
-            interactivity = PhosphorLayer::KeyboardInteractivity::None;
-            break;
-        case PanelWindow::OnDemand:
-            interactivity = PhosphorLayer::KeyboardInteractivity::OnDemand;
-            break;
-        case PanelWindow::Exclusive:
-            interactivity = PhosphorLayer::KeyboardInteractivity::Exclusive;
-            break;
-        }
-        role = role.withKeyboard(interactivity);
+        const auto panelKeyboard = [panel] {
+            return panel->keyboardFocus() == PanelWindow::Exclusive ? PhosphorLayer::KeyboardInteractivity::Exclusive
+                : panel->keyboardFocus() == PanelWindow::OnDemand   ? PhosphorLayer::KeyboardInteractivity::OnDemand
+                                                                    : PhosphorLayer::KeyboardInteractivity::None;
+        };
+        role = role.withKeyboard(panelKeyboard());
 
         switch (panel->panelLayer()) {
         case PanelWindow::LayerBackground:
@@ -691,11 +570,9 @@ bool ShellEngine::materializePanels(QString* failureReason)
             // Role::isValid REJECTS an Overlay that reserves or respects a
             // zone, and the factory refuses to create on an invalid role, so
             // every branch below would make an overlay panel fail outright.
-            // -1 is the only value an overlay can carry.
             // exclusiveZoneEnabled defaults to TRUE, so testing it alone
             // would warn for every overlay panel that never asked for
-            // anything. Warn only when a branch below would really have
-            // reserved a zone.
+            // anything. Warn only for a requested reservation.
             const bool wouldHaveReserved =
                 panel->exclusiveZone() >= 0 || (effectiveFill && panel->exclusiveZoneEnabled());
             if (wouldHaveReserved) {
@@ -703,6 +580,8 @@ bool ShellEngine::materializePanels(QString* failureReason)
                     << "PanelWindow asks for an exclusive zone on the Overlay layer, which cannot reserve one;"
                     << "ignoring the zone request";
             }
+            role = role.withExclusiveZone(-1);
+        } else if (panel->panelLayer() == PanelWindow::LayerBackground && !panel->exclusiveZoneEnabled()) {
             role = role.withExclusiveZone(-1);
         } else if (effectiveFill && panel->exclusiveZoneEnabled()) {
             role = role.withExclusiveZone(panel->thickness());
@@ -804,6 +683,9 @@ bool ShellEngine::materializePanels(QString* failureReason)
         }
         if (ownedSurface) {
             auto* surface = ownedSurface.get();
+            connect(panel, &PanelWindow::keyboardFocusChanged, surface, [surface, panelKeyboard] {
+                surface->setKeyboardInteractivity(panelKeyboard());
+            });
             m_surfaces.emplace_back(std::move(ownedSurface));
             // What this panel reserved, for reservedMarginsFor(). The zone
             // recorded is the Role's, i.e. what was actually advertised —

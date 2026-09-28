@@ -66,13 +66,8 @@ PhosphorSurfaceShaders::DecorationProfileTree makeBaselinePlusLeafTree()
     return tree;
 }
 
-/// The Phosphor shell's own surfaces live under the baseline-isolated
-/// `shell.*` root, so their seeds are injected even when the user engaged a
-/// global baseline chain (that is the isolation's purpose: a window chain
-/// must never veto the chrome's defaults). Every read of the settings tree
-/// therefore carries them; a user tree compares equal to its read-back only
-/// once it wears the same seeds.
-PhosphorSurfaceShaders::DecorationProfileTree withShellSeeds(const PhosphorSurfaceShaders::DecorationProfileTree& tree)
+/// Compare a user tree with the same runtime-independent card seeds.
+PhosphorSurfaceShaders::DecorationProfileTree withCardSeeds(const PhosphorSurfaceShaders::DecorationProfileTree& tree)
 {
     return tree.withSeedDefaults(ConfigDefaults::decorationProfileTree());
 }
@@ -84,6 +79,58 @@ class TestSettingsDecorationTree : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+
+    void runtimeSeedsNotifyWithoutPersistingOrMovingTheUserBaseline()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        settings.setInnerGap(9);
+        QVERIFY(settings.save());
+        const auto readFile = [&guard] {
+            QFile file(guard.configPath() + QStringLiteral("/plasmazones/config.json"));
+            return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
+        };
+        const auto saved = readFile();
+        QVERIFY(!saved.isEmpty());
+        auto seeds = settings.decorationSeedTree();
+        PhosphorSurfaceShaders::DecorationProfile shell;
+        shell.chain = QStringList{QStringLiteral("phosphor-glass")};
+        const auto path = PhosphorSurfaceShaders::decorationShellPhosphorBarPath();
+        seeds.setOverride(path, shell);
+        QSignalSpy changed(&settings, &Settings::decorationProfileTreeChanged);
+        bool announcedAsRuntime = false;
+        connect(&settings, &Settings::decorationProfileTreeChanged, this, [&] {
+            announcedAsRuntime = settings.isAnnouncingDecorationSeedChange();
+        });
+        settings.setDecorationSeedTree(seeds);
+        QCOMPARE(changed.count(), 1);
+        QVERIFY(announcedAsRuntime);
+        QVERIFY(!settings.isAnnouncingDecorationSeedChange());
+        QCOMPARE(settings.decorationProfileTree(), settings.committedDecorationProfileTree());
+        QCOMPARE(readFile(), saved);
+        settings.setDecorationSeedTree(seeds);
+        QCOMPARE(changed.count(), 1);
+
+        // An unrelated edit must not freeze the preview defaults into config.
+        auto tree = settings.decorationProfileTree();
+        PhosphorSurfaceShaders::DecorationProfile leaf;
+        leaf.chain = QStringList{QStringLiteral("glow")};
+        tree.setOverride(QStringLiteral("window.tiled"), leaf);
+        settings.setDecorationProfileTree(tree);
+        settings.save();
+        const auto stored = QJsonDocument::fromJson(readFile())
+                                .object()
+                                .value(QStringLiteral("Decorations"))
+                                .toObject()
+                                .value(QStringLiteral("DecorationProfileTree"))
+                                .toObject();
+        QVERIFY(!PhosphorSurfaceShaders::DecorationProfileTree::fromJson(stored).hasOverride(path));
+        shell.chain = QStringList{QStringLiteral("phosphor-motes")};
+        seeds.setOverride(path, shell);
+        settings.setDecorationSeedTree(seeds);
+        QCOMPARE(settings.decorationProfileTree().resolve(path).enabledChain(), *shell.chain);
+        QCOMPARE(settings.decorationProfileTree(), settings.committedDecorationProfileTree());
+    }
 
     /// A fresh config has no Decorations/DecorationProfileTree entry, so
     /// Settings::decorationProfileTree() must fall back to the canonical
@@ -104,13 +151,9 @@ private Q_SLOTS:
         const auto tree = settings.decorationProfileTree();
         QCOMPARE(tree, ConfigDefaults::decorationProfileTree());
         QVERIFY2(!tree.baseline().chain.has_value(), "default baseline must carry no chain (fully neutral)");
-        QStringList expectedPaths{QStringLiteral("osd"), QStringLiteral("popup.layoutPicker"),
-                                  QStringLiteral("popup.zoneSelector"), QStringLiteral("popup.cheatsheet")};
-#ifdef PLASMAZONES_HAVE_PHOSPHOR_SHELL
-        // The Phosphor shell's chrome seeds ride behind the shell gate.
-        expectedPaths += PhosphorSurfaceShaders::decorationShellPhosphorLeafPaths();
-#endif
-        QCOMPARE(tree.overriddenPaths(), expectedPaths);
+        QCOMPARE(tree.overriddenPaths(),
+                 (QStringList{QStringLiteral("osd"), QStringLiteral("popup.layoutPicker"),
+                              QStringLiteral("popup.zoneSelector"), QStringLiteral("popup.cheatsheet")}));
 
         // Every card surface resolves to the same border + theme-tinted shadow.
         const QStringList cardSurfaces{QStringLiteral("osd"), QStringLiteral("popup.layoutPicker"),
@@ -218,12 +261,12 @@ private Q_SLOTS:
         const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
         QVERIFY(doc.isObject());
         const auto parsed = PhosphorSurfaceShaders::DecorationProfileTree::fromJson(doc.object());
-        QCOMPARE(parsed, withShellSeeds(tree));
+        QCOMPARE(parsed, withCardSeeds(tree));
     }
 
-    /// setDecorationProfileTreeJson("") resets to the canonical default
-    /// (the EMPTY/neutral tree), exactly like the animation
-    /// shaderProfileTree facade. Clearing restores "no decoration".
+    /// setDecorationProfileTreeJson("") clears user overrides and restores
+    /// the current runtime seed defaults, exactly like the animation
+    /// shaderProfileTree facade.
     void testDecorationProfileTreeJson_emptyStringResetsToDefault()
     {
         IsolatedConfigGuard guard;
@@ -252,7 +295,7 @@ private Q_SLOTS:
         QSignalSpy spy(&settings, &Settings::decorationProfileTreeChanged);
         settings.setDecorationProfileTreeJson(QStringLiteral("{ this is not valid json"));
         QCOMPARE(spy.count(), 0);
-        QCOMPARE(settings.decorationProfileTree(), withShellSeeds(tree));
+        QCOMPARE(settings.decorationProfileTree(), withCardSeeds(tree));
     }
 
     /// committedDecorationProfileTree() is the baseline the per-surface

@@ -152,6 +152,10 @@ Q_SIGNALS:
     /// before deciding whether to retry, fall back or exit.
     void failed(const QString& reason);
 
+public Q_SLOTS:
+    /// Coalesced rebuild for configuration changes affecting surface geometry.
+    void requestReload();
+
 private Q_SLOTS:
     void onFileChanged();
     void onScreensChanged();

@@ -105,6 +105,17 @@ public:
     using ReservedMarginsProvider = std::function<QMargins(QScreen*)>;
     void setReservedMarginsProvider(ReservedMarginsProvider provider);
 
+    /// The decoration Component every popout's DecorationSlot instantiates
+    /// (ShellChrome.decorationComponent), asked for at each open so a
+    /// reload's fresh Component is the one handed over. Null = undecorated.
+    ///
+    /// Same shape as PanePopoutTransport's, and added because this route
+    /// had none: a user's surface pack stopped at the edge of everything
+    /// layer-routed, and the control center lost its pack outright when it
+    /// moved here from the pane route.
+    using DecorationProvider = std::function<QObject*()>;
+    void setDecorationProvider(DecorationProvider provider);
+
     /// Tear down every live surface synchronously, without notifying the
     /// controller. For shutdown and for the moment before a hot reload
     /// destroys the engine: the surfaces are about to become invalid either
@@ -162,6 +173,7 @@ private:
     PhosphorLayer::IScreenProvider* m_screens = nullptr;
     QPointer<QQmlEngine> m_engine;
     ReservedMarginsProvider m_reservedMargins;
+    DecorationProvider m_decorationProvider;
     QHash<QString, Entry> m_entries;
     std::function<void(const QString&)> m_dismissed;
     quint64 m_counter = 0;

@@ -9,6 +9,7 @@
 // parented into a regular Item or into a layer-shell wrapper Item.
 
 import Phosphor.Theme
+import Phosphor.Widgets
 import QtQuick
 
 // FocusScope, not Item, and that is load-bearing. The host claims focus while
@@ -83,12 +84,54 @@ FocusScope {
     //                hung just below the top reserved band — the bar's
     //                exclusive zone on this screen, in reservedTop — and
     //                aligned to the bar capsule's inset edges
+    //   "barItem"    hung below the same reserved band, but centred on
+    //                customX (the summoning widget's centre) and clamped
+    //                so a widget near an edge still yields a fully visible
+    //                frame
     //   "custom"     top-left at (customX, customY) in surface coordinates
     // Placement is the host's job, not the surface's: keeping the surface
     // full-bleed is what keeps the scrim, click-outside dismissal and the
     // keyboard grab exactly as they are for every placement.
+    // The surface pack drawn on this popout's frame (A1 §2.4), set by the
+    // transport from the composition root, exactly as PaneHost's is.
+    //
+    // Layer-routed popouts had no slot at all while pane-routed ones did,
+    // so a user's surface pack stopped at the edge of everything on this
+    // route — the launcher, the toasts, the bar's panels — and the control
+    // center LOST its pack the day it moved here from the pane route,
+    // trading the frame A3 §2 promised for a bare stroke.
+    property Component decoration: null
+    property var surfaceEffects: null
+    readonly property bool materialBlurred: Appearance.settings.material !== "solid"
+    readonly property real materialRadius: Appearance.radius
+    // Composite popups can leave transparent space between their panels.
+    // Blur only those panels, rather than their entire bounding rectangle.
+    readonly property rect materialRect: {
+        const region = contentFrame._visibleDelegate?.popoutBlurRect;
+        return region !== undefined ? Qt.rect(contentFrame.x + region.x, contentFrame.y + region.y, region.width, region.height) : Qt.rect(contentFrame.x, contentFrame.y, contentFrame.width, contentFrame.height);
+    }
+    readonly property rect secondaryMaterialRect: {
+        const region = contentFrame._visibleDelegate?.popoutSecondaryBlurRect;
+        return region !== undefined ? Qt.rect(contentFrame.x + region.x, contentFrame.y + region.y, region.width, region.height) : Qt.rect(0, 0, 0, 0);
+    }
+    function applyMaterial() {
+        if (surfaceEffects && !contentFrame.fullScreen)
+            surfaceEffects.setBlurBehind(root, materialBlurred ? materialRect : Qt.rect(0, 0, 0, 0), materialBlurred ? secondaryMaterialRect : Qt.rect(0, 0, 0, 0), materialRadius);
+    }
+    function clearMaterial() {
+        if (surfaceEffects)
+            surfaceEffects.setBlurBehind(root, Qt.rect(0, 0, 0, 0), Qt.rect(0, 0, 0, 0), materialRadius);
+    }
+    onMaterialRectChanged: Qt.callLater(applyMaterial)
+    onSecondaryMaterialRectChanged: Qt.callLater(applyMaterial)
+    onSurfaceEffectsChanged: Qt.callLater(applyMaterial)
+    onMaterialBlurredChanged: Qt.callLater(applyMaterial)
+    onMaterialRadiusChanged: Qt.callLater(applyMaterial)
+    Window.onWindowChanged: Qt.callLater(applyMaterial)
+
     property string placement: "center"
     property int reservedTop: 0
+    property int reservedBottom: 0
 
     // The horizontal inset a bar-anchored popout aligns to, matching the bar
     // capsule's own inset from the screen edge.
@@ -97,7 +140,7 @@ FocusScope {
     // `screenInset` as settable and invites overriding it: a host that moves
     // its capsule in from the edge has to move its popouts with it, or the
     // two stop lining up. The default is the token both sides use.
-    property int barInset: Tokens.spacing_xl
+    property int barInset: 22
     property real customX: 0
     property real customY: 0
 
@@ -218,6 +261,11 @@ FocusScope {
             if (root.keyboardFocus && !root.contentItem)
                 contentFrame.focusContentIfIdle();
         } else {
+            // Blur is a compositor effect on the whole layer surface, so it
+            // outlives the fading QML card unless explicitly cleared. Leave
+            // the surface itself to animate, but remove the blur region on
+            // the close edge so the old blue panel cannot remain behind it.
+            root.clearMaterial();
             // Known limitation: QTimer samples interval at start(), so
             // a Motion-token retune (theme switch mid-close) updates
             // dismissEmitter.interval via the binding below but does
@@ -237,6 +285,7 @@ FocusScope {
     onContentItemChanged: contentFrame.rebindContentItem()
     Component.onCompleted: {
         contentFrame.rebindContentItem();
+        Qt.callLater(applyMaterial);
         // Diagnostic: a host with neither contentItem nor
         // contentComponent renders an empty frame, which is silent in
         // QML and confusing in practice. Warn once at construction so
@@ -343,7 +392,7 @@ FocusScope {
         readonly property bool backdropShown: root.backdropColor.a > 0.01 || root.dismissOnClickOutside
 
         anchors.fill: parent
-        color: root.backdropColor
+        color: contentFrame.fullScreen ? "transparent" : root.backdropColor
         opacity: root.open ? 1 : 0
         // Bind visible to discrete cycle state (open OR a pending
         // close-animation), not to opacity > 0. The opacity binding
@@ -395,6 +444,11 @@ FocusScope {
     // bar-anchored popouts.
     Item {
         id: contentFrame
+
+        // Whether this frame is laid out against a surface that has a
+        // size, and has a size of its own. Until both hold, its x/y/width
+        // bindings are arithmetic on zeroes and it must not be shown.
+        readonly property bool _placed: root.width > 0 && root.height > 0 && width > 0 && height > 0
 
         // Tracks the contentItem currently parented under this
         // frame. Used by rebindContentItem to detach the previous
@@ -509,6 +563,23 @@ FocusScope {
             _lastBound = root.contentItem;
         }
 
+        // Prebuilt delegates follow the same bounded frame as Loader content.
+        // Restore caller sizing when the delegate is detached or replaced.
+        Binding {
+            target: root.contentItem
+            property: "width"
+            value: contentFrame.width
+            when: root.contentItem !== null
+            restoreMode: Binding.RestoreBindingOrValue
+        }
+        Binding {
+            target: root.contentItem
+            property: "height"
+            value: contentFrame.height
+            when: root.contentItem !== null
+            restoreMode: Binding.RestoreBindingOrValue
+        }
+
         // Explicit x/y rather than anchors.centerIn: an anchor would fight
         // every placement but "center". The bar placements align to the
         // capsule's inset (`barInset`, defaulting to the token BarHost uses)
@@ -526,6 +597,20 @@ FocusScope {
                 return root.barInset;
             case "barRight":
                 return Math.max(0, Math.round(root.width - width - root.barInset));
+            case "barItem":
+            case "barItemRight":
+                {
+                    // Centre on the widget, then keep the whole frame on screen.
+                    // The clamp is what makes this usable for the rightmost bar
+                    // widgets, whose centre is close enough to the edge that a
+                    // raw centring would hang half the panel off the output.
+                    // Math.min is applied BEFORE Math.max so that a frame wider
+                    // than the usable width lands at barInset rather than at a
+                    // negative x: the min would otherwise win and push it left.
+                    const centred = root.customX - (root.placement === "barItemRight" ? width : width / 2);
+                    const rightmost = root.width - width - root.barInset;
+                    return Math.round(Math.max(root.barInset, Math.min(centred, rightmost)));
+                }
             case "custom":
                 return Math.round(root.customX);
             default:
@@ -533,11 +618,19 @@ FocusScope {
             }
         }
         y: {
+            if (_visibleDelegate && _visibleDelegate.popoutBottomInset !== undefined)
+                return Math.max(Tokens.spacing_l, root.height - Math.max(root.reservedBottom + 6, _visibleDelegate.popoutBottomInset) - height);
+            if (_visibleDelegate && _visibleDelegate.popoutTopInset !== undefined)
+                return Math.max(Tokens.spacing_l, Math.min(_visibleDelegate.popoutTopInset, root.height - height - Tokens.spacing_l));
             switch (root.placement) {
+            case "bottomCenter":
+                return Math.max(Tokens.spacing_l, root.height - (root.reservedBottom > 0 ? root.reservedBottom + 6 : 36) - height);
             case "barLeft":
             case "barCenter":
             case "barRight":
-                return Math.round(root.reservedTop + Tokens.spacing_m);
+            case "barItem":
+            case "barItemRight":
+                return root.reservedBottom > root.reservedTop ? Math.max(0, Math.round(root.height - root.reservedBottom - height - 2)) : Math.round(root.reservedTop + 2);
             case "custom":
                 return Math.round(root.customY);
             default:
@@ -550,24 +643,69 @@ FocusScope {
         //
         // contentFrame can momentarily collapse to 0x0 during Loader
         // spin-up (between Loader.active flipping true and the
-        // instantiated item reporting its implicit size). The opacity
-        // Behavior masks this for the user (frame is invisible while
-        // open=false), and the next binding evaluation - once the
-        // delegate's implicitWidth/Height settle - inflates the frame
-        // before opacity reaches 1. Holding open until implicitWidth
-        // > 0 would require an extra state machine and trade one
-        // hidden transient for another; the opacity-gated transient
-        // is preferable.
+        // instantiated item reporting its implicit size), and the
+        // surface itself has NO SIZE until the compositor configures
+        // it. Both transients are hidden by `_placed` below rather
+        // than assumed to be invisible.
+        //
         // Clamped to the surface. The host fills the output, and a delegate
         // that reports an implicit size larger than the screen would be
         // centred with a negative offset and cut off on BOTH sides at once,
         // with no clip, scroll or shrink anywhere on the path. A short or
         // portrait output, or a fractional scale that shrinks the logical
         // size, reaches this with content that is fine on a typical display.
-        width: _visibleDelegate ? Math.min(_visibleDelegate.implicitWidth, root.width - 2 * Tokens.spacing_l) : 0
-        height: _visibleDelegate ? Math.min(_visibleDelegate.implicitHeight, root.height - 2 * Tokens.spacing_l) : 0
-        opacity: root.open ? 1 : 0
-        scale: root.open ? 1 : 0.96
+        //
+        // The clamp only applies once the surface HAS a size. Before the
+        // configure arrives root.width is 0, and clamping against it
+        // yielded `Math.min(implicitWidth, -2 * spacing_l)` — a NEGATIVE
+        // width — which then fed the x binding above and put the frame
+        // somewhere arbitrary. Measured at -32 px wide, at x 24 instead of
+        // 1366, before snapping into place on the configure.
+        readonly property bool fullScreen: _visibleDelegate && _visibleDelegate.fullScreen === true
+        width: fullScreen ? root.width : _visibleDelegate ? (root.width > 0 ? Math.min(_visibleDelegate.implicitWidth, root.width - 2 * Tokens.spacing_l) : _visibleDelegate.implicitWidth) : 0
+        height: fullScreen ? root.height : _visibleDelegate ? (root.height > 0 ? Math.min(_visibleDelegate.implicitHeight, root.height - ((root.placement.indexOf("bar") === 0 || root.placement === "bottomCenter") ? Math.max(root.reservedTop, root.reservedBottom) + Tokens.spacing_m + Tokens.spacing_l : 2 * Tokens.spacing_l)) : _visibleDelegate.implicitHeight) : 0
+        // Nothing is painted until the frame has a real size on a surface
+        // with a real size, so the first frame the user sees is already in
+        // its final position.
+        //
+        // This used to be `root.open ? 1 : 0` on the assumption that the
+        // frame is invisible while open is false. It is not: the transport
+        // sets open=true straight after surface->show(), which is BEFORE
+        // the compositor configures the surface, so the fade-in played over
+        // a frame that was still being laid out against a 0x0 output. That
+        // is the "it starts in the middle and pops into place" the panels
+        // were doing.
+        opacity: root.open && _placed ? 1 : 0
+        // A full-output scrim must cover the edges throughout the transition.
+        scale: fullScreen || root.open ? 1 : 0.96
+
+        // The surface pack's frame, wrapping the CONTENT FRAME rather than
+        // the surface: this host's surface is full-bleed on the output, so
+        // decorating it would draw the user's window frame around the whole
+        // screen. PaneHost anchors its slot to the surface because there
+        // the surface IS the pane.
+        //
+        // `contentItem` is the frame, which is what a pack captures and
+        // decorates. Declared BEFORE the hit-blocker so the blocker stays
+        // the topmost child and a pack cannot swallow the clicks the
+        // dismiss path depends on.
+        DecorationSlot {
+            anchors.fill: parent
+            // Full-output content owns the smaller surfaces it decorates.
+            component: contentFrame.fullScreen ? null : root.decoration
+            contentItem: contentFrame
+            surfacePath: "shell.phosphor.popout"
+            // Keep the active surface treatment through the close animation.
+            // `open` drops on the close edge, but the host remains rendered
+            // until dismissed fires; changing surface state mid-fade creates
+            // a distracting style jump.
+            focused: root.open || dismissEmitter.running
+            // SurfaceShaderItem is a custom render node and does not inherit
+            // the content frame's close transform directly. Route popup
+            // stages through layers so the finished decoration fades and
+            // scales with the content instead of lingering as a blue slab.
+            layeredStages: true
+        }
 
         // Hit-blocker. Without this, gaps inside the content area
         // (rounded-corner transparency, padding) propagate clicks

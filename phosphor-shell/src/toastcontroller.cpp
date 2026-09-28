@@ -66,17 +66,16 @@ QObject* ToastController::primaryHost()
 
 int ToastController::send(const QString& summary, const QString& body)
 {
+    return show({{QStringLiteral("summary"), summary}, {QStringLiteral("body"), body}, {QStringLiteral("urgency"), 1}});
+}
+
+int ToastController::show(const QVariantMap& toast)
+{
     QObject* host = primaryHost();
     if (!host) {
-        qWarning() << "ToastController: no toast host attached; dropping" << summary;
+        qWarning() << "ToastController: no toast host attached";
         return -1;
     }
-    // The shape ToastHost.show takes. No appName: a wire call has no app
-    // behind it, and the card hides an empty one.
-    QVariantMap toast;
-    toast.insert(QStringLiteral("summary"), summary);
-    toast.insert(QStringLiteral("body"), body);
-    toast.insert(QStringLiteral("urgency"), 1);
     // ToastHost.show is a QML function, so it is invoked by name with a
     // QVariant parameter, which is how the engine exposes it.
     QVariant result;
@@ -89,6 +88,25 @@ int ToastController::send(const QString& summary, const QString& body)
     bool ok = false;
     const int id = result.toInt(&ok);
     return ok ? id : -1;
+}
+
+void ToastController::update(const QVariantMap& notification)
+{
+    for (const auto& host : m_hosts)
+        if (host.object)
+            QMetaObject::invokeMethod(host.object, "updateNotification", Q_ARG(QVariant, QVariant(notification)));
+}
+void ToastController::remove(uint id)
+{
+    for (const auto& host : m_hosts)
+        if (host.object)
+            QMetaObject::invokeMethod(host.object, "dismiss", Q_ARG(QVariant, QVariant(id)));
+}
+void ToastController::clear()
+{
+    for (const auto& host : m_hosts)
+        if (host.object)
+            QMetaObject::invokeMethod(host.object, "clear");
 }
 
 } // namespace PhosphorShellApp

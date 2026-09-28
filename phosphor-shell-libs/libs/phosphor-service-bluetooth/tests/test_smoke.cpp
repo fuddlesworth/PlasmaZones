@@ -164,8 +164,10 @@ private Q_SLOTS:
         FakeBluez fake;
         fake.objects.insert(QDBusObjectPath(QLatin1String(kAdapterPath)),
                             InterfaceMap{{QLatin1String(kAdapterIface), adapterProps()}});
-        fake.objects.insert(QDBusObjectPath(QLatin1String(kDevicePath)),
-                            InterfaceMap{{QLatin1String(kDeviceIface), deviceProps()}});
+        fake.objects.insert(
+            QDBusObjectPath(QLatin1String(kDevicePath)),
+            InterfaceMap{{QLatin1String(kDeviceIface), deviceProps()},
+                         {QStringLiteral("org.bluez.Battery1"), {{QStringLiteral("Percentage"), uchar(78)}}}});
         QVERIFY(bus.registerObject(QStringLiteral("/"), &fake,
                                    QDBusConnection::ExportAdaptors | QDBusConnection::ExportAllContents));
 
@@ -183,6 +185,7 @@ private Q_SLOTS:
         QCOMPARE(adapter->name(), QStringLiteral("hci-test"));
         QCOMPARE(device->address(), QStringLiteral("AA:BB:CC:DD:EE:FF"));
         QVERIFY(!device->connected());
+        QCOMPARE(device->batteryPercentage(), 78);
         // UUIDs (`as`) survive the wire round-trip: over D-Bus the value nests
         // as a QDBusArgument inside the a{sv}, so this would be empty if the
         // demarshalling fell back to QVariant::toStringList().
@@ -194,6 +197,12 @@ private Q_SLOTS:
                                    {{QStringLiteral("Connected"), true}});
         QVERIFY(connectedSpy.wait(3000));
         QVERIFY(device->connected());
+
+        fake.emitPropertiesChanged(QLatin1String(kDevicePath), QStringLiteral("org.bluez.Battery1"),
+                                   {{QStringLiteral("Percentage"), uchar(62)}});
+        QTRY_COMPARE(device->batteryPercentage(), 62);
+        fake.emitInterfacesRemoved(QLatin1String(kDevicePath), {QStringLiteral("org.bluez.Battery1")});
+        QTRY_COMPARE(device->batteryPercentage(), -1);
 
         // Removing the device interface drops the row; removing the adapter
         // cascades (its devices go too, though here the device is already gone).
@@ -387,6 +396,41 @@ private Q_SLOTS:
         BluetoothHost host(QDBusConnection::sessionBus(), QStringLiteral("org.phosphor.test.AbsentBluez2"));
         QVERIFY(host.agent() != nullptr);
         QCOMPARE(host.agent()->pendingRequestCount(), 0);
+    }
+
+    void testHostsShareAgentAndReleaseExport()
+    {
+        const auto service = QStringLiteral("org.phosphor.test.SharedBluez");
+        auto first = std::make_unique<BluetoothHost>(QDBusConnection::sessionBus(), service);
+        auto second = std::make_unique<BluetoothHost>(QDBusConnection::sessionBus(), service);
+        QVERIFY(first->agent());
+        QCOMPARE(first->agent(), second->agent());
+        auto* agent = second->agent();
+        first.reset();
+        QSignalSpy request(agent, &BluetoothAgent::confirmationRequested);
+        agent->RequestConfirmation(QDBusObjectPath(QLatin1String(kDevicePath)), 123456);
+        QCOMPARE(request.count(), 1);
+        agent->respondConfirmation(request.at(0).at(2).toULongLong(), false);
+        QCOMPARE(agent->pendingRequestCount(), 0);
+        second.reset();
+        BluetoothHost reopened(QDBusConnection::sessionBus(), service);
+        QVERIFY(reopened.agent());
+    }
+
+    void testWriteFailuresReachConsumers()
+    {
+        BluetoothDevice device(QDBusConnection::sessionBus(), QLatin1String(kDevicePath), deviceProps());
+        QSignalSpy finished(&device, &BluetoothDevice::operationFinished);
+        device.connectDevice();
+        QTRY_COMPARE(finished.count(), 1);
+        QCOMPARE(finished.at(0).at(0).toString(), QStringLiteral("Connect"));
+        QVERIFY(!finished.at(0).at(1).toString().isEmpty());
+        BluetoothAdapter adapter(QDBusConnection::sessionBus(), QLatin1String(kAdapterPath), adapterProps());
+        QSignalSpy scanned(&adapter, &BluetoothAdapter::operationFinished);
+        adapter.startDiscovery();
+        QTRY_COMPARE(scanned.count(), 1);
+        QCOMPARE(scanned.at(0).at(0).toString(), QStringLiteral("StartDiscovery"));
+        QVERIFY(!scanned.at(0).at(1).toString().isEmpty());
     }
 
     void testAgentRemainingCallbacks()

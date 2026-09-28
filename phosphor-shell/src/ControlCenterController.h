@@ -97,6 +97,14 @@ public:
     // resolved from `parent` so QML need not pass it.
     [[nodiscard]] Q_INVOKABLE QQuickItem* createTile(const QString& id, QQuickItem* parent);
 
+    /// Forward a content action to the shell without relying on its QML ids.
+    Q_INVOKABLE void requestPanel(const QString& panelId);
+
+    /// Ask the owning shell context to return from a detail surface to the
+    /// control center. Popout content is created in the engine root context,
+    /// so it cannot call shell.qml ids directly.
+    Q_INVOKABLE void requestControlCenter(const QString& panelId);
+
     [[nodiscard]] QString openScreen() const;
 
     /// Set which output's bar shows the control center; empty closes it.
@@ -146,6 +154,8 @@ public:
     [[nodiscard]] int modeForScreen(const QString& screenName) const;
 
 Q_SIGNALS:
+    void panelRequested(const QString& panelId);
+    void controlCenterRequested(const QString& panelId);
     void openScreenChanged();
     void paneExternalChanged();
     void paneRectChanged();

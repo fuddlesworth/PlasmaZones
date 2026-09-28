@@ -1,22 +1,9 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# PhosphorShellLock, the Phosphor.Lock lockscreen surface (A3 §6).
-#
-# One C++ type, LockSurface (a QQuickWindow that is one output's
-# ext_session_lock_surface_v1, built on phosphor-wayland's LockSurface
-# marker and the QPA plugin's lock-surface role), plus the QML content:
-# LockScreen (the per-output composition), LockLayout (the placement map
-# as static spectrum outlines), LockAuthField (the 320 x 44 password
-# field), LockController (the one password behind every screen) and
-# LockRegion.js (the largest empty region of a placement map).
-#
-# Authentication is NOT here: the shell hands a LockService
-# (phosphor-service-lock) to LockController, which is duck-typed so the
-# tests drive it with a fake. Themed through phosphor-theme, built on the
-# phosphor-shell-widgets atoms (TabularText).
-#
-# Phase 4 deliverable per docs/phosphor-shell-design/04-implementation-plan.md.
+# Phosphor.Lock provides the ext-session-lock window, responsive lock-screen
+# composition, and a shared authentication controller. Services are injected
+# by the shell so previews and tests never require PAM or system actions.
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -37,12 +24,13 @@ endif()
 # so the static plugin's dependency walk resolves the Qt6::QuickShapes
 # target that Phosphor.Widgets links (its PhosphorRipple Shape) without a
 # configure warning. Same reason the launcher module finds it.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickShapes)
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui DBus Qml Quick QuickShapes)
 
 # Kirigami.Icon draws the app glyph in each outline and the field's lock
 # glyph. Same requirement as the bar, power, control-center and launcher
 # modules: a host without Kirigami cannot build this tier.
 find_package(KF6Kirigami REQUIRED)
+find_package(KF6GuiAddons REQUIRED)
 
 # The lock surface role comes from phosphor-wayland (LockSurface +
 # SessionLock). An in-tree sibling under BUILD_PHOSPHOR_SHELL; only
@@ -70,10 +58,13 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(_phosphor_lock_qml_files
     qml/Phosphor/Lock/LockScreen.qml
-    qml/Phosphor/Lock/LockLayout.qml
+    qml/Phosphor/Lock/LockBackdrop.qml
+    qml/Phosphor/Lock/LockClock.qml
+    qml/Phosphor/Lock/LockCard.qml
+    qml/Phosphor/Lock/LockMedia.qml
+    qml/Phosphor/Lock/LockPowerMenu.qml
     qml/Phosphor/Lock/LockAuthField.qml
     qml/Phosphor/Lock/LockController.qml
-    qml/Phosphor/Lock/LockRegion.js
 )
 
 # Pin each QML file's resource alias to its basename so import resolution
@@ -89,6 +80,8 @@ endforeach()
 set(_phosphor_lock_qml_sources
     src/phosphorshelllock_qml_plugin.cpp
     src/locksurfacewindow.cpp
+    src/lockkeyboard.cpp
+    include/PhosphorShellLock/LockKeyboard.h
     # Listed so AUTOMOC on the module target emits the metatype JSON that
     # qmltyperegistrar turns into the `LockSurface` registration.
     include/PhosphorShellLock/LockSurfaceWindow.h
@@ -134,9 +127,11 @@ target_link_libraries(PhosphorShellLockQml
     PUBLIC
         Qt6::Core
         Qt6::Gui
+        Qt6::DBus
         Qt6::Qml
         Qt6::Quick
         KF6::Kirigami
+        KF6::GuiAddons
         PhosphorWayland::PhosphorWayland
 )
 

@@ -237,6 +237,7 @@ StripParse parseStripModel(const QString& modelJson)
     const int viewOffset = model[ViewOffsetPx].toInt(0);
     const int activeColumn = model[ActiveColumn].toInt(-1);
     const bool vertical = model[Axis].toInt(0) == 1;
+    parse.vertical = vertical;
     if (extent <= 0 || viewport <= 0) {
         return parse;
     }
@@ -265,6 +266,28 @@ StripParse parseStripModel(const QString& modelJson)
         // screen, so a column entirely before or after it is off-lens.
         const qreal start = qreal(pos - viewOffset) / viewport;
         const qreal length = qreal(len) / viewport;
+        // Keep a separate, complete navigation model. The miniature still
+        // depicts only the viewport, independent of how long the strip grows.
+        for (int tileIndex = 0; tileIndex < tiles.size(); ++tileIndex) {
+            const QJsonObject tile = tiles[tileIndex].toObject();
+            const QString windowId = tile[WindowId].toString();
+            if (windowId.isEmpty()) {
+                continue;
+            }
+            Cell window =
+                makeCell(windowId, vertical ? QRectF(0.0, start, 1.0, length) : QRectF(start, 0.0, length, 1.0));
+            window.windowId = windowId;
+            window.columnIndex = column[Index].toInt(-1);
+            window.stripT = std::clamp(qreal(pos) / extent, 0.0, 1.0);
+            window.t = window.stripT;
+            window.stack = tiles.size();
+            window.occupied = true;
+            window.focused =
+                window.columnIndex == activeColumn && tileIndex == column[QLatin1String("activeTile")].toInt(0);
+            window.offscreen = start + length <= 0.0 || start >= 1.0;
+            window.minimized = tile[Minimized].toBool(false);
+            parse.windows.append(window);
+        }
         if (start + length <= 0.0) {
             ++parse.overflowLeft;
             continue;
@@ -301,7 +324,7 @@ StripParse parseStripModel(const QString& modelJson)
     } else {
         const qreal x = std::clamp(qreal(viewOffset) / extent, 0.0, 1.0);
         const qreal w = std::clamp(qreal(viewport) / extent, 0.0, 1.0 - x);
-        parse.lens = QRectF(x, 0.0, w, 1.0);
+        parse.lens = vertical ? QRectF(0.0, x, 1.0, w) : QRectF(x, 0.0, w, 1.0);
     }
     return parse;
 }
@@ -455,6 +478,7 @@ QVariantList toVariantList(const QList<Cell>& cells)
         map.insert(QStringLiteral("y"), cell.rect.y());
         map.insert(QStringLiteral("w"), cell.rect.width());
         map.insert(QStringLiteral("h"), cell.rect.height());
+        map.insert(QStringLiteral("nativeRect"), cell.nativeRect);
         map.insert(QStringLiteral("t"), cell.t);
         map.insert(QStringLiteral("occupied"), cell.occupied);
         map.insert(QStringLiteral("focused"), cell.focused);
@@ -467,12 +491,15 @@ QVariantList toVariantList(const QList<Cell>& cells)
         map.insert(QStringLiteral("appId"), cell.appId);
         map.insert(QStringLiteral("title"), cell.title);
         map.insert(QStringLiteral("urgent"), cell.urgent);
+        map.insert(QStringLiteral("offscreen"), cell.offscreen);
+        map.insert(QStringLiteral("minimized"), cell.minimized);
+        map.insert(QStringLiteral("colorIndex"), cell.colorIndex);
         list.append(map);
     }
     return list;
 }
 
-QVariantMap lensToVariant(const QRectF& lens)
+QVariantMap lensToVariant(const QRectF& lens, bool vertical)
 {
     QVariantMap map;
     if (lens.isNull() || lens.width() <= 0.0) {
@@ -480,6 +507,9 @@ QVariantMap lensToVariant(const QRectF& lens)
     }
     map.insert(QStringLiteral("x"), lens.x());
     map.insert(QStringLiteral("w"), lens.width());
+    map.insert(QStringLiteral("y"), lens.y());
+    map.insert(QStringLiteral("h"), lens.height());
+    map.insert(QStringLiteral("vertical"), vertical);
     return map;
 }
 
@@ -508,6 +538,7 @@ ScreenState screenStateFor(const QString& statesJson, const QString& screenId)
         out.layoutId = state[ScreenStatesLayoutId].toString();
         out.algorithmId = state[ScreenStatesAlgorithmId].toString();
         out.scrollingTemplateId = state[ScreenStatesTemplateId].toString();
+        out.layoutsAvailable = state[QLatin1String("layoutsAvailable")].toBool(false);
         return out;
     }
     return out;
@@ -536,6 +567,82 @@ QString dropProxyJson(const QRect& rect, const QVariantList& cells)
     root[DropProxyKey::Rect] = rectArray(rect);
     root[DropProxyKey::Cells] = entries;
     return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
+}
+
+QList<Cell> parseNativeWindows(const QString& json, const QRect& workArea)
+{
+    QList<Cell> result;
+    if (workArea.isEmpty())
+        return result;
+    for (const auto& value : QJsonDocument::fromJson(json.toUtf8()).array()) {
+        const auto obj = value.toObject();
+        Cell cell;
+        cell.id = cell.windowId = obj.value(QStringLiteral("windowId")).toString();
+        const QRectF frame(obj.value(QStringLiteral("x")).toDouble(), obj.value(QStringLiteral("y")).toDouble(),
+                           obj.value(QStringLiteral("width")).toDouble(),
+                           obj.value(QStringLiteral("height")).toDouble());
+        if (cell.windowId.isEmpty() || frame.isEmpty())
+            continue;
+        cell.rect =
+            QRectF((frame.x() - workArea.x()) / workArea.width(), (frame.y() - workArea.y()) / workArea.height(),
+                   frame.width() / workArea.width(), frame.height() / workArea.height());
+        cell.t = hueFor(cell.rect);
+        cell.occupied = true;
+        cell.appId = obj.value(QStringLiteral("appId")).toString();
+        cell.nativeRect = cell.rect;
+        cell.title = obj.value(QStringLiteral("title")).toString();
+        cell.focused = obj.value(QStringLiteral("focused")).toBool();
+        cell.minimized = obj.value(QStringLiteral("minimized")).toBool();
+        cell.offscreen = !frame.intersects(workArea);
+        cell.colorIndex = obj.value(QStringLiteral("colorIndex")).toInt(-1);
+        result.append(cell);
+    }
+    return result;
+}
+
+QList<Cell> inactiveDesktopCells(const QList<Cell>& live, bool scrolling)
+{
+    QList<Cell> result = live;
+    for (qsizetype i = 0; i < result.size(); ++i) {
+        auto& cell = result[i];
+        cell.focused = false;
+        if (scrolling) {
+            const qreal width = 1.0 / result.size();
+            cell.rect = QRectF(i * width, 0, width, 1);
+            cell.t = hueFor(cell.rect);
+            cell.offscreen = false;
+        }
+    }
+    return result;
+}
+
+QList<Cell> mergeNavigationWindows(const QList<Cell>& placed, const QList<Cell>& live)
+{
+    QHash<QString, Cell> remaining;
+    for (const Cell& cell : live)
+        remaining.insert(cell.windowId, cell);
+    QList<Cell> result;
+    for (Cell cell : placed) {
+        const auto it = remaining.constFind(cell.windowId);
+        if (it == remaining.cend())
+            continue;
+        // Scrolling retains its unbounded strip geometry and hidden tabs.
+        if (cell.columnIndex < 0)
+            cell.rect = it->rect;
+        cell.nativeRect = it->nativeRect;
+        cell.focused = it->focused;
+        cell.colorIndex = it->colorIndex;
+        cell.minimized = it->minimized;
+        cell.appId = it->appId;
+        cell.title = it->title;
+        result.append(cell);
+        remaining.remove(cell.windowId);
+    }
+    for (const Cell& cell : live) {
+        if (remaining.remove(cell.windowId))
+            result.append(cell);
+    }
+    return result;
 }
 
 } // namespace PhosphorShell::PlacementMapParser

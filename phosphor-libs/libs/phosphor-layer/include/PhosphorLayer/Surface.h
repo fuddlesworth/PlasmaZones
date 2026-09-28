@@ -119,6 +119,8 @@ public:
 
     State state() const noexcept;
     const SurfaceConfig& config() const noexcept;
+    /// Update the live keyboard policy and retain it across reattachment.
+    void setKeyboardInteractivity(KeyboardInteractivity keyboard);
 
     /**
      * @brief Convenience: is the Surface in the logical "shown" state?

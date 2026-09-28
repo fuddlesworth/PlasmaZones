@@ -97,6 +97,7 @@ set(phosphorsurface_public_HDRS
     include/PhosphorSurface/DecorationProfileTree.h
     include/PhosphorSurface/DecorationSupportedPaths.h
     include/PhosphorSurface/SurfaceThemeResolve.h
+    include/PhosphorSurface/SurfaceWindowStateResolve.h
     include/PhosphorSurface/SurfaceChainCompose.h
 )
 
@@ -113,6 +114,7 @@ set(phosphorsurface_SRCS
     src/decorationprofiletree.cpp
     src/surface_contract_pins.cpp
     src/surfacethemeresolve.cpp
+    src/surfacewindowstateresolve.cpp
     src/surfacechaincompose.cpp
 )
 

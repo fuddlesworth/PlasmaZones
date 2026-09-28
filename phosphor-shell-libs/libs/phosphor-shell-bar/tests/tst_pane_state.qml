@@ -103,6 +103,16 @@ TestCase {
         verify(host._paneOpenEff);
     }
 
+    function test_map_width_stays_latched_during_close() {
+        const host = makeHost().host;
+        host.mapPaneOpen = true;
+        tryCompare(host, "_mapPaneDisplayed", true);
+        compare(host._paneWidthEff, host.mapPaneWidth);
+        host.mapPaneOpen = false;
+        verify(host._mapPaneDisplayed, "the map surface is still displayed while closing");
+        compare(host._paneWidthEff, host.mapPaneWidth, "closing keeps the map width");
+    }
+
     function test_the_focus_latch_is_recaptured_on_every_pane_move() {
         // The latch records which cell had focus when the pane opened. On a
         // map-pane to host-pane swap the surface stays up, so `_paneOpenEff`

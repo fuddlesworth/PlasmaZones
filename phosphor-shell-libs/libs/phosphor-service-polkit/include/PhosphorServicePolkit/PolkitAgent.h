@@ -17,10 +17,15 @@
 #include <QString>
 
 #include <memory>
+#include <functional>
 
 namespace PhosphorServicePolkit {
 
 class ListenerImpl;
+class PolkitAgentTest;
+namespace detail {
+class AuthenticationSession;
+}
 
 /**
  * @brief A PolicyKit authentication agent for Phosphor-based desktop shells.
@@ -49,8 +54,23 @@ class PHOSPHORSERVICEPOLKIT_EXPORT PolkitAgent : public QObject
     Q_OBJECT
     Q_PROPERTY(bool registered READ registered NOTIFY registeredChanged)
     Q_PROPERTY(PhosphorServicePolkit::AuthRequest* activeRequest READ activeRequest NOTIFY activeRequestChanged)
+    Q_PROPERTY(Phase phase READ phase NOTIFY stateChanged)
+    Q_PROPERTY(bool inputReady READ inputReady NOTIFY stateChanged)
+    Q_PROPERTY(bool busy READ busy NOTIFY stateChanged)
+    Q_PROPERTY(bool canRetry READ canRetry NOTIFY stateChanged)
 
 public:
+    enum class Phase {
+        Idle,
+        Starting,
+        Prompt,
+        Checking,
+        Unavailable,
+        Failed,
+        Success,
+        Cancelled
+    };
+    Q_ENUM(Phase)
     /// Agent for the current session, at the default object path.
     explicit PolkitAgent(QObject* parent = nullptr);
     /// Dependency-injected: register for an explicit session id at an explicit
@@ -76,6 +96,10 @@ public:
     /// The authentication request polkit is currently waiting on, or null. A
     /// dialog binds this; at most one is active (polkit serialises).
     [[nodiscard]] AuthRequest* activeRequest() const;
+    [[nodiscard]] Phase phase() const;
+    [[nodiscard]] bool inputReady() const;
+    [[nodiscard]] bool busy() const;
+    [[nodiscard]] bool canRetry() const;
 
     /// Begin authenticating the active request as its `selectedIdentity`: starts
     /// the PAM conversation, after which `activeRequest`'s `prompt` updates and
@@ -86,6 +110,11 @@ public:
     /// Answer the active PAM prompt. The response is passed straight to PAM and
     /// is never stored, logged, or echoed by this library. Q_INVOKABLE for a UI.
     Q_INVOKABLE void respond(const QString& response);
+    /// Restart the same request as another offered identity. The previous
+    /// conversation is cancelled without resolving the polkit result.
+    Q_INVOKABLE void selectIdentity(int index);
+    /// Retry an unavailable conversation, within the request's attempt limit.
+    Q_INVOKABLE void retry();
 
     /// Decline the active request: it completes without authorization and clears
     /// (aborting any running PAM conversation). Q_INVOKABLE for a UI / CLI; never
@@ -95,6 +124,7 @@ public:
 Q_SIGNALS:
     void registeredChanged();
     void activeRequestChanged();
+    void stateChanged();
     /// A new authentication request arrived (also reflected in `activeRequest`).
     void authenticationRequested(PhosphorServicePolkit::AuthRequest* request);
     /// PAM is asking for input: answer it with `respond()`. This is an EVENT, not
@@ -116,16 +146,19 @@ Q_SIGNALS:
 private:
     Q_DISABLE_COPY_MOVE(PolkitAgent)
     friend class ListenerImpl;
+    friend class PolkitAgentTest;
 
-    /// The PAM session finished: settle the active request (completing polkit's
-    /// result) and emit authenticationCompleted.
+    /// A PAM session finished. Credential failures may begin another bounded
+    /// attempt; only terminal outcomes resolve the request's result.
     void onSessionCompleted(bool gainedAuthorization);
-    /// Resolve the active request exactly once: capture-and-clear the state first
-    /// (so re-entrant calls become no-ops), disconnect + delete the session
-    /// (aborting PAM), optionally complete polkit's result, and emit
-    /// activeRequestChanged. @p completeResult is false only when polkit itself
-    /// withdrew the request and owns the result's teardown.
-    void settleActive(bool completeResult);
+    void beginRequest(const QString& actionId, const QString& message, const QString& iconName,
+                      const QVariantMap& details, const QString& cookie, const QStringList& identities,
+                      std::function<detail::AuthenticationSession*(int, QObject*)> sessionFactory,
+                      std::function<void()> completeResult);
+    void settleActive(Phase outcome);
+    void stopSession(bool cancel);
+    void setPhase(Phase phase);
+    void restartIdentity();
 
     class Private;
     std::unique_ptr<Private> d;

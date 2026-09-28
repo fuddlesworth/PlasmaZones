@@ -172,7 +172,7 @@ TestCase {
         // no test noticed because none of them asserted a colour.
         // Groups paint no background any more; the hairline between groups
         // is the one themed colour, and it must read the Phosphor token.
-        compare(chipAt(s, 1).children[0].color, Theme.on_surface, "the hairline paints the theme token, so Theme is not shadowed");
+        compare(chipAt(s, 1).children[0].color, Appearance.text, "the hairline paints the theme token, so Theme is not shadowed");
     }
 
     function test_chip_collapses_when_every_widget_hides() {
@@ -246,5 +246,26 @@ TestCase {
         });
         compare(fakeRegistry.created, 1, "the bare string mounts exactly one widget");
         compare(fakeRegistry.mountedIds, ["clock"], "and it is the id itself, not a character");
+    }
+    Component {
+        id: regionComp
+        BarRegion {
+            registry: fakeRegistry
+            maximumWidth: 100
+        }
+    }
+    function test_overflowStaysBoundedAndRetainsEveryWidget() {
+        const region = createTemporaryObject(regionComp, testCase, {
+            groups: [["a", "b", "c", "d", "e", "f"]]
+        });
+        verify(region !== null);
+        tryCompare(region, "mountedCount", 6);
+        tryCompare(region, "overflowing", true);
+        compare(region.width, 100);
+        verify(region.cellFor("f") !== null);
+        region.maximumWidth = 600;
+        tryCompare(region, "overflowing", false);
+        compare(region.mountedCount, 6);
+        verify(region.width < 600);
     }
 }

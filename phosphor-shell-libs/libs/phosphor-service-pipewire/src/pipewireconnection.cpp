@@ -260,16 +260,30 @@ int PipeWireConnection::Private::onDefaultMetadataProperty(void* data, uint32_t 
                                                            const char* type, const char* value)
 {
     Q_UNUSED(type);
-    // WirePlumber's `default` metadata global only carries the system
-    // defaults under subject PW_ID_CORE. Other subjects can legitimately
-    // use the same key names for per-route or per-stream entries;
-    // without this filter, those entries would clobber the cached
-    // default-sink / -source names.
-    if (subject != PW_ID_CORE)
+    auto* d = static_cast<Private*>(data);
+    if (subject != PW_ID_CORE) {
+        if (key && qstrcmp(key, "target.object") != 0)
+            return 0;
+        constexpr size_t limit = 4096;
+        if (value && qstrnlen(value, limit) >= limit)
+            return 0;
+        const QString target = value ? QString::fromUtf8(value) : QString{};
+        const bool present = key && value;
+        QMetaObject::invokeMethod(
+            d->q,
+            [d, subject, target, present] {
+                if (present)
+                    d->guiTargets.insert(subject, target);
+                else
+                    d->guiTargets.remove(subject);
+                if (auto* node = d->guiNodes.value(subject, nullptr))
+                    node->applyTarget(target, present);
+            },
+            Qt::QueuedConnection);
         return 0;
+    }
     if (!key)
         return 0;
-    auto* d = static_cast<Private*>(data);
     const QString keyStr = QString::fromUtf8(key);
     // We care about the runtime default keys. The "configured"
     // variants are persistent storage; we read the runtime ones so the
@@ -357,10 +371,18 @@ void PipeWireConnection::Private::onNodeInfo(void* data, const struct pw_node_in
     auto* d = entry->owner;
     const quint32 id = entry->id;
     const auto props = detail::propsFromDict(info->props);
+    const bool running = info->state == PW_NODE_STATE_RUNNING;
+    const bool hasProps = (info->change_mask & PW_NODE_CHANGE_MASK_PROPS) && info->props;
+    const bool hasState = info->change_mask & PW_NODE_CHANGE_MASK_STATE;
     QMetaObject::invokeMethod(
         d->q,
-        [d, id, props]() {
-            d->guiNodeInfo(id, props);
+        [d, id, props, hasProps, hasState, running]() {
+            if (hasProps)
+                d->guiNodeInfo(id, props);
+            if (hasState) {
+                if (auto* node = d->guiNodes.value(id, nullptr))
+                    node->applyRunning(running);
+            }
         },
         Qt::QueuedConnection);
 }
@@ -556,6 +578,8 @@ void PipeWireConnection::Private::guiNodeAdded(quint32 id, QString mediaClass, Q
     guiNodes.insert(id, node);
     Q_EMIT q->nodeAdded(node);
     node->applyInfo(std::move(props));
+    if (guiTargets.contains(id))
+        node->applyTarget(guiTargets.value(id), true);
 }
 
 void PipeWireConnection::Private::guiNodeInfo(quint32 id, QHash<QString, QString> props)
@@ -568,6 +592,7 @@ void PipeWireConnection::Private::guiNodeInfo(quint32 id, QHash<QString, QString
 
 void PipeWireConnection::Private::guiNodeRemoved(quint32 id)
 {
+    guiTargets.remove(id);
     auto it = guiNodes.find(id);
     if (it == guiNodes.end())
         return;
@@ -579,6 +604,7 @@ void PipeWireConnection::Private::guiNodeRemoved(quint32 id)
 
 void PipeWireConnection::Private::guiNodesReset()
 {
+    guiTargets.clear();
     if (guiNodes.isEmpty())
         return;
     const auto snapshot = guiNodes;

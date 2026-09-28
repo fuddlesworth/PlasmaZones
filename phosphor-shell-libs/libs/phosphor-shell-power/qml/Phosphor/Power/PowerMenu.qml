@@ -246,8 +246,16 @@ FocusScope {
     // 40 % saturation on every window) is phase 2.
     Rectangle {
         anchors.fill: parent
-        color: Theme.background
+        color: Appearance.recess
         opacity: 0.6
+    }
+
+    ShellSurface {
+        x: column.x - 22
+        y: column.y - 22
+        width: column.width + 44
+        height: column.height + 44
+        railT: 0.85
     }
 
     // The selection line on the column's screen edge. 3 px, 6 px while an
@@ -422,7 +430,7 @@ FocusScope {
                 anchors.baseline: word.baseline
                 visible: row.isArmed
                 text: qsTr("Enter again")
-                color: Theme.on_surface_variant
+                color: Appearance.muted
                 font.pixelSize: Tokens.font_size_body_m
             }
         }

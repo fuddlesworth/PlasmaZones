@@ -170,8 +170,24 @@ QList<DesktopEntry> AppsProvider::entries() const
 void AppsProvider::rescan()
 {
     armWatches();
+    const auto previousEntries = m_entries;
     m_entries = DesktopEntryScanner::scan(m_directories, m_locale, m_currentDesktop);
     qCDebug(lcApps) << "scanned" << m_entries.size() << "application(s) from" << m_directories;
+    recompute();
+    const auto same = [](const DesktopEntry& a, const DesktopEntry& b) {
+        return a.id == b.id && a.name == b.name && a.icon == b.icon;
+    };
+    if (!std::equal(previousEntries.cbegin(), previousEntries.cend(), m_entries.cbegin(), m_entries.cend(), same)) {
+        Q_EMIT entriesChanged();
+    }
+}
+
+void AppsProvider::setListOnEmptyQuery(bool enabled)
+{
+    if (m_listOnEmptyQuery == enabled) {
+        return;
+    }
+    m_listOnEmptyQuery = enabled;
     recompute();
 }
 
@@ -189,7 +205,7 @@ void AppsProvider::recompute()
     // rescan that finds nothing new would otherwise do exactly that.
     const QList<LauncherResult> previous = std::move(m_results);
     m_results.clear();
-    if (!m_query.isEmpty()) {
+    if (!m_query.isEmpty() || m_listOnEmptyQuery) {
         struct Scored
         {
             const DesktopEntry* entry;
@@ -200,7 +216,7 @@ void AppsProvider::recompute()
         const bool smartCase = FuzzyMatcher::patternIsCaseSensitive(m_query);
         QList<Scored> scored;
         for (const DesktopEntry& entry : std::as_const(m_entries)) {
-            int best = -1;
+            int best = m_query.isEmpty() ? 0 : -1;
             if (const auto m = FuzzyMatcher::match(m_query, entry.name, smartCase)) {
                 best = m->score;
             }
@@ -240,7 +256,7 @@ void AppsProvider::recompute()
             r.title = s.entry->name;
             r.subtitle = s.entry->genericName.isEmpty() ? s.entry->comment : s.entry->genericName;
             r.iconName = s.entry->icon;
-            r.score = s.score;
+            r.score = m_query.isEmpty() ? -100 : s.score;
             r.primaryActionLabel = QCoreApplication::translate("PhosphorShellLauncher", "Open");
             m_results.append(std::move(r));
         }

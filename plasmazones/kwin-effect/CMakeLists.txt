@@ -33,6 +33,7 @@ set(QT_DEFAULT_MAJOR_VERSION 6)
 
 # Find KWin for effect development
 find_package(KWin 6.7 REQUIRED)
+find_package(KDecoration3 6.7 REQUIRED)
 
 # KColorScheme: the compositor-drawn scrolling tab pills resolve their
 # theme colours (the negative/urgent red in particular) from the active KDE
@@ -193,6 +194,8 @@ set(plasmazones_effect_SRCS
     compositor/scrolltabindicatorpainter.cpp
     compositor/scrolltabindicatorpainter_raster.cpp
     compositor/scrolltabindicatorpainter.h
+    compositor/shelloverview.cpp
+    compositor/shelloverview.h
     compositor/compositorclock.cpp
     compositor/compositorclock.h
     compositor/deferredwindowcommits.h
@@ -270,6 +273,7 @@ set_source_files_properties(pointer/pointerdecorationpaint.cpp PROPERTIES SKIP_U
 # Link required libraries
 target_link_libraries(kwin_effect_plasmazones PRIVATE
     KWin::kwin
+    KDecoration3::KDecoration
     Qt6::Core
     Qt6::Gui
     Qt6::DBus
@@ -335,3 +339,10 @@ target_include_directories(kwin_effect_plasmazones PRIVATE
 # Note: metadata.json is embedded in the plugin binary via Q_PLUGIN_METADATA in
 # the KWIN_EFFECT_FACTORY_SUPPORTED macro. The source file MUST include
 # "plasmazoneseffect.moc" at the end for MOC to process the generated Q_OBJECT class.
+
+# Native titlebars share the shell palette and geometry.
+if(BUILD_PHOSPHOR_SHELL)
+    target_compile_definitions(kwin_effect_plasmazones PRIVATE PHOSPHOR_BUILD_SHELL=1)
+    target_link_libraries(kwin_effect_plasmazones PRIVATE PhosphorTheme::PhosphorTheme)
+    add_subdirectory(shell-decoration)
+endif()

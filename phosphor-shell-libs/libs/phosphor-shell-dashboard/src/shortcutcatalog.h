@@ -37,6 +37,8 @@ class ShortcutCatalog : public QObject
     /// Whether the daemon is on the session bus right now.
     Q_PROPERTY(bool available READ isAvailable NOTIFY availableChanged)
     Q_PROPERTY(QVariantList rows READ rows NOTIFY rowsChanged)
+    Q_PROPERTY(bool loading READ isLoading NOTIFY loadingChanged)
+    Q_PROPERTY(QString error READ error NOTIFY errorChanged)
 
 public:
     explicit ShortcutCatalog(QObject* parent = nullptr);
@@ -44,6 +46,15 @@ public:
 
     [[nodiscard]] bool isAvailable() const;
     [[nodiscard]] QVariantList rows() const;
+    [[nodiscard]] bool isLoading() const
+    {
+        return m_loading;
+    }
+    [[nodiscard]] QString error() const
+    {
+        return m_error;
+    }
+    Q_INVOKABLE void retry();
 
 public Q_SLOTS:
     /// Re-read the catalog now. Async; `rowsChanged` fires when it differs.
@@ -59,16 +70,23 @@ public:
 Q_SIGNALS:
     void availableChanged();
     void rowsChanged();
+    void loadingChanged();
+    void errorChanged();
 
 private:
-    void setAvailable(bool available);
-    void setRows(const QVariantList& rows);
+    void setOwner(const QString& owner);
+    void finishRequest(quint64 generation, const QVariantList& rows, const QString& error);
+    void setLoading(bool loading);
+    void setError(const QString& error);
 
     QDBusServiceWatcher* m_watcher = nullptr;
     QVariantList m_rows;
     bool m_available = false;
+    bool m_loading = false;
+    QString m_error;
+    QString m_owner;
     // Bumped per refresh(); a reply from an older read is dropped.
-    int m_generation = 0;
+    quint64 m_generation = 0;
 };
 
 } // namespace PhosphorShellDashboard

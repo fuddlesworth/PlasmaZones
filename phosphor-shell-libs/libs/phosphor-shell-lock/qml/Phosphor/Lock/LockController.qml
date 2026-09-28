@@ -1,24 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// Phosphor.Lock.LockController, the one auth field behind every screen.
-//
-// The lock screen runs one LockScreen per output, but there is only one
-// password being typed. This object holds it: every screen's field draws
-// the same dots, and whichever screen the compositor gave keyboard focus
-// feeds keys in here (A3 §6 d: typing goes to the field without clicking
-// it). Submit goes to `lock.unlock(password)`; the field's phase follows
-// `lock.state` and the failure signal.
-//
-// `lock` is a LockService, or anything with its surface: `state` (0
-// Unlocked, 1 Locking, 2 Locked, 3 Authenticating, 4 Releasing), `locked`,
-// `unlock(password)`, and the `stateChanged` / `authenticationFailed(reason)`
-// / `unlocked` signals. Duck-typed so a test can drive it with a fake.
-//
-// Unlock: the service releases the compositor lock the moment PAM says yes,
-// so the real windows are back before any animation could run. The
-// content still dismisses over `Motion.duration_dismiss` behind
-// `dismissing`, and `surfacesWanted` keeps the surfaces up for that long,
-// so a compositor that holds the last lock frame shows the outlines fill.
+// One password and authentication lifecycle shared by every output. The real
+// service keeps the compositor lock held during the exit, then finishUnlock()
+// releases it. Rendering and input never decide whether authentication passed.
 
 import QtQml
 import Phosphor.Theme
@@ -39,9 +23,6 @@ QtObject {
     // The password so far. Cleared on failure, on Escape, and after the
     // dismiss; never logged.
     property string password: ""
-    // Shown in the empty field. Clicking an outline sets it to that
-    // window's name (`Unlock to return to Firefox`).
-    property string placeholder: ""
     // The last failure's reason, cleared by the next key.
     property string errorText: ""
 
@@ -49,6 +30,7 @@ QtObject {
     readonly property bool authenticating: controller.lock ? controller.lock.state === controller.stateAuthenticating : false
     // True for Motion.duration_dismiss after a successful unlock.
     property bool dismissing: false
+    readonly property int dismissDuration: Appearance.motion ? Motion.duration_long_3 : 0
     // "idle", "authenticating", "error" or "dismissing": what the field's
     // edge shows (A3 §6 e).
     readonly property string phase: controller.dismissing ? "dismissing" : (controller.authenticating ? "authenticating" : (controller.errorText !== "" ? "error" : "idle"))
@@ -83,7 +65,9 @@ QtObject {
             return false;
         if (event.key === Qt.Key_Backspace) {
             controller.errorText = "";
-            controller.password = controller.password.slice(0, -1);
+            const length = controller.password.length;
+            const tail = controller.password.charCodeAt(length - 1);
+            controller.password = controller.password.slice(0, length - (tail >= 0xDC00 && tail <= 0xDFFF ? 2 : 1));
             return true;
         }
         // Printable text only. Command chords are rejected by their modifier,
@@ -120,10 +104,6 @@ QtObject {
         controller.errorText = "";
     }
 
-    function placeholderFor(name: string): void {
-        controller.placeholder = name && name.length > 0 ? qsTr("Unlock to return to %1").arg(name) : "";
-    }
-
     property Connections _lockConnections: Connections {
         target: controller.lock
         ignoreUnknownSignals: true
@@ -153,21 +133,13 @@ QtObject {
         }
 
         function onStateChanged(): void {
-            // A fresh lock starts with an empty field and no stale
-            // placeholder from the last session.
-            if (controller.lock && controller.lock.state === controller.stateLocked && controller.password === "")
-                controller.placeholder = "";
+            if (controller.lock && controller.lock.state === controller.stateLocking)
+                controller.clear();
         }
     }
 
     property Timer _dismissTimer: Timer {
-        // The exit is two animations in parallel: the outlines fill over
-        // duration_release and the content block fades over duration_dismiss.
-        // Hold for the LONGER of them — releasing at duration_dismiss drops
-        // the surfaces while the fill is barely a third done, so the exit the
-        // header describes never actually plays. Still far inside the state
-        // machine's 1 s release failsafe.
-        interval: Math.max(Motion.duration_release, Motion.duration_dismiss)
+        interval: controller.dismissDuration
         repeat: false
         onTriggered: {
             // The exit has played: release the compositor lock now.
@@ -175,7 +147,6 @@ QtObject {
                 controller.lock.finishUnlock();
             controller.dismissing = false;
             controller.password = "";
-            controller.placeholder = "";
             controller.dismissed();
         }
     }

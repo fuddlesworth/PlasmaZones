@@ -5,6 +5,11 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 # phosphor-ipc — deferred follow-ups (from PR #539 audit)
 
+Current status: connection caps, idle timeouts and peer-credential checks below
+remain unimplemented. The demo translation and font sweeps also remain, but
+`Tokens.font_family_mono` now exists. Item 5 therefore needs consumer changes,
+not a new theme token. These are library follow-ups, not v3 visual-port blockers.
+
 Items raised by the multi-pass audit of PR #539 (`feat/phosphor-ipc`) that
 were intentionally **not** applied in that PR. Each entry documents the
 finding, the reason for deferring, and the change shape so a future PR can
@@ -120,20 +125,18 @@ re-run the grep before starting the work):
 
 **Finding:** CLAUDE.md says QML should not hardcode appearance —
 `Kirigami.Theme` for colors, `Kirigami.Units` for spacing, and (by
-project precedent) `Tokens.*` for font-family choices. There is no
-`Tokens.font_family_mono` accessor today.
+project precedent) `Tokens.*` for font-family choices. The current
+`phosphor-shell-libs/libs/phosphor-theme/qml/Phosphor/Theme/Tokens.qml` exposes
+`font_family_mono`, backed by Appearance's selected font and `FontFaces`.
 
-**Why deferred:** the missing token applies to all sites and to any
-future phosphor-theme consumer that needs a monospace surface. The
-fix is "add a token to `phosphor-theme/Tokens.qml`, then route every
-consumer through it" — both edits should land together.
+**Remaining work:** route the demos through the existing theme token and
+ensure each consumer declares its theme dependency. The original missing-token
+prerequisite has been completed.
 
 **Change shape:**
-- Add `readonly property string font_family_mono: "monospace"` to
-  `phosphor-shell-libs/libs/phosphor-theme/Tokens.qml`.
 - Replace each `font.family: "monospace"` site with
   `font.family: Tokens.font_family_mono` in a single sweep:
-  `grep -rln '"monospace"' examples/ src/` lists every consumer.
+  `rg -n '"monospace"' phosphor-shell-libs/examples/` lists the current consumers.
 
 ---
 

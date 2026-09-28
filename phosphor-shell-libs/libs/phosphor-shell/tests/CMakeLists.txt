@@ -132,6 +132,13 @@ add_test(NAME test_phosphorshell_placementmapparser COMMAND test_phosphorshell_p
 phosphorshell_isolate_test(test_phosphorshell_placementmapparser "QT_QPA_PLATFORM=offscreen")
 set_tests_properties(test_phosphorshell_placementmapparser PROPERTIES LABELS "phosphorshell")
 
+add_executable(test_phosphorshell_placementmap_live test_placementmap_live.cpp)
+target_link_libraries(test_phosphorshell_placementmap_live PRIVATE
+    Qt6::Test Qt6::DBus PhosphorShell::PhosphorShell)
+add_test(NAME test_phosphorshell_placementmap_live COMMAND test_phosphorshell_placementmap_live)
+phosphorshell_isolate_test(test_phosphorshell_placementmap_live "QT_QPA_PLATFORM=offscreen")
+set_tests_properties(test_phosphorshell_placementmap_live PROPERTIES LABELS "phosphorshell")
+
 # Workspaces isolation, deliberately here rather than beside its add_test
 # above: interleaving the two is what left placementmapparser unlabelled.
 phosphorshell_isolate_test(test_phosphorshell_workspaces "QT_QPA_PLATFORM=offscreen")
@@ -211,6 +218,8 @@ target_link_libraries(test_phosphorshell_persistentproperties_scan
         Qt6::Qml
         Qt6::Quick
         PhosphorShell::PhosphorShell
+        PhosphorShell::PhosphorShellQml
+        PhosphorShellQmlplugin
         PhosphorLayer::PhosphorLayer
 )
 add_test(NAME test_phosphorshell_persistentproperties_scan COMMAND test_phosphorshell_persistentproperties_scan)
@@ -229,6 +238,8 @@ target_link_libraries(test_phosphorshell_inputregion_rearm
         Qt6::Qml
         Qt6::Quick
         PhosphorShell::PhosphorShell
+        PhosphorShell::PhosphorShellQml
+        PhosphorShellQmlplugin
         PhosphorLayer::PhosphorLayer
 )
 add_test(NAME test_phosphorshell_inputregion_rearm COMMAND test_phosphorshell_inputregion_rearm)
@@ -255,6 +266,12 @@ set_tests_properties(test_phosphorshell_wallpaperservice PROPERTIES
     LABELS "phosphorshell"
     TIMEOUT 30
 )
+
+qt_add_executable(test_phosphorshell_systemstats test_systemstats.cpp)
+target_link_libraries(test_phosphorshell_systemstats PRIVATE Qt6::Test PhosphorShell::PhosphorShell)
+add_test(NAME test_phosphorshell_systemstats COMMAND test_phosphorshell_systemstats)
+phosphorshell_isolate_test(test_phosphorshell_systemstats "QT_QPA_PLATFORM=offscreen")
+set_tests_properties(test_phosphorshell_systemstats PROPERTIES LABELS "phosphorshell" TIMEOUT 30)
 
 # The mock layer-shell transport lives in phosphor-layer's own test tree, which
 # is not an exported interface. Name the directory explicitly so the include

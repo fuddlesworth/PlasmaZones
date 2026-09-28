@@ -22,7 +22,7 @@ OSDCard {
     showProgress: false
 
     // Glyph tint: muted dims the mic body (the red slash carries the state).
-    readonly property color glyphColor: osd.active ? Theme.on_surface_variant : Theme.on_surface
+    readonly property color glyphColor: osd.active ? Appearance.muted : Appearance.text
 
     icon: Component {
         Item {

@@ -43,6 +43,7 @@ class PHOSPHORSERVICEBLUETOOTH_EXPORT BluetoothDevice : public QObject
     Q_PROPERTY(bool trusted READ trusted NOTIFY trustedChanged)
     Q_PROPERTY(bool blocked READ blocked NOTIFY blockedChanged)
     Q_PROPERTY(bool connected READ connected NOTIFY connectedChanged)
+    Q_PROPERTY(int batteryPercentage READ batteryPercentage NOTIFY batteryPercentageChanged)
     Q_PROPERTY(int rssi READ rssi NOTIFY rssiChanged)
     Q_PROPERTY(QString adapter READ adapter NOTIFY adapterChanged)
     Q_PROPERTY(QStringList uuids READ uuids NOTIFY uuidsChanged)
@@ -62,6 +63,10 @@ public:
     [[nodiscard]] bool blocked() const;
     [[nodiscard]] bool connected() const;
     [[nodiscard]] int rssi() const;
+    /// -1 when the device does not report Battery1.Percentage.
+    [[nodiscard]] int batteryPercentage() const;
+    /// Internal ObjectManager update, including removal (empty map).
+    void applyBattery(const QVariantMap& properties);
     [[nodiscard]] QString adapter() const;
     [[nodiscard]] QStringList uuids() const;
 
@@ -87,6 +92,8 @@ public:
     Q_INVOKABLE void cancelPairing();
 
 Q_SIGNALS:
+    /// Completion of a write request; state follows BlueZ properties.
+    void operationFinished(const QString& operation, const QString& errorName);
     void addressChanged();
     void nameChanged();
     void aliasChanged();
@@ -96,6 +103,7 @@ Q_SIGNALS:
     void blockedChanged();
     void connectedChanged();
     void rssiChanged();
+    void batteryPercentageChanged();
     void adapterChanged();
     void uuidsChanged();
 

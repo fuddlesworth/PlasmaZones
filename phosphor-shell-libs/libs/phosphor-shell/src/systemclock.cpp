@@ -5,6 +5,7 @@
 
 #include <QDateTime>
 #include <QTimer>
+#include <QTimeZone>
 
 namespace PhosphorShell {
 
@@ -83,6 +84,17 @@ void SystemClock::update()
     const QDateTime nowDt = QDateTime::currentDateTime();
     const QTime now = nowDt.time();
     const QDate today = nowDt.date();
+    const QString zone = QString::fromUtf8(QTimeZone::systemTimeZoneId())
+                             .section(QLatin1Char('/'), -1)
+                             .replace(QLatin1Char('_'), QLatin1Char(' '));
+    const QString abbreviation = nowDt.timeZoneAbbreviation();
+    const int offset = nowDt.offsetFromUtc() / 60;
+    if (zone != m_timeZoneName || abbreviation != m_timeZoneAbbreviation || offset != m_utcOffsetMinutes) {
+        m_timeZoneName = zone;
+        m_timeZoneAbbreviation = abbreviation;
+        m_utcOffsetMinutes = offset;
+        Q_EMIT timeZoneChanged();
+    }
 
     bool anyTimeChanged = false;
     if (m_hours != now.hour()) {

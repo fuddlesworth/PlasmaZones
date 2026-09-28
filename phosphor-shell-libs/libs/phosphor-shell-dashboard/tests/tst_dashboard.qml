@@ -1,9 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// Dashboard and Cheatsheet over fakes: the grid holds one cell per
-// desktop plus the fixed cells (and the `+` only when a create verb
-// exists), Escape asks to close, a desktop click switches through the
-// cell's map, and the sheet places the catalog's chords on the fake map.
+// Dashboard over fakes: the grid holds one cell per desktop plus the
+// fixed cells (and the `+` only when a create verb exists), Escape asks
+// to close, and a desktop click switches through the cell's map.
 
 import QtQuick
 import QtTest
@@ -96,15 +95,6 @@ TestCase {
     }
 
     Component {
-        id: cheatsheetComp
-
-        Cheatsheet {
-            width: 1000
-            height: 500
-        }
-    }
-
-    Component {
         id: spyComp
 
         SignalSpy {}
@@ -191,106 +181,5 @@ TestCase {
         d.open = false;
         tryCompare(d, "progress", 0);
         tryCompare(d, "visible", false);
-    }
-
-    function test_cheatsheet_places_chords_on_the_fake_map() {
-        const map = mapFor(0);
-        map.cells = [
-            {
-                "id": "a",
-                "x": 0,
-                "y": 0,
-                "w": 0.5,
-                "h": 1,
-                "t": 0.25,
-                "zoneNumber": 1,
-                "occupied": true,
-                "focused": true
-            },
-            {
-                "id": "b",
-                "x": 0.5,
-                "y": 0,
-                "w": 0.5,
-                "h": 1,
-                "t": 0.75,
-                "zoneNumber": 2,
-                "occupied": false,
-                "focused": false
-            }
-        ];
-        const sheet = createTemporaryObject(cheatsheetComp, testCase, {
-            "map": map,
-            "catalog": [
-                {
-                    "id": "move_window_right",
-                    "label": "Move Window Right",
-                    "triggers": ["Meta+Right"],
-                    "assigned": true,
-                    "mode": "all"
-                },
-                {
-                    "id": "snap_to_zone_2",
-                    "label": "Zone 2",
-                    "triggers": ["Meta+2"],
-                    "assigned": true,
-                    "mode": "snapping"
-                },
-                {
-                    "id": "open_editor",
-                    "label": "Open Editor",
-                    "triggers": [],
-                    "assigned": false,
-                    "mode": "all"
-                }
-            ],
-            "open": true
-        });
-        map.changed();
-        compare(sheet.spatial.length, 2);
-        const right = sheet.spatial.find(l => l.id === "move_window_right");
-        compare(right.x, 500, "on the focused cell's right edge, in screen pixels");
-        compare(right.y, 250);
-        const zone = sheet.spatial.find(l => l.id === "snap_to_zone_2");
-        compare(zone.x, 750);
-        // The column holds the editor plus the shell surfaces, all unbound.
-        verify(sheet.column.length >= 1 + sheet.shellVerbs.length);
-        verify(sheet.column.find(l => l.id === "open_editor") !== undefined);
-        verify(sheet.column.every(l => l.id === "open_editor" ? !l.assigned : true));
-
-        // Typing filters both lists; Escape clears the filter first, then
-        // asks to close.
-        const spy = createTemporaryObject(spyComp, testCase, {
-            "target": sheet,
-            "signalName": "closeRequested"
-        });
-        sheet.forceActiveFocus();
-        keyClick(Qt.Key_Z);
-        compare(sheet.filter, "z");
-        compare(sheet.spatial.length, 1);
-        compare(sheet.spatial[0].id, "snap_to_zone_2");
-        keyClick(Qt.Key_Escape);
-        compare(sheet.filter, "");
-        compare(spy.count, 0);
-        keyClick(Qt.Key_Escape);
-        compare(spy.count, 1);
-
-        // Live mode: the map moves, the labels ride the rects.
-        map.cells = [
-            {
-                "id": "a",
-                "x": 0,
-                "y": 0,
-                "w": 0.25,
-                "h": 1,
-                "t": 0.125,
-                "zoneNumber": 1,
-                "occupied": true,
-                "focused": true
-            }
-        ];
-        map.changed();
-        const moved = sheet.spatial.find(l => l.id === "move_window_right");
-        compare(moved.x, 250);
     }
 }

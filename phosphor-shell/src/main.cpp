@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "BarController.h"
+#include "DesktopStyleController.h"
 #include "ControlCenterController.h"
+#include "QuickSettingsController.h"
 #include "LauncherController.h"
 #include "LayerPopoutTransport.h"
 #include "OsdController.h"
@@ -16,10 +18,13 @@
 #include "ShellGestures.h"
 #include "ShellMotion.h"
 #include "SocketPopoutTransport.h"
+#include "NotificationController.h"
 #include "ToastController.h"
 
 #include <PhosphorShellLauncher/LauncherModel.h>
 #include <PhosphorShellPicker/RetintController.h>
+#include <PhosphorTheme/AppearanceStore.h>
+#include <PhosphorShell/ShellGlobal.h>
 #include <PhosphorTheme/PaletteStore.h>
 
 #include <PhosphorServiceIdle/IdleService.h>
@@ -64,9 +69,11 @@
 #include <QPointer>
 #include <QQmlContext>
 #include <QQmlEngine>
+#include <QQuickStyle>
 #include <QUrl>
 
 #include <memory>
+#include <utility>
 
 Q_LOGGING_CATEGORY(lcShell, "phosphorshell.main")
 
@@ -114,6 +121,13 @@ int main(int argc, char* argv[])
     app.setApplicationName(QStringLiteral("phosphor-shell"));
     app.setApplicationVersion(PlasmaZones::VERSION_STRING);
     app.setQuitOnLastWindowClosed(false);
+
+    // Phosphor paints its own controls. Use a consistent base for Qt's
+    // built-in dialogs too, instead of mixing their Basic layout with an
+    // unrelated desktop style. An explicit user style remains supported.
+    if (qEnvironmentVariableIsEmpty("QT_QUICK_CONTROLS_STYLE")) {
+        QQuickStyle::setStyle(QStringLiteral("Basic"));
+    }
 
     // Guarantee named freedesktop icons resolve (bar widgets use
     // Kirigami.Icon → QIcon::fromTheme). On a desktop session the platform
@@ -311,6 +325,16 @@ int main(int argc, char* argv[])
     PhosphorShellApp::OsdController osdController;
     PhosphorShellApp::ToastController toastController;
 
+    // The notification centre. Constructing it is what makes this process
+    // the session's org.freedesktop.Notifications daemon, so it is declared
+    // once here rather than per engine: the bus name admits one owner, and
+    // a hot reload rebuilding it would drop the name and every retained
+    // notification with it. Same reverse-destruction placement as the
+    // controllers above.
+    PhosphorShellApp::NotificationController notificationController;
+    PhosphorShellApp::QuickSettingsController quickSettings;
+    PhosphorShellApp::DesktopStyleController desktopStyle;
+
     // The dashboard's media cell reads one MprisHost for the process.
     // Owned here rather than declared in QML because the dashboard popout
     // is built by the transport against the root context, where a
@@ -378,8 +402,24 @@ int main(int argc, char* argv[])
     // no placement engine, so the router's "socket" slot is the pane
     // transport and the socket transport sits behind it.
     PhosphorShellApp::PanePopoutTransport paneTransport(&controlCenterController, &socketTransport);
-    PhosphorShellApp::RoutingPopoutTransport routedTransport(&popoutTransport, &paneTransport,
-                                                             {QStringLiteral("control-center")});
+    // NOTHING is engine-placed at the moment, and the empty route set is the
+    // decision rather than an oversight.
+    //
+    // The control center was the one id here, so it opened as a real
+    // toplevel the engine placed in a zone. Two faults came from that and
+    // only that. It was ENORMOUS, because a pane is a tile and a tile gets
+    // the whole zone: five controls stretched across an 830 px surface. And
+    // it was the only surface that appeared centred and jumped, because a
+    // toplevel is mapped where the compositor chooses and the rule moves it
+    // afterwards, which a layer surface the shell positions itself never
+    // does. Every other panel — the calendar included — was already on the
+    // layer route and had neither problem.
+    //
+    // The pane transport and its rules are left wired up: the notification
+    // centre and the expanded map are still meant to be panes (A2 §4.1),
+    // and putting an id back in this set is all it takes. What is settled is
+    // that a surface you open to change one setting is not worth a window.
+    PhosphorShellApp::RoutingPopoutTransport routedTransport(&popoutTransport, &paneTransport, {});
     PhosphorPopout::PopoutController popouts(&routedTransport);
 
     // Compositor-side effects the QML asks for (blur behind the bar band).
@@ -440,6 +480,13 @@ int main(int argc, char* argv[])
             // The pane's surface pack, the same Component every other surface's
             // DecorationSlot instantiates.
             paneTransport.setDecorationProvider([&shellChrome]() -> QObject* {
+                return shellChrome.decorationComponent();
+            });
+            // The same provider on the layer route, so a surface pack reaches
+            // the launcher, the toasts, the bar's panels and the control
+            // center too. That route had none, so a pack stopped at the edge
+            // of every surface on it.
+            popoutTransport.setDecorationProvider([&shellChrome]() -> QObject* {
                 return shellChrome.decorationComponent();
             });
             // The zone nearest the chip, from this engine's placement map and
@@ -563,6 +610,7 @@ int main(int argc, char* argv[])
     // engine the shell builds.
     engine.addEngineHook([&launcherController](QQmlEngine* qmlEngine) {
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("LauncherResults"), launcherController.model());
+        qmlEngine->rootContext()->setContextProperty(QStringLiteral("LauncherCatalog"), &launcherController);
     });
 
     // The OSD provider and the toast broker, bound the same way. Context
@@ -575,6 +623,24 @@ int main(int argc, char* argv[])
     engine.addEngineHook([&toastController](QQmlEngine* qmlEngine) {
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("ToastRegistry"), &toastController);
     });
+    // The notification centre's retained list, bound the same way. The
+    // controller IS the model, so the panel binds it directly as
+    // `model: NotificationRegistry` and reads serverActive / unreadCount
+    // off the same object.
+    engine.addEngineHook([&quickSettings](QQmlEngine* qmlEngine) {
+        qmlEngine->rootContext()->setContextProperty(QStringLiteral("QuickSettings"), &quickSettings);
+    });
+    engine.addEngineHook([&notificationController](QQmlEngine* qmlEngine) {
+        qmlEngine->rootContext()->setContextProperty(QStringLiteral("NotificationRegistry"), &notificationController);
+    });
+    QObject::connect(&notificationController, &PhosphorShellApp::NotificationController::notificationArrived,
+                     &toastController, &PhosphorShellApp::ToastController::show);
+    QObject::connect(&notificationController, &PhosphorShellApp::NotificationController::notificationUpdated,
+                     &toastController, &PhosphorShellApp::ToastController::update);
+    QObject::connect(&notificationController, &PhosphorShellApp::NotificationController::notificationRemoved,
+                     &toastController, &PhosphorShellApp::ToastController::remove);
+    QObject::connect(&notificationController, &PhosphorShellApp::NotificationController::dismissAllArrivals,
+                     &toastController, &PhosphorShellApp::ToastController::clear);
     engine.addEngineHook([&dashboardMedia](QQmlEngine* qmlEngine) {
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("DashboardMedia"), &dashboardMedia);
     });
@@ -621,6 +687,36 @@ int main(int argc, char* argv[])
     // so its embedder can react.
     QObject::connect(&engine, &PhosphorShell::ShellEngine::failed, &app, [](const QString& reason) {
         qCCritical(lcShell) << "shell engine failed:" << reason << "— the shell is now headless until the next reload";
+    });
+
+    engine.addEngineHook([&engine, &desktopStyle, &shellChrome](QQmlEngine* qmlEngine) {
+        auto* appearance = qmlEngine->singletonInstance<PhosphorTheme::AppearanceStore*>(
+            QStringLiteral("Phosphor.Theme"), QStringLiteral("AppearanceStore"));
+        if (appearance) {
+            auto* global = qvariant_cast<PhosphorShell::ShellGlobal*>(
+                qmlEngine->rootContext()->contextProperty(QStringLiteral("PhosphorShell")));
+            if (global) {
+                auto* wallpaper = global->wallpaper();
+                if (appearance->values().value(QStringLiteral("wallpapers")).toMap().isEmpty()
+                    && !wallpaper->appearanceSeed().isEmpty())
+                    appearance->setValue(QStringLiteral("wallpapers"), wallpaper->appearanceSeed());
+                wallpaper->setAppearance(appearance->values().value(QStringLiteral("wallpapers")).toMap());
+                QObject::connect(
+                    appearance, &PhosphorTheme::AppearanceStore::changed, qmlEngine, [appearance, wallpaper] {
+                        wallpaper->setAppearance(appearance->values().value(QStringLiteral("wallpapers")).toMap());
+                    });
+            }
+            desktopStyle.apply(appearance->values());
+            shellChrome.setAppearance(appearance->values());
+            QObject::connect(appearance, &PhosphorTheme::AppearanceStore::changed, qmlEngine,
+                             [appearance, &desktopStyle, &shellChrome] {
+                                 desktopStyle.apply(appearance->values());
+                                 shellChrome.setAppearance(appearance->values());
+                             });
+            QObject::connect(appearance, &PhosphorTheme::AppearanceStore::geometryChanged, qmlEngine, [&engine] {
+                engine.requestReload();
+            });
+        }
     });
 
     if (!engine.load(shellUrl)) {

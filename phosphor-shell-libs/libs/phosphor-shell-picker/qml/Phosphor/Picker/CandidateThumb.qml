@@ -41,7 +41,7 @@ Item {
 
         anchors.fill: parent
         radius: Tokens.radius_edge
-        color: Theme.surface_variant
+        color: Appearance.card
         clip: true
 
         Image {
@@ -73,7 +73,7 @@ Item {
         radius: Tokens.radius_edge
         color: "transparent"
         border.width: thumb.selected ? 2 : 1
-        border.color: thumb.selected ? Spectrum.active : Theme.outline
+        border.color: thumb.selected ? Spectrum.active : Appearance.outline
         opacity: thumb.selected ? 1 : (thumb.hovered ? Tokens.stroke_active : Tokens.stroke_resting)
 
         Behavior on opacity {

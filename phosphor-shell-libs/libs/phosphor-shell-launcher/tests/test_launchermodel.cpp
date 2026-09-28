@@ -99,6 +99,7 @@ class TestLauncherModel : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void actionFilterIncludesActionProvidersOnly();
     void queryIsPushedToEveryProvider();
     void rowsAreGroupedAndProvidersOrderedByBestRow();
     void emptyQueryShowsOnlyProvidersThatListOnEmpty();
@@ -470,6 +471,22 @@ void TestLauncherModel::aDestroyedProviderDropsOut()
     QCOMPARE(model.rowCount(), 1);
     QCOMPARE(titles(model), QStringList{QStringLiteral("b1")});
     QCOMPARE(model.providers().size(), 1);
+}
+
+void TestLauncherModel::actionFilterIncludesActionProvidersOnly()
+{
+    LauncherModel model;
+    for (const auto& id :
+         {QStringLiteral("apps"), QStringLiteral("windows"), QStringLiteral("calculator"), QStringLiteral("command")}) {
+        auto* provider = new FakeProvider(id, true, &model);
+        provider->rows = {FakeProvider::row(id, 1)};
+        model.addProvider(provider);
+    }
+    model.setProviderFilter(QStringLiteral("actions"));
+    QCOMPARE(titles(model), (QStringList{QStringLiteral("calculator"), QStringLiteral("command")}));
+    QVERIFY(model.activate(0, false));
+    model.setProviderFilter(QStringLiteral("apps"));
+    QCOMPARE(titles(model), QStringList{QStringLiteral("apps")});
 }
 
 QTEST_GUILESS_MAIN(TestLauncherModel)

@@ -9,6 +9,7 @@
 #include <QImage>
 #include <QObject>
 #include <QString>
+#include <QVariantMap>
 
 #include <memory>
 
@@ -115,6 +116,12 @@ public:
     /// is empty.
     Q_INVOKABLE void clearPreview(const QString& screenName = QString());
 
+    // Appearance owns the complete, atomically saved look. This live layer
+    // also receives drafts, without writing the old standalone wallpaper file.
+    Q_INVOKABLE void setAppearance(const QVariantMap& wallpapers);
+    Q_INVOKABLE QVariantMap appearanceSeed() const;
+    Q_INVOKABLE QString effectiveFit(const QString& screenName = QString()) const;
+
     /// Re-decode `path` into `image`, for a consumer that knows the file
     /// changed on disk under the same name.
     Q_INVOKABLE void refresh();
@@ -145,6 +152,7 @@ private:
     // Output name → absolute path. The empty key is the all-screens entry.
     QHash<QString, QString> m_configured;
     QHash<QString, QString> m_preview;
+    QVariantMap m_appearance;
     // The path `m_image` was decoded from.
     QString m_imagePath;
     QImage m_image;

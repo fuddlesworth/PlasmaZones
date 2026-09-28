@@ -44,16 +44,24 @@ BarWidget {
     readonly property bool urgent: root.map ? root.map.urgent : false
 
     signal expandRequested(bool menu)
+    signal activated
 
-    readonly property int restHeight: 18
-    readonly property int hoverHeight: 22
+    readonly property int restHeight: Math.min(29, Appearance.barHeight - 20)
+    readonly property int hoverHeight: root.restHeight
     readonly property real _aspect: root.map && root.map.aspect > 0 ? root.map.aspect : 16 / 9
     readonly property int _mapH: hover.hovered || root.expanded ? root.hoverHeight : root.restHeight
-    readonly property int _mapW: Math.round(Math.max(24, Math.min(56, root._mapH * root._aspect)))
+    readonly property int _mapW: Math.round(root._mapH * 66 / 29)
 
     available: root.map !== null
-    contentWidth: root._mapW
-    contentHeight: root.restHeight + 4
+    contentWidth: root._mapW + 13 + caption.width + 20
+    contentHeight: Appearance.barHeight - 12
+
+    Rectangle {
+        anchors.fill: parent
+        radius: Appearance.compact ? 6 : 8
+        color: Appearance.recess
+        z: -1
+    }
 
     Accessible.role: Accessible.PageTabList
     Accessible.name: qsTr("Placement map")
@@ -73,17 +81,17 @@ BarWidget {
     PlacementMiniature {
         id: mini
 
-        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.left: parent.left
+        anchors.leftMargin: 10
         // Grows out of the band, never into the exclusive zone.
         anchors.top: parent.top
-        anchors.topMargin: (root.restHeight - root._mapH) / 2
+        anchors.topMargin: (root.contentHeight - root._mapH) / 2
         width: root._mapW
         height: root._mapH
         model: root.map
         interactive: true
         onCellClicked: id => {
-            if (root.map)
-                root.map.activate(id);
+            root.expandRequested(false);
         }
         onCellMoved: (fromId, toId) => {
             if (root.map)
@@ -112,13 +120,13 @@ BarWidget {
         DragHandler {
             id: lensDrag
 
-            property real sentX: 0
+            property real sent: 0
             property real pendingPx: 0
 
             enabled: root.map !== null && root.map.mode === 2 && root.map.stripExtentPx > 0
             target: null
-            xAxis.enabled: true
-            yAxis.enabled: false
+            xAxis.enabled: !mini.vertical
+            yAxis.enabled: mini.vertical
 
             function flush() {
                 const px = Math.round(pendingPx);
@@ -130,18 +138,20 @@ BarWidget {
 
             onActiveChanged: {
                 if (active) {
-                    sentX = 0;
+                    sent = 0;
                 } else {
                     flush();
                 }
                 pendingPx = 0;
             }
             onActiveTranslationChanged: {
-                if (!active || mini.width <= 0)
+                const extent = mini.vertical ? mini.height : mini.width;
+                if (!active || extent <= 0)
                     return;
-                const dx = activeTranslation.x - sentX;
-                sentX = activeTranslation.x;
-                pendingPx += dx * root.map.stripExtentPx / mini.width;
+                const position = mini.vertical ? activeTranslation.y : activeTranslation.x;
+                const delta = position - sent;
+                sent = position;
+                pendingPx += delta * root.map.stripExtentPx / extent;
             }
         }
 
@@ -207,23 +217,28 @@ BarWidget {
         root.map.registerDropProxy(rect, DropProxy.cellRects(rect, root.map.cells));
     }
 
-    // Desktop ticks: the only trace of the old dots, demoted to a ruler.
-    Row {
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: parent.top
-        anchors.topMargin: root.restHeight + 1
+    Column {
+        id: caption
+        x: root._mapW + 23
+        anchors.verticalCenter: parent.verticalCenter
+        width: Math.max(workspaceLabel.implicitWidth, modeLabel.implicitWidth)
         spacing: 2
-
-        Repeater {
-            model: root.map ? root.map.desktopCount : 0
-            delegate: Rectangle {
-                required property int index
-                width: 2
-                height: 1
-                color: Spectrum.focus
-                opacity: root.map && index === root.map.currentDesktop ? 0.9 : 0.25
-            }
+        Text {
+            id: workspaceLabel
+            text: Shell.Workspaces.activeName || qsTr("Workspace %1").arg(root.map ? root.map.currentDesktop + 1 : 1)
+            color: Appearance.text
+            font.family: Tokens.font_family_ui
+            font.pixelSize: Math.round((Appearance.compact ? 9 : 10) * Appearance.textScale)
         }
+        Text {
+            id: modeLabel
+            readonly property int offscreen: root.map ? root.map.overflowLeft + root.map.overflowRight : 0
+            text: root.map && root.map.mode === 2 ? qsTr("Scrolling") + (offscreen > 0 ? "  +" + offscreen : "") : root.map && root.map.mode === 1 ? qsTr("Tiling") : root.map && root.map.mode === 0 ? qsTr("Snapping") : qsTr("Placement off")
+            color: Appearance.muted
+            font.family: Tokens.font_family_ui
+            font.pixelSize: Math.round((Appearance.compact ? 9 : 10) * Appearance.textScale)
+        }
+        TapHandler {}
     }
 
     // A vertical delta of exactly 0 is a horizontal wheel or a touchpad

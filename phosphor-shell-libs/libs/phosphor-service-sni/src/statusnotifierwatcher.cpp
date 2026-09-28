@@ -8,6 +8,8 @@
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QDBusObjectPath>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <QLoggingCategory>
 
 #include <algorithm>
@@ -230,7 +232,7 @@ void StatusNotifierWatcher::RegisterStatusNotifierItem(const QString& service)
     const auto sender = message().service();
     const auto canonical = canonicalItemService(service, sender);
 
-    if (m_items.contains(canonical)) {
+    if (m_items.contains(canonical) || m_pendingRegistrations.contains(canonical)) {
         return; // already registered
     }
 
@@ -242,34 +244,17 @@ void StatusNotifierWatcher::RegisterStatusNotifierItem(const QString& service)
     // this is a bug or an attack, and refusing it costs a well-behaved
     // client nothing.
     constexpr int kMaxItemsPerSender = 32;
-    if (m_byOwner.value(sender).size() >= kMaxItemsPerSender) {
+    const auto pendingCount = std::count_if(m_pendingRegistrations.cbegin(), m_pendingRegistrations.cend(),
+                                            [&sender](const PendingRegistration& pending) {
+                                                return pending.owner == sender;
+                                            });
+    if (m_byOwner.value(sender).size() + pendingCount >= kMaxItemsPerSender) {
         qCWarning(lcSniWatcher) << "refusing registration from" << sender << "— already at the per-sender item cap of"
                                 << kMaxItemsPerSender;
         return;
     }
 
-    ItemEntry entry{sender, canonical};
-    m_items.insert(canonical, entry);
-    // Compute the dedup gate BEFORE the append so "already watched" is
-    // independent of the row we're about to add. QDBusServiceWatcher
-    // appends to an internal list without dedup; the dbus-daemon match-
-    // rule is shared so repeated adds are harmless on the wire, but the
-    // watcher would accumulate stale entries we never clean up. Skip
-    // the add if THIS sender is already watched via prior items or via
-    // a host registration for the same sender; onServiceUnregistered's
-    // single removeWatchedService then matches symmetrically.
-    const bool senderAlreadyWatched = !m_byOwner.value(sender).isEmpty()
-        || std::any_of(m_hosts.cbegin(), m_hosts.cend(), [&sender](const QString& v) {
-               return v == sender;
-           });
-    m_byOwner[sender].append(canonical);
-    if (!senderAlreadyWatched) {
-        m_busWatcher->addWatchedService(sender);
-    }
-    m_sortedDirty = true;
-
-    Q_EMIT StatusNotifierItemRegistered(canonical);
-    Q_EMIT registeredItemsChanged();
+    queueRegistration(canonical, sender, false);
 }
 
 void StatusNotifierWatcher::RegisterStatusNotifierHost(const QString& service)
@@ -293,24 +278,62 @@ void StatusNotifierWatcher::RegisterStatusNotifierHost(const QString& service)
         return;
     }
     const auto sender = message().service();
-    if (m_hosts.contains(service)) {
+    if (m_hosts.contains(service) || m_pendingRegistrations.contains(service)) {
         return;
     }
-    // Match the item-registration symmetry: addWatchedService is gated
-    // on "first tracking for this sender" so the single
-    // removeWatchedService in onServiceUnregistered clears cleanly.
-    // The owner is "already watched" if it has items OR another host
-    // entry (a sender that already registered an item then registers a
-    // host should not re-add).
-    const bool senderAlreadyWatched = !m_byOwner.value(sender).isEmpty()
-        || std::any_of(m_hosts.cbegin(), m_hosts.cend(), [&sender](const QString& v) {
-               return v == sender;
-           });
+    queueRegistration(service, sender, true);
+}
+
+void StatusNotifierWatcher::queueRegistration(const QString& service, const QString& sender, bool host)
+{
+    // Register the owner watch before checking liveness. A method call can
+    // remain queued after its sender has disconnected, in which case the
+    // NameOwnerChanged signal already happened before we knew to watch it.
+    // The async check covers that gap without blocking the shell thread.
+    if (!m_busWatcher->watchedServices().contains(sender))
+        m_busWatcher->addWatchedService(sender);
+    const quint64 generation = ++m_nextRegistration;
+    m_pendingRegistrations.insert(service, {sender, generation});
+    auto call =
+        QDBusMessage::createMethodCall(QStringLiteral("org.freedesktop.DBus"), QStringLiteral("/org/freedesktop/DBus"),
+                                       QStringLiteral("org.freedesktop.DBus"), QStringLiteral("NameHasOwner"));
+    call << sender;
+    auto* check = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(call), this);
+    connect(check, &QDBusPendingCallWatcher::finished, this, [this, check, service, sender, host, generation] {
+        check->deleteLater();
+        const auto pending = m_pendingRegistrations.constFind(service);
+        if (pending == m_pendingRegistrations.cend() || pending->generation != generation)
+            return; // Disconnected or replaced while the owner check was in flight.
+        const QDBusPendingReply<bool> reply = *check;
+        if (reply.isError() || !reply.value()) {
+            onServiceUnregistered(sender);
+            return;
+        }
+        m_pendingRegistrations.remove(service);
+        if (host)
+            acceptHost(service, sender);
+        else
+            acceptItem(service, sender);
+    });
+}
+
+void StatusNotifierWatcher::acceptItem(const QString& canonical, const QString& sender)
+{
+    if (m_items.contains(canonical))
+        return;
+    m_items.insert(canonical, {sender, canonical});
+    m_byOwner[sender].append(canonical);
+    m_sortedDirty = true;
+    Q_EMIT StatusNotifierItemRegistered(canonical);
+    Q_EMIT registeredItemsChanged();
+}
+
+void StatusNotifierWatcher::acceptHost(const QString& service, const QString& sender)
+{
+    if (m_hosts.contains(service))
+        return;
     const bool wasEmpty = m_hosts.isEmpty();
     m_hosts.insert(service, sender);
-    if (!senderAlreadyWatched) {
-        m_busWatcher->addWatchedService(sender);
-    }
     // Fire hostRegisteredChanged only on the false → true transition
     // (i.e., first host). Subsequent host registrations keep it true
     // and don't need a re-emit per CLAUDE.md "only emit on change".
@@ -324,6 +347,12 @@ void StatusNotifierWatcher::onServiceUnregistered(const QString& service)
 {
     // service is the unique name (":1.xx") of a process that died.
     // Reap every item + host it owned.
+    for (auto it = m_pendingRegistrations.begin(); it != m_pendingRegistrations.end();) {
+        if (it->owner == service)
+            it = m_pendingRegistrations.erase(it);
+        else
+            ++it;
+    }
     bool itemsChanged = false;
     if (m_byOwner.contains(service)) {
         const auto canonicals = m_byOwner.take(service);
@@ -345,13 +374,7 @@ void StatusNotifierWatcher::onServiceUnregistered(const QString& service)
         }
     }
 
-    // Only remove the bus watch when this owner actually had something
-    // we were tracking; the watcher is idempotent but the call still
-    // costs a hash lookup + DBus match-rule rebuild on a heavily
-    // loaded session bus.
-    if (itemsChanged || hostsRemoved > 0) {
-        m_busWatcher->removeWatchedService(service);
-    }
+    m_busWatcher->removeWatchedService(service);
 
     if (itemsChanged) {
         m_sortedDirty = true;

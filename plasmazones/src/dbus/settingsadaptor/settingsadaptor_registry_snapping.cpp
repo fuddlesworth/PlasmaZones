@@ -129,11 +129,8 @@ void SettingsAdaptor::initializeRegistrySnapping()
     REGISTER_INT_SETTING("zoneSpanGraceMs", zoneSpanGraceMs, setZoneSpanGraceMs)
     REGISTER_BOOL_SETTING("snappingEnabled", snappingEnabled, setSnappingEnabled)
 
-    // Zone settings. The shared inner/outer gaps have NO SETTERS here: they are
-    // config-backed (the Gaps group) and consumed daemon-side by the geometry
-    // cascade, so nothing writes them over this generic map. Read-only getters
-    // and their schemas are registered in settingsadaptor_registry.cpp for the
-    // effect's benefit.
+    // Zone settings. The shared inner/outer gaps are mode-neutral and are
+    // registered in settingsadaptor_registry.cpp.
     REGISTER_INT_SETTING("adjacentThreshold", adjacentThreshold, setAdjacentThreshold)
     REGISTER_INT_SETTING("pollIntervalMs", pollIntervalMs, setPollIntervalMs)
     REGISTER_INT_SETTING("minimumZoneSizePx", minimumZoneSizePx, setMinimumZoneSizePx)

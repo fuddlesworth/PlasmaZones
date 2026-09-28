@@ -9,6 +9,7 @@
 #include <QPointer>
 #include <QSet>
 #include <QString>
+#include <QVariantList>
 
 QT_BEGIN_NAMESPACE
 class QAbstractItemModel;
@@ -55,6 +56,13 @@ public:
     [[nodiscard]] QList<PhosphorRegistry::LauncherResult> results() const override;
     [[nodiscard]] bool activate(const QString& resultId, Activation activation) override;
 
+    // A host without foreign-toplevel can supply stable native window IDs.
+    // Each row carries windowId, title, appId and an optional subtitle.
+    void setNativeWindows(const QVariantList& windows);
+
+Q_SIGNALS:
+    void nativeWindowActivated(const QString& windowId);
+
 private Q_SLOTS:
     // A slot, not a plain method: watchToplevels connects to each toplevel's
     // titleChanged / appIdChanged by NAME, since this library does not link
@@ -75,6 +83,8 @@ private:
 
     QPointer<QAbstractItemModel> m_toplevels;
     int m_toplevelRole = -1;
+    bool m_native = false;
+    QVariantList m_nativeWindows;
     QString m_query;
     QList<PhosphorRegistry::LauncherResult> m_results;
     // Toplevels already subscribed to, so a rescan does not stack a second

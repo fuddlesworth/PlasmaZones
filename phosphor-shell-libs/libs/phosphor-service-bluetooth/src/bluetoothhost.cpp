@@ -13,6 +13,11 @@
 #include <QDBusConnection>
 #include <QDBusObjectPath>
 #include <QLoggingCategory>
+#include <QDBusServiceWatcher>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
+#include <QDBusMessage>
+#include <QHash>
 
 Q_LOGGING_CATEGORY(lcBluetoothHost, "phosphor.service.bluetooth.host")
 
@@ -35,7 +40,7 @@ public:
     QDBusConnection bus;
     QString service;
     PhosphorDBus::ObjectManager* objectManager = nullptr;
-    BluetoothAgent* agent = nullptr;
+    std::shared_ptr<BluetoothAgent> agent;
 
     QList<BluetoothAdapter*> adapters;
     QList<BluetoothDevice*> devices;
@@ -69,6 +74,9 @@ public:
             addAdapter(path, interfaces.value(QLatin1String(kAdapterIface)));
         if (interfaces.contains(QLatin1String(kDeviceIface)))
             addDevice(path, interfaces.value(QLatin1String(kDeviceIface)));
+        const auto battery = interfaces.constFind(QStringLiteral("org.bluez.Battery1"));
+        if (battery != interfaces.cend() && indexOfDevice(path) >= 0)
+            devices.at(indexOfDevice(path))->applyBattery(battery.value());
     }
 
     void handleInterfacesRemoved(const QString& path, const QStringList& interfaces)
@@ -80,6 +88,8 @@ public:
             // under this adapter's path so the device list can't dangle.
             removeDevicesUnder(path);
         }
+        if (interfaces.contains(QStringLiteral("org.bluez.Battery1")) && indexOfDevice(path) >= 0)
+            devices.at(indexOfDevice(path))->applyBattery({});
         if (interfaces.contains(QLatin1String(kDeviceIface)))
             removeDevice(path);
     }
@@ -139,8 +149,9 @@ public:
         }
     }
 
-    void start()
+    void observe()
     {
+        delete objectManager;
         objectManager =
             new PhosphorDBus::ObjectManager(bus, service, QLatin1String(kRootPath), owner, &lcBluetoothHost());
         QObject::connect(objectManager, &PhosphorDBus::ObjectManager::interfacesAdded, owner,
@@ -151,32 +162,76 @@ public:
                          [this](const QString& path, const QStringList& interfaces) {
                              handleInterfacesRemoved(path, interfaces);
                          });
-        registerAgent();
     }
 
     void registerAgent()
     {
-        agent = new BluetoothAgent(owner);
-        if (!bus.registerObject(BluetoothAgent::agentPath(), agent, QDBusConnection::ExportAllSlots)) {
-            qCWarning(lcBluetoothHost) << "failed to export the pairing agent at" << BluetoothAgent::agentPath();
-            // An agent that isn't exported can never be driven by BlueZ, so drop
-            // it: agent() then returns null, matching its documented contract
-            // (present only when the agent is actually usable).
-            delete agent;
-            agent = nullptr;
+        // BlueZ permits one agent per bus client. All shell hosts share it;
+        // opening a detail panel must not lose pairing to the bar's host.
+        static QHash<QString, std::weak_ptr<BluetoothAgent>> agents;
+        const auto key = bus.name() + QLatin1Char(':') + service;
+        agent = agents.value(key).lock();
+        if (agent)
+            return;
+        auto connection = bus;
+        const auto destination = service;
+        auto exported = std::make_shared<bool>(false);
+        agent = std::shared_ptr<BluetoothAgent>(
+            new BluetoothAgent, [connection, destination, exported](BluetoothAgent* instance) mutable {
+                if (!*exported) {
+                    delete instance;
+                    return;
+                }
+                auto message = QDBusMessage::createMethodCall(destination, QLatin1String(kManagerPath),
+                                                              QLatin1String(kAgentManagerIface),
+                                                              QStringLiteral("UnregisterAgent"));
+                message << QVariant::fromValue(QDBusObjectPath(BluetoothAgent::agentPath()));
+                connection.asyncCall(message);
+                connection.unregisterObject(BluetoothAgent::agentPath());
+                delete instance;
+            });
+        if (!bus.registerObject(BluetoothAgent::agentPath(), agent.get(), QDBusConnection::ExportAllSlots)) {
+            qCWarning(lcBluetoothHost) << "failed to export the pairing agent";
+            agent.reset();
             return;
         }
-        // Register with BlueZ and request default-agent status. Both are
-        // fire-and-forget and best-effort: RequestDefaultAgent fails when
-        // another agent (e.g. bluetoothctl, gnome-bluetooth) already holds the
-        // default slot, but pairing still works as a non-default agent.
-        PhosphorDBus::Client manager(bus, service, QLatin1String(kManagerPath), &lcBluetoothHost());
-        const QDBusObjectPath agentPath{BluetoothAgent::agentPath()};
-        manager.fireAndForget(owner, QLatin1String(kAgentManagerIface), QStringLiteral("RegisterAgent"),
-                              {QVariant::fromValue(agentPath), QString::fromLatin1(kAgentCapability)},
-                              QStringLiteral("RegisterAgent"));
-        manager.fireAndForget(owner, QLatin1String(kAgentManagerIface), QStringLiteral("RequestDefaultAgent"),
-                              {QVariant::fromValue(agentPath)}, QStringLiteral("RequestDefaultAgent"));
+        *exported = true;
+        agents.insert(key, agent);
+        auto* current = agent.get();
+        const auto generation = std::make_shared<quint64>(0);
+        const auto registerCurrent = [connection, destination, current, generation] {
+            const auto requestGeneration = ++*generation;
+            current->setAvailable(false);
+            auto* watcher = new QDBusPendingCallWatcher(
+                PhosphorDBus::Client(connection, destination, QLatin1String(kManagerPath), &lcBluetoothHost())
+                    .asyncCall(QLatin1String(kAgentManagerIface), QStringLiteral("RegisterAgent"),
+                               {QVariant::fromValue(QDBusObjectPath(BluetoothAgent::agentPath())),
+                                QString::fromLatin1(kAgentCapability)}),
+                current);
+            QObject::connect(watcher, &QDBusPendingCallWatcher::finished, current,
+                             [current, generation, requestGeneration](QDBusPendingCallWatcher* call) {
+                                 call->deleteLater();
+                                 if (requestGeneration != *generation)
+                                     return;
+                                 const QDBusPendingReply<> reply = *call;
+                                 current->setAvailable(!reply.isError()
+                                                       || reply.error().name()
+                                                           == QLatin1String("org.bluez.Error.AlreadyExists"));
+                             });
+        };
+        // Only our own pairing requests use this agent; another desktop's
+        // default agent continues handling its incoming requests.
+        auto* watcher = new QDBusServiceWatcher(service, bus, QDBusServiceWatcher::WatchForOwnerChange, current);
+        QObject::connect(
+            watcher, &QDBusServiceWatcher::serviceOwnerChanged, current,
+            [current, registerCurrent, generation](const QString&, const QString&, const QString& newOwner) {
+                ++*generation;
+                current->Cancel();
+                current->setAvailable(false);
+                if (!newOwner.isEmpty())
+                    registerCurrent();
+            });
+        registerCurrent();
     }
 };
 
@@ -196,7 +251,20 @@ BluetoothHost::BluetoothHost(QDBusConnection connection, QString service, QObjec
         qCWarning(lcBluetoothHost) << "bus unavailable; BluetoothHost inert for" << d->service;
         return;
     }
-    d->start();
+    d->registerAgent();
+    d->observe();
+    auto* watcher = new QDBusServiceWatcher(d->service, d->bus, QDBusServiceWatcher::WatchForOwnerChange, this);
+    connect(watcher, &QDBusServiceWatcher::serviceOwnerChanged, this,
+            [this](const QString&, const QString&, const QString& newOwner) {
+                delete d->objectManager;
+                d->objectManager = nullptr;
+                while (!d->devices.isEmpty())
+                    d->removeDevice(d->devices.constFirst()->dbusPath());
+                while (!d->adapters.isEmpty())
+                    d->removeAdapter(d->adapters.constFirst()->dbusPath());
+                if (!newOwner.isEmpty())
+                    d->observe();
+            });
 }
 
 BluetoothHost::~BluetoothHost() = default;
@@ -223,7 +291,7 @@ int BluetoothHost::deviceCount() const
 
 BluetoothAgent* BluetoothHost::agent() const
 {
-    return d->agent;
+    return d->agent.get();
 }
 
 BluetoothAdapter* BluetoothHost::adapterAt(int index) const
@@ -238,6 +306,12 @@ BluetoothDevice* BluetoothHost::deviceAt(int index) const
     if (index < 0 || index >= d->devices.size())
         return nullptr;
     return d->devices.at(index);
+}
+
+void BluetoothHost::refresh()
+{
+    if (d->bus.isConnected())
+        d->observe();
 }
 
 } // namespace PhosphorServiceBluetooth

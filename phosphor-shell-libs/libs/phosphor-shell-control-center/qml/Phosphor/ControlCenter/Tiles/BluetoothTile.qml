@@ -67,6 +67,9 @@ Tile {
 
     iconName: root._powered ? "network-bluetooth" : "network-bluetooth-inactive"
     label: qsTr("Bluetooth")
+    // Drills into the bar's bluetooth panel, the same surface the bluetooth
+    // chip opens, instead of a second view of the same service.
+    detailPanelId: "bluetooth"
     sublabel: {
         if (!root._adapter)
             return qsTr("No adapter");

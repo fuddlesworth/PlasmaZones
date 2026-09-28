@@ -3,7 +3,7 @@
     "name": "Glow",
     "description": "A soft coloured halo that hugs the surface's edge, brightest against the window and fading out over the glow size. It follows the frame's rounded corners and dims when the surface loses focus.",
     "author": "PlasmaZones",
-    "version": "1.3",
+    "version": "1.4",
     "category": "Ambience",
     "fragmentShader": "effect.frag",
     "interiorOpaque": true,
@@ -42,6 +42,20 @@
             "type": "color",
             "default": "#ff3daee9",
             "description": "Colour of the halo"
+        },
+        {
+            "id": "hideWhenMaximized",
+            "name": "Hide when maximized",
+            "type": "bool",
+            "default": false,
+            "description": "Hide the glow while the window is maximized or fullscreen."
+        },
+        {
+            "id": "useWindowAccent",
+            "name": "Use window identity colour",
+            "type": "bool",
+            "default": false,
+            "description": "Use this window's Phosphor identity colour, keeping the glow tint opacity. Takes precedence over the theme tint when a window identity is available."
         },
         {
             "id": "useThemeTint",

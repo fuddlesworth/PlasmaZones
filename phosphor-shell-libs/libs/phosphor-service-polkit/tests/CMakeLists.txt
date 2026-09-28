@@ -30,7 +30,7 @@ else()
     endfunction()
 endif()
 function(_phosphorservicepolkit_test target source)
-    add_executable(${target} ${source})
+    qt_add_executable(${target} ${source})
     target_link_libraries(${target}
         PRIVATE
             Qt6::Test
@@ -58,6 +58,9 @@ _phosphorservicepolkit_test(test_phosphorservicepolkit_smoke test_smoke.cpp)
 # binds; its registered / activeRequest properties read through QML, with
 # activeRequest null on a bare agent).
 _phosphorservicepolkit_test(test_phosphorservicepolkit_qmlfacade test_qmlfacade.cpp)
+
+_phosphorservicepolkit_test(test_phosphorservicepolkit_lifecycle test_lifecycle.cpp)
+target_include_directories(test_phosphorservicepolkit_lifecycle PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 
 # Decode unit test: drives the internal Details/Identity -> Qt-types decode with
 # real polkit-qt values. It links PolkitQt6-1::Core directly (the lib links it

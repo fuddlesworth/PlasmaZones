@@ -173,30 +173,52 @@ is the placement map. No result-row keyboard hint footer. No emoji provider
 
 ### a) The idea
 
-The control center is **a real tile placed by the engine**. It is not a popout
-anchored to a bar button. Opening it asks the placement mode for a rect (snapping:
-the zone nearest the bar's control-center button; tiling: a new leaf inserted at
-the focused window's position; scrolling: a new 420 px column inserted right of
-the focused column) and the control center is a shell window placed there,
-including the mode's gaps and the user's surface pack. Closing it removes the
-tile and the mode reflows. The control center therefore obeys the user's own
-layout rules and looks like the rest of their windows.
+The control center is **a transient anchored to its bar chip**, like every other
+panel the bar opens.
+
+It was specified as a real tile placed by the engine, and shipped that way, and
+that is what this section used to describe: opening it asked the placement mode
+for a rect and the control center was a shell window placed there, with the
+mode's gaps and the user's surface pack. It obeyed the user's layout rules and
+looked like the rest of their windows, which was the appeal.
+
+It was replaced because being a tile cost it three faults that no amount of
+layout work could reach. A tile gets the whole zone, so five controls were
+stretched across an 830 px surface — and the two obvious layouts, hugging the
+top and filling the space, produce an empty two thirds and a set of 230 px slabs
+respectively. A toplevel is mapped where the compositor chooses and the engine's
+rule moves it afterwards, so it alone among the panels appeared centred and
+jumped. And a pane by definition does not close when you look elsewhere (A2
+§4.7), which left it with no way out once it was no longer one.
+
+The engine-placed claim is still real and still worth its cost — for the
+notification centre and the expanded map, which a user leaves open beside their
+work. It is not worth its cost for a surface you open to change one setting.
 
 ### b) Layout
 
-- Size: the engine's rect. Minimum content width 380 px; the control center
-  asks for 420 × 560 when the mode lets it (scrolling column width, snapping
-  zone). In tiling it takes whatever leaf it gets and stacks its sections.
-- Ground: navy `#0B1730` at 96% over blur. Radius follows the surface pack's
-  corner radius (default 8 to match `border-*` packs). Edge: whatever the
-  user's surface pack draws for a focused window. The control center has no
-  chrome of its own.
-- Content is a single vertical list of **rails**, 52 px tall, full width, 16 px
-  side padding, 8 px between rails. Each rail: 20 px glyph, 14 px label,
-  right-aligned 13 px numeric-tabular value in `#94A3B8`, and a 2 px spectrum
-  underline across the rail's full width which *is* the slider for the
-  continuous rails and is the on/off line for toggles. There are no 2-up
-  toggle tiles and no separate slider tiles.
+- Size: its own, 360 px wide and as tall as its content, like the bar's other
+  panels. It no longer asks the engine for a rect.
+- Ground: abyss at 94% over blur, the floating-card row of 05 §5, with a stroke
+  sampling the shared field at the panel's own screen position and the rail band
+  with its gleam along the top edge. It draws its own material now: as a pane it
+  borrowed the pane host's ground, and the day it stopped being one its content
+  was left floating on the bare desktop.
+- Content is a **two-column card grid**. A toggle is a card in one column: 20 px
+  glyph at the head, label and value on one line at the foot, a 1 px stroke
+  sampling the shared field by the card's position in the grid, and a 2 px
+  spectrum underline along its foot which *is* the on/off line. A continuous
+  control (volume, brightness) spans both columns, because its underline is its
+  slider and a longer line is a finer one to drag. Cards fill the width they are
+  given and keep their own height.
+
+  This was "a single vertical list of rails, full width, no 2-up tiles". That
+  followed from the surface being zone-sized, where a row of cards would have
+  been stretched into slabs; at the panel's own 360 px a list of full-width rails
+  is instead a column of near-empty lines. The card grid is what the size the
+  surface actually asks for wants. A4 audits the tile-GRID control center as the
+  clone silhouette, and the distance from it is that these cards are strokes on
+  navy with the spectrum stepping across them — never filled tiles.
 - Rail order (fixed): Output volume, Input volume, Brightness, Night light,
   Wi-Fi, Bluetooth, VPN, Power profile, Keep awake, Do not disturb, Airplane.
   Below the rails, one 36 px footer row of text actions: `Wallpaper` ·
@@ -580,6 +602,12 @@ placement map, live, at reduced scale, with the current one outlined blue. It
 replaces the widget-panel dashboard entirely: calendar, weather and media are
 three fixed cells in the grid's last row, drawn in the same visual grammar as
 the desktop cells, so the dashboard is one grid of things you can go to.
+
+The calendar cell is the month **at overview scale**, and it is not the way to
+check a date: the clock opens a calendar transient for that (A2 §5). The two are
+the same month drawn for different errands, and the dashboard is never what a
+click on the clock opens — a full-screen takeover to read a date is the wrong
+weight, and it is what the first implementation shipped by mistake.
 
 ### b) Layout
 

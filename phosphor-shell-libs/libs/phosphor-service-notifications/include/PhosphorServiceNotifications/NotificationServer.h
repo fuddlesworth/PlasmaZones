@@ -28,14 +28,9 @@ class Notification;
  * (dunst / mako / Plasma) is a hard conflict, surfaced as `nameAcquired() ==
  * false` rather than a degraded backend. The server then stays inert.
  *
- * The four spec methods (`Notify`, `CloseNotification`, `GetCapabilities`,
- * `GetServerInformation`) are exported through a generated adaptor
- * (`qt6_add_dbus_adaptor`); this object is the adaptor's forwarding target.
- * They all reply synchronously, which is why this is a generated adaptor and
- * not a direct `ExportAllSlots` object: the bluetooth `Agent1` had to hand-roll
- * dispatch only because its callbacks defer their reply, which is not the case
- * here. The spec signals (`NotificationClosed`, `ActionInvoked`) are declared
- * on this object and auto-relayed to the bus by the adaptor.
+ * The four spec methods are exported through NotificationsAdaptor, which
+ * forwards synchronous calls and records their transport sender. Standard
+ * action/close signals are relayed; inline reply text is sent only to its origin.
  *
  * `Notify` decodes the hint set (including the `image-data` → `QImage` path)
  * into a typed `Notification`, allocates ids, and updates in place on
@@ -98,14 +93,19 @@ public:
     /// stays open. Q_INVOKABLE, not a slot: callable from QML/CLI, never exported
     /// (the bluetooth Agent1 keeps its respond* methods off the bus the same way).
     Q_INVOKABLE void invokeAction(uint id, const QString& actionKey, const QString& activationToken = QString());
+    /// KDE inline-reply extension; only advertised actions accept replies.
+    Q_INVOKABLE bool reply(uint id, const QString& text);
+    /// Preserve the remaining lifetime while a surface is being read/edited.
+    Q_INVOKABLE void setExpiryPaused(uint id, bool paused);
 
 public Q_SLOTS:
-    // org.freedesktop.Notifications, forwarded here by the generated adaptor.
+    // org.freedesktop.Notifications, forwarded here by the transport adaptor.
     // Signatures mirror the spec exactly; the PascalCase names are spec-dictated
     // (as with the bluetooth Agent1 slots) and intentionally break the project's
     // action-verb slot-naming rule. All reply synchronously.
     uint Notify(const QString& appName, uint replacesId, const QString& appIcon, const QString& summary,
-                const QString& body, const QStringList& actions, const QVariantMap& hints, int expireTimeout);
+                const QString& body, const QStringList& actions, const QVariantMap& hints, int expireTimeout,
+                const QString& sender = QString());
     void CloseNotification(uint id);
     [[nodiscard]] QStringList GetCapabilities();
     QString GetServerInformation(QString& vendor, QString& version, QString& specVersion);
@@ -127,6 +127,8 @@ Q_SIGNALS:
     /// Carries the XDG activation token for @p id ahead of an `ActionInvoked`,
     /// so the activated app can raise its window. Auto-relayed by the adaptor.
     void ActivationToken(uint id, const QString& activationToken);
+    /// Local confirmation only. Reply text is sent as a targeted D-Bus signal.
+    void replySent(uint id, const QString& text);
 
     void nameAcquiredChanged();
     void defaultExpireTimeoutChanged();

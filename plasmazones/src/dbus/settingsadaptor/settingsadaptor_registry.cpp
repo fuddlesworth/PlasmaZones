@@ -709,42 +709,45 @@ void SettingsAdaptor::initializeRegistry()
     m_schemas[QString(PhosphorProtocol::Service::SettingProperty::AnimationShaderSearchPaths)] =
         QStringLiteral("string");
 
-    // The shared inner/outer gaps are config-backed (the Gaps group), written
-    // by the settings app's Window Appearance page — not over this generic
-    // map. But the editor (a separate process) reads the resolved global gap
-    // values over D-Bus, so register READ-ONLY getters (no setter) for them; a
-    // write attempt still fails because no setter is registered. All seven are
-    // on the ISettings geometry interface (IZoneGeometrySettings), so they
-    // register through m_settings like adjacentThreshold — a non-Settings
-    // backend keeps the keys.
-    m_getters[QStringLiteral("innerGap")] = [this]() {
-        return m_settings->innerGap();
+    // The shared inner/outer gaps (the Gaps group). The editor reads the
+    // resolved values over D-Bus, and the Phosphor shell's desktop style
+    // writes them here rather than into config.json behind the daemon's back,
+    // so the geometry cascade sees the change through the setters' signals.
+    // All seven are on the ISettings geometry interface
+    // (IZoneGeometrySettings), so they register through m_settings like
+    // adjacentThreshold and a non-Settings backend keeps the keys. The
+    // setters clamp through the config schema, as setSetting documents.
+    const auto registerGap = [this](QLatin1String key, int (ISettings::*getter)() const,
+                                    void (ISettings::*setter)(int)) {
+        m_getters[QString(key)] = [this, getter]() {
+            return QVariant((m_settings->*getter)());
+        };
+        m_setters[QString(key)] = [this, setter](const QVariant& v) {
+            bool ok = false;
+            const int parsed = v.toInt(&ok);
+            if (!ok) {
+                return false;
+            }
+            (m_settings->*setter)(parsed);
+            return true;
+        };
+        m_schemas[QString(key)] = QStringLiteral("int");
     };
-    m_schemas[QStringLiteral("innerGap")] = QStringLiteral("int");
-    m_getters[QStringLiteral("outerGap")] = [this]() {
-        return m_settings->outerGap();
+    namespace Key = PhosphorProtocol::Service::SettingProperty;
+    registerGap(Key::InnerGap, &ISettings::innerGap, &ISettings::setInnerGap);
+    registerGap(Key::OuterGap, &ISettings::outerGap, &ISettings::setOuterGap);
+    registerGap(Key::OuterGapTop, &ISettings::outerGapTop, &ISettings::setOuterGapTop);
+    registerGap(Key::OuterGapBottom, &ISettings::outerGapBottom, &ISettings::setOuterGapBottom);
+    registerGap(Key::OuterGapLeft, &ISettings::outerGapLeft, &ISettings::setOuterGapLeft);
+    registerGap(Key::OuterGapRight, &ISettings::outerGapRight, &ISettings::setOuterGapRight);
+    m_getters[QString(Key::UsePerSideOuterGap)] = [this]() {
+        return QVariant(m_settings->usePerSideOuterGap());
     };
-    m_schemas[QStringLiteral("outerGap")] = QStringLiteral("int");
-    m_getters[QStringLiteral("usePerSideOuterGap")] = [this]() {
-        return m_settings->usePerSideOuterGap();
+    m_setters[QString(Key::UsePerSideOuterGap)] = [this](const QVariant& v) {
+        m_settings->setUsePerSideOuterGap(v.toBool());
+        return true;
     };
-    m_schemas[QStringLiteral("usePerSideOuterGap")] = QStringLiteral("bool");
-    m_getters[QStringLiteral("outerGapTop")] = [this]() {
-        return m_settings->outerGapTop();
-    };
-    m_schemas[QStringLiteral("outerGapTop")] = QStringLiteral("int");
-    m_getters[QStringLiteral("outerGapBottom")] = [this]() {
-        return m_settings->outerGapBottom();
-    };
-    m_schemas[QStringLiteral("outerGapBottom")] = QStringLiteral("int");
-    m_getters[QStringLiteral("outerGapLeft")] = [this]() {
-        return m_settings->outerGapLeft();
-    };
-    m_schemas[QStringLiteral("outerGapLeft")] = QStringLiteral("int");
-    m_getters[QStringLiteral("outerGapRight")] = [this]() {
-        return m_settings->outerGapRight();
-    };
-    m_schemas[QStringLiteral("outerGapRight")] = QStringLiteral("int");
+    m_schemas[QString(Key::UsePerSideOuterGap)] = QStringLiteral("bool");
 
     // Per-surface decoration tree (JSON blob round-trip via D-Bus), mirroring
     // the animation shaderProfileTree registration above. The out-of-process

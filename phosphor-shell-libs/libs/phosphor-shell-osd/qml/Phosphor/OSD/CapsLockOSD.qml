@@ -23,7 +23,7 @@ OSDCard {
     showProgress: false
 
     // Glyph tint: caps-on lights the glyph with the primary accent.
-    readonly property color glyphColor: osd.active ? Theme.primary : Theme.on_surface
+    readonly property color glyphColor: osd.active ? Theme.primary : Appearance.text
 
     icon: Component {
         Item {

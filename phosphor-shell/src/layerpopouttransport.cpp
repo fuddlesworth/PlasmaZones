@@ -10,11 +10,14 @@
 #include <PhosphorLayer/SurfaceFactory.h>
 
 #include <QColor>
+#include <QCoreApplication>
+#include <QEvent>
 #include <QLoggingCategory>
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickItem>
+#include <QQuickWindow>
 #include <QScreen>
 
 #include <utility>
@@ -22,12 +25,8 @@
 namespace {
 Q_LOGGING_CATEGORY(lcPopoutTransport, "phosphorshell.popout.transport")
 
-// The scrim is the only thing that distinguishes a modal popout from a
-// cooperative one visually, so the two alphas are a designed pair rather than
-// two independent numbers: the modal reads as "the rest is unavailable", the
-// cooperative as "this is on top of, not instead of".
+// Only modal surfaces dim the desktop. Cooperative panels retain context.
 constexpr int kModalScrimAlpha = 160;
-constexpr int kCooperativeScrimAlpha = 60;
 
 // Handle prefix. RoutingPopoutTransport keys close-routing on the handle
 // string and documents these as disjoint by construction, so this must not
@@ -68,33 +67,25 @@ void LayerPopoutTransport::setReservedMarginsProvider(ReservedMarginsProvider pr
     m_reservedMargins = std::move(provider);
 }
 
+void LayerPopoutTransport::setDecorationProvider(DecorationProvider provider)
+{
+    m_decorationProvider = std::move(provider);
+}
+
 void LayerPopoutTransport::drain()
 {
-    // Note this DEFERS destruction: destroyEntry deleteLater()s each Surface,
-    // so the surfaces and their hosts outlive this call by at least one event
-    // loop turn, and on the reload path they outlive the QQmlEngine that made
-    // them (ShellEngine::teardown resets the engine synchronously right after
-    // aboutToReload). What makes that safe is destroyEntry's DISCONNECT, not
-    // any synchrony: ~QQmlEngine runs each host's Component.onDestruction, and
-    // the disconnect is the only reason that emission reaches nobody. Do not
-    // remove it on the assumption that draining first is enough.
-    //
-    // The callback is deliberately NOT cleared here, for the same reason:
-    // nothing below can reach onHostDismissed, so there is no self-dismissal
-    // to suppress.
-    //
-    // `m_engine` is likewise retained rather than nulled: the reload path
-    // drains and then hands over a replacement through setEngine, so clearing
-    // it here would buy nothing. On the shutdown path the controller's tables
-    // are already empty before drain runs, so no further openSurface arrives. Clearing it
-    // would be permanent: PopoutController installs its callback once, in its
-    // constructor, and never reinstalls, so a transport disarmed by the first
-    // hot reload would swallow every click-outside and Escape for the rest of
-    // the process while still tearing the surface down. The controller would
-    // keep the stale row and report the popout as open forever.
+    // Close also schedules Surface deletion; Surface's destructor schedules
+    // its QQuickWindow deletion. Finish the first level here so the engine's
+    // deferred-delete flush can destroy every QML host before its singletons.
+    // Include already-closing surfaces, which have left m_entries but still
+    // belong to this transport. The callback stays installed for the new engine.
     const auto entries = std::exchange(m_entries, {});
     for (auto it = entries.cbegin(); it != entries.cend(); ++it) {
         destroyEntry(it.key(), it.value());
+    }
+    const auto surfaces = findChildren<PhosphorLayer::Surface*>(Qt::FindDirectChildrenOnly);
+    for (auto* surface : surfaces) {
+        QCoreApplication::sendPostedEvents(surface, QEvent::DeferredDelete);
     }
 }
 
@@ -168,6 +159,7 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     // asking for it hears that it did not get it.
     QString placement = QStringLiteral("center");
     int reservedTop = 0;
+    int reservedBottom = 0;
     switch (request.anchor) {
     case PhosphorPopout::Anchor::BarLeft:
         placement = QStringLiteral("barLeft");
@@ -177,6 +169,18 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
         break;
     case PhosphorPopout::Anchor::BarRight:
         placement = QStringLiteral("barRight");
+        break;
+    case PhosphorPopout::Anchor::BarItem:
+        // Starts with "bar", so the reserved-band lookup below picks it up
+        // and the panel hangs off the bar's bottom edge like the other bar
+        // anchors. Only the horizontal differs.
+        placement = QStringLiteral("barItem");
+        break;
+    case PhosphorPopout::Anchor::BarItemRight:
+        placement = QStringLiteral("barItemRight");
+        break;
+    case PhosphorPopout::Anchor::BottomCenter:
+        placement = QStringLiteral("bottomCenter");
         break;
     case PhosphorPopout::Anchor::Custom:
         placement = QStringLiteral("custom");
@@ -188,9 +192,10 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     case PhosphorPopout::Anchor::ScreenCenter:
         break;
     }
-    if (placement.startsWith(QLatin1String("bar"))) {
+    if (placement.startsWith(QLatin1String("bar")) || placement == QLatin1String("bottomCenter")) {
         if (m_reservedMargins) {
             reservedTop = m_reservedMargins(screen).top();
+            reservedBottom = m_reservedMargins(screen).bottom();
         } else {
             // Not fatal: the popout still opens, hanging from the screen's
             // top edge instead of the bar's bottom edge. But that is a
@@ -298,15 +303,14 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     if (!hostItem->setProperty("keyboardFocus", request.keyboardFocus)) {
         qCWarning(lcPopoutTransport) << "popout" << request.popoutId << "— PopoutHost rejected the keyboardFocus write";
     }
-    // The scrim is what makes a Modal read as modal. Cooperative popouts get
-    // a light wash, Detached none at all so they never darken the desktop.
+    // The approved floating panels leave the desktop and bar at full brightness.
     QColor backdrop;
     switch (request.exclusive) {
     case PhosphorPopout::ExclusiveMode::Modal:
         backdrop = QColor(0, 0, 0, kModalScrimAlpha);
         break;
     case PhosphorPopout::ExclusiveMode::Cooperative:
-        backdrop = QColor(0, 0, 0, kCooperativeScrimAlpha);
+        backdrop = QColor(Qt::transparent);
         break;
     case PhosphorPopout::ExclusiveMode::Detached:
         backdrop = QColor(Qt::transparent);
@@ -318,12 +322,23 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     // Placement, resolved above. Checked like the other host writes: a
     // rejected write means the host renamed a property and every
     // bar-anchored popout would silently land mid-screen.
+    // Asked for at each open rather than cached: a hot reload builds a
+    // fresh Component and the stale one belongs to a dead engine.
+    if (m_decorationProvider) {
+        if (QObject* decoration = m_decorationProvider()) {
+            hostItem->setProperty("decoration", QVariant::fromValue(decoration));
+        }
+    }
+    const auto effects = m_engine->rootContext()->contextProperty(QStringLiteral("ShellEffects"));
+    if (effects.isValid())
+        hostItem->setProperty("surfaceEffects", effects);
     if (!hostItem->setProperty("placement", placement)) {
         qCWarning(lcPopoutTransport) << "popout" << request.popoutId << "— PopoutHost rejected the placement write";
     }
     if (!hostItem->setProperty("reservedTop", reservedTop)) {
         qCWarning(lcPopoutTransport) << "popout" << request.popoutId << "— PopoutHost rejected the reservedTop write";
     }
+    hostItem->setProperty("reservedBottom", reservedBottom);
     // The inset is a one-shot write, so a popout open across an output
     // geometry change kept hanging at the offset the bar had when it opened.
     // Re-push it while this host is alive; the guarded QPointer means a
@@ -336,10 +351,20 @@ QString LayerPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
             if (!guardedHost || !m_reservedMargins) {
                 return;
             }
+            guardedHost->setProperty("reservedBottom", m_reservedMargins(screen).bottom());
             if (!guardedHost->setProperty("reservedTop", m_reservedMargins(screen).top())) {
                 qCWarning(lcPopoutTransport) << "popout" << popoutId << "— PopoutHost rejected a reservedTop update";
             }
         });
+    }
+    if (request.anchor == PhosphorPopout::Anchor::BarItem || request.anchor == PhosphorPopout::Anchor::BarItemRight) {
+        // x only: BarItem takes its vertical from the reserved band, so
+        // writing customY here would be writing a value the host's y
+        // binding does not read on this branch.
+        if (!hostItem->setProperty("customX", request.customAnchor.x())) {
+            qCWarning(lcPopoutTransport) << "popout" << request.popoutId
+                                         << "— PopoutHost rejected the BarItem customX write";
+        }
     }
     if (request.anchor == PhosphorPopout::Anchor::Custom) {
         // Both writes always run. Short-circuiting on the first would leave a
@@ -466,6 +491,14 @@ void LayerPopoutTransport::closeSurface(const QString& handle)
         return;
     }
     it->closing = true;
+    // Input ownership ends immediately even while the dismiss animation
+    // remains visible. A tray action may hand off to an app-owned menu.
+    if (it->surface) {
+        it->surface->setKeyboardInteractivity(PhosphorLayer::KeyboardInteractivity::None);
+        if (auto* window = it->surface->window()) {
+            window->setFlag(Qt::WindowTransparentForInput, true);
+        }
+    }
 
     if (!it->hostItem) {
         // The host is already gone (surface failed, screen lost). Nothing to

@@ -53,6 +53,13 @@ class PHOSPHORSERVICEPIPEWIRE_EXPORT PwNode : public QObject
     Q_PROPERTY(QString name READ name NOTIFY infoChanged)
     Q_PROPERTY(QString nick READ nick NOTIFY infoChanged)
     Q_PROPERTY(QString description READ description NOTIFY infoChanged)
+    Q_PROPERTY(bool running READ running NOTIFY infoChanged)
+    Q_PROPERTY(QString mediaName READ mediaName NOTIFY infoChanged)
+    Q_PROPERTY(QString applicationName READ applicationName NOTIFY infoChanged)
+    Q_PROPERTY(QString iconName READ iconName NOTIFY infoChanged)
+    Q_PROPERTY(QString serial READ serial NOTIFY infoChanged)
+    Q_PROPERTY(QString targetName READ targetName NOTIFY infoChanged)
+    Q_PROPERTY(bool canMove READ canMove NOTIFY infoChanged)
     Q_PROPERTY(QString mediaClass READ mediaClass CONSTANT)
     Q_PROPERTY(quint32 channelCount READ channelCount NOTIFY propsChanged)
     Q_PROPERTY(QList<qreal> volumes READ volumes NOTIFY propsChanged)
@@ -66,6 +73,16 @@ public:
     [[nodiscard]] QString nick() const;
     [[nodiscard]] QString description() const;
     [[nodiscard]] QString mediaClass() const;
+    [[nodiscard]] bool running() const;
+    [[nodiscard]] QString mediaName() const;
+    void applyRunning(bool running);
+    [[nodiscard]] QString applicationName() const;
+    [[nodiscard]] QString iconName() const;
+    [[nodiscard]] QString serial() const;
+    [[nodiscard]] QString targetName() const;
+    [[nodiscard]] bool canMove() const;
+    /// Internal metadata echo, on the GUI thread.
+    void applyTarget(const QString& target, bool present);
     [[nodiscard]] quint32 channelCount() const;
     [[nodiscard]] QList<qreal> volumes() const;
     [[nodiscard]] bool muted() const;

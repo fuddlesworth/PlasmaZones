@@ -57,6 +57,56 @@ target_link_libraries(test_bar_controller
 target_include_directories(test_bar_controller PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-shell/src)
 add_test(NAME test_bar_controller COMMAND test_bar_controller)
 
+# The desktop style owner. It reaches the daemon's settings only over D-Bus,
+# which the test fakes on the private bus, so it links no plasmazones target.
+add_executable(test_desktop_style_controller
+    test_desktop_style_controller.cpp
+    ${CMAKE_SOURCE_DIR}/phosphor-shell/src/DesktopStyleController.h
+    ${CMAKE_SOURCE_DIR}/phosphor-shell/src/desktopstylecontroller.cpp
+)
+target_link_libraries(test_desktop_style_controller
+    PRIVATE
+        Qt6::Test
+        Qt6::DBus
+        KF6::CoreAddons
+        PhosphorProtocol::PhosphorProtocol
+)
+target_include_directories(test_desktop_style_controller PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-shell/src)
+add_test(NAME test_desktop_style_controller COMMAND test_desktop_style_controller)
+
+add_executable(test_quick_settings_controller
+    test_quick_settings_controller.cpp
+    ${CMAKE_SOURCE_DIR}/phosphor-shell/src/QuickSettingsController.h
+    ${CMAKE_SOURCE_DIR}/phosphor-shell/src/quicksettingscontroller.cpp
+)
+target_link_libraries(test_quick_settings_controller PRIVATE Qt6::Test Qt6::Core Qt6::DBus)
+target_include_directories(test_quick_settings_controller PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-shell/src)
+add_test(NAME test_quick_settings_controller COMMAND test_quick_settings_controller)
+
+# The notification centre. The server under it runs on a private
+# peer-to-peer bus, so this needs no session daemon.
+if(TARGET PhosphorServiceNotifications::PhosphorServiceNotifications)
+    add_executable(test_notification_controller
+        test_notification_controller.cpp
+        ${CMAKE_SOURCE_DIR}/phosphor-shell/src/NotificationController.h
+        ${CMAKE_SOURCE_DIR}/phosphor-shell/src/notificationcontroller.cpp
+    )
+    target_link_libraries(test_notification_controller
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            Qt6::DBus
+            PhosphorServiceNotifications::PhosphorServiceNotifications
+            PhosphorServiceIconTheme::PhosphorServiceIconTheme
+    )
+    if(TARGET KF6::WindowSystem)
+        target_link_libraries(test_notification_controller PRIVATE KF6::WindowSystem)
+        target_compile_definitions(test_notification_controller PRIVATE PHOSPHOR_SHELL_HAVE_KWINDOWSYSTEM)
+    endif()
+    target_include_directories(test_notification_controller PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-shell/src)
+    add_test(NAME test_notification_controller COMMAND test_notification_controller)
+endif()
+
 # The OSD registry owner, same shape and same reasoning as test_bar_controller.
 add_executable(test_osd_controller
     test_osd_controller.cpp
@@ -115,6 +165,25 @@ target_link_libraries(test_shell_gestures
 target_include_directories(test_shell_gestures PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-shell/src)
 add_test(NAME test_shell_gestures COMMAND test_shell_gestures)
 
+if(TARGET PhosphorShellPicker::PhosphorShellPickerQml)
+    add_executable(test_shell_appearance_entry
+        test_shell_appearance_entry.cpp
+        ${CMAKE_SOURCE_DIR}/phosphor-shell/src/PickerController.h
+        ${CMAKE_SOURCE_DIR}/phosphor-shell/src/pickercontroller.cpp
+    )
+    target_include_directories(test_shell_appearance_entry PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-shell/src)
+    target_link_libraries(test_shell_appearance_entry PRIVATE
+        Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick
+        PhosphorLayer::PhosphorLayer PhosphorShell::PhosphorShell
+        PhosphorShellPickerQml PhosphorShellPickerQmlplugin
+        PhosphorShellWidgetsQml PhosphorShellWidgetsQmlplugin
+        PhosphorThemeQml PhosphorThemeQmlplugin
+        PhosphorShellQml PhosphorShellQmlplugin
+        phosphor_shell_example phosphor_shell_exampleplugin
+    )
+    add_test(NAME test_shell_appearance_entry COMMAND test_shell_appearance_entry)
+endif()
+
 # The chrome decoration resolver: tree JSON + the bundled packs to a stage
 # list per shell surface path.
 #
@@ -148,6 +217,42 @@ if(TARGET PhosphorTheme::PhosphorTheme)
     target_compile_definitions(test_shell_chrome PRIVATE PZ_BUNDLED_SURFACE_DIR="${CMAKE_SOURCE_DIR}/plasmazones/data/surface")
     target_include_directories(test_shell_chrome PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-shell/src)
     add_test(NAME test_shell_chrome COMMAND test_shell_chrome)
+endif()
+
+# What it costs to OPEN a bar panel: a fence against a blocking service
+# construction moving back onto the click path. Needs the Phosphor.Bar QML
+# module and every service the panels import.
+if(TARGET PhosphorShellBar::PhosphorShellBarQml AND TARGET PhosphorServiceNetwork::PhosphorServiceNetwork)
+    add_executable(test_panel_open_cost test_panel_open_cost.cpp)
+    target_link_libraries(test_panel_open_cost
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            Qt6::Gui
+            Qt6::Qml
+            Qt6::Quick
+            PhosphorShell::PhosphorShell
+            PhosphorShellQml
+            PhosphorShellQmlplugin
+            PhosphorShellBar::PhosphorShellBarQml
+            PhosphorShellBarQmlplugin
+            PhosphorShellWidgetsQml
+            PhosphorShellWidgetsQmlplugin
+            PhosphorThemeQml
+            PhosphorThemeQmlplugin
+            PhosphorServiceNetwork::PhosphorServiceNetwork
+            PhosphorServiceBluetooth::PhosphorServiceBluetooth
+            PhosphorServiceUPower::PhosphorServiceUPower
+            PhosphorServiceMpris::PhosphorServiceMpris
+            PhosphorServicePipeWire::PhosphorServicePipeWire
+            PhosphorServiceSni::PhosphorServiceSni
+            # The popout host is built per open by the transport, so it is
+            # on the click path too and is measured alongside the panels.
+            PhosphorPopout::PhosphorPopoutQml
+            PhosphorPopoutQmlplugin
+    )
+    target_compile_definitions(test_panel_open_cost PRIVATE PZ_QML_IMPORT_DIR="${CMAKE_BINARY_DIR}/qml")
+    add_test(NAME test_panel_open_cost COMMAND test_panel_open_cost)
 endif()
 
 # The toast broker behind the `notify` IpcTarget.
@@ -193,6 +298,73 @@ if(TARGET PhosphorShellBar::PhosphorShellBarQml)
     add_test(NAME test_bar_widget_types COMMAND test_bar_widget_types)
 endif()
 
+# Compile linked shell modules using their actual service type registrations.
+# Each static module needs its plugin registrar to resolve imports. Also create
+# QuickSettings in a foreign context to exercise its controller bridge.
+if(TARGET PhosphorShellBar::PhosphorShellBarQml AND TARGET PhosphorServiceNetwork::PhosphorServiceNetwork)
+    add_executable(test_shell_qml_compiles
+        test_shell_qml_compiles.cpp
+        ${CMAKE_SOURCE_DIR}/phosphor-shell/src/ControlCenterController.h
+        ${CMAKE_SOURCE_DIR}/phosphor-shell/src/controlcentercontroller.cpp
+        ${CMAKE_SOURCE_DIR}/phosphor-shell/src/QmlComponentTileFactory.h
+        ${CMAKE_SOURCE_DIR}/phosphor-shell/src/qmlcomponenttilefactory.cpp
+    )
+    target_include_directories(test_shell_qml_compiles PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-shell/src)
+    target_link_libraries(test_shell_qml_compiles
+        PRIVATE
+            Qt6::Test
+            Qt6::Core
+            Qt6::Gui
+            Qt6::Qml
+            Qt6::Quick
+            PhosphorRegistry::PhosphorRegistry
+            PhosphorShellBar::PhosphorShellBarQml
+            PhosphorShellBarQmlplugin
+            PhosphorShellControlCenterQml
+            PhosphorShellControlCenterQmlplugin
+            PhosphorShellOsdQml
+            PhosphorShellOsdQmlplugin
+            PhosphorShellNotificationsQml
+            PhosphorShellNotificationsQmlplugin
+            PhosphorShellDashboardQml
+            PhosphorShellDashboardQmlplugin
+            PhosphorShellLauncherQml
+            PhosphorShellLauncherQmlplugin
+            PhosphorShellPowerQml
+            PhosphorShellPowerQmlplugin
+            PhosphorShellPickerQml
+            PhosphorShellPickerQmlplugin
+            PhosphorShellPolkitQml
+            PhosphorShellPolkitQmlplugin
+            PhosphorShellLockQml
+            PhosphorShellLockQmlplugin
+            PhosphorShellWidgetsQml
+            PhosphorShellWidgetsQmlplugin
+            PhosphorShellQml
+            PhosphorShellQmlplugin
+            PhosphorPopout::PhosphorPopoutQml
+            PhosphorPopoutQmlplugin
+            PhosphorThemeQml
+            PhosphorThemeQmlplugin
+            PhosphorServiceSni::PhosphorServiceSni
+            PhosphorServiceIconTheme::PhosphorServiceIconTheme
+            PhosphorServiceUPower::PhosphorServiceUPower
+            PhosphorServiceMpris::PhosphorServiceMpris
+            PhosphorServicePipeWire::PhosphorServicePipeWire
+            PhosphorServiceNetwork::PhosphorServiceNetwork
+            PhosphorServiceBluetooth::PhosphorServiceBluetooth
+            PhosphorServiceBrightness::PhosphorServiceBrightness
+            PhosphorServiceNotifications::PhosphorServiceNotifications
+            PhosphorServicePolkit::PhosphorServicePolkit
+            PhosphorServiceIdle::PhosphorServiceIdle
+            PhosphorServiceSession::PhosphorServiceSession
+            # Not for a QML module: PanelWindow, SystemClock and SystemUsage
+            # are C++ types this library registers into Phosphor.Shell.
+            PhosphorShell::PhosphorShell
+    )
+    add_test(NAME test_shell_qml_compiles COMMAND test_shell_qml_compiles)
+endif()
+
 # LayerPopoutTransport, the shell's real popout transport (Phase 4.6),
 # driven headless through phosphor-layer's mock transport + screen provider.
 # Gated on the popout QML module because building PopoutHost in-test needs
@@ -225,6 +397,11 @@ if(TARGET PhosphorPopout::PhosphorPopoutQml AND TARGET PhosphorLayer::PhosphorLa
             PhosphorPopoutQmlplugin
             PhosphorThemeQml
             PhosphorThemeQmlplugin
+            # PopoutHost imports Phosphor.Widgets for the DecorationSlot it
+            # wraps its content frame in. Without the module the host does
+            # not load and every open in this file is refused.
+            PhosphorShellWidgetsQml
+            PhosphorShellWidgetsQmlplugin
     )
     add_test(NAME test_layer_popout_transport COMMAND test_layer_popout_transport)
 endif()
@@ -452,5 +629,10 @@ endif()
 # sweep for the last-wins reason above.
 if(TARGET test_socket_popout_transport)
     phosphor_append_test_environment(test_socket_popout_transport
+        "QT_QPA_PLATFORM=offscreen:configfile=${CMAKE_CURRENT_SOURCE_DIR}/two-screens.json")
+endif()
+
+if(TARGET test_shell_appearance_entry)
+    phosphor_append_test_environment(test_shell_appearance_entry
         "QT_QPA_PLATFORM=offscreen:configfile=${CMAKE_CURRENT_SOURCE_DIR}/two-screens.json")
 endif()

@@ -15,13 +15,16 @@
 #include "config/settings.h"
 #include "core/platform/logging.h"
 #include "daemon/overlayservice.h"
+#include "daemon/controllers/shellcheatsheetbridge.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "helpers.h"
 #include "phosphor_i18n.h"
 
 #include <PhosphorZones/AssignmentEntry.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 #include <QKeySequence>
+#include <QScreen>
 
 namespace PlasmaZones {
 
@@ -54,17 +57,44 @@ QString cheatsheetModeString(PhosphorZones::AssignmentEntry::Mode mode)
 
 void Daemon::toggleCheatsheet()
 {
-    if (!m_overlayService || !m_shortcutManager) {
+    if (m_shuttingDown || !m_overlayService || !m_shortcutManager
+        || (m_windowDragAdaptor && m_windowDragAdaptor->isDragInFlight())) {
         return;
     }
-    if (m_overlayService->isCheatsheetVisible()) {
-        m_overlayService->hideCheatsheet();
+    const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
+    const QScreen* screen = PhosphorScreens::ScreenIdentity::findByIdOrName(screenId);
+    if (screenId.isEmpty() || !screen) {
         return;
     }
-    showCheatsheetOnCursorScreen();
+    if (!m_shellCheatsheetBridge) {
+        m_shellCheatsheetBridge = new ShellCheatsheetBridge(this);
+        connect(m_shellCheatsheetBridge, &ShellCheatsheetBridge::accepted, this, [this] {
+            if (m_overlayService) {
+                m_overlayService->hideCheatsheet();
+                m_overlayService->hideLayoutPicker();
+                m_overlayService->hideSnapAssist();
+            }
+        });
+        connect(m_shellCheatsheetBridge, &ShellCheatsheetBridge::fallbackRequested, this,
+                [this](const QString& target) {
+                    if (m_shuttingDown || !m_overlayService || !m_shortcutManager)
+                        return;
+                    if (m_overlayService->isCheatsheetVisible())
+                        m_overlayService->hideCheatsheet();
+                    else
+                        showCheatsheetOnScreen(target);
+                });
+    }
+    m_shellCheatsheetBridge->toggle(screenId, screen->name());
 }
 
-void Daemon::showCheatsheetOnCursorScreen()
+void Daemon::cancelCheatsheetRequest()
+{
+    if (m_shellCheatsheetBridge)
+        m_shellCheatsheetBridge->cancel();
+}
+
+void Daemon::showCheatsheetOnScreen(const QString& screenId)
 {
     if (!m_overlayService || !m_shortcutManager) {
         return;
@@ -80,9 +110,8 @@ void Daemon::showCheatsheetOnCursorScreen()
         return;
     }
 
-    // Screen-targeted like the picker and the mode toggle: the user's
-    // intent is "the screen I am looking at", so resolve cursor-first.
-    const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
+    // Preserve the output captured at keypress, including a virtual-screen
+    // suffix. An asynchronous shell lookup must not follow a moving cursor.
     if (screenId.isEmpty()) {
         qCDebug(lcDaemon) << "Cheatsheet: no screen info";
         return;

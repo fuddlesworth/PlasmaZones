@@ -13,6 +13,10 @@ TestCase {
     id: testCase
 
     name: "ToastHost"
+    Component {
+        id: spyComp
+        SignalSpy {}
+    }
 
     // A rule object that suppresses everything (a "do not disturb").
     QtObject {
@@ -31,43 +35,6 @@ TestCase {
         ToastHost {
             width: 480
             height: 480
-        }
-    }
-
-    // A stand-in for PlacementMapScreen: the cells / cellRect(id) /
-    // changed() surface ToastHost reads, with one window "w1".
-    Component {
-        id: fakeMapComp
-
-        QtObject {
-            property int mode: 1
-            property rect w1Rect: Qt.rect(100, 40, 240, 200)
-            property var cells: [
-                {
-                    "id": "w1",
-                    "x": 0,
-                    "y": 0,
-                    "w": 0.5,
-                    "h": 1,
-                    "t": 0.25,
-                    "occupied": true,
-                    "focused": true,
-                    "label": ""
-                }
-            ]
-            property var lens: ({})
-            property int overflowLeft: 0
-            property int overflowRight: 0
-            property rect workArea: Qt.rect(0, 28, 480, 452)
-
-            signal changed
-
-            function focusedCellId() {
-                return "w1";
-            }
-            function cellRect(id) {
-                return id === "w1" ? w1Rect : Qt.rect(0, 0, 0, 0);
-            }
         }
     }
 
@@ -239,126 +206,77 @@ TestCase {
         compare(auto, 6, "the next auto id is bumped past the explicit one");
     }
 
-    // A3 §3: a toast for a window the map shows hangs from that window's
-    // top edge, band across the window's width, in the window's hue.
-    function test_window_toast_anchors_to_cell_rect() {
-        const map = createTemporaryObject(fakeMapComp, testCase);
+    function test_replacement_preserves_one_card_and_queue() {
         const h = createTemporaryObject(hostComp, testCase, {
-            "placementMap": map
-        });
-        const id = h.show({
-            "summary": "Build finished",
-            "windowId": "w1"
-        });
-        compare(h.anchoredCount, 1, "the toast is anchored, not stacked");
-        compare(h.activeCount, 1, "an anchored toast is active");
-        compare(h.queuedCount, 0);
-        const item = h.anchoredItem(id);
-        verify(item, "the anchored toast has its own item");
-        compare(item.anchoredToWindow, true);
-        compare(item.x, 100, "band starts at the window's left edge");
-        compare(item.width, 240, "band spans the window's width");
-        compare(item.y, 40, "card hangs from the window's top edge");
-        compare(item.t, 0.25, "the toast takes the window's hue");
-    }
-
-    function test_window_toast_follows_its_window() {
-        const map = createTemporaryObject(fakeMapComp, testCase);
-        const h = createTemporaryObject(hostComp, testCase, {
-            "placementMap": map
-        });
-        const id = h.show({
-            "summary": "x",
-            "windowId": "w1"
-        });
-        const item = h.anchoredItem(id);
-        compare(item.x, 100);
-        map.w1Rect = Qt.rect(10, 60, 300, 100);
-        map.changed();
-        tryCompare(item, "x", 10, 3000, "the toast travelled with its window");
-        tryCompare(item, "width", 300, 3000);
-        tryCompare(item, "y", 60, 3000);
-    }
-
-    function test_same_window_toasts_stack_downward() {
-        const map = createTemporaryObject(fakeMapComp, testCase);
-        const h = createTemporaryObject(hostComp, testCase, {
-            "placementMap": map
-        });
-        const older = h.show({
-            "summary": "first",
-            "windowId": "w1"
-        });
-        const newer = h.show({
-            "summary": "second",
-            "windowId": "w1"
-        });
-        const top = h.anchoredItem(newer);
-        const below = h.anchoredItem(older);
-        compare(top.y, 40, "the newest sits on the window's edge");
-        tryVerify(() => below.y >= 40 + top.height, 3000, "the older one hangs below it");
-    }
-
-    function test_unknown_window_falls_back_to_the_stack() {
-        const map = createTemporaryObject(fakeMapComp, testCase);
-        const h = createTemporaryObject(hostComp, testCase, {
-            "placementMap": map
+            maxVisible: 1
         });
         h.show({
-            "summary": "orphan",
-            "windowId": "nope"
-        });
-        compare(h.anchoredCount, 0, "no cell for the window: not anchored");
-        compare(h.activeCount, 1, "shown in the screen-edge stack instead");
-    }
-
-    function test_no_map_keeps_the_stack() {
-        // No placementMap bound and no Phosphor.Shell singleton in this
-        // engine: every toast goes to the top-edge stack, as in phase 1.
-        const h = createTemporaryObject(hostComp, testCase, {
-            "screenName": "DP-1"
+            id: 7,
+            summary: "First",
+            timeout: 0
         });
         h.show({
-            "summary": "x",
-            "windowId": "w1"
+            id: 8,
+            summary: "Queued",
+            timeout: 0
         });
-        compare(h.anchoredCount, 0);
+        h.show({
+            id: 7,
+            summary: "Updated",
+            timeout: 0
+        });
+        h.updateNotification({
+            id: 8,
+            summary: "Updated queue",
+            timeout: 0
+        });
         compare(h.activeCount, 1);
+        compare(h.queuedCount, 1);
+        compare(h.queue[0].summary, "Updated queue");
+        h.dismiss(7);
+        compare(h.activeCount, 1);
+        compare(h.queuedCount, 0);
     }
-
-    function test_dismiss_and_clear_cover_anchored() {
-        const map = createTemporaryObject(fakeMapComp, testCase);
+    function test_arrivals_stay_inside_status_edge() {
         const h = createTemporaryObject(hostComp, testCase, {
-            "placementMap": map
-        });
-        const spy = createTemporaryObject(spyComp, testCase, {
-            "target": h,
-            "signalName": "toastDismissed"
-        });
-        const a = h.show({
-            "summary": "a",
-            "windowId": "w1"
+            width: 1440,
+            height: 900,
+            topInset: 80,
+            bottomInset: 24,
+            bottomEdge: false
         });
         h.show({
-            "summary": "b",
-            "windowId": "w1"
+            summary: "Picture and a long message",
+            body: "A long message. ".repeat(100),
+            timeout: 0
         });
-        h.show({
-            "summary": "c"
-        });
-        h.dismiss(a);
-        compare(spy.count, 1, "dismissing an anchored toast emits once");
-        compare(spy.signalArguments[0][0], a);
-        compare(h.anchoredCount, 1);
-        h.clear();
-        compare(spy.count, 3, "clear emits for the anchored and the stacked toast");
-        compare(h.anchoredCount, 0);
-        compare(h.activeCount, 0);
+        const stack = findChild(h, "arrivalStack");
+        tryVerify(() => stack.height > 0);
+        compare(stack.x, 1022);
+        compare(stack.y, 80);
+        verify(stack.y + stack.height <= 876);
+        h.bottomEdge = true;
+        h.topInset = 24;
+        h.bottomInset = 70;
+        compare(stack.y + stack.height, 830);
     }
-
-    Component {
-        id: spyComp
-
-        SignalSpy {}
+    function test_closed_queued_entry_never_reappears() {
+        const h = createTemporaryObject(hostComp, testCase, {
+            maxVisible: 1
+        });
+        h.show({
+            id: 11,
+            summary: "Visible",
+            timeout: 0
+        });
+        h.show({
+            id: 12,
+            summary: "Queued",
+            timeout: 0
+        });
+        h.dismiss(12);
+        h.dismiss(11);
+        compare(h.activeCount, 0);
+        compare(h.queuedCount, 0);
     }
 }

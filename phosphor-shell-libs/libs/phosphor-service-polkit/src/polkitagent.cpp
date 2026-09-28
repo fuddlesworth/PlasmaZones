@@ -5,6 +5,7 @@
 
 #include <PhosphorServicePolkit/AuthRequest.h>
 
+#include "authenticationsession_p.h"
 #include "polkitdecode.h"
 
 #include <polkitqt1-agent-listener.h>
@@ -15,6 +16,7 @@
 
 #include <QCoreApplication>
 #include <QLoggingCategory>
+#include <QPointer>
 #include <QStringList>
 #include <QVariantMap>
 
@@ -22,16 +24,48 @@
 
 namespace {
 constexpr auto kDefaultObjectPath = "/org/phosphor/PolicyKit1/AuthenticationAgent";
-
+constexpr int kMaximumAttempts = 3;
 Q_LOGGING_CATEGORY(lcPolkitAgent, "phosphor.service.polkit")
 } // namespace
 
 namespace PhosphorServicePolkit {
 
-// Internal polkit Listener. Wraps the polkit-qt agent callback surface so the
-// public PolkitAgent stays a clean QObject with no polkit-qt types in its
-// header. A friend of PolkitAgent (to reach its Private) and of AuthRequest (to
-// build one). It overrides regular virtuals, so it needs no Q_OBJECT.
+class NativeAuthenticationSession : public detail::AuthenticationSession
+{
+public:
+    NativeAuthenticationSession(const PolkitQt1::Identity& identity, const QString& cookie, QObject* parent)
+        : AuthenticationSession(parent)
+        , m_session(new PolkitQt1::Agent::Session(identity, cookie, nullptr, this))
+    {
+        connect(m_session, &PolkitQt1::Agent::Session::request, this, &AuthenticationSession::requested);
+        connect(m_session, &PolkitQt1::Agent::Session::showError, this, &AuthenticationSession::error);
+        connect(m_session, &PolkitQt1::Agent::Session::showInfo, this, &AuthenticationSession::info);
+        connect(m_session, &PolkitQt1::Agent::Session::completed, this, [this](bool gained) {
+            // polkit-qt releases its native session immediately after this
+            // signal. Never call cancel() on that completed native object.
+            m_finished = true;
+            Q_EMIT completed(gained);
+        });
+    }
+    void initiate() override
+    {
+        m_session->initiate();
+    }
+    void respond(const QString& response) override
+    {
+        m_session->setResponse(response);
+    }
+    void cancel() override
+    {
+        if (!m_finished)
+            m_session->cancel();
+    }
+
+private:
+    PolkitQt1::Agent::Session* m_session;
+    bool m_finished = false;
+};
+
 class ListenerImpl : public PolkitQt1::Agent::Listener
 {
 public:
@@ -39,7 +73,6 @@ public:
         : m_facade(facade)
     {
     }
-
     void initiateAuthentication(const QString& actionId, const QString& message, const QString& iconName,
                                 const PolkitQt1::Details& details, const QString& cookie,
                                 const PolkitQt1::Identity::List& identities,
@@ -48,7 +81,10 @@ public:
     {
         return true;
     }
-    void cancelAuthentication() override;
+    void cancelAuthentication() override
+    {
+        m_facade->cancel();
+    }
 
 private:
     PolkitAgent* m_facade;
@@ -57,27 +93,22 @@ private:
 class PolkitAgent::Private
 {
 public:
-    QString sessionId; // empty -> current session (resolved from pid at register time)
+    QString sessionId;
     QString objectPath;
     bool registered = false;
-
-    // Created lazily by registerAgent(), never in the constructor. Constructing a
-    // polkit-qt Listener has glib side effects (it allocates and globally tracks a
-    // PolkitAgentListener), and ~Listener calls polkit_agent_listener_unregister(),
-    // which blocks indefinitely when no glib event loop is iterating its context.
-    // Keeping this null until registration makes a bare PolkitAgent genuinely
-    // side-effect-free (and destructible without blocking), as the class contract
-    // promises - and lets it be instantiated from QML purely to read properties.
+    // Listener construction/registration has GLib side effects. Keep it lazy
+    // so a bare agent and the conversation tests never claim a real session.
     std::unique_ptr<ListenerImpl> listener;
-
-    // Active request state. polkit serialises authentication, so at most one is
-    // live. The AsyncResult is owned by polkit (we complete it, never delete it);
-    // the Identity::List is kept so authenticate() can build the PAM session for
-    // the selected identity.
     AuthRequest* request = nullptr;
-    PolkitQt1::Identity::List identities;
-    PolkitQt1::Agent::AsyncResult* result = nullptr;
-    PolkitQt1::Agent::Session* session = nullptr;
+    QPointer<detail::AuthenticationSession> session;
+    std::function<detail::AuthenticationSession*(int, QObject*)> sessionFactory;
+    std::function<void()> completeResult;
+    Phase phase = Phase::Idle;
+    quint64 requestGeneration = 0;
+    quint64 sessionGeneration = 0;
+    int failedAttempts = 0;
+    bool answered = false;
+    bool sawError = false;
 
     Private(QString sid, QString path)
         : sessionId(std::move(sid))
@@ -97,32 +128,18 @@ PolkitAgent::PolkitAgent(QString sessionId, QString objectPath, QObject* parent)
 {
 }
 
-// Out-of-line: the Private dtor needs ListenerImpl complete. When the agent
-// registered, ~Listener unregisters it (there is no explicit unregister API), so
-// destroying this object releases the session; when it never registered, the
-// lazy listener is null and teardown does not touch polkit-qt at all.
 PolkitAgent::~PolkitAgent()
 {
-    // Complete any in-flight polkit result so a pending authentication does not
-    // dangle when the agent is destroyed mid-conversation. The Session +
-    // AuthRequest are QObject children, reclaimed by ~QObject; we deliberately do
-    // not run the signal-emitting settleActive() from the destructor.
-    //
-    // Sever the session first so its asynchronous completed() can never re-enter
-    // onSessionCompleted() during teardown, and clear the result as we complete
-    // it so "polkit's result is completed exactly once" holds by construction
-    // rather than by trusting ~Session to stay silent.
-    if (d->session)
-        d->session->disconnect(this);
-    if (auto* result = std::exchange(d->result, nullptr))
-        result->setCompleted();
+    stopSession(true);
+    d->request = nullptr;
+    if (auto complete = std::exchange(d->completeResult, {}))
+        complete();
 }
 
 bool PolkitAgent::registered() const
 {
     return d->registered;
 }
-
 QString PolkitAgent::defaultObjectPath()
 {
     return QLatin1String(kDefaultObjectPath);
@@ -132,22 +149,14 @@ bool PolkitAgent::registerAgent()
 {
     if (d->registered)
         return true;
-
-    // An empty session id means "this process's session", resolved from the pid.
     const PolkitQt1::UnixSessionSubject subject = d->sessionId.isEmpty()
         ? PolkitQt1::UnixSessionSubject(static_cast<qint64>(QCoreApplication::applicationPid()))
         : PolkitQt1::UnixSessionSubject(d->sessionId);
-
-    // Construct the polkit-qt Listener on first registration (see Private::listener):
-    // this is the first and only point where the agent touches polkit-qt.
     if (!d->listener)
         d->listener = std::make_unique<ListenerImpl>(this);
-
     const bool ok = d->listener->registerListener(subject, d->objectPath);
-    if (!ok) {
-        qCInfo(lcPolkitAgent) << "could not register as the authentication agent for the session"
-                              << "(another agent likely owns it) - staying inert";
-    }
+    if (!ok)
+        qCInfo(lcPolkitAgent) << "could not register as the authentication agent for the session; staying inert";
     if (ok != d->registered) {
         d->registered = ok;
         Q_EMIT registeredChanged();
@@ -159,105 +168,268 @@ AuthRequest* PolkitAgent::activeRequest() const
 {
     return d->request;
 }
+PolkitAgent::Phase PolkitAgent::phase() const
+{
+    return d->phase;
+}
+bool PolkitAgent::inputReady() const
+{
+    return d->request && d->session && d->phase == Phase::Prompt;
+}
+bool PolkitAgent::busy() const
+{
+    return d->phase == Phase::Starting || d->phase == Phase::Checking;
+}
+bool PolkitAgent::canRetry() const
+{
+    return d->request && d->phase == Phase::Unavailable && d->failedAttempts < kMaximumAttempts;
+}
+
+void PolkitAgent::setPhase(Phase phase)
+{
+    if (d->phase == phase)
+        return;
+    d->phase = phase;
+    Q_EMIT stateChanged();
+}
 
 void PolkitAgent::authenticate()
 {
-    if (!d->request || d->session)
+    if (!d->request || d->session || (d->phase != Phase::Idle && d->phase != Phase::Starting))
         return;
-    const int index = d->request->selectedIdentity();
-    if (index < 0 || index >= d->identities.size())
+    QPointer<AuthRequest> request = d->request;
+    const int identity = request->selectedIdentity();
+    if (identity < 0 || identity >= request->identities().size() || !d->sessionFactory) {
+        settleActive(Phase::Failed);
         return;
-
-    // The Session is constructed with polkit's AsyncResult and drives the PAM
-    // conversation for the chosen identity. We complete the result on completed()
-    // (the documented contract), never the Session.
-    auto* session = new PolkitQt1::Agent::Session(d->identities.at(index), d->request->cookie(), d->result, this);
+    }
+    setPhase(Phase::Starting);
+    if (d->request != request || d->phase != Phase::Starting)
+        return;
+    d->answered = false;
+    d->sawError = false;
+    const quint64 generation = ++d->sessionGeneration;
+    auto* session = d->sessionFactory(identity, this);
+    if (d->request != request || d->sessionGeneration != generation) {
+        if (session) {
+            session->cancel();
+            session->deleteLater();
+        }
+        return;
+    }
+    if (!session) {
+        onSessionCompleted(false);
+        return;
+    }
     d->session = session;
-
-    connect(session, &PolkitQt1::Agent::Session::request, this, [this](const QString& prompt, bool echo) {
-        if (!d->request)
+    const auto current = [this, request, session, generation] {
+        return request && d->request == request && d->session == session && d->sessionGeneration == generation;
+    };
+    connect(session, &detail::AuthenticationSession::requested, this,
+            [this, request, current](const QString& prompt, bool echo) {
+                if (!current())
+                    return;
+                const bool promptChanged = request->m_prompt != prompt;
+                const bool echoChanged = request->m_echo != echo;
+                request->m_prompt = prompt;
+                request->m_echo = echo;
+                if (promptChanged)
+                    Q_EMIT request->promptChanged();
+                if (!current())
+                    return;
+                if (echoChanged)
+                    Q_EMIT request->echoChanged();
+                if (!current())
+                    return;
+                setPhase(Phase::Prompt);
+                if (current())
+                    Q_EMIT promptRequested(prompt, echo);
+            });
+    connect(session, &detail::AuthenticationSession::completed, this, [this, current](bool gained) {
+        if (current())
+            onSessionCompleted(gained);
+    });
+    connect(session, &detail::AuthenticationSession::error, this, [this, current](const QString& text) {
+        if (!current())
             return;
-        // Update the display properties with change-guarded notifies, then emit
-        // the answer-now EVENT. The event fires every time (including a same-text
-        // retry after a wrong answer), which the change-guarded prompt property
-        // would not re-notify.
-        if (d->request->m_prompt != prompt) {
-            d->request->m_prompt = prompt;
-            Q_EMIT d->request->promptChanged();
-        }
-        if (d->request->m_echo != echo) {
-            d->request->m_echo = echo;
-            Q_EMIT d->request->echoChanged();
-        }
-        Q_EMIT promptRequested(prompt, echo);
-    });
-    connect(session, &PolkitQt1::Agent::Session::completed, this, [this](bool gained) {
-        onSessionCompleted(gained);
-    });
-    connect(session, &PolkitQt1::Agent::Session::showError, this, [this](const QString& text) {
+        d->sawError = true;
         Q_EMIT authenticationError(text);
     });
-    connect(session, &PolkitQt1::Agent::Session::showInfo, this, [this](const QString& text) {
-        Q_EMIT authenticationInfo(text);
+    connect(session, &detail::AuthenticationSession::info, this, [this, current](const QString& text) {
+        if (current())
+            Q_EMIT authenticationInfo(text);
     });
-
+    connect(session, &QObject::destroyed, this, [this, request, generation] {
+        if (request && d->request == request && d->sessionGeneration == generation) {
+            d->session = nullptr;
+            onSessionCompleted(false);
+        }
+    });
     session->initiate();
 }
 
 void PolkitAgent::respond(const QString& response)
 {
-    // Straight through to PAM; never retained, logged, or echoed.
-    if (d->session)
-        d->session->setResponse(response);
+    if (!inputReady())
+        return;
+    const QPointer<detail::AuthenticationSession> session = d->session;
+    const quint64 generation = d->sessionGeneration;
+    d->answered = true;
+    setPhase(Phase::Checking);
+    // A state observer may cancel or switch accounts synchronously. Never
+    // send this response to a replacement conversation, or queue it for one.
+    if (session && d->session == session && d->sessionGeneration == generation)
+        session->respond(response);
+}
+
+void PolkitAgent::selectIdentity(int index)
+{
+    if (d->request)
+        d->request->setSelectedIdentity(index);
+}
+
+void PolkitAgent::restartIdentity()
+{
+    if (!d->request)
+        return;
+    const QPointer<AuthRequest> request = d->request;
+    stopSession(true);
+    if (d->request != request)
+        return;
+    setPhase(Phase::Starting);
+    authenticate();
+}
+
+void PolkitAgent::retry()
+{
+    if (!canRetry())
+        return;
+    setPhase(Phase::Starting);
+    authenticate();
 }
 
 void PolkitAgent::cancel()
 {
-    if (!d->request)
-        return;
-    // Decline: complete polkit's result without authorization and tear down.
-    // Synchronous and deterministic even mid-conversation; it does not wait on
-    // the session's asynchronous completed() signal.
-    settleActive(/*completeResult=*/true);
-    Q_EMIT authenticationCancelled();
+    settleActive(Phase::Cancelled);
 }
 
-void PolkitAgent::onSessionCompleted(bool gainedAuthorization)
+void PolkitAgent::stopSession(bool cancel)
 {
-    // The session finished; complete polkit's result exactly once and tear down.
-    settleActive(/*completeResult=*/true);
-    Q_EMIT authenticationCompleted(gainedAuthorization);
-}
-
-void PolkitAgent::settleActive(bool completeResult)
-{
-    if (!d->request)
+    ++d->sessionGeneration;
+    const QPointer<detail::AuthenticationSession> session = d->session;
+    d->session = nullptr;
+    if (!session)
         return;
-
-    // Capture and clear the active state FIRST, so any re-entrant call (a slot on
-    // activeRequestChanged, or a synchronous session signal) sees no active
-    // request and returns. This makes the result completion exactly-once and the
-    // teardown idempotent regardless of polkit-qt's signal-emission timing
-    // (Session::completed is asynchronous, fired when the PAM helper exits).
-    AuthRequest* request = std::exchange(d->request, nullptr);
-    PolkitQt1::Agent::Session* session = std::exchange(d->session, nullptr);
-    PolkitQt1::Agent::AsyncResult* result = std::exchange(d->result, nullptr);
-    d->identities.clear();
-
-    if (session) {
-        // Disconnect before deleting so the session's pending/asynchronous
-        // completed() can never re-enter this path; ~Session aborts the PAM
-        // helper.
-        session->disconnect(this);
+    session->disconnect(this);
+    if (cancel)
+        session->cancel();
+    if (session)
         session->deleteLater();
-    }
-    // Complete polkit's result unless the daemon withdrew the request, in which
-    // case polkit owns the result's teardown and completing it would double-free.
-    if (completeResult && result)
-        result->setCompleted();
+}
 
-    Q_EMIT activeRequestChanged();
+void PolkitAgent::onSessionCompleted(bool gained)
+{
+    if (!d->request)
+        return;
+    if (gained) {
+        settleActive(Phase::Success);
+        return;
+    }
+    const bool answered = d->answered;
+    const bool sawError = d->sawError;
+    const auto request = QPointer<AuthRequest>(d->request);
+    stopSession(false);
+    const quint64 generation = d->sessionGeneration;
+    const auto current = [this, request, generation] {
+        return request && d->request == request && d->sessionGeneration == generation;
+    };
+    ++d->failedAttempts;
+    if (d->failedAttempts >= kMaximumAttempts) {
+        if (!sawError)
+            Q_EMIT authenticationError(QString());
+        if (current())
+            settleActive(Phase::Failed);
+        return;
+    }
+    if (!answered) {
+        setPhase(Phase::Unavailable);
+        if (current() && !sawError)
+            Q_EMIT authenticationError(QString());
+        return;
+    }
+    setPhase(Phase::Starting);
+    if (!current())
+        return;
+    if (!sawError)
+        Q_EMIT authenticationError(QString());
+    // Let polkit-qt's completed callback release its native session before
+    // initiating the next PAM conversation. The request and its result stay
+    // active, and account changes/cancellation invalidate this queued retry.
+    QMetaObject::invokeMethod(
+        this,
+        [this, request, generation] {
+            if (request && d->request == request && d->sessionGeneration == generation && d->phase == Phase::Starting)
+                authenticate();
+        },
+        Qt::QueuedConnection);
+}
+
+void PolkitAgent::settleActive(Phase outcome)
+{
+    if (!d->request)
+        return;
+    AuthRequest* request = std::exchange(d->request, nullptr);
+    const quint64 generation = d->requestGeneration;
+    auto complete = std::exchange(d->completeResult, {});
+    d->sessionFactory = {};
+    stopSession(true);
+    setPhase(outcome);
+    if (d->requestGeneration == generation && !d->request)
+        Q_EMIT activeRequestChanged();
     request->deleteLater();
+    if (d->requestGeneration == generation && !d->request) {
+        if (outcome == Phase::Cancelled)
+            Q_EMIT authenticationCancelled();
+        else
+            Q_EMIT authenticationCompleted(outcome == Phase::Success);
+    }
+    // polkit-qt's cancellation callback does not resolve AsyncResult. Every
+    // terminal path, including daemon withdrawal, must complete it once.
+    if (complete)
+        complete();
+}
+
+void PolkitAgent::beginRequest(const QString& actionId, const QString& message, const QString& iconName,
+                               const QVariantMap& details, const QString& cookie, const QStringList& identities,
+                               std::function<detail::AuthenticationSession*(int, QObject*)> factory,
+                               std::function<void()> complete)
+{
+    const quint64 generation = ++d->requestGeneration;
+    settleActive(Phase::Cancelled);
+    // Completing the previous result can synchronously deliver a newer
+    // request. That newer request wins; never orphan either result.
+    if (d->requestGeneration != generation) {
+        if (complete)
+            complete();
+        return;
+    }
+    auto* request = new AuthRequest(actionId, message, iconName, details, cookie, identities, this);
+    d->request = request;
+    d->sessionFactory = std::move(factory);
+    d->completeResult = std::move(complete);
+    d->failedAttempts = 0;
+    d->answered = false;
+    d->sawError = false;
+    connect(request, &AuthRequest::selectedIdentityChanged, this, [this, request] {
+        if (d->request == request)
+            restartIdentity();
+    });
+    setPhase(Phase::Idle);
+    if (d->request != request)
+        return;
+    Q_EMIT activeRequestChanged();
+    if (d->request == request)
+        Q_EMIT authenticationRequested(request);
 }
 
 void ListenerImpl::initiateAuthentication(const QString& actionId, const QString& message, const QString& iconName,
@@ -265,40 +437,21 @@ void ListenerImpl::initiateAuthentication(const QString& actionId, const QString
                                           const PolkitQt1::Identity::List& identities,
                                           PolkitQt1::Agent::AsyncResult* result)
 {
-    PolkitAgent::Private* d = m_facade->d.get();
-
-    // polkit serialises authentication, but defend against a lingering prior
-    // request: decline it synchronously (completing its result) before adopting
-    // the new one, so its AsyncResult is never orphaned. settleActive does NOT
-    // rely on the old session's asynchronous completed(), so the state is fully
-    // cleared before the assignments below.
-    if (d->request) {
-        m_facade->settleActive(/*completeResult=*/true);
-        Q_EMIT m_facade->authenticationCancelled();
-    }
-
-    auto* request = new AuthRequest(actionId, message, iconName, detail::detailsToMap(details), cookie,
-                                    detail::identityNames(identities), m_facade);
-    d->request = request;
-    d->identities = identities;
-    d->result = result;
-
-    // Surface the decoded request. A consumer calls authenticate() to begin the
-    // PAM conversation, or cancel() to decline.
-    Q_EMIT m_facade->activeRequestChanged();
-    Q_EMIT m_facade->authenticationRequested(request);
-}
-
-void ListenerImpl::cancelAuthentication()
-{
-    PolkitAgent::Private* d = m_facade->d.get();
-    if (!d->request)
-        return;
-    // polkit is withdrawing the request and owns the result's teardown, so settle
-    // WITHOUT completing the result ourselves (completing it would double-free).
-    // settleActive disconnects + deletes any running session, aborting PAM.
-    m_facade->settleActive(/*completeResult=*/false);
-    Q_EMIT m_facade->authenticationCancelled();
+    // polkit-qt allocates this wrapper for the listener and never deletes it.
+    // Keep one owner until the request is resolved; individual PAM sessions
+    // need only the cookie and do not own or complete the result.
+    auto ownedResult = std::shared_ptr<PolkitQt1::Agent::AsyncResult>(result);
+    m_facade->beginRequest(
+        actionId, message, iconName, detail::detailsToMap(details), cookie, detail::identityNames(identities),
+        [identities, cookie](int index, QObject* parent) -> detail::AuthenticationSession* {
+            if (index < 0 || index >= identities.size() || !identities.at(index).isValid())
+                return nullptr;
+            return new NativeAuthenticationSession(identities.at(index), cookie, parent);
+        },
+        [ownedResult] {
+            if (ownedResult)
+                ownedResult->setCompleted();
+        });
 }
 
 } // namespace PhosphorServicePolkit
