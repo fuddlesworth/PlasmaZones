@@ -8,7 +8,21 @@ completed floating-shell redesign (`04-implementation-plan.md`). The current
 visual reference is `mockups-v3/`; historical A1–A4 proposals below are not
 requirements for this redesign.
 
-## Identity gaps
+## Control-center service integration
+
+The v3 browser study now includes night light, dark-mode access, airplane mode,
+power profiles, wallpaper access and battery details. The next implementation
+step is native wiring and visual review of those studies. Appearance already
+owns material, palette and wallpaper choices; its quick access uses that same
+state. Battery already has a read-only native UPower panel. The expanded study
+retains charge estimates, health and other devices, with power-profile controls
+requiring a separate service. No charging-limit control is implied by UPower
+support.
+
+## Optional interactions inherited from the earlier design
+
+These proposals are not unfinished v3 visual-port requirements. They need a
+current interaction decision before implementation.
 
 | Gap | Why it matters | Notes |
 |---|---|---|
@@ -16,7 +30,7 @@ requirements for this redesign.
 | Touchpad gesture progress | Gestures are events. A 1:1 drawer (the launcher following the fingers) needs progress forwarded from the effect. | `registerTouchpadSwipeShortcut` takes a progress callback; the relay would need a rate limit. |
 | Bundled faces | Manrope and JetBrains Mono are resolved, not shipped; most machines fall back to Noto Sans. | Bundling means binaries in the repo. Decide with packaging. |
 | Direct bar-mini keyboard navigation | Navigator and Stage support arrows, Home/End and Enter. | The mini itself still uses pointer interactions. |
-| Filmstrip drag between desktops, Shift-drop as tab, double-click verbs on the map | Listed in A2 §1.5–1.6, unbuilt. | Stage exposes move-to-workspace buttons; cross-workspace drag and Shift-drop are separate interactions. |
+| Filmstrip drag between desktops, Shift-drop as tab, double-click verbs on the map | Listed in A2 §1.5–1.6, unbuilt. | Drag onto another desktop preview to move a window. Shift-drop onto a scrolling column to make a tab. Proposed double-click actions were layout editing, promote-to-master and column maximize. Stage already exposes move-to-workspace buttons. |
 | Tiling and scrolling drop proxies | The bar's drop proxy is snapping-only. | `WindowDrag.registerDropProxy` takes any cell list. |
 
 ## Surface gaps
@@ -26,7 +40,7 @@ requirements for this redesign.
 | Notification rules editor | The toast host has the rules seam and nothing edits it. The history is built: `NotificationPanel` is the centre, reading the shell's retained list, and the chip opens it. |
 | Palette-library browser | Appearance now has Phosphor/Paper/Ember, wallpaper colors and preset import/export. A browser for the `ThemePresets` palette library is separate. |
 | Dock | Not planned for the identity; the bar's map is the window list. |
-| Control-center tiles: night mode, dark mode, airplane, power profile, wallpaper | Five tiles deferred with service blockers. |
+| Extra control-center controls | Night light, airplane mode and power profiles need service integration. Dark-mode and wallpaper shortcuts reuse Appearance in the browser study. Port those shortcuts and the expanded battery design to the native panel. |
 | Emoji provider in the launcher | Deferred. |
 | Weather cell on the dashboard | No service. |
 
@@ -34,8 +48,9 @@ requirements for this redesign.
 
 | Gap | Notes |
 |---|---|
-| Lock screen in the nested harness | The virtual KWin backend does not advertise `ext_session_lock_manager_v1`. The production lock UI is visually testable through `scripts/nested-shell/lock-preview.sh`; PAM and compositor-lock lifecycle remain service-test coverage. |
-| Polkit prompt in the nested harness | The host session's agent owns the seat; the prompt stays inert under the harness. |
+| Lock screen in the nested harness | The virtual KWin backend does not advertise `ext_session_lock_manager_v1`. The production lock UI is visually testable through `phosphor-shell/scripts/nested-shell/lock-preview.sh`; PAM and compositor-lock lifecycle remain service-test coverage. |
+| Real polkit authentication in the nested harness | The host session's agent owns the seat. `authentication-preview.sh` exercises the production UI with fixtures, while service tests cover the agent. Seat-owned authentication needs a real-session check. |
+| Physical Wi-Fi, Bluetooth, audio and battery behavior | Private D-Bus and PipeWire fixtures exercise service contracts. Hardware association, pairing, device changes and battery reporting still need real devices. |
 | Real touchpad gestures | The virtual backend cannot inject swipes; the relay is driven by calling `CompositorBridge.reportGesture` directly. |
 
 ## Non-gaps

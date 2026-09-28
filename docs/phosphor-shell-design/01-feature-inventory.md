@@ -14,18 +14,21 @@ the live placement model and the services retained by the redesign.
 | Floating bar and placement mini | `Phosphor.Bar` | Per-output placement map, workspace caption, saved widget groups and bounded overflow. |
 | Navigator | `Phosphor.Bar.MapPane`, `Phosphor.Widgets.WorkspaceNavigator` | Anchored preview and complete window list with keyboard activation. |
 | Stage | `Phosphor.Dashboard.StageOverview`, `DesktopStage` | Workspace maps, native desktop preview or map fallback, window inspector and bounded filmstrip. |
-| Quick settings | `Phosphor.ControlCenter` | Vertical panel or wide bottom shelf, connection details, levels and media. |
+| Quick settings | `Phosphor.ControlCenter`, `Phosphor.Bar` detail panels | Compact panel anchored to the status area in both presentations, with native Wi-Fi, Bluetooth and Output/Input/Apps pages. |
 | Calendar | `Phosphor.Bar.CalendarPanel` | Local time/date, month navigation, Today and keyboard day selection. |
-| Appearance | `Phosphor.Bar.AppearancePanel` | Style and Widgets tabs, presets, fonts, layout editing and import/export. |
+| Appearance | `Phosphor.Picker.AppearanceWorkspace` | Wallpaper, Style, Bar and Presets pages, per-display previews, atomic Apply, Revert and import/export. |
 | Media card | `Phosphor.Widgets.MediaCard` | Real MPRIS state/artwork and CAVA Ribbon, Bars or Halo visualization. |
 | Launcher | `Phosphor.Launcher` | Search, provider filters, readable results and keyboard actions. |
 | OSD edge bands and readouts | `Phosphor.OSD` | Value feedback located through the focused-window placement map. |
-| Toasts and notification history | `Phosphor.Notifications`, `Phosphor.Bar.NotificationPanel` | Shared material with retained server data and actions. |
+| Toasts and notification history | `Phosphor.Notifications`, `Phosphor.Bar.NotificationPanel` | Rich arrivals, grouped retained history, unread filtering, replies, actions, DND and clear/undo. |
+| System stats | `Phosphor.Bar` Stats components, `Phosphor.Shell.SystemStats` | Live system metrics, history charts and configurable bar readouts. |
+| System tray | `Phosphor.Bar` Tray components, `Phosphor.Service.Sni` | Configurable SNI icons, overflow drawer and native application menus. |
+| Battery | `Phosphor.Bar.BatteryPanel`, `Phosphor.Service.UPower` | Basic native charge, time estimate, health, draw and peripheral readouts. Expanded v3 browser study includes charging, low battery and power-profile access. Native redesign remains. |
 | Power menu | `Phosphor.Power` | Session actions with their existing availability and confirmation behavior. |
 | Session lock | `Phosphor.Lock` | Shell-owned lock surface and PAM authentication. |
-| Shortcut cheatsheet | `Phosphor.Dashboard` | Daemon shortcuts over the placement map. |
-| Authentication prompt | `Phosphor.Polkit` | Agent-owned prompt with the selected appearance. |
-| Wallpaper and theme picker | `Phosphor.Picker` | Live wallpaper preview and palette selection. |
+| Shortcut reference | `Phosphor.Dashboard.Cheatsheet` | Searchable effective bindings, mode guides, alternative chords and service/capability states. |
+| Authentication prompt | `Phosphor.Polkit` | Native modal with account selection, request details, bounded retries and keyboard state. |
+| Wallpaper and theme picker library | `Phosphor.Picker.Picker` | Older reusable strip retained for library consumers. The bundled shell opens Appearance instead. |
 | Wallpaper surface | `Phosphor.Picker.WallpaperSurface` | Background-layer rendering. |
 
 ## Shared behavior

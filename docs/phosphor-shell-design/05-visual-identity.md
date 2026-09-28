@@ -62,7 +62,9 @@ Presets preserve the user's presentation, widget arrangement, fonts, media
 and motion preferences. Surface packs are opt-in; ordinary shared surfaces
 supply the default appearance.
 
-The appearance panel separates Style and Widgets. Widgets can move between
+The Appearance workspace has Wallpaper, Style, Bar and Presets pages.
+Wallpaper choices are per display; previews, colors and bar layout share a
+transaction with Apply, Revert and unsaved-close handling. Widgets can move between
 left, center and right, reorder, hide and return. The three bar regions bound
 their width and expose overflow controls. Long focused-app and media labels
 hide below 1100 px; their panel functions remain available through commands.
@@ -74,9 +76,10 @@ values use `FontFaces` (Manrope and JetBrains Mono where available, named
 fallbacks otherwise). No font binaries are bundled by this redesign.
 
 Settings live in `~/.config/phosphor-shell/appearance.json`, as a versioned
-JSON object containing `settings`. Import/export is atomic and validates the
-whole document before replacing the current appearance. Colors, fonts and
-widget moves update live. Bar geometry changes rebuild the shell surfaces.
+JSON object containing `settings`. Apply and import/export validate the
+whole document before replacing the current appearance. Apply writes atomically.
+Colors, fonts and widget moves update live. Bar geometry changes rebuild the
+shell surfaces.
 The source watcher ignores neighboring settings writes and still handles
 atomic replacements of `shell.qml`.
 

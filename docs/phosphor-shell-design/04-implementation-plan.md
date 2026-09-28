@@ -3,6 +3,49 @@
 
 # 04: Implementation Record
 
+## Current status
+
+The principal v3 surfaces have native implementations. The sections below
+record their original validation, so historical test counts and commands are
+not instructions for the current tree. Use the `pz-build` skill for current
+builds, including its six-job limit.
+
+Later ports also include:
+
+| Surface | Native implementation | Status |
+|---|---|---|
+| System stats | `0a948167e`, `951de3047` | Live metric readers, history charts and configurable bar widget. |
+| System tray | `aa811bd5b` | SNI items, visibility/order controls, overflow and native app menus. |
+| Authentication | `2dbcb831a` | Redesigned polkit modal, request details, account selection and authentication states. |
+
+The September 27 integration with `main` passed the shell-enabled non-unity
+build and 601 executed tests, plus the shell-disabled build and 480 executed
+tests. Each suite skipped the opt-in live GPU orientation test. These checks
+establish build and automated-test status, not a new visual review of every
+surface.
+
+## Additional control-center studies (mockups-v3)
+
+The browser prototype now covers the older service backlog and battery:
+
+| Detail | Interaction and example states |
+|---|---|
+| Night light | Warmth preview, sunset/custom/manual schedules, validated custom hours, pause/resume, missing location and missing service. |
+| Dark mode | Light/dark/system choices update the existing material state and retain the palette and wallpaper. Simulated system preference and unavailable states. |
+| Airplane mode | Remembers Wi-Fi/Bluetooth settings, restores them when disabled, permits Bluetooth while enabled, and handles a hardware switch or missing service. |
+| Power profiles | Balanced, Power saver and Performance, with thermal restriction, two-profile hardware and unavailable service examples. |
+| Wallpaper | Reads the existing wallpaper and opens the Wallpaper or Style page in Appearance. |
+| Battery | Charge, health, power draw, full capacity and connected peripherals. Charging, full, low, unknown estimate, desktop and unavailable examples. Links into power profiles. |
+
+Automated DOM checks exercise both Navigator and Stage, Phosphor/Paper/Ember,
+keyboard navigation, cross-service state changes, schedule validation and
+Appearance integration. No browser was available for a rendered visual check
+in this session. The browser study does not call hardware services.
+
+Battery already has a basic native UPower panel. Native service work and
+optional interactions inherited from the older design remain tracked in
+`02-gap-analysis.md`.
+
 ## Shortcut reference (mockups-v3)
 
 Native port: `dae0e6635`.
@@ -33,7 +76,7 @@ screen targeting, QML interactions and shell composition. Native nested-KWin
 captures cover all three modes, custom chords, Phosphor/Paper/Ember and a
 640×480 viewport with 115% text. The real registered daemon action opens and
 closes the native reference, and stopping the shell restores the old overlay.
-The reusable `scripts/nested-shell/shortcuts-preview.sh` fixture uses private
+The reusable `phosphor-shell/scripts/nested-shell/shortcuts-preview.sh` fixture uses private
 session/system buses and config paths for repeatable rendering checks.
 
 ## Quick settings details (mockups-v3)
@@ -91,7 +134,7 @@ arrivals, action validation, expiry pause, rich rendering and preview privacy.
 Final integration adds Wayland activation tokens ahead of app actions, rounded
 attachment images, compositor blur on arrival surfaces, and `notify.toggle` /
 `notify.hide` shortcuts. The reusable nested fixture at
-`scripts/nested-shell/notification-fixture.py` supports rich messages, replacement,
+`phosphor-shell/scripts/nested-shell/notification-fixture.py` supports rich messages, replacement,
 expiry, bursts, actions and reply observation on the private session bus.
 
 Validation: the build succeeds and all 541 CTest targets pass (540 executed, the
@@ -166,7 +209,7 @@ where the identity does.
 
 - One phase per commit on the `shell-design` worktree, each green on the full
   `ctest` run under `dbus-run-session` and checked live in the nested
-  harness (`scripts/nested-shell/run-shell.sh` on a private socket) before
+  harness (`phosphor-shell/scripts/nested-shell/run-shell.sh` on a private socket) before
   it was committed.
 - Daemon surfaces first, shell consumers second, with a capability latch in
   the shell for every new daemon method so an older daemon degrades rather
@@ -242,7 +285,7 @@ rewritten for the shell that exists.
   masked input, retry, busy and release states. The short layout keeps the
   whole unlock card visible and scrolls optional content into view on focus.
 
-`scripts/nested-shell/lock-preview.sh run` uses production components with
+`phosphor-shell/scripts/nested-shell/lock-preview.sh run` uses production components with
 fixture auth/media/power services on an existing nested session. Its config
 and IPC socket are separate from the ordinary shell. Use the same script
 with `call preview.result --arg name=error`, `success` or `idle` to drive the

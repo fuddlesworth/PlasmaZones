@@ -8,6 +8,14 @@ The current reference is [`mockups-v3/`](mockups-v3/), including Navigator,
 Stage, compact quick settings, calendar, visualizers and scrolling with
 four and ten windows.
 
+The main v3 studies have native implementations. This includes quick-setting
+details, notifications, lock, Appearance, shortcut reference, system stats,
+the system tray and authentication. The implementation record tracks those
+ports. The gap analysis separates optional interactions inherited from v2,
+service additions and hardware verification from the completed visual work.
+Battery has a basic native panel. The expanded control-center studies below
+are browser prototypes awaiting native integration.
+
 The [shortcut-reference study](mockups-v3/index.html#navigator/shortcuts) is
 implemented by the native shell. Tiling, Scrolling and Snapping each have a visual
 guide, with searchable actions, expandable shortcut families, alternative
@@ -27,12 +35,12 @@ when the shell is absent. Shell actions whose bindings are managed externally
 are marked “Set in compositor” without inventing defaults.
 
 For isolated native visual checks, start a nested compositor and run
-`scripts/nested-shell/shortcuts-preview.sh run` with the same `PZ_NESTED_SESSION`.
+`phosphor-shell/scripts/nested-shell/shortcuts-preview.sh run` with the same `PZ_NESTED_SESSION`.
 Its `preview` IPC target controls mode, custom/unassigned bindings, service
 states, palette, viewport size and text scaling. Stop the foreground preview
 with Ctrl+C before restarting it. See the implementation record for validation.
 
-The new **quick-settings detail studies** are ready for design review:
+The **quick-settings detail studies** are implemented in the native shell:
 [Wi-Fi](mockups-v3/index.html#navigator/controls/wifi),
 [Bluetooth](mockups-v3/index.html#navigator/controls/bluetooth), and
 [Audio](mockups-v3/index.html#navigator/controls/audio).
@@ -46,10 +54,27 @@ retry, captive sign-in, and connection details. Bluetooth separates paired and
 nearby devices, with code confirmation, PIN entry, disconnect, and confirmed
 Forget. Audio separates outputs, microphones, and per-app volumes and routing;
 mute preserves the chosen volume. The external **Example** selector exposes
-23 states, including disabled radios, empty discovery, unavailable adapters,
-pairing failures, and a disconnected audio device. The Wi-Fi demo password is
+23 connection and audio states, including disabled radios, empty discovery,
+unavailable adapters, pairing failures, and a disconnected audio device. The Wi-Fi demo password is
 `phosphor`; these fixtures do not access hardware, transmit or save passwords,
-or play or record audio. The new detail designs have not been ported to QML yet.
+or play or record audio. The native implementation uses NetworkManager, BlueZ
+and PipeWire. See `04-implementation-plan.md` for service and live checks.
+
+The **additional control-center studies** include the older service backlog:
+[night light](mockups-v3/index.html#navigator/controls/nightlight),
+[dark mode](mockups-v3/index.html#navigator/controls/darkmode),
+[airplane mode](mockups-v3/index.html#navigator/controls/airplane),
+[power profiles](mockups-v3/index.html#navigator/controls/power),
+[wallpaper access](mockups-v3/index.html#navigator/controls/wallpaper), and
+[battery](mockups-v3/index.html#navigator/controls/battery).
+Their Example menus cover schedules, unavailable services, hardware restrictions,
+charging, low battery, missing estimates and desktops without an internal battery.
+Airplane mode remembers radio settings and permits a Bluetooth exception.
+Dark mode uses the existing shell material settings; wallpaper access opens the
+shared Appearance workspace. Battery links to power profiles and retains charge,
+health, power draw and connected-device readouts. These controls simulate services
+and do not change host settings. Their browser interactions have automated DOM
+checks; the new layouts still need visual review in a browser.
 
 Captures: [Wi-Fi](mockups-v3/quick-wifi.png),
 [password entry](mockups-v3/quick-wifi-password.png),
@@ -113,8 +138,8 @@ expand message text, retain image proportions, and offer demo replies.
 Dismissed popups remain in history. Do Not Disturb suppresses the popup;
 the preview stays open until dismissed when it is shown.
 Organization and message previews are customizable alongside the
-shared palettes and density. These notification interactions are browser
-fixtures for design review; the approved native migration is recorded in
+shared palettes and density. The browser interactions use fixtures;
+the completed native migration is recorded in
 `04-implementation-plan.md`.
 Captures: [Phosphor](mockups-v3/notifications.png),
 [Paper](mockups-v3/notifications-paper.png),
@@ -133,7 +158,7 @@ and logind; notification content stays hidden. The browser study still uses
 `demo` and simulated power actions for design review.
 
 For native visual review, start the nested harness and run
-`scripts/nested-shell/lock-preview.sh run` with the same `PZ_NESTED_SESSION`.
+`phosphor-shell/scripts/nested-shell/lock-preview.sh run` with the same `PZ_NESTED_SESSION`.
 It renders the production QML with fixture authentication, media and power
 services in its own config directory. `lock-preview.sh call preview.state`
 reports the state without exposing the password. The virtual compositor
