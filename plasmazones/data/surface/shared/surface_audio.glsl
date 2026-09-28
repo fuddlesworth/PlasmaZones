@@ -6,28 +6,34 @@
 // <surface_audio.glsl>` in a pack that reacts to the CAVA spectrum, then guard
 // on the helpers (they return 0 when audio is off).
 //
-// The spectrum is a session-global feature, exactly as it is for zone packs:
-// the same spectrum reaches every surface item when the audio visualizer is
-// enabled, and a pack opts in purely by including this file and reading the
-// helpers. iAudioSpectrumSize (from the uniform contract) is the bar count, 0
-// when audio is disabled. Both runtimes populate it: the daemon pushes the
-// spectrum to its OSD / popup surfaces, and the KWin effect runs its own CAVA
-// provider to feed window decorations. It reads 0 (renders static) only when
-// the visualizer is off.
+// THE OPT-IN IS `"audio": true` IN metadata.json, not the include. Including
+// this file and reading the helpers is NOT enough on either runtime: the CAVA
+// process is started from a metadata scan (hasAudioReactiveDecoration walks the
+// decoration chain and tests each pack's `audio` flag), so a pack that omits the
+// flag never causes a provider to run. iAudioSpectrumSize then stays 0, the
+// helpers all return 0, and the pack renders STATIC with no diagnostic anywhere.
+//
+// Given the flag, the spectrum is a session-global feature exactly as it is for
+// zone packs: the same spectrum reaches every surface item. iAudioSpectrumSize
+// (from the uniform contract) is the bar count. Both runtimes populate it: the
+// daemon pushes the spectrum to its OSD / popup surfaces, and the KWin effect
+// runs its own CAVA provider to feed window decorations. It reads 0, and the
+// pack renders static, when the visualizer setting is off OR when no pack in the
+// chain declares the flag.
 
 #ifndef PLASMAZONES_SURFACE_AUDIO_GLSL
 #define PLASMAZONES_SURFACE_AUDIO_GLSL
 
 #include <surface_uniforms.glsl>
 
-// Audio spectrum texture (binding 6 on the daemon's RHI pipeline; a plain named
+// Audio spectrum texture (binding 10 on the daemon's RHI pipeline; a plain named
 // sampler on the compositor's classic-GL pipeline, bound to a texture unit at
 // draw time). Never sampled while iAudioSpectrumSize is 0. 1D: bar index = x,
 // y = 0; R = bar value in 0..1.
 #ifdef PLASMAZONES_KWIN
 uniform sampler2D uAudioSpectrum;
 #else
-layout(binding = 6) uniform sampler2D uAudioSpectrum;
+layout(binding = 10) uniform sampler2D uAudioSpectrum;
 #endif
 
 // Sample bar value (0..1). Returns 0 if audio is disabled or the index is out
@@ -47,45 +53,107 @@ float audioBarSmooth(float u) {
 }
 
 // ── Frequency-band helpers ───────────────────────────────────────────────────
+// The spectrum is NOT one low-to-high block. The shipped default channel mode is
+// stereo, and cava emits the left channel's bars low-to-high followed by the right
+// channel's (IAudioSpectrumProvider documents that layout, and nothing between
+// cava's stdout and the sampler reorders it). Banding the raw vector therefore
+// mixed one channel's treble with the other's bass. These helpers fold the two
+// channels first, so a band means the same thing in either mode. audioBar() and
+// audioBarSmooth() still address the RAW vector, which is what a spectrum-bar
+// visualiser wants.
+
+// Per-channel bar count: half the vector in stereo, all of it in the mono modes.
+int audioHalf() {
+    return (iAudioSpectrumSize >= 2) ? iAudioSpectrumSize / 2 : iAudioSpectrumSize;
+}
+
+// Bar `i` of the folded mono spectrum, for 0 <= i < audioHalf().
+float audioBarMono(int i) {
+    int h = audioHalf();
+    if (h == iAudioSpectrumSize)
+        return audioBar(i);
+    return 0.5 * (audioBar(i) + audioBar(i + h));
+}
+
+// ── Fetch budget ─────────────────────────────────────────────────────────────
+// Every band helper below runs PER FRAGMENT, so its loop bound is a per-pixel
+// cost. Walking every bar made that cost scale with a SETTING: at the widest bar
+// counts the four helpers together reached several hundred texelFetch per
+// fragment, and a pack calling more than one of them paid it more than once.
+//
+// The band is sampled at a bounded number of evenly spaced taps instead. Each
+// tap is one audioBarMono, which is two fetches in stereo.
+//
+// THE BOUND IS FEWER THAN 2 * kAudioBandTaps TAPS, not kAudioBandTaps. The stride
+// is integer `max(n / taps, 1)`, so just under twice the budget it is still 1 and
+// the loop walks every bar: the worst case is 15 taps at n = 15. So a band costs
+// under 4 * kAudioBandTaps fetches in stereo. Still bounded, and still independent
+// of the bar count once n is past the budget, which is the property that matters.
+//
+// AT SMALL BAR COUNTS NOTHING CHANGES. The stride is max(n / taps, 1), so a band
+// narrower than the tap budget still walks every bar and returns the exact mean
+// it always did. The approximation appears only where the exact answer was
+// unaffordable, and a band mean over a smooth spectrum is what these helpers
+// exist to give.
+const int kAudioBandTaps = 8;
+
+// Mean of the FOLDED spectrum over [lo, hi), at fewer than 2 * kAudioBandTaps
+// evenly spaced taps (see the budget note above for why it is not exactly the
+// budget).
+float audioBandMean(int lo, int hi) {
+    int n = hi - lo;
+    if (n <= 0)
+        return 0.0;
+    int stride = max(n / kAudioBandTaps, 1);
+    float sum = 0.0;
+    int taps = 0;
+    for (int i = lo; i < hi; i += stride) {
+        sum += audioBarMono(i);
+        taps++;
+    }
+    return taps > 0 ? sum / float(taps) : 0.0;
+}
 
 float getBass() {
-    if (iAudioSpectrumSize <= 0)
+    int h = audioHalf();
+    if (h <= 0)
         return 0.0;
-    float sum = 0.0;
-    int n = min(iAudioSpectrumSize, 8);
-    for (int i = 0; i < n; i++)
-        sum += audioBar(i);
-    return sum / float(n);
+    // Fractional, like the two bands below. An absolute window made "bass" the
+    // bottom half of the vector at the minimum bar count and a thirtieth of it at
+    // the maximum, so a settings slider changed which frequencies the band covered.
+    return audioBandMean(0, max(h / 8, 1));
 }
 
 float getMids() {
-    if (iAudioSpectrumSize <= 0)
+    int h = audioHalf();
+    if (h <= 0)
         return 0.0;
-    float sum = 0.0;
-    int lo = iAudioSpectrumSize / 4;
-    int hi = iAudioSpectrumSize * 3 / 4;
-    for (int i = lo; i < hi && i < iAudioSpectrumSize; i++)
-        sum += audioBar(i);
-    return sum / float(max(hi - lo, 1));
+    return audioBandMean(h / 4, h * 3 / 4);
 }
 
 float getTreble() {
-    if (iAudioSpectrumSize <= 0)
+    int h = audioHalf();
+    if (h <= 0)
         return 0.0;
-    float sum = 0.0;
-    int lo = iAudioSpectrumSize * 3 / 4;
-    for (int i = lo; i < iAudioSpectrumSize; i++)
-        sum += audioBar(i);
-    return sum / float(max(iAudioSpectrumSize - lo, 1));
+    return audioBandMean(h * 3 / 4, h);
 }
 
+// Strided over the RAW vector, not the folded one: a full mean is correct at
+// either channel layout, so there is nothing to fold. Twice a single band's tap
+// budget, since this covers the whole spectrum and each tap is a single fetch
+// rather than a folded pair. Same integer-stride slack as the bands: the worst
+// case is 31 taps, at a bar count of 31.
 float getOverall() {
     if (iAudioSpectrumSize <= 0)
         return 0.0;
+    int stride = max(iAudioSpectrumSize / (kAudioBandTaps * 2), 1);
     float sum = 0.0;
-    for (int i = 0; i < iAudioSpectrumSize; i++)
+    int taps = 0;
+    for (int i = 0; i < iAudioSpectrumSize; i += stride) {
         sum += audioBar(i);
-    return sum / float(iAudioSpectrumSize);
+        taps++;
+    }
+    return taps > 0 ? sum / float(taps) : 0.0;
 }
 
 // ── Dampened band helpers ────────────────────────────────────────────────────

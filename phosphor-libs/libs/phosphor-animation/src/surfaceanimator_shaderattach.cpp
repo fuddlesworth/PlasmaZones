@@ -30,6 +30,12 @@ namespace {
 /// instance — the per-leg attach installs the extension via
 /// `ShaderEffect::setUniformExtension`, so a `dynamic_pointer_cast`
 /// here pulls back the typed pointer for setter calls.
+///
+/// Returns a RAW pointer out of a temporary shared_ptr, which is safe only because
+/// `ShaderEffect::uniformExtension()` hands back a COPY of the member it still holds,
+/// so the refcount stays at least one after the temporary dies. Anyone "optimising"
+/// that accessor into a move, or releasing the item's own reference, breaks every
+/// caller here silently.
 inline PhosphorAnimation::AnimationUniformExtension* animExtensionFor(PhosphorRendering::ShaderEffect* shaderItem)
 {
     if (!shaderItem) {
@@ -456,8 +462,14 @@ void applyEffectStaticConfig(PhosphorRendering::ShaderEffect* shaderItem,
     // bake-cache key agrees across paths.
     shaderItem->setEntryScaffold(PhosphorAnimationShaders::AnimationShaderRegistry::animationEntryPrologue(),
                                  PhosphorAnimationShaders::AnimationShaderRegistry::animationEntryCandidates());
+    // Set on BOTH arms. The item is reused across attaches, so without the
+    // else a pack that drops its vertexShader on a hot-reload keeps rendering
+    // through the previous pack's .vert — the empty url is what falls the item
+    // back to the library's own fullscreen-quad stage.
     if (!effect.vertexShaderPath.isEmpty()) {
         shaderItem->setVertexShaderUrl(QUrl::fromLocalFile(effect.vertexShaderPath));
+    } else {
+        shaderItem->setVertexShaderUrl(QUrl());
     }
     if (effect.isMultipass && !effect.bufferShaderPaths.isEmpty()) {
         shaderItem->setBufferShaderPaths(effect.bufferShaderPaths);
@@ -675,45 +687,21 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // — gl_FragCoord is post-DPR pixel coords and would overshoot [0,1]
     // by a factor of DPR.
     //
-    // Initial-attach geometry mirrors syncShaderGeometryNow's two-mode
-    // logic (Anchor default vs Surface opt-in). Pre-seeding here keeps
-    // the first paint between attach and the next syncGeometry() call
-    // correctly sized; syncGeometry() refreshes on subsequent geometry
-    // events.
-    if (effect.fboExtentKind == PhosphorAnimationShaders::AnimationShaderEffect::FboExtentKind::Surface) {
-        QQuickItem* sceneRoot = nullptr;
-        if (QQuickWindow* win = shaderAnchor->window()) {
-            sceneRoot = win->contentItem();
-        }
-        QQuickItem* parent = shaderAnchor->parentItem();
-        if (sceneRoot && parent) {
-            const QPointF rootOriginInParent = parent->mapFromItem(sceneRoot, QPointF(0.0, 0.0));
-            shaderItem->setX(rootOriginInParent.x());
-            shaderItem->setY(rootOriginInParent.y());
-            shaderItem->setWidth(sceneRoot->width());
-            shaderItem->setHeight(sceneRoot->height());
-            shaderItem->setIResolution(QSizeF(sceneRoot->width(), sceneRoot->height()));
-        } else if (parent) {
-            shaderItem->setX(0.0);
-            shaderItem->setY(0.0);
-            shaderItem->setWidth(parent->width());
-            shaderItem->setHeight(parent->height());
-            shaderItem->setIResolution(QSizeF(parent->width(), parent->height()));
-        } else {
-            shaderItem->setX(shaderAnchor->x());
-            shaderItem->setY(shaderAnchor->y());
-            shaderItem->setWidth(shaderAnchor->width());
-            shaderItem->setHeight(shaderAnchor->height());
-            shaderItem->setIResolution(QSizeF(shaderAnchor->width(), shaderAnchor->height()));
-        }
-    } else {
-        // Anchor mode (default) — shader item exactly covers the anchor.
-        shaderItem->setX(shaderAnchor->x());
-        shaderItem->setY(shaderAnchor->y());
-        shaderItem->setWidth(shaderAnchor->width());
-        shaderItem->setHeight(shaderAnchor->height());
-        shaderItem->setIResolution(QSizeF(shaderAnchor->width(), shaderAnchor->height()));
-    }
+    // Initial-attach geometry IS syncShaderGeometryNow, called rather than
+    // reproduced. Pre-seeding here keeps the first paint between attach and the
+    // next syncGeometry() call correctly sized; syncGeometry() refreshes on
+    // subsequent geometry events, and it is the same call with the same
+    // arguments the lambda below makes.
+    //
+    // It used to be a hand-written copy of the two-mode branch, and the copy had
+    // drifted in the way a copy does. Its Anchor arm pushed the ANCHOR's size as
+    // iResolution where the real one pushes the CARD's, which differ on a
+    // PopupFrame, whose anchor wraps frame plus glow and publishes the card rect
+    // through shaderContentRect. Every frame before the first geometry event
+    // therefore told a shader doing pixel or aspect maths that the surface was
+    // bigger than it is. The copy also seeded none of iAnchorSize,
+    // iAnchorPosInFbo or the card's UV sub-rect.
+    syncShaderGeometryNow(shaderAnchor, shaderItem, shaderSource, effect.fboExtentKind);
 
     // No more customParams[7].x structural write: morph and broken-glass
     // (the only consumers) were ported to read the pad implicitly via
@@ -724,16 +712,13 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
 
     // Build the geometry-sync lambda + its dependencies.
     //
-    // The lambda re-runs the same parent-margin clamp the initial-attach
-    // block above does. Anchor x/y/w/h can change mid-leg (parent-layout
-    // reflow on sibling-hide; host's anchored layout re-evaluating on
-    // parent resize), and the clamp depends on the LIVE values. A
-    // fixed `pad` captured at attach time would let the shader item drift
-    // past the parent's bounds again whenever the anchor moves toward an
-    // edge, re-introducing the viewport-clipping vTexCoord shift the
-    // initial clamp avoids. The recomputed pad propagates into
-    // `iAnchorPosInFbo` via `syncShaderGeometryNow`, keeping the
-    // shader's UV remap consistent with the updated geometry.
+    // The lambda re-derives the extent-dependent geometry and the extension
+    // uniforms from the LIVE anchor rect, which is exactly why none of it can be
+    // computed once at attach time. Anchor x/y/w/h change mid-leg (parent-layout
+    // reflow on sibling-hide; the host's anchored layout re-evaluating on a parent
+    // resize), and `iAnchorPosInFbo` and the rest of the UV remap are all
+    // functions of those live values, so a captured copy leaves the shader's remap
+    // describing a rect the item no longer occupies for the rest of the leg.
     //
     // shaderSource is captured as QPointer so that any teardown path that
     // destroys it independently of shaderItem (scene-graph rebuild,
@@ -798,9 +783,9 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // mutates parent-layout-managed children synchronously, which can
     // emit xChanged/yChanged on the anchor as Row/ColumnLayout re-packs.
     // If the connects ran after the loop, the shader item would be stuck
-    // at the pre-reflow coordinates captured at lines 273-297 above —
-    // visible offset for the entire show leg until the next geometry
-    // signal happens to fire.
+    // at the pre-reflow coordinates the initial-attach geometry block above
+    // captured, a visible offset for the entire show leg until the next geometry
+    // signal happens to fire. No line numbers: they drift.
     QObject::connect(shaderAnchor, &QQuickItem::widthChanged, shaderItem, syncGeometry);
     QObject::connect(shaderAnchor, &QQuickItem::heightChanged, shaderItem, syncGeometry);
     QObject::connect(shaderAnchor, &QQuickItem::xChanged, shaderItem, syncGeometry);

@@ -10,6 +10,7 @@
 // sweep it schedules, and the whole-world invalidation used when the ground moves.
 
 #include "plasmazoneseffect.h"
+#include "desktopvisibility.h"
 
 // plasmazoneseffect.h only forward-declares DragTracker; the drag gate below
 // calls isDragging(), and unity batching must not be what supplies the type.
@@ -98,7 +99,9 @@ void PlasmaZonesEffect::invalidateRuleCachesForWindowGeometry(const QString& win
     // future caller hands it a daemon-supplied id, the hazard the flush's
     // findWindowById path documents.
     const QString liveId = getWindowId(w);
-    if (w->isOnCurrentDesktop()) {
+    // Per-output, matching updateAllDecorations and every other decorate gate; see
+    // desktopvisibility.h.
+    if (isOnOwnOutputCurrentDesktop(w)) {
         updateWindowDecoration(liveId, w);
     }
     reconcileRuleHiddenTitleBar(liveId, w);
@@ -152,12 +155,13 @@ void PlasmaZonesEffect::flushPendingRuleInvalidations()
         // removes and no live-id lookup (windowOwnKeepAbove / applyOwnLayerFlags
         // / the next reconcile) ever finds.
         const QString liveId = getWindowId(w);
-        // Recreate this window's border so a state-scoped border colour
-        // re-applies. Border overlays are visual-only, so build them only for a
-        // window on the current desktop — matching updateAllDecorations, which gates
-        // the same call this way to avoid building an invisible off-desktop item
-        // that the next desktop switch tears down.
-        if (w->isOnCurrentDesktop()) {
+        // Recreate this window's border so a state-scoped border colour re-applies.
+        // Border overlays are visual-only, so build them only for a window on the
+        // desktop its own output shows, matching updateAllDecorations, which gates the
+        // same call the same way to avoid building an invisible off-desktop item that
+        // the next desktop switch tears down. Per-output rather than global for the
+        // reason desktopvisibility.h gives.
+        if (isOnOwnOutputCurrentDesktop(w)) {
             updateWindowDecoration(liveId, w);
         }
         // Re-resolve the hide-title-bar override too: a SetHideTitleBar rule

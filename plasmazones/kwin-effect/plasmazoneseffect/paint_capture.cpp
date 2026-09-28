@@ -287,8 +287,12 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
             // map and no longer needs a term in it.
             const QRectF newFrame = src->frameGeometry();
             const QRectF oldFrame = transition.fromGeometry;
-            if (comp && mp.canvasGeo.isValid() && !mp.canvasGeo.isEmpty() && oldFrame.width() > 0.0
-                && oldFrame.height() > 0.0 && newFrame.width() > 0.0 && newFrame.height() > 0.0) {
+            // canvasGeo is stamped BEFORE the fold's capture bail, so it asserts "a
+            // composite covers this rect" on a state that may hold no composite at
+            // all. compositeWritten is the term that actually says one exists.
+            if (comp && mp.compositeWritten && mp.canvasGeo.isValid() && !mp.canvasGeo.isEmpty()
+                && oldFrame.width() > 0.0 && oldFrame.height() > 0.0 && newFrame.width() > 0.0
+                && newFrame.height() > 0.0) {
                 // T maps snapshot-space logical points into composite space:
                 // T(p) = oldFrame.topLeft + (p - newFrame.topLeft) ⊙ s
                 const qreal sx = oldFrame.width() / newFrame.width();
@@ -503,7 +507,9 @@ void PlasmaZonesEffect::seedTabSwapSnapshot(ShaderTransition& transition, KWin::
     }
     const SurfaceMultipassState& mp = mpIt->second;
     KWin::GLTexture* const comp = mp.compositeTex[mp.finalSlot].get();
-    if (!comp || !mp.canvasGeo.isValid() || mp.canvasGeo.isEmpty()) {
+    // compositeWritten for the reason the sibling above gives: canvasGeo is stamped
+    // ahead of the fold's capture bail, so it cannot stand in for "a fold happened".
+    if (!comp || !mp.compositeWritten || !mp.canvasGeo.isValid() || mp.canvasGeo.isEmpty()) {
         armFallback();
         return;
     }
@@ -807,10 +813,15 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     if (st && !st->surfaceExtent && !quads.isEmpty() && !m_windowDecorations.isEmpty()) {
         const auto bit = m_windowDecorations.find(frozenWindowId);
         if (bit != m_windowDecorations.end() && bit->outerPadding > 0) {
-            QRectF textureGeo = window->expandedGeometry();
-            if (textureGeo.isEmpty()) {
-                textureGeo = window->frameGeometry();
-            }
+            // Through surfaceWindowRect, for the reason the padded-present branch
+            // above gives: a raw expandedGeometry() read can transiently answer for
+            // the PREVIOUS frame rect mid-resize, and ow/oh and the texcoord
+            // extension are both derived from this, so one stale value mis-sizes the
+            // padded quad AND its texcoords for the whole animation. The helper
+            // already falls back to the raw expanded rect, then the frame, when it
+            // has no margins cached, so nothing is lost on a window it does not
+            // cover.
+            const QRectF textureGeo = surfaceWindowRect(window);
             if (textureGeo.isEmpty() || textureGeo.width() <= 0 || textureGeo.height() <= 0) {
                 return;
             }
@@ -885,10 +896,11 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     // rect) so the output quad lands where KWin placed the texture.
     // expandedGeometry can be empty for a window with no decoration or
     // shadow extents; fall back to the frame there.
-    QRectF textureGeo = window->expandedGeometry();
-    if (textureGeo.isEmpty()) {
-        textureGeo = window->frameGeometry();
-    }
+    // surfaceWindowRect, like the padded-present and anchor-extent branches above
+    // and for the reason the first of them gives: it pairs the rect with the quad
+    // this draw was handed. This was the one of the three sites left on the raw
+    // accessor. It already applies the same empty-expanded fallback internally.
+    QRectF textureGeo = surfaceWindowRect(window);
     const QRect outputGeo = output->geometry();
     if (textureGeo.isEmpty() || outputGeo.isEmpty()) {
         return;

@@ -31,6 +31,46 @@ Q_LOGGING_CATEGORY(lcSurfaceQuick, "phosphorsurfacequick")
 static_assert(PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses == PhosphorRendering::kMaxBufferPasses,
               "surface buffer-pass budget must match the rendering node's iChannel slot count");
 
+namespace {
+
+/// @p base with the `shared/` dir that sits BESIDE THE PACK DIR prepended.
+///
+/// The static list alone is not parity with the compositor, though the
+/// compositor's comment says it is. That list walks the XDG `plasmazones/surface`
+/// roots and appends each root's `shared/`, which covers a pack INSTALLED under
+/// one of those roots and nothing else. The compositor instead derives the dir
+/// from the pack's own fragment path and puts it FIRST, ahead of every registry
+/// root, which is also what the validator probes first.
+///
+/// Two things that costs, both real. A pack outside the XDG roots (a development
+/// tree, a vendored pack set) has its sibling helpers unreachable here while they
+/// resolve fine on the compositor and in the validator, so it compiles in two
+/// places and fails in the third. And where a pack's own root is not the
+/// highest-priority one, the daemon takes another root's copy of a shared header
+/// while the compositor takes the pack's, which is the body-from-one-tree,
+/// contract-from-another split the compositor comment already describes.
+///
+/// Prepended to @p base rather than replacing it, so a caller that set its own
+/// include paths keeps them.
+QStringList withPackSiblingShared(const QString& fragmentShaderPath, const QStringList& base)
+{
+    if (fragmentShaderPath.isEmpty()) {
+        return base;
+    }
+    const QString packDir = QFileInfo(fragmentShaderPath).absolutePath();
+    const QString siblingShared = QFileInfo(packDir).absolutePath() + QStringLiteral("/shared");
+    if (!QDir(siblingShared).exists() || base.contains(siblingShared)) {
+        return base;
+    }
+    QStringList paths;
+    paths.reserve(base.size() + 1);
+    paths.append(siblingShared);
+    paths.append(base);
+    return paths;
+}
+
+} // namespace
+
 // ============================================================================
 // Construction / Destruction
 // ============================================================================
@@ -269,7 +309,7 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
     // texture, zone counts, or extension.
     syncBasePropertiesToNode(node);
 
-    // ── Sync source texture provider (slot 0 / binding 7, uTexture0) ──
+    // ── Sync source texture provider (slot 0 / binding 11, uTexture0) ──
     // The base ShaderEffect binds this in ITS updatePaintNode, NOT in
     // syncBasePropertiesToNode — so a subclass that fully reimplements
     // updatePaintNode (like this one) must replicate it or sourceItem()
@@ -301,7 +341,7 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
     // on that image as much as on the two rects.
     syncBackdropRect(node);
 
-    // NB: the audio spectrum (CAVA, binding 6 + the UBO's iAudioSpectrumSize) is
+    // NB: the audio spectrum (CAVA, binding 10 + the UBO's iAudioSpectrumSize) is
     // pushed by syncBasePropertiesToNode above — the daemon writes the inherited
     // audioSpectrum Q_PROPERTY via OverlayService, and a pack reads it through
     // surface_audio.glsl. The base ShaderEffect's own setAudioSpectrum /
@@ -337,6 +377,11 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
             // has no entry scaffold and relies on a shared surface.vert for its
             // main(); the FRAGMENT stage does get one (setEntryScaffold below,
             // so a pack may ship only `vec4 pSurface(vec2 uv)`).
+            // Resolved ONCE and used for both the surface.vert lookup below and
+            // the node's own include paths, so the vertex stage and the fragment
+            // stage cannot disagree about which tree a shared header came from.
+            const QStringList effectiveIncludePaths = withPackSiblingShared(fragPath, shaderIncludePaths());
+
             QString vertPath;
             if (vertexShaderUrl().isValid() && !vertexShaderUrl().isEmpty()) {
                 vertPath = vertexShaderUrl().toLocalFile();
@@ -353,7 +398,7 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
                 if (QFile::exists(vertLocal)) {
                     vertPath = vertLocal;
                 } else {
-                    for (const QString& incDir : shaderIncludePaths()) {
+                    for (const QString& incDir : effectiveIncludePaths) {
                         const QString candidate = incDir + QStringLiteral("/surface.vert");
                         if (QFile::exists(candidate)) {
                             vertPath = candidate;
@@ -363,7 +408,7 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
                 }
             }
 
-            node->setShaderIncludePaths(shaderIncludePaths());
+            node->setShaderIncludePaths(effectiveIncludePaths);
             // Entry-point scaffold: a pack may define `vec4 pSurface(vec2 uv)`
             // and omit main(); loadFragmentShader assembles the generated main()
             // + prologue before include expansion, identical to the kwin-effect
@@ -399,6 +444,17 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
             }
 
             if (loaded) {
+                // The BUFFER passes too. Their sources are re-armed only by
+                // setBufferShaderPaths, which returns early when the path list is
+                // unchanged, and an in-place edit of a pass's source leaves it
+                // unchanged. In the SUCCESS branch, so a failed reload does not
+                // discard buffer bakes it cannot replace. The re-read itself stays
+                // lazy, in prepare()'s bakeBufferShaders.
+                // THIS override is the one the decoration chain reaches:
+                // SurfaceDecoration.qml instantiates SurfaceShaderItem and calls
+                // reloadShader() on it, and this class does not delegate to
+                // ShaderEffect::updatePaintNode, so the call there does not cover it.
+                node->invalidateBufferShaders();
                 node->invalidateShader(); // Ensure node re-bakes
                 setStatus(Status::Ready);
             } else {

@@ -43,6 +43,8 @@
 namespace PlasmaZones {
 
 namespace {
+/// Forces the re-bake an in-place source edit cannot get. See qml_property_names.h.
+int s_decorationReloadGeneration = 0;
 
 // Size the OSD window to its target screen rect. The wl_surface is now
 // screen-sized (mirrors zone-selector / snap-assist) - anchors and
@@ -503,6 +505,7 @@ void OverlayService::setSurfaceShaderRegistry(PhosphorSurfaceShaders::SurfaceSha
         connect(m_surfaceShaderRegistry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
                 [this]() {
                     m_warnedDecorationPacks.clear();
+                    ++s_decorationReloadGeneration; // before the re-resolve, so it is written
                     // And RE-RESOLVE what is on screen. A pack installed, removed or
                     // edited on disk changes what a visible popup's chain composes to,
                     // and nothing else on this path pushes that: the chain is resolved
@@ -529,6 +532,23 @@ void OverlayService::reapplyVisiblePopupDecorations()
         }
         if (m_cheatsheetVisible) {
             applyDecoration(state.cheatsheetSlot(), QStringLiteral("popup.cheatsheet"));
+        }
+        // THE OSD IS A DECORATED SURFACE TOO and had no arm here, so a pack
+        // installed, removed or enabled while one was on screen re-resolved
+        // every popup except it. Every OSD show path already calls
+        // applyDecoration(osdSlot, "osd"), so this is the same call the show
+        // paths make, on the same path string.
+        //
+        // Keyed on the ITEM's own visibility rather than a service flag, because
+        // the OSD has no flag: the show paths call setVisible(true) on the slot
+        // directly and the dismiss timer hides it, so the item is the authority.
+        // The four above have flags because their visibility is service state.
+        //
+        // The window in which this matters is short, since an OSD is transient,
+        // and an in-place pack EDIT re-resolves to an identical chain anyway.
+        // It bites on an install, an uninstall or an enable change.
+        if (QQuickItem* const osd = state.osdSlot(); osd && osd->isVisible()) {
+            applyDecoration(osd, QStringLiteral("osd"));
         }
     }
 }
@@ -613,6 +633,9 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     bool chainWantsBackdrop = false;
     // Theme colours for the pack flag resolver, read once for the whole chain.
     const QPalette pal = QGuiApplication::palette();
+    // The blur-quality tier the composer folds into every declared buffer scale.
+    // m_settings is non-null here: this function early-returns above when it is.
+    const qreal blurScale = m_settings->decorationBlurScaleMultiplier();
     for (const QString& packId : chain) {
         if (!m_surfaceShaderRegistry->hasEffect(packId)) {
             // One warning per pack id per REASON, not one per show: a profile
@@ -696,12 +719,10 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
             resolvedParams.insert(QStringLiteral("cornerRadius"), cardRadius.toReal());
         }
 
-        // Stage map (source / preamble / translated params / animated /
-        // multipass set) is composed by the shared builder, so this host and
-        // the settings app's decoration preview cannot describe a stage
-        // differently — a preview that composed its own stage would stop
-        // predicting what the daemon draws.
-        stages.append(PhosphorSurfaceShaders::composeStageMap(effect, resolvedParams));
+        // Through the shared builder, so this host, the settings app's decoration
+        // preview and the shell cannot describe a stage differently. A preview that
+        // composed its own would stop predicting what the daemon draws.
+        stages.append(PhosphorSurfaceShaders::composeStageMap(effect, resolvedParams, blurScale));
     }
     if (stages.isEmpty()) {
         clearDecoration();
@@ -738,6 +759,8 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     writeQmlProperty(slot, QStringLiteral("backdropTexture"),
                      backdrop.isNull() ? QVariant() : QVariant::fromValue(backdrop));
     writeQmlProperty(slot, QStringLiteral("decorationChain"), QVariant::fromValue(stages));
+    // Every apply, so a slot decorated after a commit starts at the current value.
+    writeQmlProperty(slot, QString(OverlayQmlPropertyNames::DecorationReloadGeneration), s_decorationReloadGeneration);
 
     // Record whether this slot now carries an audio-reactive pack, then reconcile
     // CAVA: a newly-decorated audio surface may need audio capture started, or a

@@ -60,9 +60,9 @@ PHOSPHORSURFACE_EXPORT double paddingRequest(const SurfaceShaderEffect& effect, 
  * paths to the shader item. Single-pass stages carry `multipass: false` and
  * nothing further, leaving the item's own defaults untouched.
  *
- * Used by the daemon overlay-decoration host and by the settings app's
- * decoration preview, which must compose a stage identically or the preview
- * stops predicting what the daemon draws. The kwin-effect compositor path
+ * Used by the daemon overlay-decoration host, by the shell's own chrome, and by the
+ * settings app's decoration preview, all three of which must compose a stage
+ * identically or the preview stops predicting what the daemon draws. The kwin-effect compositor path
  * builds GL uniform value arrays instead of a stage map and shares only
  * paddingRequest() above.
  *
@@ -70,8 +70,20 @@ PHOSPHORSURFACE_EXPORT double paddingRequest(const SurfaceShaderEffect& effect, 
  * fragment shader — which is also what the path-traversal guard leaves behind
  * when it rejects a pack's declared shader). Hosts must treat that as "skip
  * this stage" rather than appending it, or they add a stage with no source.
+ *
+ * @p blurScaleMultiplier is the user's decoration blur-quality tier
+ * (Decorations.Performance.BlurScaleMultiplier). It multiplies every declared
+ * buffer scale, `bufferScale` and each entry of `bufferScales`, and the product is
+ * bounded into [kMinBufferScale, kMaxBufferScale] exactly as the compositor's
+ * clampedBufferScale() does. This is the daemon-side counterpart of that
+ * chokepoint, and the reason it belongs here rather than in each host is that the
+ * setting is a GLOBAL blur-quality tier. For a while the compositor honoured it
+ * while nothing on this path read it at all, so the same pack rendered at two
+ * densities depending on whether it decorated a window or an OSD.
+ *
+ * Defaulted to 1.0, the identity, for a caller with no settings to offer.
  */
-PHOSPHORSURFACE_EXPORT QVariantMap composeStageMap(const SurfaceShaderEffect& effect,
-                                                   const QVariantMap& resolvedParams);
+PHOSPHORSURFACE_EXPORT QVariantMap composeStageMap(const SurfaceShaderEffect& effect, const QVariantMap& resolvedParams,
+                                                   qreal blurScaleMultiplier = 1.0);
 
 } // namespace PhosphorSurfaceShaders

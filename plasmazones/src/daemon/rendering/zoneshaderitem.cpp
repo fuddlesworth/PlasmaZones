@@ -414,6 +414,17 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
             }
 
             if (loaded) {
+                // The BUFFER passes too. Their sources are re-armed only by
+                // setBufferShaderPaths, which returns early when the path list is
+                // unchanged, and an in-place edit of a pass's source leaves it
+                // unchanged. In the SUCCESS branch, so a failed reload does not
+                // discard buffer bakes it cannot replace. The re-read itself stays
+                // lazy, in prepare()'s bakeBufferShaders.
+                // Same reason as the SurfaceShaderItem twin: this override replaces
+                // ShaderEffect::updatePaintNode rather than delegating to it, and the
+                // zone reload path (settings.cpp -> PassiveOverlayShell.qml ->
+                // ZoneShaderRenderer.qml) lands here.
+                node->invalidateBufferShaders();
                 node->invalidateShader(); // Ensure node re-bakes
                 setStatus(Status::Ready);
                 // Force zone data resync when shader changes successfully

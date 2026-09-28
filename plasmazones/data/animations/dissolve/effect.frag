@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Dissolve transition — operates on the rendered surface sampled via
-// uTexture0 (SRB binding 7). SurfaceAnimator binds the shaderAnchor's
+// uTexture0 (SRB binding 11). SurfaceAnimator binds the shaderAnchor's
 // live `QSGTextureProvider` through `ShaderEffect::setSourceItem`,
 // so the shader sees the current rendered pixels rather than a
 // pre-leg snapshot. Per-cell noise gates the surface's alpha against

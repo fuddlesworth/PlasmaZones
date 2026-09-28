@@ -3,10 +3,14 @@
 //
 // PlasmaZones shared shader helpers (GLSL #version 450).
 // Include from effect.frag or zone.vert with:
-//   #include <common.glsl>   (from global shaders dir)
-//   #include "common.glsl"   (from current shader dir if copied locally)
+//   #include <common.glsl>
 //
-// Bindings 0-1: UBO and labels. Channels (2-5) in multipass.glsl.
+// The ANGLE form only. A quoted include resolves against the shader's own
+// directory, which the include-root rule rejects for a shared header: a pack
+// that copied one locally would compile against its copy and drift from the
+// contract the runtime and the validator both check it against.
+//
+// Bindings 0-1: UBO and labels. Channels (2-9) in multipass.glsl.
 
 #ifndef PLASMAZONES_COMMON_GLSL
 #define PLASMAZONES_COMMON_GLSL
@@ -21,7 +25,9 @@ layout(std140, binding = 0) uniform ZoneUniforms {
     vec2 iResolution;
     int zoneCount;
     int highlightedCount;
-    vec4 iMouse;        // xy = pixels, zw = normalized (0-1), Qt Y-down (Y=0 at top)
+    vec4 iMouse;        // xy = pixels, zw = the same point over the zone extent,
+                        // UNCLAMPED: negative for the off-region sentinel and past
+                        // 1 on another screen. Qt Y-down (Y=0 at top)
     vec4 iDate;         // xyzw = year, month, day, seconds since midnight
     vec4 customParams[8];
     vec4 customColors[16];
@@ -29,7 +35,7 @@ layout(std140, binding = 0) uniform ZoneUniforms {
     int iAudioSpectrumSize;  // number of bars; 0 = disabled
     int iFlipBufferY;        // always 1; both OpenGL and Vulkan need Y-flip when sampling buffer textures
     // std140: 8 bytes implicit padding here (int+int=8 → next vec2 array aligned to 16)
-    vec2 iTextureResolution[4]; // user texture sizes (bindings 7-10); std140 pads each vec2 to 16 bytes
+    vec2 iTextureResolution[4]; // user texture sizes (bindings 11-14); std140 pads each vec2 to 16 bytes
     float iTimeHi;       // integer wrap offset (changes once per kShaderTimeWrap seconds)
     // ── Zone extension (after BaseUniforms) ──────────────────────────
     vec4 zoneRects[64];
@@ -50,8 +56,13 @@ layout(std140, binding = 0) uniform ZoneUniforms {
 // dispatch loop: for each visible zone it fills one ZoneCtx and accumulates the
 // returned colors with blendOver(), then clampFragColor()s the result. The full
 // zoneRects[]/iTime/audio globals stay readable inside pZone, so continuous-
-// field and cross-zone effects remain expressible. Unused by packs that keep
-// their own main().
+// field and cross-zone effects remain expressible.
+//
+// THREE ENTRY SHAPES, not two, and this is the least used of them. The scaffold
+// that prepends this header accepts `vec4 pZone(ZoneCtx)` (per-zone, this
+// struct), `vec4 pImage(vec2 fragCoord)` (whole-canvas, which is what most
+// bundled packs write), and a pack's own `main()`. ZoneCtx is unused by the
+// latter two.
 struct ZoneCtx {
     int   index;         // zone i (0 .. zoneCount-1)
     vec2  fragCoord;     // screen-space pixel (the vFragCoord the loop passes in)
@@ -87,7 +98,7 @@ const float TAU = 6.28318530718;
 // iTime wraps at K_TIME_WRAP seconds to preserve float32 precision. For usage
 // patterns like `fbm(pos + time * speed)` or `fract(time * speed)` the wrap is
 // visible once per period but harmless — just use iTime directly. For sin/cos
-// phase animations that must not discontinuity, use the timeSin/timeCos
+// phase animations that must not jump at the wrap, use the timeSin/timeCos
 // helpers below: they compose phase from (iTimeHi, iTime) via angle-addition,
 // with the large-phase term reduced mod TAU so float32 quantization of
 // `speed * iTimeHi` never leaks into the result.
@@ -116,15 +127,24 @@ float timeCos(float speed, float offset) {
     return cos(phaseHiMod) * cos(phaseLo) - sin(phaseHiMod) * sin(phaseLo);
 }
 
-// Resolution-independent pixel scale factor. Normalizes pixel-space values
-// (border width, glow radius, chromatic aberration, etc.) so they occupy the
-// same fraction of the screen at any resolution. Reference: 1080p.
-// Usage: multiply hardcoded pixel thresholds by pxScale().
+// Resolution-independent pixel scale factor, relative to 1080p. Use it for a
+// length that is genuinely SCREEN-relative, so that it covers the same fraction
+// of the display at any resolution. neon-city's gaussian halo reach is the
+// shape of thing it is for.
+//
+// NOT for a length measured against a ZONE. Border widths, corner radii, glow
+// insets and edge bands are all zone-relative and go through zoneLen() below,
+// which scales by uZoneScale. This doc used to say the opposite, naming border
+// width and glow radius as pxScale material, and the packs have been carrying
+// "zoneLen(), not pxScale()" comments against it ever since.
 float pxScale() { return max(iResolution.y, 1.0) / 1080.0; }
 
 // Compute fragment coordinates from texture coords.
-// Y is always flipped: both OpenGL (Y-up FBO) and Vulkan (negative-height viewport)
-// store buffer data requiring a Y-flip when sampling. iFlipBufferY is always 1.
+//
+// The Y flip here is the TEXCOORD convention, not the buffer-sampling one: the
+// incoming uv is Y-up and fragment coordinates are Y-down. This function samples
+// nothing and never reads iFlipBufferY; the buffer-sampling rationale belongs to
+// channelUv, from which it was copied verbatim.
 vec2 fragCoordFromTexCoord(vec2 uv) {
     return vec2(uv.x, 1.0 - uv.y) * iResolution;
 }
@@ -165,11 +185,12 @@ float sdRoundedBox(vec2 p, vec2 b, float r) {
 //     as a decoration corner set to the same number.
 //   * CLAMP. The radius is clamped to half the smaller side. sdRoundedBox()
 //     with r greater than a half-extent inverts the inset box and collapses
-//     the zone to a sliver rather than rounding it. The settings UI caps the
-//     radius at 50 logical px, so reaching this needs a zone under 100 logical
-//     px on its smaller side, or a per-zone borderRadius from layout JSON,
-//     which is unbounded. frameSdf() has always clamped; the inline copies
-//     never did.
+//     the zone to a sliver rather than rounding it. Reaching this needs a
+//     SMALL ZONE, not a large radius: the daemon bounds every radius it
+//     publishes against borderRadiusMax, including a per-zone one hand-edited
+//     into layout JSON, so the ceiling is the settings cap and a zone under
+//     twice it on its smaller side is what trips the clamp. frameSdf() has
+//     always clamped; the inline copies never did.
 //   * NO FLOOR. The inline copies each applied their own `max(params.x, N)`
 //     with N of 4, 6, or 8 depending on the pack, so a configured radius of 0
 //     still rounded, by a different amount per pack. The configured value is
@@ -247,6 +268,12 @@ float zoneStrokeWidth(float deviceWidth) {
 // The band around the zone edge that an edge-anchored EFFECT should occupy,
 // given the pack's border width.
 //
+// THE TWO ARGUMENTS ARE IN DIFFERENT UNITS, which the signature cannot show.
+// @p deviceWidth is consumed raw and must ALREADY be device px (what
+// zoneBorderWidth() returns). @p minLogical is LOGICAL px and goes through
+// zoneLen() here. Passing a logical width as the first argument makes the band
+// scale-dependent in the wrong direction on every display above 1x.
+//
 // Packs gate treble sparks, edge glints and similar on a multiple of the border
 // width. That was safe while the width had a hard 2-logical-px floor, but a
 // user-configured width of 0 collapses the band to nothing and takes the effect
@@ -323,10 +350,14 @@ vec3 zoneTint(vec3 base, vec4 fillColor, float weight) {
     return mix(base, base * 0.85 + zoneFillHue(fillColor) * 0.15, weight);
 }
 
-// 2D rotation matrix. mat2 is column-major, so p * rot(a) rotates by +a,
-// while rot(a) * p applies the transpose (rotation by -a). The *drift fbm
-// keeps its historical matrix-first rot(a) * uv form; the pass-shader flow
-// warps (e.g. nexus-cascade) use the p * rot(a) form.
+// 2D rotation matrix. mat2 is column-major, so p * rot(a) rotates by +a while
+// rot(a) * p applies the transpose, rotating by -a. The two forms turn in
+// OPPOSITE directions, so copying one and writing the other silently reverses
+// the motion.
+//
+// EVERY bundled pack uses the vector-first p * rot(a) form: the *drift fbm
+// warps and the pass-shader flow warps alike. Write that one unless you mean
+// the reverse.
 mat2 rot(float a) {
     float c = cos(a), s = sin(a);
     return mat2(c, -s, s, c);
@@ -388,7 +419,10 @@ vec2 labelsUv(vec2 fragCoord) {
     return fragCoord / res;
 }
 
-// Premultiplied alpha over blend: result = src over dst
+// STRAIGHT-alpha "over": both inputs carry un-premultiplied rgb, and the result
+// does too. The body multiplies each side by its own alpha and divides the sum
+// back out by the composited alpha, which is the straight-alpha form. A
+// premultiplied over would be src + dst * (1 - src.a) with no divide.
 vec4 blendOver(vec4 dst, vec4 src) {
     float srcA = src.a;
     float dstA = dst.a;
@@ -398,7 +432,8 @@ vec4 blendOver(vec4 dst, vec4 src) {
     return vec4(outRgb, outA);
 }
 
-// Soft border factor from SDF distance d (0 at edge, 1 inside border)
+// Soft border factor from SDF distance d: 1 ON the edge, falling to 0 at
+// borderWidth away from it. (The doc had this backwards.)
 float softBorder(float d, float borderWidth) {
     // A width of 0 means the user turned the border off, and it has to be
     // handled before the smoothstep rather than inside it. GLSL leaves
@@ -503,9 +538,13 @@ float fbm(vec2 uv, int octaves, float rotAngle) {
 // Tri-stop hue cycle: three colors around a loop; fract(t) picks the position.
 vec3 triStopPalette(float t, vec3 primary, vec3 secondary, vec3 accent) {
     t = fract(t);
-    if (t < 0.33)      return mix(primary, secondary, t * 3.0);
-    else if (t < 0.66) return mix(secondary, accent, (t - 0.33) * 3.0);
-    else               return mix(accent, primary, (t - 0.66) * 3.0);
+    // Exact thirds, matching the 3.0 scale. Testing 0.33 and 0.66 against a
+    // third of the way each left a 1% jump at both seams, because the branch
+    // ended at 0.99 of its mix and the next one restarted at 0.
+    const float kThird = 1.0 / 3.0;
+    if (t < kThird)           return mix(primary, secondary, t * 3.0);
+    else if (t < 2.0 * kThird) return mix(secondary, accent, (t - kThird) * 3.0);
+    else                       return mix(accent, primary, (t - 2.0 * kThird) * 3.0);
 }
 
 // Inigo Quilez cosine palette: a + b * cos(TAU * (c * t + d)).
@@ -522,7 +561,9 @@ float zoneVitality(bool isHighlighted) {
     return isHighlighted ? 1.0 : 0.3;
 }
 
-// Desaturate toward grayscale proportional to dormancy (1=full color, 0=gray).
+// Desaturate toward grayscale proportional to dormancy. 1 is full colour and 0
+// keeps 40% of it, deliberately: the mix floor is 0.4, so a dormant zone reads
+// as muted rather than grey.
 vec3 vitalityDesaturate(vec3 col, float vitality) {
     float lum = luminance(col);
     return mix(vec3(lum), col, 0.4 + 0.6 * vitality);

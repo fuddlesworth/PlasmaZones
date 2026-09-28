@@ -9,14 +9,13 @@
 #include <PhosphorShaders/BaseUniforms.h>
 #include <PhosphorShaders/IUboProfile.h>
 #include <PhosphorShaders/IUniformExtension.h>
+#include <PhosphorShaders/ShaderBindings.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
 
 #include <QColor>
 #include <QImage>
-#include <QMatrix4x4>
 #include <QPointF>
 #include <QPointer>
-#include <QSizeF>
 #include <QQuickItem>
 #include <QSGRenderNode>
 #include <QSGTextureProvider>
@@ -37,43 +36,59 @@
 namespace PhosphorRendering {
 
 // Forward declare constants used in member declarations.
-// `constexpr int` at namespace scope in a header is implicitly `inline` since
-// C++17 — no `static` needed (and matches the existing `constexpr int` style
-// used by kFirstFreeConsumerBinding / kMaxConsumerBinding below).
-constexpr int kMaxBufferPasses = 4;
-constexpr int kMaxUserTextures = 4;
+// A namespace-scope `constexpr int` in a header is NOT implicitly inline: it is
+// const and therefore has internal linkage, so each translation unit gets its
+// own copy. That is harmless for an integral constant used only in constant
+// expressions and array bounds, which is every use here, and it matches the
+// existing style of kFirstFreeConsumerBinding / kMaxConsumerBinding below. Only
+// a constexpr STATIC DATA MEMBER became implicitly inline in C++17, which is the
+// rule this comment used to cite.
+constexpr int kMaxBufferPasses = PhosphorShaders::kMaxBufferPasses;
+constexpr int kMaxUserTextures = PhosphorShaders::Bindings::kUserTextureCount;
 constexpr int kMaxCustomParams = 8;
 constexpr int kMaxCustomColors = 16;
 
 // ── Consumer binding range (for setExtraBinding) ────────────────────────
-// Library-managed bindings: 0 (UBO), 2-5 (multipass buffers), 6 (audio),
-// 7-10 (user textures), 11 (wallpaper), 12 (depth). Assigning any of those
-// via setExtraBinding() would duplicate SRB entries and is rejected at
-// runtime. Binding 1 is the one "free-in-the-gap" slot; 13..31 are free as
-// well.
+// The binding table is PhosphorShaders::Bindings (ShaderBindings.h), the one
+// layout every shader family's shared GLSL header declares and the validator
+// reflects baked stages against. Library-managed bindings: 0 (UBO), 2..9
+// (multipass buffers), 10 (audio), 11..14 (user textures), 15 (wallpaper /
+// backdrop), 16 (depth). Assigning any of those via setExtraBinding() would
+// duplicate SRB entries and is rejected at runtime. Binding 1 is the one
+// "free-in-the-gap" slot; 17..31 are free as well.
 //
 // Phosphor uses binding 1 for its zone-labels texture by convention.
 // Other consumers that interoperate with Phosphor should pick from
-// 13..kMaxConsumerBinding to avoid a per-instance overwrite.
-constexpr int kFirstFreeConsumerBinding = 1; ///< First slot usable via setExtraBinding()
-/// Highest portable SRB binding. 31 matches Qt RHI's minimum guarantee
-/// (minMaxShaderResourceBindingCount) across all backends — Vulkan/D3D11/
-/// Metal/OpenGL all advertise at least 32 bindings. Going higher risks
+// (kReservedBindingRangeEnd + 1)..kMaxConsumerBinding to avoid a per-instance
+// overwrite. (The binding table spells that lower bound kExtraBase, but that
+// name lives in PhosphorShaders::Bindings and is not declared in this
+// namespace, so the local spelling is the one to use here.)
+constexpr int kFirstFreeConsumerBinding =
+    PhosphorShaders::Bindings::kConsumer; ///< First slot usable via setExtraBinding()
+/// Highest binding this library will hand out. 31 is a PROJECT ceiling chosen to
+/// stay inside what every RHI backend realistically offers, not a value read
+/// back from Qt: QRhi exposes no such limit query, so nothing here can assert it
+/// and no upstream guarantee is being quoted. Going higher risks
 /// pipeline-creation failure on conservative drivers.
-constexpr int kMaxConsumerBinding = 31;
-constexpr int kReservedBindingRangeStart = 2; ///< First library-managed binding above 0
-constexpr int kReservedBindingRangeEnd = 12; ///< Last library-managed binding
+constexpr int kMaxConsumerBinding = PhosphorShaders::Bindings::kMaxBinding;
+// An exported MIRROR of Bindings::kChannelBase, not a value this library tests
+// against: the consumer-binding predicate forwards to
+// PhosphorShaders::isConsumerBinding, and the setExtraBinding rejection reads
+// kFirstFreeConsumerBinding, kReservedBindingRangeEnd and kMaxConsumerBinding.
+// Kept for an out-of-tree consumer describing the same range.
+constexpr int kReservedBindingRangeStart =
+    PhosphorShaders::Bindings::kChannelBase; ///< First library-managed binding above 0
+constexpr int kReservedBindingRangeEnd = PhosphorShaders::Bindings::kReservedEnd; ///< Last library-managed binding
 
-/// First SRB binding for the user-texture slots (slot 0 → binding 7).
+/// First SRB binding for the user-texture slots (slot 0 → binding 11).
 /// Both `setSourceTextureProvider`'s slot-0 override and the
 /// QImage-uploaded user textures key off this base.
-constexpr int kUserTextureBaseBinding = 7;
+constexpr int kUserTextureBaseBinding = PhosphorShaders::Bindings::kUserTextureBase;
 
 /// @return true if @p binding is usable by consumers via setExtraBinding().
 constexpr bool isConsumerBinding(int binding) noexcept
 {
-    return binding >= kFirstFreeConsumerBinding && binding <= kMaxConsumerBinding
-        && (binding < kReservedBindingRangeStart || binding > kReservedBindingRangeEnd);
+    return PhosphorShaders::Bindings::isConsumerBinding(binding);
 }
 
 /**
@@ -87,8 +102,9 @@ constexpr bool isConsumerBinding(int binding) noexcept
  * Application-specific UBO data is appended via IUniformExtension.
  * Application-specific texture bindings use setExtraBinding() / removeExtraBinding().
  *
- * Uses QRhi and QShaderBaker (runtime SPIR-V + GLSL 330 bake). Requires Qt 6.6+
- * (commandBuffer(), renderTarget()).
+ * Uses QRhi and QShaderBaker (runtime SPIR-V + GLSL 330 bake). The APIs it
+ * needs (commandBuffer(), renderTarget()) arrived in Qt 6.6; the project
+ * builds against QT_MIN_VERSION, which is 6.10.
  *
  * @par Threading contract
  * Setters on **this class** (ShaderNodeRhi — setTime, setResolution, setCustomParams,
@@ -96,15 +112,24 @@ constexpr bool isConsumerBinding(int binding) noexcept
  * the scene graph sync phase — the GUI thread is blocked and the render thread is
  * idle at that point. Calling these setters outside updatePaintNode() is a data
  * race with prepare()/render() on the render thread. Only invalidateItem() is
- * safe to call from the GUI thread outside the sync phase (it is the only flag
- * exposed as std::atomic).
+ * safe to call from the GUI thread outside the sync phase: it is the only entry
+ * point built for it, with its flag atomic AND m_itemMutex serialising the
+ * dereference against the render thread. (Not "the only flag exposed as
+ * std::atomic", which this said before and which is simply untrue — the cached
+ * geometry below is atomic too. Those are private and reached only through
+ * rect(), which the scene graph calls on the render thread, so the rule itself
+ * is unaffected.)
  *
- * One sanctioned entry point runs on the render thread OUTSIDE the sync phase:
- * releaseResources(), reached via ShaderEffect::releaseIdleGraphicsResources'
- * QQuickWindow::NoStage render job while the GUI thread is NOT blocked. That
- * is safe because no GUI-thread path mutates node members directly — every
- * ShaderEffect setter stages into the item's own members and defers the node
- * push to the next sync — so the job cannot race a concurrent member write.
+ * Two sanctioned routes reach releaseResources() on the render thread OUTSIDE
+ * the sync phase, and a consumer deciding what may call it needs both: the
+ * QQuickWindow::NoStage render job posted by
+ * ShaderEffect::releaseIdleGraphicsResources, and the Qt::DirectConnection to
+ * QQuickWindow::sceneGraphAboutToStop, whose lambda calls it as well. The render
+ * job certainly runs while the GUI thread is NOT blocked, and the same safety
+ * argument covers both either way: no GUI-thread path mutates node members
+ * directly, because every ShaderEffect setter stages into the item's own members
+ * and defers the node push to the next sync, so neither route can race a
+ * concurrent member write.
  *
  * (Setters on the sibling ShaderEffect class are a different story — those run
  * on the GUI thread and stage their changes into ShaderEffect's own members, to
@@ -265,7 +290,8 @@ public:
      * the next prepare() (UB, typically a crash).
      *
      * @return true on success; false if `binding` collides with a library-
-     * managed slot (0, 2-12) or falls outside the supported range. A `true`
+     * managed slot (0, 2-16, the range this header spells out above) or falls
+     * outside the supported range. A `true`
      * return for an identical (binding, texture, sampler) triple is a no-op —
      * the SRB/pipeline is NOT rebuilt when nothing actually changed.
      */
@@ -309,7 +335,7 @@ public:
     void setUseDepthBuffer(bool use);
 
     /// @brief Live texture-provider override for user-texture slot 0
-    ///        (SRB binding 7 / `uTexture0`).
+    ///        (SRB binding 11 / `uTexture0`).
     ///
     /// When set, every SRB rebuild reads
     /// `provider->texture()->rhiTexture()` and binds that — superseding
@@ -331,8 +357,42 @@ public:
     // ── Multi-pass Buffers ─────────────────────────────────────────────
     void setBufferShaderPath(const QString& path);
     void setBufferShaderPaths(const QStringList& paths);
+
+    /// Force every buffer pass to re-read its source and re-bake, with the path
+    /// list unchanged.
+    ///
+    /// setBufferShaderPaths is the only other thing that arms those flags and it
+    /// returns early when the list matches, which is exactly the case an in-place
+    /// edit of a pass's source presents. Without this, a reload re-baked the main
+    /// fragment and vertex stages from disk and left every buffer pass on the bake
+    /// it already had.
+    ///
+    /// Only re-arms the flags and drops the cached sources. The re-read itself
+    /// happens lazily in bakeBufferShaders during prepare(), for the reason
+    /// setBufferShaderPaths gives: this can be called from the sync phase, which
+    /// under the threaded render loop runs on the render thread with the GUI thread
+    /// blocked, and disk I/O does not belong there.
+    void invalidateBufferShaders();
     void setBufferFeedback(bool enable);
+    /// The single-value scale, and the seed for every per-pass slot: this writes
+    /// @p scale into ALL of them.
+    ///
+    /// ORDER MATTERS between this and setBufferScales, and it is not symmetric.
+    /// Call this one FIRST and setBufferScales second. The reverse order
+    /// discards the per-pass list entirely, because this setter overwrites every
+    /// slot it just filled. ShaderEffect::syncBasePropertiesToNode pushes them
+    /// in that order for exactly this reason.
     void setBufferScale(qreal scale);
+    /// Per-pass scales aligned with the buffer paths; a slot past the list's
+    /// end follows the single-value scale. Empty means "every pass on the
+    /// single-value scale".
+    ///
+    /// Must be pushed AFTER setBufferScale — see its note.
+    void setBufferScales(const QList<qreal>& scales);
+    /// Overload for the QVariantList the item already holds, so a per-frame sync
+    /// does not materialise a QList<qreal> just to read it once. Same clamping
+    /// and the same ordering contract as the overload above.
+    void setBufferScales(const QVariantList& scales);
     /// Buffer-pass texel format: RGBA16F when true (the default — safe for HDR,
     /// signed-data, and feedback buffers), RGBA8 when a pack's metadata declares
     /// its buffers hold plain clamped colour (`"halfFloatBuffers": false`).
@@ -343,6 +403,17 @@ public:
     void setBufferFilters(const QStringList& filters);
 
     // ── Shader Loading ─────────────────────────────────────────────────
+    //
+    // BOTH stages are mandatory and the bake FAILS CLOSED without them: with an
+    // empty vertex or fragment source the bake aborts with "Vertex or fragment
+    // shader source is empty", leaves isShaderReady() false, and render() draws
+    // nothing. A consumer that sets only a fragment stage gets a silent blank,
+    // not a default vertex stage, so it must supply one of these two.
+    //
+    // The file form returns false and leaves the previously installed source
+    // standing; the inline form replaces it and clears the file-derived
+    // bake-cache key (path, mtime and include fingerprint), since inline source
+    // has no file behind it.
     bool loadVertexShader(const QString& path);
     bool loadFragmentShader(const QString& path);
     void setVertexShaderSource(const QString& source);
@@ -436,10 +507,15 @@ private:
     bool ensureBufferPipeline();
     bool ensureBufferTarget();
     bool ensureDummyChannelResources(QRhi* rhi);
+    /// Upload the 1x1 dummy channel texel if it is pending. Called from
+    /// uploadDirtyTextures AND again from prepare() after ensurePipeline,
+    /// because that is where the texture is created. See the definition.
+    void uploadDummyChannelTexture(QRhi* rhi, QRhiCommandBuffer* cb);
     bool ensureBufferSampler(QRhi* rhi, int index);
     /// Drop every buffer-pass target and everything compiled against it
-    /// (render targets, pass descriptors, pipelines, SRBs). Shared by
-    /// setBufferScale and setHalfFloatBuffers; ensureBufferTarget rebuilds.
+    /// (render targets, pass descriptors, pipelines, SRBs). Shared by every
+    /// setter that invalidates a target: setBufferScale, setBufferScales,
+    /// setHalfFloatBuffers and setUseDepthBuffer. ensureBufferTarget rebuilds.
     void resetBufferTargets();
     /// Snapshot the node's live members into a UboFrameState and hand it to the
     /// installed UBO profile's fill(). @p rhi supplies the NDC Y-orientation
@@ -460,10 +536,10 @@ private:
     void uploadExtensionToUbo(QRhiResourceUpdateBatch* batch);
     void releaseRhiResources();
     void appendUserTextureBindings(QVector<QRhiShaderResourceBinding>& bindings) const;
-    /// Whether binding 11 carries a real wallpaper rather than the dummy.
+    /// Whether the wallpaper binding carries a real wallpaper rather than the dummy.
     ///
     /// The single source of truth for two things that must never disagree:
-    /// which texture appendWallpaperBinding() puts at binding 11, and what
+    /// which texture appendWallpaperBinding() puts at the wallpaper binding, and what
     /// syncBaseUniforms() reports in uHasBackdrop. A pack branches on that
     /// uniform to decide whether to sample uBackdrop at all, so a gate that
     /// outran the binding would have it sampling the 1x1 dummy (or a
@@ -489,7 +565,7 @@ private:
     /// with `depthBuffer` (neon-city, voxel-terrain). Those buffer shaders only
     /// ever write depth (`layout(location = 1) out float oDepth`); reading it
     /// back is the image pass's job, and the depth.glsl helper lives on the
-    /// image side. So a writing pass gets the dummy texture at binding 12 —
+    /// image side. So a writing pass gets the dummy texture at the depth binding —
     /// a valid binding for a shader that includes depth.glsl anyway, rather
     /// than a missing one.
     enum class DepthAccess {
@@ -501,7 +577,7 @@ private:
     void appendAudioBinding(QVector<QRhiShaderResourceBinding>& bindings) const;
     /// UBO at binding 0 + consumer-managed extra bindings (e.g. binding 1).
     void appendUboAndExtraBindings(QVector<QRhiShaderResourceBinding>& bindings) const;
-    /// Bindings 6 (audio), 7-10 (user textures), 11 (wallpaper), 12 (depth) —
+    /// Bindings 10 (audio), 11-14 (user textures), 15 (wallpaper), 16 (depth) —
     /// shared trailer between buffer-pass and image-pass SRBs. @p depthAccess
     /// is the one thing the two differ on; see DepthAccess.
     void appendCommonTrailerBindings(QVector<QRhiShaderResourceBinding>& bindings, DepthAccess depthAccess) const;
@@ -598,22 +674,45 @@ private:
     QShader m_fragmentShader;
     QVector<quint32> m_renderPassFormat;
 
-    // ── Multi-pass: buffer pass(es) (optional). Up to 4 paths. ────────
+    // ── Multi-pass: buffer pass(es) (optional). Up to kMaxBufferPasses paths. ──
     QString m_bufferPath;
     QStringList m_bufferPaths;
     bool m_bufferFeedback = false;
     qreal m_bufferScale = 1.0;
+    // Per-pass render-target scales (a pack's `bufferScales`), positionally
+    // aligned with m_bufferPaths. A slot without its own entry follows
+    // m_bufferScale, which setBufferScale writes into every slot; only
+    // setBufferScales diverges them. This is what lets a pyramid (dual Kawase)
+    // render each level at its own resolution inside one pack.
+    //
+    // Because setBufferScale SEEDS all of these, it must not compare against
+    // them to decide whether anything changed: the sync pushes it first and
+    // setBufferScales re-diverges the slots immediately after, so a comparison
+    // here would see its own seed undone every frame and rebuild every buffer
+    // target twice per frame. It compares the single value alone. See its own
+    // body for the matching note.
+    std::array<qreal, kMaxBufferPasses> m_bufferScales = []() {
+        std::array<qreal, kMaxBufferPasses> a;
+        a.fill(1.0);
+        return a;
+    }();
     // Buffer-pass texel format. Half-float by default so packs that store HDR
     // radiance, signed data, or feedback accumulators keep full precision; a
     // pack whose buffers hold plain clamped [0,1] colour opts down to RGBA8
     // via metadata to halve buffer bandwidth (which is what integrated GPUs
     // are starved of).
     bool m_halfFloatBuffers = true;
-    std::array<QString, kMaxBufferPasses> m_bufferWraps = {QStringLiteral("clamp"), QStringLiteral("clamp"),
-                                                           QStringLiteral("clamp"), QStringLiteral("clamp")};
+    std::array<QString, kMaxBufferPasses> m_bufferWraps = []() {
+        std::array<QString, kMaxBufferPasses> a;
+        a.fill(QStringLiteral("clamp"));
+        return a;
+    }();
     QString m_bufferWrapDefault = QStringLiteral("clamp");
-    std::array<QString, kMaxBufferPasses> m_bufferFilters = {QStringLiteral("linear"), QStringLiteral("linear"),
-                                                             QStringLiteral("linear"), QStringLiteral("linear")};
+    std::array<QString, kMaxBufferPasses> m_bufferFilters = []() {
+        std::array<QString, kMaxBufferPasses> a;
+        a.fill(QStringLiteral("linear"));
+        return a;
+    }();
     QString m_bufferFilterDefault = QStringLiteral("linear");
     QString m_bufferFragmentShaderSource;
     QShader m_bufferFragmentShader;
@@ -635,21 +734,20 @@ private:
     std::unique_ptr<QRhiShaderResourceBindings> m_srbB; // image pass SRB with binding 2 = texture B
     bool m_bufferFeedbackCleared = false;
 
-    // Multi-buffer mode (2-4 passes): per-pass resources
+    // Multi-buffer mode (2-8 passes): per-pass resources
     std::array<std::unique_ptr<QRhiTexture>, kMaxBufferPasses> m_multiBufferTextures = {};
     std::array<std::unique_ptr<QRhiTextureRenderTarget>, kMaxBufferPasses> m_multiBufferRenderTargets = {};
     std::array<std::unique_ptr<QRhiRenderPassDescriptor>, kMaxBufferPasses> m_multiBufferRenderPassDescriptors = {};
     std::array<std::unique_ptr<QRhiGraphicsPipeline>, kMaxBufferPasses> m_multiBufferPipelines = {};
     std::array<std::unique_ptr<QRhiShaderResourceBindings>, kMaxBufferPasses> m_multiBufferSrbs = {};
     std::array<QShader, kMaxBufferPasses> m_multiBufferFragmentShaders = {};
-    std::array<QString, kMaxBufferPasses> m_multiBufferFragmentShaderSources = {};
     bool m_multiBufferShadersReady = false;
     bool m_multiBufferShaderDirty = true;
     int m_multiBufferShaderRetries = 0;
     // Dummy 1x1 texture for the multipass channel-0 buffer slot (SRB
     // binding 2, GLSL `iChannel0`) when multipass is configured but the
     // backing buffer hasn't been created yet. Distinct from the user-
-    // texture slot 0 (SRB binding 7, GLSL `uTexture0`) — the iChannel0
+    // texture slot 0 (SRB binding 11, GLSL `uTexture0`) — the iChannel0
     // name here refers to the buffer-channel binding, not the renamed
     // user-texture.
     std::unique_ptr<QRhiTexture> m_dummyChannelTexture;
@@ -663,14 +761,6 @@ private:
     QString m_fragmentPath;
     qint64 m_vertexMtime = 0;
     qint64 m_fragmentMtime = 0;
-    /// Canonical absolute paths of every transitively-`#include`d header
-    /// the resolver visited during the most recent `loadVertexShader` /
-    /// `loadFragmentShader`. Folded into the bake-cache key by
-    /// `shaderCacheKey` so an edit to a shared header (e.g.
-    /// `data/overlays/shared/common.glsl`) invalidates downstream cache
-    /// entries even when the consuming shader's own mtime is unchanged.
-    /// Without this, an in-memory cache hit could keep serving SPIR-V
-    /// baked against an older include-content view.
     /// Include-file fingerprints (path + mtime per transitively-included
     /// header), computed AT LOAD TIME — the moment the includes were read —
     /// and folded into the bake-cache key. Statting the includes again at
@@ -721,7 +811,13 @@ private:
     float m_width = 0.0f;
     float m_height = 0.0f;
     /// Lock-free snapshot of the most recently observed item geometry, written
-    /// from prepare() under m_itemMutex and read from rect() without locking.
+    /// from prepare() OUTSIDE m_itemMutex and read from rect() without locking.
+    /// prepare() takes the mutex only to snapshot the item-derived values, drops
+    /// it, and publishes these afterwards; the release/acquire pair is what
+    /// carries the ordering, and it is sound precisely because these atomics are
+    /// independent of the m_item pointer and rect() never touches it. (The
+    /// header used to claim the write happened under the mutex, which is the
+    /// opposite of what the implementation deliberately does.)
     /// rect() is invoked once per cull pass on every node in the scene; locking
     /// m_itemMutex there fights with prepare()/render() for the same mutex
     /// every frame. The atomics carry "best-effort, last-known" geometry —
@@ -742,8 +838,19 @@ private:
     float m_surfaceFrameSize[2] = {0.0f, 0.0f};
 
     // ── Custom Parameters (indexed) ────────────────────────────────────
-    std::array<QVector4D, kMaxCustomParams> m_customParams;
-    std::array<QColor, kMaxCustomColors> m_customColors;
+    /// Seeded at the DECLARATION, like m_userTextureWraps below and for the same
+    /// reason: a second constructor cannot then forget them. -1 is the "unset"
+    /// sentinel every shader tests with `>= 0.0`.
+    std::array<QVector4D, kMaxCustomParams> m_customParams = []() {
+        std::array<QVector4D, kMaxCustomParams> a;
+        a.fill(QVector4D(-1.0f, -1.0f, -1.0f, -1.0f));
+        return a;
+    }();
+    std::array<QColor, kMaxCustomColors> m_customColors = []() {
+        std::array<QColor, kMaxCustomColors> a;
+        a.fill(QColor(Qt::white));
+        return a;
+    }();
 
     // ── Extra Bindings (consumer-managed) ──────────────────────────────
     struct ExtraBinding
@@ -756,31 +863,39 @@ private:
     // produce different iteration orders after erasures, which Qt RHI
     // backends may hash into different pipeline layout signatures.
     std::map<int, ExtraBinding> m_extraBindings;
-    bool m_extraBindingsDirty = false;
 
     // ── 1x1 Transparent Fallback ───────────────────────────────────────
     QImage m_transparentFallbackImage;
 
-    // ── Audio spectrum texture (binding 6) ─────────────────────────────
+    // ── Audio spectrum texture (binding 10) ─────────────────────────────
     QVector<float> m_audioSpectrum;
     std::unique_ptr<QRhiTexture> m_audioSpectrumTexture;
     std::unique_ptr<QRhiSampler> m_audioSpectrumSampler;
     bool m_audioSpectrumDirty = false;
 
-    // ── User texture slots (bindings 7-10) ─────────────────────────────
+    // ── User texture slots (bindings 11-14) ─────────────────────────────
     std::array<QImage, kMaxUserTextures> m_userTextureImages;
     std::array<std::unique_ptr<QRhiTexture>, kMaxUserTextures> m_userTextures;
     std::array<std::unique_ptr<QRhiSampler>, kMaxUserTextures> m_userTextureSamplers;
-    // Spelled out rather than default-constructed, matching m_bufferWraps
-    // above. The only reader normalises an unknown token to ClampToEdge, so a
-    // null QString behaves identically today, but leaving the two arrays with
-    // different defaults means a future reader that string-compares gets a
-    // different answer for a user texture than for a buffer.
-    std::array<QString, kMaxUserTextures> m_userTextureWraps = {QStringLiteral("clamp"), QStringLiteral("clamp"),
-                                                                QStringLiteral("clamp"), QStringLiteral("clamp")};
+    // Seeded with the explicit "clamp" token rather than default-constructed,
+    // matching m_bufferWraps above, so the two arrays answer the same string to
+    // anything that compares tokens rather than normalising them.
+    //
+    // Filled from kMaxUserTextures rather than written out as four literals: the
+    // count comes from the binding table, so a literal list silently stops
+    // covering the array the moment the table grows a slot.
+    std::array<QString, kMaxUserTextures> m_userTextureWraps = []() {
+        std::array<QString, kMaxUserTextures> a;
+        a.fill(QStringLiteral("clamp"));
+        return a;
+    }();
     std::array<bool, kMaxUserTextures> m_userTextureDirty = {};
+    /// One warning per slot for a failed sampler create. The retry itself is
+    /// per-frame by design (the slot stays dirty), so without this the failure
+    /// line repeats at vsync for as long as the backend stays unhappy.
+    std::array<bool, kMaxUserTextures> m_userTextureSamplerWarned = {};
 
-    // ── Source texture override (slot 0 / binding 7) ───────────────────
+    // ── Source texture override (slot 0 / binding 11) ───────────────────
     // Texture-provider source — typically a `QQuickItem::textureProvider()`
     // for a layer-enabled item. When non-null this supersedes
     // m_userTextures[0] in the SRB build, so the shader's uTexture0
@@ -803,26 +918,40 @@ private:
     QMetaObject::Connection m_sourceTextureChangedConn;
     std::unique_ptr<QRhiSampler> m_sourceSampler;
     QRhiTexture* m_lastSourceRhiTexture = nullptr;
-    /// Latch — once we've created a sampler-creation failure for the source
-    /// provider we stop retrying every paint pass (avoids per-frame
-    /// rhi->newSampler() churn when the backend is unhappy). Cleared in
-    /// releaseRhiResources() so a device reset re-attempts.
+    /// Latch — once the source-provider sampler has failed to create, we stop
+    /// retrying every paint pass (avoids per-frame rhi->newSampler() churn when
+    /// the backend is unhappy). Cleared in releaseRhiResources() so a device
+    /// reset re-attempts.
     bool m_sourceSamplerFailed = false;
     /// Single-shot warning latch: emitted once per node when we detect that
     /// the source provider's QRhiTexture comes from a different QRhi than our
     /// own (cross-window provider). Prevents log spam.
     bool m_warnedForeignRhi = false;
-    /// One-shot: binding 11 had neither a wallpaper nor a dummy substitute.
+    /// One-shot: the wallpaper binding had neither a wallpaper nor a dummy substitute.
     /// Mutable because appendWallpaperBinding() is const — it only reads state
     /// to build the binding list, and this is a diagnostic latch, not state the
     /// binding depends on.
     mutable bool m_warnedWallpaperBindingOmitted = false;
+    /// One-shot twin of the above for the depth binding, mutable for the same
+    /// reason (appendDepthBinding() is const).
+    mutable bool m_warnedDepthBindingOmitted = false;
     /// One-shot latches for the audio-spectrum diagnostics. Both conditions
     /// persist across frames by design (an oversized vector stays oversized;
     /// the create() retry is per-frame), so without a latch each would log at
     /// spectrum cadence. Cleared in releaseRhiResources() beside the RHI latch.
     bool m_warnedAudioTruncated = false;
     bool m_warnedAudioCreateFailed = false;
+    /// One-shot: the dummy 1x1 texture or its sampler would not create. Both
+    /// arms of ensureDummyChannelResources share the latch because either one
+    /// has the same consequence (the node draws nothing) and the same cure.
+    bool m_dummyChannelWarned = false;
+    /// One-shot: the backend does not support RGBA16F as a render target, so
+    /// a pack that asked for half-float buffers got RGBA8 instead.
+    bool m_halfFloatUnsupportedWarned = false;
+    /// Latch for the buffer texture / render-target create failures. Cleared on
+    /// the next successful create, so a failure that recurs after a genuine
+    /// recovery is reported again instead of being swallowed for the session.
+    bool m_bufferTargetCreateWarned = false;
     /// 1×1 transparent fallback texture used when a source provider is set
     /// but has not yet produced a usable QRhiTexture (or its texture lives
     /// on a foreign QRhi). Bound at slot 0 instead of falling through to
@@ -831,15 +960,22 @@ private:
     /// at slot 0", so a transient null must not unmask the QImage. Allocated
     /// lazily on first use; released in releaseRhiResources().
     std::unique_ptr<QRhiTexture> m_transparentFallbackTexture;
+    /// Latch for the 1x1 transparent fallback's create failure. That allocation
+    /// is retried on EVERY prepare() while a source provider is set and
+    /// unresolved, and it used to fail in complete silence.
+    bool m_transparentFallbackWarned = false;
     bool m_transparentFallbackTextureNeedsUpload = false;
 
-    // ── Depth buffer (binding 12) ──────────────────────────────────────
+    // ── Depth buffer (binding 16) ──────────────────────────────────────
     bool m_useDepthBuffer = false;
     bool m_depthMultiBufferWarned = false;
+    /// Latch for the once-per-node warning that a depth pack's declared per-pass
+    /// bufferScales are discarded. Cleared with the rest on a device reset.
+    bool m_depthScalesWarned = false;
     std::unique_ptr<QRhiTexture> m_depthTexture;
     std::unique_ptr<QRhiSampler> m_depthSampler;
 
-    // ── Desktop wallpaper texture (binding 11) ─────────────────────────
+    // ── Desktop wallpaper texture (binding 15) ─────────────────────────
     bool m_useWallpaper = false;
     QImage m_wallpaperImage;
     std::unique_ptr<QRhiTexture> m_wallpaperTexture;

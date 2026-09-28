@@ -111,6 +111,24 @@ inline bool linkSurfaceSharedIncludes(const QTemporaryDir& tmp)
     return linkSharedInto(tmp, target);
 }
 
+/// The overlay twin, for a fixture whose stage `#include`s one of the overlay
+/// shared headers rather than standing alone.
+///
+/// Most overlay slots here test METADATA lints, and they need this MORE than the
+/// wording used to suggest. The old note said such a fixture "stands alone" and that
+/// "nothing is included"; that is false. The overlay scaffold's own
+/// `zoneEntryPrologue()` emits `#include <common.glsl>`, so an UNLINKED overlay
+/// fixture fails include expansion before any stage compiles. A metadata-lint slot
+/// asserting only `errors > 0` is then satisfied by that include failure alone and
+/// never exercises the compile at all, which is a passing test that proves nothing.
+/// Link the headers even for a metadata slot unless the slot deliberately asserts on
+/// the include failure itself.
+inline bool linkOverlaySharedIncludes(const QTemporaryDir& tmp)
+{
+    const QString target = QStringLiteral(P_SOURCE_DIR "/data/overlays/shared");
+    return linkSharedInto(tmp, target);
+}
+
 /// Write @p body to @p file inside the pack directory @p dir. Returns false
 /// when the write fails or is short, for the caller to QVERIFY: a QVERIFY
 /// inside a lambda only returns from the lambda, so a failed fixture write
@@ -180,6 +198,139 @@ inline QJsonArray toArray(const QStringList& values)
     return arr;
 }
 
+// ── surface fixture writers ─────────────────────────────────────────────
+// Shared by the surface validator's two test executables. They were file-local
+// to the first one until the second needed the same writers: a per-lint negative
+// slot is only cheap when the fixture is, and two copies of a fixture writer is
+// how two test files start disagreeing about what a valid pack looks like.
+
+/// The surface twin of `validate`. Writes the pack plus a `pSurface` entry body,
+/// which the validator assembles into a full TU exactly as the daemon and the
+/// compositor do.
+/// @p vertBody, when given, is written under the name @p metadata declares in
+/// `vertexShader`, so the fixture cannot drift from what the pack claims to ship.
+inline PackResult validateSurface(const QTemporaryDir& tmp, const QString& name, const QJsonObject& metadata,
+                                  const QString& body, const QString& vertBody = QString())
+{
+    const QString dir = tmp.filePath(name);
+    if (!writePackFile(dir, QStringLiteral("metadata.json"), QJsonDocument(metadata).toJson())) {
+        return fixtureFailure(QStringLiteral("failed to write metadata.json under ") + dir);
+    }
+    if (!writePackFile(dir, QStringLiteral("effect.frag"), body.toUtf8())) {
+        return fixtureFailure(QStringLiteral("failed to write effect.frag under ") + dir);
+    }
+    if (!vertBody.isEmpty()) {
+        const QString vertName = metadata.value(QLatin1String("vertexShader")).toString();
+        if (vertName.isEmpty()) {
+            return fixtureFailure(QStringLiteral("vertex body given but metadata declares no vertexShader"));
+        }
+        if (!writePackFile(dir, vertName, vertBody.toUtf8())) {
+            return fixtureFailure(QStringLiteral("failed to write ") + vertName + QStringLiteral(" under ") + dir);
+        }
+    }
+
+    PackResult result;
+    QTextStream stream(&result.report);
+    result.errors = PlasmaZones::ShaderValidate::validateSurfacePack(dir, stream);
+    stream.flush();
+    return result;
+}
+
+/// One surface parameter declaration.
+inline QJsonObject surfaceParam(const QString& id, const QString& type, const QJsonValue& def, double min, double max)
+{
+    QJsonObject param;
+    param.insert(QStringLiteral("id"), id);
+    param.insert(QStringLiteral("name"), id);
+    param.insert(QStringLiteral("type"), type);
+    param.insert(QStringLiteral("default"), def);
+    if (type != QLatin1String("color") && type != QLatin1String("bool")) {
+        param.insert(QStringLiteral("min"), min);
+        param.insert(QStringLiteral("max"), max);
+    }
+    return param;
+}
+
+inline QJsonObject surfacePack(const QString& id, const QJsonArray& params)
+{
+    QJsonObject obj;
+    obj.insert(QStringLiteral("id"), id);
+    obj.insert(QStringLiteral("name"), id);
+    obj.insert(QStringLiteral("fragmentShader"), QStringLiteral("effect.frag"));
+    obj.insert(QStringLiteral("parameters"), params);
+    return obj;
+}
+
+/// A `pSurface` body that READS every id in @p ids, so the declared-but-unread
+/// sweep stays quiet and the lint under test is the only thing in the report.
+inline QString surfaceBodyReading(const QStringList& ids)
+{
+    QString body = QStringLiteral("vec4 pSurface(vec2 uv)\n{\n    float acc = 0.0;\n");
+    for (const QString& id : ids) {
+        body += QStringLiteral("    acc += float(p_%1);\n").arg(id);
+    }
+    body += QStringLiteral("    return vec4(acc, 0.0, 0.0, 1.0);\n}\n");
+    return body;
+}
+
+/// A vertex stage a pack ships ITSELF, with @p assign spliced in as the
+/// gl_Position write. Deliberately free of `qt_Matrix`: that uniform is declared
+/// only in the daemon UBO branch of surface_uniforms.glsl, so a stage using it
+/// cannot bake for the compositor. The shared `surface.vert` fallback does use
+/// it, which is why the validator bakes the fallback on the Qt-RHI path alone.
+///
+/// Carries its own `#version`, unlike the fragment bodies above: the validator
+/// splices a generated preamble ahead of a fragment, so a `#version` there lands
+/// mid-file, while a vertex stage is passed through and must declare its own.
+inline QString packVertexBody(const QString& assign)
+{
+    return QStringLiteral(
+               "#version 450\n"
+               "#include <surface_uniforms.glsl>\n"
+               "layout(location = 0) in vec2 position;\n"
+               "layout(location = 1) in vec2 texCoord;\n"
+               "layout(location = 0) out vec2 vTexCoord;\n"
+               "void main()\n"
+               "{\n"
+               "    vTexCoord = texCoord;\n")
+        + assign + QStringLiteral("}\n");
+}
+
+/// True when some ONE line of @p report names both @p stage and @p marker.
+/// A bare `report.contains(...)` cannot express this: every slot's report also
+/// carries the fragment's own compile lines, so asserting on "OK (compositor)"
+/// across the whole report passes whether or not the stage under test was baked
+/// at all.
+inline bool reportLineHas(const QString& report, const QString& stage, const QString& marker)
+{
+    const QStringList lines = report.split(QLatin1Char('\n'));
+    for (const QString& line : lines) {
+        if (line.contains(stage) && line.contains(marker)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// As `reportLineHas`, but the line must ALSO not contain @p excluded.
+///
+/// Needed because the two host markers NEST: a compositor line reads
+/// "OK (compositor)", which contains "OK", so asserting `reportLineHas(stage,
+/// "OK")` is SUBSUMED by the compositor assertion beside it and the Qt-RHI half
+/// goes untested. Deleting the whole daemon buffer-pass loop left both of those
+/// assertions satisfied. Use this for the daemon side of any both-hosts claim.
+inline bool reportLineHasWithout(const QString& report, const QString& stage, const QString& marker,
+                                 const QString& excluded)
+{
+    const QStringList lines = report.split(QLatin1Char('\n'));
+    for (const QString& line : lines) {
+        if (line.contains(stage) && line.contains(marker) && !line.contains(excluded)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace PackValidatorTest
 
 /// The preconditions every slot that runs the ANIMATION validator shares. The
@@ -223,14 +374,23 @@ inline QJsonArray toArray(const QStringList& values)
 /// broke no test and failed no link. The topology was an artifact of the file-size
 /// ceiling rather than of the family boundary, which is why the gap went unnoticed.
 ///
-/// Deliberately does NOT require glslangValidator, unlike the pointer twin above.
-/// The surface arm compiles through `ShaderCompiler::compile` (QShaderBaker, Qt's
-/// vendored glslang) and never shells out to the binary — `glslangValidatorPath` is
-/// read only by the animation and pointer arms. Requiring it here skipped all six
-/// surface slots on any machine without the package, which would have silently
-/// un-done the coverage this macro exists to provide.
+/// Requires glslangValidator, exactly as the pointer twin above does, and for the
+/// same reason. The surface arm bakes BOTH branches every surface pack ships on:
+/// the daemon branch through `ShaderCompiler::compile` (QShaderBaker, Qt's vendored
+/// glslang), and the compositor branch by shelling out to the binary, because
+/// QShaderBaker wants Vulkan-dialect GLSL and rejects the default-block uniforms
+/// that branch declares.
+///
+/// Skipping rather than failing is deliberate and is the safer degrade here. The
+/// slots asserting `errors == 0` would break outright without the tool, and the
+/// ones asserting a threshold would otherwise PASS on the tool-missing error
+/// alone, which is worse than failing because it reads as coverage while testing
+/// nothing.
 #define REQUIRE_SURFACE_FIXTURE(tmp)                                                                                   \
     QVERIFY((tmp).isValid());                                                                                          \
+    if (PlasmaZones::ShaderValidate::glslangValidatorPath().isEmpty()) {                                               \
+        QSKIP("glslangValidator not on PATH");                                                                         \
+    }                                                                                                                  \
     if (!PackValidatorTest::linkSurfaceSharedIncludes(tmp)) {                                                          \
         QSKIP("data/surface/shared not found — running outside source tree");                                          \
     }

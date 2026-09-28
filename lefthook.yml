@@ -80,11 +80,17 @@ pre-commit:
         - "*.desktop*"
         - "*.metainfo.xml*"
         - "packaging/**"
+        - "CHANGELOG.md"
         # The prose rule reaches .github/workflows/*.yml for the generated
         # pkgdesc strings; without this entry that arm is CI-only, which is
         # the same gap the js entry above exists to close.
         - ".github/workflows/*.yml"
       run: python3 scripts/check-conventions.py --staged {staged_files}
+    conventions-selftest:
+      # Only when the gate itself is edited. A rule that narrows reports a clean
+      # tree, so the whole-tree run above cannot catch its own blind spots.
+      glob: "scripts/check-conventions.py"
+      run: python3 scripts/check-conventions.py --selftest
     shader-validate:
       glob: "plasmazones/data/overlays/**/*.{frag,vert,glsl,json}"
       # When any bundled zone-shader file is staged, validate the whole pack set

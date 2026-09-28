@@ -26,9 +26,13 @@ vec4 pSurface(vec2 uv) {
     vec2 p = surfacePixel(uv);
     BorderBand bb = standardBorderBand(p, p_borderWidth, p_cornerRadius);
 
-    // Perimeter coordinate: angle normalised by the half extents so a wide
-    // frame does not stretch its top and bottom dashes. Marching offset in
-    // whole perimeter revolutions per second, like the sweep pack.
+    // Perimeter coordinate: the angle normalised by the half extents. That
+    // normalisation is what STRETCHES the top and bottom dashes on a wide
+    // frame rather than what prevents it — on 16:9 they run about 1.8x the
+    // length of the side dashes, and dropping the normalisation would bring
+    // the four sides within about 16% of each other. Kept because the dash
+    // COUNT per side is what the parameter is tuned against. Marching offset
+    // in whole perimeter revolutions per second, like the sweep pack.
     float u = framePerimeter(p, bb.fs.center, bb.fs.halfSize); // -0.5 .. 0.5
     float cellPos = fract((u - iTime * p_marchSpeed) * max(p_dashCount, 1.0));
     // Antialias the dash edges over a fixed fraction of the cell so the

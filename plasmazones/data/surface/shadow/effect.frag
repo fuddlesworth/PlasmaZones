@@ -6,7 +6,8 @@
 // displaced by a configurable offset so it reads as light coming from
 // above, and only mildly focus-dimmed (a real shadow does not vanish when
 // the window loses focus, it just softens). The content passes through
-// byte-for-byte; the shadow lives purely in the transparent margin.
+// byte-for-byte; the shadow lives in the transparent margin and, on a window
+// whose own body is translucent, in the band within two reaches inside the frame.
 //
 // CAPTURE MARGIN: metadata declares `"paddingParam": "shadowSize"`, so the
 // compositor host inflates the capture canvas by the resolved size. The
@@ -34,10 +35,11 @@ vec4 pSurface(vec2 uv) {
     // Same exp(-4t²) reach falloff as the glow pack, but the edge feather is
     // evaluated at the REAL (undisplaced) fragment position so a large offset
     // pushing the shadow toward the canvas edge fades out instead of ending in
-    // a hard rectangle. Confined to the transparent margin and only mildly
+    // a hard rectangle. Held to the margin and the band within two reaches inside
+    // the frame, and only mildly
     // focus-softened (a real shadow persists unfocused) — the shared halo.
     float reach = max(p_shadowSize * uSurfaceScale, 1.0);
-    float body = haloFalloff(fs.d, reach, realPx, base.a, p_shadowStrength, 0.65);
+    float body = haloFalloff(fs.d, reach, realPx, base.a, p_shadowStrength, 0.65, p_cornerRadius * uSurfaceScale);
 
     // Premultiplied over: the dark veil fills the margin under its own
     // alpha; with the default black colour the rgb term contributes nothing

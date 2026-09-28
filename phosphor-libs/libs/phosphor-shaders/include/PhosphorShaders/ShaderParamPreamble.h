@@ -69,6 +69,23 @@ PHOSPHORSHADERS_EXPORT QString buildParamPreamble(const QList<PreambleParam>& pa
 /// params `buildParamPreamble` skips, keeping the two lane-numberings identical.
 PHOSPHORSHADERS_EXPORT bool isValidParamId(const QString& id);
 
+/// True if `p_<id>` would COLLIDE with a `#define p_...` a shared family header
+/// already owns.
+///
+/// isValidParamId checks only the character set, so an id like `reversed` is a
+/// perfectly legal identifier that buildParamPreamble will happily turn into
+/// `#define p_reversed <slot>` — while data/animations/shared/animation_uniforms.glsl
+/// already carries `#define p_reversed (iIsReversed == 1)`. Redefining a macro with a
+/// different replacement list is an error in GLSL, so such a pack fails to compile
+/// with the diagnostic pointing at the SHARED HEADER rather than at the pack's own
+/// metadata, which is the wrong place to send an author.
+///
+/// The reservation is per family, because a header only reserves a name for the
+/// packs that include it. Only the animation family reserves anything today; the
+/// list lives here, beside the generator that creates the clash, so a family that
+/// adds a `#define p_...` has one place to declare it.
+PHOSPHORSHADERS_EXPORT bool isReservedAnimationParamId(const QString& id);
+
 /// Splice @p block into @p source immediately after its `#version` line, then
 /// emit a `#line <n> 0` directive so the author's subsequent lines keep their
 /// original numbers (source string 0) despite the inserted block.

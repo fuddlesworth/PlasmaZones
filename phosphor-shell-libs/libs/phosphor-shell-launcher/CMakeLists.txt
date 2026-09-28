@@ -15,6 +15,18 @@ cmake_minimum_required(VERSION 3.16)
 
 set(PHOSPHORSHELLLAUNCHER_VERSION "0.1.0")
 
+# The Qt floor this library requires AND advertises in its generated
+# PhosphorShellLauncherConfig.cmake. Taken from the top-level QT_MIN_VERSION when built in-tree so
+# the two cannot drift, with its own value for a STANDALONE build, where that
+# variable does not exist. The fallback is not optional: the Config template
+# substitutes this, and an undefined variable expands to nothing and ships a config
+# whose find_dependency(Qt6 ...) carries no version floor at all.
+if(DEFINED QT_MIN_VERSION)
+    set(PHOSPHORSHELLLAUNCHER_QT_MIN ${QT_MIN_VERSION})
+else()
+    set(PHOSPHORSHELLLAUNCHER_QT_MIN "6.10.0")
+endif()
+
 if(NOT PROJECT_VERSION)
     project(PhosphorShellLauncher VERSION ${PHOSPHORSHELLLAUNCHER_VERSION} LANGUAGES CXX)
     set(CMAKE_CXX_STANDARD 20)
@@ -33,7 +45,7 @@ include(GenerateExportHeader)
 # the other providers) is Core, and every provider degrades to a refusal
 # rather than a crash under a plain QCoreApplication, so the tests run
 # headless. No Quick / Qml: the surface is a separate module.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui)
+find_package(Qt6 ${PHOSPHORSHELLLAUNCHER_QT_MIN} REQUIRED COMPONENTS Core Gui)
 
 # The provider contract (ILauncherProvider / ILauncherProviderFactory) lives
 # in phosphor-registry.
@@ -176,7 +188,7 @@ install(FILES
 # host can link the core (providers, model) without the UI, and so the
 # core stays free of Quick.
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Qml Quick QuickShapes)
+find_package(Qt6 ${PHOSPHORSHELLLAUNCHER_QT_MIN} REQUIRED COMPONENTS Qml Quick QuickShapes)
 
 # Kirigami.Icon resolves freedesktop icon names through QIcon::fromTheme
 # for the result rows. REQUIRED, not QUIET, for the same reason the bar,

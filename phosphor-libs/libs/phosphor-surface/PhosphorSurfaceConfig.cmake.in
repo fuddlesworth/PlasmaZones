@@ -9,7 +9,7 @@ include(CMakeFindDependencyMacro)
 # minimum; without the version guard a consumer on Qt 6.5 resolves
 # find_package(PhosphorSurface) cleanly and then fails later with a
 # cryptic missing-symbol at link time.
-find_dependency(Qt6 6.6 COMPONENTS Core Gui)
+find_dependency(Qt6 @PHOSPHORSURFACE_QT_MIN@ COMPONENTS Core Gui)
 
 # PhosphorRegistry is a PUBLIC link dependency — SurfaceShaderRegistry's public
 # header exposes Registry<SurfacePack> + MetadataPackLoader<SurfacePack> — so the

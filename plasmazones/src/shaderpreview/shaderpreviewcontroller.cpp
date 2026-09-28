@@ -6,6 +6,7 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 
+#include "config/configdefaults.h" // borderRadiusMax, so the preview clamps where the daemon clamps
 #include "daemon/rendering/zonelabeltexturebuilder.h"
 
 #include <PhosphorAudio/CavaSpectrumProvider.h>
@@ -182,15 +183,36 @@ QVariantList ShaderPreviewController::zonesForShaderPreview(int width, int heigh
         if (!useCustom || !borderColor.isValid())
             borderColor = ::PhosphorZones::ZoneDefaults::BorderColor;
 
-        // Border dimensions
-        const qreal borderRadius = useCustom
-            ? zone.value(::PhosphorZones::ZoneJsonKeys::BorderRadius, ::PhosphorZones::ZoneDefaults::BorderRadius)
-                  .toReal()
-            : static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderRadius);
-        const qreal borderWidth = useCustom
-            ? zone.value(::PhosphorZones::ZoneJsonKeys::BorderWidth, ::PhosphorZones::ZoneDefaults::BorderWidth)
-                  .toReal()
-            : static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderWidth);
+        // Border dimensions.
+        //
+        // BOUNDED THE WAY THE DAEMON BOUNDS IT (overlay_data.cpp), and it was not
+        // before. A per-zone radius comes from a layout file that is never
+        // rewritten on load, so a hand-edited or legacy-wide value arrives here
+        // unclamped, and the preview drew rounder corners than the live overlay
+        // ever will. The in-shader clamp in zoneSdf keeps that a fidelity gap
+        // rather than a fault, which is exactly why it went unnoticed: the
+        // preview is the one place a user compares the two.
+        const qreal borderRadius =
+            qBound<qreal>(0,
+                          useCustom ? zone.value(::PhosphorZones::ZoneJsonKeys::BorderRadius,
+                                                 ::PhosphorZones::ZoneDefaults::BorderRadius)
+                                          .toReal()
+                                    : static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderRadius),
+                          ConfigDefaults::borderRadiusMax());
+        // BOUNDED TOO, for the same reason and from the same source. The comment
+        // above says "bounded the way the daemon bounds it", and the daemon bounds
+        // BOTH: overlay_data.cpp qBounds borderWidth to ConfigDefaults::borderWidthMax()
+        // on the line directly above the radius one, and again on the shader path. Only
+        // the radius was bounded here, so a hand-edited or legacy-wide WIDTH still drew
+        // thicker in the preview than the live overlay ever will, which is the one place
+        // a user compares the two.
+        const qreal borderWidth =
+            qBound<qreal>(0,
+                          useCustom ? zone.value(::PhosphorZones::ZoneJsonKeys::BorderWidth,
+                                                 ::PhosphorZones::ZoneDefaults::BorderWidth)
+                                          .toReal()
+                                    : static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderWidth),
+                          ConfigDefaults::borderWidthMax());
 
         // Border width and radius are px on the SCREEN, and the zone rects
         // above have just been scaled into a preview a fraction of its size.

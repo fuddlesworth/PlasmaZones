@@ -6,6 +6,7 @@
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/Curve.h>
+#include <PhosphorShaders/ShaderBindings.h>
 
 #include <QByteArray>
 #include <QRectF>
@@ -17,6 +18,7 @@
 
 #include <array>
 #include <chrono>
+#include <string_view>
 
 #include <epoxy/gl.h>
 
@@ -34,7 +36,7 @@ namespace PlasmaZones::ShaderInternal {
 /// inherits whatever state the fold's last inner draw left (a disabled
 /// GL_BLEND renders the animation shader's premultiplied output as OPAQUE
 /// BLACK across the whole quad — the close-animation black-flash class).
-/// Header-inline so both consuming TUs share one definition under the Unity
+/// Header-inline so every consuming TU shares one definition under the Unity
 /// build.
 class ScopedGlState
 {
@@ -93,9 +95,9 @@ private:
 /// Splice `#define PLASMAZONES_KWIN` (plus the ARB explicit-location
 /// extension enables) after the shader's `#version` directive, selecting the
 /// classic-GL default-block branch of the shared uniform headers that
-/// KWin::GLShader requires. Shared by the animation compile path
-/// (shader_transitions.cpp, where it is defined) and the surface-pack compile
-/// path (surface_compile.cpp); it has external linkage here rather than an
+/// KWin::GLShader requires. Called from every family's compile path (animation
+/// through pointer; no file count, it drifts) and defined in
+/// shader_transitions.cpp; it has external linkage here rather than an
 /// anonymous-namespace copy per TU because the kwin-effect builds as a Unity
 /// (jumbo) target, where duplicate anonymous-namespace definitions collide.
 /// Full behavioural notes (BOM strip, comment-aware #version scan, missing
@@ -114,13 +116,20 @@ QByteArray injectKwinDefineAfterVersion(const QString& source);
 const QString& kwinFinalizeColorBlock();
 
 /// Load a user-texture file into a QImage in `Format_RGBA8888` for GL upload:
-/// PNG/JPG/etc. decode via `QImage`, `.svg` / `.svgz` rasterise via
-/// `QSvgRenderer` at @p svgMaxDim max-axis. Returns a null QImage on any
-/// failure. Shared by the async pre-warm and the synchronous cold-install
-/// fallback (both in shader_textures.cpp) and the animation compile path's
-/// caller (shader_transitions.cpp); external linkage rather than an
-/// anonymous-namespace copy per TU because the kwin-effect builds as a Unity
-/// (jumbo) target. Defined in shader_textures.cpp.
+/// PNG/JPG/etc. decode via `QImageReader`, `.svg` / `.svgz` rasterise via
+/// `QSvgRenderer` at @p svgMaxDim max-axis. Both branches are held to a 16 MiB
+/// byte budget (RGBA8 at 2048 squared), the raster one during decode via
+/// setScaledSize so an oversized file never materialises at full resolution
+/// inside the compositor process, the SVG one after the per-axis cap, which on
+/// its own does not bound a near-square doc. Same two BUDGETS and the same values
+/// as the daemon's ShaderEffect::loadUserTextureFile. Not necessarily the same
+/// PIXELS for an SVG: every caller here takes the default 1024, while the daemon
+/// reads the pack's own uTexture<N>_svgSize clamped to [64, 2048], so a pack
+/// declaring 2048 rasterises twice as large there. A raster image does resolve
+/// identically. Returns a null QImage on any failure. Three callers: the async pre-warm in
+/// shader_textures.cpp, the animation compile path's synchronous cold-install fallback in shader_transitions.cpp, and
+/// the surface pack compile in surface_compile.cpp. External linkage rather than an anonymous-namespace copy per TU
+/// because the kwin-effect builds as a Unity (jumbo) target. Defined in shader_textures.cpp.
 QImage loadUserTextureImage(const QString& path, int svgMaxDim = 1024);
 
 } // namespace PlasmaZones::ShaderInternal
@@ -269,11 +278,14 @@ inline int resolveTransitionLifetimeMs(int nominalMs, const PhosphorAnimation::C
 /// Every other curve is clamped to [0, 1], where an out-of-range value is a bug
 /// rather than the intent.
 ///
-/// Both progress sources must route through this: `easeProgress` (the time-driven
-/// branch) and `paintWindow`'s animator-driven branch. They are two call sites of
-/// one policy, and when the policy lived in two places only one of them got
-/// updated — the animator branch kept clamping, which flattened the bounce for
-/// exactly the `window.movement.*` events whose geometry visibly bounces.
+/// EVERY progress source must route through this, across four consumers:
+/// `easeProgress` here, `paintWindow`'s animator-driven branch, the held-move
+/// release and re-grab ramps, and the desktop transition manager. No exact call
+/// count here on purpose, for the reason surface_fold.h gives: it drifts every
+/// time a caller is added. It is one policy in one place because when it
+/// lived in two only one of them got updated — the animator branch kept
+/// clamping, which flattened the bounce for exactly the `window.movement.*`
+/// events whose geometry visibly bounces.
 inline qreal clampProgressForCurve(qreal value, const PhosphorAnimation::Curve* curve)
 {
     return (curve && curve->overshoots()) ? PhosphorAnimation::boundCurveProgress(value) : qBound(0.0, value, 1.0);
@@ -345,8 +357,41 @@ inline constexpr std::array<const char*, PhosphorAnimationShaders::AnimationShad
     kUserTextureSamplerNames = {"uTexture1", "uTexture2", "uTexture3"};
 inline constexpr std::array<const char*, PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots>
     kUserTextureWrapKeys = {"uTexture1_wrap", "uTexture2_wrap", "uTexture3_wrap"};
-inline constexpr std::array<const char*, PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots>
-    kITextureResolutionKeys = {"iTextureResolution[0]", "iTextureResolution[1]", "iTextureResolution[2]"};
+/// INDEXED BY GLSL TEXTURE SLOT, not by pack slot. `iTextureResolution[i]` is the
+/// pixel size of `uTexture<i>`, so index 0 is the surface's own content and a
+/// pack's Nth declared texture is uTexture<N+1> and therefore index N+1. The two
+/// sibling tables above ARE pack-indexed, which is exactly how this drifted: they
+/// were used as parallel arrays, so a pack's first texture went to uTexture1 and
+/// its size to iTextureResolution[0], which is the surface. The daemon writes
+/// slot i's size to index i and always did, so the two hosts disagreed. Sized to
+/// the BINDING table rather than a contract's pack budget, because the index is a
+/// texture slot and there are kUserTextureCount of those.
+inline constexpr std::array<const char*, PhosphorShaders::Bindings::kUserTextureCount> kITextureResolutionKeys = {
+    "iTextureResolution[0]", "iTextureResolution[1]", "iTextureResolution[2]", "iTextureResolution[3]"};
+// The two indexing conventions, spelled out as asserts because the drift they
+// concern produced no diagnostic anywhere: a pack read the wrong element and the
+// shader still linked and ran. Entry i of the sampler table is uTexture<i+1> and
+// entry i of the resolution table is iTextureResolution[i], so a write must
+// offset by one between them.
+//
+// READ THE TWO STRING ASSERTS AS DOCUMENTATION, NOT AS COVERAGE, the same caveat
+// the pair further down this file carries. Each compares a literal against the
+// literal written ten lines above it, so it holds by construction, and each
+// checks only the first and last entry, so a mis-spelled middle one passes. The
+// drift that actually happened was in the WRITE index at the call sites, which
+// nothing here can see. The size relation is the one statement that constrains
+// anything: it fails if a slot is added to one table and not the other.
+static_assert(kITextureResolutionKeys.size() == kUserTextureSamplerNames.size() + 1,
+              "iTextureResolution is indexed by GLSL slot and the sampler table by pack slot, so the resolution "
+              "table carries exactly one more entry: index 0, uTexture0, which no pack declares");
+static_assert(std::string_view(kUserTextureSamplerNames[0]) == "uTexture1"
+                  && std::string_view(kUserTextureSamplerNames[kUserTextureSamplerNames.size() - 1]) == "uTexture3",
+              "kUserTextureSamplerNames is PACK-indexed: entry i names uTexture<i+1>");
+static_assert(std::string_view(kITextureResolutionKeys[0]) == "iTextureResolution[0]"
+                  && std::string_view(kITextureResolutionKeys[kITextureResolutionKeys.size() - 1])
+                      == "iTextureResolution[3]",
+              "kITextureResolutionKeys is GLSL-SLOT-indexed: entry i names iTextureResolution[i], and index 0 is "
+              "uTexture0, the surface itself");
 inline constexpr std::array<const char*, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams>
     kCustomParamsElementNames = {"customParams[0]", "customParams[1]", "customParams[2]", "customParams[3]",
                                  "customParams[4]", "customParams[5]", "customParams[6]", "customParams[7]"};
@@ -364,39 +409,74 @@ static_assert(PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColor
 static_assert(PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots == 3,
               "User-texture name arrays must grow to match kMaxUserTextureSlots");
 
+/// The surface composite fold's texture-unit map: unit 0 is uTexture0, then one
+/// unit per iChannel (kSurfaceChannelCount of them), then the backdrop, the
+/// audio spectrum and the user textures.
+///
+/// It tracks the daemon's descriptor-binding table
+/// (PhosphorShaders/ShaderBindings.h) for the channels and the user textures,
+/// and DIVERGES on the backdrop: the fold puts it immediately after the
+/// channels and before audio, while the binding table puts it after the user
+/// textures. The fold is free to, because these are texture UNITS it assigns
+/// itself rather than SRB bindings a shader declares, but the two orders are
+/// not interchangeable and a reader comparing them needs to know which is
+/// which.
+inline constexpr int kSurfaceChannelCount = PhosphorShaders::kMaxBufferPasses;
+/// Unit of iChannel0 inside the fold. The PRESENT slot is kSurfaceChannelBaseUnit
+/// below, which is a different number for a different phase.
+inline constexpr int kSurfaceFoldChannelBaseUnit = 1;
+/// How many iChannelResolution[N] elements the contract declares: the UBO on
+/// the daemon carries four, so the compositor pushes four and a pass reading a
+/// later channel sizes it with textureSize().
+inline constexpr int kSurfaceChannelResolutionSlots = PhosphorShaders::Bindings::kChannelResolutionSlots;
+/// Texture unit for the backdrop capture (uBackdrop): the first past the channels.
+inline constexpr int kSurfaceBackdropUnit = kSurfaceFoldChannelBaseUnit + kSurfaceChannelCount;
+
 /// Texture unit for the audio-spectrum sampler (uAudioSpectrum) in the surface
-/// composite fold. The fold's main + buffer passes bind unit 0 (uTexture0),
-/// 1..4 (iChannel0..3), and 5 (uBackdrop); unit 6 is the first free unit.
+/// composite fold: the first free unit past uTexture0, the channels and the
+/// backdrop.
 ///
 /// The present passthrough in decoration_render.cpp (`kSurfaceChannelBaseUnit`)
-/// reuses a unit in this same range, but the two never collide: the fold
-/// completes and unbinds unit 6 before drawWindow's present pass runs, so they
-/// occupy their units in disjoint phases regardless of the exact numbers.
+/// reuses a unit inside the fold's range, but the two never collide: the fold
+/// completes and unbinds its units before drawWindow's present pass runs, so
+/// they occupy their units in disjoint phases regardless of the exact numbers.
 /// Shared here (not file-local) so the fold (surfacelayers.cpp) and the bind
 /// helper (surface_audio.cpp) agree on one value. If audio ever moves into the
 /// present phase, revisit this overlap.
-inline constexpr int kSurfaceAudioUnit = 6;
-static_assert(kSurfaceAudioUnit > 5,
-              "kSurfaceAudioUnit must clear the fold's units 0..5 (uTexture0/iChannel/backdrop)");
+inline constexpr int kSurfaceAudioUnit = kSurfaceBackdropUnit + 1;
+static_assert(kSurfaceAudioUnit > kSurfaceBackdropUnit,
+              "kSurfaceAudioUnit must clear the fold's units 0..backdrop (uTexture0/iChannel/backdrop)");
 
 /// First texture unit for SURFACE pack user textures (uTexture1..3) in the
-/// composite fold's main pass: units 7..9, clear of the fold's units 0..5 and
-/// the audio unit 6. The animation paintWindow path also binds audio at unit 6
-/// (bindSurfaceAudio) in its own phase; its user textures live at units 1..3,
-/// so the two paths' maps never meet on the same draw.
-inline constexpr int kSurfaceUserTextureBaseUnit = 7;
+/// composite fold's main pass: the units past the audio unit. The animation
+/// paintWindow path also binds audio at kSurfaceAudioUnit (bindSurfaceAudio) in
+/// its own phase; its user textures live at units 1..3, so the two paths' maps
+/// never meet on the same draw.
+inline constexpr int kSurfaceUserTextureBaseUnit = kSurfaceAudioUnit + 1;
 static_assert(kSurfaceUserTextureBaseUnit > kSurfaceAudioUnit,
               "surface user textures must sit above the audio unit — the fold binds both in the same pass");
+// The one assert in this block that can actually fail. Its neighbours each
+// compare a constant with the one it was DEFINED as plus one, so they hold by
+// construction and pin nothing; they are kept because they document intent, but
+// they should not be read as coverage. This one relates the map to a limit
+// outside it: the fold's highest unit has to stay inside the per-stage texture
+// image units GL guarantees, which is 16. At kMaxBufferPasses 8 the map ends at
+// 13, so a bump of the channel count or the user-texture budget is what would
+// trip it — which is exactly the change that would otherwise fail at draw time
+// on a conservative driver, silently, as an unbound sampler reading unit 0.
+static_assert(kSurfaceUserTextureBaseUnit + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots
+                  <= 16,
+              "the surface fold's texture-unit map must fit in the 16 per-stage units GL guarantees");
 
 /// Surface decoration texture units shared by the animation-layer paths in
-/// paint_pipeline.cpp and the present rebind in decoration_render.cpp. All are
+/// paint_shader_window.cpp and the present rebind in decoration_render.cpp. All are
 /// offset from kMaxUserTextureSlots (N, = 3 today) so the animation
 /// user-texture slots 0..N-1 never collide with them:
 ///   kOldSnapshotUnit        (N+1) — the morph cross-fade's old-window snapshot
 ///   kSurfaceLayerUnit       (N+2) — the composited surface layer bound for the
 ///                                   animation shader / transition rebind
 ///   kSurfaceChannelBaseUnit (N+3) — the present passthrough's final composite
-///                                   slot (shares unit 6 with kSurfaceAudioUnit
+///                                   slot (inside the fold's iChannel unit range,
 ///                                   in the disjoint present phase, see above)
 /// Centralized here (not re-derived per call site) so the fold, the animation
 /// path, and the present rebind can't drift apart if the contract's slot count
@@ -407,13 +487,16 @@ inline constexpr int kSurfaceChannelBaseUnit =
     3 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
 static_assert(kOldSnapshotUnit < kSurfaceLayerUnit && kSurfaceLayerUnit < kSurfaceChannelBaseUnit,
               "surface decoration units must stay ordered and distinct");
-// Pin the relationship to the audio unit: today kSurfaceChannelBaseUnit == 6 ==
-// kSurfaceAudioUnit (the documented disjoint-phase overlap), while the layer /
-// old-snapshot units sit below it. A kMaxUserTextureSlots bump that pushes
-// kSurfaceLayerUnit onto the audio unit (N=4 → both 6) would silently collide
-// mid-fold, so fail at compile time instead.
-static_assert(kSurfaceLayerUnit != kSurfaceAudioUnit && kSurfaceChannelBaseUnit >= kSurfaceAudioUnit,
-              "surface layer unit must not collide with the audio unit, and the present slot must "
-              "stay at or above it — a kMaxUserTextureSlots bump needs the audio/present unit map revisited");
+// Pin the relationship to the audio unit: the layer, old-snapshot and present
+// units all sit below it today. A kMaxUserTextureSlots bump that pushed
+// kSurfaceLayerUnit onto the audio unit would silently collide mid-fold (the
+// animation draw binds both), so fail at compile time instead. The present
+// slot may share a unit with the fold's channels (disjoint phases, see
+// kSurfaceAudioUnit) but never with audio, which the animation draw binds in
+// the same phase as the present rebind.
+static_assert(kOldSnapshotUnit != kSurfaceAudioUnit && kSurfaceLayerUnit != kSurfaceAudioUnit
+                  && kSurfaceChannelBaseUnit != kSurfaceAudioUnit,
+              "none of the old-snapshot, surface layer or present units may collide with the audio unit — "
+              "a kMaxUserTextureSlots bump needs the audio/present unit map revisited");
 
 } // namespace PlasmaZones::ShaderInternal

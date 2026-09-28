@@ -86,6 +86,10 @@ inline constexpr QLatin1String OuterGapTop("outerGapTop");
 inline constexpr QLatin1String OuterGapBottom("outerGapBottom");
 inline constexpr QLatin1String OuterGapLeft("outerGapLeft");
 inline constexpr QLatin1String OuterGapRight("outerGapRight");
+/// The user's decoration blur-quality tier. Read by every host that composes a
+/// decoration chain, so that a pack renders at one density whether it decorates a
+/// window, an OSD or a shell surface. The compositor loads it under this same name.
+inline constexpr QLatin1String DecorationBlurScaleMultiplier("decorationBlurScaleMultiplier");
 }
 
 /// Keys for the extended-window-property QVariantMap (the trailing a{sv} argument

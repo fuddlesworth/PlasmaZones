@@ -29,11 +29,13 @@ from __future__ import annotations
 
 import argparse
 import codecs
+import fnmatch
 import json
 import re
 import string
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -95,7 +97,7 @@ def strip_c_comments(text: str) -> str:
     """Blank out // and /* */ comments, preserving line structure and offsets.
 
     Rules that look for a construct in *code* must not fire on prose in a
-    comment. Three of the six rules here produced nothing but comment hits
+    comment. Three of the rules here produced nothing but comment hits
     before this was added, so it is load-bearing rather than defensive.
 
     String literals are preserved, because several rules need to inspect them;
@@ -458,8 +460,46 @@ def is_title_separator(s: str) -> bool:
             return False
     return True
 
-PROSE_STRING_KEYS = {"name", "description", "title", "summary", "comment", "genericname", "text",
-                     "highlight", "highlights", "label"}
+PROSE_STRING_KEYS = {
+    "name",
+    "description",
+    "title",
+    "summary",
+    "comment",
+    "genericname",
+    "text",
+    "highlight",
+    "highlights",
+    "label",
+}
+
+
+# Finite-verb forms, for "does this segment read as a CLAUSE rather than a list
+# item". Auxiliaries and copulas, plus the third-person-singular lexical verbs this
+# project's prose actually uses.
+#
+# A LONGER LIST CANNOT CREATE A FALSE POSITIVE HERE, which is why it can afford to
+# grow: the semicolon rule requires a finite verb on BOTH sides, and a genuine
+# comma-bearing list item is a noun phrase with no verb at all, so one verbless side
+# is enough to exempt the whole construction. The list only affects how many real
+# splices get caught. It is still a heuristic and still under-catches — a splice
+# built from verbs not named here reads as a list and is missed, which review has to
+# catch — but it errs toward silence rather than toward blocking a legitimate
+# sentence, which is the right way round for a pre-commit gate.
+_FINITE_VERBS = frozenset(
+    """is are was were am be been being has have had do does did
+       can cannot could will would shall should may might must
+       isn't aren't wasn't weren't hasn't haven't doesn't don't didn't
+       can't won't wouldn't shouldn't
+       keeps drops sets reads writes runs takes gives makes shows uses needs holds
+       adds stops starts applies returns means covers carries leaves gets goes comes
+       sits lands falls picks sends pushes pulls draws paints binds clears""".split()
+)
+
+
+def _has_finite_verb(segment: str) -> bool:
+    """Whether `segment` reads as a CLAUSE rather than a list item."""
+    return any(w.strip(".,:;!?()[]\"'").lower() in _FINITE_VERBS for w in segment.split())
 
 
 def prose_problems(s: str) -> list[str]:
@@ -481,21 +521,38 @@ def prose_problems(s: str) -> list[str]:
             problems.append("em-dash splice; write two sentences or join with a plain word")
     if " - " in without_code:
         problems.append("spaced hyphen used as a dash; rewrite the sentence")
-    # Clause-splicing semicolon: only when both sides look like independent
-    # clauses. Semicolons separating genuine comma-bearing list items are
-    # legitimate, so those are excluded too.
-    # Segment first, then look for the splice inside a segment. The comma
-    # exclusion below is about the clause pair around THIS semicolon; applied
-    # to the whole string it meant that one comma anywhere in a multi-paragraph
-    # block (an RPM %description, a Nix longDescription, any CHANGELOG entry)
-    # switched the rule off for every sentence in it.
+    # CLAUSE-SPLICING SEMICOLON. CLAUDE.md forbids one joining two independent
+    # clauses and permits one "separating genuine comma-bearing list items", naming
+    # no minimum item count, so the test has to tell those two shapes apart directly.
+    #
+    # SEGMENT FIRST. The pair this rule judges is the one around THIS semicolon, and
+    # testing against the whole string meant anything found anywhere in a
+    # multi-paragraph block (an RPM %description, a Nix longDescription, a CHANGELOG
+    # entry) decided the verdict for every sentence in it.
+    #
+    # Then, inside a segment, key on a FINITE VERB present on BOTH sides. A clause
+    # has one; a list item is a noun phrase and has none, which is why "Sets the
+    # width, in pixels; the radius, in logical pixels" is a list — its second item
+    # carries no verb at all.
+    #
+    # That replaces two heuristics that stood in for it. A COMMA test cannot tell a
+    # list item from a clause with a parenthetical: "The pane, when focused, is
+    # blurred; the border is not." has a comma on each side and is a textbook splice,
+    # and so did a real description that shipped. A WORD-COUNT floor guarded against
+    # a short fragment reading as a clause, which the verb test now does directly at
+    # any length. A SEMICOLON-COUNT short-circuit, exempting anything with two or
+    # more, bought a three-item list its exemption at the price of never seeing a
+    # three-CLAUSE splice.
+    #
+    # The verb list is a heuristic and it under-catches: a splice built from verbs it
+    # does not name reads as a list and is missed, for review to catch. It cannot
+    # over-catch, because one verbless side exempts the construction and a genuine
+    # list item has no verb — which is what lets the list grow safely.
     for segment in re.split(r"(?<=[.!?])\s+|\n\s*\n", without_code):
         for part in re.finditer(r";\s+(\w+)", segment):
             before = segment[: part.start()]
             after = segment[part.start() + 1 :]
-            if "," in before or "," in after:
-                continue  # list separator, not a clause splice
-            if len(before.split()) >= 3 and len(after.split()) >= 3:
+            if _has_finite_verb(before) and _has_finite_verb(after):
                 problems.append("clause-splicing semicolon; split into sentences or use \"and\"")
                 return problems
     return problems
@@ -530,7 +587,11 @@ def iter_json_prose(path: str):
             for i, v in enumerate(node):
                 yield from walk(v, trail if isinstance(v, str) else f"{trail}/{i}")
         elif isinstance(node, str):
-            key = trail.rsplit("/", 1)[-1]
+            # The last NON-INDEX segment. Belt and braces beside the list arm above,
+            # which already hands a bare string element the ARRAY's trail: this also
+            # covers a prose key reached through an index that the arm does not
+            # flatten, and costs one generator expression to do it.
+            key = next((seg for seg in reversed(trail.split("/")) if seg and not seg.isdigit()), "")
             if key.lower() in PROSE_STRING_KEYS:
                 yield trail, node
 
@@ -558,6 +619,8 @@ SCHEMA_DESCRIPTION = re.compile(
 DESKTOP_FIELD = re.compile(r"^(Name|GenericName|Comment)(\[[^\]]+\])?\s*=\s*(.+)$", re.M)
 XML_PROSE = re.compile(r"<(summary|p|name|caption)(?:\s[^>]*)?>(.*?)</\1>", re.S)
 PKG_DESC = re.compile(r"^\s*(?:pkgdesc|Summary|Description)\s*[=:]\s*(.+)$", re.M)
+# The trailing pull-request reference on a changelog entry: markup, not prose.
+CHANGELOG_REF = re.compile(r"\(\[#\d+\]\([^)]*\)(?:,\s*\[[^\]]*\]\([^)]*\))*\)")
 
 # Nix meta. CLAUDE.md names it, but the pattern above never matched it: it is
 # case-sensitive and Nix spells the attribute `description`. `longDescription`
@@ -633,6 +696,25 @@ def rule_prose(files: list[str]) -> list[Violation]:
                     out.append(Violation("prose", f, line_of(text, m.start()), f"{p} -> {body[:80]!r}"))
             continue
 
+        # CLAUDE.md names "CHANGELOG.md entries" among the user-facing surfaces
+        # these rules govern, and nothing here checked them, so every release
+        # note this project has ever written went through the gate unread.
+        #
+        # Only the ENTRY BODY is checked. The Keep-a-Changelog "**Term**:"
+        # lead-in is an explicitly allowed colon, headings are structure rather
+        # than prose, and the trailing ([#nnnn](url)) reference is markup whose
+        # URL would otherwise read as prose punctuation.
+        if Path(f).name == "CHANGELOG.md":
+            text = read(f)
+            for n, ln in enumerate(text.splitlines(), 1):
+                if not ln.startswith("- "):
+                    continue
+                body = ln.split("**:", 1)[1] if "**:" in ln else ln[2:]
+                body = CHANGELOG_REF.sub("", body)
+                for pr in prose_problems(body):
+                    out.append(Violation("prose", f, n, f"{pr} -> {body.strip()[:80]!r}"))
+            continue
+
         # .github/workflows too: the draft PKGBUILD pkgdesc is generated in
         # ci.yml and release.yml, pacman prints it, and this arm used to stop
         # at the packaging/ prefix so those strings were invisible.
@@ -669,6 +751,146 @@ def rule_prose(files: list[str]) -> list[Violation]:
                     out.append(Violation("prose", f, line_of(code, m.start()), f"{p} -> {m.group(1)[:80]!r}"))
             continue
 
+    return out
+
+
+# --------------------------------------------------------------------------
+# Rule: dep5
+# --------------------------------------------------------------------------
+
+# The Debian DEP-5 file tells every downstream redistributor what each shipped
+# file's license is. Nothing kept it honest, so it drifted: it declared 165
+# LGPL shader-pack files as GPL-3, which defeats the whole reason those trees
+# are LGPL. Reconciling it once fixes today and nothing else, because the next
+# pack added under data/ breaks it again silently. This rule is the ratchet.
+#
+# It reads only the file HEAD, like the license rule, so SPDX text appearing in
+# a string literal or in a contributing guide's example is not mistaken for a
+# header.
+DEP5 = REPO / "packaging" / "debian" / "copyright"
+DEP5_HEAD_LINES = 8
+
+
+def dep5_head(rel: str) -> str | None:
+    """The first DEP5_HEAD_LINES lines, or None for anything without a readable
+    text head. This rule is the one that walks EVERY tracked path rather than a
+    suffix-filtered subset, so it meets what the others never see: the symlinked
+    skill directories under .agents/, and binary assets. Reading a bounded slice
+    also keeps a whole-tree run cheap."""
+    p = REPO / rel
+    try:
+        if not p.is_file():
+            return None
+        with p.open("rb") as fh:
+            raw = fh.read(4096)
+    except OSError:
+        return None
+    if b"\0" in raw:
+        return None
+    return "\n".join(raw.decode("utf-8", errors="replace").split("\n")[:DEP5_HEAD_LINES])
+
+
+def parse_dep5() -> list[dict]:
+    """The Files stanzas in declaration order. DEP-5 resolution is last-match-wins."""
+    stanzas: list[dict] = []
+    cur: dict | None = None
+    field: str | None = None
+    for raw in DEP5.read_text(encoding="utf-8").split("\n"):
+        line = raw.rstrip()
+        if line.startswith("#"):
+            continue
+        if not line.strip():
+            if cur and cur["files"]:
+                stanzas.append(cur)
+            cur, field = None, None
+            continue
+        m = re.match(r"^(\S+):\s*(.*)$", line)
+        if m:
+            key, val = m.group(1).lower(), m.group(2).strip()
+            if key == "files":
+                cur = {"files": [val] if val else [], "copyright": [], "license": ""}
+                field = "files"
+            elif cur is not None and key == "copyright":
+                if val:
+                    cur["copyright"].append(val)
+                field = "copyright"
+            elif cur is not None and key == "license":
+                cur["license"] = val
+                field = "license"
+            else:
+                field = None
+        elif line.startswith((" ", "\t")) and cur is not None and field in ("files", "copyright"):
+            cur[field].append(line.strip())
+    if cur and cur["files"]:
+        stanzas.append(cur)
+    return stanzas
+
+
+def dep5_stanza_for(rel: str, stanzas: list[dict]) -> tuple[dict, str] | tuple[None, None]:
+    """Last matching stanza wins. DEP-5 globs: * spans any run of characters,
+    including '/', which is why fnmatch is right here and Path.match is not.
+
+    Returns the pattern that matched alongside the stanza, not just the stanza's
+    first pattern: a stanza that lists eight paths would otherwise point the
+    reader at the wrong one."""
+    hit: tuple[dict, str] | tuple[None, None] = (None, None)
+    for s in stanzas:
+        for pat in s["files"]:
+            if fnmatch.fnmatchcase(rel, pat):
+                hit = (s, pat)
+                break
+    return hit
+
+
+def rule_dep5(files: list[str]) -> list[Violation]:
+    if not DEP5.exists():
+        return []
+    stanzas = parse_dep5()
+    if not stanzas:
+        return [Violation("dep5", str(DEP5.relative_to(REPO)), 0, "no Files stanza parsed")]
+
+    # Editing the DEP-5 file can break any file in the tree, not only the ones
+    # staged beside it, so that edit widens the check to everything.
+    targets = tracked_files() if str(DEP5.relative_to(REPO)) in files else files
+
+    out = []
+    for f in targets:
+        head = dep5_head(f)
+        if head is None:
+            continue
+        m = re.search(r"SPDX-License-Identifier:\s*([A-Za-z0-9.+-]+)", head)
+        if not m:
+            continue
+        got = m.group(1)
+        s, pat = dep5_stanza_for(f, stanzas)
+        if s is None:
+            out.append(Violation("dep5", f, 0, "no Files stanza in packaging/debian/copyright matches this path"))
+            continue
+        if s["license"] != got:
+            out.append(
+                Violation(
+                    "dep5",
+                    f,
+                    line_of(head, m.start()),
+                    f"header says {got}, but packaging/debian/copyright declares {s['license']} "
+                    f"for it (matched by 'Files: {pat}')",
+                )
+            )
+        blob = " ".join(s["copyright"])
+        for holder in re.findall(r"SPDX-FileCopyrightText:\s*(.+)", head):
+            # Drop the comment syntax the header sits inside, then compare on
+            # the name alone: the stanza spells fuddlesworth with an address.
+            name = re.sub(r"\s*(-->|\*/|\",?)\s*$", "", holder.strip()).split("<")[0].strip()
+            if name and name not in blob:
+                out.append(
+                    Violation(
+                        "dep5",
+                        f,
+                        0,
+                        f"copyright holder {name!r} is not named in the matching "
+                        f"packaging/debian/copyright stanza ('Files: {pat}')",
+                    )
+                )
     return out
 
 
@@ -777,8 +999,31 @@ RULES = {
     "i18n-cpp": (rule_i18n_cpp, "C++ uses PhosphorI18n::tr(), never i18n()/KLocalizedString"),
     "config-keys": (rule_config_keys, "config group/key strings go through ConfigDefaults:: accessors"),
     "prose": (rule_prose, "user-facing strings carry no em-dash splice, clause semicolon or spaced hyphen"),
+    "dep5": (rule_dep5, "packaging/debian/copyright declares each file's real license and holders"),
     "js-pragma": (rule_js_pragma, f"QML .js libraries declare '.pragma library' in Qt's first {JS_PRAGMA_WINDOW} bytes"),
 }
+
+
+# --------------------------------------------------------------------------
+# Self-test
+# --------------------------------------------------------------------------
+#
+# The data and the checks live in conventions_selftest.py. This file crossed the
+# 1150-line ceiling when two branches each added a rule, and the self-test is the
+# one section that depends on nothing but the two pure detectors, so it is what
+# moved. Imported inside the function, not at module scope: that module imports
+# this one back for those detectors.
+
+
+def selftest() -> int:
+    # The sibling is found by THIS FILE's directory, not by sys.path[0]. Those
+    # coincide for `python3 scripts/check-conventions.py`, which is how lefthook and
+    # CI invoke it, and diverge for anything that runs a copy from elsewhere — where
+    # the failure would be an ImportError that reads like a selftest failure.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from conventions_selftest import run_selftest
+
+    return run_selftest(prose_problems, iter_json_prose)
 
 
 def main() -> int:
@@ -794,8 +1039,12 @@ def main() -> int:
              "otherwise silently become a whole-tree run.",
     )
     ap.add_argument("--list-rules", action="store_true")
+    ap.add_argument("--selftest", action="store_true", help="check the rules can still see what they are meant to")
     ap.add_argument("--update-baseline", action="store_true", help="re-record the oversize-file baseline")
     args = ap.parse_args()
+
+    if args.selftest:
+        return selftest()
 
     if args.list_rules:
         for name, (_, desc) in RULES.items():

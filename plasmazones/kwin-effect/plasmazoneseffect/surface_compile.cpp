@@ -48,6 +48,8 @@ namespace PlasmaZones {
 using ShaderInternal::injectKwinDefineAfterVersion;
 using ShaderInternal::kCustomColorsElementNames;
 using ShaderInternal::kCustomParamsElementNames;
+using ShaderInternal::kITextureResolutionKeys;
+using ShaderInternal::loadUserTextureImage;
 
 namespace {
 
@@ -123,13 +125,17 @@ void PlasmaZonesEffect::ensureSurfaceRegistryPaths()
         return;
     }
     m_surfaceRegistryPathsAdded = true;
-    // Candidate dirs: every ${XDG_DATA_DIRS}/plasmazones/surface plus the user
-    // data dir (~/.local/share/plasmazones/surface), where CMake installs
-    // data/surface and where a user override would live. Added even when a dir
-    // is missing so the registry's watcher promotes a parent-watch and picks up
-    // packs that appear later (a fresh install). The daemon-delivered path
-    // mechanism the animation registry uses (loadShaderRegistryFromDbus) is a
-    // follow-up for surface packs; QStandardPaths covers the bundled pack today.
+    // Candidate dirs: every ${XDG_DATA_DIRS}/plasmazones/surface, which is
+    // where CMake installs data/surface (the top-level install() rule targets
+    // ${KDE_INSTALL_DATADIR}/plasmazones/surface), plus the user data dir
+    // ~/.local/share/plasmazones/surface, where a user override would live.
+    // Added even when a dir is missing so the registry's watcher promotes a
+    // parent-watch and picks up packs that appear later (a fresh install).
+    // Surface packs resolve from QStandardPaths and nowhere else. The
+    // animation registry also takes search paths handed over from the daemon
+    // (loadShaderRegistryFromDbus); no D-Bus arm sends the compositor a
+    // surface path, so a surface pack outside the XDG chain is invisible here
+    // even when the daemon can see it.
     // ASCENDING priority (system lowest first, the user dir LAST).
     // standardLocations hands back the writable user location first, and
     // MetadataPackScanStrategy reverse-iterates the registered paths with
@@ -198,8 +204,14 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
 
     const PhosphorSurfaceShaders::SurfaceShaderEffect eff = m_surfaceShaderRegistry.effect(packId);
     if (eff.id.isEmpty() || eff.fragmentShaderPath.isEmpty()) {
-        qCWarning(lcEffect) << "Surface shader pack" << packId << "not found in registry (effect count="
-                            << m_surfaceShaderRegistry.availableEffects().size()
+        // effectIds(), not availableEffects(): the latter returns
+        // QList<SurfaceShaderEffect> BY VALUE, so a count would deep-copy every
+        // registered effect with its parameters, textures and presets. This is
+        // not a per-frame path (the cache slot at the top of the function
+        // latches the miss), but it re-fires after every compile-cache clear,
+        // which a user nudging a decoration slider triggers repeatedly.
+        qCWarning(lcEffect) << "Surface shader pack" << packId
+                            << "not found in registry (effect count=" << m_surfaceShaderRegistry.effectIds().size()
                             << ") — window decoration disabled this session";
         return &packState;
     }
@@ -218,18 +230,40 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     // Include paths: each search path's /shared dir (resolves
     // `#include <surface_uniforms.glsl>`) PLUS the search path root itself,
     // matching the daemon/validator resolution (phosphor-surface-quick's
-    // SurfaceShaderItem::surfaceIncludePaths) so a pack that resolves a
-    // root-level include on the daemon and passes shadervalidate also links
-    // on the compositor.
+    // SurfaceShaderItem::surfaceIncludePaths) so a pack that resolves a root-level
+    // include on the daemon and passes shadervalidate also links on the compositor.
+    //
+    // HIGHEST priority first, because the include resolver takes the first
+    // root that holds the header. The registry lists its search paths in
+    // ASCENDING priority (system lowest, the user dir last, see
+    // ensureSurfaceRegistryPaths), so walking them verbatim resolved every
+    // `<surface_*.glsl>` from /usr/share even for a pack the user dir had won:
+    // the pack's body came from one tree and its contract headers from
+    // another, which is a compile failure whenever the two trees disagree (a
+    // development tree linked into the user dir against an older installed
+    // copy, or a user override of a shared header). The `shared/` dir that
+    // sits BESIDE THE PACK DIR goes first of all. For the standard flat
+    // layout `<root>/<pack>/effect.frag` that resolves to `<root>/shared` —
+    // the search root's own helpers, shared by every pack in that root, not a
+    // per-pack copy. It is the same dir the validator probes first
+    // (packSharedRoots in packvalidatorcommon.cpp derives parent-of-pack +
+    // `/shared`), so a pack tree that ships its helpers beside its packs
+    // links here exactly as it validates.
     QStringList includePaths;
-    for (const QString& sp : m_surfaceShaderRegistry.searchPaths()) {
+    const QString currentDir = QFileInfo(eff.fragmentShaderPath).absolutePath();
+    const QString siblingShared = QFileInfo(currentDir).absolutePath() + QStringLiteral("/shared");
+    if (QDir(siblingShared).exists()) {
+        includePaths.append(siblingShared);
+    }
+    QStringList searchPaths = m_surfaceShaderRegistry.searchPaths();
+    std::reverse(searchPaths.begin(), searchPaths.end());
+    for (const QString& sp : searchPaths) {
         const QString sharedDir = sp + QStringLiteral("/shared");
-        if (QDir(sharedDir).exists()) {
+        if (QDir(sharedDir).exists() && !includePaths.contains(sharedDir)) {
             includePaths.append(sharedDir);
         }
         includePaths.append(sp);
     }
-    const QString currentDir = QFileInfo(eff.fragmentShaderPath).absolutePath();
     QString includeError;
     // Assemble an entry-only pack (a `vec4 pSurface(vec2 uv)` body with no
     // main()) into a full translation unit BEFORE include expansion — identical
@@ -360,21 +394,44 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     // GLTextures (freed with the shader under the same GL-context discipline).
     // Paths were made absolute + traversal-checked at registry scan time; an
     // unloadable file warns and leaves the slot null (transparent black).
-    static const std::array<const char*, 3> kSurfaceUserTextureNames = {
+    // Sampler names come from the SURFACE contract constants rather than
+    // literals. The iTextureResolution element names are the shared table in
+    // shader_internal.h that the animation path already uses, so the literals
+    // exist once; that table is sized to the ANIMATION slot budget, which makes
+    // reusing it here sound only while the two contracts agree on the count.
+    // The second assert is what keeps them honest.
+    static const std::array<const char*, SC::kMaxUserTextureSlots> kSurfaceUserTextureNames = {
         {SC::kUTexture1, SC::kUTexture2, SC::kUTexture3}};
-    static const std::array<const char*, 3> kSurfaceTextureResNames = {
-        {"iTextureResolution[0]", "iTextureResolution[1]", "iTextureResolution[2]"}};
-    static_assert(SC::kMaxUserTextureSlots == 3, "surface user-texture name arrays must grow with the slot budget");
+    static_assert(SC::kMaxUserTextureSlots == 3, "surface user-texture name array must grow with the slot budget");
+    static_assert(SC::kMaxUserTextureSlots + 1 == PhosphorShaders::Bindings::kUserTextureCount,
+                  "a pack's N slots plus the surface's own uTexture0 must fill the binding table's texture slots");
     for (int slot = 0; slot < SC::kMaxUserTextureSlots; ++slot) {
         packState.userTextureLoc[slot] = shader->uniformLocation(kSurfaceUserTextureNames[slot]);
-        packState.iTextureResolutionLoc[slot] = shader->uniformLocation(kSurfaceTextureResNames[slot]);
+    }
+    // SEPARATE LOOP over GLSL texture slots, because iTextureResolution is indexed
+    // by those and not by pack slot: index 0 is the surface's own content, which no
+    // pack declares. Folding this into the loop above is what made the two arrays
+    // parallel and put a pack's first texture size on the surface's index.
+    for (int glslSlot = 0; glslSlot < PhosphorShaders::Bindings::kUserTextureCount; ++glslSlot) {
+        packState.iTextureResolutionLoc[glslSlot] = shader->uniformLocation(kITextureResolutionKeys[glslSlot]);
     }
     for (int slot = 0; slot < eff.textures.size() && slot < SC::kMaxUserTextureSlots; ++slot) {
         const auto& texSlot = eff.textures.at(slot);
         if (texSlot.path.isEmpty()) {
             continue;
         }
-        QImage img(texSlot.path);
+        // loadUserTextureImage, not a bare QImage(path). Two things follow from
+        // the shared helper that the QImage constructor does not give us, and
+        // both of them run INSIDE the compositor process. (a) SVG and SVGZ: the
+        // helper rasterises through QSvgRenderer at a bounded max axis, whereas
+        // QImage(path) needs the qsvg image-format plugin to be loaded in this
+        // process at all, and where it is, it rasterises at the file's intrinsic
+        // defaultSize with no cap. (b) Raster budget: the helper decodes through
+        // QImageReader::setScaledSize against a byte budget, so an oversized
+        // pack texture cannot allocate at full resolution here. The daemon has
+        // resolved surface textures this way all along (shadereffect.cpp); this
+        // is the compositor half of the same contract.
+        const QImage img = loadUserTextureImage(texSlot.path);
         if (img.isNull()) {
             qCWarning(lcEffect) << "Surface pack" << packId << "texture slot" << slot << "failed to load"
                                 << texSlot.path << "— sampler reads transparent";
@@ -399,20 +456,28 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     }
 
     // MAIN-pass multipass channel locations: the buffer-pass outputs are bound
-    // in the composite fold as iChannel0..3 so the main effect.frag can
+    // in the composite fold as iChannel0..7 so the main effect.frag can
     // sample the pre-rendered buffer textures. -1 for a single-pass pack (the
     // border never references these — the linker drops them). The literal
     // element names match the surface contract declarations in
-    // surface_uniforms.glsl ("iChannel0".."iChannel3",
-    // "iChannelResolution[0]".."[3]").
-    static constexpr int kIChannelSlots = PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses;
-    static const std::array<const char*, kIChannelSlots> kIChannelNames = {
-        {"iChannel0", "iChannel1", "iChannel2", "iChannel3"}};
-    static const std::array<const char*, kIChannelSlots> kIChannelResNames = {
+    // surface_multipass.glsl ("iChannel0".."iChannel7") and
+    // surface_uniforms.glsl ("iChannelResolution[0]".."[3]": the contract
+    // declares four sizes, and a pass reading a later channel uses
+    // textureSize()).
+    static const std::array<const char*, PhosphorShaders::kMaxBufferPasses> kIChannelNames = {
+        {"iChannel0", "iChannel1", "iChannel2", "iChannel3", "iChannel4", "iChannel5", "iChannel6", "iChannel7"}};
+    static_assert(PhosphorShaders::kMaxBufferPasses == 8, "kIChannelNames literal must grow with kMaxBufferPasses");
+    static const std::array<const char*, PhosphorShaders::Bindings::kChannelResolutionSlots> kIChannelResNames = {
         {"iChannelResolution[0]", "iChannelResolution[1]", "iChannelResolution[2]", "iChannelResolution[3]"}};
-    static_assert(kIChannelSlots == 4, "iChannel name arrays must grow with the buffer-pass budget");
-    for (int i = 0; i < kIChannelSlots; ++i) {
+    // Pinned like kIChannelNames above. The array is SIZED by the constant, so a
+    // bump would compile and leave the extra entries value-initialised to
+    // nullptr, and uniformLocation(nullptr) is undefined rather than a miss.
+    static_assert(PhosphorShaders::Bindings::kChannelResolutionSlots == 4,
+                  "kIChannelResNames literal must grow with kChannelResolutionSlots");
+    for (size_t i = 0; i < kIChannelNames.size(); ++i) {
         packState.iChannelLoc[i] = shader->uniformLocation(kIChannelNames[i]);
+    }
+    for (size_t i = 0; i < kIChannelResNames.size(); ++i) {
         packState.iChannelResolutionLoc[i] = shader->uniformLocation(kIChannelResNames[i]);
     }
 
@@ -445,13 +510,27 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     // like the daemon/animation degradation. (packState.bufferPasses starts empty
     // for this freshly-inserted cache slot.)
     //
-    // bufferFeedback (sampling the prior frame's own buffer) is ignored in this
-    // first cut — each pass only sees uTexture0 + strictly-earlier buffer outputs.
+    // bufferFeedback (sampling the prior frame's own buffer) is daemon-only by
+    // contract — see the field doc on SurfaceShaderEffect::bufferFeedback. Here
+    // each pass sees uTexture0 plus strictly-earlier buffer outputs and nothing
+    // else, so a pack that sets the flag renders without feedback rather than
+    // failing; the flag is not read on this path.
     if (eff.isMultipass && !eff.bufferShaderPaths.isEmpty()) {
         // The fullscreen-quad vertex stage is shared by every buffer pass; the
         // PLASMAZONES_KWIN define is injected so it travels the same #version
         // handling as the frag (the vertex declares no contract uniforms, but
         // keeping both stages on the same define path avoids surprises).
+        //
+        // NOTE, and this diverges from the daemon: a pack's DECLARED vertex
+        // stage (eff.vertexShaderPath, applied to the main pass above) is NOT
+        // used here. The daemon builds its buffer-pass pipelines from the
+        // pack's loaded stage with the matrix pinned to identity
+        // (shadernoderhipipeline.cpp), so a pack whose vertex emits an extra
+        // varying its buffer frags read links there and fails to link here,
+        // dropping the whole chain to single-pass with only the warning below.
+        // The declared-stage contract is documented on
+        // SurfaceShaderEffect::vertexShaderPath: a buffer frag must read no
+        // varying beyond vTexCoord. No bundled pack declares a vertex stage.
         const QByteArray bufVert = injectKwinDefineAfterVersion(QString::fromUtf8(kFullscreenQuadVertexSource));
 
         std::vector<CompiledSurfaceBufferPass> passes;
@@ -510,8 +589,19 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
             // uniforms), exactly like the main pass above.
             pass.iAudioSpectrumSizeLoc = bufShader->uniformLocation(SC::kIAudioSpectrumSize);
             pass.uAudioSpectrumLoc = bufShader->uniformLocation(SC::kUAudioSpectrum);
-            for (int i = 0; i < kIChannelSlots; ++i) {
+            // The pack's own textures, for the reason CompiledSurfaceBufferPass spells
+            // out: without the location the fold cannot bind anything, and an unset
+            // sampler reads the running composite on unit 0.
+            for (int slot = 0; slot < SC::kMaxUserTextureSlots; ++slot) {
+                pass.userTextureLoc[slot] = bufShader->uniformLocation(kSurfaceUserTextureNames[slot]);
+            }
+            for (int glslSlot = 0; glslSlot < PhosphorShaders::Bindings::kUserTextureCount; ++glslSlot) {
+                pass.iTextureResolutionLoc[glslSlot] = bufShader->uniformLocation(kITextureResolutionKeys[glslSlot]);
+            }
+            for (size_t i = 0; i < kIChannelNames.size(); ++i) {
                 pass.iChannelLoc[i] = bufShader->uniformLocation(kIChannelNames[i]);
+            }
+            for (size_t i = 0; i < kIChannelResNames.size(); ++i) {
                 pass.iChannelResolutionLoc[i] = bufShader->uniformLocation(kIChannelResNames[i]);
             }
             for (int slot = 0; slot < SC::kMaxCustomParams; ++slot) {

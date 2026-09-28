@@ -16,7 +16,7 @@ include(CMakeFindDependencyMacro)
 # COMPONENTS split across two installed packages on the PhosphorProtocol side,
 # which is a change to that library's install contract rather than to this
 # file, so the constraint is recorded here and left alone.
-find_dependency(Qt6 6.10 COMPONENTS Core)
+find_dependency(Qt6 @PHOSPHORSCROLLENGINE_QT_MIN@ COMPONENTS Core)
 find_dependency(PhosphorEngine)
 find_dependency(PhosphorProtocol)
 

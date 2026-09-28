@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plasmazoneseffect.h"
+#include "desktopvisibility.h"
 #include "shader_internal.h"
 #include "compositor/effectlogging.h"
 
@@ -423,12 +424,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // pre-swap placeholder class — re-drive them here so a rule keyed
             // to the real class applies (and one keyed to the placeholder
             // releases) without waiting for an incidental focus / placement
-            // sweep. Decoration re-folds only for an on-desktop window
-            // (matching updateAllDecorations' gate); an off-desktop swap is
-            // picked up by the desktop-switch rebuild.
+            // sweep. Decoration re-folds only for a window on the desktop its OWN
+            // OUTPUT shows, matching updateAllDecorations; off-desktop rides the sweep.
             if (safeW && !safeW->isDeleted()) {
                 const QString wid = getWindowId(safeW);
-                if (safeW->isOnCurrentDesktop()) {
+                if (isOnOwnOutputCurrentDesktop(safeW)) {
                     updateWindowDecoration(wid, safeW);
                 }
                 // Title-bar override rides the same appearance resolve as the

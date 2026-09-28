@@ -10,21 +10,62 @@
 namespace PhosphorShaders {
 
 /// Lower / upper bounds on a multipass `bufferScale` (FBO downscale
-/// factor). 0.125 means a 1/8 downscale on each axis (1/64 area — the
-/// lowest cost-floor that still gives Shadertoy-style buffer effects
-/// something to work with); 1.0 means full-resolution FBOs. Canonical
-/// home for every clamp site (overlay metadata parse, surface
-/// `SurfaceShaderEffect::kMin/MaxBufferScale` forwarders, and the two
-/// rendering setters), so the bounds cannot drift per-runtime.
-inline constexpr double kMinBufferScale = 0.125;
+/// factor). 1/128 means a 1/128 downscale on each axis, and 1.0 means
+/// full-resolution FBOs. Canonical home for every clamp site, so the bounds
+/// cannot drift per-runtime: all four families' metadata parsers, the
+/// `kMin/MaxBufferScale` forwarders that surface, animation and pointer each
+/// re-export from here, the four rendering setters (`ShaderEffect`'s scalar
+/// and per-pass scale setters and their two `ShaderNodeRhi` counterparts),
+/// the four pack-validator range lints, and the compositor's own clamps for
+/// the surface backdrop and the pointer pass.
+///
+/// WHY THE FLOOR SITS FOUR STEPS BELOW THE DEEPEST LEVEL ANY PACK DECLARES.
+/// The deepest level of the bundled Kawase pyramids is 1/32, which is as deep
+/// as a pyramid starting at quarter resolution can go and still have texels to
+/// average. But the compositor multiplies every declared scale by the user's
+/// decoration blur-scale multiplier BEFORE clamping
+/// (PlasmaZonesEffect::clampedBufferScale), and that multiplier bottoms out at
+/// 1/4 (DecorationDefaults::BlurScaleMultiplierMin). A floor equal to the
+/// deepest declared level therefore clamped the bottom of the pyramid straight
+/// back up at any multiplier below 1. At the minimum, five of the seven levels
+/// all landed on 1/32 and the pyramid stopped halving at all, so turning the
+/// quality down stopped reducing work and started destroying the blur instead.
+/// 1/32 * 1/4 = 1/128 gives the multiplier its full range to scale the whole
+/// pyramid without collapsing it. Nothing degenerates at the floor: both hosts
+/// size targets with qMax(1, qRound(extent * scale)).
+inline constexpr double kMinBufferScale = 0.0078125;
 inline constexpr double kMaxBufferScale = 1.0;
 
 /// Maximum number of multipass buffer passes a pack may declare. Canonical
-/// home shared by the overlay parser and the pack validator (the surface tree
-/// keeps its own SurfaceShaderEffect::kMaxBufferPasses at the same value, and
-/// the animation tree AnimationShaderContract::kMaxBufferPasses); every buffer
-/// pass costs a canvas-sized RGBA8 texture, so the cap bounds GPU memory.
-inline constexpr int kMaxBufferPasses = 4;
+/// home shared by the overlay parser, the pack validator and the daemon's
+/// ShaderNodeRhi binding budget (the surface tree forwards
+/// SurfaceShaderEffect::kMaxBufferPasses to it, as does the animation tree's
+/// AnimationShaderContract::kMaxBufferPasses). The figure comes from the
+/// SURFACE family: a dual Kawase pyramid needs seven passes, four down and
+/// three up, to reach a 256 px blur from a quarter-resolution base, and the
+/// eighth is headroom so the deepest bundled chain is not sitting exactly on
+/// the cap. Every buffer pass costs a texture at its declared scale, so the
+/// cap bounds GPU memory.
+///
+/// THE OTHER THREE FAMILIES INHERIT THAT NUMBER RATHER THAN NEEDING IT, and
+/// that is deliberate rather than an oversight. The overlay and animation
+/// parsers take this constant directly, so an installable pack in either
+/// family may now declare eight full-canvas buffer draws where four was the
+/// documented ceiling, on a path that is GPU-bound. The grant is accepted
+/// because both are opt-in per pack and both already pay per pass at the
+/// declared scale, so the cap bounds the worst case rather than describing a
+/// typical one. The POINTER family is the exception and keeps its own cap of
+/// two, stated in its contract, because a pointer chain runs on every output
+/// frame while the pointer is live. A family that acquires that shape should
+/// take its own cap the same way instead of inheriting this one.
+///
+/// The shared GLSL headers do NOT all declare this many iChannel samplers.
+/// Overlay (multipass.glsl) and surface (surface_multipass.glsl) declare
+/// iChannel0..7 and match; pointer declares iChannel0..3, above its own cap of
+/// two; and the animation family declares none at all, which is why a
+/// multipass animation pack has no declaration to sample its buffers through.
+/// See ShaderBindings.h for the binding numbers the first two use.
+inline constexpr int kMaxBufferPasses = 8;
 
 /// The accepted texture / buffer `wrap` vocabulary, shared by every
 /// validation site across the shader registries (overlay image-param
@@ -33,8 +74,12 @@ inline constexpr int kMaxBufferPasses = 4;
 /// tokens `clamp` / `repeat` / `mirror`. An empty string is NOT a member —
 /// callers treat empty as "use the runtime default" and handle it
 /// explicitly before consulting this predicate. Lives here (the lowest
-/// shader library) so overlay and surface validation cannot drift apart;
-/// `PhosphorSurfaceShaders::isValidWrapToken` forwards to this. Vocabulary
+/// shader library) so the four families' validation cannot drift apart. All
+/// three of the other families forward to it, each from its own contract
+/// header: `PhosphorSurfaceShaders::SurfaceShaderContract::isValidWrapToken`,
+/// `PhosphorAnimationShaders::AnimationShaderContract::isValidWrapToken` and
+/// `PhosphorPointerShaders::PointerShaderContract::isValidWrapToken`. The
+/// overlay family and the pack validator call this one directly. Vocabulary
 /// matches the runtime normaliser (`ShaderNodeRhi::normalizeWrapMode`).
 inline bool isValidWrapToken(const QString& wrap)
 {
@@ -43,8 +88,9 @@ inline bool isValidWrapToken(const QString& wrap)
 
 /// The accepted buffer `filter` vocabulary: `linear` / `nearest` /
 /// `mipmap`. Same membership and empty-string contract as
-/// `isValidWrapToken`; `PhosphorSurfaceShaders::isValidFilterToken`
-/// forwards to this.
+/// `isValidWrapToken`, and the same forwarders, each on its own contract
+/// header (`SurfaceShaderContract`, `AnimationShaderContract`,
+/// `PointerShaderContract`).
 inline bool isValidFilterToken(const QString& filter)
 {
     return filter == QLatin1String("linear") || filter == QLatin1String("nearest") || filter == QLatin1String("mipmap");
@@ -61,21 +107,20 @@ inline bool isValidFilterToken(const QString& filter)
 /// `#define direction customParams[0].x` macros, plus one for the
 /// daemon's UBO key parser).
 ///
-/// Three concrete consumers of this format today:
+/// EVERY family encodes through this format and BOTH runtimes decode through
+/// it. That is the property worth stating; the count that used to stand here
+/// said three in one sentence and four in the next, and both were out of date.
 ///
-///   • `PhosphorShaders::ShaderRegistry::ParameterInfo::uniformName()` —
-///     overlay-shader encoder (uses an internal lookup-table form;
-///     identical output)
-///   • `PhosphorAnimationShaders::AnimationShaderRegistry::translateAnimationParams`
-///     — animation-shader encoder
-///   • `PhosphorRendering::ShaderEffect::setShaderParams` — decoder for
-///     both runtime paths (overlay and animation)
+///   • Encoders. The overlay registry's `ParameterInfo::uniformName()` builds
+///     the same strings from an internal lookup table. Animation, surface and
+///     pointer each reach this function through their own contract header's
+///     `paramKey` forwarder.
+///   • Decoders. The daemon decodes in
+///     `PhosphorRendering::ShaderEffect::setShaderParams`, for every family.
+///     The compositor decodes in its own per-family pack code.
 ///
-/// Plus the kwin-effect's per-transition pack at compositor-side. All
-/// four call sites consume the format produced here. If the format ever
-/// changes — even just the leading `"customParams"` prefix or the
-/// underscore separator — the change has to land here so every site
-/// stays in sync.
+/// If the format ever changes, even just the leading `"customParams"` prefix
+/// or the underscore separator, the change lands here and every site follows.
 namespace CustomParams {
 
 /// Number of `vec4` slots in `BaseUniforms::customParams[8]`.
@@ -150,21 +195,19 @@ inline QString glslAccessor(int slot)
 /// 1-based. There is no sub-component split because each color occupies a
 /// full vec4 (rgba) — so the single-arg overload is the only one needed.
 ///
-/// Three current consumers:
+/// Reached the same way `CustomParams::slotKey` is, and by the same set:
+/// every family encodes through it, the daemon decodes through it once for
+/// all families, and the compositor decodes through it per family.
 ///
-///   • `PhosphorShaders::ShaderRegistry::ParameterInfo::uniformName()` —
-///     overlay-shader encoder for color params (uses internal lookup
-///     table; identical output)
-///   • `PhosphorRendering::ShaderEffect::setShaderParams` — decoder for
-///     both runtime paths
-///   • `AnimationShaderRegistry::translateAnimationParams` — animation
-///     shaders route color-typed params through this helper too. The
-///     encoder advances a separate `colorSlot` counter independently of
-///     the float `customParams` allocator (see
-///     `AnimationShaderContract.h` for the independence rationale) and
-///     enforces the 16-slot `kColorCount` budget; overflow is dropped
-///     with a `qCWarning`. The `AnimationShaderContract::colorKey`
-///     helper is a thin forwarder onto this function.
+///   • Encoders. The overlay registry's `ParameterInfo::uniformName()` builds
+///     the same strings from an internal lookup table. Animation, surface and
+///     pointer reach this function through their contract headers' `colorKey`
+///     forwarders. Each encoder advances a `colorSlot` counter INDEPENDENTLY
+///     of the float `customParams` allocator (see `AnimationShaderContract.h`
+///     for why they are independent) and enforces the 16-slot `kColorCount`
+///     budget, dropping overflow with a `qCWarning`.
+///   • Decoders. `PhosphorRendering::ShaderEffect::setShaderParams` on the
+///     daemon, and the compositor's own per-family pack code.
 ///
 /// Lifted alongside `CustomParams::slotKey` so a future format drift
 /// (renaming the prefix, switching to 0-based indexing, etc.) only has to

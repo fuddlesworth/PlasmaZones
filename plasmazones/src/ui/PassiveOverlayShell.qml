@@ -244,6 +244,7 @@ Window {
         // undeclared name silently becomes a dynamic property no binding
         // observes — the decoration would never update.
         property var decorationChain: []
+        property int decorationReloadGeneration: 0
         property real decorationOuterPadding: 0
         // The desktop wallpaper, standing in for the scene a daemon surface has
         // no way to capture. Under the SAME declare-and-forward contract as
@@ -393,6 +394,7 @@ Window {
             anchors.fill: parent
             contentItem: osdLoader.item
             decorationChain: osdSlot.decorationChain
+            decorationReloadGeneration: osdSlot.decorationReloadGeneration
             decorationOuterPadding: osdSlot.decorationOuterPadding
             backdropTexture: osdSlot.backdropTexture
             // The slot spans the screen, so its own rect is the area the
@@ -595,6 +597,7 @@ Window {
         // undeclared name silently becomes a dynamic property no binding
         // observes — the decoration would never update.
         property var decorationChain: []
+        property int decorationReloadGeneration: 0
         property real decorationOuterPadding: 0
         // The desktop wallpaper, standing in for the scene a daemon surface has
         // no way to capture. Under the SAME declare-and-forward contract as
@@ -715,6 +718,7 @@ Window {
             anchors.fill: parent
             contentItem: zoneSelectorLoader.item
             decorationChain: zoneSelectorSlot.decorationChain
+            decorationReloadGeneration: zoneSelectorSlot.decorationReloadGeneration
             decorationOuterPadding: zoneSelectorSlot.decorationOuterPadding
             backdropTexture: zoneSelectorSlot.backdropTexture
             backdropSourceArea: Qt.rect(0, 0, width, height)

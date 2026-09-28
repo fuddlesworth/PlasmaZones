@@ -329,9 +329,14 @@ inline SurfaceCanvas surfaceCanvasFor(const QRectF& expandedOrFrame, qreal outer
 /// uBackdropRect). uHasBackdrop and uBackdropRect are as per-frame as uBackdrop
 /// itself: the gate flips when the window leaves an output and the sub-rect is
 /// recomputed by every capture, so a pack that reads either without sampling the
-/// texture must classify the same as one that samples it. Shared between
-/// packVariesPerFrame below and paintWindow's backdrop capture gate — the two
-/// MUST agree on what "reads the backdrop" means.
+/// texture must classify the same as one that samples it.
+///
+/// packVariesPerFrame below is now the only caller. The backdrop capture gate
+/// still has to agree with it on what "reads the backdrop" means, but it splits
+/// the same three locations across its own branches (chainBackdropScale) because
+/// it needs a DENSITY out of them and not just a verdict. That equivalence holds
+/// — every one of those branches answers `needed` for any pack linking any of the
+/// three — but it holds by agreement between two places now, not by construction.
 inline bool linksBackdropUniforms(int backdrop, int hasBackdrop, int backdropRect)
 {
     return backdrop >= 0 || hasBackdrop >= 0 || backdropRect >= 0;

@@ -39,6 +39,7 @@
 #include <QDBusPendingReply>
 #include <QDBusUnixFileDescriptor>
 #include <QElapsedTimer>
+#include <QScopeGuard>
 #include <QImage>
 #include <QLoggingCategory>
 #include <QPoint>
@@ -329,6 +330,10 @@ QImage SnapAssistThumbnailCapture::grabWindowImage(KWin::EffectWindow* w, QSize 
                 // item may have no renderable content and drawWindow writes
                 // nothing — every sibling offscreen capture site holds one.
                 KWin::ItemEffect keepRenderable(w->windowItem());
+                // Neutralise a decoration present shader whose composite does not
+                // exist for this candidate, and restore it after the draw. See
+                // setCaptureDrawGuard: the fold never runs on this path.
+                auto restoreShader = qScopeGuard(enterCaptureDraw(w));
                 KWin::WindowPaintData data;
                 // Route through effects->drawWindow (the same entry the effect's own
                 // paintWindow uses) so the full draw chain renders the window's live
@@ -509,6 +514,8 @@ std::unique_ptr<KWin::GLTexture> SnapAssistThumbnailCapture::renderWindowToExpor
     // comment there); m_capturingSnapshot stays untouched here for the same
     // keep-decorations reason.
     KWin::ItemEffect keepRenderable(w->windowItem());
+    // Same neutralise-and-restore as grabWindowImage, and for the same reason.
+    auto restoreShader = qScopeGuard(enterCaptureDraw(w));
     KWin::WindowPaintData data;
     QElapsedTimer stage;
     stage.start();

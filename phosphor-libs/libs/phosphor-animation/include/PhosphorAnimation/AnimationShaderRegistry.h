@@ -208,6 +208,40 @@ public:
     /// `PhosphorShaders::assembleEntryPoint` (kwin) so both runtimes agree.
     static QList<PhosphorShaders::EntryCandidate> animationEntryCandidates();
 
+    /// The `shared` subdirectory of every search path that has one, in PRIORITY
+    /// order: the user directory first, then the system prefixes highest-first.
+    /// Deduplicated.
+    ///
+    /// That order holds for a registry populated in the CANONICAL shape, which every
+    /// in-tree caller builds: addSearchPaths normalises whatever RegistrationOrder it
+    /// is handed, but N successive singular addSearchPath calls store call order
+    /// verbatim, so a caller adding the user dir first would get the reversal exactly
+    /// backwards. Only single-path test fixtures use the singular form.
+    ///
+    /// SINGLE SOURCE OF TRUTH for animation include resolution, and the reason
+    /// it exists is that `searchPaths()` is in REGISTRATION order, which is
+    /// lowest-priority FIRST. A caller that walks that verbatim resolves every
+    /// shared header from the SYSTEM prefix even for a pack the user directory
+    /// won, so the pack's body comes from one tree and its contract headers from
+    /// another. The contract headers carry the sampler BINDING table, so that
+    /// split is a binding mismatch rather than cosmetic drift. Six call sites
+    /// across the daemon, the settings preview and the compositor re-derived
+    /// this walk by hand and three of them had the order backwards, which put
+    /// the two runtimes on different headers for the same pack. Route every new
+    /// caller through here instead of re-deriving it.
+    [[nodiscard]] QStringList sharedIncludePaths() const;
+
+    /// The shared `animation.vert` a pack that declares no vertex stage falls
+    /// back to: the first one that exists walking sharedIncludePaths(), so a
+    /// user copy wins over the bundled one. Empty when no root ships one.
+    ///
+    /// Same ordering hazard as sharedIncludePaths(): resolve the vertex stage the
+    /// way the compositor and the live daemon leg do, so a warm bake cannot key
+    /// itself on a different file from the one that runs. The hand-rolled walks this
+    /// replaced are deleted, so no claim is made here about exactly which end of the
+    /// list each of them picked.
+    [[nodiscard]] QString defaultVertexShaderPath() const;
+
 Q_SIGNALS:
     void effectsChanged();
 

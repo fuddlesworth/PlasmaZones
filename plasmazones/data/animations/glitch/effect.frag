@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Glitch transition — operates on the rendered surface (uTexture0,
-// binding 7) by sampling the captured surface with per-block UV
+// binding 11) by sampling the captured surface with per-block UV
 // displacement and per-channel RGB offset. The previous stub built
 // `r/g/b` from `smoothstep(0, 1, uv)` (a centred radial mask) —
 // visually a dim white circle, not a glitch. This version reads the

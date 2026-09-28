@@ -66,10 +66,9 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     const SurfaceCanvas canvas = surfaceCanvasFor(windowRect, pad, windowSurfaceScale(w));
     const QRectF logicalGeometry = canvas.logicalGeometry;
     // The capture texture's density, decoupled from the canvas rect it maps.
-    // A blur-only chain samples the backdrop exclusively at its packs'
-    // bufferScale resolution (through normalized uvs), so holding it at full
-    // canvas density stored and re-blitted texels the samplers stride
-    // straight over — a fifth of a decorated 4K window's VRAM for nothing.
+    // A blur-only chain samples the backdrop from one reduction pass, which wants
+    // a 2:1 source and nothing finer, so holding it at full canvas density stored
+    // and re-blitted three texels in four only to have them averaged away.
     // The RECT stays the full padded canvas either way: backdropRect,
     // backdropTexel's clamp and the alignment contract with the composite
     // are all normalized, so density is the only thing that moves.
@@ -132,6 +131,13 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
         state.backdropTex->setFilter(GL_LINEAR);
         state.backdropTex->setWrapMode(GL_CLAMP_TO_EDGE);
         state.backdropSize = textureSize;
+        // The pair of the per-pack buffer-pass allocation line in
+        // surface_capture.cpp, and here for the same reason: the density this is
+        // allocated at is a resolved value with no other observable, so without
+        // this line a chain capturing at the wrong density looks identical in the
+        // journal to one capturing correctly. Realloc-only, not per frame.
+        qCDebug(lcEffect) << "Backdrop capture allocated for" << windowId << ":" << textureSize << "at density"
+                          << texScale << "of canvas" << canvas.textureSize;
         state.backdropRect = QVector4D();
         // Nothing has been written over the fresh clear yet — the coverage
         // region that keeps backdropRect off cleared texels restarts empty.

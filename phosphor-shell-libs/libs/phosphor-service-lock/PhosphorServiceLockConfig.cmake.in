@@ -9,7 +9,7 @@ include(CMakeFindDependencyMacro)
 # link: the foundation SessionLock client is used inside the .cpp and never
 # appears in the public headers, so consumers neither include nor link it. PAM
 # is likewise a private link.)
-find_dependency(Qt6 6.6 COMPONENTS Core Qml)
+find_dependency(Qt6 @PHOSPHORSERVICELOCK_QT_MIN@ COMPONENTS Core Qml)
 
 include("${CMAKE_CURRENT_LIST_DIR}/PhosphorServiceLockTargets.cmake")
 

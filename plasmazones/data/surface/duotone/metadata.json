@@ -1,18 +1,32 @@
 {
     "id": "duotone",
     "name": "Duotone",
-    "description": "The scene behind the window blurred and remapped onto a two-colour gradient by brightness, the concert-poster look. Shadows take the first colour and highlights the second. It shows through wherever the window itself is translucent, and the Content opacity parameter sets how much of the window content stays visible over the gradient.",
+    "description": "The scene behind the window is blurred and then remapped onto a two-colour gradient by brightness, for the concert-poster look. Shadows take the first colour and highlights the second. It shows through wherever the window itself is translucent, and the Content opacity parameter sets how much of the window content stays visible over the gradient.",
     "author": "PlasmaZones",
-    "version": "1.2",
+    "version": "1.3",
     "category": "Blur",
     "fragmentShader": "effect.frag",
     "needsBackdrop": true,
     "multipass": true,
-    "bufferScale": 0.25,
     "bufferShaders": [
-        "builtin:gaussian-h",
-        "builtin:gaussian-v"
+        "builtin:kawase-down-0",
+        "builtin:kawase-down-1",
+        "builtin:kawase-down-2",
+        "builtin:kawase-down-3",
+        "builtin:kawase-up-0",
+        "builtin:kawase-up-1",
+        "builtin:kawase-up-2"
     ],
+    "bufferScales": [
+        0.25,
+        0.125,
+        0.0625,
+        0.03125,
+        0.0625,
+        0.125,
+        0.25
+    ],
+    "halfFloatBuffers": false,
     "parameters": [
         {
             "id": "blurRadius",
@@ -20,8 +34,8 @@
             "type": "int",
             "default": 24,
             "min": 2,
-            "max": 64,
-            "description": "How strongly the scene behind the window is blurred (px)",
+            "max": 256,
+            "description": "How strongly the scene behind the window is blurred (px). Past a display scale of 125% the top of the range stops adding blur, and the lowest setting is already a soft blur rather than none",
             "group": "Blur"
         },
         {
@@ -51,7 +65,7 @@
             "default": 1.0,
             "min": 0.25,
             "max": 4.0,
-            "description": "How sharply brightness splits between the two colours, where 1.0 is a linear blend",
+            "description": "How sharply brightness splits between the two colours, where 1.0 is a linear blend. This is a gamma exponent and not the Contrast the other Blur packs carry: raising it pushes the pane toward the shadow colour rather than widening the range",
             "group": "Colours"
         },
         {
@@ -68,6 +82,34 @@
             "type": "color",
             "default": "#ff89dceb",
             "description": "Colour the brightest parts of the scene map to",
+            "group": "Colours"
+        },
+        {
+            "id": "roundBottomCorners",
+            "name": "Round bottom corners",
+            "type": "bool",
+            "default": true,
+            "description": "Round the bottom corners as well as the top. Turn off to round only the top two. The Border, Glow and Drop Shadow packs always round all four, so turning this off in a chain that also holds one of them leaves their rounded bottom over this pack's square one",
+            "group": "Shape"
+        },
+        {
+            "id": "edgeSoftness",
+            "name": "Edge softness",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.1,
+            "max": 3.0,
+            "description": "Anti-alias feather of the pane edge, in device pixels, so it does not grow with display scaling. Lower is crisper",
+            "group": "Shape"
+        },
+        {
+            "id": "noiseStrength",
+            "name": "Noise",
+            "type": "float",
+            "default": 0.0,
+            "min": 0.0,
+            "max": 0.2,
+            "description": "Fine grain over the two-colour map that hides banding in its gradient",
             "group": "Colours"
         }
     ]

@@ -20,9 +20,14 @@ vec4 pSurface(vec2 uv) {
     vec2 p = surfacePixel(uv);
     BorderBand bb = standardBorderBand(p, p_borderWidth, p_cornerRadius);
 
-    // Frame-normalised position projected onto the gradient direction, so
-    // the blend spans the frame corner to corner at any angle and does not
-    // stretch with the window's aspect.
+    // Frame-normalised position projected onto the gradient direction, so the
+    // blend does not stretch with the window's aspect.
+    //
+    // It spans corner to corner at 0 and 90 degrees ONLY. On a diagonal the
+    // frame-normalised corners project to +/-0.707, so t runs -0.207..1.207
+    // and the smoothstep clips both ends: the ramp saturates about 71% of the
+    // way to each corner and the outer stretch is flat colorA or colorB. That
+    // is why it reads as working at the axis-aligned angles people try first.
     vec2 fuv = frameUv(p);
     float ang = radians(p_gradientAngle);
     vec2 dir = vec2(cos(ang), sin(ang));
