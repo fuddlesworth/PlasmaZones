@@ -62,7 +62,9 @@ const appearance = PhosphorAppearance.create({root:$('#appearance'),desktop,icon
   setSettings:(value,persist=false,redraw=true)=>{settings={...value};applySettings(persist,redraw);},presets,
   onClose:()=>setView('desktop'),notify});
 const quickSettings = PhosphorQuickSettings.create({root:$('#controls'),review:$('#quick-preview-controls'),icon,shared:state,
-  onRedraw:renderControls,onSummary:refreshBar});
+  onRedraw:renderControls,onSummary:refreshBar,getSettings:()=>settings,
+  patchSettings:patch=>{settings={...settings,...patch};$('#preset').value='custom';applySettings(true,false);appearance.render(false);},
+  getWallpaper:()=>appearance.wallpaperSummary(),onAppearance:page=>{setView('appearance');appearance.openPage(page);}});
 const systemStats = PhosphorStats.create({root:$('#stats'),review:$('#stats-preview-controls'),desktop,icon,getSettings:()=>settings,
   patchSettings:patch=>{settings={...settings,...patch};$('#preset').value='custom';applySettings(true,false);},onDismiss:()=>setView('desktop')});
 const systemTray = PhosphorTray.create({root:$('#tray'),review:$('#tray-preview-controls'),desktop,icon,getSettings:()=>settings,
@@ -251,11 +253,11 @@ function renderControls() {
   const el = $('#controls');
   el.className = state.view==='controls'?'material':'hidden';
   if (quickSettings.render(state.view==='controls',state.detail)) {syncVisualizer();return;}
-  const heading = `<div class="controls-heading"><h2>Quick settings</h2><span class="battery-summary">${icon('battery')} 82% <span style="opacity:.6">· 6h left</span></span><button class="close" data-dismiss aria-label="Close quick settings">×</button></div>`;
+  const heading = `<div class="controls-heading"><h2>Quick settings</h2><button class="battery-summary" data-detail="battery" aria-label="Battery details, ${quickSettings.batterySummary()}">${icon('battery')} ${quickSettings.batterySummary()}</button><button class="close" data-dismiss aria-label="Close quick settings">×</button></div>`;
   const connections = connectionRow('wifi','Wi-Fi',state.network,'wifi')+connectionRow('bluetooth','Bluetooth',quickSettings.bluetoothSummary(),'bluetooth');
-  const pair = `<div class="quick-pair"><button data-toggle="dnd" aria-pressed="${state.dnd}">${icon('moon')} Focus ${state.dnd?'on':'off'}</button><button data-toggle="night" aria-pressed="${state.night}">${icon('sun')} Night light ${state.night?'on':'off'}</button></div>`;
+  const services = quickSettings.overview();
   const levels = slider('volume','Volume','volume')+`<button class="device-button" data-detail="audio">${escapeHTML(state.device)} <span>Sound controls ›</span></button>`+slider('brightness','Brightness','sun');
-  el.innerHTML = `${heading}${connections}${pair}${levels}${mediaCard()}<div class="pane-footer"><span>Balanced power</span><button class="text-button" data-view="appearance">Appearance ↗</button></div>`;
+  el.innerHTML = `${heading}${connections}${services}${levels}${mediaCard()}<div class="pane-footer"><button class="text-button" data-detail="power">${quickSettings.powerSummary()}</button><button class="text-button" data-view="appearance">Appearance ↗</button></div>`;
   syncVisualizer();
 }
 
@@ -350,8 +352,8 @@ function renderNotes() {
   if(state.view==='controls') {
     $('#study-kicker').textContent='F / QUICK SETTINGS DETAILS';
     $('#study-title').textContent='Connected, on your terms.';
-    $('#study-description').textContent='Wi-Fi, Bluetooth, and audio share one compact popup beside the status area. Connection status leads; passwords, pairing, and device controls appear where you need them.';
-    $('#ux-description').textContent='Try the 23 examples above, including failures and empty states. Back returns to quick settings; Escape cancels an inline task first. Audio separates outputs, microphones, and per-app routing.';
+    $('#study-description').textContent='Connections, display comfort and power share one compact popup beside the status area. Battery details lead into power profiles. Wallpaper and style shortcuts open the shared Appearance workspace.';
+    $('#ux-description').textContent='Try the examples above, including low battery, missing services and hardware restrictions. Airplane mode coordinates the wireless controls. Dark mode updates the shell preview. Back returns to quick settings. All device activity is simulated.';
     return;
   }
   const stage = state.study==='stage';
@@ -708,7 +710,7 @@ if(['navigator','stage'].includes(study))state.study=study;
 if(['desktop','overview','controls','launcher','datetime','notifications','lockscreen','power','appearance','stats','tray','authentication','shortcuts'].includes(view))state.view=view;
 $('#preset').value=Object.entries(presets).find(([,preset])=>JSON.stringify(preset)===JSON.stringify(settings))?.[0] || 'custom';
 applySettings();
-if(state.view==='controls'&&['wifi','bluetooth','audio'].includes(detail))quickSettings.open(detail);
+if(state.view==='controls'&&['wifi','bluetooth','audio','nightlight','darkmode','airplane','power','battery','wallpaper'].includes(detail))quickSettings.open(detail);
 if(state.view==='power')$('#session .selected')?.focus({preventScroll:true});
 
 if(state.view==='appearance')appearance.focus();

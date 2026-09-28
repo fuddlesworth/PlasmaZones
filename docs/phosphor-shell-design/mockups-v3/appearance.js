@@ -399,6 +399,8 @@ window.PhosphorAppearance = (() => {
     function focus(){root.querySelector(peek?'[data-ap="back"]':`[data-ap="page:${page}"]`)?.focus({preventScroll:true});}
     return {
       focus,
+      wallpaperSummary(){return {name:current().name,display:data.display==='main'?'Main display':'Secondary display',art:artwork(current())};},
+      openPage(value){if(!['wallpaper','style','bar','presets'].includes(value))return;page=value;if(active){draw();focus();}},
       syncSettings(value){data.colorSource=value.palette;},
       render(open) {
         if(open&&!active){active=true;baseline=snapshot();peek=false;message='';}
