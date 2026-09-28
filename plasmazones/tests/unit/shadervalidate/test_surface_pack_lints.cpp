@@ -16,9 +16,12 @@
 //
 // EVERY SLOT IS A NEGATIVE, and they lean on the clean-pack positive control in
 // the sibling file: a lint that fired on EVERYTHING would satisfy all of these
-// and fail that one. Where a lint has a near-miss worth pinning (a value just
-// inside the bound, the correct spelling of a token) the slot carries its own
-// quiet control too, because the shared clean pack cannot express those.
+// and fail that one. Where a lint has a near-miss worth pinning the slot carries
+// its own quiet control too, because the shared clean pack cannot express those: a
+// value just inside the bound (the at-cap texture re-run, the in-range bufferScale),
+// and an explicit `false` or empty string where the lint fires on `true`. The
+// correctly-spelled-token control is NOT one of them — it needs a backdrop flag and a
+// radius parameter to come out clean, so it lives in the blur-chain file instead.
 
 #include <QtTest>
 
@@ -30,6 +33,7 @@
 #include <QTextStream>
 
 #include <PhosphorSurface/SurfaceShaderContract.h>
+#include <PhosphorSurface/SurfaceShaderEffect.h>
 
 #include "packvalidatortesthelpers.h"
 
@@ -247,7 +251,10 @@ private Q_SLOTS:
         QCOMPARE(r.errors, 1);
 
         // TWO passes: the daemon's feedback path is the single-buffer one, so neither host
-        // reads the key and the message says so, naming the count it counted.
+        // reads the key and the message says so, naming the count it counted. The count is
+        // pinned at TWO because appending a gaussian token sets readsRadiusSlot and this
+        // fixture declares no scalar parameter, so the blur-radius arm fires alongside —
+        // named here rather than left as invisible collateral behind three substring tests.
         obj.insert(QStringLiteral("bufferShaders"),
                    QJsonArray{surfaceFillerBufferName(), QStringLiteral("builtin:gaussian-h")});
         obj.insert(QStringLiteral("needsBackdrop"), true);
@@ -257,8 +264,37 @@ private Q_SLOTS:
         QVERIFY2(many.report.contains(QStringLiteral("with 2 buffer passes")), qPrintable(many.report));
         QVERIFY2(!many.report.contains(QStringLiteral("own previous frame in the settings preview")),
                  qPrintable(many.report));
-        obj.insert(QStringLiteral("bufferShaders"), QJsonArray{surfaceFillerBufferName()});
+        QVERIFY2(many.report.contains(QStringLiteral("blurs by 0")), qPrintable(many.report));
+        QCOMPARE(many.errors, 2);
+
+        // The CAP, which nothing pinned: a pack over the pass budget must report the BUDGET,
+        // not what it declared, or the std::min could be deleted with the suite green. The
+        // over-cap error rides along, hence 2.
+        QJsonArray overCap;
+        for (int i = 0; i < PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses + 1; ++i) {
+            overCap.append(surfaceFillerBufferName());
+        }
+        obj.insert(QStringLiteral("bufferShaders"), overCap);
         obj.remove(QStringLiteral("needsBackdrop"));
+        const PackResult capped =
+            validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-feedback"), obj, surfaceBodyReading({}));
+        QVERIFY2(capped.report.contains(QStringLiteral("with 8 buffer passes")), qPrintable(capped.report));
+        QVERIFY2(!capped.report.contains(QStringLiteral("with 9 buffer passes")), qPrintable(capped.report));
+        QCOMPARE(capped.errors, 2);
+
+        // An EMPTY entry beside a live one. The surface loader keeps empties IN PLACE, so this
+        // is TWO passes and the flag is inert — and because an empty entry also fail-closes the
+        // chain, the feedback line is suppressed entirely rather than counted. Both halves matter:
+        // a count that dropped empties would call this one pass, and a version that still printed
+        // on a fail-closed chain would describe a mechanism the registry has already disabled.
+        obj.insert(QStringLiteral("bufferShaders"), QJsonArray{surfaceFillerBufferName(), QString()});
+        const PackResult withEmpty =
+            validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-feedback"), obj, surfaceBodyReading({}));
+        QVERIFY2(withEmpty.report.contains(QStringLiteral("empty bufferShaders entry")), qPrintable(withEmpty.report));
+        QVERIFY2(!withEmpty.report.contains(QStringLiteral("bufferFeedback")), qPrintable(withEmpty.report));
+        QCOMPARE(withEmpty.errors, 1);
+
+        obj.insert(QStringLiteral("bufferShaders"), QJsonArray{surfaceFillerBufferName()});
 
         // Absent, which is the default and the non-divergent state: silent.
         obj.remove(QStringLiteral("bufferFeedback"));
@@ -306,7 +342,7 @@ private Q_SLOTS:
         QCOMPARE(off.errors, 0);
 
         // ABSENT. Every bundled chain pack writes the key explicitly, but a third-party pack
-        // need not, and this is the leg the withdrawn lint broke fourteen fixtures on.
+        // need not, and this is the leg the withdrawn lint broke all fourteen blur-chain slots on.
         obj.remove(QStringLiteral("halfFloatBuffers"));
         const PackResult absent =
             validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-halffloat"), obj, surfaceBodyReading({}));
@@ -344,6 +380,20 @@ private Q_SLOTS:
         const PackResult scale = runWith(QStringLiteral("sf-inert"), QStringLiteral("bufferScale"), 0.5);
         QVERIFY2(scale.report.contains(QStringLiteral("bufferScale is declared on a single-pass pack")),
                  qPrintable(scale.report));
+        QCOMPARE(scale.errors, 1);
+
+        // The two SINGULAR string keys, which the array sweep does not reach and which were
+        // missing from this one. An empty string is the absent case for both, so it is the
+        // negative leg as well as a guard on the toString() gate.
+        for (const QString& key : {QStringLiteral("bufferWrap"), QStringLiteral("bufferFilter")}) {
+            const PackResult on = runWith(QStringLiteral("sf-inert"), key, QStringLiteral("repeat"));
+            QVERIFY2(on.report.contains(key + QStringLiteral(" is declared on a single-pass pack")),
+                     qPrintable(on.report));
+            QCOMPARE(on.errors, 1);
+            const PackResult off = runWith(QStringLiteral("sf-inert"), key, QString());
+            QVERIFY2(!off.report.contains(QStringLiteral("single-pass pack")), qPrintable(off.report));
+            QCOMPARE(off.errors, 0);
+        }
     }
 
     /// The `builtin:` SPELLING diagnostics, all three shapes, because the arm that reports a
@@ -367,23 +417,43 @@ private Q_SLOTS:
 
         // Good prefix, mis-cased suffix: named as case, with the exact spelling to use.
         const PackResult suffix = runWithToken(QStringLiteral("sf-tok-a"), QStringLiteral("builtin:GAUSSIAN-V"));
+        // The WHOLE clause, in order, because two substring tests are satisfied by a swapped
+        // .arg pair that would tell the author to rename their correct token to the bad one.
+        QVERIFY2(suffix.report.contains(QStringLiteral("'builtin:GAUSSIAN-V' should be 'builtin:gaussian-v'")),
+                 qPrintable(suffix.report));
         QVERIFY2(suffix.report.contains(QStringLiteral("tokens are lower case")), qPrintable(suffix.report));
-        QVERIFY2(suffix.report.contains(QStringLiteral("builtin:gaussian-v")), qPrintable(suffix.report));
         QVERIFY2(!suffix.report.contains(QStringLiteral("unknown or unlocatable")), qPrintable(suffix.report));
+        QCOMPARE(suffix.errors, 1);
 
         // Mis-cased prefix, and a space-prefixed one: both the spelling arm.
         const PackResult prefix = runWithToken(QStringLiteral("sf-tok-b"), QStringLiteral("Builtin:gaussian-h"));
         QVERIFY2(prefix.report.contains(QStringLiteral("wrong spelling")), qPrintable(prefix.report));
         QVERIFY2(!prefix.report.contains(QStringLiteral("tokens are lower case")), qPrintable(prefix.report));
+        QCOMPARE(prefix.errors, 1);
         const PackResult spaced = runWithToken(QStringLiteral("sf-tok-c"), QStringLiteral(" builtin:gaussian-h"));
         QVERIFY2(spaced.report.contains(QStringLiteral("wrong spelling")), qPrintable(spaced.report));
+        QCOMPARE(spaced.errors, 1);
 
         // A plain missing file keeps the ORIGINAL message, so neither new arm has widened to
         // swallow the ordinary case.
+        // Keyed on the WHOLE message, not on the word "missing", which also appears in
+        // "missing required field", "preview missing", "texture missing" and "vertex shader
+        // missing" — this fixture discriminates today only because it draws nothing else.
         const PackResult missing = runWithToken(QStringLiteral("sf-tok-d"), QStringLiteral("nosuchfile.frag"));
-        QVERIFY2(missing.report.contains(QStringLiteral("missing")), qPrintable(missing.report));
+        QVERIFY2(missing.report.contains(QStringLiteral("multipass buffer shader missing")),
+                 qPrintable(missing.report));
         QVERIFY2(!missing.report.contains(QStringLiteral("tokens are lower case")), qPrintable(missing.report));
         QVERIFY2(!missing.report.contains(QStringLiteral("unknown or unlocatable")), qPrintable(missing.report));
+        QCOMPARE(missing.errors, 1);
+
+        // TRAILING whitespace on an otherwise-correct token. It reaches the case arm rather
+        // than the spelling one, because the prefix is exact; a LEADING space cannot, which is
+        // what the two legs above pin. Without this the token renders as correct in its own
+        // diagnostic and reads as a missing install.
+        const PackResult trailing = runWithToken(QStringLiteral("sf-tok-e"), QStringLiteral("builtin:gaussian-h "));
+        QVERIFY2(trailing.report.contains(QStringLiteral("no surrounding whitespace")), qPrintable(trailing.report));
+        QVERIFY2(!trailing.report.contains(QStringLiteral("unknown or unlocatable")), qPrintable(trailing.report));
+        QCOMPARE(trailing.errors, 1);
     }
 
     /// The SINGLE bufferScale, out of range at both ends. The per-pass list has

@@ -490,11 +490,12 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     }
 
     if (m_keyboardGrabbed && KWin::effects) {
-        // Symmetric with the `if (KWin::effects)` guard above: during
-        // compositor teardown KWin::effects can be null, and an
-        // unguarded deref here would crash even though we reached the
-        // destructor body cleanly. The compositor's own teardown
-        // releases the grab when KWin::effects is gone.
+        // Symmetric with the `if (KWin::effects)` guard above, and belt-and-braces
+        // in both places: the global CANNOT be null here — upstream nulls it only
+        // after unloadAllEffects has destroyed every effect, so it outlives this
+        // destructor. See the invariant at PlasmaZonesEffect::windowOutput in
+        // screens.cpp. The test stays because it costs one comparison; the claim it
+        // used to carry, that teardown can reach this with a null global, is false.
         KWin::effects->ungrabKeyboard();
         m_keyboardGrabbed = false;
     }
@@ -510,10 +511,10 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // erases from `m_shaderManager.m_shaderTransitions` mid-loop.
     //
     // Guarded by `if (KWin::effects)` matching the clearAllDecorations /
-    // ungrabKeyboard guards above: during compositor teardown the global
-    // is null and `endShaderTransition` dereferences it (setShader,
-    // unredirect, refWindow). The compositor's own teardown reclaims
-    // the offscreen state when KWin::effects is gone.
+    // ungrabKeyboard guards above, and as belt-and-braces for the same reason:
+    // `endShaderTransition` does dereference the global (setShader, unredirect,
+    // refWindow), but the global cannot be null while this effect object lives.
+    // See the invariant at PlasmaZonesEffect::windowOutput in screens.cpp.
     if (KWin::effects) {
         QVarLengthArray<KWin::EffectWindow*, 8> activeWindows;
         for (auto& [w, _] : m_shaderManager.shaderTransitions()) {
@@ -537,16 +538,19 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
         // synchronous dispatch from the dtor body is sound.
         QCoreApplication::sendPostedEvents(this, QEvent::MetaCall);
     }
-    // When KWin::effects is null (compositor teardown) the drain above is
-    // skipped and any still-installed ShaderTransition is destroyed by
-    // member destruction instead. Each entry's `visibleRef` dtor then
-    // dereferences its stored EffectWindow* (`unrefVisible`) — there is no
-    // way to neutralise an EffectWindowVisibleRef without touching the
-    // window. This relies on KWin destroying effects before it destroys
-    // windows, which is the same lifetime assumption KWin's own Magic
-    // Lamp / Squash effects make: both hold visible refs in member
-    // containers destroyed at effect destruction with no null-effects
-    // special-casing.
+    // The null-global branch this paragraph used to describe at length is
+    // UNREACHABLE: upstream nulls KWin::effects only after unloadAllEffects has
+    // destroyed every effect, so this destructor always runs with it valid and the
+    // drain above always happens. See the invariant at
+    // PlasmaZonesEffect::windowOutput in screens.cpp.
+    //
+    // What still matters is the part that was never about the global: each entry's
+    // `visibleRef` dtor dereferences its stored EffectWindow* (`unrefVisible`), and
+    // there is no way to neutralise an EffectWindowVisibleRef without touching the
+    // window. That relies on KWin destroying effects before it destroys windows,
+    // which is the same lifetime assumption KWin's own Magic Lamp / Squash effects
+    // make: both hold visible refs in member containers destroyed at effect
+    // destruction with no null-effects special-casing.
 }
 
 } // namespace PlasmaZones

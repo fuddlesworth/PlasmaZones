@@ -9,12 +9,14 @@
 //
 // THE OPT-IN IS `"multipass": true`, NOT `"bufferShaders"`. The two are separate
 // metadata keys and only the first one gates anything: isMultipass is read from
-// `multipass` alone, and the registry's single-pass coherence block CLEARS EVERY
-// buffer-only field whenever isMultipass is false: bufferShaderPaths, bufferWraps,
-// bufferScales, bufferFilters, bufferWrap, bufferFilter, bufferFeedback,
-// useDepthBuffer, bufferScale and halfFloatBuffers. Written as "every buffer-only
-// field" rather than as a list because an earlier version of this sentence named
-// six of the ten and read as complete. A pack that lists its buffer passes and
+// `multipass` alone, and the registry's single-pass coherence block RESETS EVERY
+// buffer-only field to its DEFAULT whenever isMultipass is false: bufferShaderPaths,
+// bufferWraps, bufferScales, bufferFilters, bufferWrap, bufferFilter, bufferFeedback,
+// useDepthBuffer, bufferScale and halfFloatBuffers. Reset to its default, not cleared:
+// nine of those go to an empty or false value but halfFloatBuffers goes to TRUE, which
+// is its declared default, so a declared true survives there and is simply never
+// consulted. Written as "every buffer-only field" rather than as a bare list because an
+// earlier version named six of the ten and read as complete. A pack that lists its buffer passes and
 // omits the flag therefore loads with every one of them discarded and renders
 // single-pass. The pack validator does report it, both for the passes themselves
 // and for each buffer-only key declared alongside them. Declare both.

@@ -507,6 +507,20 @@ protected:
      */
     void retractLiveness() noexcept;
 
+    /// Schedule another frame from the render thread (QQuickWindow::update()
+    /// is documented thread-safe), with safeRhi()'s liveness locking. For
+    /// prepare()-side conditions that leave work pending — an upload that got
+    /// no resource-update batch — where a STATIC item (no clock, no property
+    /// churn) would otherwise never be prepared again and render()'s
+    /// pending-skip would leave it blank indefinitely.
+    ///
+    /// PROTECTED rather than private because ZoneShaderNodeRhi's labels upload
+    /// has the same shape and needs it. Moving a NON-VIRTUAL member between
+    /// access sections changes no member offset and no vtable, so this is
+    /// ABI-safe under the append-only rule, for the same reason the note on
+    /// requestDepthCreateRetry gives.
+    void requestAnotherFrame() const;
+
 private:
     bool ensurePipeline();
     bool ensureBufferPipeline();
@@ -598,13 +612,6 @@ private:
     /// for the bake-cache key — see `shaderCacheKey` in
     /// shadernoderhicore.cpp for the policy.
     QString loadAndExpandShaderTracked(const QString& path, QStringList* outIncludedPaths, QString* outError);
-    /// Schedule another frame from the render thread (QQuickWindow::update()
-    /// is documented thread-safe), with safeRhi()'s liveness locking. For
-    /// prepare()-side conditions that leave work pending — a grid upload
-    /// that got no resource-update batch — where a STATIC item (no clock,
-    /// no property churn) would otherwise never be prepared again and
-    /// render()'s pending-skip would leave it blank indefinitely.
-    void requestAnotherFrame() const;
 
     QQuickItem* m_item = nullptr;
     std::atomic<bool> m_itemValid{true};
@@ -1076,8 +1083,8 @@ private:
     /// Neither arm asks for a retry frame, and that is deliberate rather than the same
     /// oversight: a create failure needs a BOUND, which is the whole m_depthCreateRetries /
     /// m_depthCreateFailedSize apparatus above, and an unbounded request would repaint at
-    /// frame rate against a driver that keeps refusing. Each arm's comment says what does
-    /// supply its next frame and what a static item loses if nothing does.
+    /// frame rate against a driver that keeps refusing. Each arm, or the resize branch it sits
+    /// in, says what supplies its next frame and what a static item loses if nothing does.
     bool m_warnedWallpaperCreateFailed = false;
     std::array<bool, kMaxUserTextures> m_userTextureCreateWarned = {};
 };

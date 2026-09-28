@@ -214,9 +214,13 @@ void PlasmaZonesEffect::repaintHoverDecorations(const QPointF& cursor)
 // against a live clock.
 bool PlasmaZonesEffect::decorationMayAnimate(KWin::EffectWindow* w) const
 {
-    // No window, or no compositor to animate on. Fail CLOSED: the focus test below
-    // reads KWin::effects, and letting a null slip past it would report "may animate"
-    // for a window that cannot be painted at all.
+    // No window, or no compositor to animate on. The KWin::effects half is
+    // belt-and-braces — it cannot be null while this effect lives, and the invariant
+    // at PlasmaZonesEffect::windowOutput in screens.cpp is the one place that says so.
+    // This file is where the RETRACTED version of that comment used to point, so a
+    // reader arriving here from the old text lands on the correction. Failing CLOSED
+    // is still the right shape: the focus test below reads the global, and reporting
+    // "may animate" for a window that cannot be painted would be the worse answer.
     if (!w || !KWin::effects) {
         return false;
     }

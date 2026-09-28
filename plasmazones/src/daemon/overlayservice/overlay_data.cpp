@@ -397,7 +397,8 @@ void OverlayService::updateZonesForAllWindows()
         // function that does its own find() on the same map — so a reference here aliases the
         // container it is used to look up. No route inserts into m_screenStates from a binding
         // (QML's whole reach into this class is one context property with one read-only
-        // property and two public slots — ONE hide and one shader-error reporter, and it is the
+        // property and two public slots — ONE hide (hideLayoutPicker) and one shader-error reporter
+        // (onShaderError), and it is the
         // reporter QML actually calls, from a signal handler), which makes the reference safe BY
         // ENUMERATION rather than by construction. A copy costs one atomic refcount bump and
         // needs no enumeration. The sibling loop in selector.cpp snapshots for its own, separate

@@ -37,7 +37,7 @@
 //
 // The evidence is "every TU in this directory that reaches a QQuickWindow member includes
 // <QQuickWindow> itself", which is a dozen of them, not the two an earlier version of this
-// comment named. The three that do not include it reach no such member and no `auto` route
+// comment named. The six that do not include it reach no such member and no `auto` route
 // to one — and an `auto` route is exactly what a token grep cannot see, which is how this
 // same removal was got wrong once in shader.cpp.
 #include <QScreen>

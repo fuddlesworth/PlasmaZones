@@ -113,13 +113,21 @@ uniform vec4 customColors[16];
 // neither. This resolution array stays in the core contract because it is a
 // pinned std140 UBO member on the daemon.
 //
-// ONLY WRITTEN FOR A CHANNEL THE PASS ALSO SAMPLES. Declaring
+// ON THE COMPOSITOR, ONLY WRITTEN FOR A CHANNEL THE PASS ALSO SAMPLES. Declaring
 // iChannelResolution[N] while never sampling iChannelN leaves that slot holding
 // whatever the program last had, because GL uniform state is per-program and
 // outlives both the frame and the window. Three of the compositor's four
 // channel-bind sites always worked that way and the fourth did not, so one pack
 // could read a live size from one pass and a stale one from the next. They agree
 // now: sample the channel whose size you read.
+//
+// THE DAEMON DOES NOT MATCH, and the difference is worth knowing before you rely on
+// either. It fills this array from the live texture for every channel the chain
+// renders, with no reference to what the shader samples, because it is a UBO member
+// and the whole block is uploaded. So a pack that reads a resolution for a channel it
+// never samples gets a live size in the settings preview and a stale one on a real
+// window. Nothing lints that yet. Sampling the channel whose size you read is what
+// makes the two hosts agree.
 uniform vec4 iChannelResolution[4];
 
 // Backdrop capture GATE: 1.0 when the host bound something behind the surface

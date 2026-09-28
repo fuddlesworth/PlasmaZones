@@ -400,7 +400,9 @@ private Q_SLOTS:
         // Kawase pyramid is incomplete (up-2 absent), so the order lint fires, and the chain
         // declares no bufferScales, so that lint fires as well. A Kawase-CLEAN alternative
         // exists that draws the join message alone — the canonical seven with their canonical
-        // scales, plus gaussian-h appended at [7] — but it would drop the incomplete-pyramid
+        // scales PLUS AN EIGHTH ENTRY, and gaussian-h appended at [7]. Without that eighth
+        // entry it draws two, because seven scales for eight shaders is its own lint. But it
+        // would drop the incomplete-pyramid
         // coverage this fixture also carries, so the errors are named instead of avoided.
         QVERIFY2(r.report.contains(QStringLiteral("are positional and must appear as bufferShaders[0..6]")),
                  qPrintable(r.report));

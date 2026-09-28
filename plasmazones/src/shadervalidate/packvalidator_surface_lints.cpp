@@ -330,18 +330,41 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         // as deliberate but was not: the POINTER validator lints its own equivalent
         // ("bufferFeedback declared without `multipass: true` (ignored at load)"), so the
         // precedent in the tree is to report them rather than to treat an array as the only
-        // shape worth reporting. An EXPLICIT bool only, for halfFloatBuffers the same reason as
-        // in the multipass branch, and for bufferFeedback and depthBuffer because both default
-        // to false so nothing but an opt-in can trip them.
+        // shape worth reporting.
+        //
+        // "never read" rather than "dropped at load", because the three keys do NOT share a fate:
+        // the coherence block resets bufferFeedback and depthBuffer to false but sets
+        // halfFloatBuffers to TRUE, its declared default, so a declared true SURVIVES there and is
+        // merely never consulted, there being no buffer targets. The registry's own comment says
+        // the block resets to defaults rather than to zero. One wording true of all three beats
+        // three messages.
+        //
+        // A bare toBool() is the whole test. QJsonValue::toBool() already answers its default for
+        // a non-bool, so an isBool() guard in front of it changes no outcome and no test can kill
+        // it — which is the kind of guard this audit has spent two rounds taking back out, so it is
+        // not being kept here to look careful. A non-bool belongs to the kBoolKeys type arm above
+        // and lands there either way.
         for (const QLatin1String key :
              {QLatin1String("bufferFeedback"), QLatin1String("depthBuffer"), QLatin1String("halfFloatBuffers")}) {
-            if (meta.value(key).isBool() && meta.value(key).toBool()) {
-                lints << QStringLiteral("%1 is declared true on a single-pass pack, where it is dropped at load")
+            if (meta.value(key).toBool()) {
+                lints << QStringLiteral("%1 is declared true on a single-pass pack, where it is never read")
                              .arg(QString(key));
             }
         }
         if (meta.value(QLatin1String("bufferScale")).isDouble()) {
             lints << QStringLiteral("bufferScale is declared on a single-pass pack, where it is never read");
+        }
+        // The SINGULAR string spellings, which the array sweep above does not cover and which the
+        // coherence block resets like the rest. They were missed when this sweep was extended, and
+        // the miss falsified a sentence in surface_multipass.glsl claiming the sweep reaches every
+        // buffer-only key. toString() is empty for a non-string, which is the right gate here: a
+        // non-string is ignored at load either way, and the vocabulary arms that would complain
+        // about its spelling are a multipass concern.
+        for (const QLatin1String key : {QLatin1String("bufferWrap"), QLatin1String("bufferFilter")}) {
+            if (!meta.value(key).toString().isEmpty()) {
+                lints
+                    << QStringLiteral("%1 is declared on a single-pass pack, where it is never read").arg(QString(key));
+            }
         }
     }
     if (!rawBufferShaders.isEmpty() && !eff.isMultipass) {
@@ -467,7 +490,7 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
                 for (qsizetype i = 0; i < kKawaseScales.size(); ++i) {
                     if (!qFuzzyCompare(kawaseScales.at(i).toDouble(), kKawaseScales.at(i))) {
                         lints << QStringLiteral(
-                                     "bufferScales[%1] is %2 where the Kawase pyramid halves to %3; the up passes read "
+                                     "bufferScales[%1] is %2 where the Kawase pyramid declares %3; the up passes read "
                                      "the level below by channel index, so an off-pyramid scale composes a level "
                                      "against the wrong resolution")
                                      .arg(i)
@@ -629,6 +652,12 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
                              .arg(firstScalarId);
             }
         }
+        // Does the chain the pack declares actually RUN? The registry fail-closes the whole pack
+        // to single-pass if ANY entry does not resolve, and its coherence block then resets
+        // bufferFeedback to false — so on a fail-closed chain the daemon never sees the flag and the
+        // feedback message below would describe a mechanism that cannot occur. Every arm that clears
+        // this already emits its own louder lint, so suppressing the feedback line loses nothing.
+        bool chainResolves = !declaredBuffers.isEmpty();
         for (const QJsonValue& v : declaredBuffers) {
             // A non-string entry reported as "empty", which says the author wrote
             // "" when they wrote an object or a number. It costs the same thing,
@@ -637,6 +666,7 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
                 lints << QStringLiteral(
                     "bufferShaders entry is not a string (kept in place as empty, but it fails the "
                     "scan-time existence check and drops the WHOLE pack to single-pass)");
+                chainResolves = false;
                 continue;
             }
             const QString bufName = v.toString();
@@ -651,6 +681,7 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
                 lints << QStringLiteral(
                     "empty bufferShaders entry (kept in place, but it fails the scan-time existence check and "
                     "drops the WHOLE pack to single-pass)");
+                chainResolves = false;
                 continue;
             }
             if (SurfaceShaderRegistry::isBuiltinBufferShader(bufName)) {
@@ -665,15 +696,23 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
                     // install is missing a file". Decided by asking the RESOLVER whether the
                     // lower-cased token resolves, rather than by copying its token table here —
                     // the table is private to it, and a copy is one more thing to keep in step.
-                    const QString lowered = bufName.toLower();
-                    if (lowered != bufName
-                        && !SurfaceShaderRegistry::resolveBuiltinBufferShader(lowered, QDir(packDir).absolutePath())
+                    // trimmed() as well as toLower(), because a token whose prefix is already correct
+                    // and lower case but which carries TRAILING whitespace reaches here too, and it
+                    // was getting the missing-file reading while rendering as an apparently-correct
+                    // token. A LEADING space never arrives here, since it breaks the exact prefix and
+                    // the spelling arm below catches it instead.
+                    const QString canonical = bufName.trimmed().toLower();
+                    if (canonical != bufName
+                        && !SurfaceShaderRegistry::resolveBuiltinBufferShader(canonical, QDir(packDir).absolutePath())
                                 .isEmpty()) {
-                        lints << QStringLiteral("builtin buffer shader tokens are lower case: %1 should be %2")
-                                     .arg(bufName, lowered);
+                        lints << QStringLiteral(
+                                     "builtin buffer shader tokens are lower case with no surrounding "
+                                     "whitespace: '%1' should be '%2'")
+                                     .arg(bufName, canonical);
                     } else {
                         lints << QStringLiteral("unknown or unlocatable builtin buffer shader: %1").arg(bufName);
                     }
+                    chainResolves = false;
                     continue;
                 }
                 // RESOLVED FROM OUTSIDE THIS TREE, which is the dev-passes /
@@ -709,7 +748,9 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
             const auto confined = confinedPackPath(packDir, bufName);
             if (!confined) {
                 lints << QStringLiteral("multipass buffer shader path escapes the pack directory: %1").arg(bufName);
+                chainResolves = false;
             } else if (!QFile::exists(*confined)) {
+                chainResolves = false;
                 // A MIS-CASED or space-prefixed `builtin:` prefix lands here, because the
                 // registry's own prefix test is case-sensitive and exact. Saying "missing" is
                 // true but sends the author looking for a file they never wrote, so name the
@@ -878,24 +919,31 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         // make someone change a working pack. This arm's contract used to come from the
         // neighbouring comment ("honoured by the DAEMON") rather than from the code that
         // implements it, which is the same mistake the gaussian positional lint was built on.
-        // Counted the way the POINTER validator counts (non-empty entries, capped at the pass
-        // budget), so the count matches what fromJson actually loads. The gaussian, backdrop and
-        // radius scans above deliberately do NOT take this cap: they can only report on a
-        // dropped pass when the pack is already rejected for exceeding the budget, so the extra
-        // diagnostic is redundant rather than wrong.
-        const auto nonEmptyBuffers =
-            std::count_if(declaredBuffers.cbegin(), declaredBuffers.cend(), [](const QJsonValue& v) {
-                return !v.toString().isEmpty();
-            });
+        // COUNTED FROM THE SURFACE LOADER, not from the pointer one. The first version of this
+        // counted NON-EMPTY entries, which is what the POINTER loader does (`if (bufName.isEmpty())
+        // continue;`) — and the comment beside it claimed that matched "what fromJson actually
+        // loads". It does not, for THIS loader: surfaceshadereffect.cpp appends EVERY entry in
+        // place, empties included, deliberately, so bufferWraps and bufferFilters stay positionally
+        // aligned, and its own comment says so. multiBufferMode keys on that size. So the loaded
+        // count is the declared size capped at the budget, empties and all, and modelling it on the
+        // sibling family made six shapes draw the wrong half of the split. Reading a neighbour
+        // instead of the code that applies is the same mistake this arm was fixed for once already.
+        //
+        // The gaussian, backdrop and radius scans above deliberately do NOT take this cap: they can
+        // only report on a dropped pass when the pack is already rejected for exceeding the budget,
+        // so the extra diagnostic is redundant rather than wrong.
         const auto livePasses =
-            std::min<qsizetype>(nonEmptyBuffers, PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses);
-        if (meta.value(QLatin1String("bufferFeedback")).toBool()) {
+            std::min<qsizetype>(declaredBuffers.size(), PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses);
+        // Suppressed entirely on a fail-closed chain: the registry has already reset bufferFeedback
+        // to false there, so neither message would be true. The louder lint that cleared
+        // chainResolves is the one the author needs.
+        if (chainResolves && meta.value(QLatin1String("bufferFeedback")).toBool()) {
             if (livePasses > 1) {
                 lints << QStringLiteral(
                              "\"bufferFeedback\": true with %1 buffer passes is read by NEITHER host: the "
                              "daemon's feedback path is the single-buffer one, and the compositor's surface "
-                             "fold ignores the key outright. A pack that wants feedback must declare exactly "
-                             "one buffer pass")
+                             "fold ignores the key outright. Only a chain declaring exactly one buffer pass "
+                             "gets feedback, and then on the daemon alone")
                              .arg(livePasses);
             } else {
                 lints << QStringLiteral(
@@ -904,10 +952,9 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
                     "transparent fallback on a real window");
             }
         }
-        // halfFloatBuffers, linted on an EXPLICIT true ONLY — never an absent key, and never a
-        // non-bool, which the kBoolKeys arm above already owns.
-        if (meta.value(QLatin1String("halfFloatBuffers")).isBool()
-            && meta.value(QLatin1String("halfFloatBuffers")).toBool()) {
+        // halfFloatBuffers, on an EXPLICIT true. One lookup, like the arm above.
+        const QJsonValue halfFloatValue = meta.value(QLatin1String("halfFloatBuffers"));
+        if (halfFloatValue.isBool() && halfFloatValue.toBool()) {
             lints << QStringLiteral(
                 "\"halfFloatBuffers\": true is honoured by the DAEMON, which creates RGBA16F buffer targets, "
                 "and ignored by the compositor's surface fold, which creates every buffer target RGBA8. Any "

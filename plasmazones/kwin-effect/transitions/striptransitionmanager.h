@@ -178,9 +178,17 @@ public:
     /// taken for a still-live strip leg (its spring keeps integrating under
     /// the blend) is neither drawn by us nor released: updateCursorHiding
     /// keeps it for a live pass under the pointer, and nothing else runs.
-    /// A no-op unless this manager holds the hide and the pointer is on
-    /// @p screen, so a strip leg on another output keeps its hide and no
-    /// per-frame hide/show flap arises. The next strip frame after the
+    /// A no-op unless this manager holds the hide. With the pointer ON
+    /// @p screen it releases unconditionally, because the caller is about to
+    /// paint this output without us. With the pointer on ANOTHER output it
+    /// DELEGATES to updateCursorHiding, which releases only when no live pass
+    /// covers the pointer — so a strip leg on another output keeps its hide and
+    /// no per-frame hide/show flap arises, while a hide stranded by a pointer
+    /// that left mid-leg is given back. That second arm used to return without
+    /// releasing, which stranded the compositor's cursor on the output the
+    /// pointer had moved to, because the frame that would have noticed is the
+    /// one postPaintScreen skips after a failed paint. The next strip frame
+    /// after the
     /// foreign pass ends re-hides through hideCursorForPass, so the pair
     /// stays balanced. Restores the cursor plane; a software cursor is
     /// still not drawn by the foreign pass, exactly as it is not for any
@@ -357,8 +365,8 @@ private:
     /// returns on a null screen (no capture exclusion is set), on an already-taken snapshot,
     /// and on an entry that exists with a null texture, where a hide may well be held. All
     /// THREE of its extra bails are named because a previous version named two. Releasing
-    /// there would still be wrong, and
-    /// for the reason this class's own contract gives above rather than anything about the
+    /// there would still be wrong, and for the reason this class's own contract gives above
+    /// rather than anything about the
     /// pushed framebuffer: KWin draws its overlay item at the END of the scene walk, so a
     /// cursor shown mid-walk lands INSIDE the capture and the pack smears it — which is the
     /// hazard the hide exists for. The post-walk re-seat arm catches the same

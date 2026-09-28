@@ -61,8 +61,9 @@ void ShaderNodeRhi::requestDepthCreateRetry()
     // spin. What the bound does NOT stop is the create attempt: an item driven from
     // outside (an animated pack, a resize) re-enters the depth block on every frame it
     // paints anyway and calls newTexture() + create() again, silently, for as long as it
-    // paints. That is not a leak to plug — it is how the node recovers at all, since only
-    // a successful create clears the latch and the count.
+    // paints. That is not a leak to plug — it is how the node recovers at all, since a
+    // successful create is the only thing on THIS path that clears the latch and the count
+    // (releaseRhiResources and setUseDepthBuffer clear it too, from outside this block).
     // Spent budget: return before the increment, so the counter STOPS at the bound rather
     // than rising for as long as the driver keeps refusing. That also makes the give-up line
     // below a one-shot PER RETRY BUDGET, by structure rather than by an equality test a later

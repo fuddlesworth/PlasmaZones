@@ -561,17 +561,16 @@ void WindowAnimator::onAnimationAbandoned(KWin::EffectWindow* window,
 
 void WindowAnimator::onRepaintNeeded(KWin::EffectWindow*, const QRectF& bounds) const
 {
-    // KWin::effects guarded, because this is reachable from a D-Bus reply rather than only
-    // from a paint. setEnabled(false) lands from a loadSettingAsync callback and reaps every
-    // live entry, and each reap comes through here. The lambda that calls it guards the
-    // global itself further down, for its own strip repaint (daemon_settings.cpp), and
-    // StripViewAnimator's matching repaint hook opens with the same test
-    // (lifecycle_wiring.cpp) — so both the caller and the sibling already treat a null global
-    // as reachable on this path, and it costs one comparison folded into a test that was
-    // already here. Whether a null global is genuinely reachable while the effect object is
-    // still alive is a KWin teardown-ordering question nobody here has answered from KWin's
-    // source; this is cheap insurance, and the tree is not consistent about it (the
-    // daemon-registration path dereferences the same global unguarded).
+    // KWin::effects tested as belt-and-braces only. It CANNOT be null while this effect
+    // object lives, which is stated once, with the upstream ordering it rests on, at
+    // PlasmaZonesEffect::windowOutput in plasmazoneseffect/screens.cpp. This paragraph used
+    // to say the question was one "nobody here has answered from KWin's source" and that the
+    // tree was inconsistent about it; both were true when written and neither is a reason for
+    // anything now. It is answered, and the unguarded dereferences elsewhere are the correct
+    // ones. The test stays because it is folded into a bounds check that was already here and
+    // costs one comparison. Reaching this from a D-Bus reply is still worth knowing about:
+    // setEnabled(false) lands from a loadSettingAsync callback and reaps every live entry,
+    // and each reap comes through here.
     if (bounds.isValid() && KWin::effects) {
         KWin::effects->addRepaint(KWin::Rect(bounds.toAlignedRect()));
     }

@@ -949,12 +949,12 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     }
     window->addLayerRepaint(repaintRect);
     if (KWin::effects) {
-        // Match the null-guard the constructor and destructor use for
-        // KWin::effects access — this method is callable from public
-        // entry points (animator-completion callback, programmatic
-        // shader installs from the future plugin API), and a future
-        // caller during compositor teardown could land here with
-        // KWin::effects null.
+        // Matches the belt-and-braces null test the constructor and destructor use.
+        // A caller during compositor teardown CANNOT land here with a null global:
+        // upstream nulls it only after every effect is destroyed. See the invariant
+        // at PlasmaZonesEffect::windowOutput in screens.cpp. The reachability from
+        // public entry points is still worth knowing (the animator-completion
+        // callback, and programmatic shader installs from the future plugin API).
         KWin::effects->addRepaintFull();
     }
     return true;

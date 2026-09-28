@@ -840,8 +840,8 @@ def run_selftest(prose_problems, iter_json_prose, partition_readable) -> int:
     # list, a leaked _dead_stanza_problems makes the dead-stanza arm report TWO failures that
     # both accuse the check under test rather than the leak, and a leaked read_error is read by
     # every later rule, which is what turns a well-formed file into a "malformed JSON" finding.
-    # conventions_shared_text.SHARED_PARAM_TEXT is
-    # redirected by two arms in this file and is the same shape. All of them are compared here
+    # conventions_shared_text.SHARED_PARAM_TEXT is redirected by two arms in this file and is
+    # the same shape. All of them are compared here
     # rather than left to the arm that set them, because the arm that leaks is not the arm
     # that fails — which is also why none of these messages names a culprit.
     entry_globals = partition_readable.__globals__

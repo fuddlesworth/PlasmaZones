@@ -318,8 +318,11 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
         // Q_INVOKABLEs — and found no insertion route. Both slot bodies were read: one does
         // find + hideSlot, the other only logs. Audited-safe, not structurally safe. The
         // sibling loop further up this file snapshots for a DIFFERENT reason, and the reason is
-        // stated where that snapshot is taken: a synchronously-fired hideSlot completion can
-        // INSERT into m_screenStates and rehash, invalidating its iterators. Not because it
+        // stated where that snapshot is taken: a synchronously-fired hideSlot completion COULD
+        // insert into m_screenStates and rehash, invalidating its iterators, if a future
+        // completion-path edit added a screen. Stated in that tense deliberately, matching the
+        // snapshot site: no such insert exists on that path today, which is what the enumeration
+        // just above concludes. Not because it
         // keeps a key across a completion lambda, which an earlier version of this sentence
         // claimed — that lambda captures the id by value, so it would hold a copy either way.
         //

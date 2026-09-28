@@ -49,10 +49,13 @@ StripTransitionManager::StripTransitionManager(PlasmaZonesEffect* effect)
 
 StripTransitionManager::~StripTransitionManager()
 {
-    // GL resources are released by their unique_ptrs. Do NOT touch
-    // KWin::effects here — teardown ordering during plugin unload is not
-    // guaranteed. reset() is the explicit-cleanup path while the compositor
-    // is live.
+    // GL resources are released by their unique_ptrs, and this destructor
+    // deliberately touches nothing else. The reason is NOT that teardown ordering is
+    // unguaranteed, which is what this used to say: upstream destroys every effect
+    // before nulling KWin::effects, so the global is valid here (see the invariant at
+    // PlasmaZonesEffect::windowOutput in plasmazoneseffect/screens.cpp). The reason is
+    // that a destructor is the wrong place to drive compositor state at all. reset()
+    // is the explicit-cleanup path while the compositor is live.
 }
 
 void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QString& effectId, const QVariantMap& params,
@@ -339,7 +342,10 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // already gone; and the failed capture walk, the post-walk re-seat with the
     // entry present but a texture missing, and the failed sharp composite through
     // releaseCursorHideForForeignPaint, because their entry is still live and
-    // updateCursorHiding would therefore not release it. (Three, before the
+    // updateCursorHiding would therefore not release it WHILE THE POINTER IS ON
+    // THAT OUTPUT. When the pointer has left it, that helper delegates to
+    // updateCursorHiding rather than returning, so those three arms release
+    // either way — see its docblock. (Three, before the
     // re-seat was split into those two arms — the count and the list both missed
     // the split, while the header's own list was corrected for it.) A pass that
     // abandons THIS frame paints the normal scene with the cursor still shown.

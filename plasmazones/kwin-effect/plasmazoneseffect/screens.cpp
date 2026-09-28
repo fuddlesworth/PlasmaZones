@@ -158,9 +158,13 @@ KWin::LogicalOutput* PlasmaZonesEffect::windowOutput(KWin::EffectWindow* w) cons
     // the unguarded siblings below as null-deref bugs. The ordering is upstream's, in
     // kwin/src/effect/effecthandler.cpp, which the package does not install — only the
     // header is in /usr/include/kwin, which is why reading from inside this tree could
-    // never settle it. EffectsHandler's constructor assigns KWin::effects = this BEFORE
-    // the effect loader runs, and its destructor is `unloadAllEffects(); KWin::effects =
-    // nullptr;` in that order. So every effect plugin is destroyed while the global is
+    // never settle it. EffectsHandler's constructor assigns KWin::effects = this before
+    // queryAndLoadAll() loads any effect (the loader OBJECT is constructed earlier, in the
+    // member-init list, so "before the loader runs" was loose), and its destructor is
+    // `unloadAllEffects(); KWin::effects = nullptr;` in that order. unloadAllEffects goes
+    // through destroyEffect(), which does a SYNCHRONOUS `delete effect;` rather than
+    // deleteLater, so an effect object cannot outlive the handler and a queued delivery
+    // cannot arrive after the global is cleared either. So every effect plugin is destroyed while the global is
     // still valid, and the global is null only when NoCompositing made the constructor
     // return early, in which case no effect was loaded and none of this code runs.
     // The `!KWin::effects` test stays because it costs nothing and a comparison is a
@@ -463,10 +467,13 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
 
                 // Look up the physical output geometry ONCE rather than per VS definition (O(N) vs O(N*M))
                 //
-                // KWin::effects guarded for the same reason WindowAnimator::onRepaintNeeded
-                // is: this body runs from a D-Bus reply at an arbitrary later moment, and
-                // `self` being QPointer-alive says nothing about the global. A null global
-                // leaves `outputs` empty, physGeom invalid, and the arm below returns.
+                // KWin::effects tested only as belt-and-braces: it CANNOT be null while this
+                // effect object lives — see the invariant at windowOutput above, which is the
+                // one place in the tree that states it. The earlier version of this comment
+                // argued the opposite, that `self` being QPointer-alive says nothing about the
+                // global, and that argument is what three review passes cited to report the
+                // unguarded siblings as bugs. A null global would leave `outputs` empty,
+                // physGeom invalid, and the arm below returns.
                 QRect physGeom;
                 if (KWin::effects) {
                     for (const auto* out : KWin::effects->screens()) {

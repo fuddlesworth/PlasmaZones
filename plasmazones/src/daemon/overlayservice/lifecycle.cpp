@@ -156,8 +156,7 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
         // raw slot Item visibility). Both checks are intentional; do
         // not merge them.
         QQuickItem* cursorMainOverlay = cursorVsHasWindow ? cursorIt->mainOverlaySlot() : nullptr;
-        const bool cursorSlotVisible =
-            cursorMainOverlay != nullptr && !qFuzzyCompare(cursorMainOverlay->opacity(), 0.0);
+        const bool cursorSlotVisible = cursorMainOverlay != nullptr && !qFuzzyIsNull(cursorMainOverlay->opacity());
         // The m_excludedScreens clause only does real work when
         // showOnAllMonitors is true: with it false, every excluded (active
         // autotile) screen is already intercepted above by the

@@ -713,23 +713,24 @@ void ShaderNodeRhi::prepare()
         if (!ensureBufferTarget() || !ensureBufferPipeline()) {
             return;
         }
-        if (!m_srb || (!multiBufferMode && m_bufferFeedback && !m_srbB)) {
-            ensurePipeline();
-        }
     }
-    // `!multiBufferMode &&` on the feedback term, matching the identical sub-expression four
-    // lines above. m_srbB is built only on the single-buffer path (ensurePipeline's own test is
-    // `!multiBufferMode && m_bufferFeedback`), so without the gate a multipass pack with more
-    // than one pass and bufferFeedback true satisfied this on EVERY prepare() and called
-    // ensurePipeline every frame for the node's life. It was not a rebuild — ensurePipeline
-    // early-outs once m_srb and m_pipeline exist — but it paid a serializedFormat() QVector
-    // allocation plus an ensureDummyChannelResources walk per frame, forever, on a condition
-    // that could never become false. No bundled pack reaches it; the validator now reports the
-    // metadata shape that would.
-    if (m_shaderReady && (!m_pipeline || !m_srb || (!multiBufferMode && m_bufferFeedback && !m_srbB))) {
-        ensurePipeline();
-    }
-
+    // ONE unconditional call, and deliberately no guarded one in front of it. Two guarded
+    // `ensurePipeline()` calls used to sit here, one inside the buffer branch above and one just
+    // below it, both immediately ahead of this line with nothing in between — so neither could
+    // achieve anything this line does not. ensurePipeline creates only what is null and has no
+    // early return on the success path, so a second call rebuilt nothing while still paying
+    // rpDesc->serializedFormat() (a QVector allocation), the m_renderPassFormat assignment and an
+    // ensureDummyChannelResources walk, on the render thread, in prepare().
+    //
+    // Their conditions were also wrong, in a way that outlived being narrowed once. Each tested
+    // `m_bufferFeedback && !m_srbB` while ensurePipeline's own test is `!multiBufferMode &&
+    // m_bufferFeedback && m_bufferTextureB && !m_srbB`. A round that added the !multiBufferMode
+    // term closed one route to a condition that can never become false and left a second: with
+    // m_bufferPaths non-empty, bufferReady false (bakeBufferShaders gave up after three attempts)
+    // and single-pass feedback, ensureBufferTarget never runs, m_bufferTextureB stays null,
+    // ensurePipeline therefore never builds m_srbB, and the guard fired on every prepare() for the
+    // node's life. Matching a condition to a callee's internals is how that happens twice; not
+    // duplicating the condition at all is why it cannot happen again. Do not re-add a guard here.
     if (!ensurePipeline()) {
         return;
     }
@@ -875,6 +876,20 @@ void ShaderNodeRhi::prepare()
                 // so mutableData() points directly at it.
                 barrier->updateDynamicBuffer(m_ubo.get(), 0, 16 * sizeof(float), m_uboProfile->mutableData());
                 cb->resourceUpdate(barrier);
+            } else {
+                // Pool exhausted, and this one cannot just wait for the flag it left set, because
+                // there is no flag: K_MATRIX_OPACITY is REFERENCE ONLY, so dirtyRegions() never
+                // emits it and the matrix bytes reach the GPU through fullUploadRegions() alone.
+                // Without this the identity the buffer passes pinned would stay on the GPU
+                // INDEFINITELY rather than for one frame, drawing the image pass upside down on a
+                // Y-up-in-NDC backend. Re-arming the full upload is what covers offset 0 again.
+                // Latent today rather than live: no bundled animation pack is multipass, overlay
+                // packs render into a texture so the pinned identity is what they want anyway, and
+                // SurfaceUniformProfile pushes the matrix region on any dirty flag. The first
+                // multipass animation pack is what would have found it.
+                m_didFullUploadOnce = false;
+                m_uniformsDirty = true;
+                requestAnotherFrame();
             }
         }
     }

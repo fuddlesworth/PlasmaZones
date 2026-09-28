@@ -942,9 +942,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceFoldChannelBaseUnit + i);
                 bufs[i]->bind();
                 mainChannelsBound = i + 1;
-                {
-                    pk->shader->setUniform(pk->iChannelLoc[i], ShaderInternal::kSurfaceFoldChannelBaseUnit + i);
-                }
+                pk->shader->setUniform(pk->iChannelLoc[i], ShaderInternal::kSurfaceFoldChannelBaseUnit + i);
                 if (i < ShaderInternal::kSurfaceChannelResolutionSlots && pk->iChannelResolutionLoc[i] >= 0) {
                     const QVector4D res(static_cast<float>(bufs[i]->width()), static_cast<float>(bufs[i]->height()),
                                         0.0f, 0.0f);

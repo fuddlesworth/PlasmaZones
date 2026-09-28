@@ -879,11 +879,11 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
 
 void PlasmaZonesEffect::updateAllDecorations()
 {
-    // Compositor teardown: KWin::effects can be null when a caller driven by a
-    // file watcher or a D-Bus reply fires during shutdown (the registry
-    // hot-reload handler documents exactly this case before its own guarded
-    // addRepaintFull). Nothing to reconcile against, and the stackingOrder()
-    // walk below would deref the null.
+    // Belt-and-braces. KWin::effects cannot be null while this effect object lives,
+    // so the shutdown case this used to describe — a file watcher or D-Bus reply
+    // firing during teardown — cannot reach here with a null global. See the
+    // invariant at PlasmaZonesEffect::windowOutput in screens.cpp. Kept because the
+    // stackingOrder() walk below would deref it and the test costs one comparison.
     if (!KWin::effects) {
         return;
     }

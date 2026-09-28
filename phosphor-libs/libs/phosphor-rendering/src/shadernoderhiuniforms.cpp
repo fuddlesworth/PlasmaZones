@@ -529,11 +529,16 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         } else if (!audioResizeFailed) {
             // Pool exhausted rather than a failed resize, so ask for the frame that
             // retries the upload. The audioResizeFailed arm is excluded deliberately, and
-            // that is the one asymmetry in this function that is not an oversight: it
-            // keeps the previous working texture bound, so its cost is one frame of stale
-            // bars rather than a blank slot, and it is only reachable because the producer
-            // just pushed a differently sized spectrum — which means the producer supplies
-            // the next frame. The batch arm has no such producer behind it.
+            // for the SAME reason the wallpaper and user-texture create-failure arms give:
+            // a create failure needs a BOUND, and an unbounded request would repaint at
+            // frame rate against a driver that keeps refusing. Its cost meanwhile is one
+            // frame of stale bars rather than a blank slot, because it keeps the previous
+            // working texture bound. NOT because the producer supplies the next frame,
+            // which an earlier version of this comment claimed: m_audioSpectrumDirty has a
+            // second writer in releaseRhiResources, which does NOT clear m_audioSpectrum,
+            // so the next prepare() re-enters the resize branch against a 1x1 texture with
+            // N bars still pending and no producer push behind it. On that route a failing
+            // resize also skips the content upload below, because the batch is forced null.
             requestAnotherFrame();
         }
         if (batch && bars > 0) {
@@ -631,14 +636,14 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 // Latched per slot, the shape m_userTextureSamplerWarned already uses:
                 // dirty stays set above, so this arm re-runs every frame while the create
                 // keeps failing and logged on every one of them.
-                if (!m_userTextureCreateWarned[i]) {
-                    m_userTextureCreateWarned[i] = true;
+                if (!m_userTextureCreateWarned[static_cast<size_t>(i)]) {
+                    m_userTextureCreateWarned[static_cast<size_t>(i)] = true;
                     qCWarning(lcShaderNode) << "user texture slot" << i << "create() failed for size" << targetSize
                                             << ", slot will retry next frame (reported once per slot)";
                 }
                 continue;
             }
-            m_userTextureCreateWarned[i] = false;
+            m_userTextureCreateWarned[static_cast<size_t>(i)] = false;
             m_userTextures[i] = std::move(resized);
             resetAllBindingsAndPipelines();
             ensurePipeline(); // result ignored: see the audio-spectrum arm above

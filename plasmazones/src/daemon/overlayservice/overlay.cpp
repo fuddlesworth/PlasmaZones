@@ -142,7 +142,7 @@ void OverlayService::destroyIfTypeMismatch(const QString& screenId)
 void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& cursorPos)
 {
     // Captured before anything can move it, because BOTH visibility arms below need it and
-    // this is the one function in the service that can be entered with m_visible already
+    // this is the one SHOW path in the service that can be entered with m_visible already
     // true and still leave it false. showAtPosition falls through to here when the cursor's
     // virtual screen has no window or an invisible slot (lifecycle.cpp), so a transport
     // failure on that path used to drop visible→hidden with no notification at all, leaving
@@ -398,10 +398,16 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     int liveOverlayCount = 0;
     // std::as_const, because a range-for over a non-const QHash takes the MUTABLE begin() and
     // detaches. It costs nothing today (this map's refcount is always 1, so the detach finds
-    // nothing to copy) but the spelling is what stops that being load-bearing. The four
-    // explicit begin()/end() loops elsewhere in this service are deliberately left alone: their
-    // bodies are not all read-only, and one of them feeds a callee that does its own non-const
-    // find on the same map.
+    // nothing to copy) but the spelling is what stops that being load-bearing.
+    //
+    // The explicit begin()/end() loops elsewhere in this service are deliberately left alone, and
+    // the reason is stated by SHAPE rather than by a count, because the first version of this
+    // sentence said "four" when there are six and attributed a property to files it had not read.
+    // Two of them must stay non-const: osd.cpp's dismiss resolver takes a mutable address into a
+    // value, and overlay_data.cpp's updateZonesForAllWindows feeds updateLabelsTextureForWindow,
+    // which does its OWN non-const find on this map — there the up-front detach is what stops that
+    // callee detaching mid-iteration, so converting it would be a regression. The rest are
+    // read-only with respect to the map and inert either way under the refcount-1 invariant.
     for (const auto& state : std::as_const(m_screenStates)) {
         if (state.overlayPhysScreen && state.shell && state.shell->shellWindow()) {
             ++liveOverlayCount;
@@ -499,8 +505,13 @@ void OverlayService::updateGeometries()
     // shape allocated a QStringList copy on every geometry update; this
     // is a hot path during multi-monitor compositor signal storms (Plasma
     // emits screenAdded/screenRemoved/geometryChanged in tight bursts on
-    // hotplug and DPMS-wake). updateOverlayWindow does not mutate
-    // m_screenStates, so iterating in-place is safe.
+    // hotplug and DPMS-wake). updateOverlayWindow does not INSERT INTO or REMOVE FROM
+    // m_screenStates, so iterating in-place is safe. "Does not mutate" would be false: it
+    // reaches updateLabelsTextureForWindow, which writes labelsTextureHash through a
+    // NON-CONST find. That is the direction worth knowing about for a CONST-iterator loop
+    // like this one — a callee detaching under const iterators is the shape that would
+    // strand them on a stale copy, and it is safe here only because m_screenStates is never
+    // copied, so its refcount is always 1 and the detach never happens.
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
         QScreen* physScreen = it.value().overlayPhysScreen;
         if (physScreen) {
@@ -748,11 +759,15 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
         // session, in a mode that can never sample it — and a drag-end does not collect it,
         // because that goes to setIdleForDragPause, which keeps the property on purpose.
         // Its wallpaperTexture half is a DUPLICATE on this route — clearShaderSlotProperties
-        // just above writes the same 1x1 transparent placeholder — and is left alone rather
+        // just above writes an equivalent 1x1 transparent placeholder — and is left alone rather
         // than split out, because on every other caller (the dismiss and destroy paths, which
-        // do not call clearShaderSlotProperties) that half is the only wallpaper release
-        // there is. ZoneShaderItem dedupes the second write on value, and the slot is about
-        // to be reloaded regardless, so the cost is one compare.
+        // do not call clearShaderSlotProperties) that half is the only wallpaper release there
+        // is. The second write has NO READER here: it lands on the slot's own `property var
+        // wallpaperTexture`, whose only consumer is the binding into RenderNodeOverlayContent,
+        // and the non-shader branch does not mount that content at all. (Not "the setter dedupes
+        // it", which an earlier version of this said: ShaderEffect::setWallpaperTexture guards on
+        // QImage::cacheKey equality, i.e. data-block identity rather than pixel value, so two
+        // separately constructed placeholders would NOT collapse even if one reached it.)
         releaseOverlaySlotTextures(slot);
         // Required by releaseOverlaySlotTextures' own contract: the hash compare in
         // updateLabelsTextureForWindow would otherwise short-circuit a later rebuild and leave
@@ -989,10 +1004,11 @@ void OverlayService::destroyOverlayWindow(const QString& screenId)
     // would pin the last shader-mode labels payload for the screen's whole non-shader
     // session. The recreateOverlayWindowsOnTypeMismatch flip off a live settings edit never
     // reaches this function at all and carries the same release at its own site in
-    // createOverlayWindow's non-shader branch. No count here on purpose: createOverlayWindow
-    // has nine callers, and whether a given one can flip a slot's type is a property of the
-    // caller rather than of this release, so a number would go stale the next time one is
-    // added. The screen-teardown callers immediately
+    // createOverlayWindow's non-shader branch. No count here on purpose, and that has to include
+    // not counting the CALLERS either — an earlier version of this sentence argued against a
+    // number and then gave one, and got it wrong. Whether a given caller can flip a slot's type
+    // is a property of the caller rather than of this release. The screen-teardown callers
+    // immediately
     // destroyPassiveShell, where this is a harmless no-op on an about-to-be-freed slot.
     // Mirrors dismissOverlayWindow's release.
     releaseOverlaySlotTextures(it->mainOverlaySlot());
@@ -1007,7 +1023,12 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
 
 void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physScreen)
 {
-    auto* slot = m_screenStates.value(screenId).mainOverlaySlot();
+    // constFind rather than value(), which copies the whole PerScreenOverlayState (two
+    // pointers, two QRects, a quint64 and a QMetaObject::Connection whose copy is an atomic
+    // refcount bump) to read one member, on the multi-monitor signal-storm path this
+    // function's own comment describes. Same fix buildZonesList already took.
+    const auto stateIt = m_screenStates.constFind(screenId);
+    auto* slot = stateIt != m_screenStates.constEnd() ? stateIt->mainOverlaySlot() : nullptr;
     if (!slot) {
         return;
     }
