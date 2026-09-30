@@ -486,7 +486,7 @@ bool PlasmaZonesEffect::windowSurfaceAnimates(const QString& windowId)
 //
 // It lives HERE, in the gating TU, because this is where the rest of the "a fold may
 // not have run for this window" reasoning sits, and because both the fold and the
-// capture TUs are at the file-size ceiling.
+// capture TUs are already over the 1000-line target.
 //
 // GATED ON THE COMPOSITE EXISTING, so a warm candidate is untouched and keeps its
 // decoration in the thumbnail, which is the whole point of not setting

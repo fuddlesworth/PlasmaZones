@@ -261,12 +261,13 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
             tileBatch->release();
         }
         // And ASK for that frame, which this arm used to leave to chance. m_labelsTextureDirty is
-        // raised only by the two label setters, so a zone overlay with no per-frame input had no
-        // one to schedule the retry and kept its zone numbers missing until unrelated damage
-        // repainted. Unbounded is right here for the same reason it is on the base class's
-        // batch-exhaustion arms: an item burning 64 batches in one frame is already painting every
-        // frame. The create-failure arms above are the other family and stay bounded by
-        // kMaxInitAttempts instead.
+        // raised by setLabelsTexture and by releaseResources, so a zone overlay with no per-frame
+        // input had nothing of its own to schedule the retry and kept its zone numbers missing
+        // until unrelated damage repainted. (An earlier version of this sentence said "the two
+        // label setters"; there is one, which is the same miscount the audio comment was corrected
+        // for in the very commit that wrote this.) Unbounded is right here for the reason the base
+        // class's batch-exhaustion arms give: exhaustion is window-wide and transient. The
+        // create-failure arms above are the other family and stay bounded by kMaxInitAttempts.
         requestAnotherFrame();
         return;
     }

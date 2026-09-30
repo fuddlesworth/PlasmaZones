@@ -48,11 +48,6 @@ void OverlayService::setupForScreen(QScreen* screen)
     }
 }
 
-void OverlayService::removeScreen(QScreen* screen)
-{
-    destroyOverlayWindow(screen);
-}
-
 void OverlayService::assertWindowOnScreen(QWindow* window, QScreen* screen, const QRect& geometry)
 {
     if (!window || !screen) {

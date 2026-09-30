@@ -12,10 +12,10 @@
 // `multipass` alone, and the registry's single-pass coherence block RESETS EVERY
 // buffer-only field to its DEFAULT whenever isMultipass is false: bufferShaderPaths,
 // bufferWraps, bufferScales, bufferFilters, bufferWrap, bufferFilter, bufferFeedback,
-// useDepthBuffer, bufferScale and halfFloatBuffers. Reset to its default, not cleared:
-// nine of those go to an empty or false value but halfFloatBuffers goes to TRUE, which
-// is its declared default, so a declared true survives there and is simply never
-// consulted. Written as "every buffer-only field" rather than as a bare list because an
+// useDepthBuffer, bufferScale and halfFloatBuffers. Reset to its DEFAULT, not cleared:
+// most go to an empty or false value, while bufferScale returns to 1.0 and
+// halfFloatBuffers to TRUE, which are their declared defaults — so a declared
+// halfFloatBuffers true survives there and is simply never consulted. Written as "every buffer-only field" rather than as a bare list because an
 // earlier version named six of the ten and read as complete. A pack that lists its buffer passes and
 // omits the flag therefore loads with every one of them discarded and renders
 // single-pass. The pack validator does report it, both for the passes themselves
@@ -68,8 +68,9 @@ layout(binding = 9) uniform sampler2D iChannel7;
 // holds the chain's IMPLEMENTATION (the reach tables, the down and up combiners)
 // and includes THIS file, not the other way round, so a main pass reaching for a
 // helper defined over there would have to pull the whole pyramid in for one line.
-// That is why all seven bundled packs sampled iChannel6 by hand, seventeen times
-// between them, while the helper sat unused one header away.
+// That is why the bundled packs sampled iChannel6 by hand while the helper sat unused one
+// header away. None of them does now; the remaining iChannel6 mentions in pack sources are
+// comments.
 //
 // Which channel the chain lands on is a contract between the pass list and the
 // main pass. Seventeen copies of the slot number is seventeen places to miss if

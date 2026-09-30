@@ -488,7 +488,7 @@ bool ShaderNodeRhi::ensureBufferTarget()
     // A pack with exactly ONE buffer pass lands here rather than in the
     // multi-buffer branch, and it is still entitled to its per-pass scale: the
     // compositor honours bufferScales[0] for a single-pass pack
-    // (chainBufferScale in surface_capture.cpp), so sizing from m_bufferScale
+    // (passBufferScaleFor in surface_capture.cpp), so sizing from m_bufferScale
     // alone here made the same pack render at two different resolutions
     // depending on which host drew it. The feedback twin shares the size
     // because the two ping-pong.
@@ -575,7 +575,7 @@ bool ShaderNodeRhi::ensureDummyChannelResources(QRhi* rhi)
     // Both arms below log. This is the hardest failure in the file: ensurePipeline
     // treats a false here as fail-closed, prepare() then bails, and the node paints
     // nothing for the rest of its life if the condition persists. Every sibling
-    // ensure* already names its failure, and this one used to be the silent
+    // ensure* already reports its failure, by a warning or by m_shaderError, and this one used to be the silent
     // exception, so the symptom was a blank pack with an empty journal.
     if (!m_dummyChannelTexture) {
         m_dummyChannelTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));

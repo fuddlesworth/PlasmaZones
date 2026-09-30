@@ -248,6 +248,17 @@ struct DaemonGateState
     /// autotile cascade guard (m_tileStaggerGenByScreen).
     QHash<QString, uint64_t> batchGenByScreen;
     int pendingVsConfigReplies = 0; ///< countdown for fetchAllVirtualScreenConfigs async replies
+    /// Countdown for the LIVE (generation 0) fetchVirtualScreenConfig replies, which the counter
+    /// above deliberately does not cover — it is the startup batch's own tally. Both exist because
+    /// virtualScreensReady is ONE flag for the whole effect while onVirtualScreensChanged is a
+    /// PER-SCREEN signal, so a virtual-screen reconfigure touching several monitors closes the gate
+    /// once and issues one fetch per monitor. Without this, the first reply to land reopened the gate
+    /// for all the others, and the window-crossing detector then ran against a half-updated
+    /// m_virtualScreenDefs — the same phantom crossing the gate exists to prevent. A superseded
+    /// reply for one screen did it too. Every live fetch increments this exactly once and every
+    /// reply path discharges it exactly once, through restoreReadyIfLive, which is already
+    /// contractually reached by all of them.
+    int pendingLiveVsConfigReplies = 0;
     uint64_t vsConfigGeneration = 0; ///< generation counter for fetchAllVirtualScreenConfigs
     /// Per-physId fetchVirtualScreenConfig sequence. Every fetch bumps its
     /// physId's entry; the async reply applies to m_virtualScreenDefs only if

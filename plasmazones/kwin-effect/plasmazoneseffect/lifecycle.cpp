@@ -246,7 +246,8 @@ void PlasmaZonesEffect::syncStockEffectSuppression()
     if (packOwnsEvent(PhosphorAnimation::ProfilePaths::WindowMinimize)) {
         // Both stock minimize animations: KWin loads whichever the user
         // picked in the exclusive minimize-animations group, and unloading
-        // the one that is not loaded is a recorded no-op.
+        // the one that is not loaded is skipped by the isEffectLoaded gate below, so
+        // listing both costs nothing.
         wanted << QStringLiteral("magiclamp") << QStringLiteral("squash");
     }
     if (packOwnsEvent(PhosphorAnimation::ProfilePaths::WindowPlaceIn)
@@ -512,8 +513,10 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     //
     // Guarded by `if (KWin::effects)` matching the clearAllDecorations /
     // ungrabKeyboard guards above, and as belt-and-braces for the same reason:
-    // `endShaderTransition` does dereference the global (setShader, unredirect,
-    // refWindow), but the global cannot be null while this effect object lives.
+    // `endShaderTransition` does dereference the global, in the addRepaint that already
+    // carries its own guard, but it cannot be null while this effect object lives.
+    // (setShader and unredirect are OffscreenEffect members on `this`, not global derefs, and
+    // refWindow is not called there at all.)
     // See the invariant at PlasmaZonesEffect::windowOutput in screens.cpp.
     if (KWin::effects) {
         QVarLengthArray<KWin::EffectWindow*, 8> activeWindows;

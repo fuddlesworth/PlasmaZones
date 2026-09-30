@@ -50,8 +50,10 @@ quint64 hashLabelsTextureInputs(const QVariantList& patched, const QSize& size, 
                                 bool showNumbers, const LabelFontSettings& lfs)
 {
     // NOTE: inside `namespace PlasmaZones {}` the unqualified name `qHash`
-    // resolves to user-defined overloads (TilingStateKey, PhosphorZones::LayoutAssignmentKey)
-    // and never falls through to Qt's global `::qHash`. Always fully qualify.
+    // resolves to a user-defined overload and never falls through to Qt's global `::qHash`: a
+    // using-declaration in core/types/types.h pulls one in, which stops ordinary lookup here,
+    // and an overload on an argument's own namespace type is found by ADL regardless. Always
+    // fully qualify.
     //
     // Mixer is the standard boost::hash_combine / Fibonacci-constant form.
     // Earlier iterations used (h << 12) + (h >> 4), which has asymmetric and
@@ -155,7 +157,7 @@ void OverlayService::updateLabelsTextureForWindow(QQuickItem* slot, const QVaria
     // resolved to no override at all. No user-visible verdict changed, though, and an earlier
     // version of this note calling it a behaviour change was wrong twice over: the not-tracked
     // arm is unreachable from either caller (one iterates m_screenStates, the other
-    // early-returns because a missing key yields a default state with a null slot), and on the
+    // early-returns because its constFind misses and leaves the slot null), and on the
     // reachable paths the scan always found the caller's OWN key, since one shell per key means
     // no two entries can answer the same item pointer. What the parameter removed is a reverse
     // scan whose miss branch could only have misfired for a caller that does not exist.
@@ -402,7 +404,8 @@ void OverlayService::updateZonesForAllWindows()
         // reporter QML actually calls, from a signal handler), which makes the reference safe BY
         // ENUMERATION rather than by construction. A copy costs one atomic refcount bump and
         // needs no enumeration. The sibling loop in selector.cpp snapshots for its own, separate
-        // reason — a completion lambda that can rehash the map under its iterators — so it is a
+        // reason — a completion lambda that COULD rehash the map under its iterators if a future
+        // completion-path edit inserted a screen — so it is a
         // precedent for copying, not the same hazard as this one.
         const QString screenId = it.key();
         auto* slot = it.value().mainOverlaySlot();

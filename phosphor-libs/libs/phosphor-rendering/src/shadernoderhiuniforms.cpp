@@ -187,7 +187,7 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
     // m_userTextureImages[0], so the loop wrote the (1, 1) fallback for a slot
     // that is sampling a live surface. On the daemon animation path the
     // override is always in play and the registry maps a pack's declared
-    // textures to uTexture<slot+1>, so [0] was the fallback on every frame.
+    // an image parameter at slot N to uTexture<N>, so [0] was the fallback on every frame.
     // Read the size off the bound texture instead, and keep the fallback only
     // for the transient where the provider has nothing resolved yet.
     if (m_sourceTextureProvider && m_lastSourceRhiTexture) {
@@ -355,11 +355,13 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 }
                 // Defensive: if no granular flags set, do full base upload.
                 // Per the dirty-flag invariants documented above, this
-                // branch is normally unreachable when m_uniformsDirty=true
-                // (the two writers that raise it with NO granular flag,
-                // setUniformExtension and prepare()'s retarget detection,
-                // both clear m_didFullUploadOnce and so take the full-upload
-                // arm above), but a future setter that
+                // branch is normally unreachable when m_uniformsDirty=true:
+                // every writer that raises it with NO granular flag also
+                // clears m_didFullUploadOnce and so takes the full-upload arm
+                // above (setUniformExtension, prepare()'s retarget detection,
+                // and prepare()'s matrix-restore fallback, which round 25
+                // added and which the earlier count here predated). But a
+                // future setter that
                 // forgets the granular flag would silently skip the GPU
                 // write entirely without this safety net. Symmetric with
                 // the !m_didFullUploadOnce path above: if we fall back
@@ -402,8 +404,11 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             // retries them: a STATIC item gets no further prepare() on its own, and a
             // deferred scene header leaves the shader reading last frame's resolution,
             // mouse and surface state until unrelated damage repaints the window. No
-            // bound, for the reason the grid upload in prepare() gives — an item burning
-            // 64 batches in one frame is already painting every frame.
+            // bound: exhaustion is a WINDOW-WIDE and normally transient condition (the pool
+            // belongs to the QRhi, so a sibling node can be what emptied it), the request is the
+            // only thing that gets this a retry at all, and bounding it would need a keyed budget
+            // like m_depthCreateRetries. Not, as an earlier version said, because the item that
+            // was refused is necessarily the one painting every frame.
             requestAnotherFrame();
         }
     } else {
@@ -961,7 +966,7 @@ void ShaderNodeRhi::releaseRhiResources()
 // splice (unlike the image fragment and vertex stages) — a buffer pass that
 // wants the pack's parameters must include the family's uniforms header and
 // read customParams directly. This is deliberate and enforced: all three
-// pack validators bake buffer passes the same way (see
+// every pack validator bakes buffer passes the same way (see
 // packvalidator_animation.cpp's buffer-pass block, which documents why
 // splicing here without updating them would invert the gate). Changing one
 // side without the other makes the validator pass sources that fail live.

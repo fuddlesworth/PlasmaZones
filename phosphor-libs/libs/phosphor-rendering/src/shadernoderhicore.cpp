@@ -205,7 +205,8 @@ ShaderNodeRhi::ShaderNodeRhi(QQuickItem* item, std::unique_ptr<PhosphorShaders::
     m_liveness->node = this;
     // The UBO profile's ctor seeds an identity qt_Matrix + qt_Opacity=1.0 (the
     // init that used to live here, moved into BaseUniformProfile so the
-    // surface profile gets the same lead-in for free).
+    // profiles, where BaseUniformProfile and SurfaceUniformProfile each seed it: they are
+    // siblings under IUboProfile, so they agree by duplication, not by inheritance).
     // customParams and customColors are seeded at their declarations, beside
     // m_userTextureWraps, so this constructor is not the only thing standing
     // between them and a default-constructed value.
@@ -420,8 +421,8 @@ void ShaderNodeRhi::prepare()
         m_vbo.reset(
             rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(RhiConstants::QuadVertices)));
         // Every failure arm in this block tears down through releaseRhiResources()
-        // rather than its own list of resets. The lists were hand-rolled, five of
-        // them, and had to be kept in step with each other as resources were
+        // rather than its own list of resets. The lists were hand-rolled, one per
+        // failure arm, and had to be kept in step as resources were added.
         // added; the helper is a superset of all of them. It does NOT clear
         // m_shaderError, so the message each arm sets just above survives to the
         // item's status block.
@@ -593,7 +594,7 @@ void ShaderNodeRhi::prepare()
 
     // Image-pass grid mesh (setGridSubdivisions). Built lazily here — after
     // the shader-ready gate, so a node whose shader never compiles does not
-    // hold ~1 MB of grid buffers it can never draw — rather than in the init
+    // hold grid buffers it can never draw, which grow with the square of the density — rather than in the init
     // block, because the density can change over the node's life (a metadata
     // hot-reload, a pack switch on a reused item); the setter drops the
     // buffers and the pipeline, and this block rebuilds both lazily.
@@ -768,6 +769,14 @@ void ShaderNodeRhi::prepare()
             if (identityBatch) {
                 identityBatch->updateDynamicBuffer(m_ubo.get(), 0, sizeof(kIdentity4x4), kIdentity4x4);
                 cb->resourceUpdate(identityBatch);
+            } else {
+                // Pool exhausted: the passes below would run against the FLIP-CARRYING matrix and
+                // write their geometry inverted, and the image pass would double-flip the sampled
+                // result. No flag can re-drive this — the pin is unconditional per-frame code — so
+                // only another prepare() re-pins, and the argument that makes the RESTORE below
+                // merely latent does NOT apply: a profile pushing the matrix region on a dirty flag
+                // pushes the very value this pin overwrites.
+                requestAnotherFrame();
             }
         }
         if (multiBufferMode) {
@@ -806,10 +815,11 @@ void ShaderNodeRhi::prepare()
                     // Inter-pass write→read barrier only: re-uploading 4 bytes at
                     // offset 0 (the first float of qt_Matrix) forces the backend to
                     // serialize pass i's writes before pass i+1 samples its output.
-                    // The value is immediately re-pinned by the next pass / final
-                    // restore, so this is a sync hint, not a meaningful data update.
-                    QRhiResourceUpdateBatch* barrier = rhi->nextResourceUpdateBatch();
-                    if (barrier) {
+                    // qt_Matrix[0] is 1.0 in every profile (the flip lives at index 5),
+                    // so this writes what the pin already put there: a sync hint, not a
+                    // data update. Nothing re-pins between passes; the restore after the
+                    // loop is the only other write to offset 0.
+                    if (QRhiResourceUpdateBatch* barrier = rhi->nextResourceUpdateBatch()) {
                         barrier->updateDynamicBuffer(m_ubo.get(), 0, 4, m_uboProfile->mutableData());
                         cb->resourceUpdate(barrier);
                     }

@@ -7,8 +7,8 @@
 // ways of getting the first scalar wrong.
 //
 // Its own executable because the family outgrew its host. test_surface_pack_validator.cpp
-// covers everything else a surface pack's metadata can get wrong, and it sat fifteen lines
-// under the file-size ceiling while this family kept growing: nine builtin passes, two
+// covers everything else a surface pack's metadata can get wrong, and it was already close
+// enough to the file-size ceiling to have no room while this family kept growing: nine builtin passes, two
 // families that read different things, and one lint per ordering mistake that still
 // compiles and still resolves. The seam mirrors the production one, since
 // packvalidator_surface_lints.cpp was split out of packvalidator_surface.cpp for the same

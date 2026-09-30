@@ -357,11 +357,14 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         // The SINGULAR string spellings, which the array sweep above does not cover and which the
         // coherence block resets like the rest. They were missed when this sweep was extended, and
         // the miss falsified a sentence in surface_multipass.glsl claiming the sweep reaches every
-        // buffer-only key. toString() is empty for a non-string, which is the right gate here: a
-        // non-string is ignored at load either way, and the vocabulary arms that would complain
-        // about its spelling are a multipass concern.
+        // buffer-only key. Gated on PRESENCE, not on the value's type: this sweep's subject is the
+        // DECLARATION, and a toString() test skipped a mistyped key entirely, since toString()
+        // answers empty for a number or a bool. That left a single-pass pack with "bufferWrap": 5
+        // silent here AND silent in the multipass non-string arm it never reaches, which is the same
+        // no-diagnostic-anywhere gap that arm exists to close.
         for (const QLatin1String key : {QLatin1String("bufferWrap"), QLatin1String("bufferFilter")}) {
-            if (!meta.value(key).toString().isEmpty()) {
+            const QJsonValue value = meta.value(key);
+            if (!value.isUndefined() && !value.isNull()) {
                 lints
                     << QStringLiteral("%1 is declared on a single-pass pack, where it is never read").arg(QString(key));
             }
@@ -658,14 +661,27 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         // feedback message below would describe a mechanism that cannot occur. Every arm that clears
         // this already emits its own louder lint, so suppressing the feedback line loses nothing.
         bool chainResolves = !declaredBuffers.isEmpty();
-        for (const QJsonValue& v : declaredBuffers) {
+        // BOUNDED TO WHAT THE LOADER KEEPS. fromJson breaks at the pass budget, so a past-cap entry
+        // is never appended, never reaches the registry's resolve loop (which iterates the CAPPED
+        // list) and therefore cannot fail the chain closed. Reporting one here told the author two
+        // untrue things at once: that the entry was "kept in place" and that it dropped the whole
+        // pack to single-pass, when it was dropped as surplus and the chain runs at full length.
+        // Worse, it cleared chainResolves and so SUPPRESSED a true bufferFeedback diagnostic for a
+        // chain that does run. The over-cap lint below already reports the surplus by count, which
+        // is the one thing an author can act on. This also retires the escaping-path arm's only
+        // reachable case, which packvalidator_surface.cpp's own confinement comment already
+        // identified as past-cap-only.
+        const qsizetype loadedBufferCount =
+            std::min<qsizetype>(declaredBuffers.size(), PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses);
+        for (qsizetype bufIndex = 0; bufIndex < loadedBufferCount; ++bufIndex) {
+            const QJsonValue v = declaredBuffers.at(bufIndex);
             // A non-string entry reported as "empty", which says the author wrote
             // "" when they wrote an object or a number. It costs the same thing,
             // so the consequence below is repeated rather than softened.
             if (!v.isString()) {
                 lints << QStringLiteral(
-                    "bufferShaders entry is not a string (kept in place as empty, but it fails the "
-                    "scan-time existence check and drops the WHOLE pack to single-pass)");
+                    "bufferShaders entry is not a string (kept in place as empty, but it is rejected at "
+                    "scan time and drops the WHOLE pack to single-pass)");
                 chainResolves = false;
                 continue;
             }
@@ -679,8 +695,8 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
                 // chain: it fails the registry's existence check at scan time and
                 // fails the pack closed to single-pass.
                 lints << QStringLiteral(
-                    "empty bufferShaders entry (kept in place, but it fails the scan-time existence check and "
-                    "drops the WHOLE pack to single-pass)");
+                    "empty bufferShaders entry (kept in place, but it is rejected at scan time and drops the "
+                    "WHOLE pack to single-pass)");
                 chainResolves = false;
                 continue;
             }
@@ -759,8 +775,9 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
                 if (bufName.trimmed().startsWith(QLatin1String("builtin:"), Qt::CaseInsensitive)) {
                     lints << QStringLiteral(
                                  "multipass buffer shader '%1' looks like a builtin token with the wrong spelling: "
-                                 "the prefix is matched exactly and in lower case, so write it as 'builtin:' with no "
-                                 "leading space. As declared it is treated as a file path, and there is no such file")
+                                 "the prefix is matched exactly, so write it as 'builtin:' — lower case, and with no "
+                                 "surrounding whitespace. As declared it is treated as a file path, and there is no "
+                                 "such file")
                                  .arg(bufName);
                 } else {
                     lints << QStringLiteral("multipass buffer shader missing: %1").arg(bufName);
@@ -858,15 +875,28 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         };
         lintSurfaceTokens(QLatin1String("bufferWraps"), true);
         lintSurfaceTokens(QLatin1String("bufferFilters"), false);
-        const QString singleWrap = meta.value(QLatin1String("bufferWrap")).toString();
-        if (!singleWrap.isEmpty() && !PhosphorSurfaceShaders::SurfaceShaderContract::isValidWrapToken(singleWrap)) {
-            lints << QStringLiteral("bufferWrap value '%1' not in vocabulary (cleared at load)").arg(singleWrap);
-        }
-        const QString singleFilter = meta.value(QLatin1String("bufferFilter")).toString();
-        if (!singleFilter.isEmpty()
-            && !PhosphorSurfaceShaders::SurfaceShaderContract::isValidFilterToken(singleFilter)) {
-            lints << QStringLiteral("bufferFilter value '%1' not in vocabulary (cleared at load)").arg(singleFilter);
-        }
+        // The SINGULAR spellings get the non-string arm their array twins have had for rounds. The
+        // gap was identical and so was its cause: the loader reads them with toString(), which
+        // answers empty for a number, bool, null, array or object, and validatedWrap's own guard
+        // then skips its warning on an empty value — so a mistyped bufferWrap reached the user with
+        // no diagnostic in the validator AND no journal line at load, on single-pass and multipass
+        // alike. The array arm's comment says that was "the one wrap/filter fault" with no
+        // diagnostic anywhere; it was two, and this is the other one.
+        const auto lintSingleToken = [&lints, &meta](QLatin1String key, bool wrap) {
+            const QJsonValue value = meta.value(key);
+            if (!value.isUndefined() && !value.isNull() && !value.isString()) {
+                lints << QStringLiteral("%1 is not a string, which is ignored at load").arg(QString(key));
+                return;
+            }
+            const QString tok = value.toString();
+            const bool ok = wrap ? PhosphorSurfaceShaders::SurfaceShaderContract::isValidWrapToken(tok)
+                                 : PhosphorSurfaceShaders::SurfaceShaderContract::isValidFilterToken(tok);
+            if (!tok.isEmpty() && !ok) {
+                lints << QStringLiteral("%1 value '%2' not in vocabulary (cleared at load)").arg(QString(key), tok);
+            }
+        };
+        lintSingleToken(QLatin1String("bufferWrap"), true);
+        lintSingleToken(QLatin1String("bufferFilter"), false);
         // DAEMON-ONLY, and the schema accepting these gave no hint of it. All four
         // wrap/filter spellings are declared daemon-only on SurfaceShaderEffect,
         // and the compositor bears that out: it creates every buffer target
@@ -919,15 +949,19 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         // make someone change a working pack. This arm's contract used to come from the
         // neighbouring comment ("honoured by the DAEMON") rather than from the code that
         // implements it, which is the same mistake the gaussian positional lint was built on.
-        // COUNTED FROM THE SURFACE LOADER, not from the pointer one. The first version of this
-        // counted NON-EMPTY entries, which is what the POINTER loader does (`if (bufName.isEmpty())
-        // continue;`) — and the comment beside it claimed that matched "what fromJson actually
-        // loads". It does not, for THIS loader: surfaceshadereffect.cpp appends EVERY entry in
-        // place, empties included, deliberately, so bufferWraps and bufferFilters stay positionally
-        // aligned, and its own comment says so. multiBufferMode keys on that size. So the loaded
-        // count is the declared size capped at the budget, empties and all, and modelling it on the
-        // sibling family made six shapes draw the wrong half of the split. Reading a neighbour
-        // instead of the code that applies is the same mistake this arm was fixed for once already.
+        // The count is the size the registry hands the node when the chain RESOLVES: the declared
+        // size, capped at the pass budget. Empties are counted because the loader appends every
+        // entry in place (deliberately, to keep bufferWraps and bufferFilters positionally aligned),
+        // and the loop above is bounded to the same cap so nothing past it is considered at all.
+        //
+        // TWO EARLIER VERSIONS OF THIS PARAGRAPH ARGUED FROM THE WRONG MECHANISM, so what it does
+        // NOT rest on is worth stating. It does not rest on multiBufferMode keying on the declared
+        // size: setBufferShaderPaths caps AND strips trailing empties, and upstream of it the
+        // registry clears the path list outright on any unresolvable entry, so an empty-bearing
+        // chain reaches multiBufferMode as zero rather than as its declared length. And the
+        // empties-in-the-count rule is not observable from the outside either, because any chain
+        // carrying an empty entry clears chainResolves and suppresses this message entirely. The
+        // rule is kept because it is the loader's, not because a fixture can tell the difference.
         //
         // The gaussian, backdrop and radius scans above deliberately do NOT take this cap: they can
         // only report on a dropped pass when the pack is already rejected for exceeding the budget,

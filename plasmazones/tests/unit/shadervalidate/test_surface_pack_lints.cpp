@@ -282,11 +282,14 @@ private Q_SLOTS:
         QVERIFY2(!capped.report.contains(QStringLiteral("with 9 buffer passes")), qPrintable(capped.report));
         QCOMPARE(capped.errors, 2);
 
-        // An EMPTY entry beside a live one. The surface loader keeps empties IN PLACE, so this
-        // is TWO passes and the flag is inert — and because an empty entry also fail-closes the
-        // chain, the feedback line is suppressed entirely rather than counted. Both halves matter:
-        // a count that dropped empties would call this one pass, and a version that still printed
-        // on a fail-closed chain would describe a mechanism the registry has already disabled.
+        // An EMPTY entry beside a live one. What this leg pins is the SUPPRESSION: an empty
+        // entry fail-closes the chain, so the feedback line must not print at all, and a version
+        // that still printed would describe a mechanism the registry has already disabled.
+        //
+        // It does NOT pin the empties-in-the-count rule, and no leg can: chainResolves is cleared
+        // by exactly the condition that would make the count differ, so both counting rules produce
+        // the same silence here. Stated rather than left implied, because the first version of this
+        // comment claimed both halves were pinned.
         obj.insert(QStringLiteral("bufferShaders"), QJsonArray{surfaceFillerBufferName(), QString()});
         const PackResult withEmpty =
             validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-feedback"), obj, surfaceBodyReading({}));
@@ -383,17 +386,39 @@ private Q_SLOTS:
         QCOMPARE(scale.errors, 1);
 
         // The two SINGULAR string keys, which the array sweep does not reach and which were
-        // missing from this one. An empty string is the absent case for both, so it is the
-        // negative leg as well as a guard on the toString() gate.
+        // missing from this one. THREE states, because the sweep is gated on PRESENCE and so
+        // distinguishes all three — an earlier version used an empty string AS the absent case,
+        // which is what made a mistyped key invisible: the sweep gated on toString(), which is
+        // empty for a number or a bool, so `"bufferWrap": 5` slipped past here AND past the
+        // multipass non-string arm it never reaches.
         for (const QString& key : {QStringLiteral("bufferWrap"), QStringLiteral("bufferFilter")}) {
             const PackResult on = runWith(QStringLiteral("sf-inert"), key, QStringLiteral("repeat"));
             QVERIFY2(on.report.contains(key + QStringLiteral(" is declared on a single-pass pack")),
                      qPrintable(on.report));
             QCOMPARE(on.errors, 1);
-            const PackResult off = runWith(QStringLiteral("sf-inert"), key, QString());
-            QVERIFY2(!off.report.contains(QStringLiteral("single-pass pack")), qPrintable(off.report));
-            QCOMPARE(off.errors, 0);
+
+            // An EXPLICIT empty string is still a declaration the author typed, and doubly inert
+            // (the loader reads empty as unset), so it reports. This is the leg that pins the
+            // presence gate against a regression to a value test.
+            const PackResult empty = runWith(QStringLiteral("sf-inert"), key, QString());
+            QVERIFY2(empty.report.contains(key + QStringLiteral(" is declared on a single-pass pack")),
+                     qPrintable(empty.report));
+            QCOMPARE(empty.errors, 1);
+
+            // A MISTYPED value reports too, which a toString() gate could not do.
+            const PackResult mistyped = runWith(QStringLiteral("sf-inert"), key, 5);
+            QVERIFY2(mistyped.report.contains(key + QStringLiteral(" is declared on a single-pass pack")),
+                     qPrintable(mistyped.report));
+            QCOMPARE(mistyped.errors, 1);
         }
+
+        // ABSENT is the only quiet state, and the clean pack above already covers every other key,
+        // so this is the one assertion that the sweep does not fire on a pack that declared nothing.
+        const PackResult clean =
+            validateSurface(tmp, QStringLiteral("sf-inert-clean"),
+                            surfacePack(QStringLiteral("sf-inert-clean"), QJsonArray{}), surfaceBodyReading({}));
+        QVERIFY2(!clean.report.contains(QStringLiteral("single-pass pack")), qPrintable(clean.report));
+        QCOMPARE(clean.errors, 0);
     }
 
     /// The `builtin:` SPELLING diagnostics, all three shapes, because the arm that reports a

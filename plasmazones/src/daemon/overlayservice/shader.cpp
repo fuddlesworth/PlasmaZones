@@ -310,7 +310,14 @@ bool OverlayService::useShaderForScreen(const QString& screenId) const
         }
     }
 
-    return m_shaderRegistry && m_shaderRegistry->shader(effectiveShaderId).isValid();
+    // shaderUrl(), not shader().isValid(), on the same per-frame path this function's own comment
+    // above goes out of its way to keep cheap. shader() returns a ShaderInfo BY VALUE — nine
+    // QStrings, a QUrl, three QStringLists, a parameter list and a preset map — to answer one bool,
+    // and then discards it. The two tests are equivalent: isValid() is a non-empty id plus a valid
+    // shaderUrl, the registry keys packs on their id so a found pack always has one, a missing pack
+    // fails both, and shaderUrl's extra none-shader early-out is already excluded by the
+    // isNoneShader gate at the top. Both go through the same factory lookup.
+    return m_shaderRegistry && m_shaderRegistry->shaderUrl(effectiveShaderId).isValid();
 }
 
 void OverlayService::startShaderAnimation()

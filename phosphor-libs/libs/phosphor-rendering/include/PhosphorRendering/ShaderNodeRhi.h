@@ -533,7 +533,9 @@ private:
     bool ensureBufferSampler(QRhi* rhi, int index);
     /// Drop every buffer-pass target and everything compiled against it
     /// (textures, render targets, pass descriptors, pipelines, SRBs). Shared by every
-    /// setter that invalidates a target: setBufferScale, setBufferScales,
+    /// setter that invalidates a buffer target, the PATH-LIST setter included (setBufferShaderPaths,
+    /// whose call carries its own note on the three multipass-disable paths that pass {}):
+    /// setBufferScale, setBufferScales,
     /// setHalfFloatBuffers, setUseDepthBuffer, and setBufferFilter /
     /// setBufferFilters on a mip-ness flip. Also by ensureBufferTarget's own
     /// depth block, whose render targets hold the depth texture as a raw
@@ -1073,9 +1075,9 @@ private:
     /// uploadDirtyTextures, which had none: the wallpaper resize and the per-slot user
     /// texture resize. Both arms leave their dirty flag set, so both are re-entered from
     /// prepare() on every frame while the create keeps failing, and both logged every one
-    /// of those frames — the same vsync flood m_warnedAudioCreateFailed, m_depthCreateWarned,
-    /// m_bufferTargetCreateWarned and m_bufferSamplerCreateWarned each already stop. Four
-    /// precedents in this class and these two were missed. Cleared on a successful create
+    /// of those frames — the same vsync flood every other create-failure latch in this class
+    /// already stops. There were precedents throughout the class and these two were missed;
+    /// the user-texture arm cites one of them two lines above itself. Cleared on a successful create
     /// and in releaseRhiResources, so a failure that recurs after a recovery is reported
     /// again. Declared here rather than beside their siblings above because members are
     /// appended, never inserted.

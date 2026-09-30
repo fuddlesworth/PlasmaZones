@@ -334,7 +334,6 @@ public:
 
     // Screen management
     void setupForScreen(QScreen* screen);
-    void removeScreen(QScreen* screen);
     void handleScreenAdded(QScreen* screen);
     void handleScreenRemoved(QScreen* screen);
 

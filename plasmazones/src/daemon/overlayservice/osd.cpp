@@ -694,7 +694,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     }
 
     // Resolve per-screen layout (not the global m_layout which may belong to another screen)
-    // Float, algorithm, rotate, and autotile-only actions don't need layout/zones
+    // Float, rotate and autotile-only actions don't need layout/zones
     // "fullscreen", "tabbed", "resize", "center", "scroll", "consume" and
     // "expel" belong here too: their success arms render plain text and never
     // consult zone data, so the missing-layout bail below could only ever

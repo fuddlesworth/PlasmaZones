@@ -924,7 +924,7 @@ bool ShaderNodeRhi::loadFragmentShader(const QString& path)
     // already defines `main()` (every traditional pack), applyEntryAssembly is
     // the identity, and read+expandSource is the exact equivalent of the old
     // loadAndExpand(path). The mtime + included-paths fingerprints are unchanged;
-    // the entry scaffold is folded into the bake-cache key in render().
+    // the entry scaffold is folded into the bake-cache key in prepare().
     QFile fragFile(path);
     if (!fragFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
         m_shaderError = QStringLiteral("Failed to open fragment shader: ") + path;

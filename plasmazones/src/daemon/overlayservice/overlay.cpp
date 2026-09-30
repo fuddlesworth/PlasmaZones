@@ -149,8 +149,10 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     // the `visible` Q_PROPERTY — and the org.plasmazones.Overlay.overlayVisibilityChanged
     // signal the adaptor relays from it — permanently stale for every external client. The
     // success arm had the mirror-image bug, emitting true on a fall-through where nothing
-    // changed. Same idiom as recreateOverlayWindowsOnTypeMismatch below and handleScreenAdded
-    // in screens.cpp, whose transient true→false needs no signal precisely because it nets out.
+    // changed. Same capture-into-a-local idiom as recreateOverlayWindowsOnTypeMismatch below, which uses it
+    // only to gate stopShaderAnimation and never writes m_visible at all. handleScreenAdded in
+    // screens.cpp is the one with a transient, false→true→false, and it needs no signal because
+    // it nets out.
     const bool wasVisible = m_visible;
 
     // Determine if we should show on all monitors (cursorScreen == nullptr means all)
@@ -402,7 +404,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     //
     // The explicit begin()/end() loops elsewhere in this service are deliberately left alone, and
     // the reason is stated by SHAPE rather than by a count, because the first version of this
-    // sentence said "four" when there are six and attributed a property to files it had not read.
+    // sentence gave a number, got it wrong, and attributed a property to files it had not read.
     // Two of them must stay non-const: osd.cpp's dismiss resolver takes a mutable address into a
     // value, and overlay_data.cpp's updateZonesForAllWindows feeds updateLabelsTextureForWindow,
     // which does its OWN non-const find on this map — there the up-front detach is what stops that
@@ -1023,7 +1025,7 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
 
 void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physScreen)
 {
-    // constFind rather than value(), which copies the whole PerScreenOverlayState (two
+    // constFind rather than value(), which copies the whole PerScreenOverlayState (three
     // pointers, two QRects, a quint64 and a QMetaObject::Connection whose copy is an atomic
     // refcount bump) to read one member, on the multi-monitor signal-storm path this
     // function's own comment describes. Same fix buildZonesList already took.

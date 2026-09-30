@@ -339,6 +339,14 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
     // and clobber a newer one (remove-then-readd raced through D-Bus).
     const uint64_t seq = ++m_daemonGate.vsFetchSeqPerPhysId[physicalScreenId];
 
+    // A LIVE fetch is outstanding work on the shared virtualScreensReady gate, so it has to be
+    // counted like the startup batch counts its own. onVirtualScreensChanged is a PER-SCREEN
+    // signal closing ONE flag, so a reconfigure across several monitors issues several of these;
+    // uncounted, the first reply reopened the gate while the rest were still in flight.
+    if (generation == 0) {
+        ++m_daemonGate.pendingLiveVsConfigReplies;
+    }
+
     auto* watcher = new QDBusPendingCallWatcher(
         PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Screen,
                                                    QStringLiteral("getVirtualScreenConfig"), {physicalScreenId}),
@@ -359,7 +367,15 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                     }
                     if (self->m_daemonGate.pendingVsConfigReplies > 0
                         && --self->m_daemonGate.pendingVsConfigReplies == 0) {
-                        self->m_daemonGate.virtualScreensReady = true;
+                        // The gate opens only when NO vs-config work is outstanding, and a live
+                        // fetch is work too. Kept as its own test rather than folded into the
+                        // condition above, because the batch's keyspace reconcile below belongs to
+                        // the batch finishing and must run whether or not a live fetch is still in
+                        // flight — coupling them would have made a concurrent live reconfigure
+                        // silently skip it.
+                        if (self->m_daemonGate.pendingLiveVsConfigReplies == 0) {
+                            self->m_daemonGate.virtualScreensReady = true;
+                        }
                         // The screen-id keyspace just changed shape. Until these
                         // definitions landed, resolveEffectiveScreenId returned the
                         // PHYSICAL id for a subdivided monitor, while the daemon keys
@@ -407,7 +423,23 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                     if (generation != 0) {
                         return;
                     }
-                    if (self->m_daemonGate.pendingVsConfigReplies == 0) {
+                    // DISCHARGE THIS REPLY FIRST, whatever it went on to decide. The decrement
+                    // lives here rather than at each of the five return paths precisely because
+                    // the contract above already obliges every one of them to reach this lambda,
+                    // exactly once — so this is the one place that cannot be forgotten by a new
+                    // early return, and cannot be run twice by an existing one.
+                    if (self->m_daemonGate.pendingLiveVsConfigReplies > 0) {
+                        --self->m_daemonGate.pendingLiveVsConfigReplies;
+                    }
+                    // BOTH counters, because the gate is one flag over two kinds of outstanding
+                    // work. Testing only the batch's counter meant that with several monitors
+                    // reconfigured at once — one per-screen signal each, one closed flag between
+                    // them — the first reply to land reopened the gate for all the others, and a
+                    // superseded reply for a single screen did the same. The crossing detector
+                    // then read half-updated definitions, which is the phantom crossing this gate
+                    // was added to stop.
+                    if (self->m_daemonGate.pendingVsConfigReplies == 0
+                        && self->m_daemonGate.pendingLiveVsConfigReplies == 0) {
                         self->m_daemonGate.virtualScreensReady = true;
                     }
                     if (!defsMutated) {
@@ -472,8 +504,8 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                 // one place in the tree that states it. The earlier version of this comment
                 // argued the opposite, that `self` being QPointer-alive says nothing about the
                 // global, and that argument is what three review passes cited to report the
-                // unguarded siblings as bugs. A null global would leave `outputs` empty,
-                // physGeom invalid, and the arm below returns.
+                // unguarded siblings as bugs. A null global would skip the loop
+                // entirely, leaving physGeom default-constructed, and the arm below returns.
                 QRect physGeom;
                 if (KWin::effects) {
                     for (const auto* out : KWin::effects->screens()) {
@@ -670,7 +702,7 @@ void PlasmaZonesEffect::onScreenAdded(KWin::LogicalOutput* output)
         return;
     }
     // Two caches sit under a screen id and BOTH have to go, which is why this is two
-    // calls. clearScreenIdCache() drops only the effect's own screenIdCache hash; the
+    // calls. clearScreenIdCache() drops the effect's own screenIdCache and invalidates its connected-id set; the
     // serial those ids are built from comes from ScreenId::readEdidHeaderSerial, a
     // process-local static hash keyed by CONNECTOR NAME, and buildScreenBaseId prefers it
     // over QScreen::serialNumber(). The effect is loaded into kwin_wayland, so it holds its

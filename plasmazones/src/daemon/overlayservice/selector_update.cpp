@@ -370,7 +370,7 @@ void OverlayService::refreshContextLockState()
     if (m_layoutPickerVisible && !m_layoutPickerScreenId.isEmpty()) {
         // constFind, not value(): value() copies the whole PerScreenOverlayState struct just
         // to call a one-line accessor. Stated as the preference rather than as settled
-        // practice, because it is not: seven sites in this directory still spell it value()
+        // practice, because it is not: sibling sites in this directory still spell it value()
         // (overlay.cpp x4, screens.cpp x2, lifecycle.cpp), on show, hide and screen-change
         // paths — and one of them, updateOverlayWindow, also runs off the coalesced
         // layoutModified refresh at up to ~60 Hz while a zone is dragged in the editor. The
