@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // FILE-SIZE EXCEPTION (sanctioned): this file is past the 1150-line ceiling, and its baseline
-// entry was RAISED from 1199 to 1244 to fund two defect fixes. What it gained: the per-entry texture
+// entry was RAISED from 1199 to 1243 to fund two defect fixes. What it gained: the per-entry texture
 // arms are now bounded to the slots the loader actually fills, and the parameter loop mirrors
 // fromJson's duplicate-id drop. Both were reporting a load behaviour that does not happen,
 // which is the one class this file exists to be correct about, and neither had a line-neutral
