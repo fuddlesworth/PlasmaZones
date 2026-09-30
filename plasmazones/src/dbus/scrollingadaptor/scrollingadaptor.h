@@ -39,7 +39,8 @@ namespace PlasmaZones {
  * clearWindowedFullscreen reconciliation call (inbound, effect to daemon,
  * when a client leaves fullscreen on its own), the reapplyWindowGeometry
  * repair call (inbound too, for a fullscreen exit whose strip rects never
- * moved), the blueprintProgressJson template-seed report, the
+ * moved), the reportCommittedSize call (inbound, the size a client settled
+ * on instead of its column), the blueprintProgressJson template-seed report, the
  * stripChanged wake-up that tells a preview its strip is worth re-reading,
  * the stripContextChanged announcement of which strip a screen is
  * currently showing, the compositor-owned behaviour map and the
@@ -448,6 +449,28 @@ public Q_SLOTS:
      * @param windowId Window to re-emit; an empty string is ignored
      */
     void reapplyWindowGeometry(const QString& windowId);
+
+    /**
+     * @brief Report the size a strip window's client settled on (compositor
+     *        reconciliation)
+     *
+     * The KWin effect calls this when a strip window's committed frame
+     * differs from the column rect it was offered, once per distinct pair and
+     * only with no configure in flight. A commit wider than the column along
+     * the strip widens the column to it, so the neighbours are laid out
+     * beside the window instead of under it; a later narrower answer gives
+     * the widening back (ScrollStrip::recordCommittedSize). Same wire-boundary
+     * policy as clearWindowedFullscreen: neither ownership- nor
+     * context-gated, since it reports what the client has already done.
+     *
+     * @param windowId Window whose commit to report; an empty string is ignored
+     * @param offeredWidth Width of the column rect the strip offered
+     * @param offeredHeight Height of the column rect the strip offered
+     * @param committedWidth Width of the frame the client committed
+     * @param committedHeight Height of the frame the client committed
+     */
+    void reportCommittedSize(const QString& windowId, int offeredWidth, int offeredHeight, int committedWidth,
+                             int committedHeight);
 
     /**
      * @brief Hold a strip tile out of the strip for its OWN fullscreen, or

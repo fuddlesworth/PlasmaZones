@@ -455,6 +455,19 @@ void ScrollingAdaptor::reapplyWindowGeometry(const QString& windowId)
     m_engine->reapplyWindowGeometry(windowId);
 }
 
+void ScrollingAdaptor::reportCommittedSize(const QString& windowId, int offeredWidth, int offeredHeight,
+                                           int committedWidth, int committedHeight)
+{
+    // clearWindowedFullscreen's wire-boundary policy, context gate skipped
+    // for its reason. Non-positive sizes are malformed and dropped here; the
+    // engine refuses an untracked window and the strip bounds a huge one.
+    if (!m_engine || windowId.isEmpty() || offeredWidth <= 0 || offeredHeight <= 0 || committedWidth <= 0
+        || committedHeight <= 0) {
+        return;
+    }
+    m_engine->reportCommittedSize(windowId, QSize(offeredWidth, offeredHeight), QSize(committedWidth, committedHeight));
+}
+
 bool ScrollingAdaptor::setWindowFullscreenFloat(const QString& windowId, const QString& screenId, bool floating)
 {
     // clearWindowedFullscreen's wire-boundary policy: a reconciliation call

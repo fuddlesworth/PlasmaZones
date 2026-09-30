@@ -1064,16 +1064,13 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, m_tilingHandler.get(),
             &TilingHandler::slotWindowFrameGeometryChanged);
 
-    // Single windowFrameGeometryChanged lambda combining the effect-side
-    // per-tick work, in the order the bodies run: a strip-animation retarget
-    // onto the rect the client actually committed (Body -1), the offered-column
-    // centring for a client that would not take its column (Body -0.5),
-    // deferred maximize completion (Body 0), first-frame suppression release
-    // (Body 1), and the debounced daemon push (Body 2). Keeping the last two
-    // as separate connections (which they were originally) doubled the per-geometry-
-    // tick lambda dispatch cost without functional benefit; the bodies
-    // are independent so collapsing them just runs one capture+vtable
-    // hop per tick instead of two. The autotile-handler connection
+    // Single windowFrameGeometryChanged lambda combining the effect-side per-tick work, in the order the bodies
+    // run: a strip-animation retarget onto the rect the client actually committed (Body -1), the report to the
+    // engine and the offered-column centring for a client that would not take its column (Body -0.5), deferred
+    // maximize completion (Body 0), first-frame suppression release (Body 1), and the debounced daemon push
+    // (Body 2). Keeping the last two as separate connections (which they were originally) doubled the
+    // per-geometry-tick lambda dispatch cost without functional benefit; the bodies are independent so
+    // collapsing them just runs one capture+vtable hop per tick instead of two. The autotile-handler connection
     // immediately above is kept separate because it dispatches to a slot
     // on a different receiver (`m_tilingHandler.get()`).
     //
@@ -1175,8 +1172,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                             safeW.data(), committed, PhosphorAnimation::RetargetPolicy::PreservePosition));
                     }
                 }
-                // Body -0.5 — centre a client that answered its column with
-                // a different size.
+                // Body -0.5 — a client answered its column with a different
+                // size: report the answer to the engine, then centre it.
                 //
                 // The strip offers the full column rect the first time it
                 // sees a column SIZE, because until the client has answered
@@ -1226,6 +1223,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     if (haveOffer && scrollManagedOutputFor(safeW.data())) {
                         const QRect live = safeW->frameGeometry().toRect();
                         if (live.size() != offered.size() && !live.size().isEmpty()) {
+                            m_tilingHandler->reportStripCommit(safeW.data(), scrollId, offered, live);
                             // Same centring as the strip apply and the paint
                             // resolver: the same toRect() rounding, and the
                             // same clamp at zero, so a frame whose minimum

@@ -277,9 +277,9 @@ int ScrollStrip::columnMinExtentPx(const Column& c, const ScrollLayoutParams& pa
             reservationFloor = params.tabIndicator.reservedThickness(c.visibleTileCount());
         }
         for (const Tile& tile : c.tiles) {
-            // minMain, not minWidth: this is the column's floor ALONG the
-            // strip, which is the client's minimum height on a vertical one.
-            const int tileMinMain = tile.minMain(params.axis);
+            // minMain, not minWidth: the floor ALONG the strip (a vertical
+            // one's is the minimum height), raised to any wider commit.
+            const int tileMinMain = qMax(tile.minMain(params.axis), committedMainFloorPx(tile.windowId));
             if (!tile.minimized && tileMinMain + reservationFloor > floor) {
                 floor = tileMinMain + reservationFloor;
             }

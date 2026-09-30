@@ -7,6 +7,7 @@
 #include <PhosphorScrollEngine/ScrollTypes.h>
 #include <phosphorscrollengine_export.h>
 
+#include <QHash>
 #include <QSize>
 #include <QString>
 #include <QStringList>
@@ -570,6 +571,52 @@ public:
     /// protecting the intent it was not written for.
     bool reconcileWindowSize(const QString& windowId, const QSize& ackedSize, bool mainChanged, bool crossChanged,
                              const ScrollLayoutParams& params);
+    /// Record the size a client settled on after being offered @p offered,
+    /// when it is not the offer: the client's own answer, as opposed to the
+    /// user's resize reconcileWindowSize takes. Some clients commit a frame
+    /// WIDER than their column along the strip (a game holding a whole-number
+    /// scale of its native resolution picks the scale from the cross extent
+    /// alone), and a column laid out at its intent then puts the next column
+    /// underneath the window. A main extent past the offer is kept as a floor
+    /// on the column, read through committedMainFloorPx the way a declared
+    /// minimum is read, so neighbours make room for it. It is NOT a width
+    /// intent: nothing is serialized, and it leaves with the window.
+    ///
+    /// Only an answer to the tile's WHOLE rect counts. A peek clamped at the
+    /// screen edge, or a stack tile clamped across the strip, was never offered
+    /// the column, so what the client did with it says nothing about the
+    /// column; @p offered is compared against the tile's resolved rect.
+    ///
+    /// A later answer NARROWER than a widened offer gives the widening back:
+    /// the floor drops to that answer while it still overshoots what the
+    /// column resolves to without it, and goes entirely once it does not. A
+    /// narrower answer never creates a floor, so a client that merely rounds
+    /// its size down is never pinned to it. Nothing is recorded while
+    /// minimum sizes are not respected, since no consumer would read it.
+    /// Returns whether the column's resolved extent changed, which is the
+    /// caller's cue to relayout.
+    bool recordCommittedSize(const QString& windowId, const QSize& offered, const QSize& committed,
+                             const ScrollLayoutParams& params);
+    /// Drop every floor its column already satisfies without it: the column
+    /// offers the tile at least the extent the client last committed, because
+    /// the user widened it past that or another tile's floor did. Such a floor
+    /// changes nothing now, but left standing it would come back into force the
+    /// moment the column is narrowed again and pin it to an answer the client
+    /// gave under different conditions. Dropped, the narrower column is offered
+    /// as asked, and a client that still will not take it answers with a new
+    /// floor. Layout-neutral, so @p resolved (this strip's relayout under
+    /// @p params) stays valid across the call. A no-op while minimum sizes are
+    /// not respected: every floor then reads as satisfied, and dropping them
+    /// would discard what the clients said before the setting comes back.
+    void dropSatisfiedCommittedFloors(const ResolvedStrip& resolved, const ScrollLayoutParams& params);
+    /// The main extent @p windowId committed past its offer, as recorded by
+    /// recordCommittedSize, or 0 when it took its column. A floor exactly like
+    /// the tile's declared minimum along the strip, and read under the same
+    /// respectMinimumSize gate by every consumer of that minimum.
+    int committedMainFloorPx(const QString& windowId) const
+    {
+        return m_committedMainFloor.value(windowId);
+    }
 
     // ── Display ──────────────────────────────────────────────────────────────
     /// Toggle the active column between Normal and Tabbed presentation.
@@ -983,6 +1030,12 @@ private:
     /// all of that bookkeeping along with this pair.
     ColumnWidth m_preMaximizeWidth;
     int m_preMaximizeColumnIdx = -1;
+    /// Per window: the main extent its client committed past the column it
+    /// was offered (see recordCommittedSize). Keyed by window rather than held
+    /// on the Tile so it survives the tile moving between columns, where the
+    /// client's answer is unchanged until it answers again. Dropped when the
+    /// window leaves the strip (removeWindowInternal).
+    QHash<QString, int> m_committedMainFloor;
 };
 
 } // namespace PhosphorScrollEngine

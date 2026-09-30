@@ -394,6 +394,7 @@ bool ScrollStrip::removeWindowInternal(const QString& windowId, const ScrollLayo
     Column& col = m_columns[colIdx];
     const int tileIdx = col.indexOfWindow(windowId);
     col.tiles.removeAt(tileIdx);
+    m_committedMainFloor.remove(windowId);
     if (col.activeTileIdx > tileIdx || col.activeTileIdx >= col.tiles.size()) {
         col.activeTileIdx = qMax(0, col.activeTileIdx - 1);
     }
