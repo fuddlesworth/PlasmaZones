@@ -43,8 +43,15 @@ namespace {
 // hotplug: plugging an identical twin gives a monitor's id a connector suffix and unplugging the
 // twin takes it away again, so a cache keyed by the id accumulates one orphan per spelling change
 // that a single remove-by-current-id can never reach. Pruning a still-live screen whose spelling
-// just changed is correct too, not collateral: its old key IS stale, and the only cost is one
-// non-deduplicated report on the next change.
+// just changed is correct too, not collateral: its old key IS stale.
+//
+// TWO READERS, and the second is why this is a prune rather than a clear. reportScreenDesktop's
+// dedup pays one non-deduplicated report for a dropped key, which is nothing. But
+// lastReportedScreenDesktops() also feeds PreTileDecisions::announceMatchesReportedDesktops,
+// whose contract is that a MISSING key is not a mismatch — so a dropped key widens that vacuous
+// accept for as long as it is absent. It converges, because the daemon re-announces on hotplug
+// and the gate only arms for a desktop switch, and the alternative (keeping a spelling no
+// consumer can match) is worse. Do not turn this into a clear.
 void pruneToLiveScreens(QHash<QString, int>& cache, const QSet<QString>& live)
 {
     for (auto it = cache.begin(); it != cache.end();) {
@@ -769,7 +776,7 @@ void PlasmaZonesEffect::onScreenAdded(KWin::LogicalOutput* output)
     // per-output record, and falls back to a resolve BEFORE its own cache clear, both so the
     // id matches the spelling the pre-unplug state was stored under. Re-reading a disconnected
     // connector's now-empty edid would change that spelling on the fallback path and break the
-    // two consumers that compare against it.
+    // one consumer that compares against it.
     // Add-side alone is sufficient for the reused-connector case, because the new monitor's
     // serial is read fresh on its first resolve.
     PhosphorIdentity::ScreenId::invalidateEdidCache(output->name());
@@ -791,20 +798,18 @@ void PlasmaZonesEffect::onScreenAdded(KWin::LogicalOutput* output)
     // resolve writes screenIdByOutput on its miss path and the cache was just cleared, so this
     // loop re-records every output and eagerly rebuilds the connected set in the same pass.
     //
-    // WHY A RESOLVE LOOP AND NOT A MAP CLEAR: upstream emits outputAdded BEFORE outputRemoved
-    // within one updateOutputs, so on a bundled add+remove (a total unplug appends a placeholder)
-    // this runs while the departing outputs still need their records. Clearing the map would wipe
-    // them and leave onScreenRemoved resolving cold, which is the defect the record exists to
-    // prevent. A resolve loop cannot: the dying outputs are already pruned from m_outputs before
-    // any emit, so screens() does not list them and nothing here touches their entries.
-    m_idCaches.connectedPhysicalIds.clear();
-    for (const auto* other : KWin::effects->screens()) {
-        const QString physId = outputScreenId(other);
-        if (!physId.isEmpty()) {
-            m_idCaches.connectedPhysicalIds.insert(physId);
-        }
-    }
-    m_idCaches.connectedPhysicalIdsValid = true;
+    // WHY A RESOLVE AND NOT A MAP CLEAR: upstream emits outputAdded BEFORE outputRemoved within
+    // one updateOutputs, so on a bundled add+remove (a total unplug appends a placeholder) this
+    // runs while the departing outputs still need their records. Clearing the map would wipe them
+    // and leave onScreenRemoved resolving cold, which is the defect the record exists to prevent.
+    // A resolve cannot: the dying outputs are already pruned from m_outputs before any emit, so
+    // screens() does not list them and nothing here touches their entries.
+    //
+    // Spelled as the ACCESSOR rather than a loop of its own. clearScreenIdCache() two lines up has
+    // already invalidated the set, so this call rebuilds it eagerly and re-records every output on
+    // the way through, which is exactly what a hand-written copy did — and a hand-written copy of
+    // a body that already exists is how the add and remove sides drift apart.
+    (void)connectedPhysicalIds();
     pruneToLiveScreens(m_lastScreenDesktop, m_idCaches.connectedPhysicalIds);
 
     // Construct a bound clock for this output. Idempotent: if the same output
@@ -846,14 +851,20 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // unplug appends a placeholder output, whose add clears the cache), where even the FIRST
     // removal resolves cold.
     //
-    // The recompute stays as the fallback, so an output nothing ever resolved behaves as before.
+    // The recompute stays as the fallback. It is BELT-AND-BRACES, not a live path: onScreenAdded
+    // resolves every output, and every output gets one, so no live output reaches here unrecorded.
+    // It stays because it is the guard against a future change to that add-side resolve, in the
+    // same spirit as the two other "not evidence this is reachable" notes in this file.
     //
     // THE TWO-STEP FORM IS LOAD-BEARING. `value(output, outputScreenId(output))` reads as a cache
-    // lookup with a lazy fallback and is neither: C++ evaluates the default argument
-    // unconditionally, and outputScreenId's miss path inserts into THIS map, so the recompute ran
-    // first, overwrote the recorded spelling with the cold one, and value() handed that straight
-    // back. Written that way the fix was inert in both scenarios above. Read first, resolve only
-    // on a genuine miss.
+    // lookup with a lazy fallback and is neither. `defaultValue` is an ordinary function ARGUMENT
+    // of a two-parameter overload, not a C++ default argument, so it is evaluated before the call
+    // whether or not the key is present — and outputScreenId's miss path inserts into THIS map, so
+    // the recompute ran first, overwrote the recorded spelling with the cold one, and value()
+    // handed that straight back. Written that way the fix was inert in both scenarios above. Read
+    // first, resolve only on a genuine miss. (An earlier version of this note, and the commit that
+    // landed it, said "default argument", which teaches the opposite: a real default argument IS
+    // evaluated only when the caller omits it.)
     const auto recordedId = m_idCaches.screenIdByOutput.constFind(output);
     const QString removedScreenId =
         recordedId != m_idCaches.screenIdByOutput.constEnd() ? *recordedId : outputScreenId(output);
@@ -936,7 +947,7 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // rather than re-resolving, for the same cache reason.
     m_tilingHandler->noteScrollTabOutputRemoved(output, removedScreenId);
 
-    // Both consumers of removedScreenId have run, so drop this output's recorded spelling. HERE,
+    // The one consumer of removedScreenId has run, so drop this output's recorded spelling. HERE,
     // not after the motion-clock early-return below: the key is a raw LogicalOutput* and an entry
     // that outlives its output is the same address-reuse hazard the suppression set and the strip
     // animator each describe in this handler — a later hotplug landing at the same address would
@@ -955,7 +966,7 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // KWin has already dropped the dying output from screenAt()'s answer: it has, because
     // updateOutputs prunes m_outputs before emitting, so a rebuild cannot put the dead pointer
     // back. It does NOT avoid the rebuild's decoration sweep: refreshFullscreenSuppression is
-    // connected to this same screenRemoved signal at lifecycle_wiring.cpp:1060, after this
+    // connected to this same screenRemoved signal at lifecycle_wiring.cpp:1059, after this
     // handler's own connection, so Qt delivers it later in the same emit (one inert slot,
     // ScreenChangeHandler::slotScreenLayoutChanged at :1012, runs between them) and it sweeps
     // whenever the rebuilt set differs. And it is NOT saved by the ~Workspace emit, which reaches

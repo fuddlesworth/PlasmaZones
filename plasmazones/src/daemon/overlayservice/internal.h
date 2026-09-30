@@ -215,6 +215,25 @@ inline QRect resolveScreenGeometry(PhosphorScreens::ScreenManager* mgr, const QS
     return screen ? screen->geometry() : QRect();
 }
 
+/// The geometry @p screenId GENUINELY resolves to, or an invalid rect when nothing does.
+///
+/// resolveScreenGeometry above destroys that distinction ON PURPOSE, and it has to: a surface
+/// needs SOME rect to be sized to, so an unresolvable id is substituted with the full physical
+/// monitor, and resolveTargetScreen substitutes the PRIMARY monitor for an id nothing can
+/// resolve at all. That is right for sizing and wrong for deciding whether an absolute
+/// setGeometry is safe, because a substituted rect compares EQUAL to its screen's own rect and
+/// so passes assertWindowOnScreen's physical-screen test trivially — which is how a
+/// virtual-screen window came to take the branch that test exists to deny it.
+///
+/// So a caller that needs both asks for both: this for the verdict, resolveScreenGeometry for
+/// the size. A tracked physical id answers with its real rect here, so the physical path is
+/// unchanged; only a genuinely unresolvable id comes back invalid. ScreenManager already
+/// latches its own warn-once for a virtual miss, so calling this adds no repeated logging.
+inline QRect trueScreenGeometry(PhosphorScreens::ScreenManager* mgr, const QString& screenId)
+{
+    return mgr ? mgr->screenGeometry(screenId) : QRect();
+}
+
 // Write all shader-config properties from ShaderInfo to a QML window (every
 // buffer/wallpaper/param field ShaderInfo carries, plus the generated param
 // preamble - see the writes below rather than an enumeration that rots).

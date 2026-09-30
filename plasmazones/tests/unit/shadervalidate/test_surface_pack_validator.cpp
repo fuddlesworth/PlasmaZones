@@ -584,7 +584,9 @@ private Q_SLOTS:
         obj.insert(QStringLiteral("multipass"), true);
         obj.insert(QStringLiteral("depthBuffer"), true);
         obj.insert(QStringLiteral("bufferShaders"), QJsonArray{surfaceFillerBufferName()});
-        obj.insert(QStringLiteral("bufferScale"), 1.0);
+        // Mid-range on purpose. 1.0 is legal but sits exactly on kMaxBufferScale, where a lowered
+        // bound would add an out-of-range line that QVERIFY(errors > 0) below cannot see.
+        obj.insert(QStringLiteral("bufferScale"), 0.75);
         obj.insert(QStringLiteral("bufferScales"), QJsonArray{0.5});
 
         const PackResult r =
@@ -646,6 +648,45 @@ private Q_SLOTS:
             validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-depth-live"), live, surfaceBodyReading({}));
         QVERIFY2(runs.report.contains(note), qPrintable(runs.report));
         QVERIFY2(!runs.report.contains(QStringLiteral("single-pass pack")), qPrintable(runs.report));
+    }
+
+    /// The BACKDROP note, which shipped with no test at all while every sibling arm in this family
+    /// had one. A pack whose main fragment reads the backdrop without declaring `needsBackdrop`
+    /// composites a transparent pane, because the compositor gates the whole capture on that flag.
+    /// It is a NOTE rather than a lint because the shared helper tells authors to gate styling on
+    /// uHasBackdrop, so sampling without the flag is a supported pattern.
+    ///
+    /// The second leg is the one that matters: it pins that the scan reads the PACK'S OWN source
+    /// and not the expanded TU. The shared helper DEFINES backdropTexel and declares uBackdrop, so
+    /// scanning after expansion would fire for any pack that merely includes it.
+    void theBackdropNoteFiresOnlyWhenThePackReadsTheBackdrop()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+        const QString note = QStringLiteral("reads the backdrop");
+        const QString include = QStringLiteral("#include <surface_backdrop.glsl>\n");
+        const QString reads = include
+            + QStringLiteral("vec4 pSurface(vec2 uv)\n{\n    return mix(backdropTexel(uv), "
+                             "surfaceTexel(uv), 0.5);\n}\n");
+
+        // READS IT, no flag: the note prints.
+        const QJsonObject bare = surfacePack(QStringLiteral("sf-bd-bare"), QJsonArray{});
+        const PackResult missing = validateSurface(tmp, QStringLiteral("sf-bd-bare"), bare, reads);
+        QVERIFY2(missing.report.contains(note), qPrintable(missing.report));
+
+        // READS IT and declares the flag: silent.
+        QJsonObject flagged = surfacePack(QStringLiteral("sf-bd-flag"), QJsonArray{});
+        flagged.insert(QStringLiteral("needsBackdrop"), true);
+        const PackResult declared = validateSurface(tmp, QStringLiteral("sf-bd-flag"), flagged, reads);
+        QVERIFY2(!declared.report.contains(note), qPrintable(declared.report));
+
+        // INCLUDES the helper but never calls it, no flag: silent. Fires only if the scan moves to
+        // the expanded source, which is the regression this leg exists to catch.
+        const QJsonObject unused = surfacePack(QStringLiteral("sf-bd-unused"), QJsonArray{});
+        const PackResult quiet =
+            validateSurface(tmp, QStringLiteral("sf-bd-unused"), unused, include + surfaceBodyReading({}));
+        QVERIFY2(!quiet.report.contains(note), qPrintable(quiet.report));
+        QCOMPARE(quiet.errors, 0);
     }
 
     /// A pack that ships its OWN vertex stage gets it baked on BOTH hosts. No

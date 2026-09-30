@@ -276,21 +276,21 @@ bool ShaderNodeRhi::ensureBufferTarget()
             << "Depth buffer with" << m_bufferPaths.size()
             << "buffer passes: only the last pass's depth output will be available in the image pass";
     }
-    // A depth pack pins EVERY pass to the single scale (see passSize above), because the passes
-    // share one depth attachment and a render target's colour and depth attachments must agree in
-    // size. Silently discarding a pack's declared per-pass scales is the kind of thing an author
-    // spends an afternoon on, so say it once. The offline validator lints the same combination;
-    // this covers a pack that reaches the node another way. NOT gated on multiBufferMode, unlike
-    // the warning above: passSize pins a ONE-pass depth pack too, so it used to diverge in silence.
+    // A depth pack pins EVERY pass to the single scale (see passSize above): the depth texture is
+    // sized from bufferScale and a render target's colour and depth attachments must agree, which
+    // holds at ONE pass too, hence no multiBufferMode gate unlike the warning above. Silently
+    // discarding declared per-pass scales costs an author an afternoon, so say it once. The
+    // offline validator lints the same combination. Bounded by the DECLARED PASS COUNT, not the
+    // 8-slot array: setBufferScales caps but never trims, so scanning all 8 named an absent pass.
     if (m_useDepthBuffer && !m_depthScalesWarned) {
         bool diverged = false;
-        for (int i = 0; i < kMaxBufferPasses && !diverged; ++i) {
+        for (int i = 0; i < m_bufferPaths.size() && i < kMaxBufferPasses && !diverged; ++i) {
             diverged = !qFuzzyCompare(m_bufferScales[static_cast<size_t>(i)], m_bufferScale);
         }
         if (diverged) {
             m_depthScalesWarned = true;
             qCWarning(lcShaderNode) << "Depth buffer with per-pass bufferScales: every pass is pinned to"
-                                    << m_bufferScale << "because the passes share one depth attachment";
+                                    << m_bufferScale << "because the depth attachment is sized from bufferScale";
         }
     }
     // Buffer texel format: RGBA16F unless the pack's metadata declares its

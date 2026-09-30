@@ -309,7 +309,9 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
     // the superseded hide completion no-ops.
 
     if (shellWindow) {
-        assertWindowOnScreen(shellWindow, screen, screenGeom);
+        // The TRUE geometry, not screenGeom: that one is substituted when the id does not resolve,
+        // and a substituted rect makes assertWindowOnScreen's physical-screen test trivially true.
+        assertWindowOnScreen(shellWindow, screen, trueScreenGeometry(m_screenManager, screenId));
         shellWindow->setWidth(screenGeom.width());
         shellWindow->setHeight(screenGeom.height());
     }

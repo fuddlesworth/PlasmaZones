@@ -127,7 +127,11 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
         state->zoneSelectorPhysScreen = physScreen;
         state->zoneSelectorGeometry = targetGeom;
         if (state->shell->shellWindow()) {
-            assertWindowOnScreen(state->shell->shellWindow(), physScreen, targetGeom);
+            // The TRUE geometry, not targetGeom: the callers below substitute the physical rect
+            // when the id does not resolve, and a substituted rect makes assertWindowOnScreen's
+            // physical-screen test trivially true. targetGeom still sizes the window.
+            assertWindowOnScreen(state->shell->shellWindow(), physScreen,
+                                 trueScreenGeometry(m_screenManager, screenId));
             state->shell->shellWindow()->setWidth(targetGeom.width());
             state->shell->shellWindow()->setHeight(targetGeom.height());
         }
@@ -205,9 +209,8 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
                     continue;
                 }
             }
-            auto* smgr = m_screenManager;
-            QRect geom = (smgr && smgr->screenGeometry(screenId).isValid()) ? smgr->screenGeometry(screenId)
-                                                                            : screen->geometry();
+            const QRect resolved = trueScreenGeometry(m_screenManager, screenId);
+            const QRect geom = resolved.isValid() ? resolved : screen->geometry();
             anyEligible = true;
             showOnScreen(screenId, screen, geom);
         }
@@ -753,7 +756,10 @@ void OverlayService::showZoneSelectorSlotOnScreen(const QString& effectiveId, QS
     state->zoneSelectorPhysScreen = physScreen;
     state->zoneSelectorGeometry = targetGeom;
     if (state->shell->shellWindow()) {
-        assertWindowOnScreen(state->shell->shellWindow(), physScreen, targetGeom);
+        // The TRUE geometry, not targetGeom — see showZoneSelector's site. targetGeom here can
+        // also be a rect CACHED from an earlier show, which is stale rather than substituted, and
+        // the same argument applies: it is not evidence that the id resolves now.
+        assertWindowOnScreen(state->shell->shellWindow(), physScreen, trueScreenGeometry(m_screenManager, effectiveId));
         state->shell->shellWindow()->setWidth(targetGeom.width());
         state->shell->shellWindow()->setHeight(targetGeom.height());
     }

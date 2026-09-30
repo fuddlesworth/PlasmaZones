@@ -115,8 +115,8 @@ constexpr bool isConsumerBinding(int binding) noexcept
  * thread outside it is a data race with prepare()/render(). The RENDER THREAD may
  * call them from prepare() BEFORE the frame's bindings are built, and does:
  * uploadLabelsTexture calls setExtraBinding there. That covers DATA RACES ONLY.
- * A setter that drops an SRB, pipeline, buffer target or the UBO — mechanically, any one that
- * calls resetAllBindingsAndPipelines() or resetBufferTargets(), or resets a GPU member itself —
+ * A mutator that drops an SRB, pipeline, buffer target or the UBO — mechanically, any one that
+ * calls resetAllBindingsAndPipelines() or resetBufferTargets(), or resets a QRhi member itself —
  * must NOT be reached from render(), nor from prepare() once its passes are recorded, on ANY
  * thread. That predicate is grep-checkable; a name list here rots. Only invalidateItem() is
  * safe to call from the GUI thread outside the sync phase: it is the only entry
@@ -179,7 +179,7 @@ public:
      *
      * Called from the owning QQuickItem destructor on the GUI thread.
      * After this call, the render node will no longer dereference m_item.
-     * Thread-safe: uses an atomic flag checked by prepare()/render().
+     * Thread-safe: an atomic flag plus m_itemMutex, which serialises every dereference.
      */
     void invalidateItem();
 

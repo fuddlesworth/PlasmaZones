@@ -360,7 +360,9 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
     // coordinates, so the snap-assist path holds to the same per-VS
     // sizing the rest of the shell uses.
     if (shellWindow) {
-        assertWindowOnScreen(shellWindow, screen, screenGeom);
+        // The TRUE geometry, not screenGeom: that one is substituted when the id does not resolve,
+        // and a substituted rect makes assertWindowOnScreen's physical-screen test trivially true.
+        assertWindowOnScreen(shellWindow, screen, trueScreenGeometry(m_screenManager, resolvedId));
         shellWindow->setWidth(screenGeom.width());
         shellWindow->setHeight(screenGeom.height());
     }
@@ -904,7 +906,8 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     applyDecoration(slot, PhosphorSurfaceShaders::decorationPopupLayoutPickerPath());
 
     if (shellWindow) {
-        assertWindowOnScreen(shellWindow, screen, screenGeom);
+        // The TRUE geometry, not screenGeom — see the snap-assist site above.
+        assertWindowOnScreen(shellWindow, screen, trueScreenGeometry(m_screenManager, resolvedId));
         shellWindow->setWidth(screenGeom.width());
         shellWindow->setHeight(screenGeom.height());
     }

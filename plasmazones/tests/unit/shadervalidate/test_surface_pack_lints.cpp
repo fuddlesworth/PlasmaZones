@@ -618,8 +618,10 @@ private Q_SLOTS:
         typed.remove(QStringLiteral("bufferScales"));
         const PackResult typeArm = validateSurface(tmp, QStringLiteral("sf-fc-type"), typed, surfaceBodyReading({}));
         QVERIFY2(typeArm.report.contains(QStringLiteral("bufferScale is not a number")), qPrintable(typeArm.report));
-        // Two again, same pair. The `depthBuffer` removal that used to sit here was dead: the base
-        // fixture no longer declares the key, so `typed` never carried it.
+        // Two again: the same missing-shader lint, plus the TYPE line where the leg above had the
+        // RANGE line. Those two arms are separately gated and exercising each on its own is why
+        // both legs exist, so this is NOT "the same pair". The `depthBuffer` removal that used to
+        // sit here was dead: the base fixture no longer declares the key, so `typed` never had it.
         QCOMPARE(typeArm.errors, 2);
 
         // Control: the identical keys on a chain that DOES resolve still draw them, or the gate
@@ -651,8 +653,10 @@ private Q_SLOTS:
         REQUIRE_SURFACE_FIXTURE(tmp);
 
         // @p passes exists so a multi-pass leg can keep bufferScales the SAME LENGTH as
-        // bufferShaders. Every buffer array has to, or lintBufferArrayLen fires and each exact
-        // count below is wrong — the fragility the sibling slot above spells out.
+        // bufferShaders, which every leg here does EXCEPT sf-dx-f. That one is over-length on
+        // purpose and its count INCLUDES the length lint, because being past the budget is the
+        // whole thing it pins — do not "fix" its array length. For every other leg a mismatch
+        // makes lintBufferArrayLen fire and the exact count wrong.
         const auto runWith = [&tmp](const QString& name, double packWide, const QJsonArray& scales, int passes = 1) {
             QJsonObject obj = surfacePack(name, QJsonArray{});
             obj.insert(QStringLiteral("multipass"), true);
@@ -681,6 +685,14 @@ private Q_SLOTS:
         QVERIFY2(!agreeMulti.report.contains(needle), qPrintable(agreeMulti.report));
         QCOMPARE(agreeMulti.errors, 0);
 
+        // AN IN-BUDGET DIVERGENCE PAST ENTRY 0, which nothing else here pins. Every other leg
+        // either agrees at entry 0, has one entry, or diverges only past the budget, so narrowing
+        // the production loop to check entry 0 alone left the whole slot green. This is the leg
+        // that fails on that mutation.
+        const PackResult later = runWith(QStringLiteral("sf-dx-h"), 0.5, QJsonArray{0.5, 0.25}, 2);
+        QVERIFY2(later.report.contains(needle), qPrintable(later.report));
+        QCOMPARE(later.errors, 1);
+
         // DIVERGING: one entry differs from the pack-wide scale, which is the case the daemon's
         // pinning actually discards, so the lint fires. One error, the depth line alone.
         const PackResult diverge = runWith(QStringLiteral("sf-dx-c"), 0.5, QJsonArray{0.25});
@@ -704,8 +716,9 @@ private Q_SLOTS:
 
         // PAST THE PASS BUDGET, and this is the leg the unbounded loop failed. fromJson caps
         // bufferScales at kMaxBufferPasses, so a divergent entry past the cap reaches neither host.
-        // The two over-cap lints reject the pack on their own; what this pins is that the depth arm
-        // adds no third claim about a divergence that provably cannot occur.
+        // The positional-length lint and the over-budget lint reject the pack on their own (two
+        // different arms, differently gated); what this pins is that the depth arm adds no third
+        // claim about a divergence that provably cannot occur.
         const int depthCap = PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses;
         QJsonArray pastBudget;
         for (int i = 0; i < depthCap; ++i) {
@@ -845,6 +858,9 @@ private Q_SLOTS:
         // But neither past-budget entry draws a claim about a value the loader threw away.
         QVERIFY2(!r.report.contains(QStringLiteral("which the DAEMON honours")), qPrintable(r.report));
         QVERIFY2(!r.report.contains(QStringLiteral("not in vocabulary")), qPrintable(r.report));
+        // Counted, for the reason the probe leg below argues: two substring negatives cannot say
+        // "and nothing else", and the two length lints this fixture does draw were unasserted.
+        QCOMPARE(r.errors, 2);
 
         // Control: the same tokens INSIDE the budget still draw both, or the cap would have
         // silenced the arms rather than bounded them.

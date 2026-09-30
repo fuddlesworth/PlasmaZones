@@ -288,8 +288,9 @@ struct IdCacheState
     // Cleared on screen geometry changes (add/remove/reconfigure).
     QHash<QString, QString> screenIdCache;
 
-    // Connected physical screen ids (outputScreenId per KWin output),
-    // rebuilt lazily after every screenIdCache invalidation. Lets the
+    // Connected physical screen ids (outputScreenId per KWin output), rebuilt
+    // EAGERLY by both screen handlers and lazily after the other invalidation
+    // points (virtual-screen change, geometry change, the bridge). Lets the
     // scroll-override path (getWindowScreenId — a per-candidate call inside
     // both focus-follows-mouse stacking walks) test output liveness with a
     // set lookup instead of an O(outputs) string-building scan per call.
@@ -301,7 +302,7 @@ struct IdCacheState
     // identical monitors: KWin prunes every removed output from its list before emitting the
     // first screenRemoved, so once the cache is dropped mid-handler the duplicate scan can no
     // longer see the departed twin, and a suffixed "baseId/connector" key collapses to a bare
-    // baseId. That defeats the two teardown clears keyed on it. Deliberately NOT cleared by
+    // baseId. That defeats the teardown clear keyed on it. Deliberately NOT cleared by
     // clearScreenIdCache, which is the whole point: it must survive the mid-handler drop.
     // Erased when its output goes, and on add, so a raw pointer cannot outlive the output or be
     // read after a later hotplug lands at the same address.

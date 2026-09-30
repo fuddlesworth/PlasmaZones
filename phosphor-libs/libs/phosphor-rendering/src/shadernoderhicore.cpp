@@ -624,7 +624,7 @@ void ShaderNodeRhi::prepare()
         }
     }
     const bool gridNeedsUpload = gridActive() && m_gridVbo && !m_gridUploaded;
-    // Batch first: the mesh is ~1.79 MB at max density and a pool-exhausted frame built then dropped it.
+    // Batch first: the mesh is ~1.83 MB at max density and a pool-exhausted frame built then dropped it.
     QRhiResourceUpdateBatch* gridBatch = gridNeedsUpload ? rhi->nextResourceUpdateBatch() : nullptr;
     if (gridNeedsUpload && !gridBatch) {
         // Batch pool exhausted mid-record (the 64-batch limit has been
@@ -683,7 +683,7 @@ void ShaderNodeRhi::prepare()
     // empty while the list is multi-entry. See bakeBufferShaders for the whole
     // failure this gate was half of.
     // ensureBufferTarget is called ONCE, at the tail of the block below. A guarded call under this
-    // IDENTICAL gate used to sit here and created nothing that one does not; see the note under it.
+    // IDENTICAL gate used to sit here; only a recovery arm below can differ, and it self-heals.
     // Late pipeline recovery
     if (!m_bufferPaths.isEmpty() && bufferReady) {
         if (!multiBufferMode && m_bufferRenderTarget && !m_bufferRenderPassDescriptor

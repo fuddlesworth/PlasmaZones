@@ -87,7 +87,14 @@ std::optional<PreparedLayoutOsdWindow> OverlayService::prepareLayoutOsdWindow(co
     // values from the previous show (or from QML property initialisers on
     // the first-ever show).
 
-    assertWindowOnScreen(prep.window, physScreen, prep.screenGeom);
+    // The TRUE geometry, not prep.screenGeom: that one is substituted above when the id does not
+    // resolve, and a substituted rect makes assertWindowOnScreen's physical-screen test trivially
+    // true. prep.screenGeom still drives the sizing and the aspect ratio below.
+    //
+    // Keyed on effectiveScreenId, not @p screenId: this function's parameter DEFAULTS to an empty
+    // string (the whole reason effectiveScreenId exists), and an empty id resolves to nothing, so
+    // asking with it would refuse the setGeometry that a primary-screen OSD does need.
+    assertWindowOnScreen(prep.window, physScreen, trueScreenGeometry(m_screenManager, prep.effectiveScreenId));
 
     prep.aspectRatio = (prep.screenGeom.height() > 0)
         ? static_cast<qreal>(prep.screenGeom.width()) / prep.screenGeom.height()

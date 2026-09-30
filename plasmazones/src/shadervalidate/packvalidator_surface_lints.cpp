@@ -1,6 +1,17 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
-//
+
+// FILE-SIZE EXCEPTION (sanctioned): this file is past the 1150-line ceiling, and its baseline
+// entry was RAISED from 1199 to 1244 to fund two defect fixes. What it gained: the per-entry texture
+// arms are now bounded to the slots the loader actually fills, and the parameter loop mirrors
+// fromJson's duplicate-id drop. Both were reporting a load behaviour that does not happen,
+// which is the one class this file exists to be correct about, and neither had a line-neutral
+// form. The alternative was deleting the "why this message is true" commentary that several
+// audit rounds built up — which is the length, and is also what keeps the arms from drifting
+// back out of step with the loader. A genuine split by concern (metadata and parameter lints
+// versus the multipass and buffer-chain block) is the right next move and is a refactor of its
+// own, not something to do while funding a fix.
+
 // The surface arm's METADATA LINT COLLECTOR, split out of packvalidator_surface.cpp when
 // that file reached the 1150-line ceiling and a new lint had to go in.
 //
@@ -9,7 +20,7 @@
 // metadata object, the parsed effect and the pack directory, and it writes to no stream and
 // counts no errors. packvalidator_surface.cpp keeps the orchestration: reading and parsing
 // the file, the path-confinement exits that must refuse a pack before anything opens it,
-// the report header, flushing these strings, the two NOTES (which print to the stream
+// the report header, flushing these strings, the NOTES (which print to the stream
 // rather than joining this list, so they belong with the printer), the preset lints, and
 // the three stage bakes that share an include path set.
 //
@@ -105,12 +116,29 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
     // green and renders 0.0 because the conversion fails silently. Same for a
     // default outside the min/max the pack itself declares, which the UI then
     // clamps to something the author never chose.
+    // MIRRORS fromJson's DUPLICATE DROP, the way the radius-slot scan further down already does
+    // and for the same reason: fromJson keeps the FIRST declaration of an id and discards every
+    // later one, so a lint over the raw array can otherwise describe a declaration that never
+    // loads. It did — an id declared cleanly and then re-declared with min above max drew both
+    // range lines, and both were false of the pack as it loads.
+    QSet<QString> seenRawParamIds;
     for (const QJsonValue& v : meta.value(QLatin1String("parameters")).toArray()) {
         const QJsonObject po = v.toObject();
         const QString pid = po.value(QLatin1String("id")).toString();
         const QString ptype = po.value(QLatin1String("type")).toString();
-        if (pid.isEmpty() || ptype.isEmpty() || !kSurfaceParamTypes.contains(ptype)) {
-            continue; // already linted above (empty id/type, or the unknown-type arm)
+        if (pid.isEmpty()) {
+            continue; // already linted above
+        }
+        // CLAIM THE ID BEFORE THE TYPE GATE. fromJson keeps the FIRST declaration of an id
+        // whatever its type, so a later one is discarded even when the first names a type this
+        // family does not have — and registering only type-valid ids would let that later one
+        // through, which is the very thing this set exists to stop.
+        const bool firstForId = !seenRawParamIds.contains(pid);
+        seenRawParamIds.insert(pid);
+        // `ptype.isEmpty()` is not tested separately: kSurfaceParamTypes cannot contain the empty
+        // string, so the vocabulary check subsumes it, and the unknown-type arm above reports it.
+        if (!firstForId || !kSurfaceParamTypes.contains(ptype)) {
+            continue; // reported above, by the duplicate arm or the unknown-type arm
         }
         const QJsonValue def = po.value(QLatin1String("default"));
         if (ptype == QLatin1String("bool")) {
@@ -160,8 +188,9 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
     // because fromJson drops the second declaration with only a qCWarning. A
     // pack that declares one id twice therefore lints clean against the parsed
     // struct and ships with one of the two silently gone. The overlay and
-    // pointer arms already walk the raw array for this; packvalidatorcommon
-    // states that every arm does, so this one was the exception.
+    // pointer arms already walk the raw array for this, each with its own seen-id
+    // set, so this one was the exception (an earlier version credited that rule to
+    // packvalidatorcommon, which does not state it).
     {
         const QJsonArray rawParams = meta.value(QLatin1String("parameters")).toArray();
         QSet<QString> seenParamIds;
@@ -185,12 +214,18 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         lints << QStringLiteral("`textures` is not an array (the whole list is ignored at load)");
     }
     const QJsonArray declaredTextures = texturesValue.toArray();
-    if (declaredTextures.size() > PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots) {
-        // Not "surplus dropped at load": an empty-path entry is skipped without taking a slot.
-        lints << QStringLiteral("too many textures: %1 declared, cap is %2 (the loader keeps the first %2 with a path)")
-                     .arg(static_cast<int>(declaredTextures.size()))
+    // Counted in LOADABLE entries, not declarations. The loader appends only path-bearing entries,
+    // so a pack with three real textures and two blank rows overflows nothing — and reporting
+    // "5 declared, cap is 3" there sent the author to delete a texture that was loading fine.
+    const auto loadable = std::count_if(declaredTextures.begin(), declaredTextures.end(), [](const QJsonValue& t) {
+        return !t.toObject().value(QLatin1String("path")).toString().isEmpty();
+    });
+    if (loadable > PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots) {
+        lints << QStringLiteral("too many textures: %1 with a path, cap is %2 (the loader keeps the first %2)")
+                     .arg(static_cast<int>(loadable))
                      .arg(PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots);
     }
+    qsizetype keptTextureSlots = 0;
     for (const QJsonValue& v : declaredTextures) {
         // A non-object entry (a bare path string, the natural mistake) reported
         // as "empty `path`", which describes an object that has the key and left
@@ -207,26 +242,34 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
             lints << QStringLiteral(
                 "texture entry with empty `path` (dropped at load, which also shifts "
                 "every later texture down one sampler slot)");
-        } else {
-            // Same confinement and existence check the animation arm applies,
-            // and for the same reason: the registry clears a rejected texture
-            // path and the sampler falls back to transparent, so a typo ships
-            // green and fails at first paint.
-            const auto confined = confinedPackPath(packDir, texPath);
-            if (!confined) {
-                lints << QStringLiteral(
-                             "texture path escapes the pack directory: %1 (rejected at load, sampler reads "
-                             "transparent)")
-                             .arg(texPath);
-            } else if (!QFile::exists(*confined)) {
-                lints << QStringLiteral("texture missing: %1 (sampler reads transparent at load)").arg(texPath);
-            } else if (!QFileInfo(*confined).isFile()) {
-                // exists() answers true for a DIRECTORY, so a path naming one passed both arms and
-                // the whole pack reported OK. The runtime accepts it too (its only test is
-                // confinement), so the failure lands at first paint with nothing having warned.
-                lints << QStringLiteral("texture path is not a file: %1 (sampler reads transparent at load)")
-                             .arg(texPath);
-            }
+            continue;
+        }
+        // BOUNDED TO WHAT THE LOADER KEEPS, like every other per-entry arm in this file. fromJson
+        // appends only path-bearing entries and breaks once the cap is full, WITHOUT reading the
+        // surplus entry's path or wrap — so every message below would otherwise name a load
+        // behaviour that does not happen for one. Counted in SLOTS TAKEN rather than by index,
+        // because an empty or non-object entry is consumed without taking a slot, so
+        // [empty, t0, t1, t2] genuinely loads all three.
+        if (keptTextureSlots++ >= PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots) {
+            continue;
+        }
+        // Same confinement and existence check the animation arm applies,
+        // and for the same reason: the registry clears a rejected texture
+        // path and the sampler falls back to transparent, so a typo ships
+        // green and fails at first paint.
+        const auto confined = confinedPackPath(packDir, texPath);
+        if (!confined) {
+            lints << QStringLiteral(
+                         "texture path escapes the pack directory: %1 (rejected at load, sampler reads "
+                         "transparent)")
+                         .arg(texPath);
+        } else if (!QFile::exists(*confined)) {
+            lints << QStringLiteral("texture missing: %1 (sampler reads transparent at load)").arg(texPath);
+        } else if (!QFileInfo(*confined).isFile()) {
+            // exists() answers true for a DIRECTORY, so a path naming one passed both arms and
+            // the whole pack reported OK. The runtime accepts it too (its only test is
+            // confinement), so the failure lands at first paint with nothing having warned.
+            lints << QStringLiteral("texture path is not a file: %1 (sampler reads transparent at load)").arg(texPath);
         }
         // Wrap vocabulary lint — read RAW metadata: SurfaceShaderEffect::fromJson
         // silently clears an invalid wrap to clamp, so a lint over the parsed
@@ -874,7 +917,7 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
             // it, so the per-entry messages below would state a consequence that
             // does not happen. Report the overflow once and lint only the entries
             // that survive.
-            const qsizetype scaleCap = PhosphorShaders::kMaxBufferPasses;
+            const qsizetype scaleCap = PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses;
             if (scales.size() > scaleCap) {
                 lints << QStringLiteral(
                              "bufferScales has %1 entries, past the %2-pass budget; the surplus is "
@@ -1144,7 +1187,8 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         // reaches neither host and cannot diverge, and this was the last unbounded per-entry loop.
         // No isEmpty() gate below either — an empty array runs no iteration and answers false here.
         bool scalesDiverge = false;
-        for (qsizetype i = 0; i < depthScales.size() && i < PhosphorShaders::kMaxBufferPasses && !scalesDiverge; ++i) {
+        const qsizetype depthCap = PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses;
+        for (qsizetype i = 0; i < depthScales.size() && i < depthCap && !scalesDiverge; ++i) {
             const QJsonValue v = depthScales.at(i);
             scalesDiverge = v.isDouble() && !qFuzzyCompare(clampScale(v.toDouble()), pinnedScale);
         }

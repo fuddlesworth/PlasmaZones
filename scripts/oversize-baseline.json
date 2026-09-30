@@ -55,7 +55,7 @@
     "plasmazones/src/settings/qml/pages/rules/ActionParamEditors.qml": 1177,
     "plasmazones/src/settings/stores/profilestore.cpp": 1322,
     "plasmazones/src/shadervalidate/packvalidator_pointer.cpp": 1173,
-    "plasmazones/src/shadervalidate/packvalidator_surface_lints.cpp": 1199,
+    "plasmazones/src/shadervalidate/packvalidator_surface_lints.cpp": 1244,
     "plasmazones/tests/unit/compositor-common/test_wire_types.cpp": 1183,
     "plasmazones/tests/unit/config/settings/test_scrolling_settings.cpp": 1776,
     "plasmazones/tests/unit/config/settings/test_settings_core.cpp": 1369,

@@ -145,7 +145,10 @@ void OverlayService::showCheatsheet(const QString& screenId, const QVariantList&
     applyDecoration(slot, PhosphorSurfaceShaders::decorationPopupCheatsheetPath());
 
     if (shellWindow) {
-        assertWindowOnScreen(shellWindow, screen, screenGeom);
+        // The TRUE geometry, not screenGeom: that one is substituted above when the id does not
+        // resolve, and a substituted rect makes assertWindowOnScreen's physical-screen test
+        // trivially true. screenGeom still sizes the window below.
+        assertWindowOnScreen(shellWindow, screen, trueScreenGeometry(m_screenManager, resolvedId));
         shellWindow->setWidth(screenGeom.width());
         shellWindow->setHeight(screenGeom.height());
     }

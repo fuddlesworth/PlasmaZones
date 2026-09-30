@@ -81,9 +81,13 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
     // otherwise be missed — the signal wouldn't have an attached slot
     // yet, and the loop would already have run. With the signals
     // connected first, the worst case is a duplicate `onScreenAdded`
-    // call (once via signal, once via loop). `onScreenAdded` is
-    // idempotent (re-insertion check against m_motionClocksByOutput)
-    // so the duplicate is a no-op.
+    // call (once via signal, once via loop), which is HARMLESS but no
+    // longer a no-op: only the motion clock is skipped by its
+    // re-insertion check. The duplicate still invalidates the EDID and
+    // screen-id caches, re-resolves every output's recorded spelling,
+    // rebuilds the connected-id set and prunes the desktop dedup map.
+    // All of those come out identical on a second run — the prune drops
+    // only keys whose spelling is already stale — so the ordering stands.
     if (KWin::effects) {
         connect(KWin::effects, &KWin::EffectsHandler::screenAdded, this, &PlasmaZonesEffect::onScreenAdded);
         connect(KWin::effects, &KWin::EffectsHandler::screenRemoved, this, &PlasmaZonesEffect::onScreenRemoved);

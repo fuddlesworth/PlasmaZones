@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Screen-management methods on OverlayService: hot-plug add / remove /
-// virtual-screen reconfigure / physical-screen teardown. Extracted from
-// overlayservice.cpp to keep the screen-lifecycle code grouped with itself.
+// virtual-screen reconfigure / physical-screen teardown, plus two helpers the
+// same lifecycle needs (window-on-screen assertion, modal-singleton reset).
+// Extracted from overlayservice.cpp to keep the screen-lifecycle code grouped
+// with itself.
 
 #include "internal.h"
 #include "daemon/overlayservice.h"
@@ -40,11 +42,21 @@ void OverlayService::assertWindowOnScreen(QWindow* window, QScreen* screen, cons
     // screen->geometry() for an invalid argument and then compare against that same value, so
     // the test was trivially true and a VIRTUAL-screen window whose geometry a caller could not
     // resolve took the absolute-setGeometry branch this comment says must never run for one.
-    // Reachable, not theoretical: ScreenManager::screenGeometry answers QRect() on a
-    // virtual-screen cache miss and for an untracked id, and most callers pass its result
-    // through. Stopping here instead leaves the margins in charge, which is right for a VS and
-    // costs a physical screen nothing, because its caller has the rect and states it — the
-    // geometry argument carries no default any more, so no caller can fall into this by omission.
+    //
+    // THE GUARD ONLY WORKS IF CALLERS STOP SUBSTITUTING FIRST, and for one round it did not,
+    // because every caller already substituted. resolveScreenGeometry is itself the substitution
+    // (and resolveTargetScreen under it falls back to the PRIMARY monitor for an id nothing
+    // resolves), so an unresolvable virtual id arrived here as the primary screen's own rect and
+    // sailed through the comparison. The callers now pass trueScreenGeometry for the verdict and
+    // keep the substituted rect for sizing, which is what makes this reachable at all. An
+    // unresolvable id is reached from a system boundary, not an internal race: the D-Bus
+    // showSnapAssist and showCheatsheet entry points take a screen id on trust and defer, so a
+    // virtual-screen reconfigure can invalidate it in between.
+    //
+    // Stopping here leaves the surface's size and position to the compositor, which is the right
+    // conservative answer: layer-shell configures an AnchorAll surface to the whole output
+    // anyway, so an untracked physical screen loses nothing it was relying on, while a virtual
+    // one is spared having another monitor's rect written onto it.
     //
     // Do NOT replace this with a VirtualScreenId::isVirtual test: layerPlacementForVs treats a
     // VS that covers its whole output as physical (AnchorAll, zero margins), and an isVirtual

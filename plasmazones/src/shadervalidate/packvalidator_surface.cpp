@@ -318,6 +318,7 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     // runtime does.
     const QString surfacePacksRoot = QFileInfo(packDir).absolutePath();
     const QStringList includePaths = QStringList(packSharedRoots(packDir)) << surfacePacksRoot;
+    bool fragReadsBackdrop = false;
     if (QFile::exists(eff.fragmentShaderPath)) {
         QFile frag(eff.fragmentShaderPath);
         if (!frag.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -342,22 +343,12 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
                     PhosphorShaders::spliceAfterVersion(expanded, SurfaceShaderRegistry::paramPreamble(eff));
                 const ShaderCompiler::Result result = ShaderCompiler::compile(spliced.toUtf8(), QShader::FragmentStage);
                 errors += reportCompile(out, fragLabel, result, declaredParamNames(eff.parameters));
-                // A NOTE, not a lint, and deliberately so: shared/surface_backdrop.glsl tells
-                // authors to gate styling on uHasBackdrop for an explicit fallback, so reading the
-                // backdrop without the flag is a SUPPORTED pattern. What an author cannot see is
-                // that the flag is a necessary precondition rather than a hint — the compositor
-                // gates the whole capture on needsBackdrop, so without it uHasBackdrop stays false
-                // and backdropTexel() returns the transparent fallback on every route. The
-                // multipass arm hard-lints this for the two builtin passes that have backdropTexel
-                // as their ONLY source; here it can only be a note. Scanned on the PACK's own
-                // source, not the expanded TU, because the shared helper defines these names and
+                // Recorded here, REPORTED after the compositor bake below, so the note does not
+                // land between one stage's two dialect results. Scanned on the PACK's own source
+                // rather than the expanded TU, because the shared helper DEFINES these names and
                 // merely including it would then read as using them.
-                if (!doc.object().value(QLatin1String("needsBackdrop")).toBool()
-                    && (raw.contains(QLatin1String("backdropTexel")) || raw.contains(QLatin1String("uBackdrop")))) {
-                    out << "  " << padLabel(QStringLiteral("note"))
-                        << "reads the backdrop (backdropTexel/uBackdrop) but \"needsBackdrop\" is not true, so "
-                           "nothing is captured and uHasBackdrop stays false\n";
-                }
+                fragReadsBackdrop =
+                    raw.contains(QLatin1String("backdropTexel")) || raw.contains(QLatin1String("uBackdrop"));
             }
         }
     }
@@ -367,6 +358,21 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     // byte-identically, which was the drift hazard that note describes.
     errors += bakeCompositorStage(out, eff, eff.fragmentShaderPath, fragLabel, QStringLiteral("frag"), includePaths,
                                   /*scaffold=*/true);
+
+    // A NOTE, not a lint, and deliberately so: shared/surface_backdrop.glsl tells authors to gate
+    // styling on uHasBackdrop for an explicit fallback, so reading the backdrop without the flag is
+    // a SUPPORTED pattern. What an author cannot see is that the flag is a necessary precondition
+    // rather than a hint — the compositor gates the whole capture on needsBackdrop, so without it
+    // uHasBackdrop stays false and backdropTexel() returns the transparent fallback on every route.
+    // The multipass arm hard-lints this for the two builtin passes that have backdropTexel as their
+    // ONLY source; here it can only be a note. KNOWN BOUNDARY: a pack that calls backdropTexel from
+    // a pack-local included helper rather than from its own fragment is missed, which is the price
+    // of scanning the pack's own source instead of the expanded TU.
+    if (fragReadsBackdrop && !doc.object().value(QLatin1String("needsBackdrop")).toBool()) {
+        out << "  " << padLabel(QStringLiteral("note"))
+            << "reads the backdrop (backdropTexel/uBackdrop) but \"needsBackdrop\" is not true, so "
+               "nothing is captured and uHasBackdrop stays false\n";
+    }
 
     // ── multipass buffer passes ──
     // Buffer passes carry their own main() (no entry scaffold, no param preamble)
