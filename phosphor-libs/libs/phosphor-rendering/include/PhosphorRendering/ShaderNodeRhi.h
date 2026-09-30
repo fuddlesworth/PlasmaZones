@@ -108,11 +108,17 @@ constexpr bool isConsumerBinding(int binding) noexcept
  * builds against QT_MIN_VERSION, which is 6.10.
  *
  * @par Threading contract
- * Setters on **this class** (ShaderNodeRhi — setTime, setResolution, setCustomParams,
- * setExtraBinding, etc.) must be called from QQuickItem::updatePaintNode() during
- * the scene graph sync phase — the GUI thread is blocked and the render thread is
- * idle at that point. Calling these setters outside updatePaintNode() is a data
- * race with prepare()/render() on the render thread. Only invalidateItem() is
+ * A GUI-THREAD caller of the setters on **this class** (ShaderNodeRhi — setTime,
+ * setResolution, setCustomParams, setExtraBinding, etc.) must go through
+ * QQuickItem::updatePaintNode() during the scene graph sync phase, where the GUI
+ * thread is blocked and the render thread is idle. Reaching them from the GUI
+ * thread outside updatePaintNode() is a data race with prepare()/render().
+ * The RENDER THREAD may call them directly, and does: ZoneShaderNodeRhi's
+ * uploadLabelsTexture calls setExtraBinding from prepare(). That is safe for the
+ * same reason the two releaseResources() routes below are — the render thread is
+ * the only mutator of node members — and an earlier wording of this paragraph made
+ * the rule about WHEN the call happens rather than about WHICH THREAD makes it, so
+ * anyone auditing setExtraBinding concluded the library broke its own contract. Only invalidateItem() is
  * safe to call from the GUI thread outside the sync phase: it is the only entry
  * point built for it, with its flag atomic AND m_itemMutex serialising the
  * dereference against the render thread. (Not "the only flag exposed as
@@ -1111,6 +1117,14 @@ private:
     /// Ask for the frame that retries a failed dummy-channel create, while the bound allows
     /// it. Non-virtual, so adding it changes no member offset.
     void requestDummyCreateRetry();
+
+    /// Per-slot latch for the user-texture TextureSizeMax clamp warning. Its neighbour, the
+    /// create-failure line, was latched because the dirty flag deliberately stays set so a
+    /// transient RHI condition self-heals — which means the whole arm re-runs every frame while
+    /// a create keeps failing. This line sat above that latch and so survived it, logging once
+    /// per frame per oversized slot and re-running a full SmoothTransformation rescale each time.
+    /// Cleared in releaseRhiResources with its siblings.
+    std::array<bool, kMaxUserTextures> m_userTextureClampWarned = {};
 };
 
 /** Result of warmShaderBakeCacheForPaths for reporting to UI. */

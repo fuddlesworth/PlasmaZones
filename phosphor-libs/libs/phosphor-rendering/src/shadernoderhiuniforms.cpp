@@ -610,8 +610,15 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         // clamped texture is a validation failure, not a fit.
         const int textureSizeMax = rhi->resourceLimit(QRhi::TextureSizeMax);
         if (textureSizeMax > 0 && (targetSize.width() > textureSizeMax || targetSize.height() > textureSizeMax)) {
-            qCWarning(lcShaderNode) << "user texture slot" << i << "size" << targetSize
-                                    << "exceeds device TextureSizeMax" << textureSizeMax << ", clamping";
+            // Latched per slot, the same shape as the create-failure line below. That one is
+            // latched because dirty deliberately stays set, so this arm re-runs every frame while
+            // a create keeps failing; this line sat above that latch and survived it.
+            if (!m_userTextureClampWarned[static_cast<size_t>(i)]) {
+                m_userTextureClampWarned[static_cast<size_t>(i)] = true;
+                qCWarning(lcShaderNode) << "user texture slot" << i << "size" << targetSize
+                                        << "exceeds device TextureSizeMax" << textureSizeMax
+                                        << ", clamping (reported once per slot)";
+            }
             targetSize = QSize(qMin(targetSize.width(), textureSizeMax), qMin(targetSize.height(), textureSizeMax));
             img = img.scaled(targetSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
         }
@@ -898,6 +905,7 @@ void ShaderNodeRhi::releaseRhiResources()
     m_bufferSamplerCreateWarned = false;
     m_userTextureSamplerWarned.fill(false);
     m_userTextureCreateWarned.fill(false);
+    m_userTextureClampWarned.fill(false);
     m_warnedWallpaperCreateFailed = false;
     m_transparentFallbackWarned = false;
     m_depthMultiBufferWarned = false;
