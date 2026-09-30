@@ -1101,10 +1101,10 @@ void TilingHandler::noteScrollTabOutputRemoved(KWin::LogicalOutput* output, cons
         return;
     }
     // Compare against the id the caller resolved BEFORE it cleared the
-    // screen-id cache (onScreenRemoved's documented order): resolving the
-    // hover screen's output here would walk effects->screens(), which still
-    // lists the dying output, and re-insert the very cache entry the handler
-    // exists to purge.
+    // screen-id cache (onScreenRemoved's documented order): outputScreenId
+    // caches every resolve, so resolving here would re-insert the entry the
+    // handler just purged, spelled for the post-unplug world rather than for
+    // the world these payload keys were stored under.
     if (!m_scrollTabHoverScreen.isEmpty() && !removedScreenId.isEmpty()
         && PhosphorIdentity::VirtualScreenId::extractPhysicalId(m_scrollTabHoverScreen)
             == PhosphorIdentity::VirtualScreenId::extractPhysicalId(removedScreenId)) {

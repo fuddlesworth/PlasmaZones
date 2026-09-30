@@ -570,17 +570,17 @@ void OverlayService::restampZoneHighlights()
             // previewZones and highlightedCount are derived from this same list
             // and are written with it, so an unchanged list leaves both correct.
             //
-            // WHAT THIS SAVES, measured rather than assumed: the patch work and the
-            // write, NOT a binding re-evaluation. An earlier version of this comment
-            // said re-pushing an identical list "re-evaluates every ZoneItem's
-            // bindings (and the shaderConfig.zones chain) for no change in output".
-            // It does not. QQmlProperty::write on a `property var` compares first, so
-            // re-pushing an equal list activates no change signal and re-runs no
-            // dependent binding — checked with a QSignalSpy on a var property for an
-            // identical list of maps, which is this list's shape. The sibling claim in
-            // syncCavaState, that an unchanged value re-evaluates nothing, is the
-            // correct one of the two. Skipping is still worth it on the drag path: the
-            // read-back, the patch and the compare are real work at cursor rate.
+            // WHAT THIS SAVES, and two earlier versions each named the wrong thing. It is NOT a
+            // binding re-evaluation: QQmlProperty::write on a `property var` compares first, so
+            // re-pushing an equal list activates no change signal and re-runs no dependent
+            // binding (measured with a QSignalSpy for this list's exact shape, a list of maps,
+            // through the same no-engine QQmlProperty ctor writeQmlProperty uses). The sibling
+            // claim in syncCavaState is the correct one. Nor is it the read-back, the patch or
+            // the compare: those are ABOVE the branch and paid unconditionally, so they are the
+            // price of the skip, not its saving. What the continue actually skips is the two
+            // full-list scans below (anyZoneUsesLayoutPreview, and the highlightedCount loop on
+            // a shader slot) and the three property writes they feed. Worth taking at cursor
+            // rate, which is why the branch is here rather than writing unconditionally.
             continue;
         }
         writeQmlProperty(slot, QString(OverlayQmlPropertyNames::Zones), patched);

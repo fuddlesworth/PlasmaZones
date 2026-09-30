@@ -569,14 +569,36 @@ private Q_SLOTS:
         obj.insert(QStringLiteral("bufferFilters"), QJsonArray{QStringLiteral("nearest")});
         obj.insert(QStringLiteral("halfFloatBuffers"), true);
         obj.insert(QStringLiteral("bufferScale"), 9);
+        // The PER-ENTRY scales and the depth pairing, which were left ungated when their siblings
+        // were gated, so this fixture now covers every arm of the family at once.
+        obj.insert(QStringLiteral("bufferScales"), QJsonArray{9});
+        obj.insert(QStringLiteral("depthBuffer"), true);
         const PackResult r = validateSurface(tmp, QStringLiteral("sf-fc"), obj, surfaceBodyReading({}));
 
         // The louder lint that CLEARED chainResolves is the one the author needs, and it fires.
         QVERIFY2(r.report.contains(QStringLiteral("multipass buffer shader missing")), qPrintable(r.report));
-        // None of the six describes a buffer target on a chain that has none.
+        // EXACT COUNT, not just absences. Three substring negatives cannot say "nothing but the
+        // louder lint", and that gap is how the ungated per-entry and depth arms stayed invisible
+        // while this slot passed.
+        QCOMPARE(r.errors, 1);
+        // Arm-SPECIFIC needles. Plain "clamped at load" has two producers (the per-entry arm and
+        // the singular one), so the generic form passed here only because the old fixture declared
+        // no bufferScales at all.
         QVERIFY2(!r.report.contains(QStringLiteral("which the DAEMON honours")), qPrintable(r.report));
         QVERIFY2(!r.report.contains(QStringLiteral("RGBA16F")), qPrintable(r.report));
-        QVERIFY2(!r.report.contains(QStringLiteral("clamped at load")), qPrintable(r.report));
+        QVERIFY2(!r.report.contains(QStringLiteral("bufferScale out of range")), qPrintable(r.report));
+        QVERIFY2(!r.report.contains(QStringLiteral("bufferScales entry 0 out of range")), qPrintable(r.report));
+        QVERIFY2(!r.report.contains(QStringLiteral("alongside \"depthBuffer\": true")), qPrintable(r.report));
+        // But the TYPE arm is deliberately NOT gated: "falls back to 1.0" is true on a fail-closed
+        // chain too, because fromJson's non-numeric branch and the coherence block both set 1.0.
+        // Gating it once silenced a true diagnostic, so this pins the un-gating.
+        QJsonObject typed = obj;
+        typed.insert(QStringLiteral("id"), QStringLiteral("sf-fc-type"));
+        typed.insert(QStringLiteral("bufferScale"), QStringLiteral("0.5"));
+        typed.remove(QStringLiteral("bufferScales"));
+        typed.remove(QStringLiteral("depthBuffer"));
+        const PackResult typeArm = validateSurface(tmp, QStringLiteral("sf-fc-type"), typed, surfaceBodyReading({}));
+        QVERIFY2(typeArm.report.contains(QStringLiteral("bufferScale is not a number")), qPrintable(typeArm.report));
 
         // Control: the identical keys on a chain that DOES resolve still draw all of them, or the
         // gate would have silenced the arms rather than scoped them.
@@ -587,7 +609,9 @@ private Q_SLOTS:
             validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-fc-ok"), ok, surfaceBodyReading({}));
         QVERIFY2(live.report.contains(QStringLiteral("which the DAEMON honours")), qPrintable(live.report));
         QVERIFY2(live.report.contains(QStringLiteral("RGBA16F")), qPrintable(live.report));
-        QVERIFY2(live.report.contains(QStringLiteral("clamped at load")), qPrintable(live.report));
+        QVERIFY2(live.report.contains(QStringLiteral("bufferScale out of range")), qPrintable(live.report));
+        QVERIFY2(live.report.contains(QStringLiteral("bufferScales entry 0 out of range")), qPrintable(live.report));
+        QVERIFY2(live.report.contains(QStringLiteral("alongside \"depthBuffer\": true")), qPrintable(live.report));
     }
 
     /// A texture or preview path naming a DIRECTORY. QFile::exists() answers true for one, so both

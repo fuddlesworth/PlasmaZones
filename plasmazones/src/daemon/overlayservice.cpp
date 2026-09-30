@@ -330,8 +330,8 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
                 &OverlayService::onVirtualScreensChanged);
         // Regions-only changes (swap/rotate/boundary-resize) also need the
         // overlay windows destroyed and recreated with the new VS geometry.
-        // The handler is heavy but only runs when overlays are visible
-        // (active drag), so the cost is bounded.
+        // Its TEARDOWN half runs on every one of these signals whatever the visibility;
+        // only the recreate block checks isVisible(). Bounded by signal rarity, not a gate.
         connect(mgr, &PhosphorScreens::ScreenManager::virtualScreenRegionsChanged, this,
                 &OverlayService::onVirtualScreensChanged);
     }

@@ -45,15 +45,18 @@ namespace PlasmaZones {
 // break is scrollTrackedScreenFor, which gates on connectedPhysicalIds().contains(...) and fails
 // OPEN for the paint clip and the input filter when the id misses.
 //
-// ON THE LIVE UNPLUG PATH THE EXCLUSION IS A NO-OP, and the earlier claim here that the rebuild
-// "runs while KWin still lists the dying output" was false. Upstream Workspace::updateOutputs
-// clears and rebuilds m_outputs from the surviving backend outputs BEFORE it emits outputRemoved,
-// and EffectsHandler::screenRemoved is a direct forward of that signal, so screens() no longer
-// holds the dying output by the time this runs and `other == excluded` never matches. The
-// parameter is not dead: ~Workspace is the other of the only two emit sites and it emits while
-// iterating m_outputs intact, so a teardown delivery does still see the output and does still
-// need the exclusion. Keep passing it — the cost is one pointer compare, and the alternative is
-// re-deriving which emitter you are under.
+// THE EXCLUSION CANNOT FIRE ON EITHER EMIT SITE, and two earlier versions of this note each got
+// that wrong in a different direction. It does NOT run "while KWin still lists the dying output":
+// Workspace::updateOutputs clears and rebuilds m_outputs from the surviving backend outputs
+// BEFORE emitting outputRemoved, so screens() is already pruned and `other == excluded` never
+// matches. Nor is it saved by the ~Workspace emit, which is the only other site and does iterate
+// m_outputs intact: that emit reaches nobody, because ~ApplicationWayland unloads every effect
+// and then deletes the EffectsHandler (taking the outputRemoved forward with it) before it
+// destroys the Workspace. Upstream states the discipline on that delete: effect windows outlive
+// effects. So the parameter is belt-and-braces on every reachable path. It stays because it is
+// one pointer compare and it pins the #724 spelling invariant locally against an upstream
+// reordering of updateOutputs. Removing it would also take the `other == excluded` branch below
+// and the caching note further down, so remove all three together or none.
 //
 // HONOURED ON A CACHE MISS ONLY. The screenIdCache lookup below runs before @p excluded is
 // looked at, so a warm entry is returned whatever the caller passed. That is safe for the one
@@ -123,10 +126,12 @@ QString PlasmaZonesEffect::outputScreenId(const KWin::LogicalOutput* output, con
     }
 
     QString result = hasDuplicate ? baseId + QLatin1Char('/') + connectorName : baseId;
-    // An EXCLUDED resolve is cached too, deliberately. The exclusion says that output is going
-    // away, which is permanent, so its answer is the one every later caller should get — and
-    // caching it is what stops an unexcluded caller later in the same teardown cascade
-    // recomputing the suffixed form from a screens() list that still holds the dying twin.
+    // An EXCLUDED resolve is cached too, and the honest reason is narrow: this insert runs on
+    // every resolve whatever @p excluded was, so the entry is a by-product rather than a choice.
+    // It is harmless because the excluded and unexcluded answers are identical here, the dying
+    // output being already pruned from the list the duplicate scan walks. An earlier version said
+    // the caching stopped a later unexcluded caller "recomputing the suffixed form from a
+    // screens() list that still holds the dying twin"; that list does not hold it.
     m_idCaches.screenIdCache.insert(connectorName, result);
     return result;
 }
@@ -165,8 +170,12 @@ void PlasmaZonesEffect::reportScreenDesktop(const QString& screenId, int desktop
 // w->screen() fallback fires "when no output contains the centre (window fully
 // off-screen mid-reconfigure)". Both were wrong: a fully off-screen window
 // still resolves to the nearest output, and the fallback is therefore
-// unreachable in a live session, where at least one output always exists. It
-// stays because it costs a comparison and covers the headless/zero-output case.
+// unreachable in a live session, and upstream ENFORCES that rather than it being
+// luck: updateOutputs appends a PlaceholderOutput whenever the backend list comes
+// back empty, under the comment "The workspace requires at least one output
+// connected". The fallback stays because it costs one comparison and is cheaper to
+// carry than the risk of tracking an upstream change to outputAt's empty-list
+// behaviour, NOT because a zero-output case is reachable.
 KWin::LogicalOutput* PlasmaZonesEffect::windowOutput(KWin::EffectWindow* w) const
 {
     // KWIN::EFFECTS CANNOT BE NULL HERE, and this is the one place that says so, because
@@ -782,23 +791,24 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // screen for every scroll-tiled window's close/minimize/drag routing.
     clearScreenIdCache();
 
-    // Rebuild the connected set eagerly, MINUS the dying output, so the whole rest of the
-    // cascade reads one settled answer instead of whatever the first caller happens to
-    // trigger a lazy rebuild into. The next add/remove/reconfigure invalidates this again.
+    // Rebuild the connected set eagerly, MINUS the dying output, so the cascade's cost is paid
+    // once here rather than at whichever consumer trips the lazy rebuild. The ANSWER is the same
+    // either way — see below — so this buys determinism, not correctness. The next
+    // add/remove/reconfigure invalidates it again.
     //
     // WHAT THIS DOES NOT DEFEND AGAINST, corrected from upstream: an earlier version said
     // screens() "still lists this output while screenRemoved is being delivered". It does not.
-    // Workspace::updateOutputs prunes m_outputs before it emits, so both the loop below and
-    // outputScreenId's duplicate scan already see the post-unplug list, and on this path the
-    // eager rebuild and a lazy one would produce the same set. What the exclusion still covers
-    // is the ~Workspace emit, which iterates m_outputs intact. See outputScreenId's own note.
+    // Workspace::updateOutputs prunes m_outputs before it emits, so the loop below, the lazy
+    // rebuild in connectedPhysicalIds() and outputScreenId's duplicate scan all see the same
+    // post-unplug list. A later version tried to rescue the old rationale by pointing at the
+    // ~Workspace emit; that emit reaches no effect at all (see outputScreenId's note), so there
+    // is no teardown cascade to defend either.
     //
-    // The dying output is excluded from each RESOLVE as well as from the loop, because skipping
-    // only the loop would leave outputScreenId's duplicate scan free to see the twin on the
-    // teardown path, and with two identical monitors the survivor would come out in its
-    // disambiguated baseId/connector form — with both this set and the id cache keeping that
-    // spelling after the twin was gone, while the daemon had moved to the unsuffixed one.
-    // Passing the exclusion makes the resolve answer what the post-unplug world will answer.
+    // The dying output is still excluded from each RESOLVE as well as from the loop, so the two
+    // agree by construction and neither can reintroduce the #724 spelling if upstream ever moves
+    // the emit ahead of the prune. The failure that shape guards against is the survivor of two
+    // identical monitors coming out in its disambiguated baseId/connector form while the daemon
+    // has moved to the unsuffixed one.
     m_idCaches.connectedPhysicalIds.clear();
     for (const auto* other : KWin::effects->screens()) {
         if (other == output) {
@@ -856,25 +866,27 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // routes through the normal undecorate path, so it is a teardown, not a paint
     // glitch) until some unrelated trigger happens to refresh.
     //
-    // An explicit ERASE, deliberately, not refreshFullscreenSuppression(). Two earlier claims
-    // for this choice were wrong and are recorded so they are not re-argued. It did NOT rest on
-    // whether KWin has already dropped the dying output from screenAt()'s answer: it has, on
-    // this path, because Workspace::updateOutputs prunes m_outputs before emitting, so a rebuild
-    // here cannot put the dead pointer back. And the erase does NOT avoid the rebuild's full
-    // decoration sweep, because the rebuild runs anyway — refreshFullscreenSuppression is
+    // An explicit ERASE, deliberately, not refreshFullscreenSuppression(). THREE earlier claims
+    // for this choice were wrong, recorded so they are not re-argued. It does NOT rest on whether
+    // KWin has already dropped the dying output from screenAt()'s answer: it has, because
+    // updateOutputs prunes m_outputs before emitting, so a rebuild cannot put the dead pointer
+    // back. It does NOT avoid the rebuild's decoration sweep: refreshFullscreenSuppression is
     // connected to this same screenRemoved signal at lifecycle_wiring.cpp:1060, after this
-    // handler's own connection, so Qt delivers it immediately afterwards, and it sweeps whenever
-    // the rebuilt set differs. It ordinarily does differ: the fullscreen window is still
-    // positioned over the dead output's old geometry, and screenAt() is nearest-output, so it
-    // resolves to a SURVIVOR and the set moves from empty to that one rather than staying put.
+    // handler's own connection, so Qt delivers it later in the same emit (one inert slot,
+    // ScreenChangeHandler::slotScreenLayoutChanged at :1012, runs between them) and it sweeps
+    // whenever the rebuilt set differs. And it is NOT saved by the ~Workspace emit, which reaches
+    // no effect at all — see outputScreenId's note.
     //
-    // What the erase is actually for is the ~Workspace emit, the other of the only two sites,
-    // which iterates m_outputs intact. There screenAt() can still answer the dying output and
-    // the rebuild would reinstate it, so this is the only thing that removes it. On the live
-    // path the erase is redundant with the rebuild that follows, and kept because it is one
-    // hash lookup and it states locally what this handler is responsible for. Runs BEFORE the
-    // motion-clock early-return below, with the other output-forgetting calls above, so it
-    // fires for an output that never had an animation clock.
+    // WHAT THE ERASE ACTUALLY BUYS, which is small and real: it SUPPRESSES one redundant
+    // updateAllDecorations() sweep in the case where fullscreen windows sit on both the dying
+    // output and a survivor. Stored {A,B} erases to {B}; the rebuild resolves both windows to B,
+    // so covered {B} equals {B} and the early return fires. Without the erase the comparison
+    // would be {B} against {A,B}, which differs, and the full sweep would run for no change in
+    // outcome. In the commoner single-fullscreen case the set does move (the window is still
+    // positioned over the dead output's geometry and screenAt is nearest-output, so it resolves
+    // to a survivor) and the sweep runs either way. Runs BEFORE the motion-clock early-return
+    // below, with the other output-forgetting calls above, so it fires for an output that never
+    // had an animation clock.
     if (m_fullscreenSuppressedOutputs.remove(output)) {
         // Keep the pointer pass's copy in step, the way refreshFullscreenSuppression
         // does on a real change. Other outputs' entries are untouched, so no

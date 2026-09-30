@@ -341,8 +341,8 @@ public:
     /// Wired to both @c ScreenManager::virtualScreensChanged (add /
     /// remove / re-cache of virtual screens under @p physicalScreenId)
     /// and @c ScreenManager::virtualScreenRegionsChanged (swap /
-    /// rotate / boundary resize). The handler is heavy but only runs
-    /// when overlays are visible (active drag), so the cost is bounded.
+    /// rotate / boundary resize). Its teardown half runs on every such signal
+    /// whatever the visibility; only the recreate block checks isVisible().
     void onVirtualScreensChanged(const QString& physicalScreenId);
 
     // PhosphorZones::Zone selector management (IOverlayService interface)

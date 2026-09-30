@@ -617,6 +617,10 @@ private Q_SLOTS:
         bare.insert(QStringLiteral("multipass"), true);
         const PackResult noBuffers =
             validateSurface(tmp, QStringLiteral("sf-depth-bare"), bare, surfaceBodyReading({}));
+        // POSITIVE COMPANION, so the negative below cannot be satisfied by a fixture failure or an
+        // empty report. Its two sibling legs each carry one; this leg did not.
+        QVERIFY2(noBuffers.report.contains(QStringLiteral("normalised back to single-pass")),
+                 qPrintable(noBuffers.report));
         QVERIFY2(!noBuffers.report.contains(note), qPrintable(noBuffers.report));
 
         // A chain that does NOT resolve: same, since the registry fail-closes it to single-pass.

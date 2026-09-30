@@ -447,19 +447,8 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
             QStringLiteral("builtin:kawase-down-2"), QStringLiteral("builtin:kawase-down-3"),
             QStringLiteral("builtin:kawase-up-0"),   QStringLiteral("builtin:kawase-up-1"),
             QStringLiteral("builtin:kawase-up-2")};
-        // A depth pack pins every pass to the single bufferScale on the daemon,
-        // because the passes share one depth attachment and a render target's colour
-        // and depth attachments must agree in size. The runtime behaviour is correct
-        // and documented in place, so this is purely the missing diagnostic: without
-        // it a pack declaring both passes green with its pyramid flattened at load.
-        if (meta.value(QLatin1String("depthBuffer")).toBool()
-            && !meta.value(QLatin1String("bufferScales")).toArray().isEmpty()) {
-            lints << QStringLiteral(
-                "bufferScales is declared alongside \"depthBuffer\": true, and the daemon pins every pass to "
-                "bufferScale, so no per-pass entry takes effect there (the passes share one depth attachment, "
-                "whose size the colour attachments must match). A one-pass chain is pinned on the daemon too, "
-                "though the compositor does honour bufferScales[0] for one");
-        }
+        // The depth+bufferScales arm moved down beside the bufferScale arms, so it can carry
+        // chainResolves (not declared until the buffer-resolve loop below).
         bool anyKawase = false;
         bool anyKawaseDown0 = false;
         bool anyGaussianH = false;
@@ -871,7 +860,9 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
                              .arg(static_cast<int>(scales.size()))
                              .arg(static_cast<int>(scaleCap));
             }
-            for (qsizetype i = 0; i < scales.size() && i < scaleCap; ++i) {
+            // BOTH per-entry arms carry chainResolves: each names a PASS, and a fail-closed chain
+            // has bufferScales cleared and no passes, so neither has a subject.
+            for (qsizetype i = 0; chainResolves && i < scales.size() && i < scaleCap; ++i) {
                 const QJsonValue v = scales.at(i);
                 if (!v.isDouble()) {
                     lints << QStringLiteral(
@@ -988,10 +979,14 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
             }
         };
         // GATED ON chainResolves, same gate and same argument as the feedback arm below: the
-        // coherence block clears all four spellings on a fail-closed chain, and no bufferShaders
-        // at all leaves chainResolves false, covering a single-pass pack and a `multipass: true`
-        // normalised back to one. The vocabulary and length arms above stay UNGATED, since a typo
-        // is a typo whether or not the chain runs.
+        // coherence block clears all four spellings on a fail-closed chain, so the daemon honours
+        // none of them and the divergence cannot happen. The vocabulary and length arms above stay
+        // UNGATED, since a typo is a typo whether or not the chain runs.
+        //
+        // WHAT IT DOES NOT COVER, corrected: a single-pass pack never reaches here (the enclosing
+        // `if (eff.isMultipass)` excludes it), and for `multipass: true` with no bufferShaders the
+        // single-pass sweep above does NOT pick these keys up, because eff.isMultipass is
+        // fromJson's RAW bool and is TRUE there. That pack gets the normalisation lint instead.
         if (chainResolves) {
             lintDaemonOnlyToken(QLatin1String("bufferWrap"), QLatin1String("clamp"), false, true);
             lintDaemonOnlyToken(QLatin1String("bufferWraps"), QLatin1String("clamp"), true, true);
@@ -1083,12 +1078,12 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         // answers its DEFAULT for a string or a bool, so `"bufferScale": "0.5"`
         // silently loads as 1.0 and the range check below sees nothing wrong.
         //
-        // Both arms carry chainResolves. On a fail-closed chain the coherence block RESETS
-        // bufferScale to 1.0 rather than clamping it, so "clamped at load" names the wrong
-        // mechanism, and with no bufferShaders at all the single-pass sweep above already reports
-        // the key as one the pack declares and nothing reads. Neither case loses a diagnostic.
+        // THE TWO ARMS ARE GATED DIFFERENTLY, deliberately. The TYPE arm is true on every path
+        // (fromJson's non-numeric branch and the coherence block both set 1.0), so gating it once
+        // silenced a true diagnostic. The RANGE arm keeps the gate for the BELOW-min case, where
+        // fromJson clamps to kMinBufferScale and the block then resets to 1.0.
         const QJsonValue rawScaleValue = meta.value(QLatin1String("bufferScale"));
-        if (chainResolves && !rawScaleValue.isUndefined() && !rawScaleValue.isNull() && !rawScaleValue.isDouble()) {
+        if (!rawScaleValue.isUndefined() && !rawScaleValue.isNull() && !rawScaleValue.isDouble()) {
             lints << QStringLiteral("bufferScale is not a number, so it falls back to 1.0 at load");
         }
         const double rawScale = rawScaleValue.toDouble(1.0);
@@ -1098,6 +1093,19 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
                          .arg(PhosphorShaders::kMinBufferScale)
                          .arg(PhosphorShaders::kMaxBufferScale)
                          .arg(rawScale);
+        }
+        // RELOCATED from the blur-chain block above to carry chainResolves: a fail-closed chain has
+        // useDepthBuffer false, bufferScales cleared and no targets, so nothing is pinned. The
+        // compositor half is general because it implements no depth buffer at all, so it honours
+        // EVERY entry at any chain length.
+        if (chainResolves && meta.value(QLatin1String("depthBuffer")).toBool()
+            && !meta.value(QLatin1String("bufferScales")).toArray().isEmpty()) {
+            lints << QStringLiteral(
+                "bufferScales is declared alongside \"depthBuffer\": true, and the daemon pins every pass to "
+                "bufferScale, so no per-pass entry takes effect there (the passes share one depth attachment, "
+                "whose size the colour attachments must match). The compositor implements no depth buffer, so "
+                "it honours every bufferScales entry at any chain length, including the one-pass case the "
+                "daemon still pins");
         }
     }
     if (!QFile::exists(eff.fragmentShaderPath)) {
