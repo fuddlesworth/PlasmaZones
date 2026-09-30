@@ -214,26 +214,20 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
             if (m_excludedScreens.contains(screenId)) {
                 continue;
             }
-            // The one create site with no geometry guard. Phase 3 hands this value straight to
-            // createOverlayWindow, which writes overlayGeometry unconditionally and sizes the
-            // shell window from width()/height() — 0x0 for a default QRect.
+            // NO INVALID-GEOMETRY GUARD HERE, DELIBERATELY, and two rounds of adding one is why
+            // this says so. effectiveScreenIds() is built from the manager's OWN tracked screens
+            // and its own live configs, and its cache is dirtied alongside every tracked-screen
+            // sync — so for every id it yields, the geometry rebuild finds the config, finds the
+            // tracked screen, and inserts that very id, and a virtual screen's absoluteGeometry
+            // clamps its width and height to at least 1. The lookup below therefore answers with a
+            // real rect for every id that reaches it, and a guard on it cannot fire.
             //
-            // A VIRTUAL id that does not resolve is SKIPPED, because there is no rect worth
-            // substituting: the physical one is the whole output, so the overlay would cover the
-            // monitor instead of the screen's slice. ScreenManager::screenGeometry already
-            // latches its own warn-once for that miss, so this adds no logging — an unlatched
-            // warning here would fire at cursor rate, since initializeOverlay runs on every drag
-            // tick that finds the cursor's screen without a live window.
-            //
-            // A PHYSICAL id SUBSTITUTES, the way the single-argument createOverlayWindow does.
-            // Skipping one would be worse than the 0x0 window: Phase 2 dismisses every non-target
-            // key, so a transient miss on a LIVE overlay would tear it down, where the isValid()
-            // gates in Phase 3 leave the last-known geometry in place and carry it through. The
-            // 0x0 sizing only ever reached a FIRST create, which is what the substitute fixes.
+            // The substitution stays as pure defence: it costs one comparison, and it is what a
+            // bare physical id would want in the one window where the manager's snapshot lags a
+            // QScreen geometry change. Do not turn it into a skip — Phase 2 dismisses every
+            // non-target key, so dropping an id here would tear down a LIVE overlay, which is
+            // worse than the 0x0 first-create window a guard was reaching for.
             const QRect resolvedGeom = mgr->screenGeometry(screenId);
-            if (!resolvedGeom.isValid() && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
-                continue;
-            }
             targetIds.append(screenId);
             targetPhysScreens.insert(screenId, physScreen);
             targetGeometries.insert(screenId, resolvedGeom.isValid() ? resolvedGeom : physScreen->geometry());
@@ -704,8 +698,10 @@ void OverlayService::clearHighlight()
 
 void OverlayService::updateMousePosition(int cursorX, int cursorY)
 {
-    // Idle-quiesce gate, the term the sibling highlight paths below already carry, spelled with
-    // the same isOverlayDisplaying() the siblings in this file use. drag.cpp keeps pushing the
+    // Idle-quiesce gate. Two different sibling sets, and an earlier version ran them together: the
+    // highlight paths below carry m_overlayIdled as a gate on the DIRTY FLAG and never early-return,
+    // while the functions that early-return on isOverlayDisplaying() are elsewhere in this file.
+    // This one belongs with the second set, so it is spelled that way. drag.cpp keeps pushing the
     // cursor through a trigger-release pause, and says so outright: while idled m_overlayShown
     // stays true BY DESIGN. A mousePosition change reaches ShaderEffect::setIMouse, which calls
     // QQuickItem::update(), so every cursor event requested a render on every live overlay window
@@ -928,15 +924,13 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
         QScreen* physScreen = m_screenStates.value(screenId).overlayPhysScreen;
         if (!physScreen)
             continue;
-        const QRect stored = m_screenStates.value(screenId).overlayGeometry;
-        const QRect geom = stored.isValid() ? stored : trueScreenGeometry(m_screenManager, screenId);
-        // This loop walks m_screenStates keys, which can be VIRTUAL, so the physical rect is not
-        // a safe last resort here: it is the whole output. Skip instead. A stale shader type on
-        // one overlay costs less than one sized to the wrong screen, and the next show rebuilds it
-        // once the geometry resolves.
-        if (!geom.isValid() && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
-            continue;
-        }
+        // A non-null overlayPhysScreen ALWAYS accompanies a valid overlayGeometry: every writer
+        // that clears one clears the other in the same statement group, and every writer that sets
+        // the screen writes a validated rect with it. The `continue` above has already skipped a
+        // null screen, so this rect is valid by construction and the substitution below is dead
+        // defence rather than a live path. A re-resolve and a virtual skip were added here and are
+        // gone again: both were unreachable for the same reason.
+        const QRect geom = m_screenStates.value(screenId).overlayGeometry;
         // createOverlayWindow now drives the slot - flips useShader,
         // toggles loaded, applies shader info - without recreating the
         // wl_surface. If the slot was visible before, it stays visible.

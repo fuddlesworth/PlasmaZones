@@ -976,7 +976,7 @@ void OverlayService::setCurrentActivity(const QString& activityId)
 
 // Screen-management methods (assertWindowOnScreen / handleScreenAdded /
 // onVirtualScreensChanged / destroyAllWindowsForPhysicalScreen /
-// handleScreenRemoved / resetModalSingletonsForDestroyedId) live in screens.cpp.
+// handleScreenRemoved / resetModalSingletonsForDestroyedId) live in overlayservice/screens.cpp.
 
 OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude(const QString& screenId,
                                                                                  QString* resolvedIdOut) const

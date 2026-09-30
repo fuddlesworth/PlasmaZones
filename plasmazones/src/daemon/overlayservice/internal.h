@@ -195,43 +195,46 @@ inline VsLayerPlacement layerPlacementForVs(const QRect& vsGeom, const QRect& ph
 // settings app. Same shape as parseZonesJson in overlay_helpers.h — an unused
 // inline helper whose comment named a consumer that does not exist.
 
-/// Resolve target screen geometry for a screen ID (virtual or physical).
-/// For virtual screens (format "physicalId/vs:N"), returns the virtual screen
-/// geometry from PhosphorScreens::ScreenManager. For physical screens, falls back to QScreen::geometry().
-/// Returns the geometry the overlay window should cover.
-inline QRect resolveScreenGeometry(PhosphorScreens::ScreenManager* mgr, const QString& screenId)
-{
-    if (mgr) {
-        QRect geom = mgr->screenGeometry(screenId);
-        if (geom.isValid()) {
-            return geom;
-        }
-    }
-    // Fallback: physical screen geometry only. This path is hit when PhosphorScreens::ScreenManager
-    // is unavailable (e.g. early startup) or when screenId doesn't match any virtual
-    // screen. The caller gets raw QScreen::geometry() which is always the full
-    // physical monitor — acceptable as a last-resort fallback.
-    QScreen* screen = resolveTargetScreen(mgr, screenId);
-    return screen ? screen->geometry() : QRect();
-}
-
 /// The geometry @p screenId GENUINELY resolves to, or an invalid rect when nothing does.
 ///
-/// resolveScreenGeometry above destroys that distinction ON PURPOSE, and it has to: a surface
-/// needs SOME rect to be sized to, so an unresolvable id is substituted with the full physical
-/// monitor, and resolveTargetScreen substitutes the PRIMARY monitor for an id nothing can
-/// resolve at all. That is right for sizing and wrong for deciding whether an absolute
-/// setGeometry is safe, because a substituted rect compares EQUAL to its screen's own rect and
-/// so passes assertWindowOnScreen's physical-screen test trivially — which is how a
-/// virtual-screen window came to take the branch that test exists to deny it.
+/// The VERDICT half of the pair below. resolveScreenGeometry destroys this distinction on purpose
+/// and has to: a surface needs SOME rect to be sized to, so an unresolvable id is substituted with
+/// the full physical monitor, and resolveTargetScreen substitutes the PRIMARY monitor for an id
+/// nothing can resolve at all. That is right for sizing and wrong for deciding whether an absolute
+/// setGeometry is safe, because a substituted rect compares EQUAL to its screen's own rect and so
+/// passes assertWindowOnScreen's physical-screen test trivially — which is how a virtual-screen
+/// window came to take the branch that test exists to deny it.
 ///
-/// So a caller that needs both asks for both: this for the verdict, resolveScreenGeometry for
-/// the size. A tracked physical id answers with its real rect here, so the physical path is
-/// unchanged; only a genuinely unresolvable id comes back invalid. ScreenManager already
-/// latches its own warn-once for a virtual miss, so calling this adds no repeated logging.
+/// A tracked physical id answers with its real rect here, so the physical path is unchanged; only
+/// a genuinely unresolvable id comes back invalid.
+///
+/// ON LOGGING, corrected: ScreenManager's warn-once for a virtual miss is latched only when its
+/// rebuild BAILS EARLY (no config for that physical screen, or the screen untracked). An id whose
+/// index is no longer in a LIVE config — which is the post-reconfigure case, and the one route
+/// that actually reaches here — re-warns on every call, because the rebuild clears the warn set
+/// before re-inserting. So ask ONCE per show and keep both forms, which is what the callers do.
 inline QRect trueScreenGeometry(PhosphorScreens::ScreenManager* mgr, const QString& screenId)
 {
     return mgr ? mgr->screenGeometry(screenId) : QRect();
+}
+
+/// Resolve target screen geometry for a screen ID (virtual or physical): the geometry the overlay
+/// window should be SIZED to, substituting when the id does not resolve.
+///
+/// Expressed in terms of trueScreenGeometry so the verdict/substitute relationship is structural
+/// rather than a claim in a comment. The substitute is the full physical monitor, which is the
+/// right last resort for sizing and the wrong basis for a placement decision — a caller that needs
+/// to know WHETHER the id resolved must ask the other helper, not test this result for validity.
+inline QRect resolveScreenGeometry(PhosphorScreens::ScreenManager* mgr, const QString& screenId)
+{
+    const QRect resolved = trueScreenGeometry(mgr, screenId);
+    if (resolved.isValid()) {
+        return resolved;
+    }
+    // This path is hit when the manager is unavailable (e.g. early startup) or when screenId
+    // matches no live virtual screen and no tracked physical one.
+    QScreen* screen = resolveTargetScreen(mgr, screenId);
+    return screen ? screen->geometry() : QRect();
 }
 
 // Write all shader-config properties from ShaderInfo to a QML window (every

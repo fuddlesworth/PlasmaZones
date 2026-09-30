@@ -26,6 +26,7 @@
 #include "packvalidatorcommon.h"
 
 #include <PhosphorShaders/CustomParamsKey.h>
+#include <PhosphorShaders/ShaderParamPreamble.h>
 #include <PhosphorSurface/SurfaceShaderContract.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
@@ -543,20 +544,39 @@ QStringList surfaceBufferChainLints(const QJsonObject& meta, const SurfaceShader
         // at load with no warning. Flag any mismatch, matching the animation arm,
         // rather than surplus alone, since a short array is the likelier slip.
         //
-        // UNGATED, since a length mismatch is decidable either way, but the message says nothing
-        // about LOAD behaviour any more. An earlier wording claimed a surplus entry is "never read"
-        // and a missing one "falls back at load", neither of which happens on a fail-closed chain
-        // (the coherence block clears these arrays and there are no passes), and it also claimed
-        // declared length is kept, which is untrue past the 8-pass budget.
-        const auto lintBufferArrayLen = [&](QLatin1String key) {
+        // UNGATED on chainResolves, since a length mismatch is decidable either way. But BOTH
+        // LENGTHS ARE CAPPED FIRST, because fromJson caps bufferShaders AND each of these arrays
+        // at the pass budget INDEPENDENTLY: 10 buffers with 8 wraps loads as 8 and 8, perfectly
+        // aligned, and reporting a mismatch there was a pure false positive with no true past-cap
+        // shape to balance it (10 buffers with 10 wraps was silent and also loads 8/8). And it is
+        // gated on a NON-EMPTY chain, because at zero passes there is no alignment and "a missing
+        // one takes the single value" cannot happen — the sibling arm above already tells the
+        // author the real thing, that the pack is normalised back to single-pass.
+        const auto lintBufferArrayLen = [&](QLatin1String key, bool reportSurplus = true) {
+            const qsizetype cap = PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses;
             const QJsonArray arr = meta.value(key).toArray();
-            if (!arr.isEmpty() && arr.size() != declaredBuffers.size()) {
+            // PAST THE BUDGET IS ITS OWN REPORT, and it has to be, because capping both sides makes
+            // an over-length array come out ALIGNED — so the author's surplus entry is dropped at
+            // load with nothing said, which the alignment arm below can no longer show. bufferScales
+            // already has a dedicated arm for this with the clamping nuance, so it opts out.
+            if (reportSurplus && arr.size() > cap) {
                 lints << QStringLiteral(
-                             "%1 has %2 entries for %3 buffer shaders (aligned positionally with bufferShaders; "
-                             "a surplus entry has no pass and a missing one takes the single value)")
+                             "%1 has %2 entries, past the %3-pass budget; the surplus is "
+                             "dropped at load rather than clamped")
                              .arg(QString(key))
                              .arg(static_cast<int>(arr.size()))
-                             .arg(static_cast<int>(declaredBuffers.size()));
+                             .arg(static_cast<int>(cap));
+            }
+            const qsizetype kept = std::min<qsizetype>(arr.size(), cap);
+            const qsizetype passes = std::min<qsizetype>(declaredBuffers.size(), cap);
+            if (kept > 0 && passes > 0 && kept != passes) {
+                lints << QStringLiteral(
+                             "%1 has %2 %3 for %4 buffer shaders (aligned positionally with bufferShaders; "
+                             "a surplus entry has no pass and a missing one takes the single value)")
+                             .arg(QString(key))
+                             .arg(static_cast<int>(kept))
+                             .arg(kept == 1 ? QStringLiteral("entry") : QStringLiteral("entries"))
+                             .arg(static_cast<int>(passes));
             }
         };
         lintBufferArrayLen(QLatin1String("bufferWraps"));
@@ -564,7 +584,7 @@ QStringList surfaceBufferChainLints(const QJsonObject& meta, const SurfaceShader
         // bufferScales is aligned the same way, and each entry is clamped at
         // load like the single-value bufferScale (a non-number falls back to
         // it with only a journal warning).
-        lintBufferArrayLen(QLatin1String("bufferScales"));
+        lintBufferArrayLen(QLatin1String("bufferScales"), /*reportSurplus=*/false);
         {
             const QJsonArray scales = meta.value(QLatin1String("bufferScales")).toArray();
             // Past the pass budget fromJson DROPS the entry rather than clamping
@@ -829,9 +849,11 @@ QStringList surfaceBufferChainLints(const QJsonObject& meta, const SurfaceShader
         }
         // RELOCATED from the blur-chain block above to carry chainResolves: a fail-closed chain has
         // useDepthBuffer false, bufferScales cleared and no targets, so nothing is pinned. AND ON
-        // REAL DIVERGENCE, mirroring the runtime's twin warning: each CLAMPED slot against the
-        // clamped pack-wide scale, warning only if one differs. Without the clamp the arm FAILED A
-        // VALID PACK — bufferScale 0.5 with bufferScales [0.5, 0.5] renders the same on both hosts.
+        // REAL DIVERGENCE, mirroring the runtime's twin warning on all three counts now — each
+        // CLAMPED slot against the clamped pack-wide scale, warning only if one differs, over the
+        // DECLARED PASS COUNT. Without the clamp the arm FAILED A VALID PACK: bufferScale 0.5 with
+        // bufferScales [0.5, 0.5] renders the same on both hosts. The two sides cite each other,
+        // so a change to either belongs in both.
         const QJsonArray depthScales = meta.value(QLatin1String("bufferScales")).toArray();
         const auto clampScale = [](double v) {
             return qBound(PhosphorShaders::kMinBufferScale, v, PhosphorShaders::kMaxBufferScale);
@@ -841,18 +863,29 @@ QStringList surfaceBufferChainLints(const QJsonObject& meta, const SurfaceShader
         // reaches neither host and cannot diverge, and this was the last unbounded per-entry loop.
         // No isEmpty() gate below either — an empty array runs no iteration and answers false here.
         bool scalesDiverge = false;
-        const qsizetype depthCap = PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses;
+        // BOUNDED BY THE DECLARED PASS COUNT, not just by the 8-slot budget, which is what the
+        // runtime twin now does too. fromJson caps the array at the budget but never TRIMS it to
+        // the pass count, so a pack with one bufferShader and two bufferScales keeps the surplus
+        // entry in the struct — and neither host reads it: the daemon's loop is bounded by its own
+        // path list, and the compositor indexes by pass index. Scanning it named a divergence on a
+        // pass that does not exist. The sibling length arm reports the real problem.
+        const qsizetype depthCap =
+            std::min<qsizetype>(declaredBuffers.size(), PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses);
+        // ACCUMULATED with |=, not assigned. With a plain assignment the result was "last entry
+        // wins" and the `!scalesDiverge` term in the condition was silently load-bearing rather
+        // than the early-out it looks like — drop that term and a pack diverging at entry 0 and
+        // agreeing at entry 1 went quiet, which no fixture in the tree would have caught.
         for (qsizetype i = 0; i < depthScales.size() && i < depthCap && !scalesDiverge; ++i) {
             const QJsonValue v = depthScales.at(i);
-            scalesDiverge = v.isDouble() && !qFuzzyCompare(clampScale(v.toDouble()), pinnedScale);
+            scalesDiverge |= v.isDouble() && !qFuzzyCompare(clampScale(v.toDouble()), pinnedScale);
         }
         if (chainResolves && scalesDiverge && meta.value(QLatin1String("depthBuffer")).toBool()) {
             lints << QStringLiteral(
                 "bufferScales is declared alongside \"depthBuffer\": true, and the daemon pins every pass to "
-                "bufferScale, so no per-pass entry takes effect there (the passes share one depth attachment, "
-                "whose size the colour attachments must match). The compositor implements no depth buffer, so "
-                "it honours every bufferScales entry at any chain length, including the one-pass case the "
-                "daemon still pins");
+                "bufferScale, so no per-pass entry takes effect there (the depth attachment is sized from "
+                "bufferScale and a render target's colour attachments must match it, which holds at one pass "
+                "too). The compositor implements no depth buffer, so it honours each declared entry, including "
+                "on a one-pass chain the daemon still pins");
         }
     }
 

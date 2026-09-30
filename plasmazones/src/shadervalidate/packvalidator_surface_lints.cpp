@@ -80,6 +80,16 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         int scalarParams = 0;
         int colorParams = 0;
         for (const SurfaceShaderEffect::ParameterInfo& p : eff.parameters) {
+            // An INVALID ID CONSUMES NO LANE, so it must not count toward either budget:
+            // translateSurfaceParams and buildParamPreamble both skip it, neither assigns it a
+            // slot and neither emits a p_<id>. Counting it reported an overflow for a pack where
+            // the loader drops nothing, and made the two lines contradict each other — one saying
+            // the parameter is skipped and gets no define, the next counting it toward the define
+            // budget. The radius-slot scan in the buffer half already gates the same way, with the
+            // same reason: invalid ids skipped as both runtimes do.
+            if (!PhosphorShaders::isValidParamId(p.id)) {
+                continue;
+            }
             if (p.type == QLatin1String("color")) {
                 ++colorParams;
             } else {
@@ -218,6 +228,40 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
     }
     qsizetype keptTextureSlots = 0;
     for (const QJsonValue& v : declaredTextures) {
+        const QString declaredPath = v.toObject().value(QLatin1String("path")).toString();
+        // CONFINEMENT IS CHECKED FOR EVERY DECLARATION, above the cap break below, and it is the
+        // one arm here that is not scoped to what the loader reads. A surplus entry's path is
+        // never read at load, so no load CONSEQUENCE can honestly be claimed for it — which is why
+        // this message names none. But an escaping path is a fault in the DECLARATION, and the
+        // loader's own note says a future kMaxUserTextureSlots bump "would loosen this cap
+        // automatically", at which point a path waved through here becomes a live traversal attempt
+        // in a pack that already shipped. The sibling stage keys (fragmentShader, vertexShader,
+        // bufferShaders) are hard REFUSALS of the whole pack for this fault; textures is the one
+        // key where it is only a lint, so at least let the lint reach every entry.
+        std::optional<QString> confined;
+        if (!declaredPath.isEmpty()) {
+            confined = confinedPackPath(packDir, declaredPath);
+            if (!confined) {
+                lints << QStringLiteral(
+                             "texture path escapes the pack directory: %1 (refused; confinement "
+                             "applies to every declared entry, not only the ones the cap keeps)")
+                             .arg(declaredPath);
+            }
+        }
+        // BOUNDED TO WHAT THE LOADER KEEPS, and bounded THE WAY THE LOADER DOES IT: fromJson's cap
+        // is a break at the TOP of its own loop, so once the slots are full it reads nothing
+        // further — not the path, not the wrap, not even whether the entry is an object. So every
+        // message below, INCLUDING the two shape lints, would otherwise name a load behaviour that
+        // does not happen: a surplus entry is not "dropped at load" for being a bare path or for
+        // having a blank one, and it shifts nothing, because no later texture loads either.
+        //
+        // Counted in SLOTS TAKEN rather than by index, because an empty or non-object entry is
+        // consumed WITHOUT taking a slot, so [empty, t0, t1, t2] genuinely loads all three. An
+        // earlier version put a counted continue in the middle of the loop, which left the two
+        // shape lints above it still firing past the cap.
+        if (keptTextureSlots >= PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots) {
+            break;
+        }
         // A non-object entry (a bare path string, the natural mistake) reported
         // as "empty `path`", which describes an object that has the key and left
         // it blank. The author wrote no object at all, so they went looking for
@@ -228,39 +272,27 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
                 "texture down one sampler slot). An entry is `{\"path\": \"...\"}`, not a bare path");
             continue;
         }
-        const QString texPath = v.toObject().value(QLatin1String("path")).toString();
-        if (texPath.isEmpty()) {
+        if (declaredPath.isEmpty()) {
             lints << QStringLiteral(
                 "texture entry with empty `path` (dropped at load, which also shifts "
                 "every later texture down one sampler slot)");
             continue;
         }
-        // BOUNDED TO WHAT THE LOADER KEEPS, like every other per-entry arm in this file. fromJson
-        // appends only path-bearing entries and breaks once the cap is full, WITHOUT reading the
-        // surplus entry's path or wrap — so every message below would otherwise name a load
-        // behaviour that does not happen for one. Counted in SLOTS TAKEN rather than by index,
-        // because an empty or non-object entry is consumed without taking a slot, so
-        // [empty, t0, t1, t2] genuinely loads all three.
-        if (keptTextureSlots++ >= PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots) {
-            continue;
-        }
-        // Same confinement and existence check the animation arm applies,
-        // and for the same reason: the registry clears a rejected texture
-        // path and the sampler falls back to transparent, so a typo ships
-        // green and fails at first paint.
-        const auto confined = confinedPackPath(packDir, texPath);
-        if (!confined) {
-            lints << QStringLiteral(
-                         "texture path escapes the pack directory: %1 (rejected at load, sampler reads "
-                         "transparent)")
-                         .arg(texPath);
-        } else if (!QFile::exists(*confined)) {
-            lints << QStringLiteral("texture missing: %1 (sampler reads transparent at load)").arg(texPath);
-        } else if (!QFileInfo(*confined).isFile()) {
-            // exists() answers true for a DIRECTORY, so a path naming one passed both arms and
-            // the whole pack reported OK. The runtime accepts it too (its only test is
-            // confinement), so the failure lands at first paint with nothing having warned.
-            lints << QStringLiteral("texture path is not a file: %1 (sampler reads transparent at load)").arg(texPath);
+        ++keptTextureSlots;
+        // The EXISTENCE checks, which the escape arm above deliberately does not duplicate: the
+        // registry clears a rejected texture path and the sampler falls back to transparent, so a
+        // typo ships green and fails at first paint. Gated on `confined` rather than re-reporting
+        // an escape, and NOT an early continue, because the wrap arms below apply either way.
+        if (confined) {
+            if (!QFile::exists(*confined)) {
+                lints << QStringLiteral("texture missing: %1 (sampler reads transparent at load)").arg(declaredPath);
+            } else if (!QFileInfo(*confined).isFile()) {
+                // exists() answers true for a DIRECTORY, so a path naming one passed both arms and
+                // the whole pack reported OK. The runtime accepts it too (its only test is
+                // confinement), so the failure lands at first paint with nothing having warned.
+                lints << QStringLiteral("texture path is not a file: %1 (sampler reads transparent at load)")
+                             .arg(declaredPath);
+            }
         }
         // Wrap vocabulary lint — read RAW metadata: SurfaceShaderEffect::fromJson
         // silently clears an invalid wrap to clamp, so a lint over the parsed

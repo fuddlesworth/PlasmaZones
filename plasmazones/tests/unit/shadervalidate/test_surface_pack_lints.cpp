@@ -194,7 +194,7 @@ private Q_SLOTS:
                        QJsonArray{QStringLiteral("builtin:gaussian-h"), QStringLiteral("builtin:gaussian-v")});
             obj.insert(key, QJsonArray{QStringLiteral("clamp")}); // one entry for two passes
             const PackResult r = validateSurface(tmp, QStringLiteral("sf-align"), obj, surfaceBodyReading({}));
-            QVERIFY2(r.report.contains(QStringLiteral("%1 has 1 entries for 2 buffer shaders").arg(key)),
+            QVERIFY2(r.report.contains(QStringLiteral("%1 has 1 entry for 2 buffer shaders").arg(key)),
                      qPrintable(r.report));
         }
     }
@@ -229,9 +229,11 @@ private Q_SLOTS:
     /// nothing to look for. The old single message sent an author hunting a
     /// settings-preview difference that could not exist.
     ///
-    /// FOUR legs, and the last two are here because of a MUTATION rather than a defect: the
+    /// No leg count here on purpose, for the reason the fail-closed slot below spells out: a
+    /// numeral in a comment is the trap the helpers header warns about twice, and this one had
+    /// already rotted once. One leg is present because of a MUTATION rather than a defect: the
     /// arm's predicate is `.toBool()`, and with only a fires/absent pair a mutation to
-    /// `meta.contains(...)` passes both. An explicit false is the state that kills it.
+    /// `meta.contains(...)` passes both, so the EXPLICIT FALSE leg is the state that kills it.
     void aDaemonOnlyBufferFeedbackIsLinted()
     {
         QTemporaryDir tmp;
@@ -693,6 +695,10 @@ private Q_SLOTS:
         QVERIFY2(later.report.contains(needle), qPrintable(later.report));
         QCOMPARE(later.errors, 1);
 
+        // Two further legs pin the arm's LOOP rather than its gates: an in-budget divergence past
+        // entry 0, and more scales than passes. They live in the sibling file's
+        // theDepthArmLoopIsBoundedByPassCountAndAccumulates, which had the room.
+
         // DIVERGING: one entry differs from the pack-wide scale, which is the case the daemon's
         // pinning actually discards, so the lint fires. One error, the depth line alone.
         const PackResult diverge = runWith(QStringLiteral("sf-dx-c"), 0.5, QJsonArray{0.25});
@@ -716,9 +722,10 @@ private Q_SLOTS:
 
         // PAST THE PASS BUDGET, and this is the leg the unbounded loop failed. fromJson caps
         // bufferScales at kMaxBufferPasses, so a divergent entry past the cap reaches neither host.
-        // The positional-length lint and the over-budget lint reject the pack on their own (two
-        // different arms, differently gated); what this pins is that the depth arm adds no third
-        // claim about a divergence that provably cannot occur.
+        // The over-budget lint rejects the pack on its own and is the ONLY line here: the positional
+        // arm is silent because capping both sides makes 9 scales and 8 passes come out aligned,
+        // which is exactly what they are at load. What this pins is that the depth arm adds no
+        // second claim about a divergence that provably cannot occur.
         const int depthCap = PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses;
         QJsonArray pastBudget;
         for (int i = 0; i < depthCap; ++i) {
@@ -727,7 +734,7 @@ private Q_SLOTS:
         pastBudget.append(0.25);
         const PackResult past = runWith(QStringLiteral("sf-dx-f"), 0.5, pastBudget, depthCap);
         QVERIFY2(!past.report.contains(needle), qPrintable(past.report));
-        QCOMPARE(past.errors, 2);
+        QCOMPARE(past.errors, 1);
 
         // THE chainResolves GATE, which nothing covered. On a fail-closed chain the registry's
         // coherence block sets useDepthBuffer false and clears bufferScales, so nothing is pinned

@@ -185,10 +185,10 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
         }
     }
 
-    QRect screenGeom = resolveScreenGeometry(m_screenManager, resolvedId);
-    if (!screenGeom.isValid()) {
-        screenGeom = screen->geometry();
-    }
+    // ONE lookup in both forms, as the sibling show paths do: trueGeom is the verdict
+    // assertWindowOnScreen needs, screenGeom is what the window is sized to.
+    const QRect trueGeom = trueScreenGeometry(m_screenManager, resolvedId);
+    const QRect screenGeom = trueGeom.isValid() ? trueGeom : screen->geometry();
 
     // Resolve target shell - per-screen shell hosts the snap-assist slot.
     auto* state = ensurePassiveShellFor(resolvedId, screen);
@@ -360,9 +360,9 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
     // coordinates, so the snap-assist path holds to the same per-VS
     // sizing the rest of the shell uses.
     if (shellWindow) {
-        // The TRUE geometry, not screenGeom: that one is substituted when the id does not resolve,
-        // and a substituted rect makes assertWindowOnScreen's physical-screen test trivially true.
-        assertWindowOnScreen(shellWindow, screen, trueScreenGeometry(m_screenManager, resolvedId));
+        // trueGeom, not screenGeom: that one is substituted when the id does not resolve, and a
+        // substituted rect makes assertWindowOnScreen's physical-screen test trivially true.
+        assertWindowOnScreen(shellWindow, screen, trueGeom);
         shellWindow->setWidth(screenGeom.width());
         shellWindow->setHeight(screenGeom.height());
     }
@@ -774,10 +774,9 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         return;
     }
 
-    QRect screenGeom = resolveScreenGeometry(m_screenManager, resolvedId);
-    if (!screenGeom.isValid()) {
-        screenGeom = screen->geometry();
-    }
+    // ONE lookup in both forms — see the snap-assist path above.
+    const QRect trueGeom = trueScreenGeometry(m_screenManager, resolvedId);
+    const QRect screenGeom = trueGeom.isValid() ? trueGeom : screen->geometry();
 
     auto* state = ensurePassiveShellFor(resolvedId, screen);
     if (!state || !state->shell || !state->shell->shellSurface() || !state->layoutPickerSlot()) {
@@ -906,8 +905,8 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     applyDecoration(slot, PhosphorSurfaceShaders::decorationPopupLayoutPickerPath());
 
     if (shellWindow) {
-        // The TRUE geometry, not screenGeom — see the snap-assist site above.
-        assertWindowOnScreen(shellWindow, screen, trueScreenGeometry(m_screenManager, resolvedId));
+        // trueGeom, not screenGeom — see the snap-assist site above.
+        assertWindowOnScreen(shellWindow, screen, trueGeom);
         shellWindow->setWidth(screenGeom.width());
         shellWindow->setHeight(screenGeom.height());
     }

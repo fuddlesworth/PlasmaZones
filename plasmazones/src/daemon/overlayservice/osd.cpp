@@ -63,12 +63,12 @@ std::optional<PreparedLayoutOsdWindow> OverlayService::prepareLayoutOsdWindow(co
     PreparedLayoutOsdWindow prep;
 
     // Use virtual screen geometry if applicable, otherwise physical
-    prep.screenGeom = resolveScreenGeometry(m_screenManager, screenId);
-    if (!prep.screenGeom.isValid()) {
-        prep.screenGeom = physScreen->geometry();
-    }
-
     prep.effectiveScreenId = screenId.isEmpty() ? PhosphorScreens::ScreenIdentity::identifierFor(physScreen) : screenId;
+
+    // ONE lookup in both forms, as the sibling show paths do, and keyed on the EFFECTIVE id for
+    // the reason given at the assert below. trueGeom is the verdict, prep.screenGeom is the size.
+    const QRect trueGeom = trueScreenGeometry(m_screenManager, prep.effectiveScreenId);
+    prep.screenGeom = trueGeom.isValid() ? trueGeom : physScreen->geometry();
 
     auto* state = ensurePassiveShellFor(prep.effectiveScreenId, physScreen);
     if (!state || !state->shell || !state->shell->shellWindow() || !state->shell->shellSurface() || !state->osdSlot()) {
@@ -91,10 +91,13 @@ std::optional<PreparedLayoutOsdWindow> OverlayService::prepareLayoutOsdWindow(co
     // resolve, and a substituted rect makes assertWindowOnScreen's physical-screen test trivially
     // true. prep.screenGeom still drives the sizing and the aspect ratio below.
     //
-    // Keyed on effectiveScreenId, not @p screenId: this function's parameter DEFAULTS to an empty
-    // string (the whole reason effectiveScreenId exists), and an empty id resolves to nothing, so
-    // asking with it would refuse the setGeometry that a primary-screen OSD does need.
-    assertWindowOnScreen(prep.window, physScreen, trueScreenGeometry(m_screenManager, prep.effectiveScreenId));
+    // Keyed on effectiveScreenId, not @p screenId, because that is the id every other per-screen
+    // lookup in this function already uses. NOT because an empty id resolves to nothing — it does
+    // not: ScreenManager::trackedScreenFor has an explicit empty-id arm answering with the primary
+    // output, so the raw id would have compared equal too. What the effective id buys is the case
+    // where the screen source's primary name is absent from the tracked set, since identifierFor
+    // stamps the same spelling the tracked entries carry.
+    assertWindowOnScreen(prep.window, physScreen, trueGeom);
 
     prep.aspectRatio = (prep.screenGeom.height() > 0)
         ? static_cast<qreal>(prep.screenGeom.width()) / prep.screenGeom.height()

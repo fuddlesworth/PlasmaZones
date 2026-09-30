@@ -28,6 +28,7 @@
 
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QDir>
 #include <QJsonObject>
 #include <QTemporaryDir>
 #include <QTextStream>
@@ -320,6 +321,155 @@ private Q_SLOTS:
             validateSurface(tmp, QStringLiteral("sf-dup-param"), obj, surfaceBodyReading({QStringLiteral("width")}));
         QVERIFY2(r.report.contains(QStringLiteral("duplicate parameter id 'width'")), qPrintable(r.report));
         QVERIFY(r.errors > 0);
+
+        // THE DROP IS MIRRORED, and these three legs are what distinguish that from the code that
+        // linted both declarations. fromJson keeps the FIRST and discards every later one, so a
+        // range fault in the SECOND describes a declaration that never loads.
+        const QString rangeLine = QStringLiteral("outside its own declared range");
+
+        // Second declaration out of range: only the duplicate line. This leg fails if the raw loop
+        // stops honouring the seen-id set.
+        const QJsonObject secondBad =
+            surfacePack(QStringLiteral("sf-dup-second"),
+                        QJsonArray{surfaceParam(QStringLiteral("width"), QStringLiteral("float"), 2.0, 0.0, 8.0),
+                                   surfaceParam(QStringLiteral("width"), QStringLiteral("float"), 99.0, 0.0, 8.0)});
+        const PackResult dropped = validateSurface(tmp, QStringLiteral("sf-dup-second"), secondBad,
+                                                   surfaceBodyReading({QStringLiteral("width")}));
+        QVERIFY2(!dropped.report.contains(rangeLine), qPrintable(dropped.report));
+        QCOMPARE(dropped.errors, 1);
+
+        // FIRST declaration out of range: the range line MUST appear, because that is the one the
+        // loader keeps. Without this the fix could have been "never lint a duplicated id at all".
+        const QJsonObject firstBad =
+            surfacePack(QStringLiteral("sf-dup-first"),
+                        QJsonArray{surfaceParam(QStringLiteral("width"), QStringLiteral("float"), 99.0, 0.0, 8.0),
+                                   surfaceParam(QStringLiteral("width"), QStringLiteral("float"), 2.0, 0.0, 8.0)});
+        const PackResult kept = validateSurface(tmp, QStringLiteral("sf-dup-first"), firstBad,
+                                                surfaceBodyReading({QStringLiteral("width")}));
+        QVERIFY2(kept.report.contains(rangeLine), qPrintable(kept.report));
+        QCOMPARE(kept.errors, 2);
+
+        // FIRST declaration has a type this family does not have. The id must still be claimed, or
+        // the second declaration reads as the first and its range fault gets linted — which is the
+        // ordering the set was corrected for, and the only leg that pins it.
+        const QJsonObject badType =
+            surfacePack(QStringLiteral("sf-dup-type"),
+                        QJsonArray{surfaceParam(QStringLiteral("width"), QStringLiteral("image"), 0.0, 0.0, 8.0),
+                                   surfaceParam(QStringLiteral("width"), QStringLiteral("float"), 99.0, 0.0, 8.0)});
+        const PackResult typed = validateSurface(tmp, QStringLiteral("sf-dup-type"), badType, surfaceBodyReading({}));
+        QVERIFY2(!typed.report.contains(rangeLine), qPrintable(typed.report));
+        QVERIFY2(typed.report.contains(QStringLiteral("unknown param type")), qPrintable(typed.report));
+        QCOMPARE(typed.errors, 2);
+    }
+
+    /// The depth+bufferScales arm's LOOP, as distinct from its gates, which the sibling file's
+    /// theDepthScalesArmFiresOnlyOnRealDivergence covers. Two shapes, and neither was reachable by
+    /// any fixture in the tree: an in-budget divergence PAST entry 0, and more scales than passes.
+    void theDepthArmLoopIsBoundedByPassCountAndAccumulates()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+        const QString needle = QStringLiteral("alongside \"depthBuffer\": true");
+
+        const auto runWith = [&tmp](const QString& name, const QJsonArray& scales, int passes) {
+            QJsonObject obj = surfacePack(name, QJsonArray{});
+            obj.insert(QStringLiteral("multipass"), true);
+            QJsonArray bufferShaders;
+            for (int i = 0; i < passes; ++i) {
+                bufferShaders.append(surfaceFillerBufferName());
+            }
+            obj.insert(QStringLiteral("bufferShaders"), bufferShaders);
+            obj.insert(QStringLiteral("depthBuffer"), true);
+            obj.insert(QStringLiteral("bufferScale"), 0.5);
+            obj.insert(QStringLiteral("bufferScales"), scales);
+            return validateSurfaceWithFillerPass(tmp, name, obj, surfaceBodyReading({}));
+        };
+
+        // DIVERGE AT ENTRY 0 AND AGREE AFTER IT, which pins that the loop ACCUMULATES rather than
+        // assigns. Every leg in the sibling slot either has one entry, agrees at entry 0, or reaches
+        // its final value on the last iteration — so with a plain assignment the result becomes
+        // "last entry wins" and nothing in the tree notices. This is the only leg that does.
+        const PackResult early = runWith(QStringLiteral("sf-dl-early"), QJsonArray{0.25, 0.5}, 2);
+        QVERIFY2(early.report.contains(needle), qPrintable(early.report));
+        QCOMPARE(early.errors, 1);
+
+        // MORE SCALES THAN PASSES, in budget. fromJson caps the array at the pass budget but never
+        // trims it to the pass COUNT, so the surplus entry survives in the struct and neither host
+        // reads it: the daemon bounds by its own path list and the compositor indexes by pass. The
+        // positional-length lint reports the real problem, and the depth arm must add nothing.
+        const PackResult overPass = runWith(QStringLiteral("sf-dl-over"), QJsonArray{0.5, 0.25}, 1);
+        QVERIFY2(!overPass.report.contains(needle), qPrintable(overPass.report));
+        QCOMPARE(overPass.errors, 1);
+    }
+
+    /// The TEXTURE CAP arms, which shipped with no test able to tell them from the code they
+    /// replaced. Both turn on the same distinction: the loader appends only path-bearing entries
+    /// and stops once its slots are full, WITHOUT reading anything further.
+    ///
+    /// The pre-existing over-cap slot cannot discriminate either fix, because it declares
+    /// cap-or-cap+1 entries that all bear a path — so declaration count equals loadable count, and
+    /// an index bound equals a slots-taken bound. Blank rows are what separate them.
+    void theTextureCapCountsLoadableEntriesAndBoundsBySlotsTaken()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+        const int cap = PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots;
+        const QString overCap = QStringLiteral("too many textures");
+
+        const auto withTextures = [&tmp](const QString& name, const QJsonArray& textures, int realFiles) {
+            QJsonObject obj = surfacePack(name, QJsonArray{});
+            obj.insert(QStringLiteral("textures"), textures);
+            const QString dir = tmp.filePath(name);
+            QDir().mkpath(dir);
+            for (int i = 0; i < realFiles; ++i) {
+                writePackFile(dir, QStringLiteral("t%1.png").arg(i), QByteArray("x"));
+            }
+            return validateSurface(tmp, name, obj, surfaceBodyReading({}));
+        };
+        const auto texEntry = [](const QString& path) {
+            return QJsonObject{{QStringLiteral("path"), path}};
+        };
+
+        // BLANK ROWS DO NOT COUNT TOWARD THE CAP. cap real paths with two blank rows between them
+        // overflows nothing, and reporting "cap+2 declared" sent the author to delete a texture
+        // that was loading fine. Fails if the count reverts to the declared array size.
+        QJsonArray spaced;
+        spaced.append(texEntry(QString()));
+        for (int i = 0; i < cap; ++i) {
+            spaced.append(texEntry(QStringLiteral("t%1.png").arg(i)));
+            spaced.append(texEntry(QString()));
+        }
+        const PackResult blanks = withTextures(QStringLiteral("sf-tex-blanks"), spaced, cap);
+        QVERIFY2(!blanks.report.contains(overCap), qPrintable(blanks.report));
+        // ONE FEWER than the blank rows declared, and that is the bound working from both ends: the
+        // leading and interleaved rows are inside the slot window and each draws its line, while the
+        // TRAILING row sits past the cap and correctly draws nothing. A bound on the array INDEX
+        // rather than on slots taken would instead have dropped the last real texture's checks.
+        QCOMPARE(blanks.errors, cap);
+
+        // PAST THE CAP nothing is read, so a surplus entry draws no claim about its own path. Fails
+        // if the per-entry arms stop being bounded.
+        QJsonArray surplus;
+        for (int i = 0; i < cap; ++i) {
+            surplus.append(texEntry(QStringLiteral("t%1.png").arg(i)));
+        }
+        surplus.append(texEntry(QStringLiteral("nosuch.png")));
+        const PackResult past = withTextures(QStringLiteral("sf-tex-past"), surplus, cap);
+        QVERIFY2(past.report.contains(overCap), qPrintable(past.report));
+        QVERIFY2(!past.report.contains(QStringLiteral("texture missing")), qPrintable(past.report));
+        QCOMPARE(past.errors, 1);
+
+        // CONFINEMENT IS THE EXCEPTION, deliberately reaching every declaration: a surplus escaping
+        // path is still reported, because the fault is in the declaration and a later cap bump would
+        // make it live in a pack that already shipped.
+        QJsonArray escaping;
+        for (int i = 0; i < cap; ++i) {
+            escaping.append(texEntry(QStringLiteral("t%1.png").arg(i)));
+        }
+        escaping.append(texEntry(QStringLiteral("../../../../etc/passwd")));
+        const PackResult escape = withTextures(QStringLiteral("sf-tex-escape"), escaping, cap);
+        QVERIFY2(escape.report.contains(QStringLiteral("escapes the pack directory")), qPrintable(escape.report));
+        QCOMPARE(escape.errors, 2);
     }
 
     /// The registry gates buffer passes on the separate "multipass" key, so a
@@ -656,9 +806,11 @@ private Q_SLOTS:
     /// It is a NOTE rather than a lint because the shared helper tells authors to gate styling on
     /// uHasBackdrop, so sampling without the flag is a supported pattern.
     ///
-    /// The second leg is the one that matters: it pins that the scan reads the PACK'S OWN source
-    /// and not the expanded TU. The shared helper DEFINES backdropTexel and declares uBackdrop, so
-    /// scanning after expansion would fire for any pack that merely includes it.
+    /// The THIRD leg is the one that matters: it pins that the scan reads the PACK'S OWN source and
+    /// not the expanded TU. The shared helper DEFINES backdropTexel and declares uBackdrop, so
+    /// scanning after expansion would fire for any pack that merely includes it. That leg's
+    /// discriminating power therefore depends on the shared helper still spelling those two names;
+    /// its error count catches the helper going missing, but not a rename inside it.
     void theBackdropNoteFiresOnlyWhenThePackReadsTheBackdrop()
     {
         QTemporaryDir tmp;
@@ -679,6 +831,9 @@ private Q_SLOTS:
         flagged.insert(QStringLiteral("needsBackdrop"), true);
         const PackResult declared = validateSurface(tmp, QStringLiteral("sf-bd-flag"), flagged, reads);
         QVERIFY2(!declared.report.contains(note), qPrintable(declared.report));
+        // The count is what stops a fixture-write failure satisfying that negative, which is this
+        // file's stated convention and the one thing this leg was missing.
+        QCOMPARE(declared.errors, 0);
 
         // INCLUDES the helper but never calls it, no flag: silent. Fires only if the scan moves to
         // the expanded source, which is the regression this leg exists to catch.
@@ -883,7 +1038,7 @@ private Q_SLOTS:
             obj.insert(QStringLiteral("bufferScales"), QJsonArray{0.25});
             const PackResult r =
                 validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-scales-len"), obj, surfaceBodyReading({}));
-            QVERIFY2(r.report.contains(QStringLiteral("bufferScales has 1 entries for 2 buffer shaders")),
+            QVERIFY2(r.report.contains(QStringLiteral("bufferScales has 1 entry for 2 buffer shaders")),
                      qPrintable(r.report));
         }
 

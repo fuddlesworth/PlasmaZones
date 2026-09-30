@@ -57,8 +57,8 @@ void ShaderNodeRhi::requestDepthCreateRetry()
     // enclosing branch is re-entered from prepare() on every frame while it keeps failing:
     // an unbounded request would repaint at frame rate for as long as the driver refuses.
     // Modelled on m_multiBufferShaderRetries, including the give-up line, so a permanent
-    // failure costs three REQUESTED frames and one message rather than a self-sustained
-    // spin. What the bound does NOT stop is the create attempt: an item driven from
+    // failure costs three attempts, two REQUESTED frames and one message rather than a
+    // self-sustained spin. What the bound does NOT stop is the create attempt: an item driven from
     // outside (an animated pack, a resize) re-enters the depth block on every frame it
     // paints anyway and calls newTexture() + create() again, silently, for as long as it
     // paints. That is not a leak to plug — it is how the node recovers at all, since a
@@ -180,7 +180,7 @@ bool ShaderNodeRhi::ensureBufferTarget()
             // one-shot treatment the buffer-target and buffer-sampler failures take.
             if (!m_depthCreateWarned) {
                 m_depthCreateWarned = true;
-                qCWarning(lcShaderNode) << "Failed to create depth texture";
+                qCWarning(lcShaderNode) << "Failed to create depth texture (R32F render target)";
             }
             // Drop the failed object for the same reason the sampler below
             // does: this branch is gated on the texture's pixelSize(), which

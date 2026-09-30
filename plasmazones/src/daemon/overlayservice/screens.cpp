@@ -47,16 +47,20 @@ void OverlayService::assertWindowOnScreen(QWindow* window, QScreen* screen, cons
     // because every caller already substituted. resolveScreenGeometry is itself the substitution
     // (and resolveTargetScreen under it falls back to the PRIMARY monitor for an id nothing
     // resolves), so an unresolvable virtual id arrived here as the primary screen's own rect and
-    // sailed through the comparison. The callers now pass trueScreenGeometry for the verdict and
-    // keep the substituted rect for sizing, which is what makes this reachable at all. An
-    // unresolvable id is reached from a system boundary, not an internal race: the D-Bus
-    // showSnapAssist and showCheatsheet entry points take a screen id on trust and defer, so a
-    // virtual-screen reconfigure can invalidate it in between.
+    // sailed through the comparison. The modal and OSD callers now pass trueScreenGeometry for the
+    // verdict and keep the substituted rect for sizing. An unresolvable id is reached from a system
+    // boundary, not an internal race: the D-Bus showSnapAssist entry point takes a screen id on
+    // trust and defers it through a zero timer, so a virtual-screen reconfigure can invalidate it
+    // in between.
     //
-    // Stopping here leaves the surface's size and position to the compositor, which is the right
-    // conservative answer: layer-shell configures an AnchorAll surface to the whole output
-    // anyway, so an untracked physical screen loses nothing it was relying on, while a virtual
-    // one is spared having another monitor's rect written onto it.
+    // WHAT STOPPING HERE ACTUALLY SAVES, stated narrowly because an earlier version overstated it.
+    // The QPA discards a layer surface's requested POSITION outright and recomputes it from the
+    // anchors and margins, so only the SIZE this write implies can matter, and then only on an axis
+    // that is not doubly anchored — i.e. on a virtual screen. At the modal and OSD sites the caller
+    // resizes from the substituted rect two lines later, so the skip is one fewer round-trip rather
+    // than a repair. The sites where this write IS the last word on size are the hot-plug calls
+    // below and the overlay's own Phase 3 call, and each of those passes a rect that is valid by
+    // construction, which is why they pass it directly.
     //
     // Do NOT replace this with a VirtualScreenId::isVirtual test: layerPlacementForVs treats a
     // VS that covers its whole output as physical (AnchorAll, zero margins), and an isVirtual

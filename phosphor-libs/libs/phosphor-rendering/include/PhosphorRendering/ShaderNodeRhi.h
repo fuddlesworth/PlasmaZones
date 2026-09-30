@@ -624,7 +624,7 @@ private:
     QQuickItem* m_item = nullptr;
     std::atomic<bool> m_itemValid{true};
 
-    /// Serialises every m_item dereference (prepare/render/rect/safeRhi) against
+    /// Serialises every m_item dereference (prepare/render/safeRhi/requestAnotherFrame) against
     /// invalidateItem(). The atomic flag alone is insufficient: a render-thread
     /// prepare() that passed the m_itemValid check can race with a GUI-thread
     /// QQuickItem destructor mid-function — the flag flips, but the in-flight

@@ -81,10 +81,11 @@ void OverlayService::showCheatsheet(const QString& screenId, const QVariantList&
         return;
     }
 
-    QRect screenGeom = resolveScreenGeometry(m_screenManager, resolvedId);
-    if (!screenGeom.isValid()) {
-        screenGeom = screen->geometry();
-    }
+    // ONE lookup, kept in both forms. trueGeom is the verdict assertWindowOnScreen needs, screenGeom
+    // is the rect the window is sized to. Asking twice cost a second virtual-geometry rebuild and,
+    // because that rebuild clears its own warn-once set, a second warning per show.
+    const QRect trueGeom = trueScreenGeometry(m_screenManager, resolvedId);
+    const QRect screenGeom = trueGeom.isValid() ? trueGeom : screen->geometry();
 
     auto* state = ensurePassiveShellFor(resolvedId, screen);
     if (!state || !state->shell || !state->shell->shellSurface() || !state->cheatsheetSlot()) {
@@ -145,10 +146,9 @@ void OverlayService::showCheatsheet(const QString& screenId, const QVariantList&
     applyDecoration(slot, PhosphorSurfaceShaders::decorationPopupCheatsheetPath());
 
     if (shellWindow) {
-        // The TRUE geometry, not screenGeom: that one is substituted above when the id does not
-        // resolve, and a substituted rect makes assertWindowOnScreen's physical-screen test
-        // trivially true. screenGeom still sizes the window below.
-        assertWindowOnScreen(shellWindow, screen, trueScreenGeometry(m_screenManager, resolvedId));
+        // trueGeom, not screenGeom: that one is substituted above when the id does not resolve, and
+        // a substituted rect makes assertWindowOnScreen's physical-screen test trivially true.
+        assertWindowOnScreen(shellWindow, screen, trueGeom);
         shellWindow->setWidth(screenGeom.width());
         shellWindow->setHeight(screenGeom.height());
     }

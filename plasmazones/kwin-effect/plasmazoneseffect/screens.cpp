@@ -49,9 +49,11 @@ namespace {
 // dedup pays one non-deduplicated report for a dropped key, which is nothing. But
 // lastReportedScreenDesktops() also feeds PreTileDecisions::announceMatchesReportedDesktops,
 // whose contract is that a MISSING key is not a mismatch — so a dropped key widens that vacuous
-// accept for as long as it is absent. It converges, because the daemon re-announces on hotplug
-// and the gate only arms for a desktop switch, and the alternative (keeping a spelling no
-// consumer can match) is worse. Do not turn this into a clear.
+// accept for as long as it is absent. What closes it is not a daemon re-announce, which is the
+// thing being GATED rather than a writer of this map: the gate arms only for a desktop switch,
+// and the effect's own desktopChanged handler calls reportScreenDesktop, re-inserting the key
+// before the daemon's announce for that switch can come back. The alternative, keeping a spelling
+// no consumer can match, is worse. Do not turn this into a clear.
 void pruneToLiveScreens(QHash<QString, int>& cache, const QSet<QString>& live)
 {
     for (auto it = cache.begin(); it != cache.end();) {
@@ -795,8 +797,8 @@ void PlasmaZonesEffect::onScreenAdded(KWin::LogicalOutput* output)
     // rebuild loop. An add can flip a PEER's duplicate verdict — the monitor that was alone now
     // has an identical twin, so its id gains the connector suffix and its state is re-published
     // under the new spelling — while the erase above only refreshes the output that arrived. The
-    // resolve writes screenIdByOutput on its miss path and the cache was just cleared, so this
-    // loop re-records every output and eagerly rebuilds the connected set in the same pass.
+    // resolve writes screenIdByOutput on its miss path and the cache was just cleared, so that
+    // call re-records every output and eagerly rebuilds the connected set in the same pass.
     //
     // WHY A RESOLVE AND NOT A MAP CLEAR: upstream emits outputAdded BEFORE outputRemoved within
     // one updateOutputs, so on a bundled add+remove (a total unplug appends a placeholder) this
@@ -805,10 +807,18 @@ void PlasmaZonesEffect::onScreenAdded(KWin::LogicalOutput* output)
     // A resolve cannot: the dying outputs are already pruned from m_outputs before any emit, so
     // screens() does not list them and nothing here touches their entries.
     //
-    // Spelled as the ACCESSOR rather than a loop of its own. clearScreenIdCache() two lines up has
-    // already invalidated the set, so this call rebuilds it eagerly and re-records every output on
-    // the way through, which is exactly what a hand-written copy did — and a hand-written copy of
-    // a body that already exists is how the add and remove sides drift apart.
+    // Spelled as the ACCESSOR rather than a loop of its own: it rebuilds the set eagerly and
+    // re-records every output on the way through, which is exactly what a hand-written copy did,
+    // and a hand-written copy of a body that already exists is how the add and remove sides drift
+    // apart.
+    //
+    // THE INVALIDATE IS NOT REDUNDANT with clearScreenIdCache above, even though that already
+    // cleared the flag. It restores the property the hand-written loop had STRUCTURALLY: this
+    // rebuild is unconditional. Without it, inserting any read of connectedPhysicalIds() between
+    // the two — a log line, a diagnostic — flips the flag true and silently turns the call below
+    // into a no-op, leaving the pre-clear set alive, every per-output record unrefreshed, and the
+    // prune on the next line running against a stale set. That failure has no symptom at the site.
+    m_idCaches.connectedPhysicalIdsValid = false;
     (void)connectedPhysicalIds();
     pruneToLiveScreens(m_lastScreenDesktop, m_idCaches.connectedPhysicalIds);
 
@@ -846,15 +856,15 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // reproducible while the peer set is intact, and on a MULTI-output removal of identical
     // monitors it is not: KWin prunes every removed output before emitting the first screenRemoved,
     // so the second twin's resolve runs against a list holding NEITHER of them, finds no duplicate,
-    // and returns the bare baseId where the suffixed form was used to key its state. Both consumers
-    // below match on that key, so they silently drop nothing. Worse with a bundled add (a total
+    // and returns the bare baseId where the suffixed form was used to key its state. The consumer
+    // below matches on that key, so it silently drops nothing. Worse with a bundled add (a total
     // unplug appends a placeholder output, whose add clears the cache), where even the FIRST
     // removal resolves cold.
     //
     // The recompute stays as the fallback. It is BELT-AND-BRACES, not a live path: onScreenAdded
     // resolves every output, and every output gets one, so no live output reaches here unrecorded.
     // It stays because it is the guard against a future change to that add-side resolve, in the
-    // same spirit as the two other "not evidence this is reachable" notes in this file.
+    // same spirit as the other belt-and-braces notes in this file.
     //
     // THE TWO-STEP FORM IS LOAD-BEARING. `value(output, outputScreenId(output))` reads as a cache
     // lookup with a lazy fallback and is neither. `defaultValue` is an ordinary function ARGUMENT
@@ -966,11 +976,12 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // KWin has already dropped the dying output from screenAt()'s answer: it has, because
     // updateOutputs prunes m_outputs before emitting, so a rebuild cannot put the dead pointer
     // back. It does NOT avoid the rebuild's decoration sweep: refreshFullscreenSuppression is
-    // connected to this same screenRemoved signal at lifecycle_wiring.cpp:1059, after this
-    // handler's own connection, so Qt delivers it later in the same emit (one inert slot,
-    // ScreenChangeHandler::slotScreenLayoutChanged at :1012, runs between them) and it sweeps
-    // whenever the rebuilt set differs. And it is NOT saved by the ~Workspace emit, which reaches
-    // no effect at all — see outputScreenId's note.
+    // connected to this same screenRemoved signal in connectWindowAndScreenSignals, after this
+    // handler's own connection, so Qt delivers it later in the same emit. One slot runs between
+    // them, ScreenChangeHandler::slotScreenLayoutChanged, and it cannot touch the suppression set
+    // (it sets a pending flag, starts the debounce and schedules a client-area report), so it does
+    // not disturb the argument. The sweep then fires whenever the rebuilt set differs. And it is NOT saved by the
+    // ~Workspace emit, which reaches no effect at all — see outputScreenId's note.
     //
     // WHAT THE ERASE ACTUALLY BUYS, which is small and real: it SUPPRESSES one redundant
     // updateAllDecorations() sweep in the case where fullscreen windows sit on both the dying

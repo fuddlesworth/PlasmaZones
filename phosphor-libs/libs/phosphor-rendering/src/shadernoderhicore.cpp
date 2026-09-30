@@ -683,7 +683,8 @@ void ShaderNodeRhi::prepare()
     // empty while the list is multi-entry. See bakeBufferShaders for the whole
     // failure this gate was half of.
     // ensureBufferTarget is called ONCE, at the tail of the block below. A guarded call under this
-    // IDENTICAL gate used to sit here; only a recovery arm below can differ, and it self-heals.
+    // IDENTICAL gate used to sit here; only the DEFENSIVE arms below can differ, and no reachable
+    // state for either was found, so the unconditional tail call is what carries this.
     // Late pipeline recovery
     if (!m_bufferPaths.isEmpty() && bufferReady) {
         if (!multiBufferMode && m_bufferRenderTarget && !m_bufferRenderPassDescriptor
