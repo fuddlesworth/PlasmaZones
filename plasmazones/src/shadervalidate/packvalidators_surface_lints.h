@@ -42,4 +42,20 @@ namespace PlasmaZones::ShaderValidate {
 QStringList surfaceMetadataLints(const QJsonObject& meta, const PhosphorSurfaceShaders::SurfaceShaderEffect& eff,
                                  const QString& packDir);
 
+/// Everything wrong with a surface pack's MULTIPASS declaration, on the same terms: one
+/// human-readable line per problem, no stream, no error count, no mutation of its arguments.
+///
+/// Called by surfaceMetadataLints rather than by the orchestrator, so the two lists interleave
+/// in declaration order and a report reads as it did before the two were separate files. The
+/// seam is described in packvalidator_surface_buffer_lints.cpp; the short version is that this
+/// half owns the buffer-shader list, the per-pass wrap/filter/scale arrays, the builtin blur
+/// chain's positional contract, the backdrop flag, the radius slot, feedback, half-float
+/// buffers and the depth pairing, and shares no local with the other half.
+///
+/// Reads the filesystem for the same reasons its sibling does: it stats buffer-shader paths,
+/// resolves builtin tokens through the registry and probes QStandardPaths through
+/// packSharedRoots. The same "do not memoise or reorder on a purity claim" warning applies.
+QStringList surfaceBufferChainLints(const QJsonObject& meta, const PhosphorSurfaceShaders::SurfaceShaderEffect& eff,
+                                    const QString& packDir);
+
 } // namespace PlasmaZones::ShaderValidate

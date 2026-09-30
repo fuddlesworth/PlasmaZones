@@ -953,6 +953,7 @@ add_executable(plasmazones-shader-validate
     shadervalidate/packvalidator_animation.cpp
     shadervalidate/packvalidator_surface.cpp
     shadervalidate/packvalidator_surface_lints.cpp
+    shadervalidate/packvalidator_surface_buffer_lints.cpp
     shadervalidate/packvalidator_pointer.cpp
     shadervalidate/packvalidatorcommon.cpp
 )
