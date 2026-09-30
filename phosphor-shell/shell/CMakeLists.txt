@@ -57,6 +57,7 @@ qt_add_qml_module(phosphor_shell_example
     QML_FILES
         shell.qml
         QuickSettingsSurface.qml
+        StatusIconSurfaces.qml
         AppearanceSurfaces.qml
         CheatsheetSurface.qml
         NotificationSurfaces.qml

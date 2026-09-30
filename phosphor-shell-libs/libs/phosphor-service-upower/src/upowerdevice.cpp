@@ -28,6 +28,7 @@ public:
     UPowerDevice* owner = nullptr;
     QString path;
     QDBusConnection bus = QDBusConnection::systemBus();
+    QString service = QLatin1String(kService);
 
     qreal percentage = 0.0;
     DeviceState state = UnknownState;
@@ -71,8 +72,8 @@ public:
     // device is removed.
     void requestAll()
     {
-        QDBusMessage msg = QDBusMessage::createMethodCall(QLatin1String(kService), path, QLatin1String(kPropsIface),
-                                                          QStringLiteral("GetAll"));
+        QDBusMessage msg =
+            QDBusMessage::createMethodCall(service, path, QLatin1String(kPropsIface), QStringLiteral("GetAll"));
         msg << QLatin1String(kDeviceIface);
         auto* watcher = new QDBusPendingCallWatcher(bus.asyncCall(msg), owner);
         QObject::connect(watcher, &QDBusPendingCallWatcher::finished, owner, [this](QDBusPendingCallWatcher* call) {
@@ -170,11 +171,17 @@ public:
 };
 
 UPowerDevice::UPowerDevice(const QString& dbusPath, QObject* parent)
+    : UPowerDevice(dbusPath, QDBusConnection::systemBus(), QLatin1String(kService), parent)
+{
+}
+UPowerDevice::UPowerDevice(const QString& dbusPath, const QDBusConnection& bus, const QString& service, QObject* parent)
     : QObject(parent)
     , d(std::make_unique<Private>())
 {
     d->owner = this;
     d->path = dbusPath;
+    d->bus = bus;
+    d->service = service;
 
     if (!d->bus.isConnected()) {
         // Parallels the UPowerHost guard. A device constructed against
@@ -184,9 +191,9 @@ UPowerDevice::UPowerDevice(const QString& dbusPath, QObject* parent)
         qCWarning(lcUPowerDevice) << "system bus unavailable; device inert:" << dbusPath;
         return;
     }
-    const bool ok = d->bus.connect(QLatin1String(kService), dbusPath, QLatin1String(kPropsIface),
-                                   QStringLiteral("PropertiesChanged"), this,
-                                   SLOT(_q_onPropertiesChanged(QString, QVariantMap, QStringList)));
+    const bool ok =
+        d->bus.connect(d->service, dbusPath, QLatin1String(kPropsIface), QStringLiteral("PropertiesChanged"), this,
+                       SLOT(_q_onPropertiesChanged(QString, QVariantMap, QStringList)));
     if (!ok)
         qCWarning(lcUPowerDevice) << "PropertiesChanged subscription failed for" << dbusPath;
 

@@ -40,7 +40,9 @@ public:
     Q_INVOKABLE void discard();
     Q_INVOKABLE bool apply(bool close = false);
     Q_INVOKABLE void keepEditing();
+    Q_INVOKABLE void requestPanel(const QString& panelId);
 Q_SIGNALS:
+    void panelRequested(const QString& panelId, const QString& screenName);
     void openingFailed(const QString& error);
     void openScreenChanged();
     void screensChanged();
@@ -57,6 +59,7 @@ private:
     void setOpenScreen(const QString& screenName);
     PhosphorLayer::IScreenProvider* m_screens;
     QString m_openScreen;
+    QString m_requestedPanel;
     QString m_page = QStringLiteral("wallpaper");
     QString m_chosenWidget = QStringLiteral("workspaces");
     QString m_selectedScreen;

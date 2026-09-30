@@ -10,6 +10,8 @@
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QDBusServiceWatcher>
+#include <QSet>
 #include <QLoggingCategory>
 
 Q_LOGGING_CATEGORY(lcUPowerHost, "phosphor.service.upower.host")
@@ -31,6 +33,40 @@ public:
     UPowerDevice* displayDevice = nullptr;
     QString displayDevicePath; ///< tracks the path so setDisplayDevice can detect a swap
     bool onBattery = false;
+    QDBusConnection bus = QDBusConnection::systemBus();
+    QString service = QLatin1String(kService);
+    bool available = false;
+    bool pending = false;
+    QString error;
+    quint64 generation = 0;
+    int remaining = 0;
+    QSet<QString> removedDuringEnumeration;
+
+    void setStatus(bool ready, bool loading, const QString& message = {})
+    {
+        if (available == ready && pending == loading && error == message)
+            return;
+        available = ready;
+        pending = loading;
+        error = message;
+        Q_EMIT owner->availabilityChanged();
+    }
+    void clear()
+    {
+        setDisplayDevice(QString());
+        while (!devices.isEmpty())
+            removeDevice(devices.first()->dbusPath());
+        setOnBattery(false);
+    }
+    void completed(const QString& message)
+    {
+        if (!message.isEmpty())
+            error = message;
+        if (--remaining == 0) {
+            const auto failure = error;
+            setStatus(failure.isEmpty(), false, failure);
+        }
+    }
 
     void setOnBattery(bool value)
     {
@@ -46,31 +82,24 @@ public:
     /// cleanly if the host is destroyed mid-flight.
     void requestOnBattery(QObject* receiver)
     {
-        auto bus = QDBusConnection::systemBus();
         if (!bus.isConnected())
             return;
-        QDBusMessage msg = QDBusMessage::createMethodCall(QLatin1String(kService), QLatin1String(kPath),
-                                                          QLatin1String(kPropsIface), QStringLiteral("Get"));
+        QDBusMessage msg = QDBusMessage::createMethodCall(service, QLatin1String(kPath), QLatin1String(kPropsIface),
+                                                          QStringLiteral("Get"));
         msg << QLatin1String(kIface) << QStringLiteral("OnBattery");
-        auto* watcher = new QDBusPendingCallWatcher(bus.asyncCall(msg), receiver);
-        QObject::connect(watcher, &QDBusPendingCallWatcher::finished, receiver, [this](QDBusPendingCallWatcher* call) {
-            call->deleteLater();
-            const QDBusPendingReply<QDBusVariant> reply = *call;
-            if (reply.isError())
-                return;
-            setOnBattery(reply.value().variant().toBool());
-        });
+        const auto revision = generation;
+        auto* watcher = new QDBusPendingCallWatcher(bus.asyncCall(msg, 5000), receiver);
+        QObject::connect(watcher, &QDBusPendingCallWatcher::finished, receiver,
+                         [this, revision](QDBusPendingCallWatcher* call) {
+                             call->deleteLater();
+                             const QDBusPendingReply<QDBusVariant> reply = *call;
+                             if (revision != generation || reply.isError())
+                                 return;
+                             setOnBattery(reply.value().variant().toBool());
+                         });
     }
 
-    // Replace the cached display device if the path actually changed.
-    // UPower normally exposes a stable aggregate path
-    // (/org/freedesktop/UPower/devices/DisplayDevice), so the path
-    // tracking is mostly bootstrap logic: empty path on the way in,
-    // populated path on the GetDisplayDevice reply. If a UPower daemon
-    // respawn produces a different aggregate path on a re-issued query,
-    // we swap the cached QObject rather than leaking it. Today no code
-    // path re-issues GetDisplayDevice after startup; the tracking lets
-    // a future daemon-respawn watcher plug in without rewriting this.
+    // Aggregate devices are replaced after a daemon restart.
     void setDisplayDevice(const QString& path)
     {
         if (path == displayDevicePath)
@@ -98,7 +127,7 @@ public:
         }
         displayDevicePath = hasReal ? path : QString();
         if (hasReal)
-            displayDevice = new UPowerDevice(path, owner);
+            displayDevice = new UPowerDevice(path, bus, service, owner);
         Q_EMIT owner->displayDeviceChanged();
     }
 
@@ -128,7 +157,7 @@ public:
                 return;
             }
         }
-        auto* device = new UPowerDevice(path, owner);
+        auto* device = new UPowerDevice(path, bus, service, owner);
         devices.append(device);
         qCDebug(lcUPowerHost) << "Device added:" << path;
         Q_EMIT owner->deviceAdded(device);
@@ -155,75 +184,83 @@ public:
 };
 
 UPowerHost::UPowerHost(QObject* parent)
+    : UPowerHost(QDBusConnection::systemBus(), QLatin1String(kService), parent)
+{
+}
+UPowerHost::UPowerHost(const QDBusConnection& bus, const QString& service, QObject* parent)
     : QObject(parent)
     , d(std::make_unique<Private>())
 {
     d->owner = this;
-
-    auto bus = QDBusConnection::systemBus();
-    if (!bus.isConnected()) {
-        // Escalated from qCInfo: shells binding `host.onBattery` get a
-        // permanent `false` with zero diagnostic when the system bus
-        // is unreachable. A warning surfaces in journals at the
-        // default threshold so the user-visible "battery widget never
-        // updates" symptom has a single line of breadcrumb.
-        qCWarning(lcUPowerHost) << "system bus unavailable: UPower not accessible";
-        return;
-    }
-
-    const bool propsOk = bus.connect(QLatin1String(kService), QLatin1String(kPath), QLatin1String(kPropsIface),
-                                     QStringLiteral("PropertiesChanged"), this,
-                                     SLOT(_q_onPropertiesChanged(QString, QVariantMap, QStringList)));
-    const bool addedOk = bus.connect(QLatin1String(kService), QLatin1String(kPath), QLatin1String(kIface),
-                                     QStringLiteral("DeviceAdded"), this, SLOT(_q_onDeviceAdded(QDBusObjectPath)));
-    const bool removedOk =
-        bus.connect(QLatin1String(kService), QLatin1String(kPath), QLatin1String(kIface),
-                    QStringLiteral("DeviceRemoved"), this, SLOT(_q_onDeviceRemoved(QDBusObjectPath)));
-    if (!propsOk || !addedOk || !removedOk) {
-        qCWarning(lcUPowerHost) << "subscription failed: props=" << propsOk << " added=" << addedOk
-                                << " removed=" << removedOk;
-    }
-
-    // All three startup queries run asynchronously: a blocking call
-    // here would freeze the GUI thread while UPower (and, through the
-    // per-device GetAll, every battery) responds. Watchers are parented
-    // to `this` so they cancel cleanly if the host is destroyed early.
-
+    d->bus = bus;
+    d->service = service;
+    d->bus.connect(service, QLatin1String(kPath), QLatin1String(kPropsIface), QStringLiteral("PropertiesChanged"), this,
+                   SLOT(_q_onPropertiesChanged(QString, QVariantMap, QStringList)));
+    d->bus.connect(service, QLatin1String(kPath), QLatin1String(kIface), QStringLiteral("DeviceAdded"), this,
+                   SLOT(_q_onDeviceAdded(QDBusObjectPath)));
+    d->bus.connect(service, QLatin1String(kPath), QLatin1String(kIface), QStringLiteral("DeviceRemoved"), this,
+                   SLOT(_q_onDeviceRemoved(QDBusObjectPath)));
+    auto* watcher = new QDBusServiceWatcher(service, bus, QDBusServiceWatcher::WatchForOwnerChange, this);
+    connect(watcher, &QDBusServiceWatcher::serviceOwnerChanged, this,
+            [this](const QString&, const QString&, const QString& owner) {
+                ++d->generation;
+                d->clear();
+                if (owner.isEmpty())
+                    d->setStatus(false, false);
+                else
+                    refresh();
+            });
+    refresh();
+}
+void UPowerHost::refresh()
+{
+    const auto revision = ++d->generation;
+    d->clear();
+    d->removedDuringEnumeration.clear();
+    d->remaining = 2;
+    d->setStatus(false, true);
     d->requestOnBattery(this);
-
-    // Get display device. The setDisplayDevice path-tracking exists
-    // so a future daemon-respawn watcher can re-issue this query and
-    // swap the cached aggregate rather than leak the prior QObject.
-    {
-        QDBusMessage msg = QDBusMessage::createMethodCall(QLatin1String(kService), QLatin1String(kPath),
-                                                          QLatin1String(kIface), QStringLiteral("GetDisplayDevice"));
-        auto* watcher = new QDBusPendingCallWatcher(bus.asyncCall(msg), this);
-        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* call) {
-            call->deleteLater();
-            const QDBusPendingReply<QDBusObjectPath> reply = *call;
-            if (reply.isError())
-                return;
+    auto displayCall = QDBusMessage::createMethodCall(d->service, QLatin1String(kPath), QLatin1String(kIface),
+                                                      QStringLiteral("GetDisplayDevice"));
+    auto* display = new QDBusPendingCallWatcher(d->bus.asyncCall(displayCall, 5000), this);
+    connect(display, &QDBusPendingCallWatcher::finished, this, [this, revision](QDBusPendingCallWatcher* call) {
+        call->deleteLater();
+        if (revision != d->generation)
+            return;
+        const QDBusPendingReply<QDBusObjectPath> reply = *call;
+        if (!reply.isError())
             d->setDisplayDevice(reply.value().path());
-        });
-    }
-
-    // Enumerate devices
-    {
-        QDBusMessage msg = QDBusMessage::createMethodCall(QLatin1String(kService), QLatin1String(kPath),
-                                                          QLatin1String(kIface), QStringLiteral("EnumerateDevices"));
-        auto* watcher = new QDBusPendingCallWatcher(bus.asyncCall(msg), this);
-        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* call) {
-            call->deleteLater();
-            const QDBusPendingReply<QList<QDBusObjectPath>> reply = *call;
-            if (reply.isError()) {
-                qCWarning(lcUPowerHost) << "EnumerateDevices failed:" << reply.error().message();
-                return;
+        d->completed(reply.isError() ? reply.error().message() : QString());
+    });
+    auto enumerateCall = QDBusMessage::createMethodCall(d->service, QLatin1String(kPath), QLatin1String(kIface),
+                                                        QStringLiteral("EnumerateDevices"));
+    auto* enumerate = new QDBusPendingCallWatcher(d->bus.asyncCall(enumerateCall, 5000), this);
+    connect(enumerate, &QDBusPendingCallWatcher::finished, this, [this, revision](QDBusPendingCallWatcher* call) {
+        call->deleteLater();
+        if (revision != d->generation)
+            return;
+        const QDBusPendingReply<QList<QDBusObjectPath>> reply = *call;
+        if (!reply.isError()) {
+            for (const auto& path : reply.value()) {
+                if (!d->removedDuringEnumeration.contains(path.path()))
+                    d->addDevice(path.path());
             }
-            const auto paths = reply.value();
-            for (const QDBusObjectPath& p : paths)
-                d->addDevice(p.path());
-        });
-    }
+        }
+        d->removedDuringEnumeration.clear();
+        d->completed(reply.isError() ? reply.error().message() : QString());
+    });
+}
+bool UPowerHost::available() const
+{
+    return d->available;
+}
+bool UPowerHost::pending() const
+{
+    return d->pending;
+}
+QString UPowerHost::error() const
+{
+    return d->error;
 }
 
 UPowerHost::~UPowerHost() = default;
@@ -271,11 +308,14 @@ void UPowerHost::_q_onPropertiesChanged(const QString& iface, const QVariantMap&
 
 void UPowerHost::_q_onDeviceAdded(const QDBusObjectPath& path)
 {
+    d->removedDuringEnumeration.remove(path.path());
     d->addDevice(path.path());
 }
 
 void UPowerHost::_q_onDeviceRemoved(const QDBusObjectPath& path)
 {
+    if (d->pending)
+        d->removedDuringEnumeration.insert(path.path());
     d->removeDevice(path.path());
 }
 

@@ -24,27 +24,57 @@ tests. Each suite skipped the opt-in live GPU orientation test. These checks
 establish build and automated-test status, not a new visual review of every
 surface.
 
-## Additional control-center studies (mockups-v3)
+## Additional control-center services (mockups-v3)
 
-The browser prototype now covers the older service backlog and battery:
+The approved browser studies now have native panels and service wiring in the
+working tree. They extend the same bounded quick-settings detail surface in
+Navigator and Stage, including links between Battery and Power profiles.
 
-| Detail | Interaction and example states |
+| Detail | Native implementation |
 |---|---|
-| Night light | Warmth preview, sunset/custom/manual schedules, validated custom hours, pause/resume, missing location and missing service. |
-| Dark mode | Light/dark/system choices update the existing material state and retain the palette and wallpaper. Simulated system preference and unavailable states. |
-| Airplane mode | Remembers Wi-Fi/Bluetooth settings, restores them when disabled, permits Bluetooth while enabled, and handles a hardware switch or missing service. |
-| Power profiles | Balanced, Power saver and Performance, with thermal restriction, two-profile hardware and unavailable service examples. |
-| Wallpaper | Reads the existing wallpaper and opens the Wallpaper or Style page in Appearance. |
-| Battery | Charge, health, power draw, full capacity and connected peripherals. Charging, full, low, unknown estimate, desktop and unavailable examples. Links into power profiles. |
+| Night light | KWin temperature, enabled/running/inhibited state and pause/resume. System day/night and custom hours use KNightTime's shared schedule; manual control remains separate. Custom hours are validated and schedule-service failures are reported. |
+| Dark mode | Light/dark/system choices use the settings portal and `AppearanceStore`, retaining palette, wallpaper and the chosen dark glass/solid material. Portal restart and unavailable states are handled. |
+| Airplane mode | Coordinates NetworkManager Wi-Fi and WWAN with BlueZ Bluetooth, remembers radio settings and restores them on request or when disabled. Supports a Bluetooth exception, hardware-switch feedback and partial-failure recovery while preserving wired networking. |
+| Power profiles | Reads and selects the daemon's supported Balanced, Power saver and Performance profiles. Pending changes, failures and service restarts are represented. `PerformanceDegraded` supplies a notice while Performance remains selectable. |
+| Wallpaper | Reads the current output's wallpaper assignment and opens the existing Wallpaper or Style page in Appearance. There is no second wallpaper store. |
+| Battery | Expanded UPower charge, health, power draw, energy/capacity and connected-device details. Charging, full, low, unknown-estimate, no-system-battery and unavailable-service states. Links to profiles and offers Power saver only when the service supports it. |
+
+Dark-mode changes made during an Appearance preview use its existing Apply and
+Discard transaction. Incoming system color-preference changes wait until that
+transaction ends. Explicit material choices and built-in presets stop following
+the system preference; saved looks can retain the preference and dark material.
+Wallpaper shortcuts enter the same workspace and transaction.
+
+The native Night light API does not expose geolocation availability. Its system
+schedule therefore reports the real scheduler service rather than reproducing
+the browser's simulated missing-location state. Changing custom hours updates
+the desktop's shared KNightTime schedule.
 
 Automated DOM checks exercise both Navigator and Stage, Phosphor/Paper/Ember,
 keyboard navigation, cross-service state changes, schedule validation and
-Appearance integration. No browser was available for a rendered visual check
-in this session. The browser study does not call hardware services.
+Appearance integration in the browser study. The user approved the prototype;
+its fixture controls do not call hardware services.
 
-Battery already has a basic native UPower panel. Native service work and
-optional interactions inherited from the older design remain tracked in
-`02-gap-analysis.md`.
+The shell-enabled non-unity and shell-disabled builds pass without warnings.
+The full CTest run
+executes 604 passing tests and skips only the opt-in GPU orientation test.
+Regression coverage includes external KDE configuration updates and atomic file
+replacement, pause ownership during failed requests and destruction, service
+restarts, radio restoration, Appearance preview transactions, keyboard focus,
+and navigation between the shipped panels.
+
+The nested-KWin preview loads all 54 service scenarios and checks the requested
+view, panel readiness and title. Native captures cover all six panels, light and
+dark materials, and a 360×480 panel at 115% text size with Ember. There are no QML
+binding errors in that run. Service actions use fixtures and wallpaper changes
+stay in the preview's private configuration. Start a nested session, then use
+`phosphor-shell/scripts/nested-shell/quick-settings-preview.sh run` with its
+`PZ_NESTED_SESSION`. For example, `call preview.batteryState --arg name=low`
+opens the low-battery case, and `call preview.state` reports the loaded panel.
+
+The earlier validation records below describe their own commits. Hardware
+verification and optional interactions inherited from the older design remain
+tracked in `02-gap-analysis.md`.
 
 ## Shortcut reference (mockups-v3)
 

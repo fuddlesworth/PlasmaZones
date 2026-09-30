@@ -147,6 +147,97 @@ private Q_SLOTS:
         QVERIFY(!store->editing());
         QVERIFY(controller.openScreen().isEmpty());
     }
+    void cleanStatusNavigationClosesPreviewBeforeOpeningThePanel()
+    {
+        EntryScreens screens;
+        PickerController controller(&screens);
+        auto* store = AppearanceStore::create(nullptr, nullptr);
+        const QString screenName = screens.outputs.last()->name();
+        QVERIFY(controller.show(screenName));
+        QVERIFY(controller.setProperty("desktopPreview", true));
+        QSignalSpy navigation(&controller, &PickerController::panelRequested);
+        bool closedBeforeNavigation = false;
+        connect(&controller, &PickerController::panelRequested, this, [&] {
+            closedBeforeNavigation = !store->editing() && controller.openScreen().isEmpty();
+        });
+        controller.requestPanel(QStringLiteral("status-icons"));
+        QCOMPARE(navigation.size(), 1);
+        QCOMPARE(navigation.first(), QVariantList({QStringLiteral("status-icons"), screenName}));
+        QVERIFY(closedBeforeNavigation);
+        QVERIFY(!controller.property("desktopPreview").toBool());
+        QVERIFY(!controller.closePending());
+    }
+    void dirtyStatusNavigationWaitsForPreviewResolution_data()
+    {
+        QTest::addColumn<bool>("apply");
+        QTest::newRow("apply") << true;
+        QTest::newRow("discard") << false;
+    }
+    void dirtyStatusNavigationWaitsForPreviewResolution()
+    {
+        QFETCH(bool, apply);
+        EntryScreens screens;
+        PickerController controller(&screens);
+        auto* store = AppearanceStore::create(nullptr, nullptr);
+        const QString screenName = screens.outputs.last()->name();
+        QVERIFY(controller.show(screenName));
+        const auto saved = store->values();
+        const int radius = saved.value(QStringLiteral("radius")).toInt() == 23 ? 24 : 23;
+        QVERIFY(store->setValue(QStringLiteral("radius"), radius));
+        QSignalSpy navigation(&controller, &PickerController::panelRequested);
+        controller.requestPanel(QStringLiteral("status-icons"));
+        QCOMPARE(navigation.size(), 0);
+        QVERIFY(controller.closePending());
+        QVERIFY(store->editing());
+        QCOMPARE(controller.openScreen(), screenName);
+        if (apply)
+            QVERIFY(controller.apply(true));
+        else
+            controller.discard();
+        QCOMPARE(navigation.size(), 1);
+        QCOMPARE(navigation.first(), QVariantList({QStringLiteral("status-icons"), screenName}));
+        QCOMPARE(store->values().value(QStringLiteral("radius")).toInt(),
+                 apply ? radius : saved.value(QStringLiteral("radius")).toInt());
+        QVERIFY(!store->editing());
+        QVERIFY(!controller.closePending());
+        QVERIFY(controller.openScreen().isEmpty());
+    }
+    void keepEditingCancelsStatusNavigation()
+    {
+        EntryScreens screens;
+        PickerController controller(&screens);
+        auto* store = AppearanceStore::create(nullptr, nullptr);
+        QVERIFY(controller.show());
+        QVERIFY(store->setValue(QStringLiteral("radius"), 23));
+        QSignalSpy navigation(&controller, &PickerController::panelRequested);
+        controller.requestPanel(QStringLiteral("status-icons"));
+        QVERIFY(controller.closePending());
+        controller.keepEditing();
+        QVERIFY(!controller.closePending());
+        QVERIFY(store->editing());
+        QVERIFY(store->dirty());
+        QCOMPARE(store->values().value(QStringLiteral("radius")).toInt(), 23);
+        QVERIFY(controller.apply(true));
+        QCOMPARE(navigation.size(), 0);
+        QVERIFY(!store->editing());
+    }
+    void invalidStatusNavigationLeavesThePreviewOpen()
+    {
+        EntryScreens screens;
+        PickerController controller(&screens);
+        auto* store = AppearanceStore::create(nullptr, nullptr);
+        QSignalSpy navigation(&controller, &PickerController::panelRequested);
+        controller.requestPanel(QStringLiteral("status-icons"));
+        QCOMPARE(navigation.size(), 0);
+        QVERIFY(controller.show());
+        controller.requestPanel(QStringLiteral("unknown-panel"));
+        QVERIFY(store->editing());
+        QVERIFY(!controller.openScreen().isEmpty());
+        QVERIFY(!controller.closePending());
+        QCOMPARE(navigation.size(), 0);
+        controller.discard();
+        QCOMPARE(navigation.size(), 0);
+    }
     void overlayReleasesInputAndTracksTheVisibleMaterial()
     {
         EntryScreens screens;

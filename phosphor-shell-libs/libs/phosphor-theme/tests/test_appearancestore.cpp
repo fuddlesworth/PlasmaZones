@@ -14,6 +14,182 @@ class TestAppearanceStore : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void statusPreferencesDefaultsAndPartialVisibility()
+    {
+        const auto defaults = AppearanceStore::defaults();
+        const QVariantList order{QStringLiteral("wifi"),    QStringLiteral("audio"),      QStringLiteral("bluetooth"),
+                                 QStringLiteral("battery"), QStringLiteral("microphone"), QStringLiteral("nightlight"),
+                                 QStringLiteral("focus"),   QStringLiteral("airplane"),   QStringLiteral("power")};
+        const QVariantMap visibility{{QStringLiteral("wifi"), QStringLiteral("always")},
+                                     {QStringLiteral("audio"), QStringLiteral("always")},
+                                     {QStringLiteral("bluetooth"), QStringLiteral("hidden")},
+                                     {QStringLiteral("battery"), QStringLiteral("auto")},
+                                     {QStringLiteral("microphone"), QStringLiteral("auto")},
+                                     {QStringLiteral("nightlight"), QStringLiteral("hidden")},
+                                     {QStringLiteral("focus"), QStringLiteral("auto")},
+                                     {QStringLiteral("airplane"), QStringLiteral("auto")},
+                                     {QStringLiteral("power"), QStringLiteral("hidden")}};
+        QCOMPARE(defaults.value(QStringLiteral("statusOrder")).toList(), order);
+        QCOMPARE(defaults.value(QStringLiteral("statusVisibility")).toMap(), visibility);
+        QCOMPARE(defaults.value(QStringLiteral("statusLimit")).toInt(), 4);
+        QVERIFY(defaults.value(QStringLiteral("statusBatteryPercent")).toBool());
+        QVariantMap normalized;
+        QVERIFY(AppearanceStore::validate(
+            {{QStringLiteral("statusVisibility"), QVariantMap{{QStringLiteral("wifi"), QStringLiteral("hidden")}}},
+             {QStringLiteral("statusLimit"), 2.0}},
+            normalized));
+        auto expected = visibility;
+        expected[QStringLiteral("wifi")] = QStringLiteral("hidden");
+        QCOMPARE(normalized.value(QStringLiteral("statusVisibility")).toMap(), expected);
+        QCOMPARE(normalized.value(QStringLiteral("statusLimit")).metaType().id(), QMetaType::Int);
+        QVERIFY(AppearanceStore::validate(
+            {{QStringLiteral("statusLimit"), qlonglong(6)}, {QStringLiteral("statusVisibility"), QVariantMap{}}},
+            normalized));
+        QCOMPARE(normalized.value(QStringLiteral("statusVisibility")).toMap(), visibility);
+        QCOMPARE(normalized.value(QStringLiteral("statusLimit")).toInt(), 6);
+    }
+    void statusPreferencesPersistAndSharePreviewTransaction()
+    {
+        QTemporaryDir dir;
+        const auto path = dir.filePath(QStringLiteral("appearance.json"));
+        AppearanceStore store(path);
+        auto next = store.values();
+        auto order = next.value(QStringLiteral("statusOrder")).toList();
+        order.prepend(order.takeLast());
+        auto visibility = next.value(QStringLiteral("statusVisibility")).toMap();
+        visibility[QStringLiteral("power")] = QStringLiteral("always");
+        next[QStringLiteral("statusOrder")] = order;
+        next[QStringLiteral("statusVisibility")] = visibility;
+        next[QStringLiteral("statusLimit")] = 6;
+        next[QStringLiteral("statusBatteryPercent")] = false;
+        QSignalSpy changed(&store, &AppearanceStore::changed);
+        QSignalSpy geometry(&store, &AppearanceStore::geometryChanged);
+        QVERIFY(store.setValues(next));
+        QCOMPARE(changed.count(), 1);
+        QCOMPARE(geometry.count(), 0);
+        QVERIFY(store.setValues(next));
+        QCOMPARE(changed.count(), 1);
+        QCOMPARE(store.currentPreset(), QStringLiteral("phosphor"));
+        for (const auto& preset : {QStringLiteral("paper"), QStringLiteral("ember"), QStringLiteral("phosphor")}) {
+            QVERIFY(store.applyPreset(preset));
+            for (const auto& key : {QStringLiteral("statusOrder"), QStringLiteral("statusVisibility"),
+                                    QStringLiteral("statusLimit"), QStringLiteral("statusBatteryPercent")})
+                QCOMPARE(store.values().value(key), next.value(key));
+        }
+        const auto saved = store.values();
+        QCOMPARE(AppearanceStore(path).values(), saved);
+        const auto exported = QUrl::fromLocalFile(dir.filePath(QStringLiteral("status.json")));
+        QVERIFY(store.exportPreset(exported));
+        AppearanceStore imported(dir.filePath(QStringLiteral("imported.json")));
+        QVERIFY(imported.importPreset(exported));
+        QCOMPARE(imported.values(), saved);
+        QVERIFY(store.beginPreview());
+        QVERIFY(store.setValue(QStringLiteral("statusLimit"), 2));
+        QVERIFY(store.setValue(QStringLiteral("statusBatteryPercent"), true));
+        QCOMPARE(AppearanceStore(path).values(), saved);
+        QVERIFY(store.dirty());
+        store.revertPreview();
+        QCOMPARE(store.values(), saved);
+        QVERIFY(store.setValue(QStringLiteral("statusLimit"), 3));
+        store.endPreview();
+        QCOMPARE(store.values(), saved);
+        QVERIFY(store.beginPreview());
+        QVERIFY(store.setValue(QStringLiteral("statusLimit"), 5));
+        QVERIFY(store.applyPreview());
+        store.endPreview();
+        QCOMPARE(AppearanceStore(path).values().value(QStringLiteral("statusLimit")).toInt(), 5);
+    }
+    void statusPreferencesRejectInvalidValues_data()
+    {
+        QTest::addColumn<QString>("key");
+        QTest::addColumn<QVariant>("value");
+        const auto order = AppearanceStore::defaults().value(QStringLiteral("statusOrder")).toList();
+        auto duplicate = order;
+        duplicate[1] = duplicate[0];
+        auto unknown = order;
+        unknown[0] = QStringLiteral("weather");
+        auto wrongType = order;
+        wrongType[0] = 1;
+        auto missing = order;
+        missing.removeLast();
+        auto excess = order;
+        excess.append(QStringLiteral("wifi"));
+        QTest::newRow("order-type") << QStringLiteral("statusOrder") << QVariant(QStringLiteral("wifi"));
+        QTest::newRow("empty-order") << QStringLiteral("statusOrder") << QVariant(QVariantList{});
+        QTest::newRow("duplicate-order") << QStringLiteral("statusOrder") << QVariant(duplicate);
+        QTest::newRow("unknown-order-id") << QStringLiteral("statusOrder") << QVariant(unknown);
+        QTest::newRow("non-string-order-id") << QStringLiteral("statusOrder") << QVariant(wrongType);
+        QTest::newRow("missing-order-id") << QStringLiteral("statusOrder") << QVariant(missing);
+        QTest::newRow("extra-order-id") << QStringLiteral("statusOrder") << QVariant(excess);
+        QTest::newRow("visibility-type") << QStringLiteral("statusVisibility") << QVariant(QVariantList{});
+        QTest::newRow("unknown-visibility-id")
+            << QStringLiteral("statusVisibility")
+            << QVariant(QVariantMap{{QStringLiteral("weather"), QStringLiteral("always")}});
+        QTest::newRow("empty-visibility-id")
+            << QStringLiteral("statusVisibility") << QVariant(QVariantMap{{QString(), QStringLiteral("hidden")}});
+        QTest::newRow("unknown-policy") << QStringLiteral("statusVisibility")
+                                        << QVariant(QVariantMap{{QStringLiteral("wifi"), QStringLiteral("pinned")}});
+        QTest::newRow("policy-type") << QStringLiteral("statusVisibility")
+                                     << QVariant(QVariantMap{{QStringLiteral("wifi"), false}});
+        QTest::newRow("low-limit") << QStringLiteral("statusLimit") << QVariant(1);
+        QTest::newRow("high-limit") << QStringLiteral("statusLimit") << QVariant(7);
+        QTest::newRow("fractional-limit") << QStringLiteral("statusLimit") << QVariant(3.5);
+        QTest::newRow("string-limit") << QStringLiteral("statusLimit") << QVariant(QStringLiteral("4"));
+        QTest::newRow("bool-limit") << QStringLiteral("statusLimit") << QVariant(true);
+        QTest::newRow("nan-limit") << QStringLiteral("statusLimit")
+                                   << QVariant(std::numeric_limits<double>::quiet_NaN());
+        QTest::newRow("infinite-limit") << QStringLiteral("statusLimit")
+                                        << QVariant(std::numeric_limits<double>::infinity());
+        QTest::newRow("integer-percent") << QStringLiteral("statusBatteryPercent") << QVariant(1);
+        QTest::newRow("string-percent") << QStringLiteral("statusBatteryPercent") << QVariant(QStringLiteral("false"));
+        QTest::newRow("null-percent") << QStringLiteral("statusBatteryPercent") << QVariant();
+    }
+    void statusPreferencesRejectInvalidValues()
+    {
+        QFETCH(QString, key);
+        QFETCH(QVariant, value);
+        QTemporaryDir dir;
+        const auto path = dir.filePath(QStringLiteral("appearance.json"));
+        AppearanceStore store(path);
+        QVERIFY(store.setValue(QStringLiteral("statusLimit"), 5));
+        const auto saved = store.values();
+        QVERIFY(!store.setValue(key, value));
+        QCOMPARE(store.values(), saved);
+        QCOMPARE(AppearanceStore(path).values(), saved);
+        QVERIFY(store.beginPreview());
+        QVERIFY(!store.setValue(key, value));
+        QVERIFY(!store.dirty());
+        QCOMPARE(store.values(), saved);
+        store.endPreview();
+    }
+    void colorModePreservesMaterialAndSharesPreviewTransaction()
+    {
+        QTemporaryDir dir;
+        const auto path = dir.filePath(QStringLiteral("appearance.json"));
+        AppearanceStore store(path);
+        QVERIFY(store.setValue(QStringLiteral("material"), QStringLiteral("solid")));
+        QVERIFY(store.setColorMode(QStringLiteral("light"), false));
+        QCOMPARE(store.values().value(QStringLiteral("darkMaterial")).toString(), QStringLiteral("solid"));
+        QVERIFY(store.setColorMode(QStringLiteral("system"), true));
+        QCOMPARE(store.values().value(QStringLiteral("material")).toString(), QStringLiteral("solid"));
+        const auto saved = store.values();
+        QVERIFY(store.beginPreview());
+        QVERIFY(store.updateSystemColorScheme(false));
+        QCOMPARE(store.values(), saved);
+        QVERIFY(store.setColorMode(QStringLiteral("light"), false));
+        QCOMPARE(AppearanceStore(path).values(), saved);
+        store.endPreview();
+        QCOMPARE(store.values(), saved);
+        QVERIFY(store.updateSystemColorScheme(false));
+        QCOMPARE(store.values().value(QStringLiteral("material")).toString(), QStringLiteral("light"));
+        QVERIFY(store.setValue(QStringLiteral("material"), QStringLiteral("glass")));
+        QVERIFY(!store.values().value(QStringLiteral("followSystemColorScheme")).toBool());
+        QVERIFY(store.updateSystemColorScheme(false));
+        QCOMPARE(store.values().value(QStringLiteral("material")).toString(), QStringLiteral("glass"));
+        QVERIFY(!store.setValue(QStringLiteral("darkMaterial"), QStringLiteral("light")));
+        QVERIFY(!store.setValue(QStringLiteral("followSystemColorScheme"), QStringLiteral("true")));
+        QVERIFY(!store.setColorMode(QStringLiteral("invalid"), false));
+    }
     void trayPreferencesPersistAcrossPresetsAndPreviewRollback()
     {
         QTemporaryDir dir;

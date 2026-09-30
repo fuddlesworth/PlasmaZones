@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="quick-settings.css">
 <link rel="stylesheet" href="system-stats.css">
 <link rel="stylesheet" href="system-tray.css">
+<link rel="stylesheet" href="status-icons.css">
 <link rel="stylesheet" href="authentication.css">
 <link rel="stylesheet" href="shortcuts.css">
 </head>
@@ -27,7 +28,7 @@
 <div class="review-toolbar">
   <nav aria-label="Preview state" class="view-switch">
     <button data-view="desktop">Desktop</button><button data-view="overview">Window navigation</button><button data-view="shortcuts">Shortcuts</button>
-    <button data-view="controls">Quick settings</button><button data-view="stats">System stats</button><button data-view="tray">System tray</button><button data-view="notifications">Notifications</button><button data-view="datetime">Date & time</button><button data-view="launcher">Launcher</button><button data-view="lockscreen">Lock screen</button><button data-view="authentication">Authentication</button><button data-view="power">Power</button><button data-view="appearance">Appearance</button>
+    <button data-view="controls">Quick settings</button><button data-view="status">Status icons</button><button data-view="stats">System stats</button><button data-view="tray">System tray</button><button data-view="notifications">Notifications</button><button data-view="datetime">Date & time</button><button data-view="launcher">Launcher</button><button data-view="lockscreen">Lock screen</button><button data-view="authentication">Authentication</button><button data-view="power">Power</button><button data-view="appearance">Appearance</button>
   </nav>
   <label class="stress-control">Scrolling demo <select id="scroll-count" aria-label="Scrolling demo window count"><option value="4">4 windows</option><option value="10">10 windows</option><option value="20">20 windows</option></select></label>
   <button id="customize-toggle" aria-expanded="false">◈ &nbsp; Preview controls</button>
@@ -50,6 +51,7 @@
 <div id="quick-preview-controls" class="quick-preview-controls hidden" aria-label="Quick settings prototype controls"></div>
 <div id="stats-preview-controls" class="stats-preview-controls hidden" aria-label="System stats prototype controls"></div>
 <div id="tray-preview-controls" class="tray-preview-controls hidden" aria-label="System tray prototype controls"></div>
+<div id="status-preview-controls" class="hidden" aria-label="Status icons prototype controls"></div>
 <div id="auth-preview-controls" class="auth-preview-controls hidden" aria-label="Authentication prototype controls"></div>
 <div id="shortcuts-preview-controls" class="shortcuts-preview-controls hidden" aria-label="Shortcut prototype controls"></div>
 <div class="review-layout">
@@ -116,6 +118,7 @@
   <div class="stage-shade hidden" id="stage-shade"></div>
   <section id="overview" class="hidden" aria-label="Window navigation"></section>
   <section id="controls" class="hidden" aria-label="Quick settings"></section>
+  <section id="status-icons" class="hidden" aria-label="Status icons"></section>
   <section id="tray" class="hidden" aria-label="System tray"></section>
   <section id="stats" class="hidden" aria-label="System stats" role="dialog"></section>
   <section id="launcher" class="hidden" aria-label="Launcher"></section>
@@ -172,6 +175,7 @@
 <script src="quick-settings.js"></script>
 <script src="system-stats.js"></script>
 <script src="system-tray.js"></script>
+<script src="status-icons.js"></script>
 <script src="authentication.js"></script>
 <script src="shortcut-catalog.js"></script>
 <script src="shortcuts.js"></script>

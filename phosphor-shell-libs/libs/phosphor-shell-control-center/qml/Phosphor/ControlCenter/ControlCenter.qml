@@ -56,6 +56,50 @@ FocusScope {
     property string batterySummary: ""
     property string powerSummary: ""
     property string notificationSummary: ""
+    property string nightLightSummary: nightLightAvailable ? (nightLightEnabled ? i18n("On") : i18n("Off")) : i18n("Unavailable")
+    property string darkModeSummary: ""
+    property string airplaneSummary: ""
+    property string wallpaperSummary: ""
+    property bool darkModeEnabled: false
+    property bool airplaneEnabled: false
+    readonly property var serviceItems: ({
+            focus: {
+                title: i18n("Focus"),
+                summary: root.focusEnabled ? i18n("On") : i18n("Off"),
+                icon: "notifications-disabled",
+                selected: root.focusEnabled
+            },
+            nightlight: {
+                title: i18n("Night light"),
+                summary: root.nightLightSummary,
+                icon: "brightness-high",
+                selected: root.nightLightEnabled
+            },
+            darkmode: {
+                title: i18n("Dark mode"),
+                summary: root.darkModeSummary,
+                icon: "weather-clear-night",
+                selected: root.darkModeEnabled
+            },
+            airplane: {
+                title: i18n("Airplane mode"),
+                summary: root.airplaneSummary,
+                icon: "flightmode-on",
+                selected: root.airplaneEnabled
+            },
+            power: {
+                title: i18n("Power profiles"),
+                summary: root.powerSummary,
+                icon: "speedometer",
+                selected: false
+            },
+            wallpaper: {
+                title: i18n("Wallpaper"),
+                summary: root.wallpaperSummary,
+                icon: "preferences-desktop-wallpaper",
+                selected: false
+            }
+        })
 
     signal detailOpened(string tileId)
     signal detailClosed(string tileId)
@@ -107,6 +151,7 @@ FocusScope {
 
         property string detailTileId: ""
         property string detailPanelId: ""
+        property Item returnFocus: null
         // Rebuilds are suppressed until construction finishes. Setting
         // `provider` and `tileIds` as initial properties fires both change
         // handlers during initialization, and Component.onCompleted then
@@ -138,8 +183,9 @@ FocusScope {
             return true;
         // Announce the outgoing view before the incoming one so a listener
         // never sees two detail views open at once.
-        if (priv.detailTileId !== "")
+        if (priv.detailTileId !== "" || priv.detailPanelId !== "")
             root.closeDetail();
+        priv.returnFocus = priv.tiles[tileId];
         priv.detailTileId = tileId;
         const panelId = priv.tiles[tileId].detailPanelId ?? "";
         priv.detailPanelId = root.detailPanels[panelId] ? panelId : "";
@@ -147,16 +193,37 @@ FocusScope {
         return true;
     }
 
+    // Service pages do not need a registry tile. Keep the original overview
+    // control as the return target when one service page opens another.
+    function openPanel(panelId, focusItem) {
+        if (!panelId || !root.detailPanels[panelId])
+            return false;
+        if (priv.detailPanelId === panelId)
+            return true;
+        const previous = priv.detailTileId || priv.detailPanelId;
+        if (previous !== "")
+            root.detailClosed(previous);
+        if (focusItem)
+            priv.returnFocus = focusItem;
+        priv.detailTileId = "";
+        priv.detailPanelId = panelId;
+        root.detailOpened(panelId);
+        return true;
+    }
+
     // Close the detail view and return to the grid. Safe to call when
     // nothing is open.
     function closeDetail() {
-        if (priv.detailTileId === "")
+        if (priv.detailTileId === "" && priv.detailPanelId === "")
             return;
-        const closing = priv.detailTileId;
+        const closing = priv.detailTileId || priv.detailPanelId;
+        const returnFocus = priv.returnFocus;
         priv.detailTileId = "";
         priv.detailPanelId = "";
+        priv.returnFocus = null;
         root.detailClosed(closing);
-        priv.tiles[closing]?.forceActiveFocus();
+        if (root.visible && returnFocus)
+            returnFocus.forceActiveFocus();
     }
 
     // Rebuild every tile from the current provider + tileIds. Called
@@ -260,7 +327,7 @@ FocusScope {
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         interactive: contentHeight > height
-        visible: priv.detailTileId === ""
+        visible: priv.detailTileId === "" && priv.detailPanelId === ""
         Basic.ScrollBar.vertical: Basic.ScrollBar {
             active: scroller.interactive
         }
@@ -282,11 +349,19 @@ FocusScope {
                 Item {
                     Layout.fillWidth: true
                 }
-                Text {
+                ShellButton {
+                    id: batteryButton
+                    objectName: "quickSettingsBattery"
                     text: root.batterySummary
-                    color: Appearance.muted
-                    font.family: Tokens.font_family_mono
-                    font.pixelSize: Math.round((10) * Appearance.textScale)
+                    label: i18n("Battery details, %1").arg(root.batterySummary)
+                    iconName: "battery"
+                    foreground: Appearance.muted
+                    labelSize: 10
+                    flat: true
+                    onClicked: {
+                        if (!root.openPanel("battery", batteryButton))
+                            root.panelRequested("battery");
+                    }
                 }
                 Item {
                     Layout.fillWidth: true
@@ -328,43 +403,70 @@ FocusScope {
                         columns: 1
                         rowSpacing: 8
                     }
-                    RowLayout {
+                    GridLayout {
                         Layout.fillWidth: true
                         Layout.topMargin: 14
                         Layout.bottomMargin: 20
-                        spacing: 8
-                        ShellButton {
-                            Layout.fillWidth: true
-                            Layout.preferredWidth: 1
-                            implicitHeight: 44
-                            iconName: "weather-clear-night"
-                            text: root.focusEnabled ? qsTr("Focus on") : qsTr("Focus off")
-                            labelSize: 10
-                            enabled: root.focusAvailable
-                            highlighted: root.focusEnabled
-                            onClicked: root.focusToggled()
-                            background: Rectangle {
-                                radius: 8
-                                color: root.focusEnabled ? Qt.tint(Appearance.recess, Qt.alpha(Appearance.stops[2], 0.2)) : Appearance.recess
-                                border.width: 1
-                                border.color: root.focusEnabled ? Appearance.stops[2] : Appearance.outline
-                            }
-                        }
-                        ShellButton {
-                            Layout.fillWidth: true
-                            Layout.preferredWidth: 1
-                            implicitHeight: 44
-                            iconName: "brightness-high"
-                            text: root.nightLightEnabled ? qsTr("Night light on") : qsTr("Night light off")
-                            labelSize: 10
-                            enabled: root.nightLightAvailable
-                            highlighted: root.nightLightEnabled
-                            onClicked: root.nightLightToggled()
-                            background: Rectangle {
-                                radius: 8
-                                color: root.nightLightEnabled ? Qt.tint(Appearance.recess, Qt.alpha(Appearance.stops[2], 0.2)) : Appearance.recess
-                                border.width: 1
-                                border.color: root.nightLightEnabled ? Appearance.stops[2] : Appearance.outline
+                        columns: 2
+                        columnSpacing: 8
+                        rowSpacing: 8
+                        Repeater {
+                            model: ["focus", "nightlight", "darkmode", "airplane", "power", "wallpaper"]
+                            delegate: Basic.Button {
+                                id: serviceButton
+                                required property string modelData
+                                readonly property var service: root.serviceItems[modelData]
+                                objectName: "quickSettings-" + modelData
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 1
+                                implicitHeight: Math.max(62, contentItem.implicitHeight + 20)
+                                padding: 10
+                                enabled: modelData !== "focus" || root.focusAvailable
+                                Accessible.name: i18n("%1, %2").arg(service.title).arg(service.summary)
+                                Accessible.checkable: modelData === "focus"
+                                Accessible.checked: modelData === "focus" && root.focusEnabled
+                                onClicked: {
+                                    if (modelData === "focus")
+                                        root.focusToggled();
+                                    else if (!root.openPanel(modelData, serviceButton))
+                                        root.panelRequested(modelData);
+                                }
+                                background: Rectangle {
+                                    radius: 9
+                                    color: serviceButton.service.selected ? Qt.tint(Appearance.recess, Qt.alpha(Appearance.stops[2], 0.14)) : serviceButton.hovered ? Qt.tint(Appearance.recess, Qt.alpha(Appearance.stops[1], 0.08)) : Appearance.recess
+                                    border.width: 1
+                                    border.color: serviceButton.visualFocus ? Appearance.text : Appearance.outline
+                                }
+                                contentItem: RowLayout {
+                                    spacing: 9
+                                    ShellIcon {
+                                        Layout.preferredWidth: 19
+                                        Layout.preferredHeight: 19
+                                        source: serviceButton.service.icon
+                                        isMask: true
+                                        color: serviceButton.service.selected ? Appearance.stops[2] : Appearance.muted
+                                    }
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 4
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: serviceButton.service.title
+                                            color: Appearance.text
+                                            font.family: Tokens.font_family_ui
+                                            font.pixelSize: Math.round(11 * Appearance.textScale)
+                                            wrapMode: Text.Wrap
+                                        }
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: serviceButton.service.summary
+                                            color: Appearance.muted
+                                            font.family: Tokens.font_family_ui
+                                            font.pixelSize: Math.round(10 * Appearance.textScale)
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -444,17 +546,29 @@ FocusScope {
             RowLayout {
                 Layout.fillWidth: true
                 Layout.topMargin: 16
-                Text {
+                spacing: Tokens.spacing_m
+                ShellButton {
+                    id: powerButton
+                    objectName: "quickSettingsPower"
+                    implicitWidth: contentItem.implicitWidth + 2 * Tokens.spacing_s
+                    implicitHeight: root.shelf ? 26 : 27
+                    text: root.powerSummary
+                    foreground: Appearance.accent
+                    label: i18n("Power profiles, %1").arg(root.powerSummary)
+                    labelSize: 10
+                    flat: true
+                    onClicked: {
+                        if (!root.openPanel("power", powerButton))
+                            root.panelRequested("power");
+                    }
+                }
+                Item {
                     Layout.fillWidth: true
-                    text: root.powerSummary + (root.shelf && root.notificationSummary ? "  ·  " + root.notificationSummary : "")
-                    color: Appearance.muted
-                    font.family: Tokens.font_family_ui
-                    font.pixelSize: Math.round((10) * Appearance.textScale)
-                    elide: Text.ElideRight
                 }
                 ShellButton {
                     objectName: "quickSettingsAppearance"
                     foreground: Appearance.accent
+                    implicitWidth: contentItem.implicitWidth + 2 * Tokens.spacing_s
                     implicitHeight: root.shelf ? 26 : 27
                     text: qsTr("Appearance ↗")
                     labelSize: 10
@@ -494,12 +608,17 @@ FocusScope {
     }
     Connections {
         target: detailLoader.status === Loader.Ready ? detailLoader.item : null
+        ignoreUnknownSignals: true
         function onBackRequested(): void {
             root.closeDetail();
         }
         function onCloseRequested(): void {
             root.closeDetail();
             root.closeRequested();
+        }
+        function onPanelRequested(panelId: string): void {
+            if (!root.openPanel(panelId))
+                root.panelRequested(panelId);
         }
     }
 }

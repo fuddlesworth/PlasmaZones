@@ -66,7 +66,7 @@ window.PhosphorAppearance = (() => {
     return result;
   }
 
-  function create({root,desktop,icon,getSettings,setSettings,presets,onClose,notify}) {
+  function create({root,desktop,icon,getSettings,setSettings,presets,onClose,onStatusIcons,notify}) {
     let data=copy(initial),applied,baseline,active=false,peek=false,page='wallpaper',filter='All',query='',dialog=null,pendingExit=null,skipGuard=false,chosenWidget='workspaces',dragged='',message='',saved=[],uploads=[];
     const key='phosphor-appearance-study-v1';
     try {
@@ -219,6 +219,7 @@ window.PhosphorAppearance = (() => {
         </div><aside class="ap-wall-inspector">${sectionTitle('Bar placement')}${select('edge','Screen edge',[['top','Top'],['bottom','Bottom']],s.edge)}${range('inset','Screen inset',6,30,data.inset,' px')}<div class="ap-rule"></div>${sectionTitle(widgets[chosenWidget][0],region?'Selected widget':'This widget is hidden.')}
         ${region?`${select('region','Region',[['left','Left'],['center','Center'],['right','Right']],region)}<span class="ap-kicker">ORDER WITHIN REGION</span><div class="ap-order">${button('widget-left','← Move earlier',data.regions[region].indexOf(chosenWidget)===0?'disabled':'')}${button('widget-right','Move later →',data.regions[region].indexOf(chosenWidget)===data.regions[region].length-1?'disabled':'')}</div>${button('hide-widget',`${icon('close-icon')} Hide widget`,'class="ap-text-link"')}`:button(`add-widget:${chosenWidget}`,'Add to bar','class="ap-primary"')}
         ${chosenWidget==='media'?toggle('media','Show media','Display the current track in the bar.',s.media):''}
+        ${chosenWidget==='status'?button('status-icons',`${icon('tune')} Arrange status icons`,'class="ap-secondary"'):''}
         <div class="ap-rule"></div><p class="ap-hint">The workspace map stays readable as more windows open. Long labels make room for the controls.</p>${button('reset-bar','Restore default layout','class="ap-text-link"')}</aside></div>`;
     }
 
@@ -318,6 +319,7 @@ window.PhosphorAppearance = (() => {
       if(action==='hide-widget'){for(const list of Object.values(data.regions)){const at=list.indexOf(chosenWidget);if(at!==-1)list.splice(at,1);}refresh();}
       if(action==='widget-left'||action==='widget-right'){const r=Object.keys(data.regions).find(r=>data.regions[r].includes(chosenWidget)),at=data.regions[r].indexOf(chosenWidget);moveWidget(chosenWidget,r,Math.max(0,Math.min(data.regions[r].length-1,at+(action==='widget-left'?-1:1))));}
       if(action==='reset-bar'){data.regions=copy(initial.regions);refresh();}
+      if(action==='status-icons')onStatusIcons();
       if(action==='save')showDialog({type:'save'});
       if(action==='preset')showDialog({type:'preset',preset:library().find(p=>p.id===value)});
       if(action==='try-preset')usePreset();

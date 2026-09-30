@@ -411,6 +411,12 @@ Item {
                 label: qsTr("Show media")
                 description: qsTr("Display the current track in the bar.")
             }
+            ShellButton {
+                Layout.fillWidth: true
+                visible: root.chosen === "controlcenter"
+                text: qsTr("Arrange status icons")
+                onClicked: root.controller.requestPanel("status-icons")
+            }
             Rectangle {
                 Layout.fillWidth: true
                 implicitHeight: 1

@@ -51,6 +51,7 @@ target_compile_features(phosphor-control-center-demo PRIVATE cxx_std_20)
 
 target_link_libraries(phosphor-control-center-demo
     PRIVATE
+        PhosphorControl::PhosphorControl
         Qt6::Core
         Qt6::Gui
         Qt6::Qml

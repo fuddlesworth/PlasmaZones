@@ -10,14 +10,21 @@ requirements for this redesign.
 
 ## Control-center service integration
 
-The v3 browser study now includes night light, dark-mode access, airplane mode,
-power profiles, wallpaper access and battery details. The next implementation
-step is native wiring and visual review of those studies. Appearance already
-owns material, palette and wallpaper choices; its quick access uses that same
-state. Battery already has a read-only native UPower panel. The expanded study
-retains charge estimates, health and other devices, with power-profile controls
-requiring a separate service. No charging-limit control is implied by UPower
-support.
+Night light, dark mode, airplane mode, power profiles, wallpaper access and
+battery details now have native panels and service wiring in the working tree.
+Automated regressions and isolated native visual checks pass. The current
+validation record is in `04-implementation-plan.md`.
+
+Night light uses KWin and the shared KNightTime schedule. The native service does
+not expose geolocation availability, so the browser's missing-location fixture
+does not become a claimed native service state. Power profiles show the daemon's
+supported choices; `PerformanceDegraded` is informational and does not disable
+Performance. Airplane mode covers Wi-Fi, WWAN and Bluetooth with remembered
+radio restoration and a Bluetooth exception. Wired networking stays available.
+Dark mode and wallpaper reuse Appearance's state and preview transaction.
+Expanded UPower details include service availability, charging, estimates,
+health, energy and connected devices. Power-profile actions use their separate
+service; no charging-limit control is implied by UPower support.
 
 ## Optional interactions inherited from the earlier design
 
@@ -40,7 +47,6 @@ current interaction decision before implementation.
 | Notification rules editor | The toast host has the rules seam and nothing edits it. The history is built: `NotificationPanel` is the centre, reading the shell's retained list, and the chip opens it. |
 | Palette-library browser | Appearance now has Phosphor/Paper/Ember, wallpaper colors and preset import/export. A browser for the `ThemePresets` palette library is separate. |
 | Dock | Not planned for the identity; the bar's map is the window list. |
-| Extra control-center controls | Night light, airplane mode and power profiles need service integration. Dark-mode and wallpaper shortcuts reuse Appearance in the browser study. Port those shortcuts and the expanded battery design to the native panel. |
 | Emoji provider in the launcher | Deferred. |
 | Weather cell on the dashboard | No service. |
 
@@ -51,6 +57,7 @@ current interaction decision before implementation.
 | Lock screen in the nested harness | The virtual KWin backend does not advertise `ext_session_lock_manager_v1`. The production lock UI is visually testable through `phosphor-shell/scripts/nested-shell/lock-preview.sh`; PAM and compositor-lock lifecycle remain service-test coverage. |
 | Real polkit authentication in the nested harness | The host session's agent owns the seat. `authentication-preview.sh` exercises the production UI with fixtures, while service tests cover the agent. Seat-owned authentication needs a real-session check. |
 | Physical Wi-Fi, Bluetooth, audio and battery behavior | Private D-Bus and PipeWire fixtures exercise service contracts. Hardware association, pairing, device changes and battery reporting still need real devices. |
+| Additional control-center services | Native service tests and isolated visual checks pass. Actual display warmth, radio switches, WWAN hardware and power-profile effects require the corresponding services and hardware. |
 | Real touchpad gestures | The virtual backend cannot inject swipes; the relay is driven by calling `CompositorBridge.reportGesture` directly. |
 
 ## Non-gaps

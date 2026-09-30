@@ -255,6 +255,16 @@ Item {
     AppearanceSurfaces {
         locked: sessionCoordinator.lock.state !== 0
     }
+    StatusIconSurfaces {
+        id: statusSurfaces
+        locked: sessionCoordinator.lock.state !== 0
+        onDetailRequested: (panelId, source, screenName) => {
+            if (panelId === "notification")
+                root.toggleWidgetPanel(panelId, source, screenName);
+            else
+                root.toggleControlCenter(source, panelId, screenName);
+        }
+    }
 
     // The layer popup and the optional pane transport share this content.
     Component {
@@ -335,13 +345,13 @@ Item {
 
     // Quick settings and the launcher share a Cooperative scope. Opening one
     // closes the other; a Modal surface closes both and prevents new opens.
-    function toggleControlCenter(source: Item): void {
+    function toggleControlCenter(source: Item, initialPanel = "", screenName = ""): void {
         // screenOf hands back a QScreen the C++ side owns; the controller
         // marks it CppOwnership before returning, so the JS GC cannot
         // delete the live screen when this wrapper is collected. Do not
         // reach for a QScreen any other way from QML.
         root._lastPanelSource = source;
-        const target = ControlCenterRegistry.screenOf(source);
+        const target = screenName ? BarRegistry.screenNamed(screenName) : ControlCenterRegistry.screenOf(source);
         const centre = BarRegistry.anchorCenterFor(source);
         const anchored = centre >= 0;
         const railT = anchored && target && target.geometry.width > 0 ? Math.max(0, Math.min(1, centre / target.geometry.width)) : 0.5;
@@ -357,7 +367,8 @@ Item {
             "exclusiveKeyboard": true,
             "props": {
                 "railT": railT,
-                "panelWidth": Appearance.panelWidth
+                "panelWidth": Appearance.panelWidth,
+                "initialPanel": initialPanel
             }
         };
         // Repeated activation toggles on one output and transfers across outputs.
@@ -457,7 +468,7 @@ Item {
             },
             "battery": {
                 "component": batteryPanelComponent,
-                "keyboard": false
+                "keyboard": true
             },
             "media": {
                 "component": mediaPanelComponent,
@@ -512,7 +523,13 @@ Item {
     Component {
         id: batteryPanelComponent
 
-        BatteryPanel {}
+        BatteryPanel {
+            onBackRequested: {
+                Popouts.close(Popouts.handleFor("bar.panel.battery"));
+                ControlCenterRegistry.requestControlCenter("battery");
+            }
+            onCloseRequested: Popouts.close(Popouts.handleFor("bar.panel.battery"))
+        }
     }
 
     Component {
@@ -563,7 +580,7 @@ Item {
     // would TOGGLE the open one shut and never open the one that was asked
     // for. Distinct ids plus the shared Cooperative scope give the wanted
     // behaviour instead — the previous panel closes, this one opens.
-    function toggleWidgetPanel(id: string, source: Item): void {
+    function toggleWidgetPanel(id: string, source: Item, screenName = ""): void {
         const panel = root.widgetPanels[id];
         if (!panel)
             return;
@@ -581,7 +598,7 @@ Item {
         // left opens a cyan-leaning surface, one on the right a
         // rose-leaning one. Falls back to centre when the chip's position
         // could not be resolved.
-        const screen = BarRegistry.screenOf(source);
+        const screen = screenName ? BarRegistry.screenNamed(screenName) : BarRegistry.screenOf(source);
         const railT = anchored && screen && screen.geometry.width > 0 ? Math.max(0, Math.min(1, centre / screen.geometry.width)) : 0.5;
         const directMenu = id === "tray" ? source?.requestedMenuKey || "" : "";
         if (directMenu && Popouts.isOpen("bar.panel.tray"))
@@ -683,7 +700,11 @@ Item {
                 PickerRegistry.toggle(ControlCenterRegistry.screenOf(source)?.name || "");
             else if (id === "launcher")
                 root.toggleLauncher();
-            else if (id === "controlcenter" || id === "media")
+            else if (id === "controlcenter" && source?.requestedStatusPage) {
+                statusSurfaces.show(source.requestedStatusPage, source, "");
+                source.requestedStatusPage = "";
+                source.requestAnchor = null;
+            } else if (id === "controlcenter" || id === "media")
                 // "controlcenter" is the bar widget's registered id
                 // (barcontroller.cpp), not the IPC target name below.
                 root.toggleControlCenter(source);

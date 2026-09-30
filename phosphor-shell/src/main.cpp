@@ -5,6 +5,10 @@
 #include "DesktopStyleController.h"
 #include "ControlCenterController.h"
 #include "QuickSettingsController.h"
+#include "AirplaneController.h"
+#include "ColorModeController.h"
+#include "StatusIconsController.h"
+#include <PhosphorControl/LocalizedContext.h>
 #include "LauncherController.h"
 #include "LayerPopoutTransport.h"
 #include "OsdController.h"
@@ -45,6 +49,7 @@
 #include <PhosphorServiceNetwork/QmlRegistration.h>
 #include <PhosphorServiceNotifications/QmlRegistration.h>
 #include <PhosphorServicePipeWire/QmlRegistration.h>
+#include <PhosphorServicePipeWire/PipeWireHost.h>
 #include <PhosphorServicePolkit/QmlRegistration.h>
 #include <PhosphorServiceSession/QmlRegistration.h>
 #include <PhosphorServiceSni/QmlRegistration.h>
@@ -333,6 +338,10 @@ int main(int argc, char* argv[])
     // controllers above.
     PhosphorShellApp::NotificationController notificationController;
     PhosphorShellApp::QuickSettingsController quickSettings;
+    PhosphorShellApp::AirplaneController airplane;
+    PhosphorShellApp::ColorModeController colorMode(PhosphorTheme::AppearanceStore::create(nullptr, nullptr));
+    PhosphorShellApp::StatusIconsController statusIcons(PhosphorTheme::AppearanceStore::create(nullptr, nullptr),
+                                                        &quickSettings, &airplane, &notificationController);
     PhosphorShellApp::DesktopStyleController desktopStyle;
 
     // The dashboard's media cell reads one MprisHost for the process.
@@ -627,8 +636,16 @@ int main(int argc, char* argv[])
     // controller IS the model, so the panel binds it directly as
     // `model: NotificationRegistry` and reads serverActive / unreadCount
     // off the same object.
-    engine.addEngineHook([&quickSettings](QQmlEngine* qmlEngine) {
+    engine.addEngineHook([&quickSettings, &airplane, &colorMode, &statusIcons](QQmlEngine* qmlEngine) {
+        auto* localized = new PhosphorControl::LocalizedContext(qmlEngine);
+        localized->setTranslationContext(QStringLiteral("phosphorshell"));
+        qmlEngine->rootContext()->setContextObject(localized);
+        qmlEngine->rootContext()->setContextProperty(QStringLiteral("Airplane"), &airplane);
+        qmlEngine->rootContext()->setContextProperty(QStringLiteral("ColorMode"), &colorMode);
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("QuickSettings"), &quickSettings);
+        qmlEngine->rootContext()->setContextProperty(QStringLiteral("StatusIcons"), &statusIcons);
+        statusIcons.setAudioHost(qmlEngine->singletonInstance<PhosphorServicePipeWire::PipeWireHost*>(
+            "Phosphor.Service.PipeWire", "PipeWireHost"));
     });
     engine.addEngineHook([&notificationController](QQmlEngine* qmlEngine) {
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("NotificationRegistry"), &notificationController);

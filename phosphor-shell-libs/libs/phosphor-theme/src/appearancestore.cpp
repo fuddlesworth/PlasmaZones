@@ -67,6 +67,8 @@ QVariantMap AppearanceStore::defaults()
             {QStringLiteral("surfaceEffect"), QStringLiteral("none")},
             {QStringLiteral("palette"), QStringLiteral("spectrum")},
             {QStringLiteral("material"), QStringLiteral("glass")},
+            {QStringLiteral("followSystemColorScheme"), false},
+            {QStringLiteral("darkMaterial"), QStringLiteral("glass")},
             {QStringLiteral("edge"), QStringLiteral("top")},
             {QStringLiteral("density"), QStringLiteral("comfortable")},
             {QStringLiteral("radius"), 18},
@@ -92,6 +94,22 @@ QVariantMap AppearanceStore::defaults()
             {QStringLiteral("trayAttention"), true},
             {QStringLiteral("trayOrder"), QVariantList{}},
             {QStringLiteral("trayVisibility"), QVariantMap{}},
+            {QStringLiteral("statusOrder"),
+             QVariantList{QStringLiteral("wifi"), QStringLiteral("audio"), QStringLiteral("bluetooth"),
+                          QStringLiteral("battery"), QStringLiteral("microphone"), QStringLiteral("nightlight"),
+                          QStringLiteral("focus"), QStringLiteral("airplane"), QStringLiteral("power")}},
+            {QStringLiteral("statusVisibility"),
+             QVariantMap{{QStringLiteral("wifi"), QStringLiteral("always")},
+                         {QStringLiteral("audio"), QStringLiteral("always")},
+                         {QStringLiteral("bluetooth"), QStringLiteral("hidden")},
+                         {QStringLiteral("battery"), QStringLiteral("auto")},
+                         {QStringLiteral("microphone"), QStringLiteral("auto")},
+                         {QStringLiteral("nightlight"), QStringLiteral("hidden")},
+                         {QStringLiteral("focus"), QStringLiteral("auto")},
+                         {QStringLiteral("airplane"), QStringLiteral("auto")},
+                         {QStringLiteral("power"), QStringLiteral("hidden")}}},
+            {QStringLiteral("statusLimit"), 4},
+            {QStringLiteral("statusBatteryPercent"), true},
             {QStringLiteral("visualizer"), QStringLiteral("ribbon")}};
 }
 AppearanceStore::AppearanceStore(QObject* parent)
@@ -166,6 +184,7 @@ bool AppearanceStore::validate(const QVariantMap& values, QVariantMap& result)
         {QStringLiteral("presentation"), {QStringLiteral("navigator"), QStringLiteral("stage")}},
         {QStringLiteral("palette"), {QStringLiteral("spectrum"), QStringLiteral("wallpaper"), QStringLiteral("ember")}},
         {QStringLiteral("material"), {QStringLiteral("glass"), QStringLiteral("solid"), QStringLiteral("light")}},
+        {QStringLiteral("darkMaterial"), {QStringLiteral("glass"), QStringLiteral("solid")}},
         {QStringLiteral("edge"), {QStringLiteral("top"), QStringLiteral("bottom")}},
         {QStringLiteral("density"), {QStringLiteral("comfortable"), QStringLiteral("compact")}},
         {QStringLiteral("notificationGrouping"), {QStringLiteral("app"), QStringLiteral("time")}},
@@ -173,6 +192,7 @@ bool AppearanceStore::validate(const QVariantMap& values, QVariantMap& result)
         {QStringLiteral("visualizer"),
          {QStringLiteral("ribbon"), QStringLiteral("bars"), QStringLiteral("halo"), QStringLiteral("off")}}};
     QSet<QString> trayKeys;
+    const auto statusIds = result.value(QStringLiteral("statusVisibility")).toMap().keys();
     for (auto it = values.cbegin(); it != values.cend(); ++it) {
         if (!result.contains(it.key()))
             return false;
@@ -180,6 +200,39 @@ bool AppearanceStore::validate(const QVariantMap& values, QVariantMap& result)
             if (it.value().metaType().id() != QMetaType::QString
                 || !enums.value(it.key()).contains(it.value().toString()))
                 return false;
+        } else if (it.key() == QLatin1String("statusOrder")) {
+            if (it.value().metaType().id() != QMetaType::QVariantList || it.value().toList().size() != statusIds.size())
+                return false;
+            QSet<QString> seen;
+            for (const auto& entry : it.value().toList()) {
+                const auto id = entry.toString();
+                if (entry.metaType().id() != QMetaType::QString || !statusIds.contains(id) || seen.contains(id))
+                    return false;
+                seen.insert(id);
+            }
+        } else if (it.key() == QLatin1String("statusVisibility")) {
+            if (it.value().metaType().id() != QMetaType::QVariantMap)
+                return false;
+            const auto policies = it.value().toMap();
+            auto normalized = result.value(it.key()).toMap();
+            const QStringList allowed{QStringLiteral("always"), QStringLiteral("auto"), QStringLiteral("hidden")};
+            for (auto policy = policies.cbegin(); policy != policies.cend(); ++policy) {
+                if (!statusIds.contains(policy.key()) || policy.value().metaType().id() != QMetaType::QString
+                    || !allowed.contains(policy.value().toString()))
+                    return false;
+                normalized[policy.key()] = policy.value();
+            }
+            result[it.key()] = normalized;
+            continue;
+        } else if (it.key() == QLatin1String("statusLimit")) {
+            const auto type = it.value().metaType().id();
+            if (type != QMetaType::Int && type != QMetaType::Double && type != QMetaType::LongLong)
+                return false;
+            const double limit = it.value().toDouble();
+            if (!std::isfinite(limit) || std::floor(limit) != limit || limit < 2 || limit > 6)
+                return false;
+            result[it.key()] = int(limit);
+            continue;
         } else if (it.key() == QLatin1String("trayOrder")) {
             if (it.value().metaType().id() != QMetaType::QVariantList || it.value().toList().size() > 256)
                 return false;
@@ -362,6 +415,8 @@ bool AppearanceStore::commit(const QVariantMap& values)
     QVariantMap validated;
     if (!validate(values, validated))
         return fail(tr("Invalid appearance settings."));
+    if (validated.value(QStringLiteral("material")).toString() != QLatin1String("light"))
+        validated[QStringLiteral("darkMaterial")] = validated.value(QStringLiteral("material"));
     if (!m_editing && !write(validated))
         return false;
     if (m_editing && !writeDocument(m_path + QStringLiteral(".preview"), validated))
@@ -432,6 +487,35 @@ bool AppearanceStore::setValue(const QString& key, const QVariant& value)
     // QML passes arrays/objects through QVariant as QJSValue. Normalize at
     // this boundary so the same strict validation serves native and QML callers.
     next[key] = value.metaType().id() == qMetaTypeId<QJSValue>() ? value.value<QJSValue>().toVariant() : value;
+    if (key == QLatin1String("material"))
+        next[QStringLiteral("followSystemColorScheme")] = false;
+    return commit(next);
+}
+bool AppearanceStore::setColorMode(const QString& mode, bool systemDark)
+{
+    if (mode != QLatin1String("system") && mode != QLatin1String("light") && mode != QLatin1String("dark"))
+        return false;
+    auto next = m_values;
+    next[QStringLiteral("followSystemColorScheme")] = mode == QLatin1String("system");
+    const auto material = next.value(QStringLiteral("material")).toString();
+    if (material != QLatin1String("light"))
+        next[QStringLiteral("darkMaterial")] = material;
+    const bool dark = mode == QLatin1String("system") ? systemDark : mode == QLatin1String("dark");
+    next[QStringLiteral("material")] = dark ? next.value(QStringLiteral("darkMaterial")) : QStringLiteral("light");
+    return commit(next);
+}
+bool AppearanceStore::updateSystemColorScheme(bool dark)
+{
+    // Environmental updates must not alter the saved baseline or the user's
+    // draft while an Appearance transaction is open. The controller retries
+    // when it ends, against whichever mode was applied or restored.
+    if (m_editing || !m_values.value(QStringLiteral("followSystemColorScheme")).toBool())
+        return true;
+    const QString material = dark ? m_values.value(QStringLiteral("darkMaterial")).toString() : QStringLiteral("light");
+    if (m_values.value(QStringLiteral("material")).toString() == material)
+        return true;
+    auto next = m_values;
+    next[QStringLiteral("material")] = material;
     return commit(next);
 }
 bool AppearanceStore::moveWidget(const QString& id, const QString& region, int index)
@@ -529,7 +613,11 @@ bool AppearanceStore::applyPreset(const QString& preset)
                             QStringLiteral("trayLimit"),
                             QStringLiteral("trayAttention"),
                             QStringLiteral("trayOrder"),
-                            QStringLiteral("trayVisibility")})
+                            QStringLiteral("trayVisibility"),
+                            QStringLiteral("statusOrder"),
+                            QStringLiteral("statusVisibility"),
+                            QStringLiteral("statusLimit"),
+                            QStringLiteral("statusBatteryPercent")})
         next[key] = m_values.value(key);
     return commit(next);
 }

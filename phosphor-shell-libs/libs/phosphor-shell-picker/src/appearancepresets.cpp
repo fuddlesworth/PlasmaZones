@@ -33,6 +33,8 @@ QVariantMap AppearanceLibrary::scopedSettings(const QVariantMap& values, bool wa
 {
     QStringList keys{QStringLiteral("palette"),
                      QStringLiteral("material"),
+                     QStringLiteral("followSystemColorScheme"),
+                     QStringLiteral("darkMaterial"),
                      QStringLiteral("density"),
                      QStringLiteral("radius"),
                      QStringLiteral("gap"),
@@ -52,7 +54,9 @@ QVariantMap AppearanceLibrary::scopedSettings(const QVariantMap& values, bool wa
                      QStringLiteral("media"), QStringLiteral("statsStyle"), QStringLiteral("statsMetrics"),
                      QStringLiteral("statsMemoryUnit"), QStringLiteral("statsInterval"), QStringLiteral("statsGpuId"),
                      QStringLiteral("trayIcons"), QStringLiteral("trayLimit"), QStringLiteral("trayAttention"),
-                     QStringLiteral("trayOrder"), QStringLiteral("trayVisibility")});
+                     QStringLiteral("trayOrder"), QStringLiteral("trayVisibility"), QStringLiteral("statusOrder"),
+                     QStringLiteral("statusVisibility"), QStringLiteral("statusLimit"),
+                     QStringLiteral("statusBatteryPercent")});
     QVariantMap result;
     for (const auto& key : keys) {
         if (values.contains(key))
@@ -90,7 +94,9 @@ QVariantList AppearanceLibrary::presets() const
              {QStringLiteral("uiFont"), QStringLiteral("monoFont"), QStringLiteral("textScale"),
               QStringLiteral("wallpaperColors"), QStringLiteral("surfacePacks"), QStringLiteral("surfaceEffect"),
               QStringLiteral("desktopStyle"), QStringLiteral("trayIcons"), QStringLiteral("trayLimit"),
-              QStringLiteral("trayAttention"), QStringLiteral("trayOrder"), QStringLiteral("trayVisibility")})
+              QStringLiteral("trayAttention"), QStringLiteral("trayOrder"), QStringLiteral("trayVisibility"),
+              QStringLiteral("statusOrder"), QStringLiteral("statusVisibility"), QStringLiteral("statusLimit"),
+              QStringLiteral("statusBatteryPercent")})
             scoped.remove(key);
         result.append(QVariantMap{{Id, id},
                                   {RecipeName,

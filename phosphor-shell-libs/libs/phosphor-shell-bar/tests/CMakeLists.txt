@@ -50,6 +50,8 @@ target_link_libraries(test_phosphor_shell_bar
         Qt6::Quick
         Qt6::QuickShapes
         Qt6::QuickTest
+        PhosphorControl::PhosphorControl
+        PhosphorServiceUPower::PhosphorServiceUPower
         # The bar module + its plugin, plus the modules it imports and
         # their plugin registrars (Phosphor.Widgets pulls Phosphor.Theme).
         PhosphorShellBarQml

@@ -86,18 +86,28 @@ class NetworkHost::Private
 {
 public:
     NetworkHost* owner = nullptr;
-    QDBusConnection bus = QDBusConnection::systemBus();
+    QDBusConnection bus;
     QList<NetworkDevice*> devices;
 
     bool available = false;
     bool wirelessHardwareEnabled = false;
+    bool wwanSupported = false;
+    bool wwanEnabled = false;
+    bool wwanHardwareEnabled = false;
     QString connectivityCheckUri;
     quint64 generation = 0;
+    quint64 propertyRevision = 0;
+    quint64 deviceRevision = 0;
     QHash<QString, quint64> activationGenerations;
     bool networkingEnabled = false;
     bool wirelessEnabled = false;
     Connectivity connectivity = UnknownConnectivity;
     QString primaryConnectionType;
+
+    explicit Private(QDBusConnection connection)
+        : bus(std::move(connection))
+    {
+    }
 
     [[nodiscard]] PhosphorDBus::Client manager() const
     {
@@ -188,6 +198,18 @@ public:
             return props.value(QLatin1String(name));
         };
         QVariant v;
+        if (props.contains(QLatin1String("WwanEnabled"))) {
+            const bool enabled = props.value(QLatin1String("WwanEnabled")).toBool();
+            if (!wwanSupported || enabled != wwanEnabled) {
+                wwanSupported = true;
+                wwanEnabled = enabled;
+                Q_EMIT owner->wwanChanged();
+            }
+        }
+        if ((v = val("WwanHardwareEnabled")).isValid() && wwanHardwareEnabled != v.toBool()) {
+            wwanHardwareEnabled = v.toBool();
+            Q_EMIT owner->wwanChanged();
+        }
         if ((v = val("WirelessHardwareEnabled")).isValid() && wirelessHardwareEnabled != v.toBool()) {
             wirelessHardwareEnabled = v.toBool();
             Q_EMIT owner->wirelessHardwareEnabledChanged();
@@ -220,7 +242,7 @@ public:
                 return;
             }
         }
-        auto* device = new NetworkDevice(path, owner);
+        auto* device = new NetworkDevice(bus, path, owner);
         devices.append(device);
         qCDebug(lcNetworkHost) << "Device added:" << path;
         Q_EMIT owner->deviceAdded(device);
@@ -247,8 +269,13 @@ public:
 };
 
 NetworkHost::NetworkHost(QObject* parent)
+    : NetworkHost(QDBusConnection::systemBus(), parent)
+{
+}
+
+NetworkHost::NetworkHost(QDBusConnection connection, QObject* parent)
     : QObject(parent)
-    , d(std::make_unique<Private>())
+    , d(std::make_unique<Private>(std::move(connection)))
 {
     d->owner = this;
 
@@ -282,6 +309,14 @@ NetworkHost::NetworkHost(QObject* parent)
                 d->setAvailable(false);
                 d->setNetworkingEnabled(false);
                 d->setWirelessEnabled(false);
+                if (d->wirelessHardwareEnabled) {
+                    d->wirelessHardwareEnabled = false;
+                    Q_EMIT wirelessHardwareEnabledChanged();
+                }
+                if (d->wwanSupported || d->wwanEnabled || d->wwanHardwareEnabled) {
+                    d->wwanSupported = d->wwanEnabled = d->wwanHardwareEnabled = false;
+                    Q_EMIT wwanChanged();
+                }
                 d->setConnectivity(UnknownConnectivity);
                 d->setPrimaryConnectionType({});
                 while (!d->devices.isEmpty())
@@ -295,6 +330,8 @@ NetworkHost::NetworkHost(QObject* parent)
 void NetworkHost::refresh()
 {
     const auto generation = ++d->generation;
+    const auto revision = d->propertyRevision;
+    const auto deviceRevision = d->deviceRevision;
     // Bootstrap queries run asynchronously: a blocking call here would
     // freeze the GUI thread while NetworkManager (and, through the
     // per-device GetAll, every device) responds. Watchers are parented to
@@ -306,19 +343,25 @@ void NetworkHost::refresh()
             new QDBusPendingCallWatcher(d->manager().asyncCall(QLatin1String(kPropsIface), QStringLiteral("GetAll"),
                                                                {QLatin1String(kManagerIface)}),
                                         this);
-        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, generation](QDBusPendingCallWatcher* call) {
-            call->deleteLater();
-            if (generation != d->generation)
-                return;
-            const QDBusPendingReply<QVariantMap> reply = *call;
-            if (reply.isError()) {
-                d->setAvailable(false);
-                qCWarning(lcNetworkHost) << "manager GetAll failed:" << reply.error().message();
-                return;
-            }
-            d->applyManagerProps(reply.value());
-            d->setAvailable(true);
-        });
+        connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                [this, generation, revision](QDBusPendingCallWatcher* call) {
+                    call->deleteLater();
+                    if (generation != d->generation)
+                        return;
+                    const QDBusPendingReply<QVariantMap> reply = *call;
+                    if (reply.isError()) {
+                        d->setAvailable(false);
+                        qCWarning(lcNetworkHost) << "manager GetAll failed:" << reply.error().message();
+                        return;
+                    }
+                    if (revision == d->propertyRevision)
+                        d->applyManagerProps(reply.value());
+                    else {
+                        refresh();
+                        return;
+                    }
+                    d->setAvailable(true);
+                });
     }
 
     // Device list. GetDevices returns a clean QList<QDBusObjectPath>,
@@ -327,19 +370,29 @@ void NetworkHost::refresh()
     {
         auto* watcher = new QDBusPendingCallWatcher(
             d->manager().asyncCall(QLatin1String(kManagerIface), QStringLiteral("GetDevices")), this);
-        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, generation](QDBusPendingCallWatcher* call) {
-            call->deleteLater();
-            if (generation != d->generation)
-                return;
-            const QDBusPendingReply<QList<QDBusObjectPath>> reply = *call;
-            if (reply.isError()) {
-                qCWarning(lcNetworkHost) << "GetDevices failed:" << reply.error().message();
-                return;
-            }
-            const auto paths = reply.value();
-            for (const QDBusObjectPath& p : paths)
-                d->addDevice(p.path());
-        });
+        connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                [this, generation, deviceRevision](QDBusPendingCallWatcher* call) {
+                    call->deleteLater();
+                    if (generation != d->generation)
+                        return;
+                    const QDBusPendingReply<QList<QDBusObjectPath>> reply = *call;
+                    if (reply.isError()) {
+                        qCWarning(lcNetworkHost) << "GetDevices failed:" << reply.error().message();
+                        return;
+                    }
+                    if (deviceRevision != d->deviceRevision) {
+                        refresh();
+                        return;
+                    }
+                    const auto paths = reply.value();
+                    const auto previous = d->devices;
+                    for (auto* device : previous) {
+                        if (!paths.contains(QDBusObjectPath(device->dbusPath())))
+                            d->removeDevice(device->dbusPath());
+                    }
+                    for (const QDBusObjectPath& p : paths)
+                        d->addDevice(p.path());
+                });
     }
 }
 
@@ -351,6 +404,25 @@ bool NetworkHost::available() const
 bool NetworkHost::wirelessHardwareEnabled() const
 {
     return d->wirelessHardwareEnabled;
+}
+bool NetworkHost::wwanSupported() const
+{
+    return d->wwanSupported;
+}
+bool NetworkHost::wwanEnabled() const
+{
+    return d->wwanEnabled;
+}
+bool NetworkHost::wwanHardwareEnabled() const
+{
+    return d->wwanHardwareEnabled;
+}
+void NetworkHost::setWwanEnabled(bool enabled)
+{
+    d->operation(
+        QLatin1String(kPath), QLatin1String(kPropsIface), QStringLiteral("Set"),
+        {QLatin1String(kManagerIface), QStringLiteral("WwanEnabled"), QVariant::fromValue(QDBusVariant(enabled))},
+        QStringLiteral("setWwanEnabled"));
 }
 QString NetworkHost::connectivityCheckUri() const
 {
@@ -562,19 +634,22 @@ void NetworkHost::_q_onPropertiesChanged(const QString& iface, const QVariantMap
 {
     if (iface != QLatin1String(kManagerIface))
         return;
+    ++d->propertyRevision;
     d->applyManagerProps(changed);
-    // The manager's scalar properties are always carried in `changed`;
-    // NetworkManager does not invalidate them, so no re-fetch is needed.
-    Q_UNUSED(invalidated);
+    // A full read refreshes any properties omitted from an invalidation.
+    if (!invalidated.isEmpty())
+        refresh();
 }
 
 void NetworkHost::_q_onDeviceAdded(const QDBusObjectPath& path)
 {
+    ++d->deviceRevision;
     d->addDevice(path.path());
 }
 
 void NetworkHost::_q_onDeviceRemoved(const QDBusObjectPath& path)
 {
+    ++d->deviceRevision;
     d->removeDevice(path.path());
 }
 

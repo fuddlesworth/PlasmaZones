@@ -25,6 +25,7 @@
 // costs to actually build is test_panel_open_cost's job.
 
 #include "ControlCenterController.h"
+#include <PhosphorControl/LocalizedContext.h>
 
 #include <PhosphorServiceBluetooth/QmlRegistration.h>
 #include <PhosphorServiceBrightness/QmlRegistration.h>
@@ -49,6 +50,7 @@
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
+#include <QQmlPropertyMap>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QSignalSpy>
@@ -77,6 +79,14 @@ private:
 
 namespace {
 constexpr auto kModuleRoot = ":/qt/qml/Phosphor";
+class PickerFixture : public QQmlPropertyMap
+{
+public:
+    PickerFixture()
+        : QQmlPropertyMap(this, nullptr)
+    {
+    }
+};
 
 QQuickItem* namedItem(QQuickItem* root, const QString& name)
 {
@@ -284,15 +294,60 @@ void TestShellQmlCompiles::quickSettingsForwardsAppearanceFromForeignContext()
 {
     PhosphorShellApp::ControlCenterController controller(nullptr);
     QQmlEngine engine;
+    auto* localized = new PhosphorControl::LocalizedContext(&engine);
+    localized->setTranslationContext(QStringLiteral("phosphorshell"));
+    engine.rootContext()->setContextObject(localized);
     engine.rootContext()->setContextProperty(QStringLiteral("ControlCenterRegistry"), &controller);
     engine.rootContext()->setContextProperty(QStringLiteral("NotificationRegistry"),
                                              QVariantMap{{QStringLiteral("doNotDisturb"), false},
                                                          {QStringLiteral("serverActive"), false},
                                                          {QStringLiteral("unreadCount"), 0}});
-    engine.rootContext()->setContextProperty(QStringLiteral("QuickSettings"),
-                                             QVariantMap{{QStringLiteral("nightLightEnabled"), false},
-                                                         {QStringLiteral("nightLightAvailable"), false},
-                                                         {QStringLiteral("powerProfile"), QStringLiteral("balanced")}});
+    engine.rootContext()->setContextProperty(
+        QStringLiteral("QuickSettings"),
+        QVariantMap{
+            {QStringLiteral("nightLightEnabled"), false},
+            {QStringLiteral("nightLightAvailable"), true},
+            {QStringLiteral("nightLightRunning"), false},
+            {QStringLiteral("nightLightInhibited"), false},
+            {QStringLiteral("nightLightPaused"), false},
+            {QStringLiteral("nightLightScheduleAvailable"), true},
+            {QStringLiteral("nightLightTemperature"), 4500},
+            {QStringLiteral("nightLightSchedule"), QStringLiteral("automatic")},
+            {QStringLiteral("nightLightMorning"), QStringLiteral("06:00")},
+            {QStringLiteral("nightLightEvening"), QStringLiteral("18:00")},
+            {QStringLiteral("nightLightPending"), false},
+            {QStringLiteral("nightLightError"), QString()},
+            {QStringLiteral("powerAvailable"), true},
+            {QStringLiteral("powerPending"), false},
+            {QStringLiteral("powerProfile"), QStringLiteral("balanced")},
+            {QStringLiteral("performanceDegraded"), QString()},
+            {QStringLiteral("powerProfiles"), QStringList{QStringLiteral("balanced"), QStringLiteral("power-saver")}},
+            {QStringLiteral("powerError"), QString()}});
+    engine.rootContext()->setContextProperty(QStringLiteral("ColorMode"),
+                                             QVariantMap{{QStringLiteral("mode"), QStringLiteral("dark")},
+                                                         {QStringLiteral("effectiveDark"), true},
+                                                         {QStringLiteral("systemAvailable"), true},
+                                                         {QStringLiteral("systemDark"), true},
+                                                         {QStringLiteral("previewActive"), false},
+                                                         {QStringLiteral("error"), QString()}});
+    engine.rootContext()->setContextProperty(QStringLiteral("Airplane"),
+                                             QVariantMap{{QStringLiteral("available"), true},
+                                                         {QStringLiteral("enabled"), false},
+                                                         {QStringLiteral("pending"), false},
+                                                         {QStringLiteral("error"), QString()},
+                                                         {QStringLiteral("restoreAvailable"), false},
+                                                         {QStringLiteral("wifiAvailable"), true},
+                                                         {QStringLiteral("wifiEnabled"), true},
+                                                         {QStringLiteral("wifiHardwareEnabled"), true},
+                                                         {QStringLiteral("wwanAvailable"), false},
+                                                         {QStringLiteral("wwanEnabled"), false},
+                                                         {QStringLiteral("wwanHardwareEnabled"), true},
+                                                         {QStringLiteral("bluetoothAvailable"), true},
+                                                         {QStringLiteral("bluetoothEnabled"), true}});
+    PickerFixture picker;
+    picker.insert(QStringLiteral("page"), QString());
+    picker.insert(QStringLiteral("selectedScreen"), QString());
+    engine.rootContext()->setContextProperty(QStringLiteral("PickerRegistry"), &picker);
     QSignalSpy requests(&controller, &PhosphorShellApp::ControlCenterController::panelRequested);
     QSignalSpy warnings(&engine, &QQmlEngine::warnings);
     const auto source = QFINDTESTDATA("../shell/QuickSettingsSurface.qml");
@@ -333,6 +388,44 @@ void TestShellQmlCompiles::quickSettingsForwardsAppearanceFromForeignContext()
     QCOMPARE(host->property("requestedPanel").toString(), QStringLiteral("appearance"));
     QVERIFY(QMetaObject::invokeMethod(appearance, "clicked"));
     QCOMPARE(requests.size(), 2);
+    // Exercise the shipped component factories in the same foreign context,
+    // including links that cross service pages and enter Appearance.
+    for (const auto& id : {QStringLiteral("microphone"), QStringLiteral("nightlight"), QStringLiteral("power"),
+                           QStringLiteral("airplane"), QStringLiteral("darkmode"), QStringLiteral("wallpaper"),
+                           QStringLiteral("battery")}) {
+        QVariant opened;
+        QVERIFY(QMetaObject::invokeMethod(content.get(), "openPanel", Q_RETURN_ARG(QVariant, opened),
+                                          Q_ARG(QVariant, id), Q_ARG(QVariant, QVariant())));
+        QVERIFY(opened.toBool());
+        QCOMPARE(content->property("detailPanelId").toString(), id);
+        auto* loader = namedItem(item, QStringLiteral("quickDetailLoader"));
+        QVERIFY(loader);
+        auto* panel = loader->property("item").value<QObject*>();
+        QVERIFY(panel);
+        if (id == QLatin1String("microphone"))
+            QCOMPARE(panel->property("tab").toString(), QStringLiteral("input"));
+        if (id == QLatin1String("darkmode") || id == QLatin1String("wallpaper")) {
+            const auto page = id == QLatin1String("darkmode") ? QStringLiteral("style") : QStringLiteral("wallpaper");
+            QVERIFY(QMetaObject::invokeMethod(panel, "appearanceRequested", Q_ARG(QString, page)));
+            QCOMPARE(picker.value(QStringLiteral("page")).toString(), page);
+            QCOMPARE(requests.last().first().toString(), QStringLiteral("appearance"));
+        }
+        if (id == QLatin1String("battery")) {
+            QVERIFY(QMetaObject::invokeMethod(panel, "panelRequested", Q_ARG(QString, QStringLiteral("power"))));
+            QCOMPARE(content->property("detailPanelId").toString(), QStringLiteral("power"));
+            panel = loader->property("item").value<QObject*>();
+            QVERIFY(panel);
+        }
+        QVERIFY(QMetaObject::invokeMethod(panel, "backRequested"));
+        QVERIFY(content->property("detailPanelId").toString().isEmpty());
+    }
+
+    std::unique_ptr<QObject> direct(popup->beginCreate(engine.rootContext()));
+    popup->setInitialProperties(direct.get(), {{QStringLiteral("initialPanel"), QStringLiteral("power")}});
+    popup->completeCreate();
+    QVERIFY2(direct, qPrintable(popup->errorString()));
+    QCOMPARE(direct->property("detailPanelId").toString(), QStringLiteral("power"));
+
     QStringList messages;
     for (const auto& warning : warnings)
         for (const auto& error : qvariant_cast<QList<QQmlError>>(warning.first()))
@@ -347,6 +440,9 @@ void TestShellQmlCompiles::detailPanelsForwardReturnFromForeignContext()
     // id from shell.qml, or Back silently dies with a ReferenceError.
     PhosphorShellApp::ControlCenterController controller(nullptr);
     QQmlEngine engine;
+    auto* localized = new PhosphorControl::LocalizedContext(&engine);
+    localized->setTranslationContext(QStringLiteral("phosphorshell"));
+    engine.rootContext()->setContextObject(localized);
     engine.rootContext()->setContextProperty(QStringLiteral("ControlCenterRegistry"), &controller);
     QSignalSpy requests(&controller, &PhosphorShellApp::ControlCenterController::controlCenterRequested);
     QSignalSpy warnings(&engine, &QQmlEngine::warnings);
@@ -364,6 +460,9 @@ void TestShellQmlCompiles::detailPanelsForwardReturnFromForeignContext()
             property Component audio: Component {
                 QtObject { signal backRequested; onBackRequested: ControlCenterRegistry.requestControlCenter("audio") }
             }
+            property Component battery: Component {
+                QtObject { signal backRequested; onBackRequested: ControlCenterRegistry.requestControlCenter("battery") }
+            }
             property Component stats: Component {
                 QtObject { signal networkSettingsRequested; onNetworkSettingsRequested: ControlCenterRegistry.requestControlCenter("systemmetrics") }
             }
@@ -379,8 +478,8 @@ void TestShellQmlCompiles::detailPanelsForwardReturnFromForeignContext()
     QVERIFY(shellFile.open(QIODevice::ReadOnly | QIODevice::Text));
     const auto shellSource = shellFile.readAll();
     QCOMPARE(shellSource.count("root.toggleControlCenter(root._lastPanelSource)"), 1);
-    for (const auto& panelId :
-         {QByteArray("network"), QByteArray("bluetooth"), QByteArray("audio"), QByteArray("systemmetrics")}) {
+    for (const auto& panelId : {QByteArray("network"), QByteArray("bluetooth"), QByteArray("audio"),
+                                QByteArray("battery"), QByteArray("systemmetrics")}) {
         QByteArray needle("ControlCenterRegistry.requestControlCenter(\"");
         needle += panelId;
         needle += QByteArray("\")");
@@ -402,6 +501,9 @@ void TestShellQmlCompiles::detailPanelsForwardReturnFromForeignContext()
 
     // Keep each object alive until its signal has been delivered, and reset
     // the spy so one broken route cannot make the next one look healthy.
+    auto battery = make("battery");
+    invoke(battery.get(), "backRequested", QStringLiteral("battery"));
+    requests.clear();
     auto network = make("network");
     invoke(network.get(), "backRequested", QStringLiteral("network"));
     requests.clear();

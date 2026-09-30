@@ -5,7 +5,7 @@
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const icon = name => `<svg class="icon" aria-hidden="true"><use href="#${name}"/></svg>`;
-const defaults = {...PhosphorStats.defaults,...PhosphorTray.defaults,palette:'spectrum',material:'glass',edge:'top',density:'comfortable',radius:18,gap:16,glow:true,media:true,motion:true,visualizer:'ribbon',lockLayout:'split',lockMedia:false,lockNotifications:true,notificationGrouping:'app',notificationPreviews:true};
+const defaults = {...PhosphorStats.defaults,...PhosphorTray.defaults,...PhosphorStatusIcons.defaults,palette:'spectrum',material:'glass',edge:'top',density:'comfortable',radius:18,gap:16,glow:true,media:true,motion:true,visualizer:'ribbon',lockLayout:'split',lockMedia:false,lockNotifications:true,notificationGrouping:'app',notificationPreviews:true};
 const presets = {
   phosphor:{...defaults},
   paper:{...defaults,palette:'wallpaper',material:'light',radius:24,gap:22,glow:false},
@@ -16,6 +16,7 @@ try {
   const saved = JSON.parse(localStorage.getItem('phosphor-design-settings') || 'null');
   if (saved) for (const key of Object.keys(defaults)) {
     if(key.startsWith('tray')) { settings[key]=PhosphorTray.preferences(saved)[key]; continue; }
+    if(key.startsWith('status')) { settings[key]=PhosphorStatusIcons.preferences(saved)[key]; continue; }
     const choices = {statsStyle:['traces','meters','numbers'],statsMemoryUnit:['percent','used'],statsInterval:[1,2,5],palette:['spectrum','wallpaper','ember'],material:['glass','solid','light'],edge:['top','bottom'],density:['comfortable','compact'],visualizer:['ribbon','bars','halo','off'],lockLayout:['split','centered'],notificationGrouping:['app','time']};
     if (choices[key]?.includes(saved[key])) settings[key] = saved[key];
     else if (typeof defaults[key] === 'boolean' && typeof saved[key] === 'boolean') settings[key] = saved[key];
@@ -60,7 +61,7 @@ const lockscreen = PhosphorLock.create({root:$('#lockscreen'),icon,getSettings:(
   onPhaseChanged:phase=>desktop.classList.toggle('lock-releasing',phase==='success')});
 const appearance = PhosphorAppearance.create({root:$('#appearance'),desktop,icon,getSettings:()=>settings,
   setSettings:(value,persist=false,redraw=true)=>{settings={...value};applySettings(persist,redraw);},presets,
-  onClose:()=>setView('desktop'),notify});
+  onClose:()=>setView('desktop'),onStatusIcons:()=>statusIcons.openSettings(),notify});
 const quickSettings = PhosphorQuickSettings.create({root:$('#controls'),review:$('#quick-preview-controls'),icon,shared:state,
   onRedraw:renderControls,onSummary:refreshBar,getSettings:()=>settings,
   patchSettings:patch=>{settings={...settings,...patch};$('#preset').value='custom';applySettings(true,false);appearance.render(false);},
@@ -70,6 +71,10 @@ const systemStats = PhosphorStats.create({root:$('#stats'),review:$('#stats-prev
 const systemTray = PhosphorTray.create({root:$('#tray'),review:$('#tray-preview-controls'),desktop,icon,getSettings:()=>settings,
   patchSettings:patch=>{settings={...settings,...patch};$('#preset').value='custom';applySettings(true,false);},
   onShow:()=>setView('tray'),onDismiss:()=>setView('desktop'),onBarChanged:refreshBar,notify});
+const statusIcons = PhosphorStatusIcons.create({root:$('#status-icons'),review:$('#status-preview-controls'),desktop,icon,getSettings:()=>settings,service:quickSettings,getView:()=>state.view,
+  patchSettings:patch=>{settings={...settings,...patch};$('#preset').value='custom';applySettings(true,false);},
+  onShow:()=>setView('status'),onDismiss:()=>setView('desktop'),onBarChanged:refreshBar,
+  onControls:id=>{if(id==='notifications')setView('notifications');else{setView('controls');quickSettings.openStatusDetail(id);}}});
 const authentication = PhosphorAuth.create({root:$('#authentication'),review:$('#auth-preview-controls'),desktop,icon,getSettings:()=>settings,
   onDismiss:reason=>{setView('desktop');notify(reason==='success'?'Authentication complete.':'Authentication cancelled.');}});
 const shortcuts = PhosphorShortcuts.create({root:$('#shortcuts'),review:$('#shortcuts-preview-controls'),icon,
@@ -139,7 +144,7 @@ function renderBar() {
     </div>
     <div class="bar-right">${systemTray.barMarkup()}${systemStats.barMarkup()}
     <button class="bar-notifications" data-view="notifications" data-unread="${notificationCenter.unread()>0}" aria-label="Notifications, ${notificationCenter.unread()} unread" aria-expanded="${state.view==='notifications'&&notificationCenter.inboxOpen()}" aria-controls="notifications">${icon('bell')}</button>
-    <button class="status-cluster" data-view="controls" aria-label="Open quick settings" aria-expanded="${state.view==='controls'}">${icon('wifi')}${icon('volume')}</button>
+    ${statusIcons.barMarkup()}
     <button class="clock" data-view="datetime" aria-label="Open date and time" aria-expanded="${state.view==='datetime'}" aria-controls="datetime"><span class="clock-date">Sat 12</span><span class="clock-time">10:24</span></button>
     <button class="settings-trigger" data-view="appearance" aria-label="Open Appearance">◈</button>
     <button class="bar-power" data-view="power" aria-label="Open session menu" aria-expanded="${state.view==='power'}">${icon('power')}</button></div>`;
@@ -150,6 +155,7 @@ function refreshBar() {
   renderBar();
   appearance.render(state.view==='appearance');
   systemTray.render(state.view==='tray');
+  statusIcons.position();
 }
 
 function windowContent(w) {
@@ -307,6 +313,13 @@ function renderNotes() {
     $('#ux-description').textContent='Type immediately and press Enter to authenticate. Incorrect responses clear the field and keep focus ready for retry. Cancel and Escape remain available while checking. Try account selection, verification codes, long requests, and an unavailable service above.';
     return;
   }
+  if(state.view==='status') {
+    $('#study-kicker').textContent='K / STATUS ICONS';
+    $('#study-title').textContent='Your essentials, within reach.';
+    $('#study-description').textContent='Choose the indicators in Quick settings, decide when they appear, and arrange their order. Extra icons share a compact more menu. A small Quick settings button remains when every indicator is hidden.';
+    $('#ux-description').textContent='Left-click any status icon to open Quick settings. Right-click for its own controls, or use Shift+F10. Try the Wi-Fi and Sound menus above. Visibility and order are saved as you change them. All device activity is simulated.';
+    return;
+  }
   if(state.view==='tray') {
     $('#study-kicker').textContent='H / SYSTEM TRAY';
     $('#study-title').textContent='A little space for what stays running.';
@@ -439,7 +452,7 @@ function render() {
   desktop.classList.toggle('stage',state.study==='stage');
   desktop.classList.toggle('overview-open',state.view==='overview');
   desktop.classList.toggle('locked',state.view==='lockscreen');
-  for(const element of desktop.querySelectorAll(':scope > :is(#bar,#windows,#overview,#controls,#stats,#tray,#launcher,#datetime,#notifications,#notification-arrival,#osd,#toast)')) element.inert=['lockscreen','power','appearance','authentication','shortcuts'].includes(state.view);
+  for(const element of desktop.querySelectorAll(':scope > :is(#bar,#windows,#overview,#controls,#status-icons,#stats,#tray,#launcher,#datetime,#notifications,#notification-arrival,#osd,#toast)')) element.inert=['lockscreen','power','appearance','authentication','shortcuts'].includes(state.view);
   $('#stage-shade').classList.toggle('hidden',!(state.study==='stage'&&state.view==='overview'));
   renderBar();renderWindows();renderOverview();renderControls();renderLauncher();renderDateTime();renderPower();renderNotes();
   notificationCenter.render(state.view==='notifications');
@@ -448,6 +461,7 @@ function render() {
   appearance.render(state.view==='appearance');
   systemStats.render(state.view==='stats');
   systemTray.render(state.view==='tray');
+  statusIcons.render(state.view==='status');
   authentication.render(state.view==='authentication');
   shortcuts.render(state.view==='shortcuts');
   // Canvas gradients cache their colors; resample after the wallpaper palette.
@@ -492,6 +506,7 @@ function setView(view) {
   if (view==='appearance') appearance.focus();
   if (view==='stats') systemStats.focus();
   if (view==='tray') systemTray.focus();
+  if (view==='status') $('#status-icons [data-si-pref],#status-icons [role^="menuitem"]')?.focus({preventScroll:true});
   if (view==='authentication') authentication.focus();
   if (view==='shortcuts') shortcuts.focus();
   if (view==='controls') $('#controls [data-toggle="wifi"]')?.focus({preventScroll:true});
@@ -499,10 +514,10 @@ function setView(view) {
     if (previousView==='notifications') $('.bar-notifications').focus();
     else if (previousView==='datetime') $('.clock').focus();
     else if (previousView==='power') $('.bar-power').focus();
-    else if (previousView==='appearance') ($('.settings-trigger')||$('.status-cluster'))?.focus();
+    else if (previousView==='appearance') ($('.settings-trigger')||$('.status-cluster button'))?.focus();
     else if (previousView==='tray') systemTray.restoreFocus();
     else if (previousView==='stats') ($('.bar-stats')||$('.view-switch [data-view="stats"]'))?.focus();
-    else if (previousView==='controls') $('.status-cluster')?.focus();
+    else if (previousView==='controls'||previousView==='status') statusIcons.restoreFocus();
     else if (previousView==='shortcuts') $('.view-switch [data-view="shortcuts"]')?.focus();
     else if (returnFocus?.isConnected) returnFocus.focus();
     else $('.map-trigger')?.focus();
@@ -584,7 +599,8 @@ document.addEventListener('click',e=>{
     if(b.hasAttribute('data-today'))selectDate(new Date(previewToday));
     if(b.dataset.date)selectDate(new Date(Number(b.dataset.date)));
     if(b.dataset.study){state.study=b.dataset.study;render();}
-    if(b.dataset.view)setView(b.closest('#bar')&&state.view===b.dataset.view&&(b.dataset.view!=='notifications'||notificationCenter.inboxOpen())?'desktop':b.dataset.view);
+    if(b.dataset.view==='status')statusIcons.openSettings();
+    else if(b.dataset.view)setView(b.closest('#bar')&&state.view===b.dataset.view&&(b.dataset.view!=='notifications'||notificationCenter.inboxOpen())?'desktop':b.dataset.view);
     if(b.hasAttribute('data-dismiss'))setView('desktop');
     if(b.hasAttribute('data-customize'))customize();
     if(b.dataset.workspace!==undefined){state.workspace=Number(b.dataset.workspace);state.mode=state.modes[state.workspace];render();}
@@ -605,7 +621,7 @@ document.addEventListener('click',e=>{
   const win=e.target.closest('[data-select]');
   if(win){focusWindow(win.dataset.select,state.view!=='overview');return;}
   if(e.target.matches('.session-shade')){setView('desktop');return;}
-  if(e.target.closest('#desktop')&&!e.target.closest('#overview,#controls,#stats,#tray,#launcher,#datetime,#notifications,#notification-arrival,#session,#bar'))setView('desktop');
+  if(e.target.closest('#desktop')&&!e.target.closest('#overview,#controls,#status-icons,#stats,#tray,#launcher,#datetime,#notifications,#notification-arrival,#session,#bar'))setView('desktop');
 });
 
 document.addEventListener('dblclick',e=>{
@@ -652,6 +668,7 @@ document.addEventListener('input',e=>{
 });
 
 document.addEventListener('keydown',e=>{
+  if(statusIcons.handleKey(e))return;
   if(appearance.handleKey(e))return;
   if(lockscreen.handleKey(e))return;
   if(authentication.handleKey(e))return;
@@ -707,7 +724,7 @@ new ResizeObserver(([entry])=>{
 }).observe($('.frame'));
 const [study,view,detail]=location.hash.slice(1).split('/');
 if(['navigator','stage'].includes(study))state.study=study;
-if(['desktop','overview','controls','launcher','datetime','notifications','lockscreen','power','appearance','stats','tray','authentication','shortcuts'].includes(view))state.view=view;
+if(['desktop','overview','controls','status','launcher','datetime','notifications','lockscreen','power','appearance','stats','tray','authentication','shortcuts'].includes(view))state.view=view;
 $('#preset').value=Object.entries(presets).find(([,preset])=>JSON.stringify(preset)===JSON.stringify(settings))?.[0] || 'custom';
 applySettings();
 if(state.view==='controls'&&['wifi','bluetooth','audio','nightlight','darkmode','airplane','power','battery','wallpaper'].includes(detail))quickSettings.open(detail);
@@ -719,3 +736,4 @@ if(state.view==='stats'&&['cpu','gpu','memory','network','storage','customize'].
 
 if(state.view==='tray'&&detail==='settings')systemTray.openSettings();
 if(state.view==='tray'&&detail==='menu')systemTray.openMenu('steam','bar');
+if(state.view==='status'&&detail&&detail!=='settings')statusIcons.openMenu(detail);

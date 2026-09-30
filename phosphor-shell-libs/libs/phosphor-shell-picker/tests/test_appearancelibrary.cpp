@@ -15,6 +15,99 @@ class TestAppearanceLibrary : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void statusPreferencesTravelOnlyWithTheBarPreset()
+    {
+        QTemporaryDir dir;
+        AppearanceStore store(dir.filePath(QStringLiteral("appearance.json")));
+        AppearanceLibrary library(&store, dir.filePath(QStringLiteral("library")));
+        const QStringList keys{QStringLiteral("statusOrder"), QStringLiteral("statusVisibility"),
+                               QStringLiteral("statusLimit"), QStringLiteral("statusBatteryPercent")};
+        auto order = store.values().value(QStringLiteral("statusOrder")).toList();
+        order.append(order.takeFirst());
+        auto visibility = store.values().value(QStringLiteral("statusVisibility")).toMap();
+        visibility[QStringLiteral("microphone")] = QStringLiteral("always");
+        visibility[QStringLiteral("audio")] = QStringLiteral("auto");
+        const QVariantMap preferences{{QStringLiteral("statusOrder"), order},
+                                      {QStringLiteral("statusVisibility"), visibility},
+                                      {QStringLiteral("statusLimit"), 2},
+                                      {QStringLiteral("statusBatteryPercent"), false}};
+        for (auto it = preferences.cbegin(); it != preferences.cend(); ++it)
+            QVERIFY(store.setValue(it.key(), it.value()));
+        for (const auto& preset : {QStringLiteral("phosphor"), QStringLiteral("paper"), QStringLiteral("ember")}) {
+            QVERIFY(library.previewPreset(preset, false, true));
+            for (const auto& key : keys)
+                QCOMPARE(store.values().value(key), preferences.value(key));
+        }
+        for (const bool withBar : {false, true}) {
+            const auto name = withBar ? QStringLiteral("My status icons") : QStringLiteral("Only colors");
+            QVERIFY(library.savePreset(name, false, withBar));
+            const auto id = library.presets().last().toMap().value(QStringLiteral("id")).toString();
+            const auto fileUrl = QUrl::fromLocalFile(dir.filePath(name + QStringLiteral(".json")));
+            QVERIFY(library.exportPreset(id, fileUrl));
+            QFile file(fileUrl.toLocalFile());
+            QVERIFY(file.open(QIODevice::ReadOnly));
+            const auto exported =
+                QJsonDocument::fromJson(file.readAll()).object().value(QStringLiteral("settings")).toObject();
+            for (const auto& key : keys) {
+                QCOMPARE(exported.contains(key), withBar);
+                QVERIFY(store.setValue(key, AppearanceStore::defaults().value(key)));
+            }
+            const auto before = store.values();
+            QVERIFY(library.inspectImport(fileUrl));
+            QCOMPARE(store.values(), before);
+            QVERIFY(store.beginPreview());
+            QVERIFY(library.previewPreset(QStringLiteral("imported"), false, false));
+            for (const auto& key : keys)
+                QCOMPARE(store.values().value(key), before.value(key));
+            QVERIFY(library.previewPreset(QStringLiteral("imported"), false, true));
+            for (const auto& key : keys)
+                QCOMPARE(store.values().value(key), withBar ? preferences.value(key) : before.value(key));
+            store.endPreview();
+            QCOMPARE(store.values(), before);
+            for (auto it = preferences.cbegin(); it != preferences.cend(); ++it)
+                QVERIFY(store.setValue(it.key(), it.value()));
+        }
+        AppearanceLibrary reloaded(&store, dir.filePath(QStringLiteral("library")));
+        const auto saved = reloaded.presets().last().toMap().value(QStringLiteral("settings")).toMap();
+        for (const auto& key : keys)
+            QCOMPARE(saved.value(key), preferences.value(key));
+    }
+    void malformedStatusPresetCannotPartiallyChangeAppearance()
+    {
+        QTemporaryDir dir;
+        AppearanceStore store(dir.filePath(QStringLiteral("appearance.json")));
+        AppearanceLibrary library(&store, dir.filePath(QStringLiteral("library")));
+        QVERIFY(store.setValue(QStringLiteral("statusLimit"), 6));
+        const auto before = store.values();
+        QFile file(dir.filePath(QStringLiteral("broken-status.json")));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(
+            "{\"version\":1,\"settings\":{\"material\":\"light\",\"statusLimit\":3,"
+            "\"statusVisibility\":{\"battery\":\"unknown\"}}}");
+        file.close();
+        QVERIFY(!library.inspectImport(QUrl::fromLocalFile(file.fileName())));
+        QVERIFY(!library.previewPreset(QStringLiteral("imported"), false, true));
+        QCOMPARE(store.values(), before);
+        QCOMPARE(AppearanceStore(dir.filePath(QStringLiteral("appearance.json"))).values(), before);
+    }
+    void colorModeTravelsWithStyleAndBuiltinsChooseTheirMaterial()
+    {
+        QTemporaryDir dir;
+        AppearanceStore store(dir.filePath(QStringLiteral("appearance.json")));
+        AppearanceLibrary library(&store, dir.filePath(QStringLiteral("library")));
+        QVERIFY(store.setValue(QStringLiteral("material"), QStringLiteral("solid")));
+        QVERIFY(store.setColorMode(QStringLiteral("system"), false));
+        QVERIFY(library.savePreset(QStringLiteral("Follow my desktop"), false, false));
+        const auto id = library.presets().last().toMap().value(QStringLiteral("id")).toString();
+        QVERIFY(library.previewPreset(QStringLiteral("phosphor"), false, false));
+        QVERIFY(!store.values().value(QStringLiteral("followSystemColorScheme")).toBool());
+        QCOMPARE(store.values().value(QStringLiteral("material")).toString(), QStringLiteral("glass"));
+        QVERIFY(library.previewPreset(id, false, false));
+        QVERIFY(store.values().value(QStringLiteral("followSystemColorScheme")).toBool());
+        QCOMPARE(store.values().value(QStringLiteral("darkMaterial")).toString(), QStringLiteral("solid"));
+        QVERIFY(store.updateSystemColorScheme(true));
+        QCOMPARE(store.values().value(QStringLiteral("material")).toString(), QStringLiteral("solid"));
+    }
     void trayPreferencesTravelOnlyWithTheBarPreset()
     {
         QTemporaryDir dir;

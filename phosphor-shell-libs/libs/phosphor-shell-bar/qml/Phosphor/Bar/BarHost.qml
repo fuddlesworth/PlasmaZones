@@ -102,6 +102,18 @@ PanelWindow {
         when: target !== null
     }
 
+    Binding {
+        target: {
+            void leftSlot.mountedCount;
+            void centerSlot.mountedCount;
+            void rightSlot.mountedCount;
+            return rightSlot.cellFor("controlcenter")?.widget ?? centerSlot.cellFor("controlcenter")?.widget ?? leftSlot.cellFor("controlcenter")?.widget ?? null;
+        }
+        property: "quickSettingsOpen"
+        value: BarRegistry.openPanelId === "controlcenter" && panel._panelOpenHere
+        when: target !== null
+    }
+
     Connections {
         target: panel._mapWidget
 

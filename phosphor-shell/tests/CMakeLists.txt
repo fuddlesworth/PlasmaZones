@@ -79,9 +79,38 @@ add_executable(test_quick_settings_controller
     ${CMAKE_SOURCE_DIR}/phosphor-shell/src/QuickSettingsController.h
     ${CMAKE_SOURCE_DIR}/phosphor-shell/src/quicksettingscontroller.cpp
 )
-target_link_libraries(test_quick_settings_controller PRIVATE Qt6::Test Qt6::Core Qt6::DBus)
+target_link_libraries(test_quick_settings_controller PRIVATE Qt6::Test Qt6::Core Qt6::DBus KF6::ConfigCore)
 target_include_directories(test_quick_settings_controller PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-shell/src)
 add_test(NAME test_quick_settings_controller COMMAND test_quick_settings_controller)
+
+add_executable(test_airplane_controller
+    test_airplane_controller.cpp
+    ../src/AirplaneController.h
+    ../src/airplanecontroller.cpp
+)
+target_link_libraries(test_airplane_controller PRIVATE Qt6::Test Qt6::DBus
+    PhosphorServiceNetwork::PhosphorServiceNetwork
+    PhosphorServiceBluetooth::PhosphorServiceBluetooth)
+add_test(NAME test_airplane_controller COMMAND test_airplane_controller)
+
+add_executable(test_color_mode_controller
+    test_color_mode_controller.cpp
+    ../src/ColorModeController.h
+    ../src/colormodecontroller.cpp
+)
+target_link_libraries(test_color_mode_controller PRIVATE Qt6::Test Qt6::DBus PhosphorTheme::PhosphorTheme)
+add_test(NAME test_color_mode_controller COMMAND test_color_mode_controller)
+
+add_executable(test_status_icons_controller
+    test_status_icons_controller.cpp
+    ../src/StatusIconsController.h
+    ../src/StatusIconsSource.h
+    ../src/statusiconscontroller.cpp
+)
+target_include_directories(test_status_icons_controller PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-shell/src)
+target_link_libraries(test_status_icons_controller PRIVATE Qt6::Test PhosphorTheme::PhosphorTheme)
+add_test(NAME test_status_icons_controller COMMAND test_status_icons_controller)
+
 
 # The notification centre. The server under it runs on a private
 # peer-to-peer bus, so this needs no session daemon.
@@ -226,6 +255,7 @@ if(TARGET PhosphorShellBar::PhosphorShellBarQml AND TARGET PhosphorServiceNetwor
     add_executable(test_panel_open_cost test_panel_open_cost.cpp)
     target_link_libraries(test_panel_open_cost
         PRIVATE
+            PhosphorControl::PhosphorControl
             Qt6::Test
             Qt6::Core
             Qt6::Gui
@@ -312,6 +342,7 @@ if(TARGET PhosphorShellBar::PhosphorShellBarQml AND TARGET PhosphorServiceNetwor
     target_include_directories(test_shell_qml_compiles PRIVATE ${CMAKE_SOURCE_DIR}/phosphor-shell/src)
     target_link_libraries(test_shell_qml_compiles
         PRIVATE
+            PhosphorControl::PhosphorControl
             Qt6::Test
             Qt6::Core
             Qt6::Gui

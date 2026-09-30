@@ -89,7 +89,12 @@ class NetworkDevice::Private
 public:
     NetworkDevice* owner = nullptr;
     QString path;
-    QDBusConnection bus = QDBusConnection::systemBus();
+    QDBusConnection bus;
+
+    explicit Private(QDBusConnection connection)
+        : bus(std::move(connection))
+    {
+    }
 
     QString interfaceName;
     DeviceType deviceType = Unknown;
@@ -278,8 +283,13 @@ public:
 };
 
 NetworkDevice::NetworkDevice(const QString& dbusPath, QObject* parent)
+    : NetworkDevice(QDBusConnection::systemBus(), dbusPath, parent)
+{
+}
+
+NetworkDevice::NetworkDevice(QDBusConnection connection, const QString& dbusPath, QObject* parent)
     : QObject(parent)
-    , d(std::make_unique<Private>())
+    , d(std::make_unique<Private>(std::move(connection)))
 {
     d->owner = this;
     d->path = dbusPath;

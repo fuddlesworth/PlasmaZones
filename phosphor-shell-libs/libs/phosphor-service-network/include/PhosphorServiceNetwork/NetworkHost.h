@@ -14,6 +14,8 @@
 
 #include <memory>
 
+class QDBusConnection;
+
 namespace PhosphorServiceNetwork {
 
 class AccessPoint;
@@ -35,6 +37,9 @@ class PHOSPHORSERVICENETWORK_EXPORT NetworkHost : public QObject
     Q_PROPERTY(int deviceCount READ deviceCount NOTIFY deviceCountChanged)
     Q_PROPERTY(bool available READ available NOTIFY availableChanged)
     Q_PROPERTY(bool wirelessHardwareEnabled READ wirelessHardwareEnabled NOTIFY wirelessHardwareEnabledChanged)
+    Q_PROPERTY(bool wwanSupported READ wwanSupported NOTIFY wwanChanged)
+    Q_PROPERTY(bool wwanEnabled READ wwanEnabled WRITE setWwanEnabled NOTIFY wwanChanged)
+    Q_PROPERTY(bool wwanHardwareEnabled READ wwanHardwareEnabled NOTIFY wwanChanged)
     Q_PROPERTY(QString connectivityCheckUri READ connectivityCheckUri NOTIFY connectivityCheckUriChanged)
 
 public:
@@ -50,11 +55,16 @@ public:
     Q_ENUM(Connectivity)
 
     explicit NetworkHost(QObject* parent = nullptr);
+    explicit NetworkHost(QDBusConnection connection, QObject* parent = nullptr);
     ~NetworkHost() override;
 
     [[nodiscard]] bool networkingEnabled() const;
     [[nodiscard]] bool available() const;
     [[nodiscard]] bool wirelessHardwareEnabled() const;
+    [[nodiscard]] bool wwanSupported() const;
+    [[nodiscard]] bool wwanEnabled() const;
+    [[nodiscard]] bool wwanHardwareEnabled() const;
+    void setWwanEnabled(bool enabled);
     [[nodiscard]] QString connectivityCheckUri() const;
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void disconnectDevice(PhosphorServiceNetwork::NetworkDevice* device);
@@ -106,6 +116,7 @@ Q_SIGNALS:
     void deviceCountChanged();
     void availableChanged();
     void wirelessHardwareEnabledChanged();
+    void wwanChanged();
     void connectivityCheckUriChanged();
     // Completion of the D-Bus request, not successful association. Device
     // state remains the authority for connection success and authentication.

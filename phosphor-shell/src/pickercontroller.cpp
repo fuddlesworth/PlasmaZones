@@ -87,19 +87,27 @@ void PickerController::hide()
         return;
     }
     if (appearance()->dirty()) {
-        m_closePending = true;
-        Q_EMIT closePendingChanged();
+        if (!m_closePending) {
+            m_closePending = true;
+            Q_EMIT closePendingChanged();
+        }
         return;
     }
     discard();
 }
 void PickerController::discard()
 {
+    const QString requestedPanel = m_requestedPanel;
+    const QString screenName = m_openScreen;
     appearance()->endPreview();
-    m_desktopPreview = false;
-    Q_EMIT desktopPreviewChanged();
+    if (m_desktopPreview) {
+        m_desktopPreview = false;
+        Q_EMIT desktopPreviewChanged();
+    }
     keepEditing();
     setOpenScreen(QString());
+    if (!requestedPanel.isEmpty())
+        Q_EMIT panelRequested(requestedPanel, screenName);
 }
 bool PickerController::apply(bool close)
 {
@@ -111,10 +119,22 @@ bool PickerController::apply(bool close)
 }
 void PickerController::keepEditing()
 {
+    m_requestedPanel.clear();
     if (m_closePending) {
         m_closePending = false;
         Q_EMIT closePendingChanged();
     }
+}
+void PickerController::requestPanel(const QString& panelId)
+{
+    if (panelId != QLatin1String("status-icons") || m_openScreen.isEmpty())
+        return;
+    m_requestedPanel = panelId;
+    if (m_desktopPreview) {
+        m_desktopPreview = false;
+        Q_EMIT desktopPreviewChanged();
+    }
+    hide();
 }
 QString PickerController::resolveScreen(const QString& screenName) const
 {

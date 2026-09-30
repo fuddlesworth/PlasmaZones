@@ -8,6 +8,8 @@
 // SNI registration is also imperative. Only tst_tray.qml starts the Python
 // fixture, on the test runner's isolated session bus.
 
+#include <PhosphorControl/LocalizedContext.h>
+#include <PhosphorServiceUPower/QmlRegistration.h>
 #include <PhosphorServiceIconTheme/QmlRegistration.h>
 #include <PhosphorServiceSni/QmlRegistration.h>
 #include <PhosphorShell/QmlRegistration.h>
@@ -113,6 +115,10 @@ class Setup : public QObject
 public Q_SLOTS:
     void qmlEngineAvailable(QQmlEngine* engine)
     {
+        auto* localized = new PhosphorControl::LocalizedContext(engine);
+        localized->setTranslationContext(QStringLiteral("phosphorshell"));
+        engine->rootContext()->setContextObject(localized);
+        PhosphorServiceUPower::registerQmlTypes();
         PhosphorShell::registerQmlTypes();
         PhosphorServiceSni::registerQmlTypes();
         PhosphorServiceIconTheme::registerQmlTypes();

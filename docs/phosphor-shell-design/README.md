@@ -13,8 +13,9 @@ details, notifications, lock, Appearance, shortcut reference, system stats,
 the system tray and authentication. The implementation record tracks those
 ports. The gap analysis separates optional interactions inherited from v2,
 service additions and hardware verification from the completed visual work.
-Battery has a basic native panel. The expanded control-center studies below
-are browser prototypes awaiting native integration.
+The six additional control-center studies below also have native panels and
+service wiring in the current working tree. Automated regressions and isolated
+native visual checks pass; the implementation record lists the validation.
 
 The [shortcut-reference study](mockups-v3/index.html#navigator/shortcuts) is
 implemented by the native shell. Tiling, Scrolling and Snapping each have a visual
@@ -72,9 +73,21 @@ charging, low battery, missing estimates and desktops without an internal batter
 Airplane mode remembers radio settings and permits a Bluetooth exception.
 Dark mode uses the existing shell material settings; wallpaper access opens the
 shared Appearance workspace. Battery links to power profiles and retains charge,
-health, power draw and connected-device readouts. These controls simulate services
-and do not change host settings. Their browser interactions have automated DOM
-checks; the new layouts still need visual review in a browser.
+health, power draw and connected-device readouts. The browser controls simulate
+services and do not change host settings. Their interactions have automated DOM
+checks; the user approved these studies for native implementation.
+
+The native panels use KWin Night Light with the shared KNightTime day/night
+schedule, the settings portal's color preference, NetworkManager and BlueZ
+radios, power-profiles-daemon, and UPower. Night light exposes system, custom-hour
+and manual schedules without claiming a geolocation-availability signal.
+Airplane mode covers Wi-Fi, WWAN and Bluetooth, preserves wired networking and
+can restore the remembered radio settings. Performance remains selectable when
+the power service reports degraded performance. Dark mode and wallpaper access
+share the existing Appearance state and preview transaction. Battery reports
+charging, low charge, missing estimates, health, energy and connected devices,
+with a guarded Power saver action and a link to power profiles. See the
+implementation record for the current validation status.
 
 Captures: [Wi-Fi](mockups-v3/quick-wifi.png),
 [password entry](mockups-v3/quick-wifi-password.png),

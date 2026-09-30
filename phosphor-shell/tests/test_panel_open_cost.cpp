@@ -36,6 +36,7 @@
 // hosts go inert and the case still passes, so this never fails for the
 // wrong reason.
 
+#include <PhosphorControl/LocalizedContext.h>
 #include <PhosphorServiceBluetooth/QmlRegistration.h>
 #include <PhosphorServiceMpris/QmlRegistration.h>
 #include <PhosphorServiceNetwork/QmlRegistration.h>
@@ -46,6 +47,7 @@
 
 #include <QElapsedTimer>
 #include <QQmlComponent>
+#include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QRectF>
@@ -94,6 +96,9 @@ void TestPanelOpenCost::initTestCase()
     PhosphorShell::registerQmlTypes();
 
     m_engine = std::make_unique<QQmlEngine>();
+    auto* localizedContext = new PhosphorControl::LocalizedContext(m_engine.get());
+    localizedContext->setTranslationContext(QStringLiteral("phosphorshell"));
+    m_engine->rootContext()->setContextObject(localizedContext);
     // The static QML modules are laid out under the build tree's qml/ root.
     m_engine->addImportPath(QStringLiteral(PZ_QML_IMPORT_DIR));
 

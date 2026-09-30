@@ -39,7 +39,7 @@ window.PhosphorQuickSettings = {create({root,review,icon,shared,onRedraw,onSumma
   let active=false,section=null,scenario='ready',notice='',timer=null,serial=0;
   let wifiName='Home network',wifiStep='',wifiTarget='',password='',passwordVisible=false,autoConnect=true,wifiInfo=false,scanning=false;
   let btTarget='',btStep='',pin='',btEmpty=false;
-  let audioTab='output',inputName='USB microphone',gain=72,inputMuted=false,testing=false;
+  let audioTab='output',inputName='USB microphone',gain=72,inputMuted=false,testing=false,inputInUse=false;
   shared.volumeMuted=false;
   const appLevels={Music:84,Firefox:45},appRoutes={Music:'Default output',Firefox:'Default output'},appMuted={Music:false,Firefox:false};
   const button = (action,label,extra='',classes='qs-button') => `<button type="button" class="${classes}" data-qs="${action}" ${extra}>${label}</button>`;
@@ -408,5 +408,45 @@ window.PhosphorQuickSettings = {create({root,review,icon,shared,onRedraw,onSumma
     const next=e.key==='Home'?0:e.key==='End'?items.length-1:(i+(['ArrowLeft','ArrowUp'].includes(e.key)?items.length-1:1))%items.length;
     action(items[next].dataset.qs,items[next].dataset.name);return true;
   }
-  return {render,open,deactivate,toggleRadio,bluetoothSummary,handleKey,overview,batterySummary,powerSummary};
+  function statusSnapshot() {
+    const battery=batteryState(),connected=devices.some(d=>d.connected),audioAvailable=!(section==='audio'&&scenario==='unavailable');
+    return {
+      wifi:{summary:shared.wifi?(wifiName||'Not connected'):'Wi-Fi off',active:shared.wifi&&!!wifiName,off:!shared.wifi,available:!(section==='wifi'&&scenario==='unavailable')},
+      audio:{summary:shared.volumeMuted?'Muted':`${shared.device} · ${shared.volume}%`,active:shared.volumeMuted,off:shared.volumeMuted,available:audioAvailable,volume:shared.volume,device:shared.device,outputs:outputs.map(o=>o[0])},
+      bluetooth:{summary:shared.bluetooth?bluetoothSummary():'Bluetooth off',active:shared.bluetooth&&connected,off:!shared.bluetooth,available:!(section==='bluetooth'&&scenario==='unavailable')},
+      battery:{summary:battery?`${battery[0]}% · ${battery[1]}`:fixtures.battery==='desktop'?'No internal battery':'Battery unavailable',active:!!battery,off:!battery,available:fixtures.battery!=='unavailable',percent:battery?.[0]??null,alert:battery&&battery[0]<=15},
+      microphone:{summary:inputMuted?'Microphone muted':inputInUse?'In use by a call':'Microphone idle',active:inputInUse,off:inputMuted,available:audioAvailable,alert:inputInUse},
+      nightlight:{summary:shared.night?(paused?'Paused':'On until sunrise'):'Off',active:shared.night&&!paused,off:!shared.night||paused,available:fixtures.nightlight!=='unavailable'},
+      focus:{summary:shared.dnd?'Notifications are quiet':'Notifications allowed',active:shared.dnd,off:!shared.dnd,available:true},
+      airplane:{summary:airplane?'Airplane mode on':'Airplane mode off',active:airplane,off:!airplane,available:fixtures.airplane!=='unavailable'},
+      power:{summary:powerSummary(),active:profile!=='balanced',off:false,available:fixtures.power!=='unavailable',profile}
+    };
+  }
+  function statusAction(name,value) {
+    if(name==='toggle') {
+      if(['wifi','bluetooth'].includes(value)){toggleRadio(value);return;}
+      if(value==='audio')shared.volumeMuted=!shared.volumeMuted;
+      if(value==='microphone')inputMuted=!inputMuted;
+      if(value==='nightlight'){shared.night=!shared.night||paused;paused=false;}
+      if(value==='focus')shared.dnd=!shared.dnd;
+      if(value==='airplane')setAirplane(!airplane);
+    }
+    if(name==='volume')shared.volume=Math.min(100,Math.max(0,Number(value)||0));
+    if(name==='output'&&outputs.some(output=>output[0]===value)){action('output',value);return;}
+    if(name==='profile'&&profiles.some(p=>p[0]===value))profile=value;
+    redraw();
+  }
+  function statusScenario(name) {
+    setAirplane(false);setRadios(true,true);shared.dnd=false;shared.night=false;paused=false;inputInUse=false;inputMuted=false;
+    fixtures.battery='ready';profile='balanced';
+    if(name==='meeting'){inputInUse=true;shared.dnd=true;}
+    if(name==='travel'){fixtures.battery='low';setAirplane(true);shared.night=true;profile='saver';}
+    if(name==='desktop')fixtures.battery='desktop';
+    redraw();
+  }
+  function openStatusDetail(name) {
+    if(name==='microphone'){audioTab='input';open('audio');}
+    else open(name);
+  }
+  return {render,open,deactivate,toggleRadio,bluetoothSummary,handleKey,overview,batterySummary,powerSummary,statusSnapshot,statusAction,statusScenario,openStatusDetail};
 }};

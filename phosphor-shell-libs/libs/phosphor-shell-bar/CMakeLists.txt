@@ -120,6 +120,12 @@ set(_phosphor_bar_qml_files
     qml/Phosphor/Bar/Tray/TrayPanel.qml
     qml/Phosphor/Bar/Widgets/Media.qml
     qml/Phosphor/Bar/Widgets/ControlCenterButton.qml
+    qml/Phosphor/Bar/Status/StatusIcon.qml
+    qml/Phosphor/Bar/Status/StatusIconButton.qml
+    qml/Phosphor/Bar/Status/StatusMenuItem.qml
+    qml/Phosphor/Bar/Status/StatusIconMenu.qml
+    qml/Phosphor/Bar/Status/StatusIconsSettings.qml
+    qml/Phosphor/Bar/Status/StatusIconsPanel.qml
     qml/Phosphor/Bar/Widgets/NotificationButton.qml
     qml/Phosphor/Bar/Widgets/PowerButton.qml
     qml/Phosphor/Bar/Widgets/Spacer.qml
@@ -148,6 +154,11 @@ set(_phosphor_bar_qml_files
     qml/Phosphor/Bar/Panels/BluetoothPanel.qml
     qml/Phosphor/Bar/Panels/AudioPanel.qml
     qml/Phosphor/Bar/Panels/BatteryPanel.qml
+    qml/Phosphor/Bar/Panels/NightLightPanel.qml
+    qml/Phosphor/Bar/Panels/PowerProfilesPanel.qml
+    qml/Phosphor/Bar/Panels/AirplanePanel.qml
+    qml/Phosphor/Bar/Panels/DarkModePanel.qml
+    qml/Phosphor/Bar/Panels/WallpaperPanel.qml
     qml/Phosphor/Bar/Panels/MediaPanel.qml
     qml/Phosphor/Bar/Panels/NotificationPanel.qml
     qml/Phosphor/Bar/Panels/CalendarPanel.qml

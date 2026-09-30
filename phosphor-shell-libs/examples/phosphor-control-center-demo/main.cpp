@@ -14,6 +14,7 @@
 
 #include "ControlCenterController.h"
 
+#include <PhosphorControl/LocalizedContext.h>
 #include <PhosphorServiceBluetooth/QmlRegistration.h>
 #include <PhosphorServiceBrightness/QmlRegistration.h>
 #include <PhosphorServiceIdle/IdleService.h>
@@ -51,6 +52,9 @@ int main(int argc, char* argv[])
     PhosphorControlCenterDemo::ControlCenterController controlCenterController(&idleService);
 
     QQmlApplicationEngine engine;
+    auto* localizedContext = new PhosphorControl::LocalizedContext(&engine);
+    localizedContext->setTranslationContext(QStringLiteral("phosphorshell"));
+    engine.rootContext()->setContextObject(localizedContext);
     engine.rootContext()->setContextProperty(QStringLiteral("controlCenterController"), &controlCenterController);
 
     engine.loadFromModule(QStringLiteral("Phosphor.ControlCenterDemo"), QStringLiteral("Main"));

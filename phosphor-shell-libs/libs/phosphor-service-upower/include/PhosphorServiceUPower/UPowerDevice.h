@@ -10,6 +10,8 @@
 
 #include <memory>
 
+class QDBusConnection;
+
 namespace PhosphorServiceUPower {
 
 class PHOSPHORSERVICEUPOWER_EXPORT UPowerDevice : public QObject
@@ -87,6 +89,8 @@ public:
     Q_ENUM(DeviceType)
 
     explicit UPowerDevice(const QString& dbusPath, QObject* parent = nullptr);
+    UPowerDevice(const QString& dbusPath, const QDBusConnection& bus, const QString& service,
+                 QObject* parent = nullptr);
     ~UPowerDevice() override;
 
     [[nodiscard]] QString dbusPath() const;

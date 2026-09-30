@@ -38,6 +38,19 @@ TestCase {
     }
 
     Component {
+        id: servicePanelComp
+
+        FocusScope {
+            property bool embedded: false
+            property real railT: 0
+            signal backRequested
+            signal closeRequested
+            signal panelRequested(string panelId)
+            implicitHeight: 400
+        }
+    }
+
+    Component {
         id: tileComp
 
         Tile {
@@ -142,6 +155,61 @@ TestCase {
         // twice for one dismissal.
         cc.closeDetail();
         compare(closed, ["network"], "closing an already-closed panel announces nothing");
+    }
+
+    function test_service_details_do_not_require_registry_tiles() {
+        const cc = createTemporaryObject(controlCenterComp, testCase, {
+            detailPanels: {
+                battery: servicePanelComp,
+                power: servicePanelComp
+            }
+        });
+        verify(cc.openPanel("battery"));
+        compare(cc.detailPanelId, "battery");
+        compare(cc.detailTileId, "");
+        compare(cc.openPanel("missing"), false);
+        compare(cc.detailPanelId, "battery", "invalid navigation keeps the current service page");
+        const loader = findChild(cc, "quickDetailLoader");
+        verify(loader.item);
+        compare(loader.item.embedded, true);
+        loader.item.panelRequested("power");
+        compare(cc.detailPanelId, "power");
+        loader.item.backRequested();
+        compare(cc.detailPanelId, "");
+        compare(loader.active, false, "leaving details releases the service UI");
+    }
+
+    function test_service_navigation_restores_the_original_overview_control() {
+        const cc = createTemporaryObject(controlCenterComp, testCase.parent, {
+            width: 410,
+            height: 700,
+            detailPanels: {
+                battery: servicePanelComp,
+                power: servicePanelComp
+            }
+        });
+        const entry = findChild(cc, "quickSettingsBattery");
+        verify(entry);
+        const events = [];
+        cc.detailOpened.connect(id => events.push("open:" + id));
+        cc.detailClosed.connect(id => events.push("close:" + id));
+        cc.openPanel("battery", entry);
+        cc.openPanel("power");
+        cc.closeDetail();
+        tryCompare(entry, "activeFocus", true);
+        compare(events, ["open:battery", "close:battery", "open:power", "close:power"]);
+    }
+
+    function test_hiding_cached_surface_releases_service_details() {
+        const cc = createTemporaryObject(controlCenterComp, testCase.parent, {
+            detailPanels: {
+                battery: servicePanelComp
+            }
+        });
+        cc.openPanel("battery");
+        cc.visible = false;
+        compare(cc.detailPanelId, "");
+        compare(findChild(cc, "quickDetailLoader").active, false);
     }
 
     function test_hiding_cached_surface_closes_detail() {

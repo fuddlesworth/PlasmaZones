@@ -33,6 +33,7 @@ target_link_libraries(test_phosphor_shell_control_center
         Qt6::Qml
         Qt6::Quick
         Qt6::QuickTest
+        PhosphorControl::PhosphorControl
         # The control-center module + its plugin, plus the modules it
         # imports and their plugin registrars (Phosphor.Widgets pulls
         # Phosphor.Theme).

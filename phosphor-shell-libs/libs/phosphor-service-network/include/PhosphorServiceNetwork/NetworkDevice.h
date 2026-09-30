@@ -10,6 +10,8 @@
 
 #include <memory>
 
+class QDBusConnection;
+
 namespace PhosphorServiceNetwork {
 
 /// One `org.freedesktop.NetworkManager.Device` object. Owned by
@@ -99,6 +101,7 @@ public:
     Q_ENUM(DeviceState)
 
     explicit NetworkDevice(const QString& dbusPath, QObject* parent = nullptr);
+    NetworkDevice(QDBusConnection connection, const QString& dbusPath, QObject* parent = nullptr);
     ~NetworkDevice() override;
 
     [[nodiscard]] QString dbusPath() const;
