@@ -3,3 +3,20 @@ inherit = "core"
 
 [shell_environment_policy.set]
 CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = "1"
+
+[mcp_servers.claude-flow]
+command = "npx"
+args = [
+    "-y",
+    "ruflo@latest",
+    "mcp",
+    "start",
+]
+
+[mcp_servers.claude-flow.env]
+npm_config_update_notifier = "false"
+CLAUDE_FLOW_MODE = "v3"
+CLAUDE_FLOW_HOOKS_ENABLED = "true"
+CLAUDE_FLOW_TOPOLOGY = "hierarchical-mesh"
+CLAUDE_FLOW_MAX_AGENTS = "15"
+CLAUDE_FLOW_MEMORY_BACKEND = "hybrid"

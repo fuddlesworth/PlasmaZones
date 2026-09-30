@@ -1,0 +1,331 @@
+{
+  "scope": "Shell settings entry points, decoration configuration, and window decoration rendering",
+  "baseline": "2195d0558e72303da1a934276d2efc15b90db954",
+  "phase": "B",
+  "partitions": 3,
+  "partition_files": {
+    "entry": [
+      "examples/phosphor-shell/shell.qml",
+      "examples/phosphor-shell/AppearanceSurfaces.qml",
+      "examples/phosphor-shell/SettingsWindow.qml",
+      "src/shell/pickercontroller.cpp",
+      "src/shell/PickerController.h",
+      "libs/phosphor-shell-picker/qml/Phosphor/Picker/AppearanceWorkspace.qml",
+      "libs/phosphor-shell-control-center/qml/Phosphor/ControlCenter/ControlCenter.qml",
+      "libs/phosphor-shell-bar/qml/Phosphor/Bar/Widgets/AppearanceButton.qml",
+      "libs/phosphor-shell-bar/qml/Phosphor/Bar/Panels/AppearancePanel.qml",
+      "src/shell/controlcentercontroller.cpp"
+    ],
+    "window": [
+      "kwin-effect/shell-decoration/phosphordecoration.cpp",
+      "kwin-effect/shell-decoration/PhosphorDecoration.h",
+      "src/shell/desktopstylecontroller.cpp",
+      "src/shell/DesktopStyleController.h",
+      "kwin-effect/plasmazoneseffect/decoration_appearance.cpp",
+      "kwin-effect/plasmazoneseffect/decoration_render.cpp",
+      "kwin-effect/plasmazoneseffect/decorations.cpp",
+      "kwin-effect/plasmazoneseffect/decoration_rules.cpp",
+      "kwin-effect/plasmazoneseffect/decoration_teardown.cpp"
+    ],
+    "shader": [
+      "src/shell/shellchrome.cpp",
+      "src/shell/ShellChrome.h",
+      "libs/phosphor-shell-picker/qml/Phosphor/Picker/AppearanceStyle.qml",
+      "libs/phosphor-theme/src/appearancestore.cpp",
+      "libs/phosphor-theme/include/PhosphorTheme/AppearanceStore.h",
+      "src/settings/pages/decorationpagecontroller.cpp",
+      "src/settings/pages/decorationpagecontroller_paths.cpp",
+      "src/settings/pages/decorationpagecontroller.h",
+      "libs/phosphor-surface/include/PhosphorSurface/DecorationSupportedPaths.h",
+      "libs/phosphor-surface/src/decorationprofiletree.cpp"
+    ]
+  },
+  "inventory_files": 29,
+  "inventory": {
+    "examples/phosphor-shell/shell.qml": 1052,
+    "examples/phosphor-shell/AppearanceSurfaces.qml": 138,
+    "examples/phosphor-shell/SettingsWindow.qml": 123,
+    "src/shell/pickercontroller.cpp": 130,
+    "src/shell/PickerController.h": 67,
+    "libs/phosphor-shell-picker/qml/Phosphor/Picker/AppearanceWorkspace.qml": 480,
+    "libs/phosphor-shell-control-center/qml/Phosphor/ControlCenter/ControlCenter.qml": 516,
+    "libs/phosphor-shell-bar/qml/Phosphor/Bar/Widgets/AppearanceButton.qml": 21,
+    "libs/phosphor-shell-bar/qml/Phosphor/Bar/Panels/AppearancePanel.qml": 505,
+    "src/shell/controlcentercontroller.cpp": 247,
+    "kwin-effect/shell-decoration/phosphordecoration.cpp": 354,
+    "kwin-effect/shell-decoration/PhosphorDecoration.h": 35,
+    "src/shell/desktopstylecontroller.cpp": 185,
+    "src/shell/DesktopStyleController.h": 37,
+    "kwin-effect/plasmazoneseffect/decoration_appearance.cpp": 162,
+    "kwin-effect/plasmazoneseffect/decoration_render.cpp": 680,
+    "kwin-effect/plasmazoneseffect/decorations.cpp": 907,
+    "kwin-effect/plasmazoneseffect/decoration_rules.cpp": 319,
+    "kwin-effect/plasmazoneseffect/decoration_teardown.cpp": 265,
+    "src/shell/shellchrome.cpp": 282,
+    "src/shell/ShellChrome.h": 107,
+    "libs/phosphor-shell-picker/qml/Phosphor/Picker/AppearanceStyle.qml": 607,
+    "libs/phosphor-theme/src/appearancestore.cpp": 589,
+    "libs/phosphor-theme/include/PhosphorTheme/AppearanceStore.h": 90,
+    "src/settings/pages/decorationpagecontroller.cpp": 593,
+    "src/settings/pages/decorationpagecontroller_paths.cpp": 38,
+    "src/settings/pages/decorationpagecontroller.h": 348,
+    "libs/phosphor-surface/include/PhosphorSurface/DecorationSupportedPaths.h": 212,
+    "libs/phosphor-surface/src/decorationprofiletree.cpp": 284
+  },
+  "pass_number": 3,
+  "complete": true,
+  "awaiting_agents": false,
+  "findings": [
+    {
+      "id": "E1",
+      "sev": "HIGH",
+      "file": "examples/phosphor-shell/shell.qml:283",
+      "description": "Appearance quick-settings route is dropped",
+      "status": "fixed",
+      "raised_pass": 1
+    },
+    {
+      "id": "E2",
+      "sev": "MEDIUM",
+      "file": "examples/phosphor-shell/AppearanceSurfaces.qml:24",
+      "description": "Closed Appearance retains keyboard interactivity; queued focus races closure",
+      "status": "fixed",
+      "raised_pass": 1
+    },
+    {
+      "id": "E3",
+      "sev": "MEDIUM",
+      "file": "examples/phosphor-shell/AppearanceSurfaces.qml:90",
+      "description": "Appearance glass has no bounded blur",
+      "status": "fixed",
+      "raised_pass": 1
+    },
+    {
+      "id": "E4",
+      "sev": "LOW",
+      "file": "examples/phosphor-shell/shell.qml:175",
+      "description": "Bar blur radius differs from actual band and does not update",
+      "status": "fixed",
+      "raised_pass": 1
+    },
+    {
+      "id": "E5",
+      "sev": "MEDIUM",
+      "file": "src/shell/pickercontroller.cpp:53",
+      "description": "Preview open failure is silent",
+      "status": "fixed",
+      "raised_pass": 1
+    },
+    {
+      "id": "E6",
+      "sev": "LOW",
+      "file": "examples/phosphor-shell/shell.qml:754",
+      "description": "Stale settings route comments",
+      "status": "fixed",
+      "raised_pass": 1
+    },
+    {
+      "id": "W1",
+      "sev": "MEDIUM",
+      "file": "kwin-effect/shell-decoration/phosphordecoration.cpp:262",
+      "description": "Native per-surface clipping fails for below-parent subsurfaces",
+      "status": "fixed",
+      "raised_pass": 1
+    },
+    {
+      "id": "W2",
+      "sev": "MEDIUM",
+      "file": "kwin-effect/shell-decoration/phosphordecoration.cpp:94",
+      "description": "Native shadow slices discard rounded corners",
+      "status": "fixed",
+      "raised_pass": 1
+    },
+    {
+      "id": "W3",
+      "sev": "MEDIUM",
+      "file": "src/shell/desktopstylecontroller.cpp:112",
+      "description": "Failed commit loses last-applied restoration journal",
+      "status": "fixed",
+      "raised_pass": 1
+    },
+    {
+      "id": "W4",
+      "sev": "LOW",
+      "file": "kwin-effect/plasmazoneseffect/decorations.cpp:523",
+      "description": "Theme shader parameters do not refresh on palette changes",
+      "status": "fixed",
+      "raised_pass": 1
+    },
+    {
+      "id": "S1",
+      "sev": "HIGH",
+      "file": "src/shell/shellchrome.cpp:97",
+      "description": "Appearance hardcodes shell shader profiles bypassing configured tree",
+      "status": "fixed",
+      "raised_pass": 1
+    },
+    {
+      "id": "S2",
+      "sev": "LOW",
+      "file": "libs/phosphor-surface/include/PhosphorSurface/DecorationSupportedPaths.h:32",
+      "description": "Stale shader ownership comments and seed counts",
+      "status": "fixed",
+      "raised_pass": 1
+    },
+    {
+      "id": "S3",
+      "sev": "LOW",
+      "file": "libs/phosphor-theme/src/appearancestore.cpp:121",
+      "description": "User error translations bypass project translator",
+      "status": "descoped",
+      "raised_pass": 1,
+      "descope_reason": "Rejected false positive after verifying the existing LGPL/app-GPL translation boundary exception in libs/phosphor-workspaces/src/VirtualDesktopManager.cpp:28-36 and cmake/PhosphorTranslations.cmake:31-34,65-72. QObject::tr remains the library translation hook; importing src/phosphor_i18n.h would cross the GPL boundary."
+    },
+    {
+      "id": "E7",
+      "sev": "MEDIUM",
+      "file": "examples/phosphor-shell/shell.qml:378",
+      "description": "Quick Settings uses obsolete screen ownership after layer-popup migration",
+      "status": "fixed",
+      "raised_pass": 2
+    },
+    {
+      "id": "C1",
+      "sev": "MEDIUM",
+      "file": "examples/phosphor-shell/shell.qml:472",
+      "description": "Detail-panel Back and Stats network settings handlers call shell.qml ids from a foreign popout context",
+      "status": "fixed",
+      "raised_pass": 4
+    },
+    {
+      "id": "C2",
+      "sev": "HIGH",
+      "file": "scripts/nested-kwin/run-nested.sh:121",
+      "description": "Nested harness scratch-path guard accepted canonical roots such as /tmp/.. before cleanup",
+      "status": "fixed",
+      "raised_pass": 4
+    },
+    {
+      "id": "C3",
+      "sev": "LOW",
+      "file": "src/config/settings/profiletrees.cpp:256",
+      "description": "Decoration reset comments described the old no-decoration result after runtime seeds were added",
+      "status": "fixed",
+      "raised_pass": 4
+    },
+    {
+      "id": "C4",
+      "sev": "LOW",
+      "file": "kwin-effect/plasmazoneseffect/plasmazoneseffect.h:190",
+      "description": "Effect header described the retired direct border-shader render path",
+      "status": "fixed",
+      "raised_pass": 4
+    }
+  ],
+  "pass": 3,
+  "coverage_pass_1": {
+    "entry": 10,
+    "window": 9,
+    "shader": 10
+  },
+  "coverage_pass_2": {
+    "entry": 10,
+    "window": 9,
+    "shader": 10
+  },
+  "coverage_pass_3": {
+    "entry": 10,
+    "window": 9,
+    "shader": 10
+  },
+  "audit_passes": 3,
+  "baseline_unchanged_verified": true,
+  "rejected_findings": [
+    "S3"
+  ],
+  "remediation_progress": {
+    "entry": "implemented; focused and full tests plus live keyboard/output checks passed",
+    "shader": "implemented; focused and full tests plus settings-app live verification passed",
+    "window": "implemented; focused and full tests plus live rounded-shadow capture passed",
+    "journal": "implemented; peer reviewed; extended failure tests passed"
+  },
+  "integration_checks": [
+    "Fixed missing-ancestor watcher traversal before final tests",
+    "Cleared desktop-style cache after both apply and restore backend commits",
+    "CaptureScreen includes compositor effects verified empirically with red width-12 shader border and radius-60 Ghastty clipping; stale harness comments corrected"
+  ],
+  "confirmation_round": 1,
+  "confirmation_partitions": {
+    "entry": [
+      "examples/phosphor-shell/AppearanceSurfaces.qml",
+      "examples/phosphor-shell/QuickSettingsSurface.qml",
+      "examples/phosphor-shell/shell.qml",
+      "libs/phosphor-shell-control-center/qml/Phosphor/ControlCenter/ControlCenter.qml",
+      "src/shell/ControlCenterController.h",
+      "src/shell/PickerController.h",
+      "src/shell/ShellEffects.h",
+      "src/shell/controlcentercontroller.cpp",
+      "src/shell/pickercontroller.cpp",
+      "src/shell/shelleffects.cpp",
+      "tests/unit/shell/test_control_center_controller.cpp",
+      "tests/unit/shell/test_shell_appearance_entry.cpp",
+      "tests/unit/shell/test_shell_qml_compiles.cpp"
+    ],
+    "shader": [
+      "data/surface/border/metadata.json",
+      "data/surface/glow/metadata.json",
+      "data/surface/shadow/metadata.json",
+      "kwin-effect/CMakeLists.txt",
+      "libs/phosphor-shell-picker/qml/Phosphor/Picker/AppearanceStyle.qml",
+      "libs/phosphor-surface/CMakeLists.txt",
+      "libs/phosphor-surface/tests/CMakeLists.txt",
+      "libs/phosphor-theme/CMakeLists.txt",
+      "libs/phosphor-theme/include/PhosphorTheme/AppearanceWatcher.h",
+      "libs/phosphor-theme/src/appearancewatcher.cpp",
+      "libs/phosphor-theme/tests/CMakeLists.txt",
+      "libs/phosphor-theme/tests/test_appearancewatcher.cpp",
+      "src/CMakeLists.txt",
+      "src/common/shelldecorationseeds.cpp",
+      "src/common/shelldecorationseeds.h",
+      "src/config/configdefaults_shaders.h",
+      "src/config/settings.h",
+      "src/config/settings/profiletrees.cpp",
+      "src/core/interfaces/isettings.h",
+      "src/daemon/daemon.cpp",
+      "src/settings/CMakeLists.txt",
+      "src/settings/controller/settingscontroller_pagestate.cpp",
+      "src/settings/main.cpp",
+      "src/settings/pages/decorationpagecontroller.cpp",
+      "src/shell/ShellChrome.h",
+      "src/shell/shellchrome.cpp",
+      "tests/unit/CMakeLists.txt",
+      "tests/unit/config/settings/test_settings_decoration_tree.cpp",
+      "tests/unit/helpers/StubSettings.h",
+      "tests/unit/shell/test_shell_chrome.cpp",
+      "tests/unit/shell/test_shell_decoration_seeds.cpp"
+    ],
+    "window": [
+      "kwin-effect/compositor/shelloverview.cpp",
+      "kwin-effect/compositor/shelloverview.h",
+      "kwin-effect/plasmazoneseffect/decoration_render.cpp",
+      "kwin-effect/plasmazoneseffect/decorations.cpp",
+      "kwin-effect/plasmazoneseffect/lifecycle.cpp",
+      "kwin-effect/plasmazoneseffect/plasmazoneseffect.h",
+      "kwin-effect/plasmazoneseffect/surface_capture.cpp",
+      "kwin-effect/shell-decoration/phosphordecoration.cpp",
+      "libs/phosphor-surface/include/PhosphorSurface/DecorationSupportedPaths.h",
+      "libs/phosphor-surface/include/PhosphorSurface/SurfaceThemeResolve.h",
+      "libs/phosphor-surface/include/PhosphorSurface/SurfaceWindowStateResolve.h",
+      "libs/phosphor-surface/src/surfacethemeresolve.cpp",
+      "libs/phosphor-surface/src/surfacewindowstateresolve.cpp",
+      "libs/phosphor-surface/tests/test_surfacethemeresolve.cpp",
+      "scripts/nested-kwin/capture-output.py",
+      "scripts/nested-kwin/run-nested.sh",
+      "scripts/nested-shell/capture.sh",
+      "scripts/nested-shell/run-shell.sh",
+      "src/shell/desktopstylecontroller.cpp",
+      "tests/unit/shell/test_desktop_style_controller.cpp"
+    ]
+  },
+  "confirmation_status": "fresh changed-file review complete; all findings fixed and final build/test/live gates passed"
+}
