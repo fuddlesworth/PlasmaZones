@@ -327,13 +327,15 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
     // does not exist, so either mistake ships green and shows up as a pack with
     // no thumbnail. Same shape as the texture branch above.
     {
-        // Non-string first, for the same reason as paddingParam above: toString() answers empty
-        // and the block is !isEmpty()-gated, so a mistyped preview shipped green with no
-        // thumbnail and nothing said why.
+        // Non-string first, for the same reason as paddingParam above. The consequence names the
+        // DECLARED thumbnail rather than claiming the pack has none: an empty previewPath sends the
+        // registry down its else branch, which adopts a conventional preview.png beside the
+        // metadata, so a pack shipping that file still gets a thumbnail. The two arms below cannot
+        // reach that case, both running inside a non-empty previewPath test.
         const QJsonValue rawPreview = meta.value(QLatin1String("preview"));
         if (!rawPreview.isUndefined() && !rawPreview.isNull() && !rawPreview.isString()) {
             lints << QStringLiteral(
-                "preview is not a string, which is ignored at load, so the pack shows no thumbnail");
+                "preview is not a string, which is ignored at load, so the declared thumbnail is not used");
         }
         const QString preview = rawPreview.toString();
         if (!preview.isEmpty()) {
@@ -841,19 +843,17 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         // at load with no warning. Flag any mismatch, matching the animation arm,
         // rather than surplus alone, since a short array is the likelier slip.
         //
-        // The message deliberately does NOT say the surplus is "dropped". That
-        // wording was carried over from the animation arm and is false here: the
-        // surface loader keeps these arrays at their declared length and only ever
-        // reads the first bufferShaders.size() entries, so a surplus entry is
-        // retained and simply never consulted. The one place anything really is
-        // dropped is the pass budget, which the bufferScales block below reports
-        // on its own.
+        // UNGATED, since a length mismatch is decidable either way, but the message says nothing
+        // about LOAD behaviour any more. An earlier wording claimed a surplus entry is "never read"
+        // and a missing one "falls back at load", neither of which happens on a fail-closed chain
+        // (the coherence block clears these arrays and there are no passes), and it also claimed
+        // declared length is kept, which is untrue past the 8-pass budget.
         const auto lintBufferArrayLen = [&](QLatin1String key) {
             const QJsonArray arr = meta.value(key).toArray();
             if (!arr.isEmpty() && arr.size() != declaredBuffers.size()) {
                 lints << QStringLiteral(
-                             "%1 has %2 entries for %3 buffer shaders (aligned positionally; surplus entries are "
-                             "never read and missing ones fall back to the single value at load)")
+                             "%1 has %2 entries for %3 buffer shaders (aligned positionally with bufferShaders; "
+                             "a surplus entry has no pass and a missing one takes the single value)")
                              .arg(QString(key))
                              .arg(static_cast<int>(arr.size()))
                              .arg(static_cast<int>(declaredBuffers.size()));
@@ -1111,28 +1111,44 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         // answers its DEFAULT for a string or a bool, so `"bufferScale": "0.5"`
         // silently loads as 1.0 and the range check below sees nothing wrong.
         //
-        // THE TWO ARMS ARE GATED DIFFERENTLY, deliberately. The TYPE arm is true on every path
-        // (fromJson's non-numeric branch and the coherence block both set 1.0), so gating it once
-        // silenced a true diagnostic. The RANGE arm keeps the gate for the BELOW-min case, where
-        // fromJson clamps to kMinBufferScale and the block then resets to 1.0.
+        // GATED PER CASE, not per arm. TYPE and ABOVE-max are true on every path (all land on 1.0).
+        // Only BELOW-min needs the gate: fromJson clamps to kMinBufferScale and the coherence block
+        // then resets to 1.0, so "clamped at load" would name a value the pack never has. An earlier
+        // version gated the whole range arm on that argument and silenced a true above-max line.
         const QJsonValue rawScaleValue = meta.value(QLatin1String("bufferScale"));
         if (!rawScaleValue.isUndefined() && !rawScaleValue.isNull() && !rawScaleValue.isDouble()) {
             lints << QStringLiteral("bufferScale is not a number, so it falls back to 1.0 at load");
         }
         const double rawScale = rawScaleValue.toDouble(1.0);
-        if (chainResolves
-            && (rawScale < PhosphorShaders::kMinBufferScale || rawScale > PhosphorShaders::kMaxBufferScale)) {
+        if (rawScale > PhosphorShaders::kMaxBufferScale
+            || (chainResolves && rawScale < PhosphorShaders::kMinBufferScale)) {
             lints << QStringLiteral("bufferScale out of range [%1, %2]: %3 (clamped at load)")
                          .arg(PhosphorShaders::kMinBufferScale)
                          .arg(PhosphorShaders::kMaxBufferScale)
                          .arg(rawScale);
         }
         // RELOCATED from the blur-chain block above to carry chainResolves: a fail-closed chain has
-        // useDepthBuffer false, bufferScales cleared and no targets, so nothing is pinned. The
-        // compositor half is general because it implements no depth buffer at all, so it honours
-        // EVERY entry at any chain length.
-        if (chainResolves && meta.value(QLatin1String("depthBuffer")).toBool()
-            && !meta.value(QLatin1String("bufferScales")).toArray().isEmpty()) {
+        // useDepthBuffer false, bufferScales cleared and no targets, so nothing is pinned.
+        //
+        // AND ON REAL DIVERGENCE, mirroring the runtime's twin warning, whose comment says "the
+        // offline validator lints the same combination": it compares each CLAMPED slot against the
+        // clamped pack-wide scale and warns only if one differs. Without this the arm FAILED A VALID
+        // PACK — bufferScale 0.5 with bufferScales [0.5, 0.5] renders identically on both hosts.
+        // Clamp before comparing, so two out-of-range values do not read as divergent.
+        const QJsonArray depthScales = meta.value(QLatin1String("bufferScales")).toArray();
+        const auto clampScale = [](double v) {
+            return qBound(PhosphorShaders::kMinBufferScale, v, PhosphorShaders::kMaxBufferScale);
+        };
+        const double pinnedScale = clampScale(rawScaleValue.toDouble(1.0));
+        bool scalesDiverge = false;
+        for (const QJsonValue& v : depthScales) {
+            if (v.isDouble() && !qFuzzyCompare(clampScale(v.toDouble()), pinnedScale)) {
+                scalesDiverge = true;
+                break;
+            }
+        }
+        if (chainResolves && scalesDiverge && meta.value(QLatin1String("depthBuffer")).toBool()
+            && !depthScales.isEmpty()) {
             lints << QStringLiteral(
                 "bufferScales is declared alongside \"depthBuffer\": true, and the daemon pins every pass to "
                 "bufferScale, so no per-pass entry takes effect there (the passes share one depth attachment, "

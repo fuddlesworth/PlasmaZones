@@ -568,11 +568,13 @@ private Q_SLOTS:
         obj.insert(QStringLiteral("bufferFilter"), QStringLiteral("nearest"));
         obj.insert(QStringLiteral("bufferFilters"), QJsonArray{QStringLiteral("nearest")});
         obj.insert(QStringLiteral("halfFloatBuffers"), true);
-        obj.insert(QStringLiteral("bufferScale"), 9);
-        // The PER-ENTRY scales and the depth pairing, which were left ungated when their siblings
-        // were gated, so this fixture now covers every arm of the family at once.
+        // BELOW-min deliberately, not above. Only the below-min case is gated on chainResolves,
+        // because there the load path clamps to kMinBufferScale and the coherence block then resets
+        // to 1.0, so "clamped at load" would name a value the pack never has. Above-max is true on
+        // both paths and is therefore UNGATED — the separate leg below pins that.
+        obj.insert(QStringLiteral("bufferScale"), 0.001);
+        // The PER-ENTRY scales, which were left ungated when their singular twin was gated.
         obj.insert(QStringLiteral("bufferScales"), QJsonArray{9});
-        obj.insert(QStringLiteral("depthBuffer"), true);
         const PackResult r = validateSurface(tmp, QStringLiteral("sf-fc"), obj, surfaceBodyReading({}));
 
         // The louder lint that CLEARED chainResolves is the one the author needs, and it fires.
@@ -588,7 +590,16 @@ private Q_SLOTS:
         QVERIFY2(!r.report.contains(QStringLiteral("RGBA16F")), qPrintable(r.report));
         QVERIFY2(!r.report.contains(QStringLiteral("bufferScale out of range")), qPrintable(r.report));
         QVERIFY2(!r.report.contains(QStringLiteral("bufferScales entry 0 out of range")), qPrintable(r.report));
-        QVERIFY2(!r.report.contains(QStringLiteral("alongside \"depthBuffer\": true")), qPrintable(r.report));
+
+        // ABOVE-max is NOT gated, because "clamped at load" is accurate on a fail-closed chain too:
+        // both the load clamp and the coherence reset land on the same value. Gating the whole range
+        // arm on the below-min argument once silenced this true line, so pin it firing.
+        QJsonObject above = obj;
+        above.insert(QStringLiteral("id"), QStringLiteral("sf-fc-max"));
+        above.insert(QStringLiteral("bufferScale"), 9);
+        above.remove(QStringLiteral("bufferScales"));
+        const PackResult aboveMax = validateSurface(tmp, QStringLiteral("sf-fc-max"), above, surfaceBodyReading({}));
+        QVERIFY2(aboveMax.report.contains(QStringLiteral("bufferScale out of range")), qPrintable(aboveMax.report));
         // But the TYPE arm is deliberately NOT gated: "falls back to 1.0" is true on a fail-closed
         // chain too, because fromJson's non-numeric branch and the coherence block both set 1.0.
         // Gating it once silenced a true diagnostic, so this pins the un-gating.
@@ -600,8 +611,11 @@ private Q_SLOTS:
         const PackResult typeArm = validateSurface(tmp, QStringLiteral("sf-fc-type"), typed, surfaceBodyReading({}));
         QVERIFY2(typeArm.report.contains(QStringLiteral("bufferScale is not a number")), qPrintable(typeArm.report));
 
-        // Control: the identical keys on a chain that DOES resolve still draw all of them, or the
-        // gate would have silenced the arms rather than scoped them.
+        // Control: the identical keys on a chain that DOES resolve still draw them, or the gate
+        // would have silenced the arms rather than scoping them. The depth pairing is deliberately
+        // NOT part of this fixture: that arm fires only on real divergence between the clamped
+        // per-pass scales and the clamped pack-wide one, which is a different axis from being out
+        // of range, so it gets its own slot below.
         QJsonObject ok = obj;
         ok.insert(QStringLiteral("id"), QStringLiteral("sf-fc-ok"));
         ok.insert(QStringLiteral("bufferShaders"), QJsonArray{surfaceFillerBufferName()});
@@ -611,7 +625,50 @@ private Q_SLOTS:
         QVERIFY2(live.report.contains(QStringLiteral("RGBA16F")), qPrintable(live.report));
         QVERIFY2(live.report.contains(QStringLiteral("bufferScale out of range")), qPrintable(live.report));
         QVERIFY2(live.report.contains(QStringLiteral("bufferScales entry 0 out of range")), qPrintable(live.report));
-        QVERIFY2(live.report.contains(QStringLiteral("alongside \"depthBuffer\": true")), qPrintable(live.report));
+        QVERIFY2(!live.report.contains(QStringLiteral("alongside \"depthBuffer\": true")), qPrintable(live.report));
+    }
+
+    /// The depth+bufferScales arm fires only on REAL divergence, mirroring the runtime's own twin
+    /// warning, which compares each clamped per-pass scale against the clamped pack-wide one and
+    /// warns just when they differ. Gated on presence alone the arm FAILED A VALID PACK: a pack
+    /// declaring the same value in both places renders identically on the daemon (which pins every
+    /// pass) and on the compositor (which has no depth buffer and reads each entry), so there was
+    /// no divergence to report and nothing an author could act on.
+    void theDepthScalesArmFiresOnlyOnRealDivergence()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        const auto runWith = [&tmp](const QString& name, double packWide, const QJsonArray& scales) {
+            QJsonObject obj = surfacePack(name, QJsonArray{});
+            obj.insert(QStringLiteral("multipass"), true);
+            obj.insert(QStringLiteral("bufferShaders"), QJsonArray{surfaceFillerBufferName()});
+            obj.insert(QStringLiteral("depthBuffer"), true);
+            obj.insert(QStringLiteral("bufferScale"), packWide);
+            obj.insert(QStringLiteral("bufferScales"), scales);
+            return validateSurfaceWithFillerPass(tmp, name, obj, surfaceBodyReading({}));
+        };
+        const QString needle = QStringLiteral("alongside \"depthBuffer\": true");
+
+        // AGREEING scales: no divergence, no lint, and the pack must ship.
+        const PackResult agree = runWith(QStringLiteral("sf-dx-a"), 0.5, QJsonArray{0.5});
+        QVERIFY2(!agree.report.contains(needle), qPrintable(agree.report));
+        QCOMPARE(agree.errors, 0);
+
+        // Agreeing across SEVERAL passes, including a slot the pack does not declare: the runtime
+        // fills those with the pack-wide scale, so they cannot diverge either.
+        const PackResult agreeMulti = runWith(QStringLiteral("sf-dx-b"), 0.25, QJsonArray{0.25, 0.25});
+        QVERIFY2(!agreeMulti.report.contains(needle), qPrintable(agreeMulti.report));
+
+        // DIVERGING: one entry differs from the pack-wide scale, which is the case the daemon's
+        // pinning actually discards, so the lint fires.
+        const PackResult diverge = runWith(QStringLiteral("sf-dx-c"), 0.5, QJsonArray{0.25});
+        QVERIFY2(diverge.report.contains(needle), qPrintable(diverge.report));
+
+        // CLAMPED divergence does not count: both sides clamp to the same bound, so a pack whose
+        // raw values differ but whose effective ones agree is not nagged.
+        const PackResult clamped = runWith(QStringLiteral("sf-dx-d"), 9.0, QJsonArray{5.0});
+        QVERIFY2(!clamped.report.contains(needle), qPrintable(clamped.report));
     }
 
     /// A texture or preview path naming a DIRECTORY. QFile::exists() answers true for one, so both

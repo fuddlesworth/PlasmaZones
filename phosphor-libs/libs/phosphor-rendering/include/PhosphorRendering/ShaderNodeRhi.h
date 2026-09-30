@@ -111,14 +111,14 @@ constexpr bool isConsumerBinding(int binding) noexcept
  * A GUI-THREAD caller of the setters on **this class** (ShaderNodeRhi — setTime,
  * setResolution, setCustomParams, setExtraBinding, etc.) must go through
  * QQuickItem::updatePaintNode() during the scene graph sync phase, where the GUI
- * thread is blocked and the render thread is idle. Reaching them from the GUI
- * thread outside updatePaintNode() is a data race with prepare()/render().
- * The RENDER THREAD may call them directly, and does: ZoneShaderNodeRhi's
- * uploadLabelsTexture calls setExtraBinding from prepare(). That is safe for the
- * same reason the two releaseResources() routes below are — the render thread is
- * the only mutator of node members — and an earlier wording of this paragraph made
- * the rule about WHEN the call happens rather than about WHICH THREAD makes it, so
- * anyone auditing setExtraBinding concluded the library broke its own contract. Only invalidateItem() is
+ * thread is blocked and the render thread is idle; reaching them from the GUI
+ * thread outside it is a data race with prepare()/render(). The RENDER THREAD may
+ * call them from prepare() BEFORE the frame's bindings are built, and does:
+ * uploadLabelsTexture calls setExtraBinding there. That covers DATA RACES ONLY.
+ * A setter that drops an SRB, pipeline, buffer target or the UBO — among them
+ * setUniformExtension, setUseDepthBuffer, setGridSubdivisions, setBufferScale(s),
+ * setBufferShaderPaths, setHalfFloatBuffers, setBufferFeedback — must NOT be reached
+ * from render(), nor from prepare() once its passes are recorded, on ANY thread. Only invalidateItem() is
  * safe to call from the GUI thread outside the sync phase: it is the only entry
  * point built for it, with its flag atomic AND m_itemMutex serialising the
  * dereference against the render thread. (Not "the only flag exposed as
