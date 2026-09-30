@@ -283,7 +283,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     // not in targetSet is either a different physical monitor we're switching
     // away from, or a leftover from a removed/excluded screen. Hide
     // non-shader overlays (cheap, no Vulkan churn - mirrors the 9e0cb05f
-    // "hide-not-destroy" policy that dismissOverlayWindow(QScreen*) uses)
+    // "hide-not-destroy" policy dismissOverlayWindow uses)
     // and destroy shader overlays (QSGRenderNode pipelines are bound to the
     // per-window QRhi context, so destroy-on-hide is mandatory there).
     const QStringList allKeys = m_screenStates.keys();
@@ -862,7 +862,11 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
         stopShaderAnimation();
 
     for (const QString& screenId : screensToFlip) {
-        if (isSnappingContextInactive(screenId)) {
+        // Both gates, matching initializeOverlay and handleScreenAdded. Downstream rather than
+        // independent — this loop needs a screen that already HAS an overlay, so an excluded one
+        // can only reach it if something else built one first — but carrying the pair everywhere is
+        // what stops the next reader having to work out which sites are complete.
+        if (isSnappingContextInactive(screenId) || m_excludedScreens.contains(screenId)) {
             continue;
         }
         QScreen* physScreen = m_screenStates.value(screenId).overlayPhysScreen;
@@ -884,23 +888,6 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
     if (isOverlayDisplaying() && anyScreenUsesShader()) {
         updateZonesForAllWindows();
         startShaderAnimation();
-    }
-}
-
-void OverlayService::dismissOverlayWindow(QScreen* screen)
-{
-    const QString physId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
-
-    // Collect matching overlay keys - may be virtual screen IDs for this physical screen
-    QStringList matchingKeys;
-    for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-        if (PhosphorIdentity::VirtualScreenId::extractPhysicalId(it.key()) == physId) {
-            matchingKeys.append(it.key());
-        }
-    }
-
-    for (const QString& screenId : matchingKeys) {
-        dismissOverlayWindow(screenId);
     }
 }
 
@@ -975,13 +962,6 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
         slot->setVisible(false);
         syncPassiveShellSurfaceState(screenId);
     }
-}
-
-void OverlayService::destroyOverlayWindow(QScreen* screen)
-{
-    const QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
-    qCDebug(lcOverlay) << "destroyOverlayWindow:" << screenId;
-    destroyOverlayWindow(screenId);
 }
 
 void OverlayService::destroyOverlayWindow(const QString& screenId)

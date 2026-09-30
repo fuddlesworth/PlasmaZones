@@ -13,10 +13,8 @@
 #include <QMutex>
 #include <QMutexLocker>
 #include <QQuickWindow>
-#include <QStandardPaths>
 #include <QTextStream>
 #include <QtMath>
-#include <cstring>
 
 namespace PhosphorRendering {
 
@@ -203,10 +201,10 @@ ShaderNodeRhi::ShaderNodeRhi(QQuickItem* item, std::unique_ptr<PhosphorShaders::
     // here: nothing else can hold a reference to the block until
     // registerRenderNode() publishes it, which happens after construction.
     m_liveness->node = this;
-    // The UBO profile's ctor seeds an identity qt_Matrix + qt_Opacity=1.0 (the
-    // init that used to live here, moved into BaseUniformProfile so the
-    // profiles, where BaseUniformProfile and SurfaceUniformProfile each seed it: they are
-    // siblings under IUboProfile, so they agree by duplication, not by inheritance).
+    // The UBO profile's ctor seeds an identity qt_Matrix + qt_Opacity=1.0 (the init
+    // that used to live here, moved into BaseUniformProfile; SurfaceUniformProfile
+    // seeds it too, the two being siblings under IUboProfile rather than one
+    // inheriting from the other, so they agree by duplication).
     // customParams and customColors are seeded at their declarations, beside
     // m_userTextureWraps, so this constructor is not the only thing standing
     // between them and a default-constructed value.
@@ -422,8 +420,8 @@ void ShaderNodeRhi::prepare()
             rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(RhiConstants::QuadVertices)));
         // Every failure arm in this block tears down through releaseRhiResources()
         // rather than its own list of resets. The lists were hand-rolled, one per
-        // failure arm, and had to be kept in step as resources were added.
-        // added; the helper is a superset of all of them. It does NOT clear
+        // failure arm, and had to be kept in step as resources were added. The
+        // helper is a superset of all of them. It does NOT clear
         // m_shaderError, so the message each arm sets just above survives to the
         // item's status block.
         //

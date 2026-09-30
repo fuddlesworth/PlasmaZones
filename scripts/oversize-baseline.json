@@ -44,7 +44,7 @@
     "plasmazones/src/daemon/daemon/osd.cpp": 1264,
     "plasmazones/src/daemon/daemon/start.cpp": 1180,
     "plasmazones/src/daemon/overlayservice.cpp": 1232,
-    "plasmazones/src/daemon/overlayservice.h": 1677,
+    "plasmazones/src/daemon/overlayservice.h": 1674,
     "plasmazones/src/dbus/layoutadaptor/assignment.cpp": 1155,
     "plasmazones/src/dbus/windowtrackingadaptor/lifecycle.cpp": 1273,
     "plasmazones/src/dbus/windowtrackingadaptor/windowtrackingadaptor.h": 1906,

@@ -412,13 +412,82 @@ private Q_SLOTS:
             QCOMPARE(mistyped.errors, 1);
         }
 
-        // ABSENT is the only quiet state, and the clean pack above already covers every other key,
-        // so this is the one assertion that the sweep does not fire on a pack that declared nothing.
+        // The four keys that were left on a TYPE gate after the singular ones moved to presence.
+        // A mistyped one was silent here AND silent at load (fromJson's loop never runs and emits
+        // no journal line), so it reached the user with no diagnostic anywhere. One leg per key,
+        // with a value of the wrong type for that key.
+        for (const QString& key :
+             {QStringLiteral("bufferWraps"), QStringLiteral("bufferFilters"), QStringLiteral("bufferScales")}) {
+            const PackResult mistyped = runWith(QStringLiteral("sf-inert"), key, QStringLiteral("clamp"));
+            QVERIFY2(mistyped.report.contains(key + QStringLiteral(" is declared on a single-pass pack")),
+                     qPrintable(mistyped.report));
+            QCOMPARE(mistyped.errors, 1);
+        }
+        const PackResult scaleMistyped =
+            runWith(QStringLiteral("sf-inert"), QStringLiteral("bufferScale"), QStringLiteral("0.5"));
+        QVERIFY2(scaleMistyped.report.contains(QStringLiteral("bufferScale is declared on a single-pass pack")),
+                 qPrintable(scaleMistyped.report));
+
+        // NULL stays quiet on every one of them, which is the tree's convention (the type arms and
+        // the array arm both skip null) and the one state where a presence gate and
+        // meta.contains() differ. Pinned so the !isNull() term cannot be dropped silently.
+        for (const QString& key : {QStringLiteral("bufferWrap"), QStringLiteral("bufferWraps"),
+                                   QStringLiteral("bufferScale"), QStringLiteral("bufferFeedback")}) {
+            const PackResult nulled = runWith(QStringLiteral("sf-inert"), key, QJsonValue(QJsonValue::Null));
+            QVERIFY2(!nulled.report.contains(QStringLiteral("single-pass pack")), qPrintable(nulled.report));
+            QCOMPARE(nulled.errors, 0);
+        }
+
+        // ABSENT is the only other quiet state, and the clean pack above already covers every other
+        // key, so this is the one assertion that the sweep does not fire on a pack that declared
+        // nothing.
         const PackResult clean =
             validateSurface(tmp, QStringLiteral("sf-inert-clean"),
                             surfacePack(QStringLiteral("sf-inert-clean"), QJsonArray{}), surfaceBodyReading({}));
         QVERIFY2(!clean.report.contains(QStringLiteral("single-pass pack")), qPrintable(clean.report));
         QCOMPARE(clean.errors, 0);
+    }
+
+    /// The daemon-only wrap/filter arm, given the WRONG JSON SHAPE for each spelling. It used to
+    /// sniff the shape from the value — string branch, array fallback — which is right for whichever
+    /// key it happens to be and wrong for the other, so a plural key given a string and a singular
+    /// key given an array both drew "which the DAEMON honours" for a value the loader reads as empty
+    /// and honours not at all, printed beside the type lint saying it is ignored.
+    void aMistypedDaemonOnlyTokenDoesNotClaimTheDaemonHonoursIt()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        const auto runMultipass = [&tmp](const QString& name, const QString& key, const QJsonValue& value) {
+            QJsonObject obj = surfacePack(name, QJsonArray{});
+            obj.insert(QStringLiteral("multipass"), true);
+            obj.insert(QStringLiteral("bufferShaders"), QJsonArray{surfaceFillerBufferName()});
+            obj.insert(key, value);
+            return validateSurfaceWithFillerPass(tmp, name, obj, surfaceBodyReading({}));
+        };
+
+        // SINGULAR key given an ARRAY: the type lint fires, the divergence claim must not.
+        const PackResult wrapArray = runMultipass(QStringLiteral("sf-dot-a"), QStringLiteral("bufferWrap"),
+                                                  QJsonArray{QStringLiteral("repeat")});
+        QVERIFY2(wrapArray.report.contains(QStringLiteral("bufferWrap is not a string")), qPrintable(wrapArray.report));
+        QVERIFY2(!wrapArray.report.contains(QStringLiteral("which the DAEMON honours")), qPrintable(wrapArray.report));
+
+        // PLURAL key given a STRING: same, the other way round.
+        const PackResult wrapsString =
+            runMultipass(QStringLiteral("sf-dot-b"), QStringLiteral("bufferWraps"), QStringLiteral("repeat"));
+        QVERIFY2(wrapsString.report.contains(QStringLiteral("bufferWraps must be an array")),
+                 qPrintable(wrapsString.report));
+        QVERIFY2(!wrapsString.report.contains(QStringLiteral("which the DAEMON honours")),
+                 qPrintable(wrapsString.report));
+
+        // And the CORRECTLY typed values still draw it, in both spellings, or the fix would have
+        // silenced the arm rather than narrowed it.
+        const PackResult wrapOk =
+            runMultipass(QStringLiteral("sf-dot-c"), QStringLiteral("bufferWrap"), QStringLiteral("repeat"));
+        QVERIFY2(wrapOk.report.contains(QStringLiteral("which the DAEMON honours")), qPrintable(wrapOk.report));
+        const PackResult wrapsOk = runMultipass(QStringLiteral("sf-dot-d"), QStringLiteral("bufferWraps"),
+                                                QJsonArray{QStringLiteral("repeat")});
+        QVERIFY2(wrapsOk.report.contains(QStringLiteral("which the DAEMON honours")), qPrintable(wrapsOk.report));
     }
 
     /// The `builtin:` SPELLING diagnostics, all three shapes, because the arm that reports a

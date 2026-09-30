@@ -92,8 +92,15 @@ void OverlayService::handleScreenAdded(QScreen* screen)
         for (const QString& vsId : mgr->virtualScreenIdsFor(physScreenId)) {
             // Recreate the snap overlay only on virtual screens that have one —
             // skip disabled, suppressed-default, and autotile-mode contexts,
-            // matching the overlay activation gate in overlay.cpp.
-            if (isSnappingContextInactive(vsId)) {
+            // matching the overlay activation gate in overlay.cpp. BOTH terms, because
+            // initializeOverlay applies both and they cover different things:
+            // isSnappingContextInactive says so itself — the excluded set carries the ACTIVE
+            // engine screens while that leg covers the bare or suppressed autotile context.
+            // With only the first, a same-connector replug of an excluded screen built a slot
+            // and MAPPED its surface (nothing painted, since only initializeOverlay sets the
+            // slot visible, but the overlayPhysScreen sentinel went live and made the screen
+            // eligible for the per-frame loops that gate on it alone).
+            if (isSnappingContextInactive(vsId) || m_excludedScreens.contains(vsId)) {
                 continue;
             }
             QRect vsGeom = mgr->screenGeometry(vsId);
@@ -116,7 +123,8 @@ void OverlayService::handleScreenAdded(QScreen* screen)
                 }
             }
         }
-    } else {
+    } else if (!isSnappingContextInactive(physScreenId) && !m_excludedScreens.contains(physScreenId)) {
+        // Same pair of gates as the virtual-screen branch above. This branch had NEITHER.
         createOverlayWindow(screen);
         updateOverlayWindow(screen);
         const auto& pState = m_screenStates.value(physScreenId);
@@ -212,6 +220,14 @@ void OverlayService::handleScreenRemoved(QScreen* screen)
 
 void OverlayService::resetModalSingletonsForDestroyedId(const QString& id)
 {
+    // An EMPTY id would match all three member ids, which are themselves empty when nothing is
+    // up, and fire all three dismissed signals plus the snap-assist cache clear. It would also
+    // make the idempotence claim below untrue for that one input, since clearing an already-empty
+    // id changes nothing. No caller passes one today — the one that could is guarded at its own
+    // site — so this is the cheap way to keep that true rather than a repair.
+    if (id.isEmpty()) {
+        return;
+    }
     // The modal singletons (snap assist, layout picker, cheatsheet) track
     // which screen's slot shows them. Destroying that screen's shell just
     // destroyed the slot, so the visible flag and screen id must reset AND

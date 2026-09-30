@@ -223,7 +223,19 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         // silently clears an invalid wrap to clamp, so a lint over the parsed
         // eff.textures could never surface an author's typo. Mirror fromJson's
         // {clamp,repeat,mirror} guard so a bad wrap fails the validator instead.
-        const QString wrap = v.toObject().value(QLatin1String("wrap")).toString();
+        const QJsonValue wrapValue = v.toObject().value(QLatin1String("wrap"));
+        if (!wrapValue.isUndefined() && !wrapValue.isNull() && !wrapValue.isString()) {
+            // A non-string wrap reached the user with no diagnostic ANYWHERE, the third key in this
+            // file with that shape: fromJson stores toString() (empty for a number, bool, array or
+            // object) and then guards its own warning on !isEmpty(), so the sampler silently clamps
+            // and nothing says why. The same !isEmpty() gate exists in the animation and pointer
+            // arms, so closing it completely is four-sided; this is the surface side.
+            lints << QStringLiteral(
+                "texture wrap is not a string, which is ignored at load (the sampler "
+                "clamps)");
+            continue;
+        }
+        const QString wrap = wrapValue.toString();
         if (!wrap.isEmpty() && !PhosphorSurfaceShaders::SurfaceShaderContract::isValidWrapToken(wrap)) {
             lints
                 << QStringLiteral("texture wrap not in {clamp,repeat,mirror}: %1 (cleared to clamp at load)").arg(wrap);
@@ -318,9 +330,17 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
     // it is multipass, which is the same authoring mistake the gate below names
     // from the other side.
     if (!eff.isMultipass) {
+        // PRESENCE, not type, for the same reason the singular keys below use it: this sweep's
+        // subject is the DECLARATION, and a toArray() test skipped a mistyped key entirely, since
+        // toArray() answers empty for a string, number, bool or object. That left "bufferWraps": 5
+        // on a single-pass pack silent HERE and silent at load too — fromJson's loop never runs and
+        // emits no journal line — which is the no-diagnostic-anywhere gap this family keeps
+        // producing. An explicitly declared empty array now reports, which is the same call made
+        // for the explicit empty string, and the message stays true of it.
         for (const QLatin1String key :
              {QLatin1String("bufferScales"), QLatin1String("bufferWraps"), QLatin1String("bufferFilters")}) {
-            if (!meta.value(key).toArray().isEmpty()) {
+            const QJsonValue arrayValue = meta.value(key);
+            if (!arrayValue.isUndefined() && !arrayValue.isNull()) {
                 lints
                     << QStringLiteral("%1 is declared on a single-pass pack, where it is never read").arg(QString(key));
             }
@@ -351,7 +371,8 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
                              .arg(QString(key));
             }
         }
-        if (meta.value(QLatin1String("bufferScale")).isDouble()) {
+        const QJsonValue singleScaleValue = meta.value(QLatin1String("bufferScale"));
+        if (!singleScaleValue.isUndefined() && !singleScaleValue.isNull()) {
             lints << QStringLiteral("bufferScale is declared on a single-pass pack, where it is never read");
         }
         // The SINGULAR string spellings, which the array sweep above does not cover and which the
@@ -425,8 +446,9 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         if (meta.value(QLatin1String("depthBuffer")).toBool()
             && !meta.value(QLatin1String("bufferScales")).toArray().isEmpty()) {
             lints << QStringLiteral(
-                "bufferScales is declared alongside \"depthBuffer\": true, and every entry is discarded at load "
-                "(the passes share one depth attachment, so they all render at bufferScale)");
+                "bufferScales is declared alongside \"depthBuffer\": true, and the daemon pins every pass to "
+                "bufferScale, so no per-pass entry takes effect (the passes share one depth attachment, whose "
+                "size the colour attachments must match)");
         }
         bool anyKawase = false;
         bool anyKawaseDown0 = false;
@@ -761,11 +783,15 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
                 }
                 continue;
             }
+            // nullopt CANNOT arrive here, so it is folded into the missing test rather than given
+            // its own arm: the caller refuses the whole pack on an escaping entry before any lint
+            // runs, and this loop is bounded to the entries it already confined. The arm that used
+            // to report an escape was reachable only past the pass budget, which the bound now
+            // excludes, so it had become dead code whose only effect was to clear chainResolves for
+            // a chain that runs. Kept as a disjunct rather than deleted, because dropping it would
+            // leave an `else if` dereferencing a possibly-empty optional.
             const auto confined = confinedPackPath(packDir, bufName);
-            if (!confined) {
-                lints << QStringLiteral("multipass buffer shader path escapes the pack directory: %1").arg(bufName);
-                chainResolves = false;
-            } else if (!QFile::exists(*confined)) {
+            if (!confined || !QFile::exists(*confined)) {
                 chainResolves = false;
                 // A MIS-CASED or space-prefixed `builtin:` prefix lands here, because the
                 // registry's own prefix test is case-sensitive and exact. Saying "missing" is
@@ -856,7 +882,7 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         // clear an unrecognised token to empty with a journal warning only.
         const auto lintSurfaceTokens = [&lints, &meta](QLatin1String key, bool wrap) {
             for (const QJsonValue& v : meta.value(key).toArray()) {
-                // A NON-STRING entry was the one wrap/filter fault that reached
+                // A NON-STRING entry was a wrap/filter fault that reached
                 // the user with no diagnostic anywhere, not even a journal line:
                 // QJsonValue::toString() answers empty for a number, bool, null,
                 // array or object, and the emptiness gate below then reads it as
@@ -880,8 +906,9 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         // answers empty for a number, bool, null, array or object, and validatedWrap's own guard
         // then skips its warning on an empty value — so a mistyped bufferWrap reached the user with
         // no diagnostic in the validator AND no journal line at load, on single-pass and multipass
-        // alike. The array arm's comment says that was "the one wrap/filter fault" with no
-        // diagnostic anywhere; it was two, and this is the other one.
+        // alike. The array arm's comment called that "the one wrap/filter fault" with no
+        // diagnostic anywhere; the same !isEmpty() shape turned up in the per-texture wrap too, so
+        // no count is given here — the shape is what to look for.
         const auto lintSingleToken = [&lints, &meta](QLatin1String key, bool wrap) {
             const QJsonValue value = meta.value(key);
             if (!value.isUndefined() && !value.isNull() && !value.isString()) {
@@ -904,19 +931,28 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         // for "repeat" or "nearest" therefore renders one way in the settings
         // preview and another on a real window, which is precisely the class of
         // divergence this validator exists to surface before a pack ships.
-        const auto lintDaemonOnlyToken = [&lints, &meta](QLatin1String key, QLatin1String honoured) {
+        // THE SHAPE IS A PARAMETER, not something to sniff from the value. An earlier version
+        // branched on value.isString() and fell back to toArray(), which is right for whichever
+        // key it happens to be and WRONG for the other: a plural key given a string took the
+        // string arm, a singular key given an array took the array arm, and both then reported
+        // "which the DAEMON honours" for a value the loader reads as EMPTY and honours not at
+        // all — printed directly beside the type lint that says it is ignored. That is the same
+        // false-mechanism class the livePasses split was written to remove, in the one arm whose
+        // entire purpose is a real preview-versus-window divergence. Reading only the declared
+        // shape means a mistyped value falls to the arm that actually describes it.
+        const auto lintDaemonOnlyToken = [&lints, &meta](QLatin1String key, QLatin1String honoured, bool plural) {
             QStringList offending;
             const QJsonValue value = meta.value(key);
-            if (value.isString()) {
-                if (!value.toString().isEmpty() && value.toString() != honoured) {
-                    offending << value.toString();
-                }
-            } else {
+            if (plural) {
                 for (const QJsonValue& v : value.toArray()) {
                     const QString tok = v.toString();
                     if (!tok.isEmpty() && tok != honoured) {
                         offending << tok;
                     }
+                }
+            } else if (value.isString()) {
+                if (!value.toString().isEmpty() && value.toString() != honoured) {
+                    offending << value.toString();
                 }
             }
             if (!offending.isEmpty()) {
@@ -928,10 +964,10 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
                              .arg(QString(key), offending.join(QLatin1String(", ")), QString(honoured));
             }
         };
-        lintDaemonOnlyToken(QLatin1String("bufferWrap"), QLatin1String("clamp"));
-        lintDaemonOnlyToken(QLatin1String("bufferWraps"), QLatin1String("clamp"));
-        lintDaemonOnlyToken(QLatin1String("bufferFilter"), QLatin1String("linear"));
-        lintDaemonOnlyToken(QLatin1String("bufferFilters"), QLatin1String("linear"));
+        lintDaemonOnlyToken(QLatin1String("bufferWrap"), QLatin1String("clamp"), false);
+        lintDaemonOnlyToken(QLatin1String("bufferWraps"), QLatin1String("clamp"), true);
+        lintDaemonOnlyToken(QLatin1String("bufferFilter"), QLatin1String("linear"), false);
+        lintDaemonOnlyToken(QLatin1String("bufferFilters"), QLatin1String("linear"), true);
         // The two daemon-only BOOLS. Only bufferFeedback is linted; the paragraph below says why
         // halfFloatBuffers is linted on an EXPLICIT true only. Same divergence class as the four
         // vocabulary arms above: the compositor's surface fold reads neither key. (Its POINTER

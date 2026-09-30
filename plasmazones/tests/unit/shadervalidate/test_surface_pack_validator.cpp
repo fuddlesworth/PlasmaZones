@@ -585,7 +585,10 @@ private Q_SLOTS:
 
         const PackResult r =
             validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-depth-scales"), obj, surfaceBodyReading({}));
-        QVERIFY2(r.report.contains(QStringLiteral("discarded at load")), qPrintable(r.report));
+        // Keyed on the MECHANISM, which is the daemon pinning every pass, not "discarded at load"
+        // — the loader keeps and clamps bufferScales and the registry keeps them, so the old
+        // wording named something that does not happen, and this assertion was pinning it there.
+        QVERIFY2(r.report.contains(QStringLiteral("the daemon pins every pass to bufferScale")), qPrintable(r.report));
         QVERIFY(r.errors > 0);
     }
 

@@ -186,8 +186,8 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
     // m_lastSourceRhiTexture at uTexture0 and never consults
     // m_userTextureImages[0], so the loop wrote the (1, 1) fallback for a slot
     // that is sampling a live surface. On the daemon animation path the
-    // override is always in play and the registry maps a pack's declared
-    // an image parameter at slot N to uTexture<N>, so [0] was the fallback on every frame.
+    // override is always in play, and the registry maps a pack's declared image
+    // parameter at slot N to uTexture<N>, so [0] was the fallback on every frame.
     // Read the size off the bound texture instead, and keep the fallback only
     // for the transient where the provider has nothing resolved yet.
     if (m_sourceTextureProvider && m_lastSourceRhiTexture) {
@@ -965,7 +965,7 @@ void ShaderNodeRhi::releaseRhiResources()
 // CONTRACT: buffer-pass sources get include expansion but NO p_<id> preamble
 // splice (unlike the image fragment and vertex stages) — a buffer pass that
 // wants the pack's parameters must include the family's uniforms header and
-// read customParams directly. This is deliberate and enforced: all three
+// read customParams directly. This is deliberate and enforced:
 // every pack validator bakes buffer passes the same way (see
 // packvalidator_animation.cpp's buffer-pass block, which documents why
 // splicing here without updating them would invert the gate). Changing one

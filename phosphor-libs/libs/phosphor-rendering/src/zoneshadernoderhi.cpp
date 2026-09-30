@@ -125,6 +125,14 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
                                         << "without uZoneLabels (halo/chroma/glyph effects will be absent)";
                 m_labelsInitGaveUp = true;
                 m_labelsTextureDirty = false;
+            } else {
+                // ASK for the frame that retries. dirty stays set above, and nothing else
+                // schedules a prepare() for a zone overlay that is not `playing` — the
+                // pool-exhaustion arm below and the base class's depth path both request one for
+                // exactly this reason. Bounded for free by kMaxInitAttempts: the give-up arm above
+                // short-circuits the whole function once it latches, so this asks at most four
+                // times and then stops.
+                requestAnotherFrame();
             }
             return; // retry next frame (or stay given-up)
         }
@@ -137,6 +145,8 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
                                         << "times — giving up; shader will render without uZoneLabels";
                 m_labelsInitGaveUp = true;
                 m_labelsTextureDirty = false;
+            } else {
+                requestAnotherFrame(); // see the texture arm above
             }
             return; // retry next frame; tex deleted by unique_ptr
         }
@@ -159,6 +169,8 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
                                         << "times — giving up; labels frozen at the previous size";
                 m_labelsInitGaveUp = true;
                 m_labelsTextureDirty = false;
+            } else {
+                requestAnotherFrame(); // see the texture arm above
             }
             return; // keep dirty; retry next frame with old texture still bound
         }
@@ -315,6 +327,12 @@ void ZoneShaderNodeRhi::prepare()
 void ZoneShaderNodeRhi::releaseResources()
 {
     qCInfo(lcZoneShader) << "releasing labels RHI resources";
+    // BEFORE the resets, not after. The parent's m_extraBindings holds raw pointers to these two
+    // objects, and the destructor's own note says that map must never point at freed resources for
+    // any part of the teardown sequence — releasing first and unregistering afterwards left a
+    // window where it did. Nothing reads the map in between today, so this was latent rather than
+    // undefined, but the invariant is cheaper to keep than to re-audit.
+    removeExtraBinding(PhosphorShaders::Bindings::kConsumer);
     m_labelsTexture.reset();
     m_labelsSampler.reset();
     m_labelsInitialized = false;
@@ -328,7 +346,6 @@ void ZoneShaderNodeRhi::releaseResources()
     // The texture is gone; the next upload re-creates and fully clears it, so
     // drop the stale vacated-rect tracking from the old texture.
     m_prevTileRects.clear();
-    removeExtraBinding(PhosphorShaders::Bindings::kConsumer);
 
     ShaderNodeRhi::releaseResources();
 }
