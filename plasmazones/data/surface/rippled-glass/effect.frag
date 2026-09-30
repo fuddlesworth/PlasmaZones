@@ -1,6 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
+// ONE of this pack's declared parameters is never read here: `blurRadius` is
+// consumed POSITIONALLY by the shared buffer passes as customParams[0].x, the
+// first scalar parameter declared. surface_blur.glsl's header carries the slot
+// convention and the offline validator lints it by name. So a reader looking for
+// p_blurRadius below will not find it, and that is not an omission.
+//
 // Rippled-glass pack, main pass: an INTERIOR-refracting pane over the blurred
 // backdrop (iChannel6). Where the Glass pack bends the backdrop only along an
 // edge bevel, this pack warps it across the WHOLE pane: a two-octave value-
@@ -48,8 +54,14 @@ vec2 rippleCoord(vec2 c) {
 }
 
 vec4 pSurface(vec2 uv) {
+    // A degenerate frame rect collapses the slab mask to a dot, and the pane below is
+    // multiplied by it, so the content has to pass through here (see surfaceFrameDegenerate).
+    if (surfaceFrameDegenerate()) {
+        return surfaceTexel(uv);
+    }
+
     float cornerPx = p_cornerRadius * uSurfaceScale;
-    SurfaceSlab slab = surfaceSlabOpen(uv, cornerPx, p_roundBottomCorners >= 0.5 ? cornerPx : 0.0, p_edgeSoftness);
+    SurfaceSlab slab = surfaceSlabOpen(uv, cornerPx, surfaceBottomRadius(cornerPx, p_roundBottomCorners), p_edgeSoftness);
     // Fade the window content over the pane; the translucency it frees is
     // filled by the rippled backdrop in slabComposite below.
     slab.window *= clamp(p_contentOpacity, 0.0, 1.0);
@@ -98,10 +110,21 @@ vec4 pSurface(vec2 uv) {
         // both the look and the cost, and this pack has not been rendered
         // against the change. The comment is corrected so the next reader does
         // not take the old justification as a reason to keep the value.
+        //
+        // The ZERO-STRENGTH gate below is a different question and changes no
+        // pixel. Both consumers of the gradient are off at their DECLARED
+        // MINIMA: refractionStrength 0 zeroes dispPx and shift (which the
+        // fringe fetches below already test for), and highlightStrength 0
+        // zeroes the glint. With both at 0 the four rippleHeight calls ran over
+        // the whole canvas and could not change a thing. Gated on the params
+        // rather than on the result, so it costs one branch, not the noise.
         const float e = 0.35;
-        vec2 grad = vec2(rippleHeight(q + vec2(e, 0.0), t) - rippleHeight(q - vec2(e, 0.0), t),
-                         rippleHeight(q + vec2(0.0, e), t) - rippleHeight(q - vec2(0.0, e), t))
-            / (2.0 * e);
+        vec2 grad = vec2(0.0);
+        if (p_refractionStrength > 0.0 || p_highlightStrength > 0.0) {
+            grad = vec2(rippleHeight(q + vec2(e, 0.0), t) - rippleHeight(q - vec2(e, 0.0), t),
+                        rippleHeight(q + vec2(0.0, e), t) - rippleHeight(q - vec2(0.0, e), t))
+                / (2.0 * e);
+        }
 
         // Gradient refraction: displace the backdrop sample UP-slope (the
         // gradient points uphill) by at most p_refractionStrength logical px,
@@ -172,7 +195,7 @@ vec4 pSurface(vec2 uv) {
         lit += glint * g.a;
         lit = mix(lit, tint * g.a, tintStrength);
         lit += surfaceGrain(px, p_noiseStrength) * g.a;
-        pane = vec4(clamp(lit, 0.0, max(g.a, 0.0001)), g.a) * mask;
+        pane = vec4(clamp(lit, 0.0, max(g.a, 0.0)), g.a) * mask;
     } else {
         pane = faintTintSlab(tint, tintStrength, mask);
     }

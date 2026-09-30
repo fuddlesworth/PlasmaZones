@@ -1,9 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Screen-management methods on OverlayService: setup / remove / hot-plug add /
-// remove / physical-screen teardown. Extracted from overlayservice.cpp to keep
-// the screen-lifecycle code grouped with itself.
+// Screen-management methods on OverlayService: hot-plug add / remove /
+// virtual-screen reconfigure / physical-screen teardown, plus two helpers the
+// same lifecycle needs (window-on-screen assertion, modal-singleton reset).
+// Extracted from overlayservice.cpp to keep the screen-lifecycle code grouped
+// with itself.
 
 #include "internal.h"
 #include "daemon/overlayservice.h"
@@ -24,35 +26,6 @@
 
 namespace PlasmaZones {
 
-void OverlayService::setupForScreen(QScreen* screen)
-{
-    // Set up overlay windows for all effective screens on this physical screen
-    auto* mgr = m_screenManager;
-    const QString physId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
-    if (mgr && mgr->hasVirtualScreens(physId)) {
-        for (const QString& vsId : mgr->virtualScreenIdsFor(physId)) {
-            if (!m_screenStates.contains(vsId) || !m_screenStates[vsId].overlayPhysScreen) {
-                QRect vsGeom = mgr->screenGeometry(vsId);
-                if (!vsGeom.isValid()) {
-                    qCWarning(lcOverlay) << "setupForScreen: invalid geometry for virtual screen" << vsId
-                                         << ", skipping overlay creation";
-                    continue;
-                }
-                createOverlayWindow(vsId, screen, vsGeom);
-            }
-        }
-    } else {
-        if (!m_screenStates.contains(physId) || !m_screenStates[physId].overlayPhysScreen) {
-            createOverlayWindow(screen);
-        }
-    }
-}
-
-void OverlayService::removeScreen(QScreen* screen)
-{
-    destroyOverlayWindow(screen);
-}
-
 void OverlayService::assertWindowOnScreen(QWindow* window, QScreen* screen, const QRect& geometry)
 {
     if (!window || !screen) {
@@ -64,9 +37,39 @@ void OverlayService::assertWindowOnScreen(QWindow* window, QScreen* screen, cons
     // For virtual screens (geometry differs from physical), positioning is handled by
     // LayerShellQt margins. Calling setGeometry with absolute coordinates would override
     // those margins, causing double-positioning. Only set geometry for physical screens.
-    const QRect targetGeom = geometry.isValid() ? geometry : screen->geometry();
-    if (targetGeom == screen->geometry()) {
-        window->setGeometry(targetGeom);
+    //
+    // AN UNRESOLVED @p geometry IS NOT A PHYSICAL SCREEN. This used to substitute
+    // screen->geometry() for an invalid argument and then compare against that same value, so
+    // the test was trivially true and a VIRTUAL-screen window whose geometry a caller could not
+    // resolve took the absolute-setGeometry branch this comment says must never run for one.
+    //
+    // THE GUARD ONLY WORKS IF CALLERS STOP SUBSTITUTING FIRST, and for one round it did not,
+    // because every caller already substituted. resolveScreenGeometry is itself the substitution
+    // (and resolveTargetScreen under it falls back to the PRIMARY monitor for an id nothing
+    // resolves), so an unresolvable virtual id arrived here as the primary screen's own rect and
+    // sailed through the comparison. The modal and OSD callers now pass trueScreenGeometry for the
+    // verdict and keep the substituted rect for sizing. An unresolvable id is reached from a system
+    // boundary, not an internal race: the D-Bus showSnapAssist entry point takes a screen id on
+    // trust and defers it through a zero timer, so a virtual-screen reconfigure can invalidate it
+    // in between.
+    //
+    // WHAT STOPPING HERE ACTUALLY SAVES, stated narrowly because an earlier version overstated it.
+    // The QPA discards a layer surface's requested POSITION outright and recomputes it from the
+    // anchors and margins, so only the SIZE this write implies can matter, and then only on an axis
+    // that is not doubly anchored — i.e. on a virtual screen. At the modal and OSD sites the caller
+    // resizes from the substituted rect two lines later, so the skip is one fewer round-trip rather
+    // than a repair. The sites where this write IS the last word on size are the hot-plug calls
+    // below and the overlay's own Phase 3 call, and each of those passes a rect that is valid by
+    // construction, which is why they pass it directly.
+    //
+    // Do NOT replace this with a VirtualScreenId::isVirtual test: layerPlacementForVs treats a
+    // VS that covers its whole output as physical (AnchorAll, zero margins), and an isVirtual
+    // test would then wrongly skip the setGeometry that one does need.
+    if (!geometry.isValid()) {
+        return;
+    }
+    if (geometry == screen->geometry()) {
+        window->setGeometry(geometry);
     }
     // Virtual screens: size is set by the caller; position is set by LayerShellQt margins.
 }
@@ -97,8 +100,15 @@ void OverlayService::handleScreenAdded(QScreen* screen)
         for (const QString& vsId : mgr->virtualScreenIdsFor(physScreenId)) {
             // Recreate the snap overlay only on virtual screens that have one —
             // skip disabled, suppressed-default, and autotile-mode contexts,
-            // matching the overlay activation gate in overlay.cpp.
-            if (isSnappingContextInactive(vsId)) {
+            // matching the overlay activation gate in overlay.cpp. BOTH terms, because
+            // initializeOverlay applies both and they cover different things:
+            // isSnappingContextInactive says so itself — the excluded set carries the ACTIVE
+            // engine screens while that leg covers the bare or suppressed autotile context.
+            // With only the first, a same-connector replug of an excluded screen built a slot
+            // and MAPPED its surface (nothing painted, since only initializeOverlay sets the
+            // slot visible, but the overlayPhysScreen sentinel went live and made the screen
+            // eligible for the per-frame loops that gate on it alone).
+            if (isSnappingContextInactive(vsId) || m_excludedScreens.contains(vsId)) {
                 continue;
             }
             QRect vsGeom = mgr->screenGeometry(vsId);
@@ -121,13 +131,14 @@ void OverlayService::handleScreenAdded(QScreen* screen)
                 }
             }
         }
-    } else {
+    } else if (!isSnappingContextInactive(physScreenId) && !m_excludedScreens.contains(physScreenId)) {
+        // Same pair of gates as the virtual-screen branch above. This branch had NEITHER.
         createOverlayWindow(screen);
         updateOverlayWindow(screen);
         const auto& pState = m_screenStates.value(physScreenId);
         if (pState.overlayPhysScreen && pState.shell) {
             if (auto* window = pState.shell->shellWindow()) {
-                assertWindowOnScreen(window, screen);
+                assertWindowOnScreen(window, screen, screen->geometry());
                 if (pState.shell->shellSurface() && !pState.shell->shellSurface()->isLogicallyShown()) {
                     pState.shell->shellSurface()->show();
                     syncPassiveShellSurfaceState(physScreenId);
@@ -186,10 +197,10 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
         }
     }
 
-    // Snap-assist + layout picker post-shell-migration are Item slots
-    // inside the per-screen passive shell - destroying the shell
-    // (above, via destroyPassiveShell) tears the slots down with
-    // it. No separate cleanup needed.
+    // All three modal singletons post-shell-migration (snap assist, layout
+    // picker, cheatsheet) are Item slots inside the per-screen passive shell -
+    // destroying the shell (above, via destroyPassiveShell) tears the slots
+    // down with it. No separate cleanup needed.
 
     const QString physId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
     clearShellFailuresForPhysicalScreen(physId);
@@ -217,6 +228,14 @@ void OverlayService::handleScreenRemoved(QScreen* screen)
 
 void OverlayService::resetModalSingletonsForDestroyedId(const QString& id)
 {
+    // An EMPTY id would match all three member ids, which are themselves empty when nothing is
+    // up, and fire all three dismissed signals plus the snap-assist cache clear. It would also
+    // make the idempotence claim below untrue for that one input, since clearing an already-empty
+    // id changes nothing. No caller passes one today — the one that could is guarded at its own
+    // site — so this is the cheap way to keep that true rather than a repair.
+    if (id.isEmpty()) {
+        return;
+    }
     // The modal singletons (snap assist, layout picker, cheatsheet) track
     // which screen's slot shows them. Destroying that screen's shell just
     // destroyed the slot, so the visible flag and screen id must reset AND
@@ -224,13 +243,13 @@ void OverlayService::resetModalSingletonsForDestroyedId(const QString& id)
     // release off those signals, and a stale visible=true would swallow
     // the next toggle press showing nothing. Signals fire even though the
     // slot never animated out — dismissal-on-teardown is part of each
-    // signal's documented contract. Called from EVERY teardown site that
-    // destroys a shell able to host a visible modal
-    // (destroyAllWindowsForPhysicalScreen's loop, and onVirtualScreensChanged's
-    // physical-removal branch AND its VS-reconfig bare-physId destroy):
-    // whichever runs first removes the m_screenStates keys or zeroes the
-    // ShellState, so each site must reset for the ids it destroys rather
-    // than relying on another. Idempotent — the first call clears the
+    // signal's documented contract. Called from every RUNTIME teardown site
+    // that destroys a shell able to host a visible modal, and deliberately NOT
+    // from ~OverlayService, where resetting members and emitting dismissed
+    // signals is moot. Whichever site runs first
+    // removes the m_screenStates keys or zeroes the ShellState, so each site
+    // must reset for the ids it destroys rather than relying on another.
+    // Idempotent, so the first call clears the
     // screen id, making any later call for the same id a no-op.
     if (id == m_snapAssistScreenId) {
         m_snapAssistVisible = false;
@@ -282,17 +301,22 @@ void OverlayService::onVirtualScreensChanged(const QString& physicalScreenId)
                 virtualKeysToDestroy.append(it.key());
             }
         }
+        // OUR entry goes before the lib's state, matching the sibling teardown above. The reverse
+        // order is safe today only by luck: removeShellStates destroys the lib-side entry while
+        // unwirePassiveShellSlots deliberately leaves our PerScreenOverlayState::shell pointing at
+        // it, so between the two statements that pointer dangles. Nothing dereferences it there
+        // now, and dropping our entry first means nothing can.
         for (const QString& key : virtualKeysToDestroy) {
             destroyPassiveShell(key);
-            removeShellStates(key);
             m_screenStates.remove(key);
+            removeShellStates(key);
             resetModalSingletonsForDestroyedId(key);
         }
         destroyOverlayWindow(physicalScreenId);
         destroyZoneSelectorWindow(physicalScreenId);
         destroyPassiveShell(physicalScreenId);
-        removeShellStates(physicalScreenId);
         m_screenStates.remove(physicalScreenId);
+        removeShellStates(physicalScreenId);
         resetModalSingletonsForDestroyedId(physicalScreenId);
         // Drop sticky creation-failure flags rooted on the now-removed
         // physical monitor. Without this, a same-name replug would
@@ -317,9 +341,10 @@ void OverlayService::onVirtualScreensChanged(const QString& physicalScreenId)
         // the ShellState fields; without the removals the stale entry
         // survives until the monitor is physically removed (bounded but
         // pointless, and destroyAllWindowsForPhysicalScreen skips it
-        // because every field it matches on was just zeroed).
-        removeShellStates(physicalScreenId);
+        // because every field it matches on was just zeroed). OUR entry
+        // first, for the dangling-pointer reason the branch above states.
         m_screenStates.remove(physicalScreenId);
+        removeShellStates(physicalScreenId);
         // A modal open on the pre-split bare-physId shell just lost its
         // slot. The later destroyAllWindowsForPhysicalScreen loop CANNOT
         // reset it: destroyShell's PreDestroy hook already zeroed every
@@ -349,15 +374,27 @@ void OverlayService::onVirtualScreensChanged(const QString& physicalScreenId)
     }
 
     // Recreate with new virtual screen config if visible.
+    //
+    // BOTH EXCLUSION GATES, the same pair as handleScreenAdded above and
+    // initializeOverlay's Phase 0. This was the fourth live createOverlayWindow site and it
+    // carried neither, so a virtual-screen change while overlays were up built a slot for an
+    // autotile or excluded screen and lit its overlayPhysScreen sentinel, which is the sole
+    // gate on updateGeometries, restampZoneHighlights, highlightZone(s), refreshVisibleWindows
+    // and the shader hot-reload sweep. Bounded rather than permanent (the next initializeOverlay
+    // dismisses the non-target key, and hide() dismisses every sentinel-bearing one), but wrong
+    // for the interval, and this handler is wired to two live signals that fire during a drag.
     if (isVisible()) {
         if (mgr && mgr->hasVirtualScreens(physicalScreenId)) {
             for (const QString& vsId : mgr->virtualScreenIdsFor(physicalScreenId)) {
+                if (isSnappingContextInactive(vsId) || m_excludedScreens.contains(vsId)) {
+                    continue;
+                }
                 QRect vsGeom = mgr->screenGeometry(vsId);
                 if (vsGeom.isValid()) {
                     createOverlayWindow(vsId, physScreen, vsGeom);
                 }
             }
-        } else {
+        } else if (!isSnappingContextInactive(physicalScreenId) && !m_excludedScreens.contains(physicalScreenId)) {
             createOverlayWindow(physScreen);
         }
     }

@@ -860,7 +860,11 @@ void ShaderEffect::setWallpaperTextureVariant(const QVariant& texture)
     // Invalid therefore clears, which is right for the clear and cannot be
     // defended against for the Binding. That is why the QML-source sweep test
     // is the guard against a host driving one property from both a direct
-    // assignment and a Binding — this setter structurally cannot catch it.
+    // assignment and a Binding — this setter structurally cannot catch it. The
+    // sweep has to cover EVERY tier that hosts one of these items, not only the
+    // app tree: it read plasmazones/src alone for a while, which left
+    // phosphor-surface-quick's SurfaceDecoration.qml, the file the regression
+    // lived in, outside the guard that names it.
     //
     // A JS-side expression can still hand over a QJSValue, and a QVariant
     // nested in a QVariant is cheap to survive, so the peel below stays as

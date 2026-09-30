@@ -2,6 +2,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
+// ONE of this pack's declared parameters is never read here: `blurRadius` is
+// consumed POSITIONALLY by the shared buffer passes as customParams[0].x, the
+// first scalar parameter declared. surface_blur.glsl's header carries the slot
+// convention and the offline validator lints it by name. So a reader looking for
+// p_blurRadius below will not find it, and that is not an omission.
+//
 // The first copyright line is there because this file says, two paragraphs down,
 // that it is a FULL PORT of kwin-effects-glass, and names that project's own
 // glass.glsl, snells-glass.glsl and oklab.glsl. CLAUDE.md's rule for the
@@ -85,8 +91,14 @@ vec2 glassCoord(vec2 c) {
 }
 
 vec4 pSurface(vec2 uv) {
+    // A degenerate frame rect collapses the slab mask to a dot, and the pane below is
+    // multiplied by it, so the content has to pass through here (see surfaceFrameDegenerate).
+    if (surfaceFrameDegenerate()) {
+        return surfaceTexel(uv);
+    }
+
     float cornerPx = p_cornerRadius * uSurfaceScale;
-    SurfaceSlab slab = surfaceSlabOpen(uv, cornerPx, p_roundBottomCorners >= 0.5 ? cornerPx : 0.0, p_edgeSoftness);
+    SurfaceSlab slab = surfaceSlabOpen(uv, cornerPx, surfaceBottomRadius(cornerPx, p_roundBottomCorners), p_edgeSoftness);
     // Fade the window content over the pane; the translucency it frees is
     // filled by the refracted backdrop in the composite below.
     slab.window *= clamp(p_contentOpacity, 0.0, 1.0);
@@ -103,10 +115,14 @@ vec4 pSurface(vec2 uv) {
     vec4 pane;
     if (uHasBackdrop >= 0.5) {
         // Bevel profile from the VISUAL-radius distance (reference glass()).
-        // max() keeps the clamp's hi bound above its lo bound on a degenerate
-        // (tiny) frame, where minHalf * 0.9 could fall below 0.1 and GLSL clamp
-        // with min > max would collapse edgePx toward 0 (an abs(d)/edgePx that
-        // is 0/0 = NaN at the frame centre).
+        // max() keeps the clamp's hi bound above its lo bound where minHalf * 0.9
+        // could fall below 0.1, since GLSL clamp with min > max would collapse
+        // edgePx toward 0 (an abs(d)/edgePx that is 0/0 = NaN at the frame centre).
+        // The degenerate-frame guard at the top of this same pSurface now forces both
+        // extents to at least one device px, so minHalf * 0.9 is at least 0.45 and this
+        // cannot bind on any frame that reaches here. Kept because it costs nothing and
+        // records the precondition that guard supplies, so a third-party pack copying
+        // this line without the guard still cannot invert the clamp.
         float edgePx = clamp(p_edgeWidth * uSurfaceScale, 0.1, max(minHalf * 0.9, 0.1));
         float edgeFactor = 1.0 - clamp(abs(d) / edgePx, 0.0, 1.0);
         float eased = smoothstep(0.0, 1.0, edgeFactor);
@@ -174,7 +190,11 @@ vec4 pSurface(vec2 uv) {
             vec2 size = uSurfaceFrameSize;
             vec4 g = surfaceBlurTexel(glassCoord(surfaceUvFromPixel(topLeft + fG * size)));
             lit = g.rgb;
-            if (fringe > 0.001) {
+            // Second test for the same reason the cheap arm gives below: deeper
+            // into the pane than the bevel `concave` is 0, so shrink is 0 and
+            // fR == fG == fB. Without it these two dependent fetches re-read
+            // the texel already in `g` over most of the pane.
+            if (fringe > 0.001 && shrink > 0.0) {
                 lit.r = surfaceBlurTexel(glassCoord(surfaceUvFromPixel(topLeft + fR * size))).r;
                 lit.b = surfaceBlurTexel(glassCoord(surfaceUvFromPixel(topLeft + fB * size))).b;
             }
@@ -221,7 +241,9 @@ vec4 pSurface(vec2 uv) {
             vec2 shiftG = pxToUv(dirPx * magnitude) + lensShift;
             vec4 g = surfaceBlurTexel(glassCoord(uv + shiftG));
             lit = g.rgb;
-            if (fringe > 0.001) {
+            // Second test as in the other two arms: with magnitude 0 every shift
+            // collapses onto lensShift, which is most of the pane.
+            if (fringe > 0.001 && magnitude > 0.0) {
                 vec2 shiftR = pxToUv(dirPx * (magnitude * (1.0 + fringe))) + lensShift;
                 vec2 shiftB = pxToUv(dirPx * (magnitude * (1.0 - fringe))) + lensShift;
                 lit.r = surfaceBlurTexel(glassCoord(uv + shiftR)).r;
@@ -261,13 +283,14 @@ vec4 pSurface(vec2 uv) {
             vec2 dirUv = pxToUv(inward * strengthUv * paneShortPx);
             vec4 g = surfaceBlurTexel(glassCoord(uv + dirUv));
             lit = g.rgb;
-            // Gated the way the concave and Snell arms already gate theirs. Run
-            // unconditionally these cost two dependent fetches per fragment that
-            // return the texel already in `g` for two separate reasons: at
+            // All three refraction arms gate their fringe fetches the same way.
+            // Run unconditionally these cost two dependent fetches per fragment
+            // that return the texel already in `g` for two separate reasons: at
             // fringing 0 the two offsets collapse onto dirUv, and anywhere
             // deeper into the pane than the bevel `concave` is exactly 0, so
             // strengthUv and dirUv are zero and all three fetches hit one texel.
-            // That second case covers most of the pane at the shipped defaults.
+            // That second case covers most of the pane at the shipped defaults,
+            // which is what makes the second test worth its branch.
             if (fringe > 0.001 && strengthUv > 0.0) {
                 lit.r = surfaceBlurTexel(glassCoord(uv + dirUv * (1.0 + fringe))).r;
                 lit.b = surfaceBlurTexel(glassCoord(uv + dirUv * (1.0 - fringe))).b;
@@ -297,8 +320,22 @@ vec4 pSurface(vec2 uv) {
         // contrast, saturation and vibrancy in one call, and glass needs its
         // OKLab saturation BETWEEN the contrast and the vibrancy to keep the
         // reference's order. Folding onto the helper would move that step.
-        float paneAlpha = max(pane.a, 0.0001);
-        lit = pane.a > 0.0001 ? lit / paneAlpha : vec3(0.0);
+        // The bail threshold stays BELOW one 8-bit quantum, and deliberately so. An audit
+        // round raised it to 1/255 "to match surfaceBackdropGrade", which was wrong twice:
+        // iChannel6 is sampled with GL_LINEAR (surface_capture.cpp sets the filter), so
+        // bilinear blending produces alphas between 0 and 1/255 and they carry a correctly
+        // interpolated hue, which raising the threshold replaced with BLACK; and the helper
+        // it cited RETURNS THE SAMPLE UNCHANGED at its guard rather than blacking it, so
+        // matching the number would have inverted the behaviour. duotone and phosphor-glass
+        // also guard BELOW one stored quantum, at 0.001, and this sits lower still, which is
+        // worth knowing before anyone unifies them. The error either way is bounded by the
+        // re-premultiply at the end of this branch.
+        //
+        // No max() floor on the divisor: the ternary already excludes every alpha the floor
+        // would have raised, so max(pane.a, 0.0001) was provably equal to pane.a in the arm
+        // that reads it and unread in the other. It was carried for two rounds with a
+        // paragraph explaining it was a no-op.
+        lit = pane.a > 0.0001 ? lit / pane.a : vec3(0.0);
 
         // Rim glow + optional edge lighting (reference glassOutline).
         float dim = focusDim(0.55);

@@ -7,12 +7,17 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 /**
- * Compile-error card for a live shader preview.
+ * Error card for a live shader preview.
  *
- * Shown overlaid on the preview surface when the RHI shader compile fails —
- * an error icon, a "Shader failed to compile" heading, and the raw (scrollable,
- * monospaced) GLSL error log. Shared by the editor preview and the settings
- * shader browser so both surface the same in-app feedback.
+ * Shown overlaid on the preview surface when a shader fails to come up: an
+ * error icon, a "Shader failed to load" heading, and the raw (scrollable,
+ * monospaced) error log. The log is a glslang compile log on a bake failure,
+ * but most of the reachable messages are LOAD failures (an unusable URL, a
+ * missing zone.vert, a fragment file that will not open), so the heading
+ * deliberately says load rather than compile. Its one production consumer is
+ * the settings shader browser. The live daemon overlay shows the same errorLog
+ * text through its own inline card in RenderNodeOverlayContent.qml rather than
+ * through this component.
  *
  * The host sets `errorLog` (typically `ZoneShaderItem.errorLog`) and positions
  * this with anchors; it self-hides when the log is empty.
@@ -20,7 +25,7 @@ import org.kde.kirigami as Kirigami
 Control {
     id: root
 
-    /// The compiler's error text. Empty hides the banner.
+    /// The load or compile error text. Empty hides the banner.
     property string errorLog: ""
 
     visible: errorLog.length > 0
@@ -51,7 +56,7 @@ Control {
             Kirigami.Heading {
                 Layout.fillWidth: true
                 level: 5
-                text: i18nc("@info:status shader preview", "Shader failed to compile")
+                text: i18nc("@info:status shader preview", "Shader failed to load")
                 color: Kirigami.Theme.negativeTextColor
                 elide: Text.ElideRight
             }

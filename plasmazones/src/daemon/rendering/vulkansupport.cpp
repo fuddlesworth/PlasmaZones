@@ -16,8 +16,9 @@
 #include <QVulkanFunctions>
 #endif
 
-// Logging note: this TU compiles into both the daemon and the editor
-// binaries, so it logs under lcCore rather than either app's category.
+// Logging note: this TU compiles only into the daemon, and logs under lcCore
+// rather than the overlay category because GPU selection is core-level and
+// happens before any overlay exists.
 // Filter with plasmazones.core=true when debugging GPU selection.
 
 namespace PlasmaZones {

@@ -24,9 +24,10 @@
 //     goes flat rather than wrong.
 //   • vnoise and voronoi floor() and add 1.0, so they collapse to a constant
 //     at |p| >= 2^24.
-//   • hexLocal is the only path that can produce a NaN, because mod() is a
-//     cancelling subtraction quantised to ULP(uv); it stair-steps well before
-//     that. Keep its input bounded.
+//   • hexLocal is the only path that can leave its own cell range, because mod()
+//     is a cancelling subtraction quantised to ULP(uv), so it stair-steps and can
+//     land outside [0, r). Not a NaN route: mod(x, r) with a finite x and a
+//     non-zero constant r is always finite. Keep its input bounded anyway.
 //   • Both integer hashes return exactly 0 at the EXACT ORIGIN, p == vec2(0),
 //     and only there. A hash result reads like a value in (0, 1), so using one
 //     as a divisor, a pow base or a smoothstep edge is idiomatic and each is
@@ -134,8 +135,10 @@ float hashSin1(float n) {
 // and its own comment saying why.
 //
 // Returns the UN-weighted term. A pack over a premultiplied backdrop multiplies
-// by that alpha itself, which four of the five do and blur does not need to,
-// since it grains an un-premultiplied colour and re-premultiplies after.
+// by that alpha itself, which four of the five do and DUOTONE does not need to,
+// since it grains an un-premultiplied colour and re-premultiplies after. (blur
+// weights by alpha like the other three; it moved into premultiplied space when
+// it adopted surfaceBackdropGrade, and says so at its own call.)
 float surfaceGrain(vec2 px, float strength) {
     return (hash13(px) - 0.5) * 2.0 * clamp(strength, 0.0, 0.2);
 }

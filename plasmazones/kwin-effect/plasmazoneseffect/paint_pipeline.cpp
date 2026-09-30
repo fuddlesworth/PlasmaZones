@@ -45,7 +45,6 @@
 #include <QVector2D>
 #include <QVector4D>
 
-#include <chrono>
 #include <type_traits>
 
 #include "compositor/stripviewanimator.h"
@@ -150,29 +149,11 @@ KWin::RenderDevice* PlasmaZonesEffect::currentPassRenderDevice() const
 
 void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
 {
-    // KWin 6.7 no longer passes a presentTime; sample the steady clock
-    // ourselves. CompositorClock's epoch is steady_clock by contract, so a
-    // current-time sample is the correct (and only available) source — KWin's
-    // own effects likewise read "now" rather than the target present time.
-    const auto presentTime =
-        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch());
-
-    // Feed presentTime to the clock for THIS output so animations
-    // bound to other outputs' clocks read stale `now` on their
-    // AnimatedValue::advance() calls this tick and step with dt=0
-    // (correct: they tick when their own output paints, not when any
-    // output paints).
-    //
-    // The fallback clock is intentionally NOT fed per-output presentTime
-    // here. It self-drives from std::chrono::steady_clock — on an
-    // N-output desktop, prePaintScreen fires N× per vsync, and pushing
-    // presentTime into the fallback every call would step fallback-bound
-    // animations N× per frame. Fallback's now() reads steady_clock
-    // directly so it advances once per wall-clock moment regardless of
-    // how many outputs painted. See CompositorClock::now()/updatePresentTime
-    // for the fallback branch; epoch identity is shared (both rooted at
-    // steady_clock) so rebinds between per-output and fallback remain
-    // compatible.
+    // No presentTime is sampled or pushed to a clock here. KWin 6.7 stopped
+    // passing one, and CompositorClock now reads steady_clock in now() for
+    // every output, so there is nothing per-output to feed. See
+    // CompositorClock's class docblock for why the per-output latch was
+    // retired rather than fed from our own wall-clock sample.
     m_currentPassOutput = data.screen;
     // Latched with the output, cleared with it: the view is this pass's route to
     // the RenderDevice its ItemRenderer belongs to (see m_currentPassView).
@@ -261,10 +242,10 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
                 // At a leg boundary the two can disagree for a single frame,
                 // both ways: a column that unparks this tick is skipped here
                 // though the draw will paint it, and a column that parks this
-                // tick is elected here though the draw will cull it. Neither
-                // costs more than one frame with the pills under the second
-                // trigger instead of the first. Moving the election after
-                // advanceAnimations would tighten it, but the anchor must also
+                // tick is elected here though the draw will cull it. The cost is one frame
+                // with the pills under the second trigger rather than the first, or (for the
+                // unpark) under a strip column, or none where the skip leaves no anchor. Moving
+                // the election after advanceAnimations would tighten it, but the anchor must also
                 // survive the scene's own occlusion culling, which nothing here
                 // can predict, so the fallback has to stay correct regardless.
                 if (scrollParkedOffscreen(sw, getWindowId(sw))) {
@@ -307,24 +288,11 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
             m_scrollTabAboveAnchor.clear();
         }
     }
-    if (data.screen) {
-        auto it = m_motionClocksByOutput.find(data.screen);
-        if (it != m_motionClocksByOutput.end()) {
-            // Pass `data.screen` so the clock can cross-check in debug
-            // builds that it is being fed presentTime only for the
-            // output it was constructed against. The map lookup above
-            // already guarantees this by construction, but the extra
-            // argument makes the invariant explicit at the call site —
-            // a future refactor that stops keying by output will fire
-            // the assertion instead of silently latching another
-            // output's timestamps.
-            it->second->updatePresentTime(presentTime, data.screen);
-        }
-    }
-
-    // advanceAnimations iterates all animations regardless of which
-    // clock was just updated; each animation reads its own clock's
-    // `now()` in AnimatedValue::advance and steps with its own dt.
+    // advanceAnimations iterates every animation, whichever output is
+    // painting; each one reads its own clock's `now()` in
+    // AnimatedValue::advance and steps with its own dt. On an N-output
+    // desktop that means N steps per vsync, which parametric curves and
+    // Spring::step both absorb exactly (see CompositorClock's docblock).
     // Cost is O(#animations) per prePaintScreen — typical paths see
     // single-digit counts.
     m_windowAnimator->advanceAnimations();
@@ -594,11 +562,11 @@ bool PlasmaZonesEffect::paintScreenImpl(const KWin::RenderTarget& renderTarget, 
     // pass's cursor hide back BEFORE that pass runs, not after: the strip
     // pass's own hideCursorForPass refuses when KWin already reports the
     // cursor hidden, so a hide still held here would leave neither pass
-    // drawing the pointer for the length of the leg. Gated on the strip
-    // pass's entry check, which is broader than "will paint": the pass can
-    // still abandon the frame after it (a compile sentinel, a capture that
-    // failed to allocate), costing one frame with both cursors on that path.
-    // Accepted rather than plumbing a will-paint predicate through.
+    // drawing the pointer for the length of the leg. The gate reads the same
+    // frame-pinned clock paintOutput does, so it cannot answer false for a
+    // frame the pass then takes, but it is still broader than "will paint":
+    // the pass can abandon after it (a compile sentinel, a failed capture
+    // allocation), costing one frame with both cursors. Accepted as is.
     if (m_stripTransition.isRunningForOutput(screen)) {
         m_pointerPass.releaseCursorHide(screen);
     }
@@ -650,25 +618,25 @@ bool PlasmaZonesEffect::paintScreenImpl(const KWin::RenderTarget& renderTarget, 
     // blitting at the anchor's slot. Still requires an
     // anchor: with no strip column on the output there is nothing the pills
     // belong to this pass.
-    // !m_directPaintCapture for symmetry with the two paintWindow triggers, which
-    // both treat the latch as load-bearing. Unreachable today — both of its
-    // setters drive paintWindow directly and never call paintScreen — but the
-    // asymmetry is the kind a future direct-drive caller falls into.
+    // !m_directPaintCapture and !m_currentPassPaintFailed for symmetry with the two
+    // paintWindow triggers, which both treat these latches as load-bearing. The first is
+    // unreachable today (its one setter's two callers drive paintWindow directly and never
+    // call paintScreen); the second is the same raw GL on the same possibly-lost context.
     if (screen && m_scrollTabPaintAnchor && !m_scrollTabPainted && !m_capturingSnapshot && !m_directPaintCapture
-        && m_scrollTabPainter->hasIndicators(screen)) {
+        && m_scrollTabPainter->hasIndicators(screen) && !m_currentPassPaintFailed) {
         paintScrollTabIndicators(renderTarget, viewport, deviceRegion);
     }
-    // The pointer decoration chain composites over the FINISHED frame, so it
-    // is the last thing this override does on the normal path. Reached only
-    // here: a desktop transition or a strip leg replaces the output's paint
-    // and returns above, and the pass gives its cursor hide back at those
-    // sites. The capture guard is defensive only: captures route through
-    // drawWindow and never nest a screen pass today, so the latch is always
-    // false here.
-    if (!m_capturingSnapshot) {
+    // The pointer chain composites over the FINISHED frame, so it is the last thing this override does
+    // on the normal path, reached only here: a foreign paint returns above, releasing the hide there. As
+    // the SECOND raw-GL consumer the failure comment names, it carries the same latch term as the three
+    // pill sites; and no capture nests a screen pass (both setters re-enter drawWindow), so both are inert.
+    if (!m_capturingSnapshot && m_currentPassPaintFailed) {
+        m_pointerPass.releaseCursorHide(screen); // else nobody draws the sprite
+    } else if (!m_capturingSnapshot) {
         m_pointerPass.paintOutput(renderTarget, viewport, screen, currentPassRenderDevice());
     }
-    return true;
+    // A latch set mid-walk skipped both raw-GL consumers above, so this cannot answer true past it.
+    return !m_currentPassPaintFailed;
 }
 
 void PlasmaZonesEffect::postPaintScreen()
@@ -677,9 +645,9 @@ void PlasmaZonesEffect::postPaintScreen()
     // in prePaintScreen: this function ends in an unconditional
     // `KWin::effects->postPaintScreen()`, so it cannot complete with a null
     // global under any circumstances and a per-site guard would only hide that
-    // from the reader. The ONE guard below sits in the park-reap timer's
-    // callback, which is not part of this bracket — it fires later, from the
-    // event loop, and can genuinely land after compositor teardown.
+    // from the reader. The TWO guards below are both in singleShot callbacks (the
+    // scroll-tab hover re-evaluation and the park-reap timer), outside this bracket:
+    // each fires later, from the event loop, and can land after compositor teardown.
     //
     // Pass over. Defensive hygiene: every capture path in this tree reaches
     // paintWindow from INSIDE the pass (before this runs), so the clear only
@@ -724,8 +692,8 @@ void PlasmaZonesEffect::postPaintScreen()
     // cursor hide when the chain went quiet on an output that stopped
     // painting entirely. An unengaged or quiet chain returns immediately.
     m_pointerPass.scheduleRepaints();
-    // Free strip-pass entries whose view spring has settled (the spring's own
-    // repaint pump drives live legs; this is resource hygiene, not a ticker).
+    // Free strip-pass entries whose view spring has settled. Resource hygiene, not a
+    // ticker: this schedules nothing, and no strip pump is driven from here at all.
     //
     // Skipped on a failed pass for the same reason the park reap below is: the
     // erase frees two output-sized GLTextures, and KWin 6.8 documents that after
@@ -772,11 +740,11 @@ void PlasmaZonesEffect::postPaintScreen()
     // Time-based shader transitions (window.*) ride a steady-clock
     // timer, not m_windowAnimator, so paintWindow would only fire on
     // surface damage and iTime would stall. Mirror KWin's own
-    // `AnimationEffect::postPaintScreen`: while a time-based transition
-    // is live, inject expanded-geometry layer repaint per active
-    // window so the next vsync runs our paint chain. Animator-driven
-    // transitions (durationMs == 0) are kept alive by
-    // m_windowAnimator->scheduleRepaints above.
+    // `AnimationEffect::postPaintScreen`: while a time-based transition is live, inject an expanded-geometry
+    // layer repaint per active window so the next vsync runs our paint chain. Animator-driven legs
+    // (durationMs == 0) are kept alive by m_windowAnimator->scheduleRepaints above.
+    // `now` is a LIVE clock read, where paintWindow takes the frame PIN for the same transition. Both
+    // measure from one startTimeMs stamp, so the pump and its progress consumer sit on different clocks.
     if (!m_shaderManager.empty()) {
         const qint64 now = shaderClockNowMs();
         for (const auto& [w, transition] : m_shaderManager.shaderTransitions()) {
@@ -1309,8 +1277,8 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // report the empty case.
     const bool parkedOffscreen = scrollParkedOffscreen(w, windowId);
 
-    // A scroll-strip window on a FOREIGN output's pass: paintWindow will skip
-    // drawing it entirely, so it must not occlude either. Leaving its opaque
+    // A scroll-strip window paintWindow will SKIP: on a FOREIGN output's pass, or
+    // parked off the viewport. Either way it must not occlude. Leaving its opaque
     // region declared tells KWin's occlusion culling that everything behind
     // the frame is covered, so the background there is never recomposited —
     // and with the window itself skipped, nothing overdraws those pixels at
@@ -1319,8 +1287,14 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // transition branch below documents for translated renders). The ghost is
     // indistinguishable from "the clip is broken": the window was never being
     // DRAWN over there, it was being REMEMBERED there.
+    //
+    // The park case belongs HERE, not on the interiorOpaque branch below, because
+    // paintWindowImpl's cull carries no decoration term: it skips ANY parked column.
+    // Usually inert: the opaque region follows the COMMITTED rect, the predicate tests
+    // the DRAWN one, and an ordinary park commits off every output (atScrollPark).
     if (w && !m_capturingSnapshot && m_currentPassOutput) {
-        if (const KWin::LogicalOutput* managed = scrollManagedOutputFor(w); managed && managed != m_currentPassOutput) {
+        const KWin::LogicalOutput* managed = scrollManagedOutputFor(w);
+        if (parkedOffscreen || (managed && managed != m_currentPassOutput)) {
             data.setTranslucent();
         }
     }
@@ -1339,10 +1313,10 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         // `KWin::effects->addRepaint(output->geometry())` rather than
         // addLayerRepaint — the scene clips a layer repaint to the window
         // item's bounding rect, which is exactly the margin the expansion
-        // needs to paint past. prePaintWindow doesn't drive that on KWin 6;
-        // `WindowPrePaintData::devicePaint` is the dirty region in
-        // device coords and isn't the right surface for declaring "I
-        // want to paint this many pixels past the natural frame".
+        // needs to paint past. prePaintWindow cannot drive that on KWin 6 at
+        // all: WindowPrePaintData carries only `mask`, setTranslucent() and
+        // setTransformed(), with no dirty-region member to widen, so there is
+        // nothing here to say "paint this many pixels past the natural frame".
         data.setTransformed();
 
         // Mark the window non-opaque for the duration of the transition.
@@ -1429,18 +1403,18 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     //   borderComposite  ba = edge * insideMask * col.a — the band's output alpha IS
     //                    the border colour's alpha, and a translucent border colour is
     //                    a supported feature, not an edge case.
-    //   standardBorderBand  radius = (cornerRadius + borderWidth) * uSurfaceScale —
-    //                    the OUTER radius includes the border width, so even a zero
-    //                    corner radius arcs the window's outer corners away whenever
-    //                    the border has any width. And the smoothstep feather leaves
-    //                    the outermost ring of the frame partially transparent
-    //                    regardless.
+    //   standardBorderBandSplit  the smoothstep feather leaves the outermost ring of
+    //                    the frame partially transparent at every radius, so the band
+    //                    thins frame texels unconditionally. (A zero radius is no longer
+    //                    dilated, so the feather leg alone is what carries this now.)
     //
     // So every border-family chain thins frame texels and must stay translucent. But
-    // the margin-only packs (shadow, glow) provably do NOT: their halo is gated on
-    // `1 - base.a` (haloFalloff) and composited additively over the transparent
-    // margin (marginComposite), so the interior passes through byte-for-byte and
-    // the client's own opaque region stays truthful. That is exactly the metadata
+    // the four interiorOpaque packs provably do NOT. shadow and glow gate their halo on
+    // `1 - base.a` (haloFalloff) and add it over the transparent margin
+    // (marginComposite); fireflies and phosphor-motes return either the capture untouched
+    // or slabComposite(window, pane) = window + pane * (1 - window.a), which cannot lower
+    // an alpha. Either way the interior passes through byte-for-byte where the client is
+    // already opaque, so its opaque region stays truthful. That is exactly the metadata
     // contract an earlier attempt at this flag lacked: packs now declare
     // `interiorOpaque` (SurfaceShaderEffect), the chain sweep in
     // updateWindowDecoration ANDs it into WindowDecoration::chainInteriorOpaque,
@@ -1449,17 +1423,11 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // CAPTURE itself (see foldedOpacity's doc) and that thins the interior with
     // no pack involved.
     //
-    // SCOPE LIMIT, verified against the same workspacescene.cpp sources: a
-    // PADDED chain (outerPadding > 0) is marked PAINT_WINDOW_TRANSFORMED
-    // above, and the transformed flag independently excludes the window from
-    // BOTH culling halves — so skipping setTranslucent() recovers nothing for
-    // it. The two bundled interiorOpaque declarers (shadow, glow) are both
-    // padded, which means the skip below is live only for an unpadded
-    // interiorOpaque chain: a third-party contract today, not a bundled win.
-    // Keeping the flag is still correct (it is the necessary half of the
-    // recovery; the transformed presentation is the other), and the sweep's
-    // AND is what a future unpadded pack or a padded-presentation redesign
-    // will inherit.
+    // SCOPE LIMIT, verified against the same workspacescene.cpp sources: a PADDED
+    // chain (outerPadding > 0) is already marked PAINT_WINDOW_TRANSFORMED above, which
+    // excludes it from BOTH culling halves, so skipping setTranslucent() recovers
+    // nothing. All four bundled declarers ask at least 4 px, so the skip is live only
+    // for an unpadded third-party chain, which is what the sweep's AND is for.
     //
     // Note what this is NOT for. It used to be set to keep the window in KWin's paint
     // set so drawWindow kept firing on idle frames. That was a repaint-scheduling hack
@@ -1740,15 +1708,15 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
             paintScrollTabIndicators(renderTarget, viewport, deviceRegion);
         }
     });
-    // Second trigger: the anchor's paint alone is not reliable. The scene
-    // culls a fully occluded anchor — a dialog or a raised floating window
-    // covering the column — and then the guard above never arms. So ALSO blit
-    // just before the first window stacked above the anchor paints — an
-    // occluded anchor implies a visible occluder above it, so one of the two
-    // triggers always fires, and the pills land under that occluder rather
-    // than flickering over it as the anchor's culling comes and goes.
+    // Second trigger: the anchor's paint alone is not reliable. The scene culls a
+    // fully occluded anchor — a dialog or a raised floating window over the column —
+    // and then the guard above never arms. So ALSO blit just before the first window
+    // stacked above the anchor paints: an occluded anchor implies a visible occluder
+    // above it, so one of the two triggers always fires, and the pills land under that
+    // occluder rather than flickering over it as the culling comes and goes. Carries the
+    // guard's failure term too, since this is the same raw GL on the same lost context.
     if (!m_capturingSnapshot && !m_directPaintCapture && w && m_scrollTabPaintAnchor && !m_scrollTabPainted
-        && m_scrollTabAboveAnchor.contains(w)) {
+        && m_scrollTabAboveAnchor.contains(w) && !m_currentPassPaintFailed) {
         paintScrollTabIndicators(renderTarget, viewport, deviceRegion);
     }
 
@@ -2010,13 +1978,13 @@ bool PlasmaZonesEffect::paintWindowImpl(const KWin::RenderTarget& renderTarget, 
         return notePaintOk(KWinCompat::drawWindowChecked(renderTarget, viewport, w, mask, deviceRegion, data));
     }
 
-    // Apply the C++ translate+scale geometry morph — UNLESS a shader
-    // geometry-morph owns this window's visual transition. A morph shader
-    // (one that declares iFromRect) interpolates the drawn rect itself and
-    // cross-fades old->new content, so letting WindowAnimator::applyTransform
-    // also translate+scale would double-transform the window. The animator's
-    // animation still exists (it drives the morph's progress timeline); we
-    // just skip its paint-data transform here.
+    // Apply the C++ geometry morph — UNLESS a shader geometry-morph owns this
+    // window's visual transition. A morph shader (one that declares iFromRect)
+    // interpolates the drawn rect itself and cross-fades old->new content, so
+    // letting WindowAnimator::applyTransform also translate it would
+    // double-transform the window. It only TRANSLATES now (the setXScale/setYScale half went with discussion #868). The
+    // animator's animation still exists (it drives the morph's progress timeline); we just skip its paint-data
+    // transform here.
     {
         const auto* morphSt = m_shaderManager.findTransition(w);
         const bool shaderOwnsGeometry = morphSt && morphSt->cached && morphSt->cached->iFromRectLoc >= 0;

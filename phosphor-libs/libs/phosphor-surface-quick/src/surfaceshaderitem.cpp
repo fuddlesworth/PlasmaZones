@@ -7,6 +7,7 @@
 #include <PhosphorRendering/ShaderNodeRhi.h>
 
 #include <PhosphorShaders/ShaderRegistry.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 #include <PhosphorSurface/SurfaceUniformProfile.h>
@@ -42,13 +43,20 @@ namespace {
 /// from the pack's own fragment path and puts it FIRST, ahead of every registry
 /// root, which is also what the validator probes first.
 ///
-/// Two things that costs, both real. A pack outside the XDG roots (a development
-/// tree, a vendored pack set) has its sibling helpers unreachable here while they
-/// resolve fine on the compositor and in the validator, so it compiles in two
-/// places and fails in the third. And where a pack's own root is not the
+/// Two things the STATIC LIST ALONE costs, both real. A pack outside the XDG roots
+/// (a development tree, a vendored pack set) has its sibling helpers unreachable
+/// while they resolve fine on the compositor and in the validator, so it compiles in
+/// two places and fails in the third. And where a pack's own root is not the
 /// highest-priority one, the daemon takes another root's copy of a shared header
 /// while the compositor takes the pack's, which is the body-from-one-tree,
 /// contract-from-another split the compositor comment already describes.
+///
+/// THIS FUNCTION closes the first of those for the live node path, which applies it
+/// before handing the result to setShaderIncludePaths. It is the reason this exists,
+/// so describing the cost as unqualified was reading past the fix. The daemon's warm
+/// bake still uses the unwrapped list, harmlessly: its registry only ever sees packs
+/// under an XDG root, where this prepend is a no-op because the root's `shared/` is
+/// already in @p base. The second cost stands, and is not this function's to fix.
 ///
 /// Prepended to @p base rather than replacing it, so a caller that set its own
 /// include paths keeps them.
@@ -81,12 +89,14 @@ QStringList SurfaceShaderItem::surfaceIncludePaths()
     // through these dirs. Mirror ZoneShaderItem: locateAll() (not locate()) so
     // the system dir is included alongside ~/.local/share — the user dir holds
     // user packs but not the shared include. Surface packs install to
-    // `plasmazones/surface` (singular; see the install() rule in the top-level
-    // CMakeLists), the third pack category beside `plasmazones/overlays` and
-    // `plasmazones/animations`. The plasmazones daemon warm-bake calls this
+    // `plasmazones/surface` (singular; see the install() rule in
+    // plasmazones/CMakeLists.txt), one of four pack categories beside
+    // `plasmazones/overlays`, `plasmazones/animations` and
+    // `plasmazones/pointer`. The plasmazones daemon warm-bake calls this
     // same function — see the header doc for why the two must not diverge.
-    const QStringList allSurfaceDirs = QStandardPaths::locateAll(
-        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/surface"), QStandardPaths::LocateDirectory);
+    const QStringList allSurfaceDirs =
+        QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, PhosphorSurfaceShaders::surfacePackDataSubdir(),
+                                  QStandardPaths::LocateDirectory);
     QStringList includePaths;
     for (const QString& dir : allSurfaceDirs) {
         const QString sharedDir = dir + QStringLiteral("/shared");
@@ -359,21 +369,35 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
     const bool wasDirty = consumeShaderDirty();
     const bool needLoad = wasDirty || freshNode;
     const bool shaderSourceValid = shaderSource().isValid() && !shaderSource().isEmpty();
+    // Set only by a SUCCESSFUL load in this sync, and read by the status block at
+    // the bottom. Mirrors ShaderEffect::updatePaintNode, which this override
+    // replaces rather than delegates to, so the base's latch does not cover it.
+    // Without it a load that just succeeded gets the PREVIOUS shader's resident
+    // bake error stamped over its Ready: invalidateShader() only raises the dirty
+    // flag, and the node clears its error inside prepare()'s bake, which has not
+    // run yet. Fixing a pack's GLSL and reloading would report the old failure.
+    bool loadSucceededThisSync = false;
 
     if (needLoad) {
         if (shaderSourceValid) {
-            QString fragPath = shaderSource().toLocalFile();
-            if (shaderSource().scheme() == QLatin1String("qrc")) {
-                fragPath = QLatin1Char(':') + shaderSource().path();
-            }
+            // The base's resolver, not a local copy. Both overrides had hand-rolled one that
+            // dropped its `url.path()` fallback, so a scheme-less URL (which setShaderSource
+            // accepts) resolved to nothing. With no explicit vertexShaderUrl the vertex arm
+            // below then blamed a missing surface.vert for it; WITH one set, that arm stayed
+            // silent and the success branch ran over an empty fragment source, which is the
+            // one shape that reported Ready. The base's form is also stricter now (it rejects
+            // a non-local scheme and a relative path), which is why a subclass must not roll
+            // its own.
+            const QString fragPath = localShaderPath(shaderSource());
 
             // Resolve the vertex shader: an explicit per-item vertexShaderUrl
             // wins, then a per-pack `surface.vert` beside the fragment, then a
-            // shared `surface.vert` from the include paths. Surface packs ship
-            // no vertex shader today (the field defaults empty), so this falls
-            // through to the include-path lookup — when the on-screen host
-            // stage ships a shared fullscreen-quad surface.vert it resolves
-            // here without a code change. This resolves the VERTEX stage, which
+            // shared `surface.vert` from the include paths. No bundled surface pack
+            // declares a vertex shader (the field defaults empty), so this lookup is
+            // the LIVE resolution for every decoration stage, not a future
+            // convenience: the fullscreen-quad `surface.vert` in the surface tree's
+            // shared/ dir is what it finds, and the warning branch below is the
+            // pack-tree-misinstalled case rather than an unimplemented one. This resolves the VERTEX stage, which
             // has no entry scaffold and relies on a shared surface.vert for its
             // main(); the FRAGMENT stage does get one (setEntryScaffold below,
             // so a pack may ship only `vec4 pSurface(vec2 uv)`).
@@ -382,16 +406,9 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
             // stage cannot disagree about which tree a shared header came from.
             const QStringList effectiveIncludePaths = withPackSiblingShared(fragPath, shaderIncludePaths());
 
-            QString vertPath;
-            if (vertexShaderUrl().isValid() && !vertexShaderUrl().isEmpty()) {
-                vertPath = vertexShaderUrl().toLocalFile();
-                // Mirror the fragment path: a qrc: URL has no local file, so
-                // map it to the ':'-prefixed resource path instead of silently
-                // dropping it and falling through to the surface.vert lookup.
-                if (vertexShaderUrl().scheme() == QLatin1String("qrc")) {
-                    vertPath = QLatin1Char(':') + vertexShaderUrl().path();
-                }
-            }
+            // Same resolver as the fragment path, so an explicit per-item vertex URL cannot
+            // be dropped for a scheme the fragment side handles.
+            QString vertPath = localShaderPath(vertexShaderUrl());
             if (vertPath.isEmpty() && !fragPath.isEmpty()) {
                 const QString dir = QFileInfo(fragPath).absolutePath();
                 const QString vertLocal = dir + QStringLiteral("/surface.vert");
@@ -425,20 +442,49 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
             node->setFragmentShaderSource(QString());
 
             bool loaded = true;
-            if (!vertPath.isEmpty()) {
+            // Tested BEFORE the vertex arms, which would otherwise blame a missing surface.vert
+            // for a fragment-path problem: the pack-sibling lookup is keyed on fragPath's own
+            // directory, so an empty fragPath makes it fail too and "no vertex shader found
+            // for ''" is what the journal would carry.
+            // Set by the two arms that do NOT come from a node call, because those leave the
+            // node's resident shaderError untouched: setVertex/FragmentShaderSource clear the
+            // path and mtime but not the error. The node clears it only inside prepare()'s bake
+            // and in clearBakedShader, neither of which has run when the else branch reads it.
+            // Without this, a reload whose URL resolves to nothing reported the PREVIOUS
+            // shader's compile error as its reason.
+            QString failureReason;
+            if (fragPath.isEmpty()) {
+                qCWarning(lcSurfaceQuick)
+                    << "SurfaceShaderItem: shader URL resolved to no usable path:" << shaderSource();
+                failureReason = QStringLiteral("Shader URL resolved to no usable path: ") + shaderSource().toString();
+                loaded = false;
+            }
+            if (loaded && !vertPath.isEmpty()) {
                 if (!node->loadVertexShader(vertPath)) {
                     qCWarning(lcSurfaceQuick) << "SurfaceShaderItem: failed to load vertex shader:" << vertPath
                                               << "error:" << node->shaderError();
                     loaded = false;
                 }
-            } else {
+            } else if (loaded) {
                 qCWarning(lcSurfaceQuick) << "SurfaceShaderItem: no vertex shader found for" << fragPath
                                           << "(expected surface.vert in the pack dir or a search path)";
+                // Carries the journal line's parenthetical too, byte for byte, so the two cannot
+                // drift. No surface host reads errorLog today (SurfaceDecoration exposes only
+                // the boolean chainHasError), so this keeps the text ready for one and matches
+                // the zone twin, whose banner does show it.
+                failureReason = QStringLiteral("No vertex shader found for ") + fragPath
+                    + QStringLiteral(" (expected surface.vert in the pack dir or a search path)");
                 loaded = false;
             }
 
-            if (loaded && !fragPath.isEmpty()) {
+            // Load the fragment shader. The failure is LOGGED here: neither loadFragmentShader
+            // nor setError writes a journal line, so the commonest failure of all (a pack's own
+            // GLSL, or an include it cannot resolve) was silent from the daemon decoration path,
+            // which reads no stage status. Both vertex arms above already warn.
+            if (loaded) {
                 if (!node->loadFragmentShader(fragPath)) {
+                    qCWarning(lcSurfaceQuick) << "SurfaceShaderItem: failed to load fragment shader:" << fragPath
+                                              << "error:" << node->shaderError();
                     loaded = false;
                 }
             }
@@ -457,12 +503,26 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
                 node->invalidateBufferShaders();
                 node->invalidateShader(); // Ensure node re-bakes
                 setStatus(Status::Ready);
+                loadSucceededThisSync = true;
+                // One extra frame so prepare()'s bake can report its real outcome,
+                // as the base does. A successful LOAD is not a successful BAKE, and
+                // a decoration stage whose pack is not animated runs with
+                // playing=false (SurfaceDecoration.qml gates it on
+                // stageData.animated), so this is the item's LAST sync: without the
+                // extra frame a compile failure stands as Ready forever and
+                // chainHasError reads false over a stage that draws nothing.
+                update();
             } else {
-                // Read the node's error BEFORE clearing — clearBakedShader
-                // wipes it along with the resident bake.
-                QString errorMsg = node->shaderError();
+                // An arm that set its OWN reason wins: the node's error belongs to whatever was
+                // baked last, which on those two arms is the PREVIOUS shader. Otherwise read
+                // the node's error BEFORE clearing, since clearBakedShader wipes it along with
+                // the resident bake.
+                QString errorMsg = failureReason;
                 if (errorMsg.isEmpty()) {
-                    errorMsg = QStringLiteral("Shader loading failed - missing required files");
+                    errorMsg = node->shaderError();
+                }
+                if (errorMsg.isEmpty()) {
+                    errorMsg = QStringLiteral("Shader loading failed because a required file is missing");
                 }
                 // Drop the partially-set sources and the resident bake
                 // together (same pattern as ShaderEffect::updatePaintNode):
@@ -490,9 +550,12 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
     }
 
     // ── Update status based on shader node state ─────────────────────
-    if (node->isShaderReady() && status() != Status::Ready) {
+    // One snapshot, as the base takes: two status() calls could straddle a write in principle,
+    // and reading it once is the shape the base documents.
+    const Status currentStatus = status();
+    if (node->isShaderReady() && currentStatus != Status::Ready) {
         setStatus(Status::Ready);
-    } else if (!node->shaderError().isEmpty() && status() != Status::Error) {
+    } else if (!loadSucceededThisSync && !node->shaderError().isEmpty() && currentStatus != Status::Error) {
         setError(node->shaderError());
     }
 

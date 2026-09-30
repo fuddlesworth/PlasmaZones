@@ -1,6 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
+// ONE of this pack's declared parameters is never read here: `blurRadius` is
+// consumed POSITIONALLY by the shared buffer passes as customParams[0].x, the
+// first scalar parameter declared. surface_blur.glsl's header carries the slot
+// convention and the offline validator lints it by name. So a reader looking for
+// p_blurRadius below will not find it, and that is not an omission.
+//
 // Duotone pack, main pass: the Kawase-blurred backdrop (iChannel6)
 // collapsed to luminance and remapped onto a two-colour gradient — the
 // concert-poster look. A contrast exponent shapes the split between the
@@ -32,8 +38,14 @@
 #include <surface_noise.glsl>
 
 vec4 pSurface(vec2 uv) {
+    // A degenerate frame rect collapses the slab mask to a dot, and the pane below is
+    // multiplied by it, so the content has to pass through here (see surfaceFrameDegenerate).
+    if (surfaceFrameDegenerate()) {
+        return surfaceTexel(uv);
+    }
+
     float cornerPx = p_cornerRadius * uSurfaceScale;
-    SurfaceSlab slab = surfaceSlabOpen(uv, cornerPx, p_roundBottomCorners >= 0.5 ? cornerPx : 0.0, p_edgeSoftness);
+    SurfaceSlab slab = surfaceSlabOpen(uv, cornerPx, surfaceBottomRadius(cornerPx, p_roundBottomCorners), p_edgeSoftness);
     // Fade the window content over the pane; the translucency it frees is
     // filled by the duotone backdrop in slabComposite below.
     slab.window *= clamp(p_contentOpacity, 0.0, 1.0);
@@ -45,6 +57,9 @@ vec4 pSurface(vec2 uv) {
         // region doesn't read darker than it is, then re-weight the mapped
         // colour by the capture's own alpha to stay premultiplied.
         float luma = blurred.a > 0.001 ? luma709(blurred.rgb / blurred.a) : 0.0;
+        // 0.05 is a pow() guard against a zero or negative exponent, NOT the parameter's
+        // floor, which is 0.25. Same shape as the guards mosaic, rain-glass and
+        // rippled-glass carry, and it exists for a hand-edited metadata file.
         luma = pow(clamp(luma, 0.0, 1.0), max(p_contrast, 0.05));
         vec3 mapped = mix(p_colorA.rgb, p_colorB.rgb, luma);
         // Driver-stable grain over the two-tone map, which hides the banding
@@ -58,7 +73,10 @@ vec4 pSurface(vec2 uv) {
         // is at the bottom).
         vec2 fuv = frameUv(slab.px);
         vec3 grad = mix(p_colorA.rgb, p_colorB.rgb, smoothstep(0.0, 1.0, 1.0 - fuv.y));
-        pane = vec4(grad, 1.0) * 0.4 * slab.mask;
+        // Clamped for the reason faintTintSlab gives: the colour params reach
+        // this shader through QColor and so cannot exceed 1 today, but the
+        // premultiplied invariant rgb <= a should not rest on that.
+        pane = vec4(clamp(grad, 0.0, 1.0), 1.0) * 0.4 * slab.mask;
     }
 
     return slabComposite(slab.window, pane);

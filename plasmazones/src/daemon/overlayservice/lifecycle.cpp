@@ -22,7 +22,6 @@
 
 #include <QCursor>
 #include <QGuiApplication>
-#include <QQuickWindow>
 #include <QScreen>
 
 #include <PhosphorScreens/Manager.h>
@@ -157,8 +156,7 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
         // raw slot Item visibility). Both checks are intentional; do
         // not merge them.
         QQuickItem* cursorMainOverlay = cursorVsHasWindow ? cursorIt->mainOverlaySlot() : nullptr;
-        const bool cursorSlotVisible =
-            cursorMainOverlay != nullptr && !qFuzzyCompare(cursorMainOverlay->opacity(), 0.0);
+        const bool cursorSlotVisible = cursorMainOverlay != nullptr && !qFuzzyIsNull(cursorMainOverlay->opacity());
         // The m_excludedScreens clause only does real work when
         // showOnAllMonitors is true: with it false, every excluded (active
         // autotile) screen is already intercepted above by the
@@ -216,9 +214,14 @@ void OverlayService::hide()
     // out cleanly and the next show() can fade-in. dismissOverlayWindow
     // also clears the per-screen "main overlay active" sentinel
     // (overlayPhysScreen) via setVisible(false) + syncPassiveShellSurfaceState.
-    // Gate on overlayPhysScreen - the shell may be alive for OSD-only
-    // screens that never had main overlay attached, and dismissing
-    // those would queue 0→0 opacity noise on idle slots.
+    // Gate on overlayPhysScreen: the shell may be alive for OSD-only screens
+    // that never had a main overlay attached. What the gate saves is the
+    // synchronous no-op completion for each of those screens, not animator
+    // work — ShellHost::hideSlot fast-paths a missing or already-invisible
+    // slot item and returns before the animator, so an idle slot queues no
+    // opacity track with or without this. An earlier version claimed it
+    // avoided "0→0 opacity noise", which made initializeOverlay's Phase 2
+    // read like a bug for dismissing non-target keys with no such gate.
     const QStringList screenIds = m_screenStates.keys();
     for (const QString& screenId : screenIds) {
         if (!m_screenStates.value(screenId).overlayPhysScreen) {

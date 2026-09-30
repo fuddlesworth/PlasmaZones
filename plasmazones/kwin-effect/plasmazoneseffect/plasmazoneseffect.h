@@ -882,9 +882,9 @@ private:
      * regardless of which EDID field KWin's Output::serialNumber() returns.
      *
      * Format: "manufacturer:model:serial" — falls back to connector name
-     * when EDID fields are empty.
+     * when EDID fields are empty. @p excluded is left out of the duplicate scan.
      */
-    QString outputScreenId(const KWin::LogicalOutput* output) const;
+    QString outputScreenId(const KWin::LogicalOutput* output, const KWin::LogicalOutput* excluded = nullptr) const;
     /// Report a screen's current virtual desktop to the daemon (Plasma 6.7
     /// per-output virtual desktops). Deduplicates against m_lastScreenDesktop and
     /// only fires when the daemon service is registered.
@@ -953,7 +953,7 @@ private:
      * delta, plus the live view offset — intersects no part of its managed
      * output. The visual rect is where a column is drawn AT REST, which is the
      * one honest visibility test for a parked column; the committed rect is
-     * always off every output (that is what parking IS) and answers nothing.
+     * normally off every output (that is what parking IS) and answers nothing.
      *
      * The WindowAnimator's term IS folded in: a live per-window leg draws at
      * the animator's current rect rather than the committed frame, so testing
@@ -970,9 +970,9 @@ private:
      * just above and put the predicate right back at the destination.
      *
      * The consumers, which must stay in lockstep or a column blinks or
-     * burns: prePaintWindow withholds the TRANSFORMED flag (so KWin's own
-     * culling is free to skip the window instead of being forced to paint
-     * it), paintWindow skips the backdrop capture / decoration fold / draw,
+     * burns: prePaintWindow withholds the TRANSFORMED flag AND drops the
+     * opaque region (KWin may skip the window, and a region nothing overdraws
+     * must not cull), paintWindow skips the backdrop capture / fold / draw,
      * the postPaintScreen repaint driver stops driving the window's
      * decoration (the ~30fps backdrop refold and the animated-pack pump),
      * prePaintScreen's tab-anchor election skips a parked column so an
@@ -981,21 +981,21 @@ private:
      * below-strip snapshot, and the topmost, above which the capture
      * composites sharp) skip one, falling back to the parked members when
      * every column on the output is parked rather than capturing the
-     * whole scene, the desktop-transition capture excludes one from the
-     * outgoing scene, and the tab-strip builder skips one when deciding which
-     * members still warrant a pill. Note the anchor election runs BEFORE the strip view
+     * whole scene, the desktop-transition composite's own pill-anchor
+     * election skips one, and so does the pill-band occlusion probe. Note
+     * prePaintScreen's election above runs BEFORE the strip view
      * animator advances for the frame, so its answer is one advance behind
      * the paint-path sites mid-leg — the failure is the benign,
-     * already-documented one (indicators fall back to their layer slot for a
-     * frame). A column that scrolls back toward the viewport starts
-     * intersecting — the view offset is part of the rect, re-read every pass
-     * — and the paint-path sites wake in the same frame.
+     * already-documented one (one frame with the pills under the second trigger instead of
+     * the first, or under a strip column on an unpark, or none where the skip leaves no anchor).
+     * A column that scrolls back toward the viewport starts intersecting — the
+     * offset is in the rect, re-read every pass — and the sites wake with it.
      *
      * Snapshot captures must NOT consult this: a parked column's offscreen
      * capture (close snapshot, decoration capture) is legitimate work on an
-     * invisible window. Both paint-path callers sit behind the
-     * m_capturingSnapshot exemption already, matching the foreign-output
-     * cull's treatment.
+     * invisible window. The two arms that would drop it carry the
+     * m_capturingSnapshot exemption; the TRANSFORMED gates need none, since a
+     * capture sets that flag in its own mask and never runs prePaintWindow.
      */
     bool scrollParkedOffscreen(KWin::EffectWindow* w, const QString& windowId) const;
 
@@ -1605,10 +1605,10 @@ private:
     /// A few other sites erase m_surfaceMultipass directly, and each is deliberate:
     ///   - lifecycle_wiring.cpp's windowDeleted backstop, which runs after the window is gone
     ///     and there is nothing left to animate;
-    ///   - surface_capture.cpp's ensureSurfaceTargets, which on an allocation failure
-    ///     erases the half-built state it just failed to allocate and returns false;
-    ///     its caller abandons the fold immediately, so a transition loses its layer
-    ///     for one frame rather than sampling a freed texture.
+    ///   - surface_capture.cpp's ensureSurfaceTargets, TWICE: an allocation failure, and a
+    ///     pack that lost its buffer passes while sampling an iChannel. Each erases the state
+    ///     it could not build and returns false, and its caller abandons the fold at once, so
+    ///     a transition loses its layer for one frame rather than sampling a freed texture.
     /// Nothing else may. The per-entry loops that walk m_surfaceMultipass on a settings
     /// or registry change INVALIDATE and erase nothing, for the reason their own sites
     /// give: a corpse's entry is the frame its close leg needs. No count, it drifts.
@@ -1883,19 +1883,19 @@ private:
     int m_surfacePresentFinalLoc = -1; ///< uFinal sampler location on the present shader
     int m_surfacePresentOpacityLoc = -1; ///< uOpacity (final modulation) location on the present shader
     bool m_surfacePresentFailed = false; ///< latch a failed present-shader compile
-    /// One-shot latch for the capture-time opacity fallback warning (the
-    /// opacity-tint pack failed to compile). The condition is pack-level and
-    /// the fold runs per window per frame, so an unlatched warning would spam
-    /// the journal at vsync rate. Reset alongside the compile cache on a
-    /// registry hot-reload (effectsChanged) so a fixed pack that breaks again
-    /// warns again.
+    /// One-shot latch for the capture-time opacity fallback warning (the opacity-tint pack
+    /// failed to compile). The condition is pack-level and the fold runs per window per frame,
+    /// so an unlatched warning would spam the journal at vsync rate. Reset alongside the compile
+    /// cache on a registry hot-reload (effectsChanged) so a fixed pack that breaks again warns.
     bool m_opacityTintFallbackWarned = false;
-    /// Once-latched journal warning for a backdrop texture or framebuffer that
-    /// failed to allocate (captureWindowBackdrop). The capture retries every
-    /// paint, so an unlatched warning would spam at vsync rate. Re-armed at every
-    /// compile-cache clear, like its two neighbours: session-permanent meant one
-    /// transient failure silenced every later one.
+    /// Once-latched journal warnings for a backdrop texture or framebuffer that failed to
+    /// allocate (captureWindowBackdrop), and for a surface composite target that did
+    /// (ensureSurfaceTargets). Both retry every paint, so unlatched they would spam at
+    /// vsync rate, and both are re-armed at every compile-cache clear: session-permanent meant
+    /// one transient failure silenced every later one. The second's state is ERASED on the
+    /// failure path, so an effect member is what outlives it; a per-window flag could not.
     bool m_backdropAllocWarned = false;
+    bool m_surfaceTargetAllocWarned = false;
 
     /// Reusable staging buffer for updateShellContentRect's glReadPixels — the
     /// scan runs on the compositor paint path, and a fresh per-scan QByteArray
@@ -1975,9 +1975,9 @@ private:
     /// in nine, including the hottest one (every time-driven animation's teardown). It is
     /// one call here instead, idempotent and a no-op when the context is already current.
     ///
-    /// False only during compositor teardown, where GL is going away and the driver
-    /// reclaims everything regardless — so callers clear their state either way rather
-    /// than leaking it to avoid a call that cannot matter.
+    /// False for compositor teardown (no `KWin::effects`) and for a failed make-current:
+    /// GL is going away in the first, and there is no context to delete against in the
+    /// second. Callers that DISCARD the result proceed either way; two branch on it.
     bool ensureGlContextCurrent() const
     {
         return KWin::effects && KWin::effects->makeOpenGLContextCurrent();
@@ -2309,13 +2309,13 @@ private:
     /// tree on arrival.
     void seedDecorationTreeBaseline();
 
-    // Constructor wiring, decomposed from the ctor along its original comment
-    // seams (definitions in lifecycle_wiring.cpp, except connectDaemonSubscriptions
-    // which is in lifecycle_wiring_daemon.cpp). Each is called exactly once,
-    // from the ctor, in this declared order. Not part of the public surface —
-    // pure ctor decomposition, so their bodies keep the ordering guarantees the
-    // inline sequence had (notably: connect the screen signals before iterating
-    // the current screens() in initRenderingAndRegistries).
+    // Constructor wiring, decomposed from the ctor along its original comment seams.
+    // Definitions sit in three files: lifecycle_wiring.cpp (the first two and
+    // connectWindowAndScreenSignals), lifecycle_wiring_drag.cpp (connectDragTracker) and
+    // lifecycle_wiring_daemon.cpp (connectDaemonSubscriptions). Each is called exactly
+    // once, from the ctor, in this declared order. Not public — pure ctor decomposition,
+    // so their bodies keep the ordering guarantees the inline sequence had:
+    // initRenderingAndRegistries connects the screen signals before it iterates screens().
     void initRenderingAndRegistries();
     void initTimers();
     void connectDragTracker();
@@ -2538,9 +2538,9 @@ private:
     // pre-split cold-start behaviour.
     bool m_snapAssistFeatureEnabled = false;
     bool m_snapAssistBehaviorEnabled = false;
-    // Per-output motion clocks. One `CompositorClock` per `LogicalOutput`
-    // so mixed refresh-rate displays (e.g., 60 Hz + 144 Hz) phase-lock
-    // independently — see IMotionClock docs. Populated on construction
+    // Per-output motion clocks. One `CompositorClock` per `LogicalOutput`,
+    // which scopes refreshRate() and requestFrame() to that output but NOT
+    // the clock reading — see its docblock. Populated on construction
     // from `KWin::effects->screens()` and maintained via the
     // screenAdded/screenRemoved signals. A fallback unbound clock is
     // always present for the degenerate no-output / migrated-window
@@ -2592,10 +2592,10 @@ private:
     /// would then report whatever that second walk said, silently swallowing the
     /// first failure whenever the retry happened to succeed.
     ///
-    /// Set at the sites whose failure ABANDONS a pass, cleared in prePaintScreen beside
-    /// the two latches above. Read by paintScreenImpl (to bail instead of
-    /// re-walking) and by postPaintScreen, which per KWin 6.8's contract still
-    /// runs after a failed paint and must not book a discarded frame as painted.
+    /// Set where a chained paint's failure abandons the PRESENTED frame, plus paintWindowImpl's
+    /// m_capturingSnapshot arm, an offscreen capture that latches anyway through notePaintOk and is
+    /// unreachable under KWin's closed draw chain. Cleared in prePaintScreen beside the two latches
+    /// above. Read five times in paintScreenImpl, at the two other pill sites, THRICE in postPaintScreen.
     bool m_currentPassPaintFailed = false;
 
     /// The three paint hooks' actual bodies, version-independent: true when the
@@ -2948,7 +2948,7 @@ private:
     /// the clip for the pill blit wherever it fires (the anchor trigger, the
     /// above-anchor trigger, paintScreen's post-walk fallback). Set by
     /// paintScreen for the presented walk and by the nested capture walks
-    /// (desktop transition) for theirs, through ScrollTabWalkScope; valid
+    /// for theirs, through ScrollTabWalkScope; valid
     /// only inside that scope. A blit clipped to the TRIGGER WINDOW's region
     /// instead cut away every pill outside the anchor column, because KWin
     /// hands each paintWindow the damage intersected with that window's own

@@ -1,11 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Fixture helpers shared by the offline pack validator's five test executables:
-// test_pack_validators, test_pointer_pack_validator, test_surface_pack_validator,
-// test_animation_pack_bakes and test_pack_model_detection.
+// Fixture helpers shared by every executable in the shadervalidate/ foreach in
+// plasmazones/tests/unit/CMakeLists.txt, which is where the list lives. Named there rather
+// than enumerated here: two earlier versions of this comment carried a list, each was correct
+// when written, and both went stale later — the second within a fortnight, when a sixth
+// executable joined the foreach and nobody came back here.
 // Header-only and `inline` so each executable carries one definition and no
-// test-only library has to exist for five small binaries.
+// test-only library has to exist for a handful of small binaries.
 
 #pragma once
 
@@ -199,10 +201,10 @@ inline QJsonArray toArray(const QStringList& values)
 }
 
 // ── surface fixture writers ─────────────────────────────────────────────
-// Shared by the surface validator's two test executables. They were file-local
-// to the first one until the second needed the same writers: a per-lint negative
-// slot is only cheap when the fixture is, and two copies of a fixture writer is
-// how two test files start disagreeing about what a valid pack looks like.
+// Shared by every surface test executable, deliberately without naming how many.
+// They were file-local to the first one until the second needed the same writers: a
+// per-lint negative slot is only cheap when the fixture is, and two copies of a fixture
+// writer is how two test files start disagreeing about what a valid pack looks like.
 
 /// The surface twin of `validate`. Writes the pack plus a `pSurface` entry body,
 /// which the validator assembles into a full TU exactly as the daemon and the
@@ -234,6 +236,41 @@ inline PackResult validateSurface(const QTemporaryDir& tmp, const QString& name,
     result.errors = PlasmaZones::ShaderValidate::validateSurfacePack(dir, stream);
     stream.flush();
     return result;
+}
+
+/// The buffer-pass FILLER: a pass that is not one of the nine builtin blur passes.
+///
+/// A fixture whose subject is a buffer-ARRAY lint (a non-numeric scale, a misaligned
+/// length, a daemon-only wrap) still has to declare a buffer pass for the arrays to be
+/// about anything, and every `builtin:` token belongs to the Kawase pyramid or the
+/// separable gaussian pair. The blur lints fire on those BY NAME, so such a fixture drew
+/// two errors with nothing to do with its subject — and several of these slots carried an
+/// `errors > 0` assertion that those two satisfied on their own, leaving the lint under
+/// test unguarded. This pass writes a constant, reads no channel and declares no
+/// parameter, so it draws no lint of its own and composes at any index.
+inline QString surfaceFillerBufferName()
+{
+    return QStringLiteral("filler.frag");
+}
+
+inline QByteArray surfaceFillerBufferBody()
+{
+    return QByteArrayLiteral(
+        "#version 450\n"
+        "layout(location = 0) out vec4 fragColor;\n"
+        "void main() { fragColor = vec4(0.0, 0.0, 0.0, 1.0); }\n");
+}
+
+/// `validateSurface` plus the filler buffer pass written beside the pack, for a fixture
+/// that declares `bufferShaders: [surfaceFillerBufferName()]`.
+inline PackResult validateSurfaceWithFillerPass(const QTemporaryDir& tmp, const QString& name,
+                                                const QJsonObject& metadata, const QString& body)
+{
+    const QString dir = tmp.filePath(name);
+    if (!writePackFile(dir, surfaceFillerBufferName(), surfaceFillerBufferBody())) {
+        return fixtureFailure(QStringLiteral("failed to write the filler buffer pass under ") + dir);
+    }
+    return validateSurface(tmp, name, metadata, body);
 }
 
 /// One surface parameter declaration.
@@ -367,9 +404,9 @@ inline bool reportLineHasWithout(const QString& report, const QString& stage, co
 
 /// The surface twin, and the reason it did not exist until now is the finding it
 /// closes: the SURFACE arm of the validator had no test harness at all. Four
-/// production arms (animation, pointer, surface, overlay) and, before this macro,
-/// four of the five executables listed at the top of this file, between them
-/// reaching only three of those arms. Each executable compiles all four, so a
+/// production arms (animation, pointer, surface, overlay) and, before this macro, every
+/// executable then in the shadervalidate/ foreach reaching only three of them
+/// between them. Each executable compiles all four, so a
 /// lint deleted from the surface arm alone
 /// broke no test and failed no link. The topology was an artifact of the file-size
 /// ceiling rather than of the family boundary, which is why the gap went unnoticed.

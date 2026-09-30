@@ -73,7 +73,15 @@ uniform float uSurfaceFocused;
 
 // Continuously-increasing seconds, for ANIMATED packs (pulsing glow, shimmer,
 // …) — the same role iTime plays in the overlay / animation categories. The
-// host captures an epoch at first use so this begins near 0 (float precision).
+// host captures an epoch at first use so this begins near 0, and nothing
+// rebases or wraps it after that: the compositor accumulates animated time and
+// only subtracts the spans a window was NOT animating, so a continuously
+// decorated window's clock grows without bound. That matters at binary32: the
+// ULP is 7.8 ms at one day of accumulated animation (invisible), 62.5 ms at
+// about twelve days, and half a second at about three months. Every animated
+// pack reads iTime through fract() or sin(), so the quantisation lands in the
+// phase and a periodic effect reads steppy rather than wrong. Closing it means
+// rebasing the epoch host-side, not changing any pack.
 // The linker drops it for a static pack (e.g. the border). iTime is not the only
 // repaint driver, though: a pack that reads the audio spectrum or iMouse is
 // driven by those instead, so "references no iTime" means free only for a pack
@@ -104,6 +112,22 @@ uniform vec4 customColors[16];
 // surface_multipass.glsl module — a single-pass pack (the border) declares
 // neither. This resolution array stays in the core contract because it is a
 // pinned std140 UBO member on the daemon.
+//
+// ON THE COMPOSITOR, ONLY WRITTEN FOR A CHANNEL THE PASS ALSO SAMPLES. Declaring
+// iChannelResolution[N] while never sampling iChannelN leaves that slot holding
+// whatever the program last had, because GL uniform state is per-program and
+// outlives both the frame and the window. Three of the compositor's four
+// channel-bind sites always worked that way and the fourth did not, so one pack
+// could read a live size from one pass and a stale one from the next. They agree
+// now: sample the channel whose size you read.
+//
+// THE DAEMON DOES NOT MATCH, and the difference is worth knowing before you rely on
+// either. It fills this array from the live texture for every channel the chain
+// renders, with no reference to what the shader samples, because it is a UBO member
+// and the whole block is uploaded. So a pack that reads a resolution for a channel it
+// never samples gets a live size in the settings preview and a stale one on a real
+// window. Nothing lints that yet. Sampling the channel whose size you read is what
+// makes the two hosts agree.
 uniform vec4 iChannelResolution[4];
 
 // Backdrop capture GATE: 1.0 when the host bound something behind the surface

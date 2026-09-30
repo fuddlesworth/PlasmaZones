@@ -7,8 +7,8 @@
  * @file internal.h
  * @brief Shared constants and helper declarations for ShaderNodeRhi TUs
  *
- * Provides RhiConstants (quad vertices, component indices) and compile-time
- * limits for the multipass buffer system.
+ * Provides RhiConstants (quad vertices, component indices). The multipass
+ * compile-time limits live on ShaderNodeRhi.h, not here.
  */
 
 #include <PhosphorRendering/ShaderNodeRhi.h>
@@ -24,7 +24,10 @@ Q_DECLARE_LOGGING_CATEGORY(lcShaderNode)
 /// True for URLs the shader loader can read: file://, qrc:, scheme-less
 /// local paths, and the empty/invalid URL (an intentional "no shader").
 /// Shared by the setter guards (shadereffect_setters.cpp) and kept beside
-/// its path-resolving sibling below so the two can never drift.
+/// its path-resolving sibling below so the two can never drift. A third,
+/// STRICTER variant that neither of these knows about is the protected
+/// ShaderEffect::localShaderPath, which composes them and additionally
+/// refuses a relative resolved path; both subclass load paths use it.
 inline bool isLocalShaderUrl(const QUrl& url)
 {
     if (!url.isValid() || url.isEmpty()) {

@@ -21,10 +21,12 @@ vec4 pSurface(vec2 uv) {
         return tex;
     }
 
-    // Band geometry: the family's OUTER-radius rounded-rect SDF, content clip
+    // Band geometry: the family's rounded-rect SDF (outer radius = content radius +
+    // width, except at a zero end, which stays square), content clip
     // and band edge from this pack's logical-px width and corner radius.
     vec2 p = surfacePixel(uv);
-    BorderBand bb = standardBorderBand(p, p_borderWidth, p_cornerRadius);
+    float bottomRadius = surfaceBottomRadius(p_cornerRadius, p_roundBottomCorners);
+    BorderBand bb = standardBorderBandSplit(p, p_borderWidth, p_cornerRadius, bottomRadius, p_edgeSoftness);
 
     // Perimeter coordinate: the angle normalised by the half extents. That
     // normalisation is what STRETCHES the top and bottom dashes on a wide

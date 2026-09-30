@@ -4,7 +4,7 @@
 // Standard buffer pass: dual Kawase DOWN level 0, the backdrop capture into
 // the quarter-res base.
 //
-// OPTING IN TAKES THREE KEYS, not just the tokens, and a pack that declares
+// OPTING IN TAKES FOUR KEYS, not just the tokens, and a pack that declares
 // only the tokens renders a fully transparent pane with no warning at any
 // level. In metadata.json:
 //
@@ -16,8 +16,13 @@
 //                              They are positional, so the order is the chain.
 //   "needsBackdrop": true    — this pass's only source is backdropTexel(),
 //                              which reads nothing without it.
+//   "bufferScales": [ ... ]  — the pyramid, [0.25, 0.125, 0.0625, 0.03125,
+//                              0.0625, 0.125, 0.25]. With none declared every
+//                              pass renders at the pack-wide bufferScale and
+//                              the pyramid is not a pyramid.
 //
-// See surface_blur.glsl for the chain and its bufferScales.
+// The offline validator hard-errors on all four, so a pack missing one fails the
+// shipped gate rather than shipping blank. See surface_blur.glsl for the chain.
 
 #version 450
 #include <surface_blur.glsl>

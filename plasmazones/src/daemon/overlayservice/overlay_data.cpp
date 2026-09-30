@@ -50,8 +50,10 @@ quint64 hashLabelsTextureInputs(const QVariantList& patched, const QSize& size, 
                                 bool showNumbers, const LabelFontSettings& lfs)
 {
     // NOTE: inside `namespace PlasmaZones {}` the unqualified name `qHash`
-    // resolves to user-defined overloads (TilingStateKey, PhosphorZones::LayoutAssignmentKey)
-    // and never falls through to Qt's global `::qHash`. Always fully qualify.
+    // resolves to a user-defined overload and never falls through to Qt's global `::qHash`: a
+    // using-declaration in core/types/types.h pulls one in, which stops ordinary lookup here,
+    // and an overload on an argument's own namespace type is found by ADL regardless. Always
+    // fully qualify.
     //
     // Mixer is the standard boost::hash_combine / Fibonacci-constant form.
     // Earlier iterations used (h << 12) + (h >> 4), which has asymmetric and
@@ -88,14 +90,14 @@ quint64 hashLabelsTextureInputs(const QVariantList& patched, const QSize& size, 
     mix(::qHash(static_cast<uint>(lfs.fontStrikeout)));
     for (const QVariant& zoneVar : patched) {
         const QVariantMap z = zoneVar.toMap();
-        mix(::qHash(z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::ZoneNumber)).toInt()));
+        mix(::qHash(z.value(::PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt()));
         // PhosphorZones::Zone rects in the overlay use qreal; hash the full bit pattern so
         // sub-pixel geometry changes still produce a distinct key.
         const double fields[4] = {
-            z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::X)).toDouble(),
-            z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::Y)).toDouble(),
-            z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::Width)).toDouble(),
-            z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::Height)).toDouble(),
+            z.value(::PhosphorZones::ZoneJsonKeys::X).toDouble(),
+            z.value(::PhosphorZones::ZoneJsonKeys::Y).toDouble(),
+            z.value(::PhosphorZones::ZoneJsonKeys::Width).toDouble(),
+            z.value(::PhosphorZones::ZoneJsonKeys::Height).toDouble(),
         };
         for (double f : fields) {
             quint64 bits = 0;
@@ -110,7 +112,7 @@ quint64 hashLabelsTextureInputs(const QVariantList& patched, const QSize& size, 
 } // namespace
 
 void OverlayService::updateLabelsTextureForWindow(QQuickItem* slot, const QVariantList& patched, QScreen* screen,
-                                                  PhosphorZones::Layout* screenLayout)
+                                                  PhosphorZones::Layout* screenLayout, const QString& screenId)
 {
     Q_UNUSED(screen)
     if (!slot) {
@@ -128,25 +130,37 @@ void OverlayService::updateLabelsTextureForWindow(QQuickItem* slot, const QVaria
     // wl_output INTEGER buffer scale, which is 2 on a 1.15 output.
     const qreal dpr = slot->window() ? slot->window()->effectiveDevicePixelRatio() : 1.0;
 
-    PerScreenOverlayState* state = nullptr;
-    QString screenId;
-    for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
-        if (it.value().mainOverlaySlot() == slot) {
-            state = &it.value();
-            screenId = it.key();
-            break;
-        }
-    }
+    // The screen id ARRIVES, rather than being recovered by scanning m_screenStates for the
+    // slot pointer. Both callers already hold it, so that scan was an O(n) reverse lookup for
+    // something known, and the warning arm below could fire for a slot that IS tracked simply
+    // because the pointer comparison missed. Now it means what it says.
+    //
+    // What this does NOT change: the lookup is still a mutating one, because the hash write at
+    // the tail needs a mutable handle, and updateZonesForAllWindows calls this while holding
+    // an iterator into the same map. That is safe for one reason worth stating rather than
+    // rediscovering — m_screenStates is never copied anywhere in the tree, so its refcount is
+    // always 1 and the detach a non-const find() would perform never happens.
+    auto stateIt = m_screenStates.find(screenId);
+    PerScreenOverlayState* state = stateIt != m_screenStates.end() ? &stateIt.value() : nullptr;
     if (!state) {
-        qCWarning(lcOverlay) << "updateLabelsTextureForWindow: slot not tracked in m_screenStates - "
-                                "labels-texture cache bypassed";
+        qCWarning(lcOverlay) << "updateLabelsTextureForWindow: screen" << screenId
+                             << "not tracked in m_screenStates - labels-texture cache bypassed";
     }
 
     // A SetOverlayShowZoneNumbers context rule overrides the global setting for this
     // screen, matching the QML `showNumbers` property set in updateOverlayWindow so
-    // both the property and the label-texture path agree. An empty screenId (slot
-    // untracked) resolves to no override, i.e. the global setting. The per-layout
-    // hide still wins (a layout that hides numbers keeps them hidden).
+    // both the property and the label-texture path agree. The per-layout hide still
+    // wins (a layout that hides numbers keeps them hidden).
+    //
+    // screenId is always the caller's live key now, so the override resolves even on the
+    // not-tracked path above, where the old reverse scan left the id EMPTY on a miss and so
+    // resolved to no override at all. No user-visible verdict changed, though, and an earlier
+    // version of this note calling it a behaviour change was wrong twice over: the not-tracked
+    // arm is unreachable from either caller (one iterates m_screenStates, the other
+    // early-returns because its constFind misses and leaves the slot null), and on the
+    // reachable paths the scan always found the caller's OWN key, since one shell per key means
+    // no two entries can answer the same item pointer. What the parameter removed is a reverse
+    // scan whose miss branch could only have misfired for a caller that does not exist.
     const PhosphorZones::ContextOverlayOverride overlayOverride = overlayOverrideForScreen(m_layoutManager, screenId);
     const bool showNumbers = overlayOverride.showZoneNumbers.value_or(m_settings ? m_settings->showZoneNumbers() : true)
         && (!screenLayout || screenLayout->showZoneNumbers());
@@ -206,9 +220,13 @@ QVariantList OverlayService::buildZonesList(const QString& screenId, QScreen* ph
         return zonesList;
     }
 
-    const QRect overlayGeom = (m_screenStates.contains(screenId) && m_screenStates[screenId].overlayGeometry.isValid()
-                                   ? m_screenStates[screenId].overlayGeometry
-                                   : physScreen->geometry());
+    // One constFind, not contains() plus two const operator[] reads: each of those
+    // returns a PerScreenOverlayState by VALUE, so the old form copied the whole
+    // per-screen state twice on a path that runs per zone-data update.
+    const auto stateIt = m_screenStates.constFind(screenId);
+    const QRect overlayGeom =
+        (stateIt != m_screenStates.constEnd() && stateIt->overlayGeometry.isValid() ? stateIt->overlayGeometry
+                                                                                    : physScreen->geometry());
     qCDebug(lcOverlay) << "buildZonesList: screenId=" << screenId << "overlayGeom=" << overlayGeom
                        << "layout=" << screenLayout->name() << "zones=" << screenLayout->zones().size();
 
@@ -274,7 +292,7 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QS
     // Bounded like the shader keys further down. Zone::fromJson deliberately
     // does not clamp, so a legacy layout can hold a per-zone border wider than
     // any surface now offers; without this the Rectangle-based overlays and
-    // snap assist would draw it while the shader overlay and the editor
+    // snap assist would draw it while the shader overlay and the settings
     // preview drew the clamped value.
     map[::PhosphorZones::ZoneJsonKeys::BorderWidth] = qBound(0, zone->borderWidth(), ConfigDefaults::borderWidthMax());
     map[::PhosphorZones::ZoneJsonKeys::BorderRadius] =
@@ -287,7 +305,7 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QS
     // layout value, mirroring the precedence useShaderForScreen applies. The override
     // is screen-invariant across zones, so the caller resolves it once and passes it
     // in rather than re-resolving (and re-deriving the cache key) per zone.
-    int resolvedDisplayMode = 0; // default: ZoneRectangles
+    int resolvedDisplayMode = ConfigDefaults::overlayDisplayMode();
     if (zone->overlayDisplayMode() >= 0) {
         resolvedDisplayMode = zone->overlayDisplayMode();
     } else if (overlayOverride.style) {
@@ -376,20 +394,35 @@ void OverlayService::updateZonesForAllWindows()
     m_zoneDataDirty = false;
 
     for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
-        const QString& screenId = it.key();
+        // A COPY of the key, not a reference into the hash node. The body writes QML
+        // properties, whose bindings evaluate synchronously, and it hands this id to a
+        // function that does its own find() on the same map — so a reference here aliases the
+        // container it is used to look up. No route inserts into m_screenStates from a binding
+        // (QML's whole reach into this class is one context property with one read-only
+        // property and two public slots — ONE hide (hideLayoutPicker) and one shader-error reporter
+        // (onShaderError), and it is the
+        // reporter QML actually calls, from a signal handler), which makes the reference safe BY
+        // ENUMERATION rather than by construction. A copy costs one atomic refcount bump and
+        // needs no enumeration. The sibling loop in selector.cpp snapshots for its own, separate
+        // reason — a completion lambda that COULD rehash the map under its iterators if a future
+        // completion-path edit inserted a screen — so it is a
+        // precedent for copying, not the same hazard as this one.
+        const QString screenId = it.key();
         auto* slot = it.value().mainOverlaySlot();
 
         if (!slot) {
             continue;
         }
 
-        QScreen* physScreen = m_screenStates.value(screenId).overlayPhysScreen;
+        // The loop already holds the iterator; value(screenId) would re-hash and copy
+        // the whole PerScreenOverlayState to read one pointer out of it.
+        QScreen* physScreen = it.value().overlayPhysScreen;
         QVariantList zones = buildZonesList(screenId, physScreen);
         QVariantList patched = patchZonesWithHighlight(zones, slot);
 
         int highlightedCount = 0;
         for (const QVariant& z : patched) {
-            if (z.toMap().value(QLatin1String("isHighlighted")).toBool()) {
+            if (z.toMap().value(::PhosphorZones::ZoneJsonKeys::IsHighlighted).toBool()) {
                 ++highlightedCount;
             }
         }
@@ -400,7 +433,7 @@ void OverlayService::updateZonesForAllWindows()
 
         if (useShaderForScreen(screenId)) {
             PhosphorZones::Layout* screenLayout = resolveScreenLayout(screenId);
-            updateLabelsTextureForWindow(slot, patched, physScreen, screenLayout);
+            updateLabelsTextureForWindow(slot, patched, physScreen, screenLayout, screenId);
         }
     }
 

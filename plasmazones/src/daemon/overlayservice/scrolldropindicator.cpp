@@ -183,10 +183,10 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
     if (!screen) {
         return;
     }
-    QRect screenGeom = resolveScreenGeometry(m_screenManager, screenId);
-    if (!screenGeom.isValid()) {
-        screenGeom = screen->geometry();
-    }
+    // ONE lookup in both forms, as the sibling show paths do: trueGeom is the verdict
+    // assertWindowOnScreen needs, screenGeom is what the window is sized to.
+    const QRect trueGeom = trueScreenGeometry(m_screenManager, screenId);
+    const QRect screenGeom = trueGeom.isValid() ? trueGeom : screen->geometry();
 
     // The rect arrives in absolute compositor coordinates; the shell window
     // sits at the screen origin, so shift into window space here (the single
@@ -309,7 +309,8 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
     // the superseded hide completion no-ops.
 
     if (shellWindow) {
-        assertWindowOnScreen(shellWindow, screen, screenGeom);
+        // trueGeom, not screenGeom — see the sibling show paths.
+        assertWindowOnScreen(shellWindow, screen, trueGeom);
         shellWindow->setWidth(screenGeom.width());
         shellWindow->setHeight(screenGeom.height());
     }

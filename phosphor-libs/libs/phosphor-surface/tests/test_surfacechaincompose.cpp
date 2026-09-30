@@ -3,7 +3,15 @@
 
 #include <PhosphorSurface/SurfaceChainCompose.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
+#include <PhosphorSurface/SurfaceShaderRegistry.h>
 
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QTemporaryDir>
 #include <QUrl>
 #include <QtTest/QtTest>
 
@@ -34,12 +42,90 @@ SurfaceShaderEffect::ParameterInfo floatParam(const QString& id, double defaultV
     return p;
 }
 
+/// Write @p contents to @p path, creating parent directories.
+bool writeFile(const QString& path, const QByteArray& contents)
+{
+    const QFileInfo fi(path);
+    if (!QDir().mkpath(fi.absolutePath()))
+        return false;
+    QFile f(path);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        return false;
+    return f.write(contents) == contents.size();
+}
+
+/// Author `<root>/<id>/metadata.json` plus the stub effect.frag the registry's
+/// on-disk check needs.
+///
+/// chainRoundBottomCorners resolves against DECLARED parameters, so these go
+/// through a real registry rather than hand-built effects: the declared-default
+/// arm is only reachable when a pack actually declares the control, and that is
+/// the loader's job.
+///
+/// @p roundBottomDefault selects one of THREE shapes, and the branch order
+/// matters because a default-constructed QVariant is both invalid AND null:
+///   - invalid  -> declares `opacity` but NOT roundBottomCorners. That is the
+///     shape of a pack that draws no outline; every such bundled pack
+///     (fireflies, focus-fade, opacity-tint, phosphor-motes) declares other
+///     parameters, so an EMPTY list would not exercise the find_if scan at all.
+///   - null     -> declares roundBottomCorners with an explicit JSON null
+///     default, which is how the "declares the control but states no default"
+///     case is authored. NOTE this is deliberately SCHEMA-INVALID metadata: the
+///     surface schema requires `default` and types it number/string/boolean. The
+///     registry does not validate at load ("the catalog, not the gate"), which is
+///     exactly why the resolver has to guard the value itself, so the guard is not
+///     dead code even though no validator-clean pack can reach the state.
+///   - a bool   -> declares it with that default.
+bool writeSilhouettePack(const QString& root, const QString& id, const QVariant& roundBottomDefault)
+{
+    QJsonObject meta;
+    meta.insert(QLatin1String("id"), id);
+    meta.insert(QLatin1String("name"), id);
+    meta.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+    QJsonArray params;
+    // Always declared, so a pack that does not carry roundBottomCorners still has
+    // a NON-EMPTY parameter list and the resolver's find_if really scans.
+    QJsonObject filler;
+    filler.insert(QLatin1String("id"), QStringLiteral("opacity"));
+    filler.insert(QLatin1String("name"), QStringLiteral("Opacity"));
+    filler.insert(QLatin1String("type"), QStringLiteral("float"));
+    filler.insert(QLatin1String("default"), 1.0);
+    params.append(filler);
+    if (roundBottomDefault.isValid()) {
+        QJsonObject param;
+        param.insert(QLatin1String("id"), QStringLiteral("roundBottomCorners"));
+        param.insert(QLatin1String("name"), QStringLiteral("Round bottom corners"));
+        param.insert(QLatin1String("type"), QStringLiteral("bool"));
+        // A null QVariant authors `"default": null`; a bool authors the bool.
+        if (roundBottomDefault.isNull()) {
+            param.insert(QLatin1String("default"), QJsonValue());
+        } else {
+            param.insert(QLatin1String("default"), roundBottomDefault.toBool());
+        }
+        params.append(param);
+    }
+    meta.insert(QLatin1String("parameters"), params);
+    const QString packDir = root + QLatin1Char('/') + id;
+    if (!writeFile(packDir + QStringLiteral("/metadata.json"), QJsonDocument(meta).toJson()))
+        return false;
+    return writeFile(packDir + QStringLiteral("/effect.frag"), QByteArrayLiteral("// stub\n"));
+}
+
+/// One pack's entry in the post-flatten effectiveParameters() map.
+QVariantMap storedValue(bool roundBottomCorners)
+{
+    return QVariantMap{{QStringLiteral("roundBottomCorners"), roundBottomCorners}};
+}
+
 } // namespace
 
-/// Covers the two helpers the daemon overlay host, the kwin-effect compositor
-/// path, the settings decoration preview and the shell chrome share. The
-/// padding resolution had been copy-pasted into two of those and had already
-/// drifted in type; these pin the behaviour all four now depend on.
+/// Covers the four exported helpers the daemon overlay host, the kwin-effect
+/// compositor path, the settings decoration preview and the shell chrome share.
+/// The padding resolution had been copy-pasted into two of those and had already
+/// drifted in type; these pin the behaviour all four now depend on. The chain's
+/// bottom-corner resolution is pinned here for the same reason: three of those
+/// four hosts inject its answer, so a disagreement between them is a visual
+/// defect rather than a preference.
 class TestSurfaceChainCompose : public QObject
 {
     Q_OBJECT
@@ -47,6 +133,10 @@ class TestSurfaceChainCompose : public QObject
 private Q_SLOTS:
     // ── paddingRequest ───────────────────────────────────────────────
 
+    /// Pins the OUTCOME: no paddingParam means no canvas request. The `isEmpty()` fast
+    /// path at the top of paddingRequest is not isolated by this assertion — with it
+    /// deleted, basePack() falls into the find_if, which fails, and the function
+    /// answers 0.0 anyway.
     void paddingRequest_is_zero_without_a_paddingParam()
     {
         const SurfaceShaderEffect e = basePack();
@@ -178,8 +268,13 @@ private Q_SLOTS:
                  QUrl::fromLocalFile(QStringLiteral("/packs/border/effect.frag")));
     }
 
-    /// An empty vertexShaderPath must stay an EMPTY url, not file:// of "".
-    /// The host falls through to its shared surface vert on the empty case.
+    /// An undeclared vertex stage must arrive as an EMPTY url, which is what the host
+    /// falls through to its shared surface vert on.
+    ///
+    /// This pins the HOST CONTRACT, not a conversion: QUrl::fromLocalFile() already
+    /// answers an empty, invalid url for an empty path, so the ternary in
+    /// composeStageMap is documentation-by-code rather than a guard, and deleting it
+    /// would leave this assertion green. Do not read the assertion as covering it.
     void composeStageMap_leaves_an_undeclared_vertex_stage_empty()
     {
         const SurfaceShaderEffect e = basePack();
@@ -288,8 +383,6 @@ private Q_SLOTS:
         SurfaceShaderEffect e = basePack();
         e.isMultipass = true;
         e.bufferShaderPaths = QStringList{QStringLiteral("/packs/blur/a.frag")};
-        e.bufferScale = 1.0;
-        e.bufferScales = QList<qreal>{1.0};
 
         // A HALF-density pack throughout, deliberately. With a pack at 1.0 the
         // identity answer and the clamped answer are both kMaxBufferScale, so an
@@ -297,6 +390,13 @@ private Q_SLOTS:
         // vacuity was real twice over: it left the `huge` case passing with the
         // multiplier dropped entirely, and the infinity row passing with
         // std::isfinite deleted.
+        // The bounds pinned NUMERICALLY once, because every other assertion here
+        // compares against the same two symbols the code under test uses, so both
+        // sides move together and nothing would catch the band itself changing.
+        // CHANGELOG entries quote the floor as "a hundred and twenty-eighth".
+        QCOMPARE(SurfaceShaderEffect::kMinBufferScale, 1.0 / 128.0);
+        QCOMPARE(SurfaceShaderEffect::kMaxBufferScale, 1.0);
+
         SurfaceShaderEffect half = e;
         half.bufferScale = 0.5;
         half.bufferScales = QList<qreal>{0.5};
@@ -383,6 +483,12 @@ private Q_SLOTS:
         QVERIFY2(!params.contains(QStringLiteral("borderWidth")),
                  "friendly param id must not survive into the stage's uploaded params");
         QCOMPARE(params.value(QStringLiteral("customParams1_x")).toDouble(), 5.0);
+        // The preamble VALUE, not just the key: the slot map only binds because a
+        // `#define p_<id>` names the lane, so dropping the preamble leaves every
+        // param-declaring pack failing to compile. basePack() declares no params
+        // and buildParamPreamble({}) returns an empty string, so the presence
+        // assertion elsewhere cannot tell a real preamble from a lost one.
+        QVERIFY(stage.value(QStringLiteral("preamble")).toString().contains(QStringLiteral("#define p_borderWidth")));
     }
 
     /// An unusable pack composes to nothing at all.
@@ -404,6 +510,366 @@ private Q_SLOTS:
         noId.id.clear();
         QVERIFY(!noId.isValid());
         QVERIFY(composeStageMap(noId, {}).isEmpty());
+    }
+
+    // ── chainRoundBottomCorners ──────────────────────────────────────
+    //
+    // The pane's silhouette is one shape for the whole chain. These pin the
+    // resolution order the three injecting hosts read, because a disagreement
+    // between a backdrop pack and the border tracing it is always a visual
+    // defect and never a preference. (The fourth host, the settings decoration
+    // preview, composes one pack at a time and so injects nothing.)
+
+    /// A chain of packs that draw no outline has nothing to agree about, and an
+    /// invalid answer is what tells the host to inject nothing. Injecting a
+    /// fabricated `true` instead would be indistinguishable downstream from a
+    /// pack that really declared it.
+    void chainRoundBottomCorners_is_invalid_when_no_pack_declares_it()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("fireflies"), {}));
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("opacity-tint"), {}));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+        // Assert the packs really LOADED. Without this the slot passes just as well
+        // when the fixture writes metadata the loader rejects and the registry holds
+        // nothing at all, which is a different arm entirely (and one
+        // chainRoundBottomCorners_ignores_a_pack_the_registry_does_not_know covers).
+        // Named, not numbered: a line reference into a test file this long drifts, and the
+        // last one here pointed at a fixture line in the wrong slot. The sentence that
+        // replaced it quoted a line COUNT, which drifted in the same commit that wrote it.
+        QVERIFY(registry.hasEffect(QStringLiteral("fireflies")));
+        QVERIFY(registry.hasEffect(QStringLiteral("opacity-tint")));
+
+        const QStringList chain{QStringLiteral("fireflies"), QStringLiteral("opacity-tint")};
+        QVERIFY(!chainRoundBottomCorners(registry, chain, {}).isValid());
+    }
+
+    /// Nothing stored anywhere: the first pack in CHAIN ORDER that declares the
+    /// control settles it. Bundled packs all declare the same default, so this
+    /// arm only bites for a third-party pack shipping a different one, and it
+    /// still has to produce one answer rather than let each pack keep its own.
+    void chainRoundBottomCorners_falls_back_to_the_first_declaring_packs_default()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("backdrop"), false));
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("border"), true));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+
+        const QStringList chain{QStringLiteral("backdrop"), QStringLiteral("border")};
+        const QVariant answer = chainRoundBottomCorners(registry, chain, {});
+        QVERIFY(answer.isValid());
+        QCOMPARE(answer.toBool(), false);
+
+        // Reversing the chain reverses the answer: it is chain order that
+        // decides, not pack id or discovery order.
+        const QStringList reversed{QStringLiteral("border"), QStringLiteral("backdrop")};
+        QCOMPARE(chainRoundBottomCorners(registry, reversed, {}).toBool(), true);
+    }
+
+    /// A value the user actually set outranks ANY declared default, including
+    /// one belonging to an earlier pack in the chain. effectiveParameters()
+    /// carries only what a user or preset set, so presence in the map is the
+    /// signal that this is a choice rather than a default racing a default.
+    void chainRoundBottomCorners_prefers_a_stored_value_over_an_earlier_declared_default()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("backdrop"), true));
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("border"), true));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+
+        // Only the SECOND pack carries a stored value. The first pack's
+        // declared true must not win just for coming first.
+        const QVariantMap allParams{{QStringLiteral("border"), storedValue(false)}};
+        const QStringList chain{QStringLiteral("backdrop"), QStringLiteral("border")};
+        QCOMPARE(chainRoundBottomCorners(registry, chain, allParams).toBool(), false);
+    }
+
+    /// Two stored values disagree, which is a genuine conflict with no right
+    /// answer. It resolves by chain order and stays deterministic rather than
+    /// depending on QVariantMap iteration.
+    void chainRoundBottomCorners_takes_the_first_stored_value_in_chain_order()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("backdrop"), true));
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("border"), true));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+
+        const QVariantMap allParams{{QStringLiteral("backdrop"), storedValue(true)},
+                                    {QStringLiteral("border"), storedValue(false)}};
+        QCOMPARE(chainRoundBottomCorners(registry, {QStringLiteral("backdrop"), QStringLiteral("border")}, allParams)
+                     .toBool(),
+                 true);
+        QCOMPARE(chainRoundBottomCorners(registry, {QStringLiteral("border"), QStringLiteral("backdrop")}, allParams)
+                     .toBool(),
+                 false);
+    }
+
+    /// A profile naming a pack the user uninstalled keeps its stored values.
+    /// Letting that vote would hand the chain a silhouette from a pack that
+    /// draws nothing, which is the same class of bug as paddingRequest honouring
+    /// an override under an undeclared paddingParam.
+    void chainRoundBottomCorners_ignores_a_pack_the_registry_does_not_know()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("border"), true));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+        QVERIFY(!registry.hasEffect(QStringLiteral("uninstalled")));
+
+        const QVariantMap allParams{{QStringLiteral("uninstalled"), storedValue(false)}};
+        const QStringList chain{QStringLiteral("uninstalled"), QStringLiteral("border")};
+        // The surviving pack's declared true, not the ghost's stored false.
+        QCOMPARE(chainRoundBottomCorners(registry, chain, allParams).toBool(), true);
+    }
+
+    /// A stored value for a pack that never declared the control is stale config
+    /// (the user switched packs, or hand-edited the profile). resolveParams
+    /// copies unrecognised ids through verbatim, so this reaches the resolver and
+    /// must not be read as that pack's answer.
+    void chainRoundBottomCorners_ignores_a_stored_value_on_a_pack_that_does_not_declare_it()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("opacity-tint"), {}));
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("border"), true));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+        // Positive assertion for the same reason as above: "declares other params but
+        // not this one" and "not in the registry at all" both yield true here, and it
+        // is the FORMER this slot exists to pin.
+        QVERIFY(registry.hasEffect(QStringLiteral("opacity-tint")));
+
+        const QVariantMap allParams{{QStringLiteral("opacity-tint"), storedValue(false)}};
+        const QStringList chain{QStringLiteral("opacity-tint"), QStringLiteral("border")};
+        QCOMPARE(chainRoundBottomCorners(registry, chain, allParams).toBool(), true);
+    }
+
+    /// A pack that DECLARES the control with no default states no opinion, so it must
+    /// abstain and let a later pack's declared default decide. Before the validity
+    /// guard, defaultValue.toBool() answered false for an absent default and — because
+    /// QVariant(false) is itself valid — latched into the fallback and blocked every
+    /// later pack, so one silent pack squared the whole chain.
+    void chainRoundBottomCorners_a_declarer_without_a_default_abstains()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        // Valid-but-null selects the `"default": null` shape; see writeSilhouettePack.
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("backdrop"), QVariant::fromValue(nullptr)));
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("border"), true));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+        QVERIFY(registry.hasEffect(QStringLiteral("backdrop")));
+        QVERIFY(registry.hasEffect(QStringLiteral("border")));
+
+        const QStringList chain{QStringLiteral("backdrop"), QStringLiteral("border")};
+        const QVariant answer = chainRoundBottomCorners(registry, chain, {});
+        QVERIFY2(answer.isValid(), "the later pack states a default, so the chain has an answer");
+        QCOMPARE(answer.toBool(), true);
+    }
+
+    /// A stored value that is present but null is not a choice either. It falls through
+    /// to THAT pack's own declared default rather than terminating the scan with a
+    /// fabricated false. Reachable from a hand-edited or imported profile.
+    void chainRoundBottomCorners_ignores_a_null_stored_value()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("border"), true));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+        QVERIFY(registry.hasEffect(QStringLiteral("border")));
+
+        const QVariantMap allParams{
+            {QStringLiteral("border"),
+             QVariantMap{{QStringLiteral("roundBottomCorners"), QVariant::fromValue(nullptr)}}}};
+        const QStringList chain{QStringLiteral("border")};
+        QCOMPARE(chainRoundBottomCorners(registry, chain, allParams).toBool(), true);
+    }
+
+    /// An unusable stored value falls through to THAT pack's declared default, and the
+    /// scan then CONTINUES — so a genuine stored value on a later pack still outranks the
+    /// fallback. This is the outcome most likely to be misread: "falls through to the
+    /// declared default" does not mean "returns it", and turning the fall-through into a
+    /// return would break exactly this case.
+    void chainRoundBottomCorners_a_later_stored_value_outranks_a_fallback_default()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("backdrop"), true));
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("border"), true));
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("late"), false));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+        QVERIFY(registry.hasEffect(QStringLiteral("backdrop")));
+        QVERIFY(registry.hasEffect(QStringLiteral("border")));
+        QVERIFY(registry.hasEffect(QStringLiteral("late")));
+
+        // backdrop's stored value is null, so it contributes only its declared true as a
+        // fallback; border's stored false is a real choice and must win. Turning the
+        // fall-through into an early RETURN would answer backdrop's true and fail here.
+        const QVariantMap allParams{{QStringLiteral("backdrop"),
+                                     QVariantMap{{QStringLiteral("roundBottomCorners"), QVariant::fromValue(nullptr)}}},
+                                    {QStringLiteral("border"), storedValue(false)}};
+        const QStringList chain{QStringLiteral("backdrop"), QStringLiteral("border")};
+        QCOMPARE(chainRoundBottomCorners(registry, chain, allParams).toBool(), false);
+
+        // The mirror case, needed because the assertion above passes against the
+        // PRE-FIX code too (which read the null as a usable false and returned it, the
+        // same answer border's stored false gives). Here no later pack stores anything,
+        // so the fallback backdrop contributed IS the answer, and it must be backdrop's
+        // true rather than `late`'s declared false. Three mutations fail this:
+        // treating the null as usable, skipping the pack outright instead of falling
+        // through, and letting a later declarer overwrite an already-held fallback.
+        const QVariantMap fallbackOnly{
+            {QStringLiteral("backdrop"),
+             QVariantMap{{QStringLiteral("roundBottomCorners"), QVariant::fromValue(nullptr)}}}};
+        const QStringList fallbackChain{QStringLiteral("backdrop"), QStringLiteral("late")};
+        QCOMPARE(chainRoundBottomCorners(registry, fallbackChain, fallbackOnly).toBool(), true);
+    }
+
+    /// An EMPTY chain and a chain naming one pack twice. Neither is a shape a host
+    /// produces today, and both are cheap to get wrong in a scan that carries a
+    /// fallback across iterations, so they are pinned rather than argued about.
+    void chainRoundBottomCorners_handles_an_empty_and_a_duplicated_chain()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("border"), true));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+        QVERIFY(registry.hasEffect(QStringLiteral("border")));
+
+        QVERIFY2(!chainRoundBottomCorners(registry, {}, {}).isValid(),
+                 "an empty chain states nothing, so the host must inject nothing");
+        // DOCUMENTS two shapes; neither is a guard. With one pack the first iteration decides
+        // either way, so no mutation makes {border, border} differ from {border}; and the
+        // empty chain reaches the same `return declaredFallback` the no-declarer slot already
+        // pins, so only a contrived isEmpty() special case would be caught here alone. Kept
+        // because both shapes are cheap to state and a reader asks about them.
+        const QStringList twice{QStringLiteral("border"), QStringLiteral("border")};
+        QCOMPARE(chainRoundBottomCorners(registry, twice, {}).toBool(), true);
+        const QVariantMap stored{
+            {QStringLiteral("border"), QVariantMap{{QStringLiteral("roundBottomCorners"), false}}}};
+        QCOMPARE(chainRoundBottomCorners(registry, twice, stored).toBool(), false);
+    }
+
+    /// A lone declarer whose default is `"default": null`, with nothing stored, returns an
+    /// INVALID answer while still drawing an outline. That is the distinction step 3 of the
+    /// header contract draws, and it had no slot of its own: the ONE sibling that uses a null
+    /// DEFAULT pairs the null pack with a later declarer, so it ends in a VALID answer and
+    /// cannot exhibit step 3's result. (The other two null slots store a null on a pack whose
+    /// declared default is a real bool, which is a different arm.) A CONTRACT PIN, not a
+    /// unique guard: the mutation that lets an absent default vote `false` is caught by that
+    /// sibling as well, and I found no mutation this slot alone catches.
+    void chainRoundBottomCorners_is_invalid_when_the_only_declarer_states_no_default()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        // Valid-but-null selects the `"default": null` shape; see writeSilhouettePack.
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("backdrop"), QVariant::fromValue(nullptr)));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+        // Separates "declares it with no usable default" from "not installed".
+        QVERIFY(registry.hasEffect(QStringLiteral("backdrop")));
+
+        const QVariant answer = chainRoundBottomCorners(registry, {QStringLiteral("backdrop")}, {});
+        QVERIFY2(!answer.isValid(), "a null default states nothing, so the chain has no answer to inject");
+    }
+
+    /// The DOCUMENTED RESIDUAL: a wrong-typed stored value is honoured, not refused.
+    /// QVariant::toBool() is true for any non-empty string that is not "0" or "false",
+    /// so `"off"` rounds. usableBool's docblock spends a paragraph arguing this is
+    /// deliberate — gating on the declared type would refuse a pack a vote while still
+    /// writing the chain's answer into it — and names two ways to reach it, a
+    /// hand-edited profile and a rule's params. A deliberate behaviour with a paragraph
+    /// of rationale and no assertion is what a later tidy-up deletes, so this pins it.
+    /// It endorses nothing: if the policy changes, this slot is the one to change with it.
+    void chainRoundBottomCorners_honours_a_wrong_typed_stored_value()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        // The two halves need OPPOSITE declared defaults, or neither discriminates. `"off"`
+        // converts to TRUE, so it goes on the pack declaring FALSE: honouring it answers
+        // true, refusing it falls through to false. The empty string converts to FALSE, so
+        // it needs the pack declaring TRUE for the same reason. Put both on one default and
+        // one of the halves holds whatever the resolver does, which is what it did.
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("border"), false));
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("declares-true"), true));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+        QVERIFY(registry.hasEffect(QStringLiteral("border")));
+        QVERIFY(registry.hasEffect(QStringLiteral("declares-true")));
+
+        const QVariantMap offString{
+            {QStringLiteral("border"), QVariantMap{{QStringLiteral("roundBottomCorners"), QStringLiteral("off")}}}};
+        QCOMPARE(chainRoundBottomCorners(registry, {QStringLiteral("border")}, offString).toBool(), true);
+        // The empty string is the other half: it passes the null guard and converts to
+        // false, so it SQUARES rather than abstaining to the pack's declared true.
+        const QVariantMap emptyString{
+            {QStringLiteral("declares-true"), QVariantMap{{QStringLiteral("roundBottomCorners"), QString()}}}};
+        QCOMPARE(chainRoundBottomCorners(registry, {QStringLiteral("declares-true")}, emptyString).toBool(), false);
+    }
+
+    /// A pack the registry KNOWS but cannot use gets no vote either. The loader keeps a
+    /// pack whose fragmentShader escapes its own directory but clears the path, so
+    /// hasEffect() is true while isValid() is false — the one shape that distinguishes
+    /// the isValid() guard from the registry lookup.
+    void chainRoundBottomCorners_ignores_a_registered_but_invalid_pack()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        // Declares FALSE, the opposite of the surviving pack, so the slot fails if the
+        // invalid pack is allowed to vote.
+        QJsonObject meta;
+        meta.insert(QLatin1String("id"), QStringLiteral("broken"));
+        meta.insert(QLatin1String("name"), QStringLiteral("broken"));
+        meta.insert(QLatin1String("fragmentShader"), QStringLiteral("../outside.frag"));
+        QJsonObject param;
+        param.insert(QLatin1String("id"), QStringLiteral("roundBottomCorners"));
+        param.insert(QLatin1String("name"), QStringLiteral("Round bottom corners"));
+        param.insert(QLatin1String("type"), QStringLiteral("bool"));
+        param.insert(QLatin1String("default"), false);
+        QJsonArray params;
+        params.append(param);
+        meta.insert(QLatin1String("parameters"), params);
+        QVERIFY(writeFile(tmp.path() + QStringLiteral("/broken/metadata.json"), QJsonDocument(meta).toJson()));
+        QVERIFY(writeSilhouettePack(tmp.path(), QStringLiteral("border"), true));
+
+        SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+        QVERIFY2(registry.hasEffect(QStringLiteral("broken")), "the registry is the catalog, not the gate");
+        QVERIFY2(!registry.effect(QStringLiteral("broken")).isValid(), "the escaping shader path is cleared");
+
+        const QStringList chain{QStringLiteral("broken"), QStringLiteral("border")};
+        QCOMPARE(chainRoundBottomCorners(registry, chain, {}).toBool(), true);
+    }
+
+    /// The id the hosts inject under has to be the id the resolver reads, or the
+    /// chain answer lands in a key no pack declares and is silently dropped.
+    void roundBottomCornersParamId_is_the_id_packs_declare()
+    {
+        QCOMPARE(roundBottomCornersParamId(), QStringLiteral("roundBottomCorners"));
     }
 };
 

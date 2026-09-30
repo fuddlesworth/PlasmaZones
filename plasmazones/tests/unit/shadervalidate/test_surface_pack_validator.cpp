@@ -4,16 +4,17 @@
 // The offline pack validator's SURFACE arm, which until this file had no test
 // harness at all.
 //
-// That absence was structural rather than accidental. The validator has four
-// production arms, and the executables beside this one reached only three of
-// them: test_pack_validators covers animation and overlay, test_pointer_pack_-
-// validator covers pointer, test_animation_pack_bakes and test_pack_model_-
-// detection cover the animation stage bakes and the shared/ marker lookup, and
-// surface had nothing at all. Each executable compiles ALL FOUR arms, so a lint
-// removed from the surface arm alone broke no test and failed no link either.
-// Nothing in the topology made a missing family visible. The split that produced
-// it was made when the shared file passed the file-size ceiling, so the cut
-// followed line count rather than the family boundary.
+// That absence WAS structural rather than accidental, in the past tense this paragraph
+// now needs. The validator has four production arms, and at the time this file was written
+// the executables beside it reached only three: animation and overlay in
+// test_pack_validators, pointer in test_pointer_pack_validator, the animation stage bakes
+// and the shared/ marker lookup in test_animation_pack_bakes and test_pack_model_detection,
+// and surface nothing at all. Each executable compiles ALL FOUR arms, so a lint removed
+// from the surface arm alone broke no test and failed no link either, and nothing in the
+// topology made a missing family visible. That cut had followed line count rather than the
+// family boundary. Two files have since joined on the family boundary instead —
+// test_surface_pack_lints.cpp and test_surface_blur_chain_lints.cpp — so the sentence
+// describes how the gap arose, not how the directory is laid out today.
 //
 // The bundled-pack gate (shader_validate_surface) only proves the shipped packs
 // are clean; it cannot show that a BROKEN pack is caught. These slots build
@@ -27,6 +28,7 @@
 
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QDir>
 #include <QJsonObject>
 #include <QTemporaryDir>
 #include <QTextStream>
@@ -319,6 +321,155 @@ private Q_SLOTS:
             validateSurface(tmp, QStringLiteral("sf-dup-param"), obj, surfaceBodyReading({QStringLiteral("width")}));
         QVERIFY2(r.report.contains(QStringLiteral("duplicate parameter id 'width'")), qPrintable(r.report));
         QVERIFY(r.errors > 0);
+
+        // THE DROP IS MIRRORED, and these three legs are what distinguish that from the code that
+        // linted both declarations. fromJson keeps the FIRST and discards every later one, so a
+        // range fault in the SECOND describes a declaration that never loads.
+        const QString rangeLine = QStringLiteral("outside its own declared range");
+
+        // Second declaration out of range: only the duplicate line. This leg fails if the raw loop
+        // stops honouring the seen-id set.
+        const QJsonObject secondBad =
+            surfacePack(QStringLiteral("sf-dup-second"),
+                        QJsonArray{surfaceParam(QStringLiteral("width"), QStringLiteral("float"), 2.0, 0.0, 8.0),
+                                   surfaceParam(QStringLiteral("width"), QStringLiteral("float"), 99.0, 0.0, 8.0)});
+        const PackResult dropped = validateSurface(tmp, QStringLiteral("sf-dup-second"), secondBad,
+                                                   surfaceBodyReading({QStringLiteral("width")}));
+        QVERIFY2(!dropped.report.contains(rangeLine), qPrintable(dropped.report));
+        QCOMPARE(dropped.errors, 1);
+
+        // FIRST declaration out of range: the range line MUST appear, because that is the one the
+        // loader keeps. Without this the fix could have been "never lint a duplicated id at all".
+        const QJsonObject firstBad =
+            surfacePack(QStringLiteral("sf-dup-first"),
+                        QJsonArray{surfaceParam(QStringLiteral("width"), QStringLiteral("float"), 99.0, 0.0, 8.0),
+                                   surfaceParam(QStringLiteral("width"), QStringLiteral("float"), 2.0, 0.0, 8.0)});
+        const PackResult kept = validateSurface(tmp, QStringLiteral("sf-dup-first"), firstBad,
+                                                surfaceBodyReading({QStringLiteral("width")}));
+        QVERIFY2(kept.report.contains(rangeLine), qPrintable(kept.report));
+        QCOMPARE(kept.errors, 2);
+
+        // FIRST declaration has a type this family does not have. The id must still be claimed, or
+        // the second declaration reads as the first and its range fault gets linted — which is the
+        // ordering the set was corrected for, and the only leg that pins it.
+        const QJsonObject badType =
+            surfacePack(QStringLiteral("sf-dup-type"),
+                        QJsonArray{surfaceParam(QStringLiteral("width"), QStringLiteral("image"), 0.0, 0.0, 8.0),
+                                   surfaceParam(QStringLiteral("width"), QStringLiteral("float"), 99.0, 0.0, 8.0)});
+        const PackResult typed = validateSurface(tmp, QStringLiteral("sf-dup-type"), badType, surfaceBodyReading({}));
+        QVERIFY2(!typed.report.contains(rangeLine), qPrintable(typed.report));
+        QVERIFY2(typed.report.contains(QStringLiteral("unknown param type")), qPrintable(typed.report));
+        QCOMPARE(typed.errors, 2);
+    }
+
+    /// The depth+bufferScales arm's LOOP, as distinct from its gates, which the sibling file's
+    /// theDepthScalesArmFiresOnlyOnRealDivergence covers. Two shapes, and neither was reachable by
+    /// any fixture in the tree: an in-budget divergence PAST entry 0, and more scales than passes.
+    void theDepthArmLoopIsBoundedByPassCountAndAccumulates()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+        const QString needle = QStringLiteral("alongside \"depthBuffer\": true");
+
+        const auto runWith = [&tmp](const QString& name, const QJsonArray& scales, int passes) {
+            QJsonObject obj = surfacePack(name, QJsonArray{});
+            obj.insert(QStringLiteral("multipass"), true);
+            QJsonArray bufferShaders;
+            for (int i = 0; i < passes; ++i) {
+                bufferShaders.append(surfaceFillerBufferName());
+            }
+            obj.insert(QStringLiteral("bufferShaders"), bufferShaders);
+            obj.insert(QStringLiteral("depthBuffer"), true);
+            obj.insert(QStringLiteral("bufferScale"), 0.5);
+            obj.insert(QStringLiteral("bufferScales"), scales);
+            return validateSurfaceWithFillerPass(tmp, name, obj, surfaceBodyReading({}));
+        };
+
+        // DIVERGE AT ENTRY 0 AND AGREE AFTER IT, which pins that the loop ACCUMULATES rather than
+        // assigns. Every leg in the sibling slot either has one entry, agrees at entry 0, or reaches
+        // its final value on the last iteration — so with a plain assignment the result becomes
+        // "last entry wins" and nothing in the tree notices. This is the only leg that does.
+        const PackResult early = runWith(QStringLiteral("sf-dl-early"), QJsonArray{0.25, 0.5}, 2);
+        QVERIFY2(early.report.contains(needle), qPrintable(early.report));
+        QCOMPARE(early.errors, 1);
+
+        // MORE SCALES THAN PASSES, in budget. fromJson caps the array at the pass budget but never
+        // trims it to the pass COUNT, so the surplus entry survives in the struct and neither host
+        // reads it: the daemon bounds by its own path list and the compositor indexes by pass. The
+        // positional-length lint reports the real problem, and the depth arm must add nothing.
+        const PackResult overPass = runWith(QStringLiteral("sf-dl-over"), QJsonArray{0.5, 0.25}, 1);
+        QVERIFY2(!overPass.report.contains(needle), qPrintable(overPass.report));
+        QCOMPARE(overPass.errors, 1);
+    }
+
+    /// The TEXTURE CAP arms, which shipped with no test able to tell them from the code they
+    /// replaced. Both turn on the same distinction: the loader appends only path-bearing entries
+    /// and stops once its slots are full, WITHOUT reading anything further.
+    ///
+    /// The pre-existing over-cap slot cannot discriminate either fix, because it declares
+    /// cap-or-cap+1 entries that all bear a path — so declaration count equals loadable count, and
+    /// an index bound equals a slots-taken bound. Blank rows are what separate them.
+    void theTextureCapCountsLoadableEntriesAndBoundsBySlotsTaken()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+        const int cap = PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots;
+        const QString overCap = QStringLiteral("too many textures");
+
+        const auto withTextures = [&tmp](const QString& name, const QJsonArray& textures, int realFiles) {
+            QJsonObject obj = surfacePack(name, QJsonArray{});
+            obj.insert(QStringLiteral("textures"), textures);
+            const QString dir = tmp.filePath(name);
+            QDir().mkpath(dir);
+            for (int i = 0; i < realFiles; ++i) {
+                writePackFile(dir, QStringLiteral("t%1.png").arg(i), QByteArray("x"));
+            }
+            return validateSurface(tmp, name, obj, surfaceBodyReading({}));
+        };
+        const auto texEntry = [](const QString& path) {
+            return QJsonObject{{QStringLiteral("path"), path}};
+        };
+
+        // BLANK ROWS DO NOT COUNT TOWARD THE CAP. cap real paths with two blank rows between them
+        // overflows nothing, and reporting "cap+2 declared" sent the author to delete a texture
+        // that was loading fine. Fails if the count reverts to the declared array size.
+        QJsonArray spaced;
+        spaced.append(texEntry(QString()));
+        for (int i = 0; i < cap; ++i) {
+            spaced.append(texEntry(QStringLiteral("t%1.png").arg(i)));
+            spaced.append(texEntry(QString()));
+        }
+        const PackResult blanks = withTextures(QStringLiteral("sf-tex-blanks"), spaced, cap);
+        QVERIFY2(!blanks.report.contains(overCap), qPrintable(blanks.report));
+        // ONE FEWER than the blank rows declared, and that is the bound working from both ends: the
+        // leading and interleaved rows are inside the slot window and each draws its line, while the
+        // TRAILING row sits past the cap and correctly draws nothing. A bound on the array INDEX
+        // rather than on slots taken would instead have dropped the last real texture's checks.
+        QCOMPARE(blanks.errors, cap);
+
+        // PAST THE CAP nothing is read, so a surplus entry draws no claim about its own path. Fails
+        // if the per-entry arms stop being bounded.
+        QJsonArray surplus;
+        for (int i = 0; i < cap; ++i) {
+            surplus.append(texEntry(QStringLiteral("t%1.png").arg(i)));
+        }
+        surplus.append(texEntry(QStringLiteral("nosuch.png")));
+        const PackResult past = withTextures(QStringLiteral("sf-tex-past"), surplus, cap);
+        QVERIFY2(past.report.contains(overCap), qPrintable(past.report));
+        QVERIFY2(!past.report.contains(QStringLiteral("texture missing")), qPrintable(past.report));
+        QCOMPARE(past.errors, 1);
+
+        // CONFINEMENT IS THE EXCEPTION, deliberately reaching every declaration: a surplus escaping
+        // path is still reported, because the fault is in the declaration and a later cap bump would
+        // make it live in a pack that already shipped.
+        QJsonArray escaping;
+        for (int i = 0; i < cap; ++i) {
+            escaping.append(texEntry(QStringLiteral("t%1.png").arg(i)));
+        }
+        escaping.append(texEntry(QStringLiteral("../../../../etc/passwd")));
+        const PackResult escape = withTextures(QStringLiteral("sf-tex-escape"), escaping, cap);
+        QVERIFY2(escape.report.contains(QStringLiteral("escapes the pack directory")), qPrintable(escape.report));
+        QCOMPARE(escape.errors, 2);
     }
 
     /// The registry gates buffer passes on the separate "multipass" key, so a
@@ -351,10 +502,10 @@ private Q_SLOTS:
 
         QJsonObject obj = surfacePack(QStringLiteral("sf-wrap"), QJsonArray{});
         obj.insert(QStringLiteral("multipass"), true);
-        obj.insert(QStringLiteral("bufferShaders"), QJsonArray{QStringLiteral("builtin:gaussian-h")});
+        obj.insert(QStringLiteral("bufferShaders"), QJsonArray{surfaceFillerBufferName()});
         obj.insert(QStringLiteral("bufferWraps"), QJsonArray{QStringLiteral("repeat")});
         obj.insert(QStringLiteral("bufferFilter"), QStringLiteral("nearest"));
-        PackResult r = validateSurface(tmp, QStringLiteral("sf-wrap"), obj, surfaceBodyReading({}));
+        PackResult r = validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-wrap"), obj, surfaceBodyReading({}));
         QVERIFY2(r.report.contains(QStringLiteral("bufferWraps declares repeat")), qPrintable(r.report));
         QVERIFY2(r.report.contains(QStringLiteral("bufferFilter declares nearest")), qPrintable(r.report));
 
@@ -362,50 +513,14 @@ private Q_SLOTS:
         // states the default explicitly is not nagged for it.
         obj.insert(QStringLiteral("bufferWraps"), QJsonArray{QStringLiteral("clamp")});
         obj.insert(QStringLiteral("bufferFilter"), QStringLiteral("linear"));
-        r = validateSurface(tmp, QStringLiteral("sf-wrap"), obj, surfaceBodyReading({}));
+        // The filler-writing helper again, not plain validateSurface: this second call would
+        // otherwise rest on the first one having written filler.frag into the same pack
+        // directory. It works either way today, but a reorder or a deletion of the first call
+        // would leave the pack declaring a buffer shader that is not there — which reports
+        // "multipass buffer shader missing" and makes the absence assertion below pass
+        // vacuously. The helper is idempotent, so calling it twice costs one rewrite.
+        r = validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-wrap"), obj, surfaceBodyReading({}));
         QVERIFY2(!r.report.contains(QStringLiteral("the compositor ignores")), qPrintable(r.report));
-    }
-
-    /// The builtin Kawase passes are bound to iChannel<index> BY POSITION and the
-    /// seven frags hardcode which channel they read, so the chain composes in one
-    /// order only. Every token here resolves and every file compiles, so nothing
-    /// but an order check can catch a pack that lists them wrongly.
-    void aReorderedKawaseChainIsLinted()
-    {
-        QTemporaryDir tmp;
-        REQUIRE_SURFACE_FIXTURE(tmp);
-
-        QJsonObject obj = surfacePack(QStringLiteral("sf-kawase-order"), QJsonArray{});
-        obj.insert(QStringLiteral("multipass"), true);
-        // The correct seven with two DOWN levels transposed.
-        obj.insert(QStringLiteral("bufferShaders"),
-                   QJsonArray{QStringLiteral("builtin:kawase-down-1"), QStringLiteral("builtin:kawase-down-0"),
-                              QStringLiteral("builtin:kawase-down-2"), QStringLiteral("builtin:kawase-down-3"),
-                              QStringLiteral("builtin:kawase-up-0"), QStringLiteral("builtin:kawase-up-1"),
-                              QStringLiteral("builtin:kawase-up-2")});
-
-        const PackResult r = validateSurface(tmp, QStringLiteral("sf-kawase-order"), obj, surfaceBodyReading({}));
-        QVERIFY2(r.report.contains(QStringLiteral("positional")), qPrintable(r.report));
-        QVERIFY(r.errors > 0);
-    }
-
-    /// The positive control for the slot above: the chain in its declared order
-    /// must NOT trip the order lint, or the lint would fail every blur pack.
-    void theCorrectKawaseChainIsNotLinted()
-    {
-        QTemporaryDir tmp;
-        REQUIRE_SURFACE_FIXTURE(tmp);
-
-        QJsonObject obj = surfacePack(QStringLiteral("sf-kawase-ok"), QJsonArray{});
-        obj.insert(QStringLiteral("multipass"), true);
-        obj.insert(QStringLiteral("bufferShaders"),
-                   QJsonArray{QStringLiteral("builtin:kawase-down-0"), QStringLiteral("builtin:kawase-down-1"),
-                              QStringLiteral("builtin:kawase-down-2"), QStringLiteral("builtin:kawase-down-3"),
-                              QStringLiteral("builtin:kawase-up-0"), QStringLiteral("builtin:kawase-up-1"),
-                              QStringLiteral("builtin:kawase-up-2")});
-
-        const PackResult r = validateSurface(tmp, QStringLiteral("sf-kawase-ok"), obj, surfaceBodyReading({}));
-        QVERIFY2(!r.report.contains(QStringLiteral("positional")), qPrintable(r.report));
     }
 
     /// Boolean keys are read with toBool(default), which answers the DEFAULT for
@@ -467,10 +582,11 @@ private Q_SLOTS:
 
         QJsonObject obj = surfacePack(QStringLiteral("sf-scale-str"), QJsonArray{});
         obj.insert(QStringLiteral("multipass"), true);
-        obj.insert(QStringLiteral("bufferShaders"), QJsonArray{QStringLiteral("builtin:gaussian-h")});
+        obj.insert(QStringLiteral("bufferShaders"), QJsonArray{surfaceFillerBufferName()});
         obj.insert(QStringLiteral("bufferScale"), QStringLiteral("0.5"));
 
-        const PackResult r = validateSurface(tmp, QStringLiteral("sf-scale-str"), obj, surfaceBodyReading({}));
+        const PackResult r =
+            validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-scale-str"), obj, surfaceBodyReading({}));
         QVERIFY2(r.report.contains(QStringLiteral("bufferScale is not a number")), qPrintable(r.report));
         QVERIFY(r.errors > 0);
     }
@@ -484,10 +600,11 @@ private Q_SLOTS:
 
         QJsonObject obj = surfacePack(QStringLiteral("sf-scales-scalar"), QJsonArray{});
         obj.insert(QStringLiteral("multipass"), true);
-        obj.insert(QStringLiteral("bufferShaders"), QJsonArray{QStringLiteral("builtin:gaussian-h")});
+        obj.insert(QStringLiteral("bufferShaders"), QJsonArray{surfaceFillerBufferName()});
         obj.insert(QStringLiteral("bufferScales"), 0.5);
 
-        const PackResult r = validateSurface(tmp, QStringLiteral("sf-scales-scalar"), obj, surfaceBodyReading({}));
+        const PackResult r =
+            validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-scales-scalar"), obj, surfaceBodyReading({}));
         QVERIFY2(r.report.contains(QStringLiteral("bufferScales must be an array")), qPrintable(r.report));
         QVERIFY(r.errors > 0);
     }
@@ -502,10 +619,11 @@ private Q_SLOTS:
 
         QJsonObject obj = surfacePack(QStringLiteral("sf-wrap-num"), QJsonArray{});
         obj.insert(QStringLiteral("multipass"), true);
-        obj.insert(QStringLiteral("bufferShaders"), QJsonArray{QStringLiteral("builtin:gaussian-h")});
+        obj.insert(QStringLiteral("bufferShaders"), QJsonArray{surfaceFillerBufferName()});
         obj.insert(QStringLiteral("bufferWraps"), QJsonArray{3});
 
-        const PackResult r = validateSurface(tmp, QStringLiteral("sf-wrap-num"), obj, surfaceBodyReading({}));
+        const PackResult r =
+            validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-wrap-num"), obj, surfaceBodyReading({}));
         QVERIFY2(r.report.contains(QStringLiteral("bufferWraps has a non-string entry")), qPrintable(r.report));
         QVERIFY(r.errors > 0);
     }
@@ -601,9 +719,12 @@ private Q_SLOTS:
     }
 
     /// A depth pack pins every pass to the single bufferScale on the daemon,
-    /// because the passes share one depth attachment. That is correct, but it
-    /// means a pack declaring both gets its whole pyramid flattened at load, and
-    /// before this lint it shipped green.
+    /// because the passes share one depth attachment. That is correct, but a pack
+    /// declaring a DIFFERENT per-pass scale gets it flattened there while the
+    /// compositor honours it, and before this lint that shipped green. The arm
+    /// needs real divergence, so the fixture states both values rather than
+    /// leaning on `bufferScale` defaulting to 1.0, which is how it used to
+    /// diverge by accident.
     void bufferScalesAlongsideDepthBufferIsLinted()
     {
         QTemporaryDir tmp;
@@ -612,12 +733,115 @@ private Q_SLOTS:
         QJsonObject obj = surfacePack(QStringLiteral("sf-depth-scales"), QJsonArray{});
         obj.insert(QStringLiteral("multipass"), true);
         obj.insert(QStringLiteral("depthBuffer"), true);
-        obj.insert(QStringLiteral("bufferShaders"), QJsonArray{QStringLiteral("builtin:gaussian-h")});
+        obj.insert(QStringLiteral("bufferShaders"), QJsonArray{surfaceFillerBufferName()});
+        // Mid-range on purpose. 1.0 is legal but sits exactly on kMaxBufferScale, where a lowered
+        // bound would add an out-of-range line that QVERIFY(errors > 0) below cannot see.
+        obj.insert(QStringLiteral("bufferScale"), 0.75);
         obj.insert(QStringLiteral("bufferScales"), QJsonArray{0.5});
 
-        const PackResult r = validateSurface(tmp, QStringLiteral("sf-depth-scales"), obj, surfaceBodyReading({}));
-        QVERIFY2(r.report.contains(QStringLiteral("discarded at load")), qPrintable(r.report));
+        const PackResult r =
+            validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-depth-scales"), obj, surfaceBodyReading({}));
+        // Keyed on the MECHANISM, which is the daemon pinning every pass, not "discarded at load"
+        // — the loader keeps and clamps bufferScales and the registry keeps them, so the old
+        // wording named something that does not happen, and this assertion was pinning it there.
+        QVERIFY2(r.report.contains(QStringLiteral("the daemon pins every pass to bufferScale")), qPrintable(r.report));
         QVERIFY(r.errors > 0);
+    }
+
+    /// The depthBuffer NOTE and the single-pass depthBuffer LINT used to contradict each other in
+    /// one report: the lint said the key is never read on a single-pass pack, and the note two lines
+    /// below said the daemon honours it. The lint is the true half — the registry's coherence block
+    /// sets useDepthBuffer = false for any pack it resolves to single-pass, so the daemon never sees
+    /// the flag. The note is now gated on the chain actually running at load.
+    void theDepthBufferNoteIsOnlyPrintedWhenTheChainRuns()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+        const QString note = QStringLiteral("honoured on the daemon only");
+
+        // SINGLE-PASS: the lint fires, the note must not.
+        QJsonObject single = surfacePack(QStringLiteral("sf-depth-single"), QJsonArray{});
+        single.insert(QStringLiteral("depthBuffer"), true);
+        const PackResult one = validateSurface(tmp, QStringLiteral("sf-depth-single"), single, surfaceBodyReading({}));
+        QVERIFY2(one.report.contains(QStringLiteral("single-pass pack")), qPrintable(one.report));
+        QVERIFY2(!one.report.contains(note), qPrintable(one.report));
+
+        // `multipass: true` with NO bufferShaders, which the registry normalises back to
+        // single-pass, so the daemon does not see the flag there either.
+        QJsonObject bare = surfacePack(QStringLiteral("sf-depth-bare"), QJsonArray{});
+        bare.insert(QStringLiteral("depthBuffer"), true);
+        bare.insert(QStringLiteral("multipass"), true);
+        const PackResult noBuffers =
+            validateSurface(tmp, QStringLiteral("sf-depth-bare"), bare, surfaceBodyReading({}));
+        // POSITIVE COMPANION, so the negative below cannot be satisfied by a fixture failure or an
+        // empty report. Its two sibling legs each carry one; this leg did not.
+        QVERIFY2(noBuffers.report.contains(QStringLiteral("normalised back to single-pass")),
+                 qPrintable(noBuffers.report));
+        QVERIFY2(!noBuffers.report.contains(note), qPrintable(noBuffers.report));
+
+        // A chain that does NOT resolve: same, since the registry fail-closes it to single-pass.
+        QJsonObject broken = surfacePack(QStringLiteral("sf-depth-broken"), QJsonArray{});
+        broken.insert(QStringLiteral("depthBuffer"), true);
+        broken.insert(QStringLiteral("multipass"), true);
+        broken.insert(QStringLiteral("bufferShaders"), QJsonArray{QStringLiteral("typo.frag")});
+        const PackResult fail = validateSurface(tmp, QStringLiteral("sf-depth-broken"), broken, surfaceBodyReading({}));
+        QVERIFY2(fail.report.contains(QStringLiteral("multipass buffer shader missing")), qPrintable(fail.report));
+        QVERIFY2(!fail.report.contains(note), qPrintable(fail.report));
+
+        // CONTROL: a resolving chain is where the note is true, and it still prints. Without this
+        // the gate could have suppressed the note everywhere with the suite green.
+        QJsonObject live = surfacePack(QStringLiteral("sf-depth-live"), QJsonArray{});
+        live.insert(QStringLiteral("depthBuffer"), true);
+        live.insert(QStringLiteral("multipass"), true);
+        live.insert(QStringLiteral("bufferShaders"), QJsonArray{surfaceFillerBufferName()});
+        const PackResult runs =
+            validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-depth-live"), live, surfaceBodyReading({}));
+        QVERIFY2(runs.report.contains(note), qPrintable(runs.report));
+        QVERIFY2(!runs.report.contains(QStringLiteral("single-pass pack")), qPrintable(runs.report));
+    }
+
+    /// The BACKDROP note, which shipped with no test at all while every sibling arm in this family
+    /// had one. A pack whose main fragment reads the backdrop without declaring `needsBackdrop`
+    /// composites a transparent pane, because the compositor gates the whole capture on that flag.
+    /// It is a NOTE rather than a lint because the shared helper tells authors to gate styling on
+    /// uHasBackdrop, so sampling without the flag is a supported pattern.
+    ///
+    /// The THIRD leg is the one that matters: it pins that the scan reads the PACK'S OWN source and
+    /// not the expanded TU. The shared helper DEFINES backdropTexel and declares uBackdrop, so
+    /// scanning after expansion would fire for any pack that merely includes it. That leg's
+    /// discriminating power therefore depends on the shared helper still spelling those two names;
+    /// its error count catches the helper going missing, but not a rename inside it.
+    void theBackdropNoteFiresOnlyWhenThePackReadsTheBackdrop()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+        const QString note = QStringLiteral("reads the backdrop");
+        const QString include = QStringLiteral("#include <surface_backdrop.glsl>\n");
+        const QString reads = include
+            + QStringLiteral("vec4 pSurface(vec2 uv)\n{\n    return mix(backdropTexel(uv), "
+                             "surfaceTexel(uv), 0.5);\n}\n");
+
+        // READS IT, no flag: the note prints.
+        const QJsonObject bare = surfacePack(QStringLiteral("sf-bd-bare"), QJsonArray{});
+        const PackResult missing = validateSurface(tmp, QStringLiteral("sf-bd-bare"), bare, reads);
+        QVERIFY2(missing.report.contains(note), qPrintable(missing.report));
+
+        // READS IT and declares the flag: silent.
+        QJsonObject flagged = surfacePack(QStringLiteral("sf-bd-flag"), QJsonArray{});
+        flagged.insert(QStringLiteral("needsBackdrop"), true);
+        const PackResult declared = validateSurface(tmp, QStringLiteral("sf-bd-flag"), flagged, reads);
+        QVERIFY2(!declared.report.contains(note), qPrintable(declared.report));
+        // The count is what stops a fixture-write failure satisfying that negative, which is this
+        // file's stated convention and the one thing this leg was missing.
+        QCOMPARE(declared.errors, 0);
+
+        // INCLUDES the helper but never calls it, no flag: silent. Fires only if the scan moves to
+        // the expanded source, which is the regression this leg exists to catch.
+        const QJsonObject unused = surfacePack(QStringLiteral("sf-bd-unused"), QJsonArray{});
+        const PackResult quiet =
+            validateSurface(tmp, QStringLiteral("sf-bd-unused"), unused, include + surfaceBodyReading({}));
+        QVERIFY2(!quiet.report.contains(note), qPrintable(quiet.report));
+        QCOMPARE(quiet.errors, 0);
     }
 
     /// A pack that ships its OWN vertex stage gets it baked on BOTH hosts. No
@@ -749,6 +973,13 @@ private Q_SLOTS:
         obj.insert(QStringLiteral("multipass"), true);
         obj.insert(QStringLiteral("bufferShaders"),
                    QJsonArray{QStringLiteral("builtin:gaussian-h"), QStringLiteral("builtin:gaussian-v")});
+        // gaussian_h's only source is backdropTexel(), so a chain declaring it needs the
+        // flag or it composites a transparent pane. This slot exists to BAKE the two
+        // shared stages rather than to exercise a lint, so it declares it and keeps the
+        // errors == 0 assertion meaningful. The widened backdrop lint found this fixture
+        // on its first run, which is the whole argument for widening it: the tree's one
+        // gaussian pack was the broken shape.
+        obj.insert(QStringLiteral("needsBackdrop"), true);
         const PackResult r =
             validateSurface(tmp, QStringLiteral("sf-gauss"), obj, surfaceBodyReading({QStringLiteral("blurRadius")}));
 
@@ -784,11 +1015,20 @@ private Q_SLOTS:
         QTemporaryDir tmp;
         REQUIRE_SURFACE_FIXTURE(tmp);
 
+        // The FILLER pass, twice, not two Kawase tokens. Every sub-fixture here is about the
+        // bufferScales ARRAY, and a Kawase token drags in the blur family's own lints: with
+        // these built from kawase-down-0 + kawase-up-2 the six drew between three and six
+        // errors apiece, and the two NEGATIVE controls below (`!contains("out of range")` and
+        // `!contains("pass budget")`) were asserting an absence against a pack the validator
+        // rejected four and three ways respectively, surviving only because none of those
+        // messages happened to carry their substring. The filler reads no channel and declares
+        // no parameter, so it draws nothing of its own and both controls now assert absence
+        // against a pack the validator ACCEPTS.
         const auto twoPassPack = [](const QString& id) {
             QJsonObject obj = surfacePack(id, QJsonArray{});
             obj.insert(QStringLiteral("multipass"), true);
             obj.insert(QStringLiteral("bufferShaders"),
-                       QJsonArray{QStringLiteral("builtin:kawase-down-0"), QStringLiteral("builtin:kawase-up-2")});
+                       QJsonArray{surfaceFillerBufferName(), surfaceFillerBufferName()});
             return obj;
         };
 
@@ -796,8 +1036,9 @@ private Q_SLOTS:
         {
             QJsonObject obj = twoPassPack(QStringLiteral("sf-scales-len"));
             obj.insert(QStringLiteral("bufferScales"), QJsonArray{0.25});
-            const PackResult r = validateSurface(tmp, QStringLiteral("sf-scales-len"), obj, surfaceBodyReading({}));
-            QVERIFY2(r.report.contains(QStringLiteral("bufferScales has 1 entries for 2 buffer shaders")),
+            const PackResult r =
+                validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-scales-len"), obj, surfaceBodyReading({}));
+            QVERIFY2(r.report.contains(QStringLiteral("bufferScales has 1 entry for 2 buffer shaders")),
                      qPrintable(r.report));
         }
 
@@ -806,7 +1047,8 @@ private Q_SLOTS:
         {
             QJsonObject obj = twoPassPack(QStringLiteral("sf-scales-type"));
             obj.insert(QStringLiteral("bufferScales"), QJsonArray{0.25, QStringLiteral("0.125")});
-            const PackResult r = validateSurface(tmp, QStringLiteral("sf-scales-type"), obj, surfaceBodyReading({}));
+            const PackResult r =
+                validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-scales-type"), obj, surfaceBodyReading({}));
             QVERIFY2(r.report.contains(QStringLiteral("bufferScales entry 1 is not a number")), qPrintable(r.report));
             // Entry 0 is fine and must draw nothing, or the arm would be firing
             // on the array rather than on the entry.
@@ -819,7 +1061,8 @@ private Q_SLOTS:
             QJsonObject obj = twoPassPack(QStringLiteral("sf-scales-range"));
             obj.insert(QStringLiteral("bufferScales"),
                        QJsonArray{PhosphorShaders::kMinBufferScale / 2.0, PhosphorShaders::kMaxBufferScale * 2.0});
-            const PackResult r = validateSurface(tmp, QStringLiteral("sf-scales-range"), obj, surfaceBodyReading({}));
+            const PackResult r =
+                validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-scales-range"), obj, surfaceBodyReading({}));
             QVERIFY2(r.report.contains(QStringLiteral("bufferScales entry 0 out of range")), qPrintable(r.report));
             QVERIFY2(r.report.contains(QStringLiteral("bufferScales entry 1 out of range")), qPrintable(r.report));
             QVERIFY2(r.report.contains(QStringLiteral("clamped at load")), qPrintable(r.report));
@@ -832,7 +1075,8 @@ private Q_SLOTS:
             QJsonObject obj = twoPassPack(QStringLiteral("sf-scales-edge"));
             obj.insert(QStringLiteral("bufferScales"),
                        QJsonArray{PhosphorShaders::kMinBufferScale, PhosphorShaders::kMaxBufferScale});
-            const PackResult r = validateSurface(tmp, QStringLiteral("sf-scales-edge"), obj, surfaceBodyReading({}));
+            const PackResult r =
+                validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-scales-edge"), obj, surfaceBodyReading({}));
             QVERIFY2(!r.report.contains(QStringLiteral("out of range")), qPrintable(r.report));
         }
 
@@ -845,12 +1089,13 @@ private Q_SLOTS:
             QJsonArray passes;
             QJsonArray scales;
             for (int i = 0; i < PhosphorShaders::kMaxBufferPasses + 1; ++i) {
-                passes.append(QStringLiteral("builtin:kawase-down-0"));
+                passes.append(surfaceFillerBufferName());
                 scales.append(0.25);
             }
             obj.insert(QStringLiteral("bufferShaders"), passes);
             obj.insert(QStringLiteral("bufferScales"), scales);
-            const PackResult r = validateSurface(tmp, QStringLiteral("sf-scales-cap"), obj, surfaceBodyReading({}));
+            const PackResult r =
+                validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-scales-cap"), obj, surfaceBodyReading({}));
             QVERIFY2(
                 r.report.contains(
                     QStringLiteral("past the %1-pass budget").arg(static_cast<int>(PhosphorShaders::kMaxBufferPasses))),
@@ -866,12 +1111,13 @@ private Q_SLOTS:
             QJsonArray passes;
             QJsonArray scales;
             for (int i = 0; i < PhosphorShaders::kMaxBufferPasses; ++i) {
-                passes.append(QStringLiteral("builtin:kawase-down-0"));
+                passes.append(surfaceFillerBufferName());
                 scales.append(0.25);
             }
             obj.insert(QStringLiteral("bufferShaders"), passes);
             obj.insert(QStringLiteral("bufferScales"), scales);
-            const PackResult r = validateSurface(tmp, QStringLiteral("sf-scales-atcap"), obj, surfaceBodyReading({}));
+            const PackResult r =
+                validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-scales-atcap"), obj, surfaceBodyReading({}));
             QVERIFY2(!r.report.contains(QStringLiteral("pass budget")), qPrintable(r.report));
         }
     }

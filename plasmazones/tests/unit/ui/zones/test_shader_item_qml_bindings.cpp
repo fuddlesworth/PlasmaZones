@@ -22,6 +22,9 @@
 #include <QUrl>
 #include <qqml.h>
 
+#include <algorithm>
+#include <memory>
+
 using PhosphorSurfaceQuick::SurfaceShaderItem;
 using PlasmaZones::ZoneShaderItem;
 
@@ -181,20 +184,38 @@ QStringList guardedProperties()
             names.insert(name);
         }
     }
+    // The QML-ONLY RELAY, which no metaobject can supply. Every real host writes
+    // SurfaceDecoration's own `property var backdropTexture` (six sites) rather than the
+    // item's wallpaperTexture, and SurfaceDecoration forwards it one level down. So the
+    // metaobject-derived set guards the inner property while the surface hosts actually
+    // drive the outer one, and a Binding element on the relay would be the same shape the
+    // inner guard exists for. Every current drive is a direct assignment, so this is a
+    // growth guard rather than a live violation — and the two-sided assertion still holds,
+    // because those six direct assignments are what satisfy it.
+    names.insert(QStringLiteral("backdropTexture"));
     QStringList sorted(names.constBegin(), names.constEnd());
     sorted.sort();
     return sorted;
 }
 
-/// Every shipping .qml under src/, so a new host cannot be added outside the
-/// sweep's sight.
+/// Every shipping .qml that can host a shader item, so a new host cannot be added
+/// outside the sweep's sight.
+///
+/// TWO roots, because the guarded properties are declared on ShaderEffect and its
+/// hosts do not all live in one tier. plasmazones/src holds the daemon and settings
+/// hosts; phosphor-surface-quick's qml/ holds SurfaceDecoration.qml, the only
+/// library host that drives a guarded property, and the file the silent-Binding
+/// regression this test exists for actually lived in. Scoped to plasmazones/src
+/// alone the sweep stayed green while that file could reintroduce it, and three
+/// comments in the tree named the sweep as the guard against exactly that.
 QStringList shippingQmlFiles()
 {
     QStringList files;
-    QDirIterator it(QStringLiteral(P_SOURCE_DIR "/src"), QStringList{QStringLiteral("*.qml")}, QDir::Files,
-                    QDirIterator::Subdirectories);
-    while (it.hasNext())
-        files.append(it.next());
+    for (const QString& root : {QStringLiteral(P_SOURCE_DIR "/src"), QStringLiteral(P_SURFACE_QUICK_QML_DIR)}) {
+        QDirIterator it(root, QStringList{QStringLiteral("*.qml")}, QDir::Files, QDirIterator::Subdirectories);
+        while (it.hasNext())
+            files.append(it.next());
+    }
     files.sort();
     return files;
 }
@@ -209,8 +230,9 @@ QStringList shippingQmlFiles()
  * phosphor-surface-quick) take an image through a QVariant-typed property, and
  * a QML Binding element hands that setter an invalid variant. The item-level
  * unit tests live beside each item; this test owns the cross-item contract:
- * the source sweep over every .qml under plasmazones/src, and the pinned
- * demonstrations of the shape that wipes a good payload.
+ * the source sweep over every host .qml in either tier (plasmazones/src plus
+ * phosphor-surface-quick's qml/), and the pinned demonstrations of the shape
+ * that wipes a good payload.
  */
 class TestShaderItemQmlBindings : public QObject
 {
@@ -251,6 +273,20 @@ private Q_SLOTS:
 
         const QStringList files = shippingQmlFiles();
         QVERIFY2(files.size() > 10, qPrintable(QStringLiteral("swept %1 files").arg(files.size())));
+        // PER-ROOT, because a total cannot see the smaller root vanish. plasmazones/src
+        // holds hundreds of .qml and the surface-quick root holds exactly one, so if
+        // P_SURFACE_QUICK_QML_DIR is wrong, renamed, or the file moves, QDirIterator
+        // yields nothing, the total barely changes, `> 10` still passes, and the guard
+        // the second root was added for is silently gone. That is the same
+        // probe-sized-relative-to-the-thing-it-pins failure this suite has been bitten by
+        // elsewhere, so the assertion names the file rather than counting.
+        QVERIFY2(
+            std::any_of(files.cbegin(), files.cend(),
+                        [](const QString& p) {
+                            return p.endsWith(QLatin1String("/SurfaceDecoration.qml"));
+                        }),
+            qPrintable(
+                QStringLiteral("the phosphor-surface-quick root contributed no files; swept %1").arg(files.size())));
 
         QSet<QString> directlyAssigned;
         for (const QString& path : files) {
@@ -346,7 +382,7 @@ Item {
     }
 
     /// The same for the zone labels, which reach the item as a QImage from the
-    /// settings and editor previews and rely on the registered converter. The
+    /// settings preview and rely on the registered converter. The
     /// converter never runs, because there is no image left to convert by the
     /// time the setter sees the value.
     void testZoneShaderItem_aBindingElementWipesGoodLabels()
@@ -379,7 +415,7 @@ Item {
 
     /// The zone labels must survive the trip through QML too, from BOTH shapes
     /// the hosts produce: the daemon passes a ZoneLabelTexture payload, while
-    /// the settings and editor shader previews pass a full QImage and rely on
+    /// the settings shader preview passes a full QImage and relies on
     /// the QImage→ZoneLabelTexture converter registered in the item.
     ///
     /// The payload happens to survive a Binding element; a QImage does not, so

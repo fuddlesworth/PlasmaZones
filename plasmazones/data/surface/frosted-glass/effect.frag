@@ -1,8 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
+// ONE of this pack's declared parameters is never read here: `blurRadius` is
+// consumed POSITIONALLY by the shared buffer passes as customParams[0].x, the
+// first scalar parameter declared. surface_blur.glsl's header carries the slot
+// convention and the offline validator lints it by name. So a reader looking for
+// p_blurRadius below will not find it, and that is not an omission.
+//
 // Frosted-glass pack, main pass: the phosphor-shell frosted panel shader
-// (examples/phosphor-shell/shaders/frosted_glass.frag) ported onto a REAL
+// (phosphor-shell/shell/shaders/frosted_glass.frag) ported onto a REAL
 // blurred backdrop. The original faked frosting with a translucent tint
 // slab; here the slab is the dual-Kawase-blurred scene behind the surface
 // (iChannel6), and the original's layers ride on top: the multi-octave
@@ -71,8 +77,14 @@ float frostedTexture(vec2 p, float time) {
 }
 
 vec4 pSurface(vec2 uv) {
+    // A degenerate frame rect collapses the slab mask to a dot, and the pane below is
+    // multiplied by it, so the content has to pass through here (see surfaceFrameDegenerate).
+    if (surfaceFrameDegenerate()) {
+        return surfaceTexel(uv);
+    }
+
     float cornerPx = p_cornerRadius * uSurfaceScale;
-    SurfaceSlab slab = surfaceSlabOpen(uv, cornerPx, p_roundBottomCorners >= 0.5 ? cornerPx : 0.0, p_edgeSoftness);
+    SurfaceSlab slab = surfaceSlabOpen(uv, cornerPx, surfaceBottomRadius(cornerPx, p_roundBottomCorners), p_edgeSoftness);
     // Fade the window content over the pane; the translucency it frees is
     // filled by the frosted backdrop in slabComposite below.
     slab.window *= clamp(p_contentOpacity, 0.0, 1.0);
@@ -94,9 +106,9 @@ vec4 pSurface(vec2 uv) {
     // minimum of 0 the fallback still draws a full-saturation two-colour
     // gradient, at 40% alpha, while the backdrop path at 0 shows no gradient at
     // all. That asymmetry is deliberate — the fallback has nothing else to
-    // draw, and a fully transparent pane would communicate nothing — but it is
-    // not what the parameter's description says, so do not read the two paths
-    // as one control.
+    // draw, and a fully transparent pane would communicate nothing — and the
+    // parameter's description now states it, so do not read the two paths as
+    // one control.
     float variation = 0.0;
     if (p_grainAmount > 0.0) {
         // ASPECT-CORRECTED, because voronoi works on an isotropic unit lattice and
@@ -145,7 +157,7 @@ vec4 pSurface(vec2 uv) {
         vec4 blurred = surfaceBackdropGrade(surfaceBlurTexel(uv), p_brightness, p_contrast, p_saturation,
                                             p_vibrancy, p_vibrancyDarkness);
         vec3 color = mix(blurred.rgb, grad * blurred.a, gradStrength);
-        color = clamp(color + vec3(variation) * blurred.a, 0.0, max(blurred.a, 0.0001));
+        color = clamp(color + vec3(variation) * blurred.a, 0.0, max(blurred.a, 0.0));
         color *= vignette;
         pane = vec4(color, blurred.a) * slab.mask;
     } else {

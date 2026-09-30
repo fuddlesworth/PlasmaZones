@@ -125,6 +125,17 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
                                         << "without uZoneLabels (halo/chroma/glyph effects will be absent)";
                 m_labelsInitGaveUp = true;
                 m_labelsTextureDirty = false;
+            } else {
+                // ASK for the frame that retries. dirty stays set above, and nothing else
+                // schedules a prepare() for a zone overlay that is not `playing` — the
+                // pool-exhaustion arm below and the base class's depth path both request one for
+                // exactly this reason. Bounded for free by kMaxInitAttempts: the give-up arm above
+                // short-circuits the whole function once it latches, so a run of consecutive
+                // failures asks four times and then stops. Four per RUN, not per node: the
+                // counter is cleared on every successful init and resize, so a later failure
+                // gets a fresh budget. That is the intent — the latch is for a create that
+                // stays broken, not a lifetime quota.
+                requestAnotherFrame();
             }
             return; // retry next frame (or stay given-up)
         }
@@ -137,6 +148,8 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
                                         << "times — giving up; shader will render without uZoneLabels";
                 m_labelsInitGaveUp = true;
                 m_labelsTextureDirty = false;
+            } else {
+                requestAnotherFrame(); // see the texture arm above
             }
             return; // retry next frame; tex deleted by unique_ptr
         }
@@ -159,6 +172,8 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
                                         << "times — giving up; labels frozen at the previous size";
                 m_labelsInitGaveUp = true;
                 m_labelsTextureDirty = false;
+            } else {
+                requestAnotherFrame(); // see the texture arm above
             }
             return; // keep dirty; retry next frame with old texture still bound
         }
@@ -260,6 +275,15 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
         if (tileBatch) {
             tileBatch->release();
         }
+        // And ASK for that frame, which this arm used to leave to chance. m_labelsTextureDirty is
+        // raised by setLabelsTexture and by releaseResources, so a zone overlay with no per-frame
+        // input had nothing of its own to schedule the retry and kept its zone numbers missing
+        // until unrelated damage repainted. (An earlier version of this sentence said "the two
+        // label setters"; there is one, which is the same miscount the audio comment was corrected
+        // for in the very commit that wrote this.) Unbounded is right here for the reason the base
+        // class's batch-exhaustion arms give: exhaustion is window-wide and transient. The
+        // create-failure arms above are the other family and stay bounded by kMaxInitAttempts.
+        requestAnotherFrame();
         return;
     }
 
@@ -306,6 +330,12 @@ void ZoneShaderNodeRhi::prepare()
 void ZoneShaderNodeRhi::releaseResources()
 {
     qCInfo(lcZoneShader) << "releasing labels RHI resources";
+    // BEFORE the resets, not after. The parent's m_extraBindings holds raw pointers to these two
+    // objects, and the destructor's own note says that map must never point at freed resources for
+    // any part of the teardown sequence — releasing first and unregistering afterwards left a
+    // window where it did. Nothing reads the map in between today, so this was latent rather than
+    // undefined, but the invariant is cheaper to keep than to re-audit.
+    removeExtraBinding(PhosphorShaders::Bindings::kConsumer);
     m_labelsTexture.reset();
     m_labelsSampler.reset();
     m_labelsInitialized = false;
@@ -319,7 +349,6 @@ void ZoneShaderNodeRhi::releaseResources()
     // The texture is gone; the next upload re-creates and fully clears it, so
     // drop the stale vacated-rect tracking from the old texture.
     m_prevTileRects.clear();
-    removeExtraBinding(PhosphorShaders::Bindings::kConsumer);
 
     ShaderNodeRhi::releaseResources();
 }

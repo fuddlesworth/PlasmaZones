@@ -583,7 +583,37 @@ void PlasmaZonesEffect::loadCachedSettings()
             // is safe from this D-Bus reply path; the dropped shader cache
             // recompiles on the next scroll, which is negligible against a
             // settings toggle.
+            // And damage, which reset() cannot do for itself: a pass killed mid SETTLE FADE
+            // was still presenting its decorated capture last frame, and nothing else
+            // repaints it. setEnabled(false) above damages only outputs whose spring is still
+            // animating, which during a fade is none of them, so the smeared strip frame
+            // would persist on the un-damaged regions until unrelated damage arrived. Same
+            // pairing the outputRemoved sites and the daemon-death path already make.
+            //
+            // GATED, and sampled BEFORE reset() while the per-output state still exists. This
+            // callback re-delivers on every settingsChanged, so an ungated repaint damaged
+            // every monitor each time, which is also against this file's own convention that
+            // a full repaint sits behind a change gate. reset() stays UNGATED because it now
+            // gates itself: it early-returns when nothing is held, so a re-delivery no longer
+            // makes a GL context current for an empty teardown. With every spring already cleared,
+            // isRunning() reduces to "some entry's fade is still open". holdsCursorHide() also
+            // catches an entry whose fade closed with NO settle frame: an output that stopped
+            // painting takes neither paintOutput's settle release nor postPaintScreen's reap,
+            // so the hide is still held while isRunning() already reads false. On a desktop
+            // with another live output that output's own postPaintScreen reaps and releases,
+            // so the term is silent there. It is NOT a general "was presenting" test either
+            // way: hideCursorForPass only ever takes a hide when the pointer was on the
+            // presenting output and no other effect already held one, so an output that
+            // presented without the pointer never sets it.
+            // Otherwise a closed fade rests on paintOutput's unconditional !springLive
+            // addRepaint, which leaves damage pending for that output on every fade frame it
+            // presents. Full rather than per-output because this repaint is a once-per-toggle
+            // belt over that pending damage, not the thing keeping the strip off the screen.
+            const bool wasPresenting = m_stripTransition.isRunning() || m_stripTransition.holdsCursorHide();
             m_stripTransition.reset();
+            if (wasPresenting && KWin::effects) {
+                KWin::effects->addRepaintFull();
+            }
         }
         // The animations master toggle is part of the suppression predicate
         // for every group: with animations off none of our packs run, so
@@ -920,7 +950,8 @@ void PlasmaZonesEffect::loadCachedSettings()
             surfaceState.chainKey.clear();
         }
         m_opacityTintFallbackWarned = false; // re-arm the capture-fallback warning with the fresh compiles
-        m_backdropAllocWarned = false; // and the backdrop-allocation one, for the same reason
+        m_backdropAllocWarned = false; // and the two allocation ones, for the same reason
+        m_surfaceTargetAllocWarned = false;
         // The pointer is a surface in this same tree (path `pointer`), so its
         // chain re-derives here rather than from a config domain of its own.
         // It is baseline-isolated, so a global window chain resolves onto it as

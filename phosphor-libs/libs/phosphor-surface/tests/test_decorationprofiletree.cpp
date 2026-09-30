@@ -5,8 +5,6 @@
 #include <PhosphorSurface/DecorationProfileTree.h>
 #include <PhosphorSurface/DecorationSupportedPaths.h>
 
-#include <PhosphorShaders/ShaderPresetRegistry.h>
-
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
@@ -107,6 +105,28 @@ private Q_SLOTS:
                           makeProfile(QStringList{QStringLiteral("frost")}, 1.0, QStringLiteral("#445566")));
         const DecorationProfileTree merged = user.withSeedDefaults(seeds);
         QCOMPARE(merged.resolve(QStringLiteral("shell.panel")).chain, QStringList{QStringLiteral("frost")});
+    }
+
+    /// The pointer's own isolation arm, in its own slot so a pointer regression is not
+    /// reported as a shell failure. It had NO coverage at all: deleting the whole `pointer`
+    /// branch of the predicate left every test green, although the header spends a paragraph
+    /// on why a surface baseline must not resolve onto the cursor.
+    void pointer_path_is_baseline_isolated()
+    {
+        // The same three shapes the shell arm above pins: the node, a dot-child (the
+        // prefix guard the header's comment exists for), and a prefix collision.
+        QVERIFY(decorationPathIsBaselineIsolated(decorationPointerPath()));
+        QVERIFY(decorationPathIsBaselineIsolated(decorationPointerPath() + QStringLiteral(".trail")));
+        QVERIFY(!decorationPathIsBaselineIsolated(decorationPointerPath() + QStringLiteral("ish")));
+
+        // And at the TREE level, which is what the predicate exists to produce: with the
+        // arm gone, resolve() starts from the baseline and the cursor inherits its chain.
+        DecorationProfileTree tree;
+        tree.setBaseline(makeProfile(QStringList{QStringLiteral("border")}, 2.0, QStringLiteral("#112233")));
+        QCOMPARE(tree.resolve(decorationPointerPath()).chain.value_or(QStringList{}), QStringList{});
+        // The control: a non-isolated surface does inherit it, so an empty answer above
+        // cannot be resolve() returning empty for everything.
+        QCOMPARE(tree.resolve(QStringLiteral("window.tiled")).chain, QStringList{QStringLiteral("border")});
     }
 
     void shell_isolation_covers_every_baseline_field()
@@ -687,9 +707,6 @@ private Q_SLOTS:
         QVERIFY(!mergedCustom.directOverride(QStringLiteral("osd")).parameters.has_value());
     }
 
-    /// A parameters-only override at a seeded path is a RETUNE: the seed
-    /// chain injects into the unengaged chain slot while the user's engaged
-    /// parameters map wins wholesale.
     void withSeedDefaults_engagedPresetIdsBlocksTheSeedParameters()
     {
         // A seed carries hard-coded parameter values for the surfaces a decoration set
@@ -782,7 +799,11 @@ private Q_SLOTS:
         seed.parameters = QVariantMap{{QStringLiteral("border"), QVariantMap{{QStringLiteral("borderWidth"), 1}}}};
         seeds.setOverride(QStringLiteral("osd"), seed);
 
-        const auto seededWidth = [&seeds](const QVariantMap& presetIds) {
+        // Returns the pack's whole parameter MAP, not the width read out of it, so the
+        // blocked case below can assert absence. Reading an int out of an absent QVariant
+        // gives 0 either way, which cannot tell a blocked seed from a seed that landed
+        // carrying zero.
+        const auto seededParams = [&seeds](const QVariantMap& presetIds) {
             DecorationProfileTree user;
             DecorationProfile profile;
             profile.presetIds = presetIds;
@@ -791,14 +812,13 @@ private Q_SLOTS:
                 .resolve(QStringLiteral("osd"))
                 .effectiveParameters()
                 .value(QStringLiteral("border"))
-                .toMap()
-                .value(QStringLiteral("borderWidth"))
-                .toInt();
+                .toMap();
         };
-        QCOMPARE(seededWidth(QVariantMap{}), 1);
-        QCOMPARE(seededWidth(QVariantMap{{QStringLiteral("border"), QString()}}), 1);
+        const QString widthKey = QStringLiteral("borderWidth");
+        QCOMPARE(seededParams(QVariantMap{}).value(widthKey).toInt(), 1);
+        QCOMPARE(seededParams(QVariantMap{{QStringLiteral("border"), QString()}}).value(widthKey).toInt(), 1);
         // And a real id still blocks it, so the predicate is specific.
-        QCOMPARE(seededWidth(QVariantMap{{QStringLiteral("border"), QStringLiteral("Thick")}}), 0);
+        QVERIFY(!seededParams(QVariantMap{{QStringLiteral("border"), QStringLiteral("Thick")}}).contains(widthKey));
     }
 
     void withSeedDefaults_injectsTheSeedsOwnPresetIds()
@@ -833,6 +853,9 @@ private Q_SLOTS:
                  QStringLiteral("Mine"));
     }
 
+    /// A parameters-only override at a seeded path is a RETUNE: the seed
+    /// chain injects into the unengaged chain slot while the user's engaged
+    /// parameters map wins wholesale.
     void withSeedDefaults_parametersOnlyOverride_keepsSeedChain()
     {
         DecorationProfileTree seeds;

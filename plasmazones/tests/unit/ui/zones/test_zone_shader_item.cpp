@@ -779,9 +779,9 @@ private Q_SLOTS:
 
     void testZoneShaderItem_qImageConverterWrapsAsSingleTile()
     {
-        // The editor/settings shader previews still hand the labelsTexture
+        // The settings shader preview still hands the labelsTexture
         // property a full QImage; the ctor-registered converter must wrap it as
-        // a single full-size tile so those paths keep working unchanged.
+        // a single full-size tile so that path keeps working unchanged.
         ZoneShaderItem item; // ctor registers the QImage→ZoneLabelTexture converter
 
         QImage img(64, 48, QImage::Format_ARGB32);

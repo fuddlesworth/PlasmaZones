@@ -15,6 +15,7 @@
 #include <PhosphorShaders/ShaderEntryPoint.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorSurface/SurfaceShaderContract.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 
@@ -126,8 +127,9 @@ void PlasmaZonesEffect::ensureSurfaceRegistryPaths()
     }
     m_surfaceRegistryPathsAdded = true;
     // Candidate dirs: every ${XDG_DATA_DIRS}/plasmazones/surface, which is
-    // where CMake installs data/surface (the top-level install() rule targets
-    // ${KDE_INSTALL_DATADIR}/plasmazones/surface), plus the user data dir
+    // where CMake installs data/surface (the install() rule in
+    // plasmazones/CMakeLists.txt targets ${KDE_INSTALL_DATADIR}/plasmazones/surface),
+    // plus the user data dir
     // ~/.local/share/plasmazones/surface, where a user override would live.
     // Added even when a dir is missing so the registry's watcher promotes a
     // parent-watch and picks up packs that appear later (a fresh install).
@@ -150,7 +152,7 @@ void PlasmaZonesEffect::ensureSurfaceRegistryPaths()
     std::reverse(bases.begin(), bases.end());
     paths.reserve(bases.size());
     for (const QString& base : bases) {
-        paths.append(base + QStringLiteral("/plasmazones/surface"));
+        paths.append(base + QLatin1Char('/') + PhosphorSurfaceShaders::surfacePackDataSubdir());
     }
     if (!paths.isEmpty()) {
         m_surfaceShaderRegistry.addSearchPaths(paths);

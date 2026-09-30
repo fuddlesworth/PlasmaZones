@@ -156,12 +156,13 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
             // Latched. The state is ERASED on this path, so a per-window flag cannot
             // survive to suppress the repeat: the next frame builds a fresh state and
             // fails again. While VRAM stays short that is one line per window per
-            // frame, which is exactly when the journal is least useful. A
-            // function-local static is the smallest thing that outlives the state,
-            // and it matches the one-shot `explained` latch the pack validator uses.
-            static bool allocFailureWarned = false;
-            if (!allocFailureWarned) {
-                allocFailureWarned = true;
+            // frame, which is exactly when the journal is least useful. An effect
+            // member outlives the erased state just as a function-local static
+            // would, and unlike one it is RE-ARMED at every compile-cache clear,
+            // like the backdrop-allocation latch it sits beside: session-permanent
+            // meant one transient failure silenced every later one for the session.
+            if (!m_surfaceTargetAllocWarned) {
+                m_surfaceTargetAllocWarned = true;
                 qCWarning(lcEffect) << "Surface target allocation failed for" << windowId << "at" << textureSize
                                     << "— dropping this window's decoration (out of VRAM?). This is "
                                        "reported once per session.";
@@ -640,6 +641,14 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
     // TWO ways a window stops, and both must be accounted or the jump returns through
     // whichever was missed:
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+    // Both LIVE reads, deliberately unlike the focus-fade ramp in this same fold, which
+    // takes the frame pin precisely to avoid per-output-pass drift. iTime wants the drift:
+    // it is a wall clock the pack reads, not a quantity two outputs have to agree on. The
+    // comparison against state.lastFoldMs below is live-against-pinned for the same reason,
+    // with a skew bounded by ONE paint pass against a 250 ms threshold: lastFoldMs is
+    // stamped FROM the pin (`pinnedFoldMs >= 0 ? pinnedFoldMs : live`), so the previous
+    // pass contributes nothing and only this pass's live-minus-pin is in play. It errs
+    // toward "unpainted", because that offset can only push the difference up.
     const qint64 sharedNowMs = surfaceShaderTimeMs();
     // Well clear of any real frame interval, and well under any gap a person would notice
     // as a phase jump.

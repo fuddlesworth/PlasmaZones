@@ -17,31 +17,21 @@ using namespace PlasmaZones;
  * @brief Unit tests for overlay service helper functions
  *
  * Tests cover:
- * - parseZonesJson: valid array, invalid JSON, non-array JSON, empty input
  * - patchZonesWithHighlight: single/multi highlight, empty ids, null window
  * - writeQmlProperty: valid property, null object safety
  * - ensureShaderTimerStarted: idempotency
  * - getAnchorsForPosition: all positions
  *
- * These are pure/inline functions from internal.h. They are replicated here
- * because internal.h has include dependencies that only resolve in unity builds.
- * The function bodies are exact copies and must stay in sync.
+ * These are the real inline definitions from overlay_helpers.h, included above.
+ * Nothing is replicated here and nothing has to be kept in sync — an earlier
+ * version of this docblock said otherwise, contradicting the include note at the
+ * top of the file.
  */
 class TestOverlayHelpers : public QObject
 {
     Q_OBJECT
 
 private:
-    // Helper: build a JSON array string from zone maps
-    static QString zonesJsonString(const QVariantList& zones)
-    {
-        QJsonArray arr;
-        for (const QVariant& z : zones) {
-            arr.append(QJsonObject::fromVariantMap(z.toMap()));
-        }
-        return QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
-    }
-
     // Delegate to shared TestHelpers::makeZone (uses JsonKeys constants)
     static QVariantMap makeZone(const QString& id, float x, float y, float w, float h, int zoneNumber = 0,
                                 bool highlighted = false)
@@ -50,59 +40,6 @@ private:
     }
 
 private Q_SLOTS:
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // P0: parseZonesJson
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    void testParseZonesJson_validArray()
-    {
-        QVariantList input;
-        input.append(makeZone(QStringLiteral("z1"), 0, 0, 960, 1080, 1));
-        input.append(makeZone(QStringLiteral("z2"), 960, 0, 960, 1080, 2));
-
-        QString json = zonesJsonString(input);
-        QVariantList result = parseZonesJson(json, "test:");
-
-        QCOMPARE(result.size(), 2);
-
-        // Verify first zone fields are preserved
-        QVariantMap z1 = result[0].toMap();
-        QCOMPARE(z1.value(QStringLiteral("id")).toString(), QStringLiteral("z1"));
-        QCOMPARE(z1.value(QStringLiteral("zoneNumber")).toInt(), 1);
-
-        // Verify second zone with exact coordinate comparison
-        QVariantMap z2 = result[1].toMap();
-        QCOMPARE(z2.value(QStringLiteral("id")).toString(), QStringLiteral("z2"));
-        QVERIFY(qFuzzyCompare(z2.value(QStringLiteral("x")).toFloat(), 960.0f));
-    }
-
-    void testParseZonesJson_invalidJson_returnsEmpty()
-    {
-        // Malformed JSON should return empty list without crashing
-        QVariantList result = parseZonesJson(QStringLiteral("{invalid json!!!"), "test:");
-        QVERIFY(result.isEmpty());
-    }
-
-    void testParseZonesJson_notArray_returnsEmpty()
-    {
-        // JSON object (not array) should return empty list
-        QJsonObject obj;
-        obj.insert(QStringLiteral("key"), QStringLiteral("value"));
-        QString json = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
-
-        QVariantList result = parseZonesJson(json, "test:");
-        QVERIFY(result.isEmpty());
-    }
-
-    void testParseZonesJson_emptyString_returnsEmpty()
-    {
-        QVariantList result = parseZonesJson(QString(), "test:");
-        QVERIFY(result.isEmpty());
-
-        QVariantList result2 = parseZonesJson(QStringLiteral(""), "test:");
-        QVERIFY(result2.isEmpty());
-    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // P0: patchZonesWithHighlight
@@ -357,28 +294,16 @@ private Q_SLOTS:
         QVERIFY(def.testFlag(PhosphorWayland::LayerSurface::AnchorLeft));
         QVERIFY(def.testFlag(PhosphorWayland::LayerSurface::AnchorRight));
     }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // P1: parseZonesJson — additional edge cases
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    void testParseZonesJson_mixedArray_skipsNonObjects()
-    {
-        QString json = QStringLiteral("[1, \"string\", null, {\"id\": \"z1\"}]");
-        QVariantList result = parseZonesJson(json, "test:");
-        QCOMPARE(result.size(), 1);
-        QCOMPARE(result[0].toMap().value(QLatin1String("id")).toString(), QStringLiteral("z1"));
-    }
-
-    void testParseZonesJson_emptyArray_returnsEmpty()
-    {
-        QVariantList result = parseZonesJson(QStringLiteral("[]"), "test:");
-        QVERIFY(result.isEmpty());
-    }
 };
 
-// Custom main: QQuickWindow requires QGuiApplication, but QTEST_MAIN creates
-// QCoreApplication. Provide QGuiApplication explicitly.
+// Custom main, and VESTIGIAL: QTEST_MAIN would do the same thing here. This target
+// links Qt6::Quick, so QT_GUI_LIB is defined and QTEST_MAIN_SETUP already expands to
+// QGuiApplication, which is the only application type the QQuickWindow below needs.
+// QTEST_MAIN would additionally set AA_Use96Dpi, and nothing here depends on the DPI:
+// these tests cover QVariantMap key logic, a QObject dynamic property, a QElapsedTimer
+// and an enum switch, and the window is never shown, never sized and never measured.
+// Two earlier versions of this comment each gave a different wrong reason for keeping
+// the custom main. It is kept only because replacing it buys nothing.
 int main(int argc, char* argv[])
 {
     QGuiApplication app(argc, argv);

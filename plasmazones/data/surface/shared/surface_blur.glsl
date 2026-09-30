@@ -10,7 +10,13 @@
 // because the builtin:gaussian-h and builtin:gaussian-v passes call it and a
 // third-party pack may still declare those. It is 9 taps spread over a 4-tap
 // reach, so the outermost tap sits at the full radius and the effective sigma is
-// roughly 0.45 of the radius, not the radius/3 this file used to claim.
+// 0.42 of the radius, not the radius/3 this file used to claim. That figure is
+// the discrete second moment of the weights below: variance = 2*sum(i^2*w_i) =
+// 2.854 in quarter-radii, so sigma = 1.689 quarter-radii = 0.422 R. (It read
+// 0.45 for several rounds, which overstated it by about 7 per cent.) Its
+// offsets step in canvas UV: the logical-px radius is scaled to device px by
+// uSurfaceScale, normalized by the canvas extent (uSurfaceSize), and spread over
+// the kernel's 4-tap reach.
 //
 // BUFFER-PASS CONVENTION: buffer shaders compile WITHOUT the generated p_<id>
 // parameter preamble, so parameters are read by their RAW contract slot. THREE
@@ -19,16 +25,18 @@
 // validator. Each skips the preamble deliberately, and a pack that referenced a
 // p_<id> from a buffer pass would fail on every path it ships on.
 //
-// NOTHING ENFORCES THE SLOT, which is the part a pack author has to carry. The
-// builtin passes read the radius as customParams[0].x, and slots are assigned
-// by DECLARATION ORDER (see buildParamPreamble), so the convention is that
-// `blurRadius` is the FIRST scalar parameter a blur-family pack declares.
-// Reorder the parameters array and the chain silently blurs by whatever the
-// new first scalar is; no validator lint and no test covers it, and this file
-// is the only place the convention is written down outside the authoring
-// skill. Offsets step in canvas UV: the logical-px radius is
-// scaled to device px by uSurfaceScale, normalized by the canvas extent
-// (uSurfaceSize), and spread over the kernel's 4-tap reach.
+// THE RADIUS SLOT. The builtin passes read the radius as customParams[0].x, and
+// slots are assigned by DECLARATION ORDER (see buildParamPreamble), so the
+// convention is that `blurRadius` is the FIRST scalar parameter a blur-family
+// pack declares. Reorder the parameters array and the chain silently blurs by
+// whatever the new first scalar is. Note SCALAR, not float: a bool pools as one
+// too, so leading with `roundBottomCorners` puts a corner switch in the radius
+// slot. The offline validator lints all of this, by name, in surfaceMetadataLints
+// (packvalidator_surface_lints.cpp, split out of packvalidator_surface.cpp when that
+// FILE reached its size ceiling), including a pack that declares no scalar at all,
+// where the chain would blur by 0. test_surface_blur_chain_lints.cpp covers the arms:
+// the no-scalar one, the wrong-name one, a bool declared first, a parameter with no
+// type at all, and the gaussian twin of the bool-first one.
 
 #ifndef PLASMAZONES_SURFACE_BLUR_GLSL
 #define PLASMAZONES_SURFACE_BLUR_GLSL
@@ -40,8 +48,9 @@
 #include <surface_backdrop.glsl>
 #include <surface_multipass.glsl>
 
-// 9-tap Gaussian weights, summing to ~1. See the header for why the effective
-// sigma is about 0.45 of the radius rather than a third of it.
+// 9-tap Gaussian weights, summing to ~1 (0.9999994, so the kernel is a convex
+// combination and cannot break the premultiplied rgb<=a invariant). See the header
+// for why the effective sigma is 0.42 of the radius rather than a third of it.
 const float kSurfaceGaussW0 = 0.227027;
 const float kSurfaceGaussW1 = 0.1945946;
 const float kSurfaceGaussW2 = 0.1216216;
@@ -71,7 +80,21 @@ vec4 surfaceGaussianBackdropH(vec2 uv) {
 
 // Buffer pass 1: VERTICAL half over buffer 0's result (iChannel0, same
 // bufferScale resolution). Together the two passes approximate a full 2D
-// Gaussian; the main pass samples the result as iChannel1.
+// Gaussian; the main pass samples the result as iChannel1 in the canonical
+// two-entry declaration, or as iChannel<this half's index> in any other.
+//
+// iChannel0 is hardcoded, so this half needs the HORIZONTAL one at pass 0. It does
+// not need to be pass 1 itself: iChannelN is pass N's output for every later pass,
+// so [gaussian-h, something, gaussian-v] composes exactly as [gaussian-h,
+// gaussian-v] does. At pass 0 it would read nothing this chain has written — the 1x1
+// transparent fallback the hosts bind for a channel at or past the current pass index,
+// or, on the daemon with a single buffer pass and `bufferFeedback` set, that pass's own
+// previous frame — and write a blank pane either way.
+//
+// The offline validator enforces that for the `builtin:` tokens, because a pack
+// declaring them the wrong way round still resolves both and still compiles both
+// frags. A pack shipping its own copies is on its own: an arbitrary frag cannot be
+// identified as a horizontal Gaussian, so it is left unlinted rather than guessed at.
 //
 // The tap reach is measured against the CANVAS, not the buffer: stepUv is
 // radiusPx / (4 * uSurfaceSize.y), so the outermost tap sits a full
@@ -81,6 +104,12 @@ vec4 surfaceGaussianBackdropH(vec2 uv) {
 // It is CLAMP on the compositor unconditionally: the buffer targets are
 // created GL_LINEAR / GL_CLAMP_TO_EDGE and the `bufferWraps` and
 // `bufferFilters` keys are daemon-only, which the fields themselves declare.
+// `halfFloatBuffers` is daemon-only in the same way, and its field says so too:
+// the compositor hardcodes GL_RGBA8 and never reads the key, so a pack asking
+// for true gets RGBA16F on one host and RGBA8 on the other. Every bundled pack
+// that declares buffer passes declares it false (the seven blur-family packs);
+// the other seventeen declare no buffers at all, so the key never reaches an
+// allocation.
 // So a big radius on a small surface smears the edge texel rather than
 // blurring, identically on both hosts at the default wrap. Do NOT "fix" that
 // by clamping uv here; that changes the Gaussian's edge behaviour everywhere.
@@ -201,7 +230,7 @@ const float kSurfaceKawaseBaseTexel = 4.0;
 // deliberate steps.
 //
 // 120 -> 121 IS continuous, and that is what the 3.6 floor below buys. The summed
-// tap extent per (o + 0.5) is 14 at depth 2, 38 at depth 3 and 86 at depth 4, so a
+// tap extent per (o + 0.5) is 2 at depth 1, 14 at depth 2, 38 at depth 3 and 86 at depth 4, so a
 // radius of 120 reaches 4.0 x 38 = 152 px. With a 3.0 floor a radius of 121 reached
 // only 1.5125 x 86 = 130 px, i.e. asking for more blur gave LESS. Continuity needs
 // a floor of at least 3.5349; 3.6 clears it and keeps the band monotonic to the top
@@ -212,8 +241,11 @@ const float kSurfaceKawaseBaseTexel = 4.0;
 // the step is the lesser evil.
 //
 // 15 -> 16 is left as a step for a different reason: depth 1 IS the quarter-res
-// floor. Closing it would need an offset near 6.9 at quarter resolution, which is
-// the square Kawase ghosting this calibration exists to avoid.
+// floor. Closing it would need a RETURNED tap offset near 6.9 at quarter
+// resolution — a kwinOffset near 14.8, not the 6.9 an OffsetMin entry would
+// take — which is the square Kawase ghosting this calibration exists to avoid.
+// The two bullets above use "offset" for the kwinOffset scale; this one means
+// the value surfaceKawaseOffset returns.
 const vec4 kSurfaceKawaseReach = vec4(15.0, 40.0, 120.0, 320.0);
 const vec4 kSurfaceKawaseOffsetMin = vec4(1.0, 2.0, 3.0, 3.6);
 const vec4 kSurfaceKawaseOffsetMax = vec4(3.0, 5.0, 8.0, 8.0);

@@ -639,7 +639,9 @@ Item {
                 // all. The property is a QVariant now (see
                 // ShaderEffect::setWallpaperTextureVariant), so a host with
                 // nothing to show can pass null or undefined straight through
-                // without the guard that broke it.
+                // without the guard that broke it. What stops it coming back is
+                // the QML-source sweep in test_shader_item_qml_bindings, which
+                // reads this directory as well as plasmazones/src.
                 useWallpaper: root.backdropTexture !== null && root.backdropTexture !== undefined
                 wallpaperTexture: root.backdropTexture
 
@@ -792,9 +794,9 @@ Item {
                 // No published shaderContentRect (root-as-anchor content like
                 // snap-assist): the frame IS the whole anchor, per this
                 // component's documented fallback. A (0, 0) fallback here
-                // would trip every pack's degenerate-frame guard
-                // (uSurfaceFrameSize < 1 → passthrough) and render nothing on
-                // those surfaces.
+                // would trip the degenerate-frame guard of every pack that reads
+                // the frame rect (uSurfaceFrameSize < 1 → passthrough) and so
+                // draw no decoration at all on those surfaces.
                 surfaceFrameSize: (root.shaderAnchorItem && root.shaderAnchorItem.shaderContentRect !== undefined) ? Qt.size(root.shaderAnchorItem.shaderContentRect.width * root.surfaceScale, root.shaderAnchorItem.shaderContentRect.height * root.surfaceScale) : (root.shaderAnchorItem ? Qt.size(root.shaderAnchorItem.width * root.surfaceScale, root.shaderAnchorItem.height * root.surfaceScale) : Qt.size(0, 0))
 
                 // Pack source + params, per stage. paramPreamble/shaderParams
@@ -808,16 +810,16 @@ Item {
                 vertexShaderUrl: stage.stageData.vertexSource !== undefined ? stage.stageData.vertexSource : ""
                 shaderSource: stage.stageData.source !== undefined ? stage.stageData.source : ""
 
-                // Multipass buffer passes, forwarded from the composer's stage
-                // map VERBATIM. Inherited wholesale from ShaderEffect, and that
-                // is a real difference from the compositor rather than a shared
-                // design: the compositor folds the user's decoration
-                // blur-scale multiplier into every declared scale
-                // (clampedBufferScale, applied to the per-pass array too),
-                // and nothing on this path reads that setting at all. So a
-                // daemon-hosted decoration and a window decoration render the
-                // same pack at different buffer densities whenever the
-                // multiplier is not 1. `multipass` is false for every single-pass pack, so
+                // Multipass buffer passes, forwarded from the composer's stage map
+                // VERBATIM, and that includes the user's decoration blur-scale
+                // multiplier: composeStageMap folds it into bufferScale and into
+                // every bufferScales entry, and bounds the product, so this path
+                // folds it exactly once, as the compositor's clampedBufferScale
+                // does on its own side (two mirrored implementations, and each
+                // says so). Do NOT fold it again here. An earlier version of this comment
+                // said the two hosts diverged on buffer density, which was true
+                // before the composer took the multiplier and is not now.
+                // `multipass` is false for every single-pass pack, so
                 // the empty-list / default arms below keep those stages on the
                 // classic single-pass path.
                 bufferShaderPaths: stage.stageData.multipass === true && stage.stageData.bufferShaderPaths !== undefined ? Array.from(stage.stageData.bufferShaderPaths) : []

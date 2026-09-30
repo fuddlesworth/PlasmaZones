@@ -330,8 +330,8 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
                 &OverlayService::onVirtualScreensChanged);
         // Regions-only changes (swap/rotate/boundary-resize) also need the
         // overlay windows destroyed and recreated with the new VS geometry.
-        // The handler is heavy but only runs when overlays are visible
-        // (active drag), so the cost is bounded.
+        // Its TEARDOWN half runs on every one of these signals whatever the visibility;
+        // only the recreate block checks isVisible(). Bounded by signal rarity, not a gate.
         connect(mgr, &PhosphorScreens::ScreenManager::virtualScreenRegionsChanged, this,
                 &OverlayService::onVirtualScreensChanged);
     }
@@ -419,16 +419,11 @@ OverlayService::~OverlayService()
     m_shellHost.reset();
     m_screenStates.clear();
 
-    // Singleton surfaces (layout picker, shader preview) are QObject
-    // children of `this`, so the QObject parent-child system would
-    // destroy them AFTER our own destructor body runs - i.e. after
-    // the member destructors. Schedule their deletion now so
-    // SurfaceManager's drain loop picks them up before the engine is
-    // destroyed. Snap-assist post-shell-migration is an Item slot
-    // inside the per-screen passive shell - its lifetime is the
-    // shell's, no separate cleanup here.
-    // Picker post-shell-migration is also a slot in the per-screen
-    // passive shell - no separate surface cleanup.
+    // No singleton surfaces are scheduled for deletion here any more. Snap assist,
+    // the layout picker and the cheatsheet are all Item slots inside the per-screen
+    // passive shell, so their lifetime is the shell's. The block that used to sit
+    // here justified code that has since been removed, and named a shader preview
+    // this service never hosted.
 
     // Drain deferred-delete events NOW, while all OverlayService members are
     // still alive. Surface destructors may touch m_screenStates, m_shaderRegistry,
@@ -452,7 +447,7 @@ OverlayService::~OverlayService()
     // every prime-tracked surface is destroyed, so most Connections are
     // already retired by sender-destruction; this loop is defensive
     // against any future path that adds prime-tracked surfaces outside
-    // of m_screenStates / the three explicit singletons.
+    // of m_screenStates, which is the only source of them today.
     for (const auto& conn : std::as_const(m_primingFrameConnections)) {
         QObject::disconnect(conn);
     }
@@ -575,14 +570,13 @@ PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLay
         return nullptr;
     }
 
-    // Post-shell-migration: per-content auto-dismiss is wired through
-    // the shell window's per-slot signals (`osdDismissRequested`,
-    // `snapAssistDismissRequested`, `layoutPickerDismissRequested`),
-    // each routed by ensurePassiveShellFor to a slot-specific
-    // animator-driven hide rather than a whole-surface hide. There's
-    // no generic `dismissRequested` signal on PassiveOverlayShell.qml
-    // anymore - wiring one would unmap the shell on any per-slot
-    // auto-dismiss timer.
+    // Post-shell-migration: per-content auto-dismiss is wired through the shell
+    // window's per-slot signals (`osdDismissRequested`, `snapAssistDismissRequested`,
+    // `layoutPickerDismissRequested`, `cheatsheetDismissRequested`), each routed by
+    // ensurePassiveShellFor to a slot-specific animator-driven hide rather than a
+    // whole-surface hide. There's no generic `dismissRequested` signal on
+    // PassiveOverlayShell.qml anymore - wiring one would unmap the shell on any
+    // per-slot auto-dismiss timer.
     return surface;
 }
 
@@ -980,9 +974,9 @@ void OverlayService::setCurrentActivity(const QString& activityId)
     }
 }
 
-// Screen-management methods (setupForScreen / removeScreen /
-// assertWindowOnScreen / handleScreenAdded / destroyAllWindowsForPhysicalScreen
-// / handleScreenRemoved) live in overlayservice/screens.cpp.
+// Screen-management methods (assertWindowOnScreen / handleScreenAdded /
+// onVirtualScreensChanged / destroyAllWindowsForPhysicalScreen /
+// handleScreenRemoved / resetModalSingletonsForDestroyedId) live in overlayservice/screens.cpp.
 
 OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude(const QString& screenId,
                                                                                  QString* resolvedIdOut) const

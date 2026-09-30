@@ -4,8 +4,11 @@
 // Standard buffer pass: VERTICAL half of the shared separable Gaussian over
 // the horizontal pass's result (iChannel0). Packs opt in via
 // `"bufferShaders": ["builtin:gaussian-h", "builtin:gaussian-v"]` in
-// metadata.json; the main pass samples this buffer as iChannel1. Kernel in
-// surface_blur.glsl.
+// metadata.json, and the main pass then samples this buffer as iChannel1. That
+// index is the canonical declaration's, not a requirement: this half reads
+// iChannel0 wherever it sits, so it needs the horizontal half at pass 0 and is
+// otherwise free to follow it at any index — with the main pass sampling
+// iChannel<this half's own index>. Kernel in surface_blur.glsl.
 
 #version 450
 #include <surface_blur.glsl>

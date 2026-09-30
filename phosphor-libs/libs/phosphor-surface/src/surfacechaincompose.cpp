@@ -6,7 +6,6 @@
 #include "PhosphorSurface/SurfaceShaderEffect.h"
 #include "PhosphorSurface/SurfaceShaderRegistry.h"
 
-#include <QLatin1String>
 #include <QUrl>
 #include <QVariant>
 
@@ -61,8 +60,8 @@ double paddingRequest(const SurfaceShaderEffect& effect, const QVariantMap& frie
     // Per-surface override wins over the declared default, but only when it is
     // actually a number: an unusable override falls through to the default
     // rather than collapsing the margin to zero.
-    const auto override = friendlyParams.constFind(effect.paddingParam);
-    if (override != friendlyParams.constEnd() && usablePadding(*override, &value)) {
+    const auto stored = friendlyParams.constFind(effect.paddingParam);
+    if (stored != friendlyParams.constEnd() && usablePadding(*stored, &value)) {
         return value;
     }
     return usablePadding(declared->defaultValue, &value) ? value : 0.0;
@@ -91,35 +90,152 @@ QVariantMap composeStageMap(const SurfaceShaderEffect& effect, const QVariantMap
     if (!effect.isValid()) {
         return stageMap;
     }
-    stageMap.insert(QLatin1String("source"), QUrl::fromLocalFile(effect.fragmentShaderPath));
-    stageMap.insert(QLatin1String("vertexSource"),
+    stageMap.insert(QStringLiteral("source"), QUrl::fromLocalFile(effect.fragmentShaderPath));
+    stageMap.insert(QStringLiteral("vertexSource"),
                     effect.vertexShaderPath.isEmpty() ? QUrl() : QUrl::fromLocalFile(effect.vertexShaderPath));
-    stageMap.insert(QLatin1String("preamble"), SurfaceShaderRegistry::paramPreamble(effect));
-    stageMap.insert(QLatin1String("params"), SurfaceShaderRegistry::translateSurfaceParams(effect, resolvedParams));
-    stageMap.insert(QLatin1String("animated"), effect.animated);
+    stageMap.insert(QStringLiteral("preamble"), SurfaceShaderRegistry::paramPreamble(effect));
+    stageMap.insert(QStringLiteral("params"), SurfaceShaderRegistry::translateSurfaceParams(effect, resolvedParams));
+    stageMap.insert(QStringLiteral("animated"), effect.animated);
 
     // See the header: the emptiness half of this gate is what keeps a pack
     // whose builtin: buffer failed to resolve on the single-pass path.
     const bool stageMultipass = effect.isMultipass && !effect.bufferShaderPaths.isEmpty();
-    stageMap.insert(QLatin1String("multipass"), stageMultipass);
+    stageMap.insert(QStringLiteral("multipass"), stageMultipass);
     if (stageMultipass) {
-        stageMap.insert(QLatin1String("bufferShaderPaths"), QVariant::fromValue(effect.bufferShaderPaths));
-        stageMap.insert(QLatin1String("bufferFeedback"), effect.bufferFeedback);
-        stageMap.insert(QLatin1String("bufferScale"), clampedScale(effect.bufferScale));
+        stageMap.insert(QStringLiteral("bufferShaderPaths"), QVariant::fromValue(effect.bufferShaderPaths));
+        stageMap.insert(QStringLiteral("bufferFeedback"), effect.bufferFeedback);
+        stageMap.insert(QStringLiteral("bufferScale"), clampedScale(effect.bufferScale));
         QVariantList scales;
         scales.reserve(effect.bufferScales.size());
         for (qreal s : effect.bufferScales) {
             scales.append(clampedScale(s));
         }
-        stageMap.insert(QLatin1String("bufferScales"), scales);
-        stageMap.insert(QLatin1String("bufferWrap"), effect.bufferWrap);
-        stageMap.insert(QLatin1String("bufferWraps"), QVariant::fromValue(effect.bufferWraps));
-        stageMap.insert(QLatin1String("bufferFilter"), effect.bufferFilter);
-        stageMap.insert(QLatin1String("bufferFilters"), QVariant::fromValue(effect.bufferFilters));
-        stageMap.insert(QLatin1String("useDepthBuffer"), effect.useDepthBuffer);
-        stageMap.insert(QLatin1String("halfFloatBuffers"), effect.halfFloatBuffers);
+        stageMap.insert(QStringLiteral("bufferScales"), scales);
+        stageMap.insert(QStringLiteral("bufferWrap"), effect.bufferWrap);
+        stageMap.insert(QStringLiteral("bufferWraps"), QVariant::fromValue(effect.bufferWraps));
+        stageMap.insert(QStringLiteral("bufferFilter"), effect.bufferFilter);
+        stageMap.insert(QStringLiteral("bufferFilters"), QVariant::fromValue(effect.bufferFilters));
+        stageMap.insert(QStringLiteral("useDepthBuffer"), effect.useDepthBuffer);
+        stageMap.insert(QStringLiteral("halfFloatBuffers"), effect.halfFloatBuffers);
     }
     return stageMap;
+}
+
+QString roundBottomCornersParamId()
+{
+    return QStringLiteral("roundBottomCorners");
+}
+
+/// A silhouette answer is usable only if the variant actually holds one.
+///
+/// This mirrors usablePadding's SHAPE above but not its rationale, and the
+/// difference matters. QVariant::toDouble() reports convertibility through an
+/// `ok` out-parameter, so usablePadding can reject a wrong-TYPED override.
+/// QVariant::toBool() has no such out-parameter and never reports failure, so
+/// this rejects only an ABSENT (invalid) or explicitly-null value and converts
+/// everything else — a stored string or container still gets an answer. That
+/// residual is deliberate: gating the chain vote on a declared `"bool"` type was
+/// considered and rejected, because the hosts inject into a pack without testing
+/// its declared type, so refusing such a pack a VOTE while still writing the
+/// chain's answer into it would be the asymmetry rather than the fix.
+///
+/// Both inputs cross the same trust boundary usablePadding describes: an
+/// installed pack's metadata.json for the declared default, and a stored
+/// per-surface profile for the override.
+///
+/// So a WRONG-TYPED stored value is explicitly not covered: QVariant::toBool() is
+/// true for any string that is not empty, "0" or a case-insensitive "false", so `"off"`
+/// reads as round.
+/// No code path in the tree produces that today (the settings UI writes a bool and the
+/// flatten copies it verbatim), and the alternative — gating on the declared type —
+/// was rejected for the reason above. A HAND-EDITED profile can, and it gets the value
+/// it asked for rather than a refusal: the flatten keeps every non-null inner value
+/// verbatim, so a string survives it. A rule can carry one too, since paramsBlobIsSane
+/// refuses arrays and over-long strings but accepts an ordinary one.
+///
+/// An EMPTY string stored here squares the chain rather than abstaining, and there is no
+/// empty-vs-null asymmetry to it. Qt 6 dropped the QString::isNull() special case from
+/// QVariant::isNull(), so a default-constructed QString and a `""` both report isNull()
+/// false, both pass this guard, and both convert to false. Every other string rounds, except
+/// `"0"` and a case-insensitive `"false"`. Spelled out because this sentence has been wrong
+/// twice: "a string" contradicted the paragraph above, and "non-empty" contradicted those two
+/// exceptions. Nothing is trimmed either, so `" false "` and `"00"` round.
+///
+/// A JSON `null` arrives as std::nullptr_t — valid, isNull() true — and abstains, the
+/// shape the tests pin. A tree PROFILE cannot carry one: DecorationProfile::fromJson
+/// drops nulls at both levels, and says why. That is the profile's own parameters map
+/// and nothing else, so it does NOT make the arm dead. Every tree read whose PARAMETERS
+/// are consumed flattens through withPresetsResolved when it has a preset registry, and
+/// the chain-only reads that never look at a parameter do not need to. A USER preset
+/// file keeps its nulls:
+/// ShaderPreset::fromJson raw-converts, overlayPresetDeltas copies verbatim, and
+/// clampToBounds skips anything non-numeric. A pack-DECLARED preset does drop them, so
+/// the asymmetry is the user file. A rule's params (shader_resolve.cpp) and a pack's own
+/// `"default": null` reach here too. Three producers. The rule arm is compositor-only, so
+/// it is the other two that make the arm live on every host.
+static bool usableBool(const QVariant& value, bool* out)
+{
+    if (!value.isValid() || value.isNull()) {
+        return false;
+    }
+    *out = value.toBool();
+    return true;
+}
+
+QVariant chainRoundBottomCorners(const SurfaceShaderRegistry& registry, const QStringList& chain,
+                                 const QVariantMap& allPackParams)
+{
+    const QString key = roundBottomCornersParamId();
+    // Step 2's answer, held back until the whole chain has been searched for a
+    // step 1 answer. A stored value ANYWHERE in the chain outranks any declared
+    // default, including one declared by an earlier pack.
+    QVariant declaredFallback;
+    for (const QString& packId : chain) {
+        // No hasEffect() pre-check: effect() answers a default-constructed
+        // SurfaceShaderEffect for an id the registry does not hold, and that has
+        // an empty id so isValid() is already false for it. Both calls perform the
+        // same factory lookup, so the probe was a second one for the same answer.
+        // NOTE this reasoning is local to the resolver, and it does NOT condemn every
+        // host probe. The daemon overlay host's and the shell's chainFor are both
+        // load-bearing: each distinguishes "not installed" from "installed but broken"
+        // for its own pair of diagnostics. A probe with no diagnostic on either arm is
+        // the redundant shape.
+        const SurfaceShaderEffect effect = registry.effect(packId);
+        if (!effect.isValid()) {
+            continue;
+        }
+        const auto declared =
+            std::find_if(effect.parameters.cbegin(), effect.parameters.cend(), [&key](const auto& param) {
+                return param.id == key;
+            });
+        if (declared == effect.parameters.cend()) {
+            continue;
+        }
+        // Bound to a named local: constFind on the temporary QVariantMap that
+        // value().toMap() returns would leave the iterator dangling at the end
+        // of the full expression.
+        const QVariantMap packParams = allPackParams.value(packId).toMap();
+        bool value = false;
+        // An unusable stored value FALLS THROUGH to this pack's declared default
+        // rather than terminating the scan, the shape paddingRequest uses above.
+        // Skipping the pack outright would be wrong: the scan would go on to a
+        // later pack, and a null left in a hand-edited profile would silently
+        // hand the chain to someone else.
+        const auto stored = packParams.constFind(key);
+        if (stored != packParams.constEnd() && usableBool(*stored, &value)) {
+            return QVariant(value);
+        }
+        // A pack that declares the control WITHOUT a default has no opinion, so it
+        // abstains and a later pack's stated default decides. Without the usability
+        // test, defaultValue.toBool() on an absent default answered false, and
+        // because QVariant(false) is itself valid it latched here and blocked every
+        // later pack — silence outvoting a statement. The pair is the one
+        // translateSurfaceParams already applies to this same field.
+        if (!declaredFallback.isValid() && usableBool(declared->defaultValue, &value)) {
+            declaredFallback = QVariant(value);
+        }
+    }
+    return declaredFallback;
 }
 
 } // namespace PhosphorSurfaceShaders

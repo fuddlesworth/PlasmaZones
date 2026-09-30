@@ -364,6 +364,11 @@ void ShaderNodeRhi::setUserTexture(int slot, const QImage& image)
     }
     m_userTextureImages[slot] = image;
     m_userTextureDirty[slot] = true;
+    // A NEW image gets a fresh clamp warning. The latch is not keyed on size, so without this a
+    // second, differently-oversized image at the same slot reports nothing and the one surviving
+    // journal line names a size that is no longer the one being clamped. Exactly once per supplied
+    // image, because the arm only runs while the slot is dirty.
+    m_userTextureClampWarned[static_cast<size_t>(slot)] = false;
     m_uniformsDirty = true;
     m_sceneDataDirty = true;
 }
@@ -391,9 +396,18 @@ void ShaderNodeRhi::setUserTextureWrap(int slot, const QString& wrap)
     // phase, so every one of them already runs inside a sync that dirties at
     // the end, and the item-side setters call update() besides. It is kept
     // because this is an LGPL library and the only thing protecting an
-    // out-of-tree host that forgets that trailing markDirty. The lambda that
-    // fires from QSGTextureProvider::textureChanged is the genuine case, since
-    // that one arrives outside sync.
+    // out-of-tree host that forgets that trailing markDirty. Exactly seven
+    // setters carry it — this one, setBufferWrap/Wraps, setBufferFilter/Filters,
+    // setUseWallpaper and setUseDepthBuffer — plus the textureChanged lambda.
+    // That set is HISTORICAL, not principled: no property distinguishes it.
+    // setUseWallpaper rebuilds no sampler at all (its own comment two hundred
+    // lines down says the wallpaper texture and sampler are deliberately NOT
+    // freed on the OFF flip), and setUniformExtension, setExtraBinding,
+    // setSourceTextureProvider, setGridSubdivisions, setBufferFeedback,
+    // setBufferScale(s) and setHalfFloatBuffers all drop pipelines or bindings
+    // and carry none. The lambda that fires from
+    // QSGTextureProvider::textureChanged is the genuine case, since that one
+    // arrives outside sync.
     markDirty(QSGNode::DirtyMaterial);
 }
 
@@ -505,6 +519,10 @@ void ShaderNodeRhi::setUseDepthBuffer(bool use)
     m_useDepthBuffer = use;
     m_depthTexture.reset();
     m_depthSampler.reset();
+    // The depth setting itself changed, so an earlier create failure says nothing about
+    // the objects this flip will ask for. Without the clear, a pack that failed three
+    // times and then had depth toggled off and on would start already out of budget.
+    clearDepthCreateFailure();
     // The buffer render targets were created WITH the depth texture as their
     // second colour attachment (createTextureAndRT), and the buffer pipelines'
     // target-blend count is keyed on m_useDepthBuffer. A bare
@@ -594,26 +612,34 @@ void ShaderNodeRhi::setBufferShaderPaths(const QStringList& paths)
     // anyway. m_bufferShaderDirty=true above is enough to trigger the
     // deferred load on the next prepare().
 
-    m_bufferPipeline.reset();
-    m_bufferSrb.reset();
-    m_bufferSrbB.reset();
-    m_bufferTexture.reset();
-    m_bufferTextureB.reset();
-    m_bufferRenderTarget.reset();
-    m_bufferRenderTargetB.reset();
-    m_bufferRenderPassDescriptor.reset();
-    m_bufferRenderPassDescriptorB.reset();
-    m_bufferFeedbackCleared = false;
-    for (int i = 0; i < kMaxBufferPasses; ++i) {
-        m_multiBufferPipelines[i].reset();
-        m_multiBufferSrbs[i].reset();
-        m_multiBufferTextures[i].reset();
-        m_multiBufferRenderTargets[i].reset();
-        m_multiBufferRenderPassDescriptors[i].reset();
-    }
-    m_pipeline.reset();
-    m_srb.reset();
-    m_srbB.reset();
+    // The shared teardown, not a hand-rolled copy of it. The list this used to spell out was
+    // member-for-member what resetBufferTargets drops, MINUS the two dirty flags it arms —
+    // and those are the point: iChannelResolution is resolved from the live buffer textures
+    // during the UBO upload, which is gated on m_uniformsDirty, so without them a pack
+    // switch left the GPU holding the departed passes' resolutions. The rebuild normally
+    // re-arms them, but it is not reached when the new path list is EMPTY, and all THREE
+    // multipass-disable paths pass {} — surfaceanimator_shaderattach.cpp,
+    // pointerpreviewcontroller.cpp and the shader-render pointer driver. Each pushes it
+    // through ShaderEffect::setBufferShaderPaths, which reaches this node setter from
+    // syncBasePropertiesToNode rather than directly.
+    //
+    // ONE-FRAME CONSEQUENCE on a NON-empty A→B switch, recorded so it is not rediscovered as
+    // a regression: syncBaseUniforms runs before ensureBufferTarget in prepare(), so on the
+    // first frame after the switch the new textures do not exist yet and the armed
+    // scene-header upload publishes (1,1) into every iChannelResolution slot, where the
+    // hand-rolled teardown left the departed pack's size standing for that frame.
+    //
+    // Both of syncBaseUniforms' routes land on that (1,1), which is worth spelling out because
+    // an earlier version of this note named only one and named the wrong one for the common
+    // case: with a MULTIPASS B, m_bufferPaths already holds B's list, so numChannels is B's
+    // pass count and the fallback comes from the per-pass null-texture else; numChannels is 0
+    // only when B is single-pass, since this setter clears m_bufferShaderReady.
+    //
+    // Neither value is the right one, and the same publish already happened on any switch that
+    // also changed a param or a colour, since syncBasePropertiesToNode pushes those first. The
+    // underlying ordering — channel sizes published before the pass that resolves them — is
+    // older than this call and is where a fix would belong.
+    resetBufferTargets();
 }
 
 void ShaderNodeRhi::setBufferFeedback(bool enable)
@@ -666,7 +692,9 @@ void ShaderNodeRhi::setBufferScale(qreal scale)
 
 // Shared body for both setBufferScales overloads, templated on how a value is
 // read out of the caller's container. Named distinctively rather than given a
-// generic name because this TU takes part in a unity build.
+// generic name so a later move into a unity-built target cannot collide. This
+// library is NOT unity-built today: the root CMakeLists turns CMAKE_UNITY_BUILD
+// on globally and phosphor-rendering opts out on its own target.
 template<typename Accessor>
 static bool assignBufferPassScales(std::array<qreal, kMaxBufferPasses>& slots, qreal fallback, qsizetype count,
                                    Accessor valueAt)
@@ -720,7 +748,10 @@ void ShaderNodeRhi::setHalfFloatBuffers(bool enable)
 
 // Shared teardown for any change that invalidates the buffer-pass targets:
 // size via setBufferScale or setBufferScales, texel format via
-// setHalfFloatBuffers, and the depth attachment via setUseDepthBuffer. Drops
+// setHalfFloatBuffers, the depth attachment via setUseDepthBuffer, and mip-ness
+// via setBufferFilter / setBufferFilters (see the block that explains why a
+// filter flip has to drop the textures). ensureBufferTarget's depth block calls
+// it too, because its render targets hold the depth texture raw. Drops
 // textures, render targets, pass descriptors, the pipelines compiled against
 // them, and every SRB that references a buffer texture. ensureBufferTarget
 // rebuilds lazily on the next frame.
@@ -736,9 +767,9 @@ void ShaderNodeRhi::resetBufferTargets()
     m_bufferSrb.reset();
     m_bufferSrbB.reset();
     // m_pipeline (the image pass) was compiled against m_srb, destroyed just
-    // below — keep them in lockstep like resetAllBindingsAndPipelines and
-    // setBufferShaderPaths do, or the retained pipeline holds a pointer to a
-    // destroyed QRhiShaderResourceBindings across a format/scale flip.
+    // below — keep them in lockstep like resetAllBindingsAndPipelines does, or
+    // the retained pipeline holds a pointer to a destroyed
+    // QRhiShaderResourceBindings across a format/scale flip.
     m_pipeline.reset();
     m_srb.reset();
     m_srbB.reset();
@@ -898,7 +929,7 @@ bool ShaderNodeRhi::loadFragmentShader(const QString& path)
     // already defines `main()` (every traditional pack), applyEntryAssembly is
     // the identity, and read+expandSource is the exact equivalent of the old
     // loadAndExpand(path). The mtime + included-paths fingerprints are unchanged;
-    // the entry scaffold is folded into the bake-cache key in render().
+    // the entry scaffold is folded into the bake-cache key in prepare().
     QFile fragFile(path);
     if (!fragFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
         m_shaderError = QStringLiteral("Failed to open fragment shader: ") + path;
@@ -938,8 +969,9 @@ void ShaderNodeRhi::setEntryScaffold(const QString& prologue, const QList<Phosph
     m_entryCandidates = candidates;
     // Like setParamPreamble: the scaffold is applied inside loadFragmentShader
     // and folded into the bake-cache key, so a change must force a reload+rebake.
-    // The owning ShaderEffect re-invokes loadFragmentShader on its next dirty
-    // updatePaintNode, which re-assembles with the new scaffold.
+    // This flag is the NODE's, not the item's, so it does not by itself cause a
+    // reload. Callers must pair the call with one, which every in-tree caller
+    // does by setting the scaffold inside the item's own reload block.
     m_shaderDirty = true;
 }
 
@@ -1048,8 +1080,12 @@ void ShaderNodeRhi::setParamPreamble(const QString& preamble)
     // The preamble is spliced inside loadFragmentShader and folded into the
     // bake-cache key, so a change must force a reload+rebake — marking dirty
     // alone (without a re-load) would re-bake the already-spliced cached
-    // source. The owning ShaderEffect re-invokes loadFragmentShader on its
-    // next updatePaintNode when dirty, which re-splices with the new preamble.
+    // source. Callers must pair this with a reload: every in-tree caller sets
+    // the preamble inside the item's own reload block, immediately before
+    // loadFragmentShader. Raising this flag alone re-splices the VERTEX source
+    // at bake time while the FRAGMENT still carries the preamble spliced at its
+    // last load, and stores that mixed pair under a key that folds the NEW
+    // preamble, so a later correctly-spliced load takes the poisoned hit.
     m_shaderDirty = true;
 }
 

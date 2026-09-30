@@ -19,6 +19,7 @@
 #include <QQuickItem>
 #include <QSGRenderNode>
 #include <QSGTextureProvider>
+#include <QSize>
 #include <QString>
 #include <QStringList>
 #include <QVector>
@@ -107,11 +108,17 @@ constexpr bool isConsumerBinding(int binding) noexcept
  * builds against QT_MIN_VERSION, which is 6.10.
  *
  * @par Threading contract
- * Setters on **this class** (ShaderNodeRhi — setTime, setResolution, setCustomParams,
- * setExtraBinding, etc.) must be called from QQuickItem::updatePaintNode() during
- * the scene graph sync phase — the GUI thread is blocked and the render thread is
- * idle at that point. Calling these setters outside updatePaintNode() is a data
- * race with prepare()/render() on the render thread. Only invalidateItem() is
+ * A GUI-THREAD caller of the setters on **this class** (ShaderNodeRhi — setTime,
+ * setResolution, setCustomParams, setExtraBinding, etc.) must go through
+ * QQuickItem::updatePaintNode() during the scene graph sync phase, where the GUI
+ * thread is blocked and the render thread is idle; reaching them from the GUI
+ * thread outside it is a data race with prepare()/render(). The RENDER THREAD may
+ * call them from prepare() BEFORE the frame's bindings are built, and does:
+ * uploadLabelsTexture calls setExtraBinding there. That covers DATA RACES ONLY.
+ * A mutator that drops an SRB, pipeline, buffer target or the UBO — mechanically, any one that
+ * calls resetAllBindingsAndPipelines() or resetBufferTargets(), or resets a QRhi member itself —
+ * must NOT be reached from render(), nor from prepare() once its passes are recorded, on ANY
+ * thread. That predicate is grep-checkable; a name list here rots. Only invalidateItem() is
  * safe to call from the GUI thread outside the sync phase: it is the only entry
  * point built for it, with its flag atomic AND m_itemMutex serialising the
  * dereference against the render thread. (Not "the only flag exposed as
@@ -158,7 +165,11 @@ public:
     ///                the legacy overlay/animation UBO (BaseUniforms, currently
     ///                672 bytes) unchanged. The surface-decoration runtime passes
     ///                a SurfaceUniformProfile here to reuse the engine with the
-    ///                leaner surface UBO. UBO size is always profile-defined
+    ///                DISTINCT surface UBO — a different 672-byte layout, not a
+    ///                smaller one. Both static_assert to the same size, and past
+    ///                the shared qt_Matrix / qt_Opacity lead (and
+    ///                iTextureResolution, also at 592 in both) the members do not
+    ///                line up. UBO size is always profile-defined
     ///                (m_uboProfile->baseSize()), never hard-coded.
     explicit ShaderNodeRhi(QQuickItem* item, std::unique_ptr<PhosphorShaders::IUboProfile> profile = nullptr);
     ~ShaderNodeRhi() override;
@@ -168,7 +179,7 @@ public:
      *
      * Called from the owning QQuickItem destructor on the GUI thread.
      * After this call, the render node will no longer dereference m_item.
-     * Thread-safe: uses an atomic flag checked by prepare()/render().
+     * Thread-safe: an atomic flag plus m_itemMutex, which serialises every dereference.
      */
     void invalidateItem();
 
@@ -313,7 +324,7 @@ public:
      * never displace. Clamped to [0, kMaxGridSubdivisions] (index-buffer
      * width); the pack metadata clamp (kMaxGeometryGridSubdivisions = 128)
      * is tighter.
-     * Same threading contract as every setter here: updatePaintNode() only.
+     * Drops the grid buffers and the pipeline, so the class-level resource rule applies.
      */
     void setGridSubdivisions(int subdivisions);
 
@@ -502,6 +513,20 @@ protected:
      */
     void retractLiveness() noexcept;
 
+    /// Schedule another frame from the render thread (QQuickWindow::update()
+    /// is documented thread-safe), with safeRhi()'s liveness locking. For
+    /// prepare()-side conditions that leave work pending — an upload that got
+    /// no resource-update batch — where a STATIC item (no clock, no property
+    /// churn) would otherwise never be prepared again and render()'s
+    /// pending-skip would leave it blank indefinitely.
+    ///
+    /// PROTECTED rather than private because ZoneShaderNodeRhi's labels upload
+    /// has the same shape and needs it. Moving a NON-VIRTUAL member between
+    /// access sections changes no member offset and no vtable, so this is
+    /// ABI-safe under the append-only rule, for the same reason the note on
+    /// requestDepthCreateRetry gives.
+    void requestAnotherFrame() const;
+
 private:
     bool ensurePipeline();
     bool ensureBufferPipeline();
@@ -513,9 +538,14 @@ private:
     void uploadDummyChannelTexture(QRhi* rhi, QRhiCommandBuffer* cb);
     bool ensureBufferSampler(QRhi* rhi, int index);
     /// Drop every buffer-pass target and everything compiled against it
-    /// (render targets, pass descriptors, pipelines, SRBs). Shared by every
-    /// setter that invalidates a target: setBufferScale, setBufferScales,
-    /// setHalfFloatBuffers and setUseDepthBuffer. ensureBufferTarget rebuilds.
+    /// (textures, render targets, pass descriptors, pipelines, SRBs). Shared by every
+    /// setter that invalidates a buffer target, the PATH-LIST setter included (setBufferShaderPaths,
+    /// whose call carries its own note on the three multipass-disable paths that pass {}):
+    /// setBufferScale, setBufferScales,
+    /// setHalfFloatBuffers, setUseDepthBuffer, and setBufferFilter /
+    /// setBufferFilters on a mip-ness flip. Also by ensureBufferTarget's own
+    /// depth block, whose render targets hold the depth texture as a raw
+    /// attachment. ensureBufferTarget rebuilds.
     void resetBufferTargets();
     /// Snapshot the node's live members into a UboFrameState and hand it to the
     /// installed UBO profile's fill(). @p rhi supplies the NDC Y-orientation
@@ -590,18 +620,11 @@ private:
     /// for the bake-cache key — see `shaderCacheKey` in
     /// shadernoderhicore.cpp for the policy.
     QString loadAndExpandShaderTracked(const QString& path, QStringList* outIncludedPaths, QString* outError);
-    /// Schedule another frame from the render thread (QQuickWindow::update()
-    /// is documented thread-safe), with safeRhi()'s liveness locking. For
-    /// prepare()-side conditions that leave work pending — a grid upload
-    /// that got no resource-update batch — where a STATIC item (no clock,
-    /// no property churn) would otherwise never be prepared again and
-    /// render()'s pending-skip would leave it blank indefinitely.
-    void requestAnotherFrame() const;
 
     QQuickItem* m_item = nullptr;
     std::atomic<bool> m_itemValid{true};
 
-    /// Serialises every m_item dereference (prepare/render/rect/safeRhi) against
+    /// Serialises every m_item dereference (prepare/render/safeRhi/requestAnotherFrame) against
     /// invalidateItem(). The atomic flag alone is insufficient: a render-thread
     /// prepare() that passed the m_itemValid check can race with a GUI-thread
     /// QQuickItem destructor mid-function — the flag flips, but the in-flight
@@ -846,6 +869,11 @@ private:
         a.fill(QVector4D(-1.0f, -1.0f, -1.0f, -1.0f));
         return a;
     }();
+    /// Seeded WHITE, where ShaderEffect's mirror seeds transparent black. The two
+    /// defaults genuinely disagree, and the disagreement is not observable through
+    /// an item: syncBasePropertiesToNode pushes the item's values before the first
+    /// bake and the first UBO upload is the full one, so an item-driven node never
+    /// reads this seed. Only a node driven without an item would see it.
     std::array<QColor, kMaxCustomColors> m_customColors = []() {
         std::array<QColor, kMaxCustomColors> a;
         a.fill(QColor(Qt::white));
@@ -938,7 +966,11 @@ private:
     /// One-shot latches for the audio-spectrum diagnostics. Both conditions
     /// persist across frames by design (an oversized vector stays oversized;
     /// the create() retry is per-frame), so without a latch each would log at
-    /// spectrum cadence. Cleared in releaseRhiResources() beside the RHI latch.
+    /// spectrum cadence. Both are cleared in releaseRhiResources() beside the
+    /// RHI latch, and the create one ALSO clears on a successful resize, so a
+    /// failure recurring after a genuine recovery is reported again — the rule
+    /// m_bufferTargetCreateWarned states. The truncation one deliberately does
+    /// not, because an oversized vector stays oversized.
     bool m_warnedAudioTruncated = false;
     bool m_warnedAudioCreateFailed = false;
     /// One-shot: the dummy 1x1 texture or its sampler would not create. Both
@@ -981,6 +1013,118 @@ private:
     std::unique_ptr<QRhiTexture> m_wallpaperTexture;
     std::unique_ptr<QRhiSampler> m_wallpaperSampler;
     bool m_wallpaperDirty = false;
+
+    // ── Appended members ───────────────────────────────────────────────
+    // New members go HERE, at the end, even at SOVERSION 0: this is an installed
+    // header, and inserting one mid-class shifts every later member's offset for
+    // anything already compiled against it. Grouped by concern above only for the
+    // members that shipped together.
+
+    /// Latch for the buffer SAMPLER create failure, which sits on the same
+    /// re-entered-every-frame path as the target-create failures and so needs the
+    /// same one-shot treatment. Cleared on the next successful create.
+    bool m_bufferSamplerCreateWarned = false;
+
+    /// Bounded retry for the DEPTH texture and sampler creates, modelled on
+    /// m_bufferShaderRetries / m_multiBufferShaderRetries.
+    ///
+    /// Both depth failure arms drop the pipeline and SRB through resetBufferTargets, so
+    /// render() bails and the item paints nothing — and a pack with no per-frame input
+    /// then has nothing to schedule another prepare(). A STATIC depth pack therefore stayed
+    /// blank after a single transient failure until unrelated damage repainted the window,
+    /// which is the same defect m_multiBufferShaderRetries' own comment describes for the
+    /// shader load. Retrying UNBOUNDED would spin at frame rate against a driver that keeps
+    /// failing, so the count is what makes asking for a frame safe.
+    /// Cleared at FOUR sites, and the fourth is what separates this member's lifetime from
+    /// the latch below: the success path, releaseRhiResources and setUseDepthBuffer all go
+    /// through clearDepthCreateFailure, while ensureBufferTarget's size gate zeroes THIS
+    /// COUNT ALONE when the buffer size changes. So a new size gets a fresh budget without
+    /// a fresh warning.
+    int m_depthCreateRetries = 0;
+
+    /// One-shot latch for the two depth create-failure warnings. ensureBufferTarget is
+    /// re-entered from prepare() on every frame while it returns false, so an ANIMATED
+    /// depth pack flooded both lines at vsync — the flood the buffer-target and
+    /// buffer-sampler latches above already exist to stop. Cleared with the retry count at
+    /// the three clearDepthCreateFailure sites, but NOT by the size gate, which is the whole
+    /// point of the split. Shared between the texture line and the sampler line, so a
+    /// sampler failure that follows a texture failure is reported only by the generic
+    /// give-up line.
+    bool m_depthCreateWarned = false;
+
+    /// Ask for the frame that retries a failed depth create, while the bound allows it.
+    /// Both depth failure arms call this after resetBufferTargets. Non-virtual, so adding
+    /// it changes no member offset.
+    void requestDepthCreateRetry();
+
+    /// Forget a depth create failure, so a later one is retried and reported again rather
+    /// than swallowed for the lifetime of the node. Called on the depth success path and
+    /// from releaseRhiResources / setUseDepthBuffer.
+    void clearDepthCreateFailure();
+
+    /// The buffer size the recorded depth failure was against, so a RESIZE gets a fresh
+    /// retry budget. The clears above fire on a setting change, a resource drop and a
+    /// success, and none of them covers a resize: bufferSize follows m_width/m_height,
+    /// setResolution's changed arm arms nothing depth-related, and setBufferScale's
+    /// resetBufferTargets touches neither the depth objects nor the count. So a node that
+    /// burned its three attempts at one size carried a spent budget into the next. Compared
+    /// in ensureBufferTarget's depth block rather than cleared from setResolution, which
+    /// fires on every frame of an animated resize.
+    ///
+    /// That block resets the COUNT alone on a size change and leaves m_depthCreateWarned to
+    /// clearDepthCreateFailure. Clearing both there re-armed the warning every frame of a
+    /// resize and reset the count before it could reach the bound, which is the flood the
+    /// bound exists to prevent.
+    QSize m_depthCreateFailedSize;
+
+    /// One-shot latches for the two REMAINING create-failure warnings in
+    /// uploadDirtyTextures, which had none: the wallpaper resize and the per-slot user
+    /// texture resize. Both arms leave their dirty flag set, so both are re-entered from
+    /// prepare() on every frame while the create keeps failing, and both logged every one
+    /// of those frames — the same vsync flood every other create-failure latch in this class
+    /// already stops. There were precedents throughout the class and these two were missed;
+    /// the user-texture arm cites one of them two lines above itself. Cleared on a successful create
+    /// and in releaseRhiResources, so a failure that recurs after a recovery is reported
+    /// again. Declared here rather than beside their siblings above because members are
+    /// appended, never inserted.
+    ///
+    /// Neither arm asks for a retry frame, and that is deliberate rather than the same
+    /// oversight: a create failure needs a BOUND, which is the whole m_depthCreateRetries /
+    /// m_depthCreateFailedSize apparatus above, and an unbounded request would repaint at
+    /// frame rate against a driver that keeps refusing. Each arm, or the resize branch it sits
+    /// in, says what supplies its next frame and what a static item loses if nothing does.
+    bool m_warnedWallpaperCreateFailed = false;
+    std::array<bool, kMaxUserTextures> m_userTextureCreateWarned = {};
+
+    /// One-shot latch for the mipmap-fallback warning in ensureBufferTarget. It was the only
+    /// create-adjacent warning in that file with no latch, and it sits on a per-frame path: an
+    /// animated resize moves passSize() nearly every frame, which is the same vsync flood
+    /// m_depthCreateWarned exists to stop. m_bufferTargetCreateWarned cannot serve, because it
+    /// is cleared on every successful create and the fallback path reaches one. Cleared in
+    /// releaseRhiResources only, so the message is once per node per device lifetime.
+    bool m_mipmapFallbackWarned = false;
+
+    /// Bounded retry budget for the 1x1 dummy channel create, modelled on
+    /// m_depthCreateRetries. Its failure is the one ensureDummyChannelResources calls the
+    /// hardest in the file: every unbound channel, user-texture, wallpaper and depth slot
+    /// substitutes that texture, so a false there makes prepare() bail and the node paint
+    /// nothing. An ANIMATED node retries anyway, because ensurePipeline runs unconditionally
+    /// every prepare(); a STATIC one had nothing scheduling the retry, which is exactly the
+    /// split the depth apparatus was built for. Cleared on the success path and in
+    /// releaseRhiResources.
+    int m_dummyCreateRetries = 0;
+
+    /// Ask for the frame that retries a failed dummy-channel create, while the bound allows
+    /// it. Non-virtual, so adding it changes no member offset.
+    void requestDummyCreateRetry();
+
+    /// Per-slot latch for the user-texture TextureSizeMax clamp warning. Its neighbour, the
+    /// create-failure line, was latched because the dirty flag deliberately stays set so a
+    /// transient RHI condition self-heals — which means the whole arm re-runs every frame while
+    /// a create keeps failing. This line sat above that latch and so survived it, logging once
+    /// per frame per oversized slot and re-running a full SmoothTransformation rescale each time.
+    /// Cleared in releaseRhiResources with its siblings.
+    std::array<bool, kMaxUserTextures> m_userTextureClampWarned = {};
 };
 
 /** Result of warmShaderBakeCacheForPaths for reporting to UI. */

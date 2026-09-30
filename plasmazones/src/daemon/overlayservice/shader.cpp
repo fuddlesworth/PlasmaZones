@@ -21,6 +21,12 @@
 
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/Surface.h>
+// QQuickWindow is LOAD-BEARING here and a token grep cannot see it: updateShaderUniforms
+// calls window->isVisible() on `auto* window = ...->shellWindow()`, so the type name appears
+// nowhere in this file. An audit pass removed it on the strength of exactly that grep, and
+// the unity build accepted it because a batch-mate supplied the header; the non-unity build
+// is what refused. The three QJson includes that sat beside it really were orphans, and the
+// difference is that no QJson type is ever reached through an `auto` here.
 #include <QQuickWindow>
 #include <QScreen>
 #include <QQmlEngine>
@@ -30,9 +36,6 @@
 #include <QImage>
 #include <QGuiApplication>
 #include <QPalette>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonParseError>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
@@ -83,11 +86,14 @@ void OverlayService::setPresetRegistry(PhosphorShaders::ShaderPresetRegistry* re
     // before tearing the store down, so the old pointer is still alive here.
     //
     // The precise handle, not `disconnect(registry, nullptr, this, nullptr)`: the
-    // blanket form severs every slot this object has on that sender, which is safe
-    // only while there is exactly one. This class keeps handles for exactly that
-    // reason (see m_shadersChangedConnection). Note setSurfaceShaderRegistry still
-    // uses the blanket form — correct there today because this object makes exactly
-    // one connection to that sender, but it is the counter-example, not the model.
+    // blanket form severs every slot this object has on that sender, which on a
+    // replace-the-borrow setter like this one is the CORRECT end state, so it is not
+    // what the handle buys. This class keeps handles for a different
+    // reason (see m_shadersChangedConnection). A stored handle is what a LAMBDA
+    // connection needs, since no slot name can single one out; a second lambda slot
+    // here would need its own second handle, because this one does not sever it.
+    // setSurfaceShaderRegistry names its signal instead, and its own comment records
+    // what that does and does not buy.
     if (m_presetsChangedConnection) {
         disconnect(m_presetsChangedConnection);
         m_presetsChangedConnection = {};
@@ -131,8 +137,9 @@ void OverlayService::setPresetRegistry(PhosphorShaders::ShaderPresetRegistry* re
                                                  // Mirror of the decorationProfileTreeChanged arm in
                                                  // setSettings: a visible popup's decoration chain is
                                                  // resolved at show time, so a retune has to be pushed into
-                                                 // the slots that are already up. OSDs are omitted for the
-                                                 // same reason they are there — they auto-dismiss sub-second.
+                                                 // the slots that are already up, the OSD included: the
+                                                 // sweep keys each popup arm on its service flag and the
+                                                 // OSD arm on the item's own visibility.
                                                  reapplyVisiblePopupDecorations();
                                                  break;
                                              case PhosphorShaders::ShaderFamily::Pointer:
@@ -289,18 +296,28 @@ bool OverlayService::useShaderForScreen(const QString& screenId) const
     // If any zone resolves to LayoutPreview mode, fall back to standard overlay for this screen.
     // A context rule's style override slots between the per-zone override and the
     // layout value: zone > rule > layout > global.
-    int globalMode = m_settings ? static_cast<int>(m_settings->overlayDisplayMode()) : 0;
+    // ConfigDefaults for the null-settings fallback, not a literal: the default lives in
+    // one place and the sibling clamp below already routes through it.
+    int globalMode =
+        m_settings ? static_cast<int>(m_settings->overlayDisplayMode()) : ConfigDefaults::overlayDisplayMode();
     int layoutMode = screenLayout->overlayDisplayMode();
     for (const auto* zone : screenLayout->zones()) {
         int resolved = zone->overlayDisplayMode() >= 0 ? zone->overlayDisplayMode()
             : overlayOverride.style                    ? *overlayOverride.style
                                                        : (layoutMode >= 0 ? layoutMode : globalMode);
-        if (resolved == 1) { // OverlayDisplayMode::LayoutPreview
+        if (resolved == static_cast<int>(OverlayDisplayMode::LayoutPreview)) {
             return false;
         }
     }
 
-    return m_shaderRegistry && m_shaderRegistry->shader(effectiveShaderId).isValid();
+    // shaderUrl(), not shader().isValid(), on the same per-frame path this function's own comment
+    // above goes out of its way to keep cheap. shader() returns a ShaderInfo BY VALUE — nine
+    // QStrings, a QUrl, three QStringLists, a parameter list and a preset map — to answer one bool,
+    // and then discards it. The two tests are equivalent: isValid() is a non-empty id plus a valid
+    // shaderUrl, the registry keys packs on their id so a found pack always has one, a missing pack
+    // fails both, and shaderUrl's extra none-shader early-out is already excluded by the
+    // isNoneShader gate at the top. Both go through the same factory lookup.
+    return m_shaderRegistry && m_shaderRegistry->shaderUrl(effectiveShaderId).isValid();
 }
 
 void OverlayService::startShaderAnimation()
@@ -368,7 +385,7 @@ void OverlayService::stopShaderAnimation()
 
 QList<QQuickItem*> OverlayService::visibleAudioDecorationSlots() const
 {
-    // The decoration hosts are the OSD + the three popups, per screen; each is a
+    // The decoration hosts are the OSD + the four popups, per screen; each is a
     // SurfaceDecoration carrying an audioSpectrum property. A slot is fed audio
     // only while it is visible AND its current chain has an audio-reactive pack
     // (recorded by applyDecoration as the dynamic _wantsAudioDecoration flag).

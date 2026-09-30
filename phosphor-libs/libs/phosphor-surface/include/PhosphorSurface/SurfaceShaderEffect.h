@@ -55,21 +55,17 @@ namespace PhosphorSurfaceShaders {
  *
  * On the daemon side the fields below reach a `SurfaceShaderItem`, which
  * inherits the whole multipass property set from
- * `PhosphorRendering::ShaderEffect`. Four hosts forward them through
- * `composeStageMap`: the overlay decoration host
- * (phosphor-surface-quick's `SurfaceDecoration.qml`, via `OverlayService::applyDecoration`),
- * the OSD (`osd.cpp`), the settings decoration preview
- * (`plasmazones/src/settings/pages/decorationpreviewcontroller.cpp`) and the shell chrome
- * (`phosphor-shell/src/shellchrome.cpp`). A multipass stage is layered
- * (`layer.enabled`) because the render node drives its own passes and needs a
- * target isolated from the scene graph's batch renderer.
+ * `PhosphorRendering::ShaderEffect`. The hosts that forward them through
+ * `composeStageMap` are enumerated once, in `SurfaceChainCompose.h` beside the
+ * function itself, rather than a second time here. The `layer.enabled` policy
+ * for a multipass stage belongs to `SurfaceDecoration.qml`, which states it at
+ * length and records what an earlier theory about it cost.
  *
  * The kwin-effect compositor compiles and runs the same buffer passes in its
  * composite fold. It degrades to single-pass, with a diagnostic log, only
- * when a buffer pass fails to compile. The two hosts differ in three places,
- * each documented on the field it belongs to: `bufferFeedback` is daemon-only,
- * `vertexShaderPath` does not reach the compositor's buffer passes, and
- * `textures` overrides are daemon-only.
+ * when a buffer pass fails to compile. The two hosts differ in several places,
+ * each documented on the field it belongs to. An enumeration here kept going
+ * stale as fields were added, so the fields are the list.
  *
  * ## Trimmed vs AnimationShaderEffect
  *

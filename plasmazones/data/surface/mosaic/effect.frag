@@ -23,8 +23,14 @@
 #include <surface_backdrop.glsl>
 
 vec4 pSurface(vec2 uv) {
+    // A degenerate frame rect collapses the slab mask to a dot, and the pane below is
+    // multiplied by it, so the content has to pass through here (see surfaceFrameDegenerate).
+    if (surfaceFrameDegenerate()) {
+        return surfaceTexel(uv);
+    }
+
     float cornerPx = p_cornerRadius * uSurfaceScale;
-    SurfaceSlab slab = surfaceSlabOpen(uv, cornerPx, p_roundBottomCorners >= 0.5 ? cornerPx : 0.0, p_edgeSoftness);
+    SurfaceSlab slab = surfaceSlabOpen(uv, cornerPx, surfaceBottomRadius(cornerPx, p_roundBottomCorners), p_edgeSoftness);
     // Fade the window content over the pane; the translucency it frees is
     // filled by the mosaic in slabComposite below.
     slab.window *= clamp(p_contentOpacity, 0.0, 1.0);
@@ -50,11 +56,17 @@ vec4 pSurface(vec2 uv) {
         vec2 local = px - uSurfaceFrameTopLeft;
         vec2 snapped = (floor(local / cell) + 0.5) * cell;
         vec4 b = backdropTexel(uv + pxToUv(snapped - local));
-        vec3 rgb = mix(b.rgb, p_tintColor.rgb * b.a, clamp(p_tintStrength, 0.0, 1.0));
+        // Tint clamped for the same reason the no-backdrop arm below clamps it:
+        // above 1 the mix exceeds b.a and the premultiplied invariant rgb <= a
+        // breaks on the way out. Not reachable through QColor today.
+        vec3 rgb = mix(b.rgb, clamp(p_tintColor.rgb, 0.0, 1.0) * b.a, clamp(p_tintStrength, 0.0, 1.0));
         pane = vec4(rgb, b.a) * mask;
     } else {
-        // Original pseudo look with no backdrop: a still tint slab.
-        pane = vec4(p_tintColor.rgb, 1.0) * 0.4 * mask;
+        // Original pseudo look with no backdrop: a still tint slab. Clamped for
+        // the reason faintTintSlab gives: the colour reaches this shader through
+        // QColor and so cannot exceed 1 today, but the premultiplied invariant
+        // rgb <= a should not rest on that.
+        pane = vec4(clamp(p_tintColor.rgb, 0.0, 1.0), 1.0) * 0.4 * mask;
     }
 
     return slabComposite(slab.window, pane);

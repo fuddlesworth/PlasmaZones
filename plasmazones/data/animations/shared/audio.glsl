@@ -79,7 +79,11 @@ float audioBarSmooth(float u) {
 // audioBarSmooth() still address the RAW vector, which is what a spectrum-bar
 // visualiser wants.
 
-// Per-channel bar count: half the vector in stereo, all of it in the mono modes.
+// Half the vector, for every size >= 2. This CANNOT tell stereo from mono: no uniform
+// carries the channel mode, and the mono modes collapse to a single low->high block
+// (PhosphorAudio::ChannelMode). So in a mono mode the fold below averages a low band
+// with one half a spectrum higher, which is wrong but undetectable from here. Fixing
+// it needs the host to publish the mode or a per-channel count.
 int audioHalf() {
     return (iAudioSpectrumSize >= 2) ? iAudioSpectrumSize / 2 : iAudioSpectrumSize;
 }

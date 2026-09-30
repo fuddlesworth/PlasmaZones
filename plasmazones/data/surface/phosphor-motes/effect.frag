@@ -42,12 +42,9 @@ const int kMaxMotes = 24;
 const int kTailTaps = 4; // head + 3 history stamps
 
 // Four-stop brand gradient, t in [0, 1]: cyan → blue → purple → rose.
+// Local name for the shared ramp, so this pack's own p_color* params reach it.
 vec3 fluxGradient(float t) {
-    t = clamp(t, 0.0, 1.0) * 3.0;
-    vec3 c = mix(p_colorCyan.rgb, p_colorBlue.rgb, clamp(t, 0.0, 1.0));
-    c = mix(c, p_colorPurple.rgb, clamp(t - 1.0, 0.0, 1.0));
-    c = mix(c, p_colorRose.rgb, clamp(t - 2.0, 0.0, 1.0));
-    return c;
+    return surfaceFluxGradient(p_colorCyan.rgb, p_colorBlue.rgb, p_colorPurple.rgb, p_colorRose.rgb, t);
 }
 
 // Birth point on the frame perimeter and its outward normal, from a single
@@ -79,12 +76,16 @@ void frameBirth(float u, out vec2 spawn, out vec2 normal) {
 // motion is purely RADIAL: outward along the birth edge's normal for the
 // mote's whole life — a fast detach easing into a glide — while a layered
 // wander slides it along the edge tangent. No shared drift direction.
+// `spawn` is an out-param rather than discarded: the caller's cull needs it for
+// the streak's bounding circle, and calling frameBirth a second time to recover
+// it cost a duplicate birth-edge solve per mote per fragment, 24x on a padded
+// full-canvas pass per decorated window per frame.
 vec2 motePath(float h1, float h2, float h3, float t, float reachPx,
-              float swayAmp, out float age) {
+              float swayAmp, out float age, out vec2 spawn) {
     float rate = 0.05 + 0.07 * h3;
     age = fract(h2 + t * rate);
 
-    vec2 spawn, normal;
+    vec2 normal;
     frameBirth(h1, spawn, normal);
 
     float travel = reachPx * (1.0 - pow(1.0 - age, 1.8)) * (0.75 + 0.25 * h2);
@@ -270,9 +271,8 @@ vec4 pSurface(vec2 uv) {
         // ember (a head-sized slack clipped the outermost tail stamp at
         // ~0.24 of its peak).
         float altHead;
-        vec2 headPos = motePath(h1, h2, h3, tMote, driftDist, swayAmp, altHead);
-        vec2 spawn, normalUnused;
-        frameBirth(h1, spawn, normalUnused);
+        vec2 spawn;
+        vec2 headPos = motePath(h1, h2, h3, tMote, driftDist, swayAmp, altHead, spawn);
         vec2 mid = (spawn + headPos) * 0.5;
         float maxTapR = sizeI * (1.0 + 0.45 * float(kTailTaps - 1));
         float bound = length(headPos - spawn) * 0.5 + maxTapR * 3.0 + swayAmp;
@@ -288,8 +288,9 @@ vec4 pSurface(vec2 uv) {
         // and the life envelope stay correct along the whole streak. ──
         for (int k = 0; k < kTailTaps; ++k) {
             float ageK;
+            vec2 spawnK;
             vec2 posK = motePath(h1, h2, h3, tMote - float(k) * tailStep,
-                                 driftDist, swayAmp, ageK);
+                                 driftDist, swayAmp, ageK, spawnK);
             // A tap evaluated before the clock's fract wrap belongs to the
             // PREVIOUS mote instance (its age jumps HIGHER than the head's)
             // — skip it rather than stamping a disconnected ember far out
@@ -320,6 +321,19 @@ vec4 pSurface(vec2 uv) {
     float dustA;
     glow += microDust(px, t, clamp(p_dustAmount, 0.0, 1.0), reachPx, dustA);
     alpha += dustA;
+
+    // CANVAS-EDGE FEATHER, the same one haloFalloff gives glow and shadow and the
+    // fireflies sibling carries inline. A mote centre travels to 0.9 of the reach and its
+    // gaussian body reaches further still (sizeI goes to moteSize * 2.38, and a tail tap
+    // 2.35x that again), so on a host granting only the margin this pack asks for the
+    // swarm was cut off in a hard rectangle at the canvas boundary. The micro-dust half
+    // above already tapers on its own; the heads and their tails did not. Applied to BOTH
+    // sides of the premultiplied pair, so the glow <= alpha invariant the clamp below
+    // relies on survives it. Same profile and the same 12-logical-px cap as the shared
+    // helper, so all four fade alike.
+    float edgeFade = surfaceCanvasEdgeFade(px, reachPx);
+    glow *= edgeFade;
+    alpha *= edgeFade;
 
     // BOTH sides of the premultiplied pair, not just alpha. glow and alpha are
     // accumulated together above (glow += col * contrib beside alpha += contrib,

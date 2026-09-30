@@ -9,9 +9,9 @@ import org.phosphor.animation
 import org.plasmazones.common 1.0
 
 /**
- * Shader-mode zone overlay content body — Item version of the legacy
- * RenderNodeOverlay.qml, hosted inside the unified PassiveOverlayShell's
- * mainOverlay slot when shader rendering is enabled for the screen.
+ * Shader-mode zone overlay content body, hosted inside the unified
+ * PassiveOverlayShell's mainOverlay slot when shader rendering is enabled for
+ * the screen.
  */
 Item {
     id: root
@@ -84,14 +84,12 @@ Item {
     property bool _idled: false
     // Set while the idle quiesce has parked the shader stack. Gates the
     // renderer's layer FBO (screen-sized, otherwise immortal) and its
-    // visibility. Cleared on EVERY wake path, and each host has a live one:
-    // on the daemon overlay the un-idle flip covers the warm resume
-    // (lifecycle.cpp writes _idled both ways) and the slot Item's visibility
-    // toggle covers a plain show() after a full hide; on the editor preview
-    // the Window folds its own visibility into _idled (RenderNodeOverlay
-    // binds _idled to root._idled || !root.visible), so the show itself
-    // fires the un-idle flip. All of these run before the next painted
-    // frame, which is the renderer's contract for re-enabling the layer.
+    // visibility. Cleared on EVERY wake path, and the daemon overlay — the only
+    // host that instantiates this component — has two: the un-idle flip covers
+    // the warm resume (lifecycle.cpp writes _idled both ways) and the slot
+    // Item's visibility toggle covers a plain show() after a full hide. Both run
+    // before the next painted frame, which is the renderer's contract for
+    // re-enabling the layer.
     property bool idleParked: false
     on_IdledChanged: if (!root._idled)
         root.idleParked = false
@@ -293,7 +291,7 @@ Item {
             visible: root.shaderSource.toString() !== "" && zoneShaderRenderer.status === ZoneShaderItem.Error
             anchors.centerIn: parent
             // gridUnit multiple rather than a raw px cap, matching the
-            // ShaderCompileErrorBanner sites' sizing convention.
+            // ShaderErrorBanner site's sizing convention.
             width: Math.min(parent.width * 0.5, Kirigami.Units.gridUnit * 22)
             height: shaderErrorText.implicitHeight + Kirigami.Units.gridUnit * 2
             color: Kirigami.Theme.backgroundColor
@@ -305,7 +303,11 @@ Item {
             Text {
                 id: shaderErrorText
 
-                Accessible.name: i18n("Shader error details")
+                // Accessible.DESCRIPTION, not name: the Text's own text is the error log, and
+                // that is the default accessible name. Overriding the name would hide the
+                // actual error from assistive technology, which is what the settings app's
+                // ShaderErrorBanner documents for the same card.
+                Accessible.description: i18nc("@info:whatsthis", "Shader error details")
                 anchors.centerIn: parent
                 text: zoneShaderRenderer.errorLog || i18n("Shader error")
                 color: Kirigami.Theme.textColor

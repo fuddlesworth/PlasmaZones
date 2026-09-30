@@ -9,6 +9,11 @@
 // byte-for-byte; the shadow lives in the transparent margin and, on a window
 // whose own body is translucent, in the band within two reaches inside the frame.
 //
+// ONE of this pack's declared parameters is consumed HOST-SIDE and is never
+// read here: p_useThemeTint replaces the shadow colour with the theme colour
+// before the shader runs, in SurfaceThemeResolve. So a reader looking for it
+// below will not find it, and that is not an omission.
+//
 // CAPTURE MARGIN: metadata declares `"paddingParam": "shadowSize"`, so the
 // compositor host inflates the capture canvas by the resolved size. The
 // offset displaces the shadow within that margin; the texture-edge feather
@@ -27,10 +32,16 @@ vec4 pSurface(vec2 uv) {
     // Rounded-rect SDF over the frame rect DISPLACED by the cast offset:
     // evaluating the fragment against the shifted frame moves the whole
     // shadow body down/right, the classic dropped look.
+    //
+    // Top and bottom radii are separate so the shadow traces the SAME outline as
+    // the backdrop pack under it. A pane squared off along its bottom edge used
+    // to cast a shadow still rounded at the corners the pane had given up.
     vec2 offset = vec2(p_offsetX, p_offsetY) * uSurfaceScale;
     vec2 realPx = surfacePixel(uv);
     vec2 p = realPx - offset;
-    FrameSDF fs = frameSdf(p, p_cornerRadius * uSurfaceScale);
+    float cornerPx = p_cornerRadius * uSurfaceScale;
+    float bottomPx = surfaceBottomRadius(cornerPx, p_roundBottomCorners);
+    FrameSDF fs = frameSdfSplit(p, cornerPx, bottomPx);
 
     // Same exp(-4t²) reach falloff as the glow pack, but the edge feather is
     // evaluated at the REAL (undisplaced) fragment position so a large offset
@@ -38,8 +49,11 @@ vec4 pSurface(vec2 uv) {
     // a hard rectangle. Held to the margin and the band within two reaches inside
     // the frame, and only mildly
     // focus-softened (a real shadow persists unfocused) — the shared halo.
+    // Both radii go to the depth gate, as in the glow pack, so the gate follows the
+    // same split outline fs carries. With one radius it over-KEPT at a squared bottom
+    // corner instead of holding the veil to two reaches inside the frame.
     float reach = max(p_shadowSize * uSurfaceScale, 1.0);
-    float body = haloFalloff(fs.d, reach, realPx, base.a, p_shadowStrength, 0.65, p_cornerRadius * uSurfaceScale);
+    float body = haloFalloff(fs.d, reach, realPx, base.a, p_shadowStrength, 0.65, cornerPx, bottomPx);
 
     // Premultiplied over: the dark veil fills the margin under its own
     // alpha; with the default black colour the rgb term contributes nothing

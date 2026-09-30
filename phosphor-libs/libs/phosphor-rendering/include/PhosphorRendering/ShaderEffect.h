@@ -661,9 +661,9 @@ public:
     /// So a host must assign this property directly. An invalid QVariant is
     /// treated as "no texture" and clears, which is correct for the absent-key
     /// and `undefined` cases and is the only option for the Binding case: the
-    /// two are INDISTINGUISHABLE at the setter. That is why the QML-source
-    /// sweep test — not this code — is the guard against a host driving one
-    /// property from both a direct assignment and a Binding.
+    /// two are INDISTINGUISHABLE at the setter. That is why the QML-source sweep
+    /// test — over every tier that hosts one of these items, not this code — is the
+    /// guard against a host driving one property from both a direct and a Binding.
     ///
     /// Mirrors the `audioSpectrum` property beside it, which is a QVariant for
     /// the same class of reason.
@@ -900,6 +900,7 @@ protected:
 
     void setError(const QString& error);
     void setStatus(Status newStatus);
+    static QString localShaderPath(const QUrl& url); ///< URL to loader path; see the definition.
 
 private:
     // ── Auto-tick (playing=true) plumbing ────────────────────────────

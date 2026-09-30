@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 
 #include <QDir>
@@ -72,7 +73,7 @@ QString SurfaceShaderRegistry::resolveBuiltinBufferShader(const QString& token, 
     // whitelist, it is only the file each resolves to that follows the search
     // path, and it does not reach a pack that has a sibling of its own.
     const QString located = QStandardPaths::locate(QStandardPaths::GenericDataLocation,
-                                                   QStringLiteral("plasmazones/surface/shared/") + fileName);
+                                                   surfacePackDataSubdir() + QLatin1String("/shared/") + fileName);
     return located.isEmpty() ? QString() : QFileInfo(located).canonicalFilePath();
 }
 

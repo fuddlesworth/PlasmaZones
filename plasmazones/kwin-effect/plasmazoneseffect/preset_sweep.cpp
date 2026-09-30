@@ -130,11 +130,12 @@ void PlasmaZonesEffect::applySurfacePresetSweep()
         // buffers sized from the compile that was just dropped.
         state.chainKey.clear();
     }
-    // These two are stale-TRUE only, and the sibling clear sites reset them for the
+    // These are stale-TRUE only, and the sibling clear sites reset them for the
     // same reason.
     m_anyCompiledPackReadsCursor = false;
     m_opacityTintFallbackWarned = false;
     m_backdropAllocWarned = false;
+    m_surfaceTargetAllocWarned = false;
     if (KWin::effects) {
         KWin::effects->addRepaintFull();
     }

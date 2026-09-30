@@ -57,9 +57,18 @@ pre-commit:
       # the GPL-3 app / LGPL-2.1 libs/phosphor-* split (any tier's libs/
       # directory), the file-size ceiling
       # (growth-only, against scripts/oversize-baseline.json), i18n() in C++,
-      # inline config paths that should be ConfigDefaults:: accessors, and the
-      # plain-prose rules on user-facing strings. Only the staged files are
-      # checked so the hook stays instant; CI runs the whole tree.
+      # inline config paths that should be ConfigDefaults:: accessors, `.pragma
+      # library` in QML .js libraries, the DEP-5 copyright file, the plain-prose
+      # rules on user-facing strings, and the shared description a chain-resolved
+      # shader param carries on every pack. Only the staged files are checked so
+      # the hook stays instant, with TWO exceptions. shared-param-text is a
+      # whole-set rule and compares all twenty packs whenever this hook runs at
+      # all, so it can name a file this commit did not stage; and dep5 widens to
+      # the whole tree when packaging/debian/copyright is itself staged. A commit
+      # that stages nothing matching the globs below runs neither, because lefthook
+      # skips a command whose glob filters every staged path away; the gate's own
+      # empty-staged-list early return is the backstop for a hand-run or another
+      # runner. CI's whole-tree run is the backstop for both.
       #
       # Stdlib-only, so unlike the schema hook there is no venv to bootstrap
       # and this is always a hard gate.
@@ -69,7 +78,15 @@ pre-commit:
         # a pragma drifting past Qt's 128-byte window would only ever fire in
         # CI, which is the wall-of-warnings-from-files-nobody-edited case it
         # was written to prevent.
-        - "*.{cpp,cc,cxx,h,hpp,qml,luau,py,frag,vert,glsl,js}"
+        # `sh` and `cmake` for the same reason: three rules read those suffixes, and
+        # without an entry the 16 tracked files outside packaging/ (cmake/, the
+        # nested-session helpers, plasmazones-report.sh, docs/media/videos/convert.sh)
+        # matched no glob at all, so editing one ran no pre-commit check. `c` covers the
+        # two QPA protocol stubs.
+        # `spec` is in CODE_SUFFIXES too. Today the only tracked one lives under
+        # packaging/, which the entry below already covers, so this closes the shape
+        # rather than a live gap.
+        - "*.{c,cpp,cc,cxx,h,hpp,qml,luau,py,frag,vert,glsl,js,sh,cmake,spec}"
         - "plasmazones/data/**/*.json"
         # `plasmazones/data/**/*.json` does not match a file sitting directly
         # in data/, and whatsnew.json is a prose surface CLAUDE.md names, so
@@ -83,13 +100,24 @@ pre-commit:
         - "CHANGELOG.md"
         # The prose rule reaches .github/workflows/*.yml for the generated
         # pkgdesc strings; without this entry that arm is CI-only, which is
-        # the same gap the js entry above exists to close.
+        # the same gap the js entry above exists to close. Both suffixes,
+        # because rule_prose accepts .yml AND .yaml and a glob for one of them
+        # reopens the gap for the other.
         - ".github/workflows/*.yml"
+        - ".github/workflows/*.yaml"
       run: python3 scripts/check-conventions.py --staged {staged_files}
     conventions-selftest:
       # Only when the gate itself is edited. A rule that narrows reports a clean
       # tree, so the whole-tree run above cannot catch its own blind spots.
-      glob: "scripts/check-conventions.py"
+      #
+      # The gate is SIX files now, not one: watching only the entry point meant a
+      # commit that broke conventions_selftest.py ran no selftest at all, because
+      # this glob did not match it and the `conventions` hook only imports the
+      # sibling under --selftest. CI was the sole net. The second glob is a wildcard
+      # rather than a list precisely so a split does not have to be remembered here.
+      glob:
+        - "scripts/check-conventions.py"
+        - "scripts/conventions_*.py"
       run: python3 scripts/check-conventions.py --selftest
     shader-validate:
       glob: "plasmazones/data/overlays/**/*.{frag,vert,glsl,json}"

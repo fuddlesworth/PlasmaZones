@@ -29,7 +29,43 @@ inline QString decorationShellAppletPopupPath()
     return QStringLiteral("shell.appletPopup");
 }
 
-/// The OSD surface and the three transient overlays invoked by user action.
+/// XDG data subdirectory holding installed surface-shader packs, relative to a
+/// GenericDataLocation root. Lives here because every tier that scans it can reach
+/// this header while the application tiers may not link each other. Each producer
+/// used to build it from a separate copy of the literal, so a rename would have moved
+/// some and left the rest looking in the old place. Deliberately NOT an enumeration
+/// of the consumers: that list was written three times and was wrong twice, each time
+/// letting the extraction be declared finished with a spelling still live. Grep for
+/// the literal instead, including sub-paths like `.../shared/`.
+///
+/// `ConfigDefaults::userSurfaceSubdir()` is the settings tier's LEADING-SLASH form
+/// and now derives from this, so there is one string and two spellings of it rather
+/// than two strings. Keep it that way: the slash belongs to the callers that join
+/// without one, not to the location.
+inline QString surfacePackDataSubdir()
+{
+    return QStringLiteral("plasmazones/surface");
+}
+
+/// The three per-placement window decoration paths. Accessors for the same reason as
+/// the leaves below, and because this header's own supported-paths list and the
+/// compositor's resolveSurfacePathFor each spelled them independently. Both now read
+/// from here. The settings page that EDITS them is QML and still carries its own
+/// literals, with no C++ bridge to reach these.
+inline QString decorationWindowTiledPath()
+{
+    return QStringLiteral("window.tiled");
+}
+inline QString decorationWindowSnappedPath()
+{
+    return QStringLiteral("window.snapped");
+}
+inline QString decorationWindowFloatingPath()
+{
+    return QStringLiteral("window.floating");
+}
+
+/// The OSD surface and the four transient overlays invoked by user action.
 /// Accessors rather than literals because the seed tree in
 /// configdefaults_shaders.h writes overrides at these exact paths, and a
 /// typo there is a seed that silently decorates nothing.
@@ -124,9 +160,9 @@ inline QStringList decorationLeafSurfacePaths()
     return QStringList{
                // window.* — per-placement window decoration (border / corners /
                // titlebar appearance + surface-pack chain) for each placement state.
-               QStringLiteral("window.tiled"),
-               QStringLiteral("window.snapped"),
-               QStringLiteral("window.floating"),
+               decorationWindowTiledPath(),
+               decorationWindowSnappedPath(),
+               decorationWindowFloatingPath(),
                // osd — the notification surface.
                decorationOsdPath(),
                // popup.* — the four transient overlays invoked by user action.

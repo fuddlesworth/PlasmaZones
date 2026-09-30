@@ -226,7 +226,9 @@ private Q_SLOTS:
 
     void interiorOpaque_flag_parses_and_roundtrips()
     {
-        // "interiorOpaque" is the margin-only promise (shadow / glow): the
+        // "interiorOpaque" is the never-thins-the-interior promise, which a
+        // margin-only halo pack (glow, shadow) and a pack compositing over the
+        // capture (fireflies, phosphor-motes) both satisfy: the
         // pack never thins a texel inside the natural frame rect, so a chain
         // of such packs keeps the client's opaque region truthful and the
         // compositor can skip setTranslucent(). Pin the parse, the FALSE
@@ -479,7 +481,9 @@ private Q_SLOTS:
         QCOMPARE(e.bufferShaderPaths.last(),
                  QStringLiteral("pass%1.frag").arg(SurfaceShaderEffect::kMaxBufferPasses - 1));
 
-        // Exactly at the budget is accepted whole and warns about nothing.
+        // Exactly at the budget is accepted whole. Only that is asserted: Qt Test does not
+        // fail a slot for an UNEXPECTED qWarning, so the absence of one is not checkable
+        // here and must not be claimed.
         QJsonArray exact;
         for (int i = 0; i < SurfaceShaderEffect::kMaxBufferPasses; ++i) {
             exact.append(QStringLiteral("pass%1.frag").arg(i));
@@ -656,6 +660,12 @@ private Q_SLOTS:
         const bool wrote = writeFile(installed, QByteArrayLiteral("// stub\n"));
         const QString resolved = SurfaceShaderRegistry::resolveBuiltinBufferShader(
             QStringLiteral("builtin:gaussian-h"), packRoot.path() + QStringLiteral("/user-pack"));
+        // Captured HERE, while the file still exists: canonicalFilePath() answers empty for
+        // a path that is gone, so computing this after the remove below compares against
+        // nothing and fails whatever the resolver did. The same reason `wrote` and
+        // `resolved` are captured rather than re-derived after test mode is off.
+        const bool servedFromTestDir =
+            QFileInfo(resolved).canonicalFilePath().startsWith(QFileInfo(dataDir).canonicalFilePath());
         QFile::remove(installed);
         QStandardPaths::setTestModeEnabled(false);
 
@@ -664,6 +674,15 @@ private Q_SLOTS:
         QVERIFY2(!resolved.isEmpty(), "user pack without a sibling shared/ dir must resolve via QStandardPaths");
         QCOMPARE(QFileInfo(resolved).fileName(), QStringLiteral("gaussian_h.frag"));
         QVERIFY(QFileInfo(resolved).isAbsolute());
+        // WHERE it resolved from, which the two sibling probe slots each assert and this
+        // one did not. A regression that stopped consulting the test-mode data location
+        // first would still hand back a /usr/share path on any machine with the package
+        // installed, and every assertion above would pass — the dev-passes / CI-hides
+        // asymmetry, in the direction that conceals the regression.
+        QVERIFY2(servedFromTestDir,
+                 qPrintable(QStringLiteral("resolved outside the test-mode data location (%1), so QStandardPaths "
+                                           "did not serve it: %2")
+                                .arg(dataDir, resolved)));
     }
 
     void builtinBuffer_helpers_reject_non_builtin_tokens()

@@ -18,48 +18,55 @@ namespace PlasmaZones {
 /**
  * @brief KWin adapter implementing `PhosphorAnimation::IMotionClock`.
  *
- * Each instance is bound to one `KWin::LogicalOutput` so a multi-monitor
- * session with mixed refresh rates (60 Hz + 144 Hz being the common case
- * we need to handle correctly) can phase-lock per-output without
- * cross-output beating. The effect holds one `CompositorClock` per
- * output (maintained via `screenAdded` / `screenRemoved` signals) plus a
- * fallback unbound clock for the bootstrap-before-screens-populate and
- * null-screen() migration windows. Each `prePaintScreen` feeds the
- * presentTime to the clock matching `data.screen`; animations bound to
- * that output tick on that clock, animations bound to other outputs
- * step with dt=0 (correct — they tick when their own output paints).
+ * Each instance is bound to one `KWin::LogicalOutput`, so `refreshRate()`
+ * and `requestFrame()` answer for that output rather than for the session.
+ * The effect holds one `CompositorClock` per output (maintained via
+ * `screenAdded` / `screenRemoved` signals) plus a fallback unbound clock
+ * for the bootstrap-before-screens-populate and null-screen() migration
+ * windows.
  *
- * ## Driver contract
+ * The class was originally built to phase-lock each output to its own
+ * presentTime, so a mixed-refresh session (60 Hz + 144 Hz) would not beat.
+ * That never worked. `now()` returned max(latched presentTime, wall), and
+ * the only value ever fed to the latch was the effect's own
+ * `duration_cast<milliseconds>(steady_clock::now())`, which truncates, so
+ * the latched value was never above the wall time it was sampled at and the
+ * max always selected wall. KWin 6.7 then dropped the predicted presentTime
+ * the design needed, and the latch was retired rather than kept as cover
+ * for an API that has moved away. Every clock reads wall time, and on an
+ * N-output desktop advanceAnimations steps every in-flight animation with a
+ * real dt N times per vsync. Correctness is unaffected: parametric curves read
+ * elapsed/duration off wall time, and Spring::step is the closed-form solution
+ * of a linear ODE, so N sub-steps summing to dt give the same state as one dt
+ * step (its convergence snap is the one step-count-dependent part, and it only
+ * ever settles EARLIER). The per-output pacing is simply not a thing this class
+ * does.
  *
- * The effect (or test harness) is the *driver* — it owns the clock and
- * pushes presentTime via `updatePresentTime()` once per paint cycle.
- * `now()` returns the last pushed value, upcast to nanoseconds. This is
- * not a wall-clock; the reference epoch is whatever KWin uses for
- * presentTime (`std::chrono::steady_clock` on current KDE). Consumers
- * only use *differences* between consecutive readings, so epoch choice
- * is irrelevant.
+ * What is still per-output is the REPAINT SCOPE — requestFrame's per-output
+ * addRepaint — and that is what earns the per-output clock map now. refreshRate()
+ * is also per-output but has no production consumer anywhere in the tree, so it
+ * is API surface rather than a reason.
  *
- * `updatePresentTime` is the only method that mutates clock state, and
- * it MUST be called from the compositor thread. All `IMotionClock`
- * methods (`now()`, `refreshRate()`, `requestFrame()`) must ALSO be
- * called from the compositor thread — they read the state written by
- * `updatePresentTime` without synchronization, and `requestFrame()`
- * additionally dereferences the `QPointer<LogicalOutput>` which is not
- * cross-thread safe. This diverges from the `QtQuickClock` sibling
- * (which explicitly supports cross-thread `now()` / `requestFrame()`
- * via atomics + Qt's thread-safe `update()`); consumers holding an
- * `IMotionClock*` polymorphically must therefore either treat the
- * pointer as main-thread-bound OR know which concrete class they got.
- * The base-class `IMotionClock::now()` doc lists per-implementation
+ * ## Thread contract
+ *
+ * `now()` is a plain `steady_clock` read, but `refreshRate()` and
+ * `requestFrame()` dereference the `QPointer<LogicalOutput>`, which is not
+ * cross-thread safe, and `requestFrame()` also touches `KWin::effects` and
+ * the debug-log rate-limit latches. All `IMotionClock` methods must
+ * therefore be called from the compositor thread. This diverges from the
+ * `QtQuickClock` sibling (which explicitly supports cross-thread `now()` /
+ * `requestFrame()` via atomics + Qt's thread-safe `update()`); consumers
+ * holding an `IMotionClock*` polymorphically must either treat the pointer
+ * as main-thread-bound OR know which concrete class they got. The
+ * base-class `IMotionClock::now()` doc lists per-implementation
  * thread-safety stories for exactly this reason.
  *
  * ## Monotonicity
  *
- * KWin's presentTime is sourced from `std::chrono::steady_clock` and
- * is monotonic in normal operation, but output hotplug / DPMS cycles
- * can (rarely) reset it. `updatePresentTime` latches the maximum seen
- * so `now()` stays monotonic regardless. The `IMotionClock` contract
- * mandates this; don't remove it.
+ * The `IMotionClock` contract mandates a non-decreasing `now()`, because
+ * `AnimatedValue<T>` downstream derives `dt` from (now() - lastNow) and a
+ * negative dt would step the curve backwards. `std::chrono::steady_clock`
+ * supplies that property directly, so nothing here has to clamp for it.
  *
  * ## Output lifetime
  *
@@ -76,14 +83,12 @@ public:
     /**
      * @brief Construct a clock bound to @p output.
      *
-     * @p output may be nullptr for the degenerate single-output /
-     * test case where per-output phase-locking isn't required. In
-     * that mode the clock self-drives from `std::chrono::steady_clock`
-     * (see `now()`), `refreshRate()` returns 0, `requestFrame()` falls
-     * through to `KWin::effects->addRepaintFull()`, and
-     * `updatePresentTime()` is a no-op — the fallback ignores per-output
-     * paint cadence to avoid N× stepping on N-output systems where
-     * `prePaintScreen` fires once per output per vsync.
+     * @p output may be nullptr for the bootstrap and migration windows
+     * where the effect has no screen to bind to yet, and for tests. In
+     * that mode `refreshRate()` returns 0 and `requestFrame()` falls
+     * through to `KWin::effects->addRepaintFull()` instead of scoping
+     * the repaint to an output's geometry. `now()` behaves identically
+     * either way.
      */
     explicit CompositorClock(KWin::LogicalOutput* output = nullptr);
     ~CompositorClock() override;
@@ -94,41 +99,11 @@ public:
     void requestFrame() override;
     const void* epochIdentity() const override;
 
-    /**
-     * @brief Push the next presentTime sample from the compositor.
-     *
-     * Call once per paint cycle from the effect's `prePaintScreen`
-     * with the `presentTime` parameter KWin provides. The clock
-     * upconverts to nanoseconds and latches the maximum so `now()`
-     * stays monotonic even if the underlying source regresses.
-     *
-     * @param paintingOutput The output whose `prePaintScreen` is firing.
-     *     Passed by the caller so the clock can assert in debug builds
-     *     that it is receiving presentTime only for the output it was
-     *     constructed against. Mis-plumbing (feeding a 60 Hz output's
-     *     presentTime into a 144 Hz clock) would silently latch the
-     *     faster output's timestamps into the slower clock, stepping
-     *     its animations ahead of its own vsync — a correctness bug
-     *     that neither test harness nor runtime paint cycle exercises
-     *     unless this cross-check catches it. Release builds drop the
-     *     assertion; the argument is otherwise unused, and `nullptr`
-     *     is accepted (the fallback clock path is an intentional
-     *     skip). Defaulted so existing direct callers (tests driving
-     *     a bound CompositorClock without a real output) compile
-     *     unchanged.
-     */
-    void updatePresentTime(std::chrono::milliseconds presentTime, KWin::LogicalOutput* paintingOutput = nullptr);
-
     /// The output this clock is bound to. May be null.
     KWin::LogicalOutput* output() const;
 
 private:
     QPointer<KWin::LogicalOutput> m_output;
-    // Seeded from `std::chrono::steady_clock::now()` in the constructor
-    // — NOT zero — to keep `now()` sensible before the first
-    // `updatePresentTime` sample lands. See the ctor body for the
-    // cross-output rebind hazard the seed closes.
-    std::chrono::nanoseconds m_latestPresentTime{0};
     // `true` if the clock was constructed bound to a non-null output
     // (per-output instance), `false` for the always-unbound fallback
     // clock. Used by `requestFrame()` to distinguish "stale output

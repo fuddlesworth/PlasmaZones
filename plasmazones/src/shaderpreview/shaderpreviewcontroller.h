@@ -25,9 +25,10 @@ namespace PlasmaZones {
 /// ZoneShaderItem preview consumes — the zone geometry transform, the generated
 /// `p_<id>` preamble, translated uniform params, the zone-label texture, the
 /// wallpaper texture — and owns the optional CAVA audio-spectrum capture used by
-/// audio-reactive shaders. Both the zone editor and the settings-app shader
-/// browser drive their preview through one of these, differing only in the
-/// injected backend.
+/// audio-reactive shaders. The settings-app shader browser is the only host that
+/// drives a preview through one of these today. The backend indirection is what
+/// keeps the host's data source out of the controller, so a second host would
+/// supply one rather than change anything here.
 ///
 /// The backend is borrowed: the caller owns it and must keep it alive for the
 /// controller's lifetime.
@@ -108,22 +109,23 @@ Q_SIGNALS:
 private:
     /// The shader's declared parameter metadata, memoized by shader id.
     ///
-    /// shaderInfo() is cheap in the settings app (an in-process registry hit)
-    /// and expensive in the editor (an uncached blocking D-Bus round-trip to
-    /// the daemon), and translateShaderParams needs it on every debounced
-    /// slider move and every resize. Cached here rather than per-backend so
-    /// both hosts pay the same once-per-shader cost.
+    /// shaderInfo() is cheap in the settings app (an in-process registry hit) but a
+    /// backend is free to make it expensive — a D-Bus round-trip to the daemon's
+    /// registry is the obvious shape — and translateShaderParams needs it on every
+    /// debounced slider move and every resize. Cached here rather than per-backend
+    /// so the cost is once per shader whatever the backend does.
     ///
     /// NOTE: this controller observes no registry / effects-changed signal, so
     /// there is nothing to hook invalidation to — the cache is keyed on the
     /// shader id alone and turns over when the previewed shader changes.
     QVariantList parameterInfos(const QString& shaderId) const;
 
-    // Borrowed. In the settings app the owner (a unique_ptr backend declared
-    // before the controller) outlives it. In the editor the backend IS the
-    // EditorController, which owns the controller as a QObject child — there the
+    // Borrowed, and the destruction order is the OWNER's to decide, not ours. In
+    // the settings app the owner is a unique_ptr backend declared before the
+    // controller, so it outlives it. Nothing stops a host from being its own
+    // backend and owning the controller as a QObject child, and then the
     // IShaderPreviewBackend base subobject is destroyed BEFORE the child
-    // controller, so this destructor must never dereference m_backend (it does
+    // controller. So this destructor must never dereference m_backend (it does
     // not: ~ShaderPreviewController only tears down its own CAVA provider).
     IShaderPreviewBackend* m_backend;
     PhosphorAudio::CavaSpectrumProvider* m_audioProvider = nullptr;

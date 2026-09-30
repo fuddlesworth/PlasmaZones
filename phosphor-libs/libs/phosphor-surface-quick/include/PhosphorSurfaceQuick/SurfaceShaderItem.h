@@ -21,9 +21,9 @@ namespace PhosphorSurfaceQuick {
  * @brief QQuickItem for rendering a per-window surface-decoration layer with a
  *        custom shader (border / rounded corners / focus tint / glow).
  *
- * The Qt Quick consumer for the third shader-pack category
- * (`plasmazones/surface`), sibling to the plasmazones ZoneShaderItem (overlay
- * zone backgrounds) and the animation transition runtime. Like ZoneShaderItem it inherits from
+ * The Qt Quick consumer for the `plasmazones/surface` shader-pack category, one
+ * of four beside overlays, animations and pointer, and sibling to the plasmazones
+ * ZoneShaderItem (overlay zone backgrounds). Like ZoneShaderItem it inherits from
  * PhosphorRendering::ShaderEffect, which provides all base shader rendering:
  * Shadertoy uniforms, custom params/colors, user textures, multipass, status,
  * and the createShaderNode() / syncBasePropertiesToNode() seam.
@@ -35,10 +35,13 @@ namespace PhosphorSurfaceQuick {
  * live window surface; it has no zones, no per-zone glyph labels, and no
  * consumer escape-hatch int slots. The ONLY thing that differs from the base
  * render path is the UBO: the node is created with a
- * PhosphorSurfaceShaders::SurfaceUniformProfile so it uploads the leaner
- * 672-byte surface UBO instead of the overlay UBO. createShaderNode() supplies
- * that profile to a stock PhosphorRendering::ShaderNodeRhi — there is no
- * SurfaceShaderItem-specific node subclass.
+ * PhosphorSurfaceShaders::SurfaceUniformProfile so it uploads the DISTINCT
+ * 672-byte surface UBO instead of the overlay one. Distinct, not smaller: both
+ * layouts static_assert to 672 bytes, and past the shared qt_Matrix / qt_Opacity
+ * lead (offsets 0 and 64, plus iTextureResolution at 592) the members do not line
+ * up. createShaderNode() supplies that profile to a stock
+ * PhosphorRendering::ShaderNodeRhi — there is no SurfaceShaderItem-specific node
+ * subclass.
  *
  * The surface-state inputs below (scale / focus / geometry) map to the
  * surface-only fields of PhosphorShaders::UboFrameState that
@@ -91,8 +94,24 @@ public:
     /// by this item's constructor AND the plasmazones daemon's warm-bake so
     /// the bake-cache key the warm compile writes is guaranteed to be the one
     /// the first live paint looks up — the two paths cannot silently diverge.
+    ///
+    /// The LIVE node is handed one more entry than this returns: updatePaintNode
+    /// prepends the pack's own sibling `shared` dir (withPackSiblingShared). That
+    /// is a no-op for every XDG-installed pack, which is all the warm bake sees,
+    /// and surfaceshaderitem.cpp documents why at that call.
     static QStringList surfaceIncludePaths();
 
+    // Note: setEntryScaffold is inherited and PUBLIC, but this override never delegates to
+    // ShaderEffect::updatePaintNode, the only site that pushes the item's own scaffold, so
+    // the scaffold a host sets is never read for rendering. A call that CHANGES the scaffold
+    // is not inert: the base setter raises shaderDirty and calls update() unconditionally,
+    // and sets Status::Loading when a shaderSource is set, so it forces a reload and a
+    // statusChanged round trip. A call passing the SAME scaffold early-returns and IS inert,
+    // which includes the identity call on a fresh item, since the default is the empty pair.
+    // No in-tree host makes either, and none can from QML: setEntryScaffold is not
+    // Q_INVOKABLE and both items are QML-instantiated. The ZoneShaderItem twin carries the
+    // same note.
+    //
     // Note: shaderSource, paramPreamble, shaderParams, iTime, and the
     // customParams / customColors slots are inherited Q_PROPERTYs from
     // PhosphorRendering::ShaderEffect — the QML host binds them directly. The

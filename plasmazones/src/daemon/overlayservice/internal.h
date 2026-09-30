@@ -6,6 +6,13 @@
 #include <optional>
 
 #include "overlay_helpers.h"
+// Its OWN logging include. applyShaderInfoToWindow below calls qCWarning(lcOverlay), and
+// this header was getting the declaration only through overlay_helpers.h — a masked include
+// across a header boundary, independent of unity builds, and one that leaned on a header
+// whose stated purpose is to depend on neither ConfigDefaults, ShaderRegistry nor
+// settings_interfaces, so that test TUs can include it directly. That header carries plenty
+// of Qt includes; what it does not carry is a reason for this one, and it no longer does.
+#include "core/platform/logging.h"
 #include "core/interfaces/settings_interfaces.h"
 #include "core/interfaces/interfaces.h"
 #include "core/interfaces/shaderregistry.h"
@@ -21,8 +28,18 @@
 #include <QGuiApplication>
 #include <QMargins>
 #include <QPalette>
-#include <QQuickItem>
-#include <QQuickWindow>
+// No QQuickItem and no QQuickWindow: neither token appears anywhere in this file except as
+// an include line, and this header's own helpers take QObject* rather than QQuickItem*.
+// overlay_helpers.h above still supplies QQuickItem for the TUs that do want it. Removed
+// under the same rule and with the same evidence as the six that left overlay_helpers.h,
+// including the non-unity builds with the shell on and off, because a unity build cannot
+// tell an orphan from a load-bearing transitive include.
+//
+// The evidence is "every TU in this directory that reaches a QQuickWindow member includes
+// <QQuickWindow> itself", which is a dozen of them, not the two an earlier version of this
+// comment named. The six that do not include it reach no such member and no `auto` route
+// to one — and an `auto` route is exactly what a token grep cannot see, which is how this
+// same removal was got wrong once in shader.cpp.
 #include <QScreen>
 
 namespace PlasmaZones {
@@ -81,10 +98,12 @@ inline void resetOsdOverlayState(QObject* window)
 }
 
 // @p includeLabelFontColor: only the main overlay slot declares a
-// `labelFontColor` property; the OSD / zone-selector / snap-assist /
-// layout-picker slots deliberately don't wire label color (see
-// PassiveOverlayShell.qml), so writing it there would only create a dead
-// dynamic property. Pass true from the main-overlay update path only.
+// `labelFontColor` property. The OSD / zone-selector / snap-assist /
+// layout-picker / cheatsheet slots deliberately don't wire label color (see
+// PassiveOverlayShell.qml for the main slot's declaration and
+// PassiveOverlayModalSlots.qml for the picker's matching note), so writing it
+// there would only create a dead dynamic property. Pass true from the
+// main-overlay update path only.
 inline void writeFontProperties(QObject* window, const IZoneVisualizationSettings* settings,
                                 bool includeLabelFontColor = false)
 {
@@ -170,36 +189,50 @@ inline VsLayerPlacement layerPlacementForVs(const QRect& vsGeom, const QRect& ph
             QMargins(clamped.x() - physGeom.x(), clamped.y() - physGeom.y(), 0, 0)};
 }
 
-/// Resolve anchors + margins for a floating surface whose absolute top-left
-/// should land at @p topLeft within the physical screen @p physGeom. Always
-/// Top|Left-anchored with margins relative to the physical origin.
-/// Used by shader-preview paths that position the preview window at a
-/// caller-chosen absolute coordinate inside the monitor (rather than at a
-/// virtual-screen sub-region). Separate from layerPlacementForVs because the
-/// VS variant treats "topLeft == physGeom.topLeft" as "fullscreen → AnchorAll",
-/// which would drop the margins a floating preview needs.
-inline VsLayerPlacement layerPlacementAt(const QPoint& topLeft, const QRect& physGeom)
+// layerPlacementAt was removed here. It had no caller anywhere in the tree, and
+// its docblock attributed it to "shader-preview paths" the daemon does not host:
+// there is no preview role in PhosphorRoles, and the preview lives in the
+// settings app. Same shape as parseZonesJson in overlay_helpers.h — an unused
+// inline helper whose comment named a consumer that does not exist.
+
+/// The geometry @p screenId GENUINELY resolves to, or an invalid rect when nothing does.
+///
+/// The VERDICT half of the pair below. resolveScreenGeometry destroys this distinction on purpose
+/// and has to: a surface needs SOME rect to be sized to, so an unresolvable id is substituted with
+/// the full physical monitor, and resolveTargetScreen substitutes the PRIMARY monitor for an id
+/// nothing can resolve at all. That is right for sizing and wrong for deciding whether an absolute
+/// setGeometry is safe, because a substituted rect compares EQUAL to its screen's own rect and so
+/// passes assertWindowOnScreen's physical-screen test trivially — which is how a virtual-screen
+/// window came to take the branch that test exists to deny it.
+///
+/// A tracked physical id answers with its real rect here, so the physical path is unchanged; only
+/// a genuinely unresolvable id comes back invalid.
+///
+/// ON LOGGING, corrected: ScreenManager's warn-once for a virtual miss is latched only when its
+/// rebuild BAILS EARLY (no config for that physical screen, or the screen untracked). An id whose
+/// index is no longer in a LIVE config — which is the post-reconfigure case, and the one route
+/// that actually reaches here — re-warns on every call, because the rebuild clears the warn set
+/// before re-inserting. So ask ONCE per show and keep both forms, which is what the callers do.
+inline QRect trueScreenGeometry(PhosphorScreens::ScreenManager* mgr, const QString& screenId)
 {
-    return {PhosphorLayer::Anchors{PhosphorLayer::Anchor::Top, PhosphorLayer::Anchor::Left},
-            QMargins(qMax(0, topLeft.x() - physGeom.x()), qMax(0, topLeft.y() - physGeom.y()), 0, 0)};
+    return mgr ? mgr->screenGeometry(screenId) : QRect();
 }
 
-/// Resolve target screen geometry for a screen ID (virtual or physical).
-/// For virtual screens (format "physicalId/vs:N"), returns the virtual screen
-/// geometry from PhosphorScreens::ScreenManager. For physical screens, falls back to QScreen::geometry().
-/// Returns the geometry the overlay window should cover.
+/// Resolve target screen geometry for a screen ID (virtual or physical): the geometry the overlay
+/// window should be SIZED to, substituting when the id does not resolve.
+///
+/// Expressed in terms of trueScreenGeometry so the verdict/substitute relationship is structural
+/// rather than a claim in a comment. The substitute is the full physical monitor, which is the
+/// right last resort for sizing and the wrong basis for a placement decision — a caller that needs
+/// to know WHETHER the id resolved must ask the other helper, not test this result for validity.
 inline QRect resolveScreenGeometry(PhosphorScreens::ScreenManager* mgr, const QString& screenId)
 {
-    if (mgr) {
-        QRect geom = mgr->screenGeometry(screenId);
-        if (geom.isValid()) {
-            return geom;
-        }
+    const QRect resolved = trueScreenGeometry(mgr, screenId);
+    if (resolved.isValid()) {
+        return resolved;
     }
-    // Fallback: physical screen geometry only. This path is hit when PhosphorScreens::ScreenManager
-    // is unavailable (e.g. early startup) or when screenId doesn't match any virtual
-    // screen. The caller gets raw QScreen::geometry() which is always the full
-    // physical monitor — acceptable as a last-resort fallback.
+    // This path is hit when the manager is unavailable (e.g. early startup) or when screenId
+    // matches no live virtual screen and no tracked physical one.
     QScreen* screen = resolveTargetScreen(mgr, screenId);
     return screen ? screen->geometry() : QRect();
 }
@@ -207,7 +240,7 @@ inline QRect resolveScreenGeometry(PhosphorScreens::ScreenManager* mgr, const QS
 // Write all shader-config properties from ShaderInfo to a QML window (every
 // buffer/wallpaper/param field ShaderInfo carries, plus the generated param
 // preamble - see the writes below rather than an enumeration that rots).
-// Replaces 3 occurrences of the shader-info-to-window property push pattern.
+// Replaces the shader-info-to-window property push pattern at its call sites.
 //
 // @p vsGeom / @p physGeom identify the target screen. When they differ (i.e.
 // the overlay covers a virtual screen that is a sub-rect of the physical
@@ -382,7 +415,7 @@ inline void writeColorSettings(QObject* window, const IZoneVisualizationSettings
                      ov && ov->inactiveOpacity ? *ov->inactiveOpacity : settings->inactiveOpacity());
 }
 
-// writeQmlProperty, patchZonesWithHighlight, parseZonesJson, ensureShaderTimerStarted,
+// writeQmlProperty, patchZonesWithHighlight, ensureShaderTimerStarted,
 // getAnchorsForPosition, findQmlItemByName, collectQmlItemsByName, mapVisibleRectToItem
 // are defined in overlay_helpers.h (included above)
 
