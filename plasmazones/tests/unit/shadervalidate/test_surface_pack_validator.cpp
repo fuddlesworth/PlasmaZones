@@ -569,9 +569,12 @@ private Q_SLOTS:
     }
 
     /// A depth pack pins every pass to the single bufferScale on the daemon,
-    /// because the passes share one depth attachment. That is correct, but it
-    /// means a pack declaring both gets its whole pyramid flattened at load, and
-    /// before this lint it shipped green.
+    /// because the passes share one depth attachment. That is correct, but a pack
+    /// declaring a DIFFERENT per-pass scale gets it flattened there while the
+    /// compositor honours it, and before this lint that shipped green. The arm
+    /// needs real divergence, so the fixture states both values rather than
+    /// leaning on `bufferScale` defaulting to 1.0, which is how it used to
+    /// diverge by accident.
     void bufferScalesAlongsideDepthBufferIsLinted()
     {
         QTemporaryDir tmp;
@@ -581,6 +584,7 @@ private Q_SLOTS:
         obj.insert(QStringLiteral("multipass"), true);
         obj.insert(QStringLiteral("depthBuffer"), true);
         obj.insert(QStringLiteral("bufferShaders"), QJsonArray{surfaceFillerBufferName()});
+        obj.insert(QStringLiteral("bufferScale"), 1.0);
         obj.insert(QStringLiteral("bufferScales"), QJsonArray{0.5});
 
         const PackResult r =

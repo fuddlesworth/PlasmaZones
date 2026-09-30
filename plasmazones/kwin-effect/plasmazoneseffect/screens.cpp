@@ -36,6 +36,28 @@
 
 namespace PlasmaZones {
 
+namespace {
+
+// Drop every entry whose key is not a live physical screen id. Both screen handlers rebuild
+// connectedPhysicalIds eagerly and then call this, because a screen id is not stable across a
+// hotplug: plugging an identical twin gives a monitor's id a connector suffix and unplugging the
+// twin takes it away again, so a cache keyed by the id accumulates one orphan per spelling change
+// that a single remove-by-current-id can never reach. Pruning a still-live screen whose spelling
+// just changed is correct too, not collateral: its old key IS stale, and the only cost is one
+// non-deduplicated report on the next change.
+void pruneToLiveScreens(QHash<QString, int>& cache, const QSet<QString>& live)
+{
+    for (auto it = cache.begin(); it != cache.end();) {
+        if (live.contains(it.key())) {
+            ++it;
+        } else {
+            it = cache.erase(it);
+        }
+    }
+}
+
+} // namespace
+
 // @p excluded is left out of the duplicate scan below, and exists for ONE caller:
 // onScreenRemoved's eager rebuild. The failure it was written for is the #724 family: resolving
 // the SURVIVOR of two identical monitors in its disambiguated baseId/connector form while the
@@ -708,8 +730,7 @@ void PlasmaZonesEffect::fetchAllVirtualScreenConfigs()
 void PlasmaZonesEffect::onVirtualScreensChanged(const QString& physicalScreenId)
 {
     qCInfo(lcEffect) << "Virtual screens changed for" << physicalScreenId;
-    m_idCaches.screenIdCache.clear();
-    m_idCaches.connectedPhysicalIdsValid = false;
+    clearScreenIdCache();
     m_lastEffectiveScreenId.clear();
     // Temporarily disable VS-aware crossing detection while the async fetch is in-flight.
     // Without this, slotWindowFrameGeometryChanged uses stale boundary definitions from the
@@ -744,10 +765,11 @@ void PlasmaZonesEffect::onScreenAdded(KWin::LogicalOutput* output)
     // different cable) therefore had the effect building newManuf:newModel:OLDSERIAL while
     // the daemon built the new serial: the same cross-process spelling disagreement the
     // #724 family is about, and reachable without two identical monitors.
-    // ADD SIDE ONLY. onScreenRemoved must NOT mirror this: it resolves removedScreenId
-    // BEFORE its own cache clear precisely so the id matches the spelling the pre-unplug
-    // state was stored under, and re-reading a disconnected connector's now-empty edid
-    // would change that spelling and break the two consumers that compare against it.
+    // ADD SIDE ONLY. onScreenRemoved must NOT mirror this: it reads removedScreenId from the
+    // per-output record, and falls back to a resolve BEFORE its own cache clear, both so the
+    // id matches the spelling the pre-unplug state was stored under. Re-reading a disconnected
+    // connector's now-empty edid would change that spelling on the fallback path and break the
+    // two consumers that compare against it.
     // Add-side alone is sufficient for the reused-connector case, because the new monitor's
     // serial is read fresh on its first resolve.
     PhosphorIdentity::ScreenId::invalidateEdidCache(output->name());
@@ -761,6 +783,30 @@ void PlasmaZonesEffect::onScreenAdded(KWin::LogicalOutput* output)
     // stale recorded spelling under the same pointer would then be read on this output's removal.
     // clearScreenIdCache deliberately does NOT touch this map, so the erase has to be here.
     m_idCaches.screenIdByOutput.remove(output);
+
+    // Refresh every surviving peer's recorded spelling, the add-side twin of onScreenRemoved's
+    // rebuild loop. An add can flip a PEER's duplicate verdict — the monitor that was alone now
+    // has an identical twin, so its id gains the connector suffix and its state is re-published
+    // under the new spelling — while the erase above only refreshes the output that arrived. The
+    // resolve writes screenIdByOutput on its miss path and the cache was just cleared, so this
+    // loop re-records every output and eagerly rebuilds the connected set in the same pass.
+    //
+    // WHY A RESOLVE LOOP AND NOT A MAP CLEAR: upstream emits outputAdded BEFORE outputRemoved
+    // within one updateOutputs, so on a bundled add+remove (a total unplug appends a placeholder)
+    // this runs while the departing outputs still need their records. Clearing the map would wipe
+    // them and leave onScreenRemoved resolving cold, which is the defect the record exists to
+    // prevent. A resolve loop cannot: the dying outputs are already pruned from m_outputs before
+    // any emit, so screens() does not list them and nothing here touches their entries.
+    m_idCaches.connectedPhysicalIds.clear();
+    for (const auto* other : KWin::effects->screens()) {
+        const QString physId = outputScreenId(other);
+        if (!physId.isEmpty()) {
+            m_idCaches.connectedPhysicalIds.insert(physId);
+        }
+    }
+    m_idCaches.connectedPhysicalIdsValid = true;
+    pruneToLiveScreens(m_lastScreenDesktop, m_idCaches.connectedPhysicalIds);
+
     // Construct a bound clock for this output. Idempotent: if the same output
     // arrives twice (rare, but possible on some compositors' hotplug
     // sequences) the early return keeps the existing clock and skips the
@@ -801,7 +847,16 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // removal resolves cold.
     //
     // The recompute stays as the fallback, so an output nothing ever resolved behaves as before.
-    const QString removedScreenId = m_idCaches.screenIdByOutput.value(output, outputScreenId(output));
+    //
+    // THE TWO-STEP FORM IS LOAD-BEARING. `value(output, outputScreenId(output))` reads as a cache
+    // lookup with a lazy fallback and is neither: C++ evaluates the default argument
+    // unconditionally, and outputScreenId's miss path inserts into THIS map, so the recompute ran
+    // first, overwrote the recorded spelling with the cold one, and value() handed that straight
+    // back. Written that way the fix was inert in both scenarios above. Read first, resolve only
+    // on a genuine miss.
+    const auto recordedId = m_idCaches.screenIdByOutput.constFind(output);
+    const QString removedScreenId =
+        recordedId != m_idCaches.screenIdByOutput.constEnd() ? *recordedId : outputScreenId(output);
     // Unplug twin of the onScreenAdded invalidation: KWin fires
     // screenRemoved BEFORE the per-window outputChanged cascade, and the
     // connected-output gate in scrollTrackedScreenFor exists for exactly
@@ -844,7 +899,11 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // reportScreenDesktop's m_lastScreenDesktop cache retains a stale value for
     // a disconnected connector. Runs before the motion-clock early-return below
     // so it fires even for an output that never had an animation clock.
-    m_lastScreenDesktop.remove(removedScreenId);
+    //
+    // Pruned against the set rebuilt above rather than removed by removedScreenId, because a
+    // remove-by-id reaches ONE spelling and this map can hold two for the same monitor. It drops
+    // the departing screen either way, since the rebuild loop excludes it.
+    pruneToLiveScreens(m_lastScreenDesktop, m_idCaches.connectedPhysicalIds);
 
     // Drop any live desktop-switch transition on this output. A disconnected
     // LogicalOutput* left in the transition manager's active map would dangle:

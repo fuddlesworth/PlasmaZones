@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Screen-management methods on OverlayService: setup / remove / hot-plug add /
-// remove / physical-screen teardown. Extracted from overlayservice.cpp to keep
-// the screen-lifecycle code grouped with itself.
+// Screen-management methods on OverlayService: hot-plug add / remove /
+// virtual-screen reconfigure / physical-screen teardown. Extracted from
+// overlayservice.cpp to keep the screen-lifecycle code grouped with itself.
 
 #include "internal.h"
 #include "daemon/overlayservice.h"
@@ -35,9 +35,25 @@ void OverlayService::assertWindowOnScreen(QWindow* window, QScreen* screen, cons
     // For virtual screens (geometry differs from physical), positioning is handled by
     // LayerShellQt margins. Calling setGeometry with absolute coordinates would override
     // those margins, causing double-positioning. Only set geometry for physical screens.
-    const QRect targetGeom = geometry.isValid() ? geometry : screen->geometry();
-    if (targetGeom == screen->geometry()) {
-        window->setGeometry(targetGeom);
+    //
+    // AN UNRESOLVED @p geometry IS NOT A PHYSICAL SCREEN. This used to substitute
+    // screen->geometry() for an invalid argument and then compare against that same value, so
+    // the test was trivially true and a VIRTUAL-screen window whose geometry a caller could not
+    // resolve took the absolute-setGeometry branch this comment says must never run for one.
+    // Reachable, not theoretical: ScreenManager::screenGeometry answers QRect() on a
+    // virtual-screen cache miss and for an untracked id, and most callers pass its result
+    // through. Stopping here instead leaves the margins in charge, which is right for a VS and
+    // costs a physical screen nothing, because its caller has the rect and states it — the
+    // geometry argument carries no default any more, so no caller can fall into this by omission.
+    //
+    // Do NOT replace this with a VirtualScreenId::isVirtual test: layerPlacementForVs treats a
+    // VS that covers its whole output as physical (AnchorAll, zero margins), and an isVirtual
+    // test would then wrongly skip the setGeometry that one does need.
+    if (!geometry.isValid()) {
+        return;
+    }
+    if (geometry == screen->geometry()) {
+        window->setGeometry(geometry);
     }
     // Virtual screens: size is set by the caller; position is set by LayerShellQt margins.
 }
@@ -106,7 +122,7 @@ void OverlayService::handleScreenAdded(QScreen* screen)
         const auto& pState = m_screenStates.value(physScreenId);
         if (pState.overlayPhysScreen && pState.shell) {
             if (auto* window = pState.shell->shellWindow()) {
-                assertWindowOnScreen(window, screen);
+                assertWindowOnScreen(window, screen, screen->geometry());
                 if (pState.shell->shellSurface() && !pState.shell->shellSurface()->isLogicallyShown()) {
                     pState.shell->shellSurface()->show();
                     syncPassiveShellSurfaceState(physScreenId);
@@ -309,9 +325,10 @@ void OverlayService::onVirtualScreensChanged(const QString& physicalScreenId)
         // the ShellState fields; without the removals the stale entry
         // survives until the monitor is physically removed (bounded but
         // pointless, and destroyAllWindowsForPhysicalScreen skips it
-        // because every field it matches on was just zeroed).
-        removeShellStates(physicalScreenId);
+        // because every field it matches on was just zeroed). OUR entry
+        // first, for the dangling-pointer reason the branch above states.
         m_screenStates.remove(physicalScreenId);
+        removeShellStates(physicalScreenId);
         // A modal open on the pre-split bare-physId shell just lost its
         // slot. The later destroyAllWindowsForPhysicalScreen loop CANNOT
         // reset it: destroyShell's PreDestroy hook already zeroed every

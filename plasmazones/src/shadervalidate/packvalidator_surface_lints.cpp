@@ -109,8 +109,8 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         const QJsonObject po = v.toObject();
         const QString pid = po.value(QLatin1String("id")).toString();
         const QString ptype = po.value(QLatin1String("type")).toString();
-        if (pid.isEmpty() || ptype.isEmpty()) {
-            continue; // already linted above
+        if (pid.isEmpty() || ptype.isEmpty() || !kSurfaceParamTypes.contains(ptype)) {
+            continue; // already linted above (empty id/type, or the unknown-type arm)
         }
         const QJsonValue def = po.value(QLatin1String("default"));
         if (ptype == QLatin1String("bool")) {
@@ -119,7 +119,10 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
             }
             continue;
         }
-        if (ptype == QLatin1String("color") || ptype == QLatin1String("image")) {
+        // No `image` arm: the surface family has no such type, so one lands on the unknown-type
+        // lint above and is skipped here rather than drawing a second claim about a contract
+        // that does not exist. The animation family is where an image parameter belongs.
+        if (ptype == QLatin1String("color")) {
             if (!def.isUndefined() && !def.isString()) {
                 lints << QStringLiteral("parameter '%1' is %2 but its default is not a string").arg(pid, ptype);
             }
@@ -175,16 +178,16 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
             }
         }
     }
-    // A `textures` that is not an array lints clean without this: toArray() answers
-    // empty for a string, a number or an object, the loop below never runs, and the
-    // pack passes with its texture list silently ignored.
+    // A `textures` that is not an array lints clean without this: toArray() answers empty for a
+    // string, number or object, the loop never runs, and the pack passes with its list ignored.
     const QJsonValue texturesValue = meta.value(QLatin1String("textures"));
     if (!texturesValue.isUndefined() && !texturesValue.isNull() && !texturesValue.isArray()) {
         lints << QStringLiteral("`textures` is not an array (the whole list is ignored at load)");
     }
     const QJsonArray declaredTextures = texturesValue.toArray();
     if (declaredTextures.size() > PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots) {
-        lints << QStringLiteral("too many textures: %1 declared, cap is %2 (surplus dropped at load)")
+        // Not "surplus dropped at load": an empty-path entry is skipped without taking a slot.
+        lints << QStringLiteral("too many textures: %1 declared, cap is %2 (the loader keeps the first %2 with a path)")
                      .arg(static_cast<int>(declaredTextures.size()))
                      .arg(PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots);
     }
@@ -1128,27 +1131,24 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
                          .arg(rawScale);
         }
         // RELOCATED from the blur-chain block above to carry chainResolves: a fail-closed chain has
-        // useDepthBuffer false, bufferScales cleared and no targets, so nothing is pinned.
-        //
-        // AND ON REAL DIVERGENCE, mirroring the runtime's twin warning, whose comment says "the
-        // offline validator lints the same combination": it compares each CLAMPED slot against the
-        // clamped pack-wide scale and warns only if one differs. Without this the arm FAILED A VALID
-        // PACK — bufferScale 0.5 with bufferScales [0.5, 0.5] renders identically on both hosts.
-        // Clamp before comparing, so two out-of-range values do not read as divergent.
+        // useDepthBuffer false, bufferScales cleared and no targets, so nothing is pinned. AND ON
+        // REAL DIVERGENCE, mirroring the runtime's twin warning: each CLAMPED slot against the
+        // clamped pack-wide scale, warning only if one differs. Without the clamp the arm FAILED A
+        // VALID PACK — bufferScale 0.5 with bufferScales [0.5, 0.5] renders the same on both hosts.
         const QJsonArray depthScales = meta.value(QLatin1String("bufferScales")).toArray();
         const auto clampScale = [](double v) {
             return qBound(PhosphorShaders::kMinBufferScale, v, PhosphorShaders::kMaxBufferScale);
         };
-        const double pinnedScale = clampScale(rawScaleValue.toDouble(1.0));
+        const double pinnedScale = clampScale(rawScale);
+        // BOUNDED to the pass budget like every sibling arm: fromJson drops an entry past it, so it
+        // reaches neither host and cannot diverge, and this was the last unbounded per-entry loop.
+        // No isEmpty() gate below either — an empty array runs no iteration and answers false here.
         bool scalesDiverge = false;
-        for (const QJsonValue& v : depthScales) {
-            if (v.isDouble() && !qFuzzyCompare(clampScale(v.toDouble()), pinnedScale)) {
-                scalesDiverge = true;
-                break;
-            }
+        for (qsizetype i = 0; i < depthScales.size() && i < PhosphorShaders::kMaxBufferPasses && !scalesDiverge; ++i) {
+            const QJsonValue v = depthScales.at(i);
+            scalesDiverge = v.isDouble() && !qFuzzyCompare(clampScale(v.toDouble()), pinnedScale);
         }
-        if (chainResolves && scalesDiverge && meta.value(QLatin1String("depthBuffer")).toBool()
-            && !depthScales.isEmpty()) {
+        if (chainResolves && scalesDiverge && meta.value(QLatin1String("depthBuffer")).toBool()) {
             lints << QStringLiteral(
                 "bufferScales is declared alongside \"depthBuffer\": true, and the daemon pins every pass to "
                 "bufferScale, so no per-pass entry takes effect there (the passes share one depth attachment, "

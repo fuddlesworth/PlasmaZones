@@ -623,7 +623,18 @@ void ShaderNodeRhi::prepare()
             m_gridUploaded = false;
         }
     }
-    if (gridActive() && m_gridVbo && !m_gridUploaded) {
+    const bool gridNeedsUpload = gridActive() && m_gridVbo && !m_gridUploaded;
+    // Batch first: the mesh is ~1.79 MB at max density and a pool-exhausted frame built then dropped it.
+    QRhiResourceUpdateBatch* gridBatch = gridNeedsUpload ? rhi->nextResourceUpdateBatch() : nullptr;
+    if (gridNeedsUpload && !gridBatch) {
+        // Batch pool exhausted mid-record (the 64-batch limit has been
+        // hit in this codebase before). render() skips the frame while
+        // the grid is pending, and a STATIC item gets no further
+        // prepare() on its own — request one so the upload retries next
+        // frame instead of leaving the item blank indefinitely.
+        requestAnotherFrame();
+    }
+    if (gridBatch) {
         const int n = m_gridSubdivisions;
         // Same layout and corner values as RhiConstants::QuadVertices:
         // clip-space position, then a texCoord that runs 0..1 with v = 0 at
@@ -656,19 +667,10 @@ void ShaderNodeRhi::prepare()
                 indexData.append(bl);
             }
         }
-        if (QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch()) {
-            batch->uploadStaticBuffer(m_gridVbo.get(), vertexData.constData());
-            batch->uploadStaticBuffer(m_gridIbo.get(), indexData.constData());
-            cb->resourceUpdate(batch);
-            m_gridUploaded = true;
-        } else {
-            // Batch pool exhausted mid-record (the 64-batch limit has been
-            // hit in this codebase before). render() skips the frame while
-            // the grid is pending, and a STATIC item gets no further
-            // prepare() on its own — request one so the upload retries next
-            // frame instead of leaving the item blank indefinitely.
-            requestAnotherFrame();
-        }
+        gridBatch->uploadStaticBuffer(m_gridVbo.get(), vertexData.constData());
+        gridBatch->uploadStaticBuffer(m_gridIbo.get(), indexData.constData());
+        cb->resourceUpdate(gridBatch);
+        m_gridUploaded = true;
     }
 
     // Upload textures FIRST — before any SRB or pipeline creation.
@@ -680,10 +682,8 @@ void ShaderNodeRhi::prepare()
     // m_bufferPaths, not m_bufferPath: a leading empty entry leaves the latter
     // empty while the list is multi-entry. See bakeBufferShaders for the whole
     // failure this gate was half of.
-    if (!m_bufferPaths.isEmpty() && bufferReady && !ensureBufferTarget()) {
-        return;
-    }
-
+    // ensureBufferTarget is called ONCE, at the tail of the block below. A guarded call under this
+    // IDENTICAL gate used to sit here and created nothing that one does not; see the note under it.
     // Late pipeline recovery
     if (!m_bufferPaths.isEmpty() && bufferReady) {
         if (!multiBufferMode && m_bufferRenderTarget && !m_bufferRenderPassDescriptor
@@ -713,9 +713,9 @@ void ShaderNodeRhi::prepare()
             return;
         }
     }
-    // ONE unconditional call, and deliberately no guarded one in front of it. Two guarded
-    // `ensurePipeline()` calls used to sit here, one inside the buffer branch above and one just
-    // below it, both immediately ahead of this line with nothing in between — so neither could
+    // ONE unconditional call, no guarded one in front of it, and ensureBufferTarget above is the
+    // same shape for the same reason. Two guarded `ensurePipeline()` calls used to sit here, one in
+    // the buffer branch above and one just below it, nothing in between — so neither could
     // achieve anything this line does not. ensurePipeline creates only what is null and has no
     // early return on the success path, so a second call rebuilt nothing while still paying
     // rpDesc->serializedFormat() (a QVector allocation), the m_renderPassFormat assignment and an

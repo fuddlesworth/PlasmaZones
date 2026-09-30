@@ -270,29 +270,27 @@ bool ShaderNodeRhi::ensureBufferTarget()
         clearDepthCreateFailure();
     }
 
-    if (m_useDepthBuffer && multiBufferMode) {
-        if (!m_depthMultiBufferWarned) {
-            m_depthMultiBufferWarned = true;
-            qCWarning(lcShaderNode)
-                << "Depth buffer with" << m_bufferPaths.size()
-                << "buffer passes: only the last pass's depth output will be available in the image pass";
+    if (m_useDepthBuffer && multiBufferMode && !m_depthMultiBufferWarned) {
+        m_depthMultiBufferWarned = true;
+        qCWarning(lcShaderNode)
+            << "Depth buffer with" << m_bufferPaths.size()
+            << "buffer passes: only the last pass's depth output will be available in the image pass";
+    }
+    // A depth pack pins EVERY pass to the single scale (see passSize above), because the passes
+    // share one depth attachment and a render target's colour and depth attachments must agree in
+    // size. Silently discarding a pack's declared per-pass scales is the kind of thing an author
+    // spends an afternoon on, so say it once. The offline validator lints the same combination;
+    // this covers a pack that reaches the node another way. NOT gated on multiBufferMode, unlike
+    // the warning above: passSize pins a ONE-pass depth pack too, so it used to diverge in silence.
+    if (m_useDepthBuffer && !m_depthScalesWarned) {
+        bool diverged = false;
+        for (int i = 0; i < kMaxBufferPasses && !diverged; ++i) {
+            diverged = !qFuzzyCompare(m_bufferScales[static_cast<size_t>(i)], m_bufferScale);
         }
-        // A depth pack pins EVERY pass to the single scale (see passSize above),
-        // because the passes share one depth attachment and a render target's
-        // colour and depth attachments must agree in size. Silently discarding a
-        // pack's declared per-pass scales is the kind of thing an author spends
-        // an afternoon on, so say it once. The offline validator lints the same
-        // combination; this covers a pack that reaches the node another way.
-        if (!m_depthScalesWarned) {
-            bool diverged = false;
-            for (int i = 0; i < kMaxBufferPasses && !diverged; ++i) {
-                diverged = !qFuzzyCompare(m_bufferScales[static_cast<size_t>(i)], m_bufferScale);
-            }
-            if (diverged) {
-                m_depthScalesWarned = true;
-                qCWarning(lcShaderNode) << "Depth buffer with per-pass bufferScales: every pass is pinned to"
-                                        << m_bufferScale << "because the passes share one depth attachment";
-            }
+        if (diverged) {
+            m_depthScalesWarned = true;
+            qCWarning(lcShaderNode) << "Depth buffer with per-pass bufferScales: every pass is pinned to"
+                                    << m_bufferScale << "because the passes share one depth attachment";
         }
     }
     // Buffer texel format: RGBA16F unless the pack's metadata declares its
@@ -359,7 +357,8 @@ bool ShaderNodeRhi::ensureBufferTarget()
         // format must not take the whole pack down with it, because the pack
         // worked (as plain linear) before mipmap meant anything. Retry once
         // without the mip flags and say so.
-        if (wantMips && !tex->create()) {
+        const bool mipCreated = wantMips && tex->create();
+        if (wantMips && !mipCreated) {
             // Latched: this arm is re-entered per frame while an animated resize moves
             // passSize(), and it was the file's one unlatched create-adjacent warning.
             if (!m_mipmapFallbackWarned) {
@@ -377,7 +376,8 @@ bool ShaderNodeRhi::ensureBufferTarget()
         // create() — so leaving a failed object installed latches the failure
         // permanently and lets ensureBufferPipeline build an SRB and pipeline
         // against an uncreated texture and render target.
-        if (!tex->create()) {
+        // !mipCreated because a second create() releases the native object, so a won mip attempt pays twice.
+        if (!mipCreated && !tex->create()) {
             tex.reset();
             // The caller's render target and pass descriptor go with it. They
             // were built against the texture the reset above destroyed and now

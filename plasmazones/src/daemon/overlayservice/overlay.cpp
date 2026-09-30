@@ -213,9 +213,26 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
             if (m_excludedScreens.contains(screenId)) {
                 continue;
             }
+            // The one create site with no geometry guard, and the likely mechanism of an overlay
+            // that comes up blank. Phase 3 hands this value straight to createOverlayWindow, which
+            // writes overlayGeometry unconditionally and sizes the shell window from
+            // width()/height() — 0x0 for a default QRect — and Phase 3's isValid() gate cannot
+            // repair it, because there is nothing valid left to gate on. Every sibling create site
+            // guards, and the setupForScreen that guarded THIS condition with a warning was
+            // deleted, which left the cause in place without the diagnosis.
+            //
+            // SKIP rather than substitute the physical rect: for a virtual screen that rect is the
+            // whole output, so the overlay would cover the monitor instead of the screen's slice.
+            // A later show picks the target up once ScreenManager has resolved its geometry.
+            const QRect resolvedGeom = mgr->screenGeometry(screenId);
+            if (!resolvedGeom.isValid()) {
+                qCWarning(lcOverlay) << "initializeOverlay: no geometry for screen" << screenId
+                                     << ", skipping it until one resolves";
+                continue;
+            }
             targetIds.append(screenId);
             targetPhysScreens.insert(screenId, physScreen);
-            targetGeometries.insert(screenId, mgr->screenGeometry(screenId));
+            targetGeometries.insert(screenId, resolvedGeom);
         }
     } else {
         for (auto* screen : Utils::allScreens()) {
@@ -579,8 +596,9 @@ void OverlayService::restampZoneHighlights()
             // the compare: those are ABOVE the branch and paid unconditionally, so they are the
             // price of the skip, not its saving. What the continue actually skips is the two
             // full-list scans below (anyZoneUsesLayoutPreview, and the highlightedCount loop on a
-            // shader slot), the two writes they gate, and the unconditional zones write above
-            // them. Worth taking at cursor rate, which is why the branch is here at all.
+            // shader slot), the `useShader` property read that gates the second of them, the two
+            // writes they gate, and the unconditional zones write above them. Worth taking at
+            // cursor rate, which is why the branch is here at all.
             continue;
         }
         writeQmlProperty(slot, QString(OverlayQmlPropertyNames::Zones), patched);
@@ -683,6 +701,17 @@ void OverlayService::clearHighlight()
 void OverlayService::updateMousePosition(int cursorX, int cursorY)
 {
     if (!m_visible) {
+        return;
+    }
+    // Idle-quiesce gate, the term the sibling highlight paths below already carry. drag.cpp keeps
+    // pushing the cursor through a trigger-release pause, and says so outright: while idled
+    // m_overlayShown stays true BY DESIGN. A mousePosition change reaches ShaderEffect::setIMouse,
+    // which calls QQuickItem::update(), so every cursor event requested a render on every live
+    // overlay window after scheduleIdleQuiesce had stopped the frame loop and released the layer
+    // FBOs. setIdleForDragPause never clears `loaded`, so the content Loader is still active and
+    // the binding chain is still live. The cost of gating is one stale tick on resume, read only by
+    // hoveredZoneIndex's pre-Ready hover fallback, and the next cursor event settles it.
+    if (m_overlayIdled) {
         return;
     }
 

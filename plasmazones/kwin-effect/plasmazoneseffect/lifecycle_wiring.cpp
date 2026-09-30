@@ -1015,8 +1015,7 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     // (connector names may be reassigned, physical screen geometry changes invalidate
     // virtual screen absolute geometry)
     connect(KWin::effects, &KWin::EffectsHandler::virtualScreenGeometryChanged, this, [this]() {
-        m_idCaches.screenIdCache.clear();
-        m_idCaches.connectedPhysicalIdsValid = false;
+        clearScreenIdCache();
         m_lastEffectiveScreenId.clear();
         // A rotation or mode change keeps the same connector and EDID id, so
         // no per-window outputChanged fires — yet ScreenOrientation is a

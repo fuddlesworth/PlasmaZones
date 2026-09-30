@@ -606,6 +606,9 @@ private Q_SLOTS:
         above.remove(QStringLiteral("bufferScales"));
         const PackResult aboveMax = validateSurface(tmp, QStringLiteral("sf-fc-max"), above, surfaceBodyReading({}));
         QVERIFY2(aboveMax.report.contains(QStringLiteral("bufferScale out of range")), qPrintable(aboveMax.report));
+        // Counted for the reason this slot argues above: two, the louder missing-shader lint plus
+        // the range line. A substring negative alone cannot say "and nothing else".
+        QCOMPARE(aboveMax.errors, 2);
         // But the TYPE arm is deliberately NOT gated: "falls back to 1.0" is true on a fail-closed
         // chain too, because fromJson's non-numeric branch and the coherence block both set 1.0.
         // Gating it once silenced a true diagnostic, so this pins the un-gating.
@@ -613,9 +616,11 @@ private Q_SLOTS:
         typed.insert(QStringLiteral("id"), QStringLiteral("sf-fc-type"));
         typed.insert(QStringLiteral("bufferScale"), QStringLiteral("0.5"));
         typed.remove(QStringLiteral("bufferScales"));
-        typed.remove(QStringLiteral("depthBuffer"));
         const PackResult typeArm = validateSurface(tmp, QStringLiteral("sf-fc-type"), typed, surfaceBodyReading({}));
         QVERIFY2(typeArm.report.contains(QStringLiteral("bufferScale is not a number")), qPrintable(typeArm.report));
+        // Two again, same pair. The `depthBuffer` removal that used to sit here was dead: the base
+        // fixture no longer declares the key, so `typed` never carried it.
+        QCOMPARE(typeArm.errors, 2);
 
         // Control: the identical keys on a chain that DOES resolve still draw them, or the gate
         // would have silenced the arms rather than scoping them. The depth pairing is deliberately
@@ -645,10 +650,17 @@ private Q_SLOTS:
         QTemporaryDir tmp;
         REQUIRE_SURFACE_FIXTURE(tmp);
 
-        const auto runWith = [&tmp](const QString& name, double packWide, const QJsonArray& scales) {
+        // @p passes exists so a multi-pass leg can keep bufferScales the SAME LENGTH as
+        // bufferShaders. Every buffer array has to, or lintBufferArrayLen fires and each exact
+        // count below is wrong — the fragility the sibling slot above spells out.
+        const auto runWith = [&tmp](const QString& name, double packWide, const QJsonArray& scales, int passes = 1) {
             QJsonObject obj = surfacePack(name, QJsonArray{});
             obj.insert(QStringLiteral("multipass"), true);
-            obj.insert(QStringLiteral("bufferShaders"), QJsonArray{surfaceFillerBufferName()});
+            QJsonArray bufferShaders;
+            for (int i = 0; i < passes; ++i) {
+                bufferShaders.append(surfaceFillerBufferName());
+            }
+            obj.insert(QStringLiteral("bufferShaders"), bufferShaders);
             obj.insert(QStringLiteral("depthBuffer"), true);
             obj.insert(QStringLiteral("bufferScale"), packWide);
             obj.insert(QStringLiteral("bufferScales"), scales);
@@ -661,20 +673,61 @@ private Q_SLOTS:
         QVERIFY2(!agree.report.contains(needle), qPrintable(agree.report));
         QCOMPARE(agree.errors, 0);
 
-        // Agreeing across SEVERAL passes, including a slot the pack does not declare: the runtime
-        // fills those with the pack-wide scale, so they cannot diverge either.
-        const PackResult agreeMulti = runWith(QStringLiteral("sf-dx-b"), 0.25, QJsonArray{0.25, 0.25});
+        // Agreeing across SEVERAL passes. TWO passes and two scales: an earlier version declared
+        // one pass with two scales and called the surplus entry "a slot the pack does not declare",
+        // which is the opposite shape, drew an unasserted length error, and left the leg a
+        // duplicate of `agree`.
+        const PackResult agreeMulti = runWith(QStringLiteral("sf-dx-b"), 0.25, QJsonArray{0.25, 0.25}, 2);
         QVERIFY2(!agreeMulti.report.contains(needle), qPrintable(agreeMulti.report));
+        QCOMPARE(agreeMulti.errors, 0);
 
         // DIVERGING: one entry differs from the pack-wide scale, which is the case the daemon's
-        // pinning actually discards, so the lint fires.
+        // pinning actually discards, so the lint fires. One error, the depth line alone.
         const PackResult diverge = runWith(QStringLiteral("sf-dx-c"), 0.5, QJsonArray{0.25});
         QVERIFY2(diverge.report.contains(needle), qPrintable(diverge.report));
+        QCOMPARE(diverge.errors, 1);
 
         // CLAMPED divergence does not count: both sides clamp to the same bound, so a pack whose
-        // raw values differ but whose effective ones agree is not nagged.
+        // raw values differ but whose effective ones agree is not nagged. Two, both from the range
+        // arms — the count is what pins that the silence is not covering a third line.
         const PackResult clamped = runWith(QStringLiteral("sf-dx-d"), 9.0, QJsonArray{5.0});
         QVERIFY2(!clamped.report.contains(needle), qPrintable(clamped.report));
+        QCOMPARE(clamped.errors, 2);
+
+        // A MISTYPED entry cannot diverge, and the isDouble() guard in the loop is what says so.
+        // fromJson appends the pack-wide scale in place of a non-number, so that slot is equal by
+        // construction; drop the guard and clampScale(0) reads as a divergence next to the
+        // not-a-number line, which is the one line the author needs.
+        const PackResult mistyped = runWith(QStringLiteral("sf-dx-e"), 0.25, QJsonArray{QStringLiteral("0.5")});
+        QVERIFY2(!mistyped.report.contains(needle), qPrintable(mistyped.report));
+        QCOMPARE(mistyped.errors, 1);
+
+        // PAST THE PASS BUDGET, and this is the leg the unbounded loop failed. fromJson caps
+        // bufferScales at kMaxBufferPasses, so a divergent entry past the cap reaches neither host.
+        // The two over-cap lints reject the pack on their own; what this pins is that the depth arm
+        // adds no third claim about a divergence that provably cannot occur.
+        const int depthCap = PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses;
+        QJsonArray pastBudget;
+        for (int i = 0; i < depthCap; ++i) {
+            pastBudget.append(0.5);
+        }
+        pastBudget.append(0.25);
+        const PackResult past = runWith(QStringLiteral("sf-dx-f"), 0.5, pastBudget, depthCap);
+        QVERIFY2(!past.report.contains(needle), qPrintable(past.report));
+        QCOMPARE(past.errors, 2);
+
+        // THE chainResolves GATE, which nothing covered. On a fail-closed chain the registry's
+        // coherence block sets useDepthBuffer false and clears bufferScales, so nothing is pinned
+        // and the claim would be false. Plain validateSurface, so the declared pass cannot resolve.
+        QJsonObject broken = surfacePack(QStringLiteral("sf-dx-g"), QJsonArray{});
+        broken.insert(QStringLiteral("multipass"), true);
+        broken.insert(QStringLiteral("bufferShaders"), QJsonArray{QStringLiteral("typo.frag")});
+        broken.insert(QStringLiteral("depthBuffer"), true);
+        broken.insert(QStringLiteral("bufferScale"), 0.5);
+        broken.insert(QStringLiteral("bufferScales"), QJsonArray{0.25});
+        const PackResult failClosed = validateSurface(tmp, QStringLiteral("sf-dx-g"), broken, surfaceBodyReading({}));
+        QVERIFY2(!failClosed.report.contains(needle), qPrintable(failClosed.report));
+        QCOMPARE(failClosed.errors, 1);
     }
 
     /// A texture or preview path naming a DIRECTORY. QFile::exists() answers true for one, so both
@@ -816,19 +869,33 @@ private Q_SLOTS:
         // tokens at index cap-1 with only cap-1 PASSES, so the entries are inside the loader's
         // budget while being surplus against the pass count: the claims must still print. A
         // mutation to the wrong bound passes every other leg and is caught only here.
+        //
+        // ITS OWN ARRAYS, with the tokens at index cap-1. An earlier version reused
+        // inWraps/inFilters, which put them at index 0 — inside BOTH candidate bounds, so the leg
+        // discriminated nothing and was the control above plus two unasserted length errors.
         QJsonArray fewBuffers;
-        for (int i = 0; i < cap - 1; ++i) {
-            fewBuffers.append(surfaceFillerBufferName());
+        QJsonArray probeWraps;
+        QJsonArray probeFilters;
+        for (int i = 0; i < cap; ++i) {
+            probeWraps.append(i == cap - 1 ? QStringLiteral("repeat") : QStringLiteral("clamp"));
+            probeFilters.append(i == cap - 1 ? QStringLiteral("nosuchfilter") : QStringLiteral("linear"));
+            if (i < cap - 1) {
+                fewBuffers.append(surfaceFillerBufferName());
+            }
         }
         QJsonObject inBudget = obj;
         inBudget.insert(QStringLiteral("id"), QStringLiteral("sf-cap-probe"));
         inBudget.insert(QStringLiteral("bufferShaders"), fewBuffers);
-        inBudget.insert(QStringLiteral("bufferWraps"), inWraps);
-        inBudget.insert(QStringLiteral("bufferFilters"), inFilters);
+        inBudget.insert(QStringLiteral("bufferWraps"), probeWraps);
+        inBudget.insert(QStringLiteral("bufferFilters"), probeFilters);
         const PackResult probe =
             validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-cap-probe"), inBudget, surfaceBodyReading({}));
         QVERIFY2(probe.report.contains(QStringLiteral("which the DAEMON honours")), qPrintable(probe.report));
         QVERIFY2(probe.report.contains(QStringLiteral("not in vocabulary")), qPrintable(probe.report));
+        // Four: one length lint per array (cap entries against cap-1 passes) plus the two claims.
+        // Narrowing the bound to declaredBuffers.size() drops index cap-1 and takes both claims
+        // with it, which is the mutation this leg exists to fail on.
+        QCOMPARE(probe.errors, 4);
     }
 
     /// The `builtin:` SPELLING diagnostics, all three shapes, because the arm that reports a

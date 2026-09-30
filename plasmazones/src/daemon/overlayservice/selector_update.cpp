@@ -13,7 +13,6 @@
 #include <PhosphorScreens/Manager.h>
 #include "core/utils/utils.h"
 #include "core/types/zoneselectorlayout.h"
-#include "config/configdefaults.h"
 #include <QScreen>
 #include <QQuickItem>
 #include <QQmlEngine>

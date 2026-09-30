@@ -1498,7 +1498,7 @@ private:
      * The QPA plugin binds the Wayland output once during LayerSurface/platform
      * window construction. Set QWindow::screen() BEFORE the window is shown.
      */
-    static void assertWindowOnScreen(QWindow* window, QScreen* screen, const QRect& geometry = QRect());
+    static void assertWindowOnScreen(QWindow* window, QScreen* screen, const QRect& geometry);
 
     /**
      * @brief Prepare the layout OSD window for display.

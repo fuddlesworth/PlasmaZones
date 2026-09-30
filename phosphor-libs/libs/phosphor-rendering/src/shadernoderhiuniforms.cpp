@@ -166,9 +166,10 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
     // null check, so the pointer is never null here. The `rhi ? … : 0` this replaces was
     // dead, and two different spellings of one precondition in one function leave a reader
     // unable to tell which states it.
-    const int audioDeviceMax = rhi->resourceLimit(QRhi::TextureSizeMax);
+    // Named for the limit, not the caller: the user-texture block below clamps against it too.
+    const int textureSizeMax = rhi->resourceLimit(QRhi::TextureSizeMax);
     const int rawAudioBars = static_cast<int>(m_audioSpectrum.size());
-    const int pendingAudioBars = (audioDeviceMax > 0) ? qMin(rawAudioBars, audioDeviceMax) : rawAudioBars;
+    const int pendingAudioBars = (textureSizeMax > 0) ? qMin(rawAudioBars, textureSizeMax) : rawAudioBars;
     state.audioSpectrumSize = qMin(boundAudioWidth, pendingAudioBars);
 
     // User texture resolutions (bindings 11-14) — resolved node-side.
@@ -187,8 +188,8 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
     for (int i = 0; i < kMaxUserTextures; ++i) {
         if (m_userTextures[i] && !m_userTextureImages[i].isNull()) {
             const QSize imgSize = m_userTextureImages[i].size();
-            const int wpx = audioDeviceMax > 0 ? qMin(imgSize.width(), audioDeviceMax) : imgSize.width();
-            const int hpx = audioDeviceMax > 0 ? qMin(imgSize.height(), audioDeviceMax) : imgSize.height();
+            const int wpx = textureSizeMax > 0 ? qMin(imgSize.width(), textureSizeMax) : imgSize.width();
+            const int hpx = textureSizeMax > 0 ? qMin(imgSize.height(), textureSizeMax) : imgSize.height();
             state.textureResolution[i][0] = static_cast<float>(wpx);
             state.textureResolution[i][1] = static_cast<float>(hpx);
         } else {

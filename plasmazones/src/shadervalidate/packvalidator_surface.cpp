@@ -342,6 +342,22 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
                     PhosphorShaders::spliceAfterVersion(expanded, SurfaceShaderRegistry::paramPreamble(eff));
                 const ShaderCompiler::Result result = ShaderCompiler::compile(spliced.toUtf8(), QShader::FragmentStage);
                 errors += reportCompile(out, fragLabel, result, declaredParamNames(eff.parameters));
+                // A NOTE, not a lint, and deliberately so: shared/surface_backdrop.glsl tells
+                // authors to gate styling on uHasBackdrop for an explicit fallback, so reading the
+                // backdrop without the flag is a SUPPORTED pattern. What an author cannot see is
+                // that the flag is a necessary precondition rather than a hint — the compositor
+                // gates the whole capture on needsBackdrop, so without it uHasBackdrop stays false
+                // and backdropTexel() returns the transparent fallback on every route. The
+                // multipass arm hard-lints this for the two builtin passes that have backdropTexel
+                // as their ONLY source; here it can only be a note. Scanned on the PACK's own
+                // source, not the expanded TU, because the shared helper defines these names and
+                // merely including it would then read as using them.
+                if (!doc.object().value(QLatin1String("needsBackdrop")).toBool()
+                    && (raw.contains(QLatin1String("backdropTexel")) || raw.contains(QLatin1String("uBackdrop")))) {
+                    out << "  " << padLabel(QStringLiteral("note"))
+                        << "reads the backdrop (backdropTexel/uBackdrop) but \"needsBackdrop\" is not true, so "
+                           "nothing is captured and uHasBackdrop stays false\n";
+                }
             }
         }
     }
