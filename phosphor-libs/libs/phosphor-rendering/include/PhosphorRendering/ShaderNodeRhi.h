@@ -1089,6 +1089,28 @@ private:
     /// in, says what supplies its next frame and what a static item loses if nothing does.
     bool m_warnedWallpaperCreateFailed = false;
     std::array<bool, kMaxUserTextures> m_userTextureCreateWarned = {};
+
+    /// One-shot latch for the mipmap-fallback warning in ensureBufferTarget. It was the only
+    /// create-adjacent warning in that file with no latch, and it sits on a per-frame path: an
+    /// animated resize moves passSize() nearly every frame, which is the same vsync flood
+    /// m_depthCreateWarned exists to stop. m_bufferTargetCreateWarned cannot serve, because it
+    /// is cleared on every successful create and the fallback path reaches one. Cleared in
+    /// releaseRhiResources only, so the message is once per node per device lifetime.
+    bool m_mipmapFallbackWarned = false;
+
+    /// Bounded retry budget for the 1x1 dummy channel create, modelled on
+    /// m_depthCreateRetries. Its failure is the one ensureDummyChannelResources calls the
+    /// hardest in the file: every unbound channel, user-texture, wallpaper and depth slot
+    /// substitutes that texture, so a false there makes prepare() bail and the node paint
+    /// nothing. An ANIMATED node retries anyway, because ensurePipeline runs unconditionally
+    /// every prepare(); a STATIC one had nothing scheduling the retry, which is exactly the
+    /// split the depth apparatus was built for. Cleared on the success path and in
+    /// releaseRhiResources.
+    int m_dummyCreateRetries = 0;
+
+    /// Ask for the frame that retries a failed dummy-channel create, while the bound allows
+    /// it. Non-virtual, so adding it changes no member offset.
+    void requestDummyCreateRetry();
 };
 
 /** Result of warmShaderBakeCacheForPaths for reporting to UI. */

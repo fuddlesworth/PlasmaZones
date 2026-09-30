@@ -281,7 +281,18 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
     // numeric parameter, so a typo does not fail anything: the pack simply asks
     // for no margin and clips at the frame edge, which looks like a shader bug.
     {
-        const QString paddingParam = meta.value(QLatin1String("paddingParam")).toString();
+        // NON-STRING FIRST, the same shape lintSingleToken and the per-texture wrap arm use.
+        // fromJson reads this with toString(), which answers EMPTY for a number, array or
+        // object with no journal warning, and the block below is gated on !isEmpty() — so a
+        // mistyped value got no diagnostic in the validator AND none at load, and the pack
+        // shipped green with no outer padding.
+        const QJsonValue rawPadding = meta.value(QLatin1String("paddingParam"));
+        if (!rawPadding.isUndefined() && !rawPadding.isNull() && !rawPadding.isString()) {
+            lints << QStringLiteral(
+                "paddingParam is not a string, which is ignored at load, so the pack "
+                "requests no padding and clips at the frame edge");
+        }
+        const QString paddingParam = rawPadding.toString();
         if (!paddingParam.isEmpty()) {
             bool resolves = false;
             for (const SurfaceShaderEffect::ParameterInfo& p : eff.parameters) {
@@ -316,7 +327,15 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
     // does not exist, so either mistake ships green and shows up as a pack with
     // no thumbnail. Same shape as the texture branch above.
     {
-        const QString preview = meta.value(QLatin1String("preview")).toString();
+        // Non-string first, for the same reason as paddingParam above: toString() answers empty
+        // and the block is !isEmpty()-gated, so a mistyped preview shipped green with no
+        // thumbnail and nothing said why.
+        const QJsonValue rawPreview = meta.value(QLatin1String("preview"));
+        if (!rawPreview.isUndefined() && !rawPreview.isNull() && !rawPreview.isString()) {
+            lints << QStringLiteral(
+                "preview is not a string, which is ignored at load, so the pack shows no thumbnail");
+        }
+        const QString preview = rawPreview.toString();
         if (!preview.isEmpty()) {
             const auto confined = confinedPackPath(packDir, preview);
             if (!confined) {
@@ -881,8 +900,17 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         }
         // Vocabulary, on all four spellings. validatedWrap / validatedFilter
         // clear an unrecognised token to empty with a journal warning only.
+        // BOUNDED TO WHAT THE LOADER KEEPS, like the buffer-shader loop and the bufferScales
+        // loop: fromJson caps both arrays at kMaxBufferPasses and drops the surplus, so an
+        // entry past the budget never reaches the struct and reporting on it claimed the
+        // daemon honours a value that was thrown away. The over-length arm still names the
+        // surplus by count, which is the part an author can act on.
         const auto lintSurfaceTokens = [&lints, &meta](QLatin1String key, bool wrap) {
-            for (const QJsonValue& v : meta.value(key).toArray()) {
+            const QJsonArray arr = meta.value(key).toArray();
+            const qsizetype kept =
+                std::min<qsizetype>(arr.size(), PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses);
+            for (qsizetype idx = 0; idx < kept; ++idx) {
+                const QJsonValue v = arr.at(idx);
                 // A NON-STRING entry was a wrap/filter fault that reached
                 // the user with no diagnostic anywhere, not even a journal line:
                 // QJsonValue::toString() answers empty for a number, bool, null,
@@ -958,8 +986,13 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
             QStringList offending;
             const QJsonValue value = meta.value(key);
             if (plural) {
-                for (const QJsonValue& v : value.toArray()) {
-                    const QString tok = v.toString();
+                // Capped for the same reason as the vocabulary arm above: an entry past the
+                // pass budget is dropped by fromJson, so the daemon honours nothing there.
+                const QJsonArray arr = value.toArray();
+                const qsizetype kept =
+                    std::min<qsizetype>(arr.size(), PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses);
+                for (qsizetype idx = 0; idx < kept; ++idx) {
+                    const QString tok = arr.at(idx).toString();
                     if (reportable(tok)) {
                         offending << tok;
                     }

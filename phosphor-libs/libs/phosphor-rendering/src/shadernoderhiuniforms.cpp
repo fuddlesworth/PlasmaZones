@@ -891,6 +891,8 @@ void ShaderNodeRhi::releaseRhiResources()
     m_warnedWallpaperBindingOmitted = false;
     m_warnedDepthBindingOmitted = false;
     m_dummyChannelWarned = false;
+    m_dummyCreateRetries = 0;
+    m_mipmapFallbackWarned = false;
     m_halfFloatUnsupportedWarned = false;
     m_bufferTargetCreateWarned = false;
     m_bufferSamplerCreateWarned = false;

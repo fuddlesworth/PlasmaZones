@@ -91,6 +91,26 @@ void ShaderNodeRhi::clearDepthCreateFailure()
     m_depthCreateFailedSize = QSize();
 }
 
+void ShaderNodeRhi::requestDummyCreateRetry()
+{
+    // Same shape and same bound as requestDepthCreateRetry above, and placed beside it because
+    // this is one apparatus with two clients. An ANIMATED node never needed it (ensurePipeline
+    // runs unconditionally every prepare(), so the create is retried anyway); a STATIC one had
+    // nothing scheduling a retry at all, so a single transient failure left it blank for the rest
+    // of its life. Spent budget returns BEFORE the increment, so the counter stops at the bound
+    // and the give-up line is one-shot per budget by structure.
+    if (m_dummyCreateRetries >= 3) {
+        return;
+    }
+    if (++m_dummyCreateRetries < 3) {
+        requestAnotherFrame();
+        return;
+    }
+    qCWarning(lcShaderNode) << "Dummy channel texture or sampler creation failed after 3 attempts; no longer "
+                               "requesting retry frames until the node's resources change. Nothing will be drawn: "
+                               "every unbound channel, user-texture, wallpaper and depth slot substitutes it";
+}
+
 bool ShaderNodeRhi::ensureBufferTarget()
 {
     if (m_width <= 0 || m_height <= 0) {
@@ -340,8 +360,15 @@ bool ShaderNodeRhi::ensureBufferTarget()
         // worked (as plain linear) before mipmap meant anything. Retry once
         // without the mip flags and say so.
         if (wantMips && !tex->create()) {
-            qCWarning(lcShaderNode) << "Buffer texture with mipmaps unavailable at" << size
-                                    << "— falling back to a single level, 'mipmap' will sample as 'linear'";
+            // Latched: this arm is re-entered per frame while an animated resize moves
+            // passSize(), and it was the file's one unlatched create-adjacent warning.
+            if (!m_mipmapFallbackWarned) {
+                m_mipmapFallbackWarned = true;
+                qCWarning(lcShaderNode) << "Buffer texture with mipmaps unavailable at" << size
+                                        << "— falling back to a single level, 'mipmap' will sample as 'linear'."
+                                        << "A create can also fail for size or memory reasons, so this names the"
+                                        << "mip flags as the likeliest cause rather than the certain one";
+            }
             tex.reset(rhi->newTexture(bufferFormat, size, 1, baseFlags));
         }
         // Every failure exit clears what it allocated. Callers gate the retry
@@ -589,6 +616,7 @@ bool ShaderNodeRhi::ensureDummyChannelResources(QRhi* rhi)
                                         << "— every unbound channel, user-texture, wallpaper and depth slot "
                                            "substitutes it, so nothing can be drawn";
             }
+            requestDummyCreateRetry();
             return false;
         }
     }
@@ -603,15 +631,16 @@ bool ShaderNodeRhi::ensureDummyChannelResources(QRhi* rhi)
                                         << "— every unbound channel, user-texture, wallpaper and depth slot "
                                            "substitutes it, so nothing can be drawn";
             }
+            requestDummyCreateRetry();
             return false;
         }
     }
-    // A success clears the latch, so a failure that recurs after a genuine
-    // recovery is reported again rather than swallowed for the session. Both arms
-    // above reset their object and return false and both builders re-enter next
-    // prepare(), so recovery is reachable. This was the file's one create-failure
-    // latch without the clear, guarding its hardest failure.
+    // A success clears the latch AND the retry budget, so a failure that recurs after a
+    // genuine recovery is both reported and retried again rather than swallowed for the
+    // session. Both arms above reset their object and return false and both builders re-enter
+    // next prepare(), so recovery is reachable.
     m_dummyChannelWarned = false;
+    m_dummyCreateRetries = 0;
     return true;
 }
 

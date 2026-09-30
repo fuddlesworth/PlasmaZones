@@ -647,6 +647,101 @@ private Q_SLOTS:
         QVERIFY2(!goneResult.report.contains(QStringLiteral("is not a file")), qPrintable(goneResult.report));
     }
 
+    /// A NON-STRING `preview` or `paddingParam` shipped the pack GREEN with no diagnostic
+    /// anywhere, in the validator or the journal: fromJson reads both with toString(), which
+    /// answers empty for a number or an array, and both lint blocks were gated on !isEmpty().
+    /// This is the same shape that was closed for the wrap/filter keys and the per-texture wrap;
+    /// these two were what remained.
+    void aNonStringPreviewOrPaddingParamIsLinted()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        const auto runWith = [&tmp](const QString& name, QLatin1String key, const QJsonValue& value) {
+            QJsonObject obj = surfacePack(name, QJsonArray{});
+            obj.insert(QString(key), value);
+            return validateSurface(tmp, name, obj, surfaceBodyReading({}));
+        };
+
+        const PackResult prevNum = runWith(QStringLiteral("sf-ns-a"), QLatin1String("preview"), 5);
+        QVERIFY2(prevNum.report.contains(QStringLiteral("preview is not a string")), qPrintable(prevNum.report));
+        const PackResult prevArr =
+            runWith(QStringLiteral("sf-ns-b"), QLatin1String("preview"), QJsonArray{QStringLiteral("a.png")});
+        QVERIFY2(prevArr.report.contains(QStringLiteral("preview is not a string")), qPrintable(prevArr.report));
+
+        const PackResult padNum = runWith(QStringLiteral("sf-ns-c"), QLatin1String("paddingParam"), 5);
+        QVERIFY2(padNum.report.contains(QStringLiteral("paddingParam is not a string")), qPrintable(padNum.report));
+        const PackResult padArr =
+            runWith(QStringLiteral("sf-ns-d"), QLatin1String("paddingParam"), QJsonArray{QStringLiteral("w")});
+        QVERIFY2(padArr.report.contains(QStringLiteral("paddingParam is not a string")), qPrintable(padArr.report));
+
+        // ABSENT and NULL stay silent on both, or the arm would fire on every idiomatic pack.
+        const PackResult absent =
+            validateSurface(tmp, QStringLiteral("sf-ns-e"), surfacePack(QStringLiteral("sf-ns-e"), QJsonArray{}),
+                            surfaceBodyReading({}));
+        QVERIFY2(!absent.report.contains(QStringLiteral("is not a string")), qPrintable(absent.report));
+        QCOMPARE(absent.errors, 0);
+        const PackResult nulled =
+            runWith(QStringLiteral("sf-ns-f"), QLatin1String("preview"), QJsonValue(QJsonValue::Null));
+        QVERIFY2(!nulled.report.contains(QStringLiteral("is not a string")), qPrintable(nulled.report));
+    }
+
+    /// The wrap/filter arrays were read UNCAPPED, so an entry past the pass budget drew both the
+    /// vocabulary line and the daemon-honours claim for a value fromJson DROPS rather than keeps.
+    /// The buffer-shader loop and the bufferScales loop were already bounded to what the loader
+    /// keeps; these two were missed. The over-length arm still reports the surplus by count,
+    /// which is the part an author can act on.
+    void wrapAndFilterArraysAreBoundedToWhatTheLoaderKeeps()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        const int cap = PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses;
+        QJsonArray buffers;
+        for (int i = 0; i < cap; ++i) {
+            buffers.append(surfaceFillerBufferName());
+        }
+        // cap empties, then one past-budget entry carrying a non-default token AND a bad one.
+        QJsonArray wraps;
+        QJsonArray filters;
+        for (int i = 0; i < cap; ++i) {
+            wraps.append(QStringLiteral("clamp"));
+            filters.append(QStringLiteral("linear"));
+        }
+        wraps.append(QStringLiteral("repeat"));
+        filters.append(QStringLiteral("nosuchfilter"));
+
+        QJsonObject obj = surfacePack(QStringLiteral("sf-cap"), QJsonArray{});
+        obj.insert(QStringLiteral("multipass"), true);
+        obj.insert(QStringLiteral("bufferShaders"), buffers);
+        obj.insert(QStringLiteral("bufferWraps"), wraps);
+        obj.insert(QStringLiteral("bufferFilters"), filters);
+        const PackResult r = validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-cap"), obj, surfaceBodyReading({}));
+
+        // The surplus is still reported by COUNT, which is the actionable part.
+        QVERIFY2(r.report.contains(QStringLiteral("bufferWraps has")), qPrintable(r.report));
+        // But neither past-budget entry draws a claim about a value the loader threw away.
+        QVERIFY2(!r.report.contains(QStringLiteral("which the DAEMON honours")), qPrintable(r.report));
+        QVERIFY2(!r.report.contains(QStringLiteral("not in vocabulary")), qPrintable(r.report));
+
+        // Control: the same tokens INSIDE the budget still draw both, or the cap would have
+        // silenced the arms rather than bounded them.
+        QJsonArray inWraps;
+        QJsonArray inFilters;
+        for (int i = 0; i < cap; ++i) {
+            inWraps.append(i == 0 ? QStringLiteral("repeat") : QStringLiteral("clamp"));
+            inFilters.append(i == 0 ? QStringLiteral("nosuchfilter") : QStringLiteral("linear"));
+        }
+        QJsonObject ok = obj;
+        ok.insert(QStringLiteral("id"), QStringLiteral("sf-cap-ok"));
+        ok.insert(QStringLiteral("bufferWraps"), inWraps);
+        ok.insert(QStringLiteral("bufferFilters"), inFilters);
+        const PackResult live =
+            validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-cap-ok"), ok, surfaceBodyReading({}));
+        QVERIFY2(live.report.contains(QStringLiteral("which the DAEMON honours")), qPrintable(live.report));
+        QVERIFY2(live.report.contains(QStringLiteral("not in vocabulary")), qPrintable(live.report));
+    }
+
     /// The `builtin:` SPELLING diagnostics, all three shapes, because the arm that reports a
     /// mis-cased prefix had no test at all and could have been deleted with the suite green.
     /// The two failures land in DIFFERENT arms, which is the whole point: a bad PREFIX makes
