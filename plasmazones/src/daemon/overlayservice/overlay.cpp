@@ -578,9 +578,9 @@ void OverlayService::restampZoneHighlights()
             // claim in syncCavaState is the correct one. Nor is it the read-back, the patch or
             // the compare: those are ABOVE the branch and paid unconditionally, so they are the
             // price of the skip, not its saving. What the continue actually skips is the two
-            // full-list scans below (anyZoneUsesLayoutPreview, and the highlightedCount loop on
-            // a shader slot) and the three property writes they feed. Worth taking at cursor
-            // rate, which is why the branch is here rather than writing unconditionally.
+            // full-list scans below (anyZoneUsesLayoutPreview, and the highlightedCount loop on a
+            // shader slot), the two writes they gate, and the unconditional zones write above
+            // them. Worth taking at cursor rate, which is why the branch is here at all.
             continue;
         }
         writeQmlProperty(slot, QString(OverlayQmlPropertyNames::Zones), patched);
@@ -687,14 +687,28 @@ void OverlayService::updateMousePosition(int cursorX, int cursorY)
     }
 
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+        // The sentinel gate every sibling per-frame loop carries (highlightZone, highlightZones,
+        // restampZoneHighlights, refreshVisibleWindows). Without it this loop reached a DISMISSED
+        // slot on every cursor push: initializeOverlay Phase 2 dismisses every non-target key, the
+        // shell prewarm has already made an entry for each effective screen, and a dismiss nulls
+        // overlayPhysScreen and clears overlayGeometry while leaving the slot object alive. So on a
+        // mixed multi-monitor setup the excluded screens hit the debug line below at ~30 Hz for the
+        // whole drag, and the comment called that a transient beat.
+        //
+        // Skipping them loses nothing: mousePosition's only reader lives inside the slot's content
+        // Loader, whose `active` binding follows `loaded`, and every dismiss path clears that, so
+        // the content item is destroyed and there is no reader at all. The first tick after a
+        // re-show refreshes it. Behaviour-neutral besides, because a null overlayPhysScreen always
+        // accompanies a cleared overlayGeometry, so these entries already took the continue below.
+        if (!it.value().overlayPhysScreen) {
+            continue;
+        }
         if (QQuickItem* slot = it.value().mainOverlaySlot()) {
             const QRect targetGeom = it.value().overlayGeometry;
             if (!targetGeom.isValid()) {
-                // Expected-transient: during a virtual-screen reconfigure an
-                // overlay slot can exist for a beat before its geometry is
-                // resolved. updateMousePosition runs once per cursor-move
-                // event (~30 Hz), so warning here floods the journal for a
-                // condition that self-heals on the next geometry update.
+                // What is left after the gate above is the genuinely transient case: a LIVE overlay
+                // context whose geometry has not resolved yet, which the geometry watcher's next
+                // write settles. Debug rather than warning because this runs per cursor event.
                 qCDebug(lcOverlay) << "updateMousePosition: no overlay geometry for screen" << it.key()
                                    << ": skipping mouse position update";
                 continue;
@@ -998,9 +1012,8 @@ void OverlayService::destroyOverlayWindow(const QString& screenId)
     // not counting the CALLERS either — an earlier version of this sentence argued against a
     // number and then gave one, and got it wrong. Whether a given caller can flip a slot's type
     // is a property of the caller rather than of this release. The screen-teardown callers
-    // immediately
-    // destroyPassiveShell, where this is a harmless no-op on an about-to-be-freed slot.
-    // Mirrors dismissOverlayWindow's release.
+    // immediately call destroyPassiveShell, where this is a harmless no-op on an
+    // about-to-be-freed slot. Mirrors dismissOverlayWindow's release.
     releaseOverlaySlotTextures(it->mainOverlaySlot());
     it->labelsTextureHash = 0;
 }

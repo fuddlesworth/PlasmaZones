@@ -333,7 +333,6 @@ public:
     void setExcludedScreens(const QSet<QString>& screenIds);
 
     // Screen management
-    void setupForScreen(QScreen* screen);
     void handleScreenAdded(QScreen* screen);
     void handleScreenRemoved(QScreen* screen);
 

@@ -550,10 +550,12 @@ private Q_SLOTS:
         QVERIFY2(valid.report.contains(QStringLiteral("bufferFilters declares mipmap")), qPrintable(valid.report));
     }
 
-    /// The six divergence messages on a chain that FAILS CLOSED. The registry resets every buffer
-    /// key and drops the pack to single-pass when any entry does not resolve, so it creates no
-    /// buffer targets at all — every message describing what the daemon does with them is then
-    /// false. Only bufferFeedback was gated; its five siblings described targets that never exist.
+    /// The divergence messages on a chain that FAILS CLOSED. The registry resets every buffer key
+    /// and drops the pack to single-pass when any entry does not resolve, so it creates no buffer
+    /// targets at all, and every message describing what the daemon does with them is then false.
+    /// Only bufferFeedback was gated; every sibling described targets that never exist. No count
+    /// is given here on purpose: two rounds have moved which arms this fixture reaches, and a
+    /// numeral in a comment is the trap the helpers header warns about twice.
     void aFailClosedChainDrawsNoBufferDivergenceClaims()
     {
         QTemporaryDir tmp;
@@ -574,6 +576,10 @@ private Q_SLOTS:
         // both paths and is therefore UNGATED — the separate leg below pins that.
         obj.insert(QStringLiteral("bufferScale"), 0.001);
         // The PER-ENTRY scales, which were left ungated when their singular twin was gated.
+        // KEEP EVERY BUFFER ARRAY THE SAME LENGTH AS bufferShaders. The exact count below holds
+        // only because of that: lintBufferArrayLen is deliberately UNGATED (a length mismatch is
+        // decidable either way), so adding a pass without extending the arrays, or an entry
+        // without a pass, makes it fire and the count wrong.
         obj.insert(QStringLiteral("bufferScales"), QJsonArray{9});
         const PackResult r = validateSurface(tmp, QStringLiteral("sf-fc"), obj, surfaceBodyReading({}));
 
@@ -722,12 +728,16 @@ private Q_SLOTS:
 
         const PackResult prevNum = runWith(QStringLiteral("sf-ns-a"), QLatin1String("preview"), 5);
         QVERIFY2(prevNum.report.contains(QStringLiteral("preview is not a string")), qPrintable(prevNum.report));
+        // EXACTLY one line. Without a count, a change to toVariant().toString() would add a
+        // spurious "preview missing: 5" beside this and no leg would notice.
+        QCOMPARE(prevNum.errors, 1);
         const PackResult prevArr =
             runWith(QStringLiteral("sf-ns-b"), QLatin1String("preview"), QJsonArray{QStringLiteral("a.png")});
         QVERIFY2(prevArr.report.contains(QStringLiteral("preview is not a string")), qPrintable(prevArr.report));
 
         const PackResult padNum = runWith(QStringLiteral("sf-ns-c"), QLatin1String("paddingParam"), 5);
         QVERIFY2(padNum.report.contains(QStringLiteral("paddingParam is not a string")), qPrintable(padNum.report));
+        QCOMPARE(padNum.errors, 1);
         const PackResult padArr =
             runWith(QStringLiteral("sf-ns-d"), QLatin1String("paddingParam"), QJsonArray{QStringLiteral("w")});
         QVERIFY2(padArr.report.contains(QStringLiteral("paddingParam is not a string")), qPrintable(padArr.report));
@@ -743,11 +753,13 @@ private Q_SLOTS:
         QVERIFY2(!nulled.report.contains(QStringLiteral("is not a string")), qPrintable(nulled.report));
     }
 
-    /// The wrap/filter arrays were read UNCAPPED, so an entry past the pass budget drew both the
-    /// vocabulary line and the daemon-honours claim for a value fromJson DROPS rather than keeps.
-    /// The buffer-shader loop and the bufferScales loop were already bounded to what the loader
-    /// keeps; these two were missed. The over-length arm still reports the surplus by count,
-    /// which is the part an author can act on.
+    /// The wrap/filter arrays were read UNCAPPED, so an entry past the pass budget drew a claim
+    /// about a value fromJson DROPS rather than keeps: the vocabulary line for an invalid token, or
+    /// the daemon-honours claim for a valid non-default one. Not both for one entry — those two
+    /// arms are mutually exclusive, since the second requires the token to BE valid. The
+    /// buffer-shader loop and the bufferScales loop were already bounded to what the loader keeps;
+    /// these two were missed. The over-length arm still reports the surplus by count, which is the
+    /// part an author can act on.
     void wrapAndFilterArraysAreBoundedToWhatTheLoaderKeeps()
     {
         QTemporaryDir tmp;
@@ -797,6 +809,26 @@ private Q_SLOTS:
             validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-cap-ok"), ok, surfaceBodyReading({}));
         QVERIFY2(live.report.contains(QStringLiteral("which the DAEMON honours")), qPrintable(live.report));
         QVERIFY2(live.report.contains(QStringLiteral("not in vocabulary")), qPrintable(live.report));
+        QCOMPARE(live.errors, 2);
+
+        // THE BOUND IS kMaxBufferPasses, NOT declaredBuffers.size(), and the two fixtures above
+        // cannot tell them apart because both are `cap` there. This leg puts the same offending
+        // tokens at index cap-1 with only cap-1 PASSES, so the entries are inside the loader's
+        // budget while being surplus against the pass count: the claims must still print. A
+        // mutation to the wrong bound passes every other leg and is caught only here.
+        QJsonArray fewBuffers;
+        for (int i = 0; i < cap - 1; ++i) {
+            fewBuffers.append(surfaceFillerBufferName());
+        }
+        QJsonObject inBudget = obj;
+        inBudget.insert(QStringLiteral("id"), QStringLiteral("sf-cap-probe"));
+        inBudget.insert(QStringLiteral("bufferShaders"), fewBuffers);
+        inBudget.insert(QStringLiteral("bufferWraps"), inWraps);
+        inBudget.insert(QStringLiteral("bufferFilters"), inFilters);
+        const PackResult probe =
+            validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-cap-probe"), inBudget, surfaceBodyReading({}));
+        QVERIFY2(probe.report.contains(QStringLiteral("which the DAEMON honours")), qPrintable(probe.report));
+        QVERIFY2(probe.report.contains(QStringLiteral("not in vocabulary")), qPrintable(probe.report));
     }
 
     /// The `builtin:` SPELLING diagnostics, all three shapes, because the arm that reports a

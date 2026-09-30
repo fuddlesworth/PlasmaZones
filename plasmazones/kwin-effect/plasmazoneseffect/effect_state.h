@@ -27,6 +27,7 @@
 
 namespace KWin {
 class EffectWindow;
+class LogicalOutput;
 }
 
 namespace PlasmaZones {
@@ -294,6 +295,17 @@ struct IdCacheState
     // set lookup instead of an O(outputs) string-building scan per call.
     QSet<QString> connectedPhysicalIds;
     bool connectedPhysicalIdsValid = false;
+
+    // Screen id RECORDED PER OUTPUT, so a removal reads the spelling its state was published
+    // under instead of recomputing one. The recompute is unreliable on a MULTI-output removal of
+    // identical monitors: KWin prunes every removed output from its list before emitting the
+    // first screenRemoved, so once the cache is dropped mid-handler the duplicate scan can no
+    // longer see the departed twin, and a suffixed "baseId/connector" key collapses to a bare
+    // baseId. That defeats the two teardown clears keyed on it. Deliberately NOT cleared by
+    // clearScreenIdCache, which is the whole point: it must survive the mid-handler drop.
+    // Erased when its output goes, and on add, so a raw pointer cannot outlive the output or be
+    // read after a later hotplug lands at the same address.
+    QHash<const KWin::LogicalOutput*, QString> screenIdByOutput;
 
     // Window ID cache: EffectWindow* → "appId|uuid" (populated on first getWindowId call,
     // cleared in slotWindowClosed/windowDeleted). Eliminates 3-5 QString allocations per

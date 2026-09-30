@@ -133,6 +133,12 @@ QString PlasmaZonesEffect::outputScreenId(const KWin::LogicalOutput* output, con
     // the caching stopped a later unexcluded caller "recomputing the suffixed form from a
     // screens() list that still holds the dying twin"; that list does not hold it.
     m_idCaches.screenIdCache.insert(connectorName, result);
+    // Recorded per OUTPUT as well, on the miss path only. onScreenRemoved reads this instead of
+    // recomputing, because a recompute is only reproducible while the peer set is intact. The
+    // cache-hit early return above deliberately does not write: clearScreenIdCache runs on every
+    // add, so a connector cannot be warm under a different output than the one that warmed it, and
+    // writing on the hit path would add a hash insert to the ~30 Hz drag path this cache protects.
+    m_idCaches.screenIdByOutput.insert(output, result);
     return result;
 }
 
@@ -750,6 +756,11 @@ void PlasmaZonesEffect::onScreenAdded(KWin::LogicalOutput* output)
     // scrollTrackedScreenFor's liveness gate answers from the pre-plug set
     // for the whole cascade.
     clearScreenIdCache();
+    // Belt-and-braces against address reuse: KWin allocates a fresh LogicalOutput when the backend
+    // output does not match an existing one, and that allocation can land where a freed one was. A
+    // stale recorded spelling under the same pointer would then be read on this output's removal.
+    // clearScreenIdCache deliberately does NOT touch this map, so the erase has to be here.
+    m_idCaches.screenIdByOutput.remove(output);
     // Construct a bound clock for this output. Idempotent: if the same output
     // arrives twice (rare, but possible on some compositors' hotplug
     // sequences) the early return keeps the existing clock and skips the
@@ -780,10 +791,17 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     if (!output) {
         return;
     }
-    // Resolve the dying connector's id BEFORE the cache is dropped: resolving
-    // it afterwards would re-populate the fresh cache with the very entry this
-    // handler exists to purge.
-    const QString removedScreenId = outputScreenId(output);
+    // READ the id this output was published under, rather than resolving one. A resolve is only
+    // reproducible while the peer set is intact, and on a MULTI-output removal of identical
+    // monitors it is not: KWin prunes every removed output before emitting the first screenRemoved,
+    // so the second twin's resolve runs against a list holding NEITHER of them, finds no duplicate,
+    // and returns the bare baseId where the suffixed form was used to key its state. Both consumers
+    // below match on that key, so they silently drop nothing. Worse with a bundled add (a total
+    // unplug appends a placeholder output, whose add clears the cache), where even the FIRST
+    // removal resolves cold.
+    //
+    // The recompute stays as the fallback, so an output nothing ever resolved behaves as before.
+    const QString removedScreenId = m_idCaches.screenIdByOutput.value(output, outputScreenId(output));
     // Unplug twin of the onScreenAdded invalidation: KWin fires
     // screenRemoved BEFORE the per-window outputChanged cascade, and the
     // connected-output gate in scrollTrackedScreenFor exists for exactly
@@ -858,6 +876,13 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // daemon's replay or the next relayout). Takes the id resolved above
     // rather than re-resolving, for the same cache reason.
     m_tilingHandler->noteScrollTabOutputRemoved(output, removedScreenId);
+
+    // Both consumers of removedScreenId have run, so drop this output's recorded spelling. HERE,
+    // not after the motion-clock early-return below: the key is a raw LogicalOutput* and an entry
+    // that outlives its output is the same address-reuse hazard the suppression set and the strip
+    // animator each describe in this handler — a later hotplug landing at the same address would
+    // read the dead output's spelling.
+    m_idCaches.screenIdByOutput.remove(output);
 
     // m_fullscreenSuppressedOutputs holds raw LogicalOutput* too. It is only ever
     // COMPARED, never dereferenced, so a stale entry cannot crash — but a later

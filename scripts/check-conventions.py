@@ -400,6 +400,14 @@ def rule_size(files: list[str]) -> list[Violation]:
                     f"growing an existing overrun is a finding, shrink it or split it",
                 )
             )
+        # DELIBERATELY NOT an `n < base[f]` arm, and the selftest asserts its absence so this stays
+        # that way. An entry recorded ABOVE the file's real length does silently permit growth up to
+        # it, and only a hand edit can produce that, since --update-baseline always writes the actual
+        # length. Turning the comparison into `!=` to catch it was tried and reverted: it fails the
+        # gate on every net shrink, which is the direction this ratchet exists to encourage, so it
+        # would block beneficial refactors to catch a case that a diff of this committed file already
+        # shows a reviewer. If it ever needs machine-checking, it belongs in a separate rule that
+        # reports the slack without failing a shrink.
     return out
 
 

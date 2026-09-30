@@ -364,6 +364,11 @@ void ShaderNodeRhi::setUserTexture(int slot, const QImage& image)
     }
     m_userTextureImages[slot] = image;
     m_userTextureDirty[slot] = true;
+    // A NEW image gets a fresh clamp warning. The latch is not keyed on size, so without this a
+    // second, differently-oversized image at the same slot reports nothing and the one surviving
+    // journal line names a size that is no longer the one being clamped. Exactly once per supplied
+    // image, because the arm only runs while the slot is dirty.
+    m_userTextureClampWarned[static_cast<size_t>(slot)] = false;
     m_uniformsDirty = true;
     m_sceneDataDirty = true;
 }

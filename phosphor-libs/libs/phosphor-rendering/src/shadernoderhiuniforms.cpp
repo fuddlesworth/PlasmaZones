@@ -172,10 +172,25 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
     state.audioSpectrumSize = qMin(boundAudioWidth, pendingAudioBars);
 
     // User texture resolutions (bindings 11-14) — resolved node-side.
+    //
+    // CLAMPED TO THE DEVICE LIMIT, because the upload clamps too and nothing writes the shrunk size
+    // back. uploadDirtyTextures rescales a LOCAL copy when the image exceeds TextureSizeMax, and
+    // setUserTexture is the only writer of m_userTextureImages, so publishing the raw size told the
+    // shader a resolution the bound texture does not have — permanently, not for one frame. The
+    // shared prologues state that iTextureResolution carries the BOUND image's pixel size, and the
+    // audio sibling above solves the same shape the same way with its own qMin.
+    //
+    // Clamped against the DEVICE LIMIT rather than the bound texture's pixelSize on purpose: this
+    // runs before the resize loop below, so on the frame an image arrives the bound texture is still
+    // the old one, and that loop's success path raises no dirty flag and requests no frame, so an
+    // under-reported value would never be republished.
     for (int i = 0; i < kMaxUserTextures; ++i) {
         if (m_userTextures[i] && !m_userTextureImages[i].isNull()) {
-            state.textureResolution[i][0] = static_cast<float>(m_userTextureImages[i].width());
-            state.textureResolution[i][1] = static_cast<float>(m_userTextureImages[i].height());
+            const QSize imgSize = m_userTextureImages[i].size();
+            const int wpx = audioDeviceMax > 0 ? qMin(imgSize.width(), audioDeviceMax) : imgSize.width();
+            const int hpx = audioDeviceMax > 0 ? qMin(imgSize.height(), audioDeviceMax) : imgSize.height();
+            state.textureResolution[i][0] = static_cast<float>(wpx);
+            state.textureResolution[i][1] = static_cast<float>(hpx);
         } else {
             state.textureResolution[i][0] = 1.0f;
             state.textureResolution[i][1] = 1.0f;

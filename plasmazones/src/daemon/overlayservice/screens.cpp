@@ -24,30 +24,6 @@
 
 namespace PlasmaZones {
 
-void OverlayService::setupForScreen(QScreen* screen)
-{
-    // Set up overlay windows for all effective screens on this physical screen
-    auto* mgr = m_screenManager;
-    const QString physId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
-    if (mgr && mgr->hasVirtualScreens(physId)) {
-        for (const QString& vsId : mgr->virtualScreenIdsFor(physId)) {
-            if (!m_screenStates.contains(vsId) || !m_screenStates[vsId].overlayPhysScreen) {
-                QRect vsGeom = mgr->screenGeometry(vsId);
-                if (!vsGeom.isValid()) {
-                    qCWarning(lcOverlay) << "setupForScreen: invalid geometry for virtual screen" << vsId
-                                         << ", skipping overlay creation";
-                    continue;
-                }
-                createOverlayWindow(vsId, screen, vsGeom);
-            }
-        }
-    } else {
-        if (!m_screenStates.contains(physId) || !m_screenStates[physId].overlayPhysScreen) {
-            createOverlayWindow(screen);
-        }
-    }
-}
-
 void OverlayService::assertWindowOnScreen(QWindow* window, QScreen* screen, const QRect& geometry)
 {
     if (!window || !screen) {
@@ -293,17 +269,22 @@ void OverlayService::onVirtualScreensChanged(const QString& physicalScreenId)
                 virtualKeysToDestroy.append(it.key());
             }
         }
+        // OUR entry goes before the lib's state, matching the sibling teardown above. The reverse
+        // order is safe today only by luck: removeShellStates destroys the lib-side entry while
+        // unwirePassiveShellSlots deliberately leaves our PerScreenOverlayState::shell pointing at
+        // it, so between the two statements that pointer dangles. Nothing dereferences it there
+        // now, and dropping our entry first means nothing can.
         for (const QString& key : virtualKeysToDestroy) {
             destroyPassiveShell(key);
-            removeShellStates(key);
             m_screenStates.remove(key);
+            removeShellStates(key);
             resetModalSingletonsForDestroyedId(key);
         }
         destroyOverlayWindow(physicalScreenId);
         destroyZoneSelectorWindow(physicalScreenId);
         destroyPassiveShell(physicalScreenId);
-        removeShellStates(physicalScreenId);
         m_screenStates.remove(physicalScreenId);
+        removeShellStates(physicalScreenId);
         resetModalSingletonsForDestroyedId(physicalScreenId);
         // Drop sticky creation-failure flags rooted on the now-removed
         // physical monitor. Without this, a same-name replug would
