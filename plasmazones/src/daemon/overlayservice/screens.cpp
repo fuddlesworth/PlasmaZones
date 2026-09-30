@@ -360,15 +360,27 @@ void OverlayService::onVirtualScreensChanged(const QString& physicalScreenId)
     }
 
     // Recreate with new virtual screen config if visible.
+    //
+    // BOTH EXCLUSION GATES, the same pair as handleScreenAdded above and
+    // initializeOverlay's Phase 0. This was the fourth live createOverlayWindow site and it
+    // carried neither, so a virtual-screen change while overlays were up built a slot for an
+    // autotile or excluded screen and lit its overlayPhysScreen sentinel, which is the sole
+    // gate on updateGeometries, restampZoneHighlights, highlightZone(s), refreshVisibleWindows
+    // and the shader hot-reload sweep. Bounded rather than permanent (the next initializeOverlay
+    // dismisses the non-target key, and hide() dismisses every sentinel-bearing one), but wrong
+    // for the interval, and this handler is wired to two live signals that fire during a drag.
     if (isVisible()) {
         if (mgr && mgr->hasVirtualScreens(physicalScreenId)) {
             for (const QString& vsId : mgr->virtualScreenIdsFor(physicalScreenId)) {
+                if (isSnappingContextInactive(vsId) || m_excludedScreens.contains(vsId)) {
+                    continue;
+                }
                 QRect vsGeom = mgr->screenGeometry(vsId);
                 if (vsGeom.isValid()) {
                     createOverlayWindow(vsId, physScreen, vsGeom);
                 }
             }
-        } else {
+        } else if (!isSnappingContextInactive(physicalScreenId) && !m_excludedScreens.contains(physicalScreenId)) {
             createOverlayWindow(physScreen);
         }
     }

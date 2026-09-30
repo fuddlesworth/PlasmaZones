@@ -130,8 +130,11 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
                 // schedules a prepare() for a zone overlay that is not `playing` — the
                 // pool-exhaustion arm below and the base class's depth path both request one for
                 // exactly this reason. Bounded for free by kMaxInitAttempts: the give-up arm above
-                // short-circuits the whole function once it latches, so this asks at most four
-                // times and then stops.
+                // short-circuits the whole function once it latches, so a run of consecutive
+                // failures asks four times and then stops. Four per RUN, not per node: the
+                // counter is cleared on every successful init and resize, so a later failure
+                // gets a fresh budget. That is the intent — the latch is for a create that
+                // stays broken, not a lifetime quota.
                 requestAnotherFrame();
             }
             return; // retry next frame (or stay given-up)

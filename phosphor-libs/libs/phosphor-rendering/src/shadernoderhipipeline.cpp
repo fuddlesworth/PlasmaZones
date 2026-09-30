@@ -606,6 +606,12 @@ bool ShaderNodeRhi::ensureDummyChannelResources(QRhi* rhi)
             return false;
         }
     }
+    // A success clears the latch, so a failure that recurs after a genuine
+    // recovery is reported again rather than swallowed for the session. Both arms
+    // above reset their object and return false and both builders re-enter next
+    // prepare(), so recovery is reachable. This was the file's one create-failure
+    // latch without the clear, guarding its hardest failure.
+    m_dummyChannelWarned = false;
     return true;
 }
 

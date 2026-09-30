@@ -567,12 +567,20 @@ void OverlayService::restampZoneHighlights()
             // Nothing to re-stamp on this screen. A highlight write reaches
             // every live slot, but the zone that changed lives on one of them,
             // so on a multi-monitor setup most screens land here every time.
-            // The write matters: `zones` is a QML `property var` feeding the
-            // Repeater model, so re-pushing an identical list re-evaluates
-            // every ZoneItem's bindings (and the shaderConfig.zones chain) for
-            // no change in output, on the drag path. previewZones and
-            // highlightedCount are derived from this same list and are written
-            // with it, so an unchanged list leaves both already correct.
+            // previewZones and highlightedCount are derived from this same list
+            // and are written with it, so an unchanged list leaves both correct.
+            //
+            // WHAT THIS SAVES, measured rather than assumed: the patch work and the
+            // write, NOT a binding re-evaluation. An earlier version of this comment
+            // said re-pushing an identical list "re-evaluates every ZoneItem's
+            // bindings (and the shaderConfig.zones chain) for no change in output".
+            // It does not. QQmlProperty::write on a `property var` compares first, so
+            // re-pushing an equal list activates no change signal and re-runs no
+            // dependent binding — checked with a QSignalSpy on a var property for an
+            // identical list of maps, which is this list's shape. The sibling claim in
+            // syncCavaState, that an unchanged value re-evaluates nothing, is the
+            // correct one of the two. Skipping is still worth it on the drag path: the
+            // read-back, the patch and the compare are real work at cursor rate.
             continue;
         }
         writeQmlProperty(slot, QString(OverlayQmlPropertyNames::Zones), patched);

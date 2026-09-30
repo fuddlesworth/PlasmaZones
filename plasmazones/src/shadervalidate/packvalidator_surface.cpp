@@ -257,10 +257,19 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
     // A NOTE, not a lint: declaring depth is legal and the runtime honours it.
     // What an author cannot see is that it is honoured on the DAEMON alone, and
     // the compositor is where a decoration lives on a real window, so the same
-    // pack reads one way in the settings preview and another on screen. Printed
-    // for a single-pass pack too; the multipass block below only knows about
-    // the interaction with bufferScales, which a single-pass pack does not have.
-    if (doc.object().value(QLatin1String("depthBuffer")).toBool()) {
+    // pack reads one way in the settings preview and another on screen.
+    //
+    // GATED ON THE CHAIN ACTUALLY RUNNING. The registry's coherence block sets
+    // useDepthBuffer = false for any pack it resolves to single-pass, so the daemon
+    // never sees the flag on a single-pass pack, on a `multipass: true` with no
+    // bufferShaders, or on one whose entry does not resolve. The note used to print
+    // for those anyway and claimed the daemon honours the key two lines under the
+    // lint saying it is never read, which is the lint an author needs there.
+    const bool depthChainRuns = eff.isMultipass && !eff.bufferShaderPaths.isEmpty()
+        && std::all_of(eff.bufferShaderPaths.cbegin(), eff.bufferShaderPaths.cend(), [](const QString& p) {
+                                    return !p.isEmpty() && QFileInfo(p).isFile();
+                                });
+    if (depthChainRuns && doc.object().value(QLatin1String("depthBuffer")).toBool()) {
         out << "  " << padLabel(QStringLiteral("note"))
             << "\"depthBuffer\" is honoured on the daemon only (settings preview, OSD and popup decorations); "
                "the compositor implements no depth buffer for surface packs\n";

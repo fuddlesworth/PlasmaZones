@@ -217,6 +217,12 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
                              .arg(texPath);
             } else if (!QFile::exists(*confined)) {
                 lints << QStringLiteral("texture missing: %1 (sampler reads transparent at load)").arg(texPath);
+            } else if (!QFileInfo(*confined).isFile()) {
+                // exists() answers true for a DIRECTORY, so a path naming one passed both arms and
+                // the whole pack reported OK. The runtime accepts it too (its only test is
+                // confinement), so the failure lands at first paint with nothing having warned.
+                lints << QStringLiteral("texture path is not a file: %1 (sampler reads transparent at load)")
+                             .arg(texPath);
             }
         }
         // Wrap vocabulary lint — read RAW metadata: SurfaceShaderEffect::fromJson
@@ -320,6 +326,9 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
                              .arg(preview);
             } else if (!QFile::exists(*confined)) {
                 lints << QStringLiteral("preview missing: %1 (the pack shows no thumbnail)").arg(preview);
+            } else if (!QFileInfo(*confined).isFile()) {
+                // A directory, same as the texture arm above: exists() lets it through.
+                lints << QStringLiteral("preview path is not a file: %1 (the pack shows no thumbnail)").arg(preview);
             }
         }
     }
@@ -447,8 +456,9 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
             && !meta.value(QLatin1String("bufferScales")).toArray().isEmpty()) {
             lints << QStringLiteral(
                 "bufferScales is declared alongside \"depthBuffer\": true, and the daemon pins every pass to "
-                "bufferScale, so no per-pass entry takes effect (the passes share one depth attachment, whose "
-                "size the colour attachments must match)");
+                "bufferScale, so no per-pass entry takes effect there (the passes share one depth attachment, "
+                "whose size the colour attachments must match). A one-pass chain is pinned on the daemon too, "
+                "though the compositor does honour bufferScales[0] for one");
         }
         bool anyKawase = false;
         bool anyKawaseDown0 = false;
@@ -940,18 +950,31 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         // false-mechanism class the livePasses split was written to remove, in the one arm whose
         // entire purpose is a real preview-versus-window divergence. Reading only the declared
         // shape means a mistyped value falls to the arm that actually describes it.
-        const auto lintDaemonOnlyToken = [&lints, &meta](QLatin1String key, QLatin1String honoured, bool plural) {
+        const auto lintDaemonOnlyToken = [&lints, &meta](QLatin1String key, QLatin1String honoured, bool plural,
+                                                         bool wrap) {
+            // IN VOCABULARY as well as different from the default, because validatedWrap and
+            // validatedFilter CLEAR a rejected token, leaving the daemon on the same clamp/linear
+            // the compositor uses. Without this an invalid token drew the divergence claim two
+            // lines under the vocabulary lint saying the value was cleared. Same false-mechanism
+            // class as the shape bug below, reached by VALUE instead of by shape.
+            const auto reportable = [wrap, honoured](const QString& tok) {
+                if (tok.isEmpty() || tok == honoured) {
+                    return false;
+                }
+                return wrap ? PhosphorSurfaceShaders::SurfaceShaderContract::isValidWrapToken(tok)
+                            : PhosphorSurfaceShaders::SurfaceShaderContract::isValidFilterToken(tok);
+            };
             QStringList offending;
             const QJsonValue value = meta.value(key);
             if (plural) {
                 for (const QJsonValue& v : value.toArray()) {
                     const QString tok = v.toString();
-                    if (!tok.isEmpty() && tok != honoured) {
+                    if (reportable(tok)) {
                         offending << tok;
                     }
                 }
             } else if (value.isString()) {
-                if (!value.toString().isEmpty() && value.toString() != honoured) {
+                if (reportable(value.toString())) {
                     offending << value.toString();
                 }
             }
@@ -964,10 +987,17 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
                              .arg(QString(key), offending.join(QLatin1String(", ")), QString(honoured));
             }
         };
-        lintDaemonOnlyToken(QLatin1String("bufferWrap"), QLatin1String("clamp"), false);
-        lintDaemonOnlyToken(QLatin1String("bufferWraps"), QLatin1String("clamp"), true);
-        lintDaemonOnlyToken(QLatin1String("bufferFilter"), QLatin1String("linear"), false);
-        lintDaemonOnlyToken(QLatin1String("bufferFilters"), QLatin1String("linear"), true);
+        // GATED ON chainResolves, same gate and same argument as the feedback arm below: the
+        // coherence block clears all four spellings on a fail-closed chain, and no bufferShaders
+        // at all leaves chainResolves false, covering a single-pass pack and a `multipass: true`
+        // normalised back to one. The vocabulary and length arms above stay UNGATED, since a typo
+        // is a typo whether or not the chain runs.
+        if (chainResolves) {
+            lintDaemonOnlyToken(QLatin1String("bufferWrap"), QLatin1String("clamp"), false, true);
+            lintDaemonOnlyToken(QLatin1String("bufferWraps"), QLatin1String("clamp"), true, true);
+            lintDaemonOnlyToken(QLatin1String("bufferFilter"), QLatin1String("linear"), false, false);
+            lintDaemonOnlyToken(QLatin1String("bufferFilters"), QLatin1String("linear"), true, false);
+        }
         // The two daemon-only BOOLS. Only bufferFeedback is linted; the paragraph below says why
         // halfFloatBuffers is linted on an EXPLICIT true only. Same divergence class as the four
         // vocabulary arms above: the compositor's surface fold reads neither key. (Its POINTER
@@ -1022,9 +1052,11 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
                     "transparent fallback on a real window");
             }
         }
-        // halfFloatBuffers, on an EXPLICIT true. One lookup, like the arm above.
+        // halfFloatBuffers, on an EXPLICIT true. One lookup, like the arm above, and gated on
+        // chainResolves for the same reason: a fail-closed chain has no buffer targets at all, so
+        // "creates RGBA16F buffer targets" would describe something that does not exist.
         const QJsonValue halfFloatValue = meta.value(QLatin1String("halfFloatBuffers"));
-        if (halfFloatValue.isBool() && halfFloatValue.toBool()) {
+        if (chainResolves && halfFloatValue.isBool() && halfFloatValue.toBool()) {
             lints << QStringLiteral(
                 "\"halfFloatBuffers\": true is honoured by the DAEMON, which creates RGBA16F buffer targets, "
                 "and ignored by the compositor's surface fold, which creates every buffer target RGBA8. Any "
@@ -1050,12 +1082,18 @@ QStringList surfaceMetadataLints(const QJsonObject& meta, const SurfaceShaderEff
         // The single-value twin of the per-entry not-a-number lint above. toDouble
         // answers its DEFAULT for a string or a bool, so `"bufferScale": "0.5"`
         // silently loads as 1.0 and the range check below sees nothing wrong.
+        //
+        // Both arms carry chainResolves. On a fail-closed chain the coherence block RESETS
+        // bufferScale to 1.0 rather than clamping it, so "clamped at load" names the wrong
+        // mechanism, and with no bufferShaders at all the single-pass sweep above already reports
+        // the key as one the pack declares and nothing reads. Neither case loses a diagnostic.
         const QJsonValue rawScaleValue = meta.value(QLatin1String("bufferScale"));
-        if (!rawScaleValue.isUndefined() && !rawScaleValue.isNull() && !rawScaleValue.isDouble()) {
+        if (chainResolves && !rawScaleValue.isUndefined() && !rawScaleValue.isNull() && !rawScaleValue.isDouble()) {
             lints << QStringLiteral("bufferScale is not a number, so it falls back to 1.0 at load");
         }
         const double rawScale = rawScaleValue.toDouble(1.0);
-        if (rawScale < PhosphorShaders::kMinBufferScale || rawScale > PhosphorShaders::kMaxBufferScale) {
+        if (chainResolves
+            && (rawScale < PhosphorShaders::kMinBufferScale || rawScale > PhosphorShaders::kMaxBufferScale)) {
             lints << QStringLiteral("bufferScale out of range [%1, %2]: %3 (clamped at load)")
                          .arg(PhosphorShaders::kMinBufferScale)
                          .arg(PhosphorShaders::kMaxBufferScale)

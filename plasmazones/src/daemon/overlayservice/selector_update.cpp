@@ -150,11 +150,13 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     qreal aspectRatio =
         (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
     // Clamped symmetrically about 1:1 — the lower bound is the inverse of the
-    // upper, so a rotated 21:9 (about 0.43) keeps its shape. NOTE: for the
-    // SELECTOR slot this write is currently declared-but-unforwarded
-    // (ZoneSelectorContent derives its own aspect; see the contract note in
-    // PassiveOverlayShell.qml), so the clamp's live consumers are the OSD
-    // and picker contents, whose own safeAspectRatio floors match this one.
+    // upper, so a rotated 21:9 (about 0.43) keeps its shape. NOTE: this write
+    // currently has NO live consumer. The slot's screenAspectRatio is declared
+    // on PassiveOverlayShell but ZoneSelectorContent never reads it, and the OSD
+    // and picker contents read their OWN slots' copies, written by osd.cpp and
+    // snapassist.cpp at qBound(0.5, …, 4.0) — so this 0.25 floor is not the
+    // operative one for them either. Kept as the declared 0.25–4.0 policy the
+    // QML safeAspectRatio guards mirror, not because anything reads it today.
     aspectRatio = qBound(0.25, aspectRatio, 4.0);
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeQmlProperty(window, QStringLiteral("screenWidth"), screenGeom.width());
@@ -370,13 +372,15 @@ void OverlayService::refreshContextLockState()
     if (m_layoutPickerVisible && !m_layoutPickerScreenId.isEmpty()) {
         // constFind, not value(): value() copies the whole PerScreenOverlayState struct just
         // to call a one-line accessor. Stated as the preference rather than as settled
-        // practice, because it is not: sibling sites in this directory still spell it value()
-        // (overlay.cpp x4, screens.cpp x2, lifecycle.cpp), on show, hide and screen-change
-        // paths — and one of them, updateOverlayWindow, also runs off the coalesced
-        // layoutModified refresh at up to ~60 Hz while a zone is dragged in the editor. The
-        // copy is three pointers, two QRects, a quint64 and one atomic refcount bump, so none
-        // of them is worth a refactor; an earlier version of this line claimed the siblings
-        // follow the convention, and its replacement called them all per-show.
+        // practice, because it is not. Six sibling sites in this directory still spell it
+        // value(): initializeOverlay once, recreateOverlayWindowsOnTypeMismatch twice, hide
+        // once and handleScreenAdded twice, so a show, a type-mismatch rebuild, a hide and a
+        // screen change. All four are per-event, none is per-frame, and the copy is three
+        // pointers, two QRects, a quint64 and one atomic refcount bump, so none is worth a
+        // refactor. Two earlier versions of this line were wrong about the siblings: one
+        // claimed they follow the convention, the next called them all per-show and named
+        // updateOverlayWindow among them at ~60 Hz — that function uses constFind and says so
+        // at its own lookup, and no value() site sits on a per-frame path.
         const auto pickerIt = m_screenStates.constFind(m_layoutPickerScreenId);
         if (auto* slot = pickerIt != m_screenStates.constEnd() ? pickerIt->layoutPickerSlot() : nullptr) {
             // Per-output virtual desktops (#648): each screen resolves its own desktop.

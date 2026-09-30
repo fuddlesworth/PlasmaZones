@@ -592,6 +592,54 @@ private Q_SLOTS:
         QVERIFY(r.errors > 0);
     }
 
+    /// The depthBuffer NOTE and the single-pass depthBuffer LINT used to contradict each other in
+    /// one report: the lint said the key is never read on a single-pass pack, and the note two lines
+    /// below said the daemon honours it. The lint is the true half — the registry's coherence block
+    /// sets useDepthBuffer = false for any pack it resolves to single-pass, so the daemon never sees
+    /// the flag. The note is now gated on the chain actually running at load.
+    void theDepthBufferNoteIsOnlyPrintedWhenTheChainRuns()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+        const QString note = QStringLiteral("honoured on the daemon only");
+
+        // SINGLE-PASS: the lint fires, the note must not.
+        QJsonObject single = surfacePack(QStringLiteral("sf-depth-single"), QJsonArray{});
+        single.insert(QStringLiteral("depthBuffer"), true);
+        const PackResult one = validateSurface(tmp, QStringLiteral("sf-depth-single"), single, surfaceBodyReading({}));
+        QVERIFY2(one.report.contains(QStringLiteral("single-pass pack")), qPrintable(one.report));
+        QVERIFY2(!one.report.contains(note), qPrintable(one.report));
+
+        // `multipass: true` with NO bufferShaders, which the registry normalises back to
+        // single-pass, so the daemon does not see the flag there either.
+        QJsonObject bare = surfacePack(QStringLiteral("sf-depth-bare"), QJsonArray{});
+        bare.insert(QStringLiteral("depthBuffer"), true);
+        bare.insert(QStringLiteral("multipass"), true);
+        const PackResult noBuffers =
+            validateSurface(tmp, QStringLiteral("sf-depth-bare"), bare, surfaceBodyReading({}));
+        QVERIFY2(!noBuffers.report.contains(note), qPrintable(noBuffers.report));
+
+        // A chain that does NOT resolve: same, since the registry fail-closes it to single-pass.
+        QJsonObject broken = surfacePack(QStringLiteral("sf-depth-broken"), QJsonArray{});
+        broken.insert(QStringLiteral("depthBuffer"), true);
+        broken.insert(QStringLiteral("multipass"), true);
+        broken.insert(QStringLiteral("bufferShaders"), QJsonArray{QStringLiteral("typo.frag")});
+        const PackResult fail = validateSurface(tmp, QStringLiteral("sf-depth-broken"), broken, surfaceBodyReading({}));
+        QVERIFY2(fail.report.contains(QStringLiteral("multipass buffer shader missing")), qPrintable(fail.report));
+        QVERIFY2(!fail.report.contains(note), qPrintable(fail.report));
+
+        // CONTROL: a resolving chain is where the note is true, and it still prints. Without this
+        // the gate could have suppressed the note everywhere with the suite green.
+        QJsonObject live = surfacePack(QStringLiteral("sf-depth-live"), QJsonArray{});
+        live.insert(QStringLiteral("depthBuffer"), true);
+        live.insert(QStringLiteral("multipass"), true);
+        live.insert(QStringLiteral("bufferShaders"), QJsonArray{surfaceFillerBufferName()});
+        const PackResult runs =
+            validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-depth-live"), live, surfaceBodyReading({}));
+        QVERIFY2(runs.report.contains(note), qPrintable(runs.report));
+        QVERIFY2(!runs.report.contains(QStringLiteral("single-pass pack")), qPrintable(runs.report));
+    }
+
     /// A pack that ships its OWN vertex stage gets it baked on BOTH hosts. No
     /// bundled pack declares one, so shader_validate_surface never reaches this
     /// arm and a regression in it would surface to a third-party author before

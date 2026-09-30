@@ -833,11 +833,13 @@ void ShaderNodeRhi::prepare()
                 // iFrame is computed as `cleared ? m_frame : 0` in syncBaseUniforms()
                 // and lives in K_TIME_BLOCK (offsets 68-79). The transition we just
                 // made invalidates whatever iFrame was uploaded at the top of this
-                // prepare() pass, so force a time-block re-upload on the next
-                // frame. Without this, the first post-clear frame would render
-                // with iFrame stuck at 0 on the GPU.
+                // prepare() pass, so force a time-block re-upload on the next frame
+                // AND ask for that frame, since a flag raised in prepare() schedules
+                // nothing by itself (the rule the re-arm site below and the uniforms
+                // grow arm both follow). Without both, iFrame stays 0 for one frame.
                 m_timeDirty = true;
                 m_uniformsDirty = true;
+                requestAnotherFrame();
             }
             const int writeIndex = m_bufferFeedback ? (m_frame % 2) : 0;
             QRhiTextureRenderTarget* bufferRT = (m_bufferFeedback && writeIndex == 1 && m_bufferRenderTargetB)

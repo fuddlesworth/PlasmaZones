@@ -488,6 +488,139 @@ private Q_SLOTS:
         const PackResult wrapsOk = runMultipass(QStringLiteral("sf-dot-d"), QStringLiteral("bufferWraps"),
                                                 QJsonArray{QStringLiteral("repeat")});
         QVERIFY2(wrapsOk.report.contains(QStringLiteral("which the DAEMON honours")), qPrintable(wrapsOk.report));
+
+        // bufferFilters, THE FOURTH CALL SITE, which nothing in the tree pinned: the shape is four
+        // hand-written booleans and only three were covered, so flipping this one silenced the arm
+        // for every correctly-typed bufferFilters array with the whole suite green.
+        const PackResult filtersOk = runMultipass(QStringLiteral("sf-dot-e"), QStringLiteral("bufferFilters"),
+                                                  QJsonArray{QStringLiteral("nearest")});
+        QVERIFY2(filtersOk.report.contains(QStringLiteral("bufferFilters declares nearest")),
+                 qPrintable(filtersOk.report));
+        const PackResult filtersString =
+            runMultipass(QStringLiteral("sf-dot-f"), QStringLiteral("bufferFilters"), QStringLiteral("nearest"));
+        QVERIFY2(filtersString.report.contains(QStringLiteral("bufferFilters must be an array")),
+                 qPrintable(filtersString.report));
+        QVERIFY2(!filtersString.report.contains(QStringLiteral("which the DAEMON honours")),
+                 qPrintable(filtersString.report));
+    }
+
+    /// The same arm given an INVALID token rather than the wrong shape. The loader's validatedWrap
+    /// and validatedFilter CLEAR a token their vocabulary guard rejects, so the daemon falls back to
+    /// the same clamp/linear the compositor uses and there is no divergence to report — but the arm
+    /// collected any token that merely differed from the default, so an invalid one drew the
+    /// "DAEMON honours" claim two lines under the vocabulary lint saying the value was cleared.
+    void anInvalidDaemonOnlyTokenDoesNotClaimTheDaemonHonoursIt()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        const auto runMultipass = [&tmp](const QString& name, const QString& key, const QJsonValue& value) {
+            QJsonObject obj = surfacePack(name, QJsonArray{});
+            obj.insert(QStringLiteral("multipass"), true);
+            obj.insert(QStringLiteral("bufferShaders"), QJsonArray{surfaceFillerBufferName()});
+            obj.insert(key, value);
+            return validateSurfaceWithFillerPass(tmp, name, obj, surfaceBodyReading({}));
+        };
+
+        // All four spellings, each given a token that is not in its vocabulary.
+        const PackResult wrap =
+            runMultipass(QStringLiteral("sf-iv-a"), QStringLiteral("bufferWrap"), QStringLiteral("wobble"));
+        QVERIFY2(wrap.report.contains(QStringLiteral("not in vocabulary")), qPrintable(wrap.report));
+        QVERIFY2(!wrap.report.contains(QStringLiteral("which the DAEMON honours")), qPrintable(wrap.report));
+
+        const PackResult wraps = runMultipass(QStringLiteral("sf-iv-b"), QStringLiteral("bufferWraps"),
+                                              QJsonArray{QStringLiteral("wobble")});
+        QVERIFY2(wraps.report.contains(QStringLiteral("not in vocabulary")), qPrintable(wraps.report));
+        QVERIFY2(!wraps.report.contains(QStringLiteral("which the DAEMON honours")), qPrintable(wraps.report));
+
+        const PackResult filter =
+            runMultipass(QStringLiteral("sf-iv-c"), QStringLiteral("bufferFilter"), QStringLiteral("trilinear"));
+        QVERIFY2(filter.report.contains(QStringLiteral("not in vocabulary")), qPrintable(filter.report));
+        QVERIFY2(!filter.report.contains(QStringLiteral("which the DAEMON honours")), qPrintable(filter.report));
+
+        const PackResult filters = runMultipass(QStringLiteral("sf-iv-d"), QStringLiteral("bufferFilters"),
+                                                QJsonArray{QStringLiteral("trilinear")});
+        QVERIFY2(filters.report.contains(QStringLiteral("not in vocabulary")), qPrintable(filters.report));
+        QVERIFY2(!filters.report.contains(QStringLiteral("which the DAEMON honours")), qPrintable(filters.report));
+
+        // A VALID non-default token still draws it, so the fix narrowed the arm rather than
+        // silencing it. `mipmap` is in the filter vocabulary and is not the compositor's default.
+        const PackResult valid = runMultipass(QStringLiteral("sf-iv-e"), QStringLiteral("bufferFilters"),
+                                              QJsonArray{QStringLiteral("mipmap")});
+        QVERIFY2(valid.report.contains(QStringLiteral("bufferFilters declares mipmap")), qPrintable(valid.report));
+    }
+
+    /// The six divergence messages on a chain that FAILS CLOSED. The registry resets every buffer
+    /// key and drops the pack to single-pass when any entry does not resolve, so it creates no
+    /// buffer targets at all — every message describing what the daemon does with them is then
+    /// false. Only bufferFeedback was gated; its five siblings described targets that never exist.
+    void aFailClosedChainDrawsNoBufferDivergenceClaims()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        QJsonObject obj = surfacePack(QStringLiteral("sf-fc"), QJsonArray{});
+        obj.insert(QStringLiteral("multipass"), true);
+        // A typo'd buffer filename, the commonest authoring slip, and nothing writes it.
+        obj.insert(QStringLiteral("bufferShaders"), QJsonArray{QStringLiteral("typo.frag")});
+        obj.insert(QStringLiteral("bufferWrap"), QStringLiteral("repeat"));
+        obj.insert(QStringLiteral("bufferWraps"), QJsonArray{QStringLiteral("repeat")});
+        obj.insert(QStringLiteral("bufferFilter"), QStringLiteral("nearest"));
+        obj.insert(QStringLiteral("bufferFilters"), QJsonArray{QStringLiteral("nearest")});
+        obj.insert(QStringLiteral("halfFloatBuffers"), true);
+        obj.insert(QStringLiteral("bufferScale"), 9);
+        const PackResult r = validateSurface(tmp, QStringLiteral("sf-fc"), obj, surfaceBodyReading({}));
+
+        // The louder lint that CLEARED chainResolves is the one the author needs, and it fires.
+        QVERIFY2(r.report.contains(QStringLiteral("multipass buffer shader missing")), qPrintable(r.report));
+        // None of the six describes a buffer target on a chain that has none.
+        QVERIFY2(!r.report.contains(QStringLiteral("which the DAEMON honours")), qPrintable(r.report));
+        QVERIFY2(!r.report.contains(QStringLiteral("RGBA16F")), qPrintable(r.report));
+        QVERIFY2(!r.report.contains(QStringLiteral("clamped at load")), qPrintable(r.report));
+
+        // Control: the identical keys on a chain that DOES resolve still draw all of them, or the
+        // gate would have silenced the arms rather than scoped them.
+        QJsonObject ok = obj;
+        ok.insert(QStringLiteral("id"), QStringLiteral("sf-fc-ok"));
+        ok.insert(QStringLiteral("bufferShaders"), QJsonArray{surfaceFillerBufferName()});
+        const PackResult live =
+            validateSurfaceWithFillerPass(tmp, QStringLiteral("sf-fc-ok"), ok, surfaceBodyReading({}));
+        QVERIFY2(live.report.contains(QStringLiteral("which the DAEMON honours")), qPrintable(live.report));
+        QVERIFY2(live.report.contains(QStringLiteral("RGBA16F")), qPrintable(live.report));
+        QVERIFY2(live.report.contains(QStringLiteral("clamped at load")), qPrintable(live.report));
+    }
+
+    /// A texture or preview path naming a DIRECTORY. QFile::exists() answers true for one, so both
+    /// existence lints passed it and the whole pack reported OK. The runtime accepts it too (its
+    /// only test is confinement), so the failure landed at first paint with nothing having warned.
+    void aDirectoryPathIsNotAcceptedAsAFile()
+    {
+        QTemporaryDir tmp;
+        REQUIRE_SURFACE_FIXTURE(tmp);
+
+        // preview naming a directory inside the pack.
+        QVERIFY(QDir().mkpath(tmp.filePath(QStringLiteral("sf-dir-a")) + QStringLiteral("/sub")));
+        QJsonObject prev = surfacePack(QStringLiteral("sf-dir-a"), QJsonArray{});
+        prev.insert(QStringLiteral("preview"), QStringLiteral("sub"));
+        const PackResult previewResult = validateSurface(tmp, QStringLiteral("sf-dir-a"), prev, surfaceBodyReading({}));
+        QVERIFY2(previewResult.report.contains(QStringLiteral("preview path is not a file")),
+                 qPrintable(previewResult.report));
+
+        // textures[].path naming a directory inside the pack.
+        QVERIFY(QDir().mkpath(tmp.filePath(QStringLiteral("sf-dir-b")) + QStringLiteral("/sub")));
+        QJsonObject tex = surfacePack(QStringLiteral("sf-dir-b"), QJsonArray{});
+        tex.insert(QStringLiteral("textures"),
+                   QJsonArray{QJsonObject{{QStringLiteral("path"), QStringLiteral("sub")}}});
+        const PackResult texResult = validateSurface(tmp, QStringLiteral("sf-dir-b"), tex, surfaceBodyReading({}));
+        QVERIFY2(texResult.report.contains(QStringLiteral("texture path is not a file")), qPrintable(texResult.report));
+
+        // A genuinely ABSENT path keeps its own wording, so the two cases stay distinguishable.
+        QJsonObject gone = surfacePack(QStringLiteral("sf-dir-c"), QJsonArray{});
+        gone.insert(QStringLiteral("preview"), QStringLiteral("nope.png"));
+        const PackResult goneResult = validateSurface(tmp, QStringLiteral("sf-dir-c"), gone, surfaceBodyReading({}));
+        QVERIFY2(goneResult.report.contains(QStringLiteral("preview missing: nope.png")),
+                 qPrintable(goneResult.report));
+        QVERIFY2(!goneResult.report.contains(QStringLiteral("is not a file")), qPrintable(goneResult.report));
     }
 
     /// The `builtin:` SPELLING diagnostics, all three shapes, because the arm that reports a
