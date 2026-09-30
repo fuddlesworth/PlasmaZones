@@ -15,6 +15,7 @@ the live placement model and the services retained by the redesign.
 | Navigator | `Phosphor.Bar.MapPane`, `Phosphor.Widgets.WorkspaceNavigator` | Anchored preview and complete window list with keyboard activation. |
 | Stage | `Phosphor.Dashboard.StageOverview`, `DesktopStage` | Workspace maps, native desktop preview or map fallback, window inspector and bounded filmstrip. |
 | Quick settings | `Phosphor.ControlCenter`, `Phosphor.Bar` detail panels | Compact panel anchored to the status area in both presentations, with native Wi-Fi, Bluetooth, Output/Input/Apps, Night light, Dark mode, Airplane mode, Power profiles, Wallpaper and Battery pages. |
+| Status icons | `Phosphor.Bar.Status`, `StatusIconsController` | Configurable nine-icon group with ordering, Always/When active/Hidden policies, a visible limit, overflow, battery percentage and individual context menus. |
 | Calendar | `Phosphor.Bar.CalendarPanel` | Local time/date, month navigation, Today and keyboard day selection. |
 | Appearance | `Phosphor.Picker.AppearanceWorkspace` | Wallpaper, Style, Bar and Presets pages, per-display previews, atomic Apply, Revert and import/export. |
 | Media card | `Phosphor.Widgets.MediaCard` | Real MPRIS state/artwork and CAVA Ribbon, Bars or Halo visualization. |
@@ -22,7 +23,7 @@ the live placement model and the services retained by the redesign.
 | OSD edge bands and readouts | `Phosphor.OSD` | Value feedback located through the focused-window placement map. |
 | Toasts and notification history | `Phosphor.Notifications`, `Phosphor.Bar.NotificationPanel` | Rich arrivals, grouped retained history, unread filtering, replies, actions, DND and clear/undo. |
 | System stats | `Phosphor.Bar` Stats components, `Phosphor.Shell.SystemStats` | Live system metrics, history charts and configurable bar readouts. |
-| System tray | `Phosphor.Bar` Tray components, `Phosphor.Service.Sni` | Configurable SNI icons, overflow drawer and native application menus. |
+| System tray | `Phosphor.Bar` Tray components, `Phosphor.Service.Sni` | Configurable SNI application icons, overflow drawer and native application menus. This is separate from the service status-icon group. |
 | Battery | `Phosphor.Bar.BatteryPanel`, `Phosphor.Service.UPower` | Native charge, charging/full/low states, time estimates, health, energy, draw and device readouts. Distinguishes service failure from no system battery, links to power profiles and offers Power saver when supported. |
 | Power menu | `Phosphor.Power` | Session actions with their existing availability and confirmation behavior. |
 | Session lock | `Phosphor.Lock` | Shell-owned lock surface and PAM authentication. |
@@ -61,6 +62,7 @@ power-profiles-daemon. Airplane mode coordinates Wi-Fi and WWAN through
 NetworkManager and Bluetooth through BlueZ, with remembered-state restoration
 and wired networking retained. Dark mode keeps the palette, wallpaper and
 remembered dark material in `AppearanceStore`; changes join an active Appearance
-preview. Wallpaper access opens the existing Wallpaper or Style page. These six
-panel integrations are in the working tree; their current build, test and visual
-validation is recorded separately in `04-implementation-plan.md`.
+preview. Wallpaper access opens the existing Wallpaper or Style page. The
+status-icon controller shares those service hosts and the process-wide PipeWire
+host with the detail panels. The six panel integrations and the status-icon
+group are recorded separately in `04-implementation-plan.md`.

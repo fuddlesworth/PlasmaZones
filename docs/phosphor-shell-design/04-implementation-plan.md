@@ -19,15 +19,15 @@ Later ports also include:
 | Authentication | `2dbcb831a` | Redesigned polkit modal, request details, account selection and authentication states. |
 
 The September 27 integration with `main` passed the shell-enabled non-unity
-build and 601 executed tests, plus the shell-disabled build and 480 executed
-tests. Each suite skipped the opt-in live GPU orientation test. These checks
-establish build and automated-test status, not a new visual review of every
-surface.
+build and 606 executed tests, plus the shell-disabled build. Each suite skipped
+the opt-in live GPU orientation test. Commit `0be82cf8e` records the completed
+service and status-icon integration. These checks establish build and
+automated-test status, not a new visual review of every surface.
 
 ## Additional control-center services (mockups-v3)
 
 The approved browser studies now have native panels and service wiring in the
-working tree. They extend the same bounded quick-settings detail surface in
+tree. They extend the same bounded quick-settings detail surface in
 Navigator and Stage, including links between Battery and Power profiles.
 
 | Detail | Native implementation |
@@ -50,23 +50,48 @@ schedule therefore reports the real scheduler service rather than reproducing
 the browser's simulated missing-location state. Changing custom hours updates
 the desktop's shared KNightTime schedule.
 
+## Configurable status icons
+
+The bar's status group now has native storage and service wiring for Wi-Fi,
+Sound, Bluetooth, Battery, Microphone, Night light, Do not disturb, Airplane
+mode and Power profile. Users can reorder the icons, choose Always, When active
+or Hidden for each one, set the visible limit from two to six, and show battery
+percentage. When the limit is reached, the remaining icons move to an overflow
+page. Right-clicking or pressing Shift+F10 on an icon opens its individual
+controls; left-clicking opens the normal quick-settings surface.
+
+The controller shares the existing NetworkManager, BlueZ, UPower, PipeWire,
+notification and power-profile services. Audio actions wait for service
+confirmation and report failures without losing the saved layout. The native
+tests cover defaults, persistence, service loss, invalid requests, no-op
+signals and action dispatch. The hardware-free preview exercises all nine
+icons, every menu, overflow, the all-hidden fallback and the unavailable,
+pending and error scenarios through
+`phosphor-shell/scripts/nested-shell/quick-settings-preview.sh run-status`.
+
+The full shell-enabled build passes with 606 executed tests and one opt-in GPU
+orientation test skipped. The shell-disabled build also passes. Native captures
+cover the settings panel, audio menu, Bluetooth menu and the smaller 1280×900
+viewport with the settings footer visible.
+
 Automated DOM checks exercise both Navigator and Stage, Phosphor/Paper/Ember,
 keyboard navigation, cross-service state changes, schedule validation and
 Appearance integration in the browser study. The user approved the prototype;
 its fixture controls do not call hardware services.
 
 The shell-enabled non-unity and shell-disabled builds pass without warnings.
-The full CTest run
-executes 604 passing tests and skips only the opt-in GPU orientation test.
+The full CTest run executes 606 passing tests and skips only the opt-in GPU
+orientation test.
 Regression coverage includes external KDE configuration updates and atomic file
 replacement, pause ownership during failed requests and destruction, service
 restarts, radio restoration, Appearance preview transactions, keyboard focus,
 and navigation between the shipped panels.
 
-The nested-KWin preview loads all 54 service scenarios and checks the requested
-view, panel readiness and title. Native captures cover all six panels, light and
-dark materials, and a 360×480 panel at 115% text size with Ember. There are no QML
-binding errors in that run. Service actions use fixtures and wallpaper changes
+The nested-KWin preview loads all 54 service scenarios and the status-icon
+scenarios, checking the requested view, panel readiness and title. Native
+captures cover all six panels, the status-icon settings and individual menus,
+light and dark materials, and a 360×480 panel at 115% text size with Ember.
+There are no QML binding errors in that run. Service actions use fixtures and wallpaper changes
 stay in the preview's private configuration. Start a nested session, then use
 `phosphor-shell/scripts/nested-shell/quick-settings-preview.sh run` with its
 `PZ_NESTED_SESSION`. For example, `call preview.batteryState --arg name=low`

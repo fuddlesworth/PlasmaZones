@@ -14,8 +14,13 @@ the system tray and authentication. The implementation record tracks those
 ports. The gap analysis separates optional interactions inherited from v2,
 service additions and hardware verification from the completed visual work.
 The six additional control-center studies below also have native panels and
-service wiring in the current working tree. Automated regressions and isolated
-native visual checks pass; the implementation record lists the validation.
+service wiring in the current tree. The bar also has a configurable status-icon
+group for Wi-Fi, Sound, Bluetooth, Battery, Microphone, Night light, Do not
+disturb, Airplane mode and Power profile. Each icon can be reordered and set to
+Always, When active or Hidden. Right-clicking an icon opens its own controls,
+and overflow keeps the remaining icons reachable. Automated regressions and
+isolated native visual checks pass; the implementation record lists the
+validation.
 
 The [shortcut-reference study](mockups-v3/index.html#navigator/shortcuts) is
 implemented by the native shell. Tiling, Scrolling and Snapping each have a visual
@@ -60,6 +65,13 @@ unavailable adapters, pairing failures, and a disconnected audio device. The Wi-
 `phosphor`; these fixtures do not access hardware, transmit or save passwords,
 or play or record audio. The native implementation uses NetworkManager, BlueZ
 and PipeWire. See `04-implementation-plan.md` for service and live checks.
+
+The [status-icon study](mockups-v3/index.html#navigator/status) covers the
+bar's compact group, the overflow page and individual context menus. The
+browser fixture includes all nine icons, visibility policies, ordering, battery
+percentage and keyboard access. Native status icons use the same service
+controllers as quick settings, so a menu action and a detail page share one
+state.
 
 The **additional control-center studies** include the older service backlog:
 [night light](mockups-v3/index.html#navigator/controls/nightlight),

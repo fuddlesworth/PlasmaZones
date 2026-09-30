@@ -11,7 +11,9 @@ requirements for this redesign.
 ## Control-center service integration
 
 Night light, dark mode, airplane mode, power profiles, wallpaper access and
-battery details now have native panels and service wiring in the working tree.
+battery details now have native panels and service wiring in the tree. The
+status-icon group is also complete, including saved order and visibility
+policies, overflow, keyboard access and per-icon menus.
 Automated regressions and isolated native visual checks pass. The current
 validation record is in `04-implementation-plan.md`.
 
@@ -25,6 +27,12 @@ Dark mode and wallpaper reuse Appearance's state and preview transaction.
 Expanded UPower details include service availability, charging, estimates,
 health, energy and connected devices. Power-profile actions use their separate
 service; no charging-limit control is implied by UPower support.
+
+The status group reads the same NetworkManager, BlueZ, UPower, PipeWire,
+notification and power-profile state as the detail pages. Actions are routed
+through those controllers, and the native tests cover service loss, pending
+audio changes, unavailable devices and persistence failures. The remaining
+hardware gap is verification with physical radios, audio devices and batteries.
 
 ## Optional interactions inherited from the earlier design
 
