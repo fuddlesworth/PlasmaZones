@@ -612,9 +612,18 @@ void TilingHandler::fetchScrollTabPaintOverrides()
                                 << reply.error().message();
             return;
         }
-        // Teardown guard, matching the managedScreens reply handler above. The
-        // slots below reach outputForScreenId, which dereferences
-        // KWin::effects->screens() without a check of its own.
+        // Teardown guard, matching the managedScreens reply handler above. The slots below
+        // reach outputForScreenId, which dereferences KWin::effects->screens() without a check
+        // of its own.
+        //
+        // BOTH scroll-tab slots now carry the same test themselves, and this one is kept as the
+        // cheap early exit that skips the whole loop. It used to be the ONLY guard, which was
+        // the defect: each slot is also invoked by direct D-Bus signal delivery (see the
+        // bus.connect calls near the top of this file), which never passed through here, so the
+        // guard covered one of two callers. Whether a queued delivery can observe a null global
+        // while an Effect object is still alive is a KWin teardown-ordering question nobody here
+        // has answered from KWin's source — this handler asserts it can, and putting the test in
+        // the slots makes both paths agree either way, for one comparison.
         if (!KWin::effects) {
             return;
         }

@@ -17,12 +17,9 @@
 // uniform itself and repaints the window continuously while decorated.
 
 // Four-stop brand gradient, t in [0, 1]: cyan → blue → purple → rose.
+// Local name for the shared ramp, so this pack's own p_color* params reach it.
 vec3 fluxGradient(float t) {
-    t = clamp(t, 0.0, 1.0) * 3.0;
-    vec3 c = mix(p_colorCyan.rgb, p_colorBlue.rgb, clamp(t, 0.0, 1.0));
-    c = mix(c, p_colorPurple.rgb, clamp(t - 1.0, 0.0, 1.0));
-    c = mix(c, p_colorRose.rgb, clamp(t - 2.0, 0.0, 1.0));
-    return c;
+    return surfaceFluxGradient(p_colorCyan.rgb, p_colorBlue.rgb, p_colorPurple.rgb, p_colorRose.rgb, t);
 }
 
 vec4 pSurface(vec2 uv) {
@@ -32,10 +29,12 @@ vec4 pSurface(vec2 uv) {
         return tex;
     }
 
-    // Band geometry: the family's OUTER-radius rounded-rect SDF, content clip
+    // Band geometry: the family's rounded-rect SDF (outer radius = content radius +
+    // width, except at a zero end, which stays square), content clip
     // and band edge from this pack's logical-px width and corner radius.
     vec2 p = surfacePixel(uv);
-    BorderBand bb = standardBorderBand(p, p_borderWidth, p_cornerRadius);
+    float bottomRadius = surfaceBottomRadius(p_cornerRadius, p_roundBottomCorners);
+    BorderBand bb = standardBorderBandSplit(p, p_borderWidth, p_cornerRadius, bottomRadius, p_edgeSoftness);
 
     // ── Flowing gradient: the perimeter coordinate drifts with time and is
     // folded into a ping-pong triangle, so the full cyan→rose gradient runs

@@ -2,7 +2,7 @@
     "$schema": "http://json-schema.org/draft-07/schema#",
     "$id": "urn:plasmazones:schema:animation-metadata",
     "title": "PlasmaZones Animation Shader Metadata",
-    "description": "metadata.json for a bundled or user animation-shader pack. Core identity and the parameter contract are enforced. Optional rendering keys (vertexShader, fboExtent, textures, appliesTo, geometryGrid), named parameter presets and descriptive metadata (description, author, version, category) are allowed through. Unknown top-level keys are accepted rather than rejected, so this schema will not catch a mis-spelled key such as \"preset\" for \"presets\". The loader ignores anything it does not know.",
+    "description": "metadata.json for a bundled or user animation-shader pack. Core identity and the parameter contract are enforced. The optional rendering keys (vertexShader, fboExtent, textures, appliesTo, geometryGrid, preview), the audio and multipass keys (audio, multipass, bufferShaders, bufferScale, bufferWrap, bufferWraps, bufferFilter, bufferFilters, bufferFeedback, depthBuffer, wallpaper), the named parameter presets and the descriptive metadata (description, author, version, category) are type-checked, so a wrong-typed value is rejected at the gate rather than swallowed by a typed accessor at load. Unknown top-level keys are still accepted rather than rejected, so this schema will not catch a mis-spelled key such as \"preset\" for \"presets\". The loader ignores anything it does not know. There is no per-pass bufferScales list here. That is surface-only, and one bufferScale covers the whole chain.",
     "type": "object",
     "required": ["id", "name", "fragmentShader", "parameters"],
     "properties": {
@@ -14,10 +14,66 @@
         "category": { "type": "string" },
         "fragmentShader": { "type": "string", "minLength": 1 },
         "vertexShader": { "type": "string" },
+        "preview": { "type": "string" },
+        "fboExtent": {
+            "type": "string",
+            "description": "Which rect the effect's FBO spans. \"anchor\" is the captured window, and is what an absent key means. \"surface\" is the whole surface, which a pack needs when it draws outside the window's own bounds. Type-checked only, deliberately: the loader matches both spellings case-insensitively, treats an empty string as absent, and warns and falls back on anything else, so an enum here would drop a pack the loader would have run."
+        },
+        "textures": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string" },
+                    "wrap": { "type": "string" }
+                }
+            },
+            "description": "Image textures the pack declares. Slot N feeds uTexture<N+1>, because uTexture0 is the window's own content, and that slot's pixel size arrives at iTextureResolution[N+1]. Paths are pack-relative and are containment-checked at load. Type-checked only, deliberately: the loader caps the list, drops an entry with an empty path and ignores a key it does not know, warning about each, so a cap or a required-path rule here would drop a pack the loader would have run with a journal entry."
+        },
+        "appliesTo": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Event classes this pack offers itself for: geometry, appearance, desktop, move, strip or tab. An absent key, or one that validates down to empty, means universal, which is everywhere except the four opt-in classes desktop, move, strip and tab. Type-checked only, deliberately: the loader drops an unknown token with a warning and keeps the pack, so an enum here would drop the pack instead."
+        },
+        "geometryGrid": {
+            "type": "integer",
+            "description": "Vertex-grid subdivisions, for a pack whose vertex stage displaces geometry. Absent or zero means the pack is drawn on a plain quad. No minimum, deliberately: the loader clamps with qBound(0, value, max), so an explicit 0 is the documented way to say no grid and a schema floor would drop a pack for writing it."
+        },
+        "audio": {
+            "type": "boolean",
+            "description": "The pack samples the CAVA spectrum through data/animations/shared/audio.glsl. This flag is what keys the compositor's CAVA run-gate. The daemon reads it nowhere, including in its own run-gate, so an audio animation pack hosted by the daemon can be fed a spectrum that was never started."
+        },
+        "multipass": { "type": "boolean" },
+        "bufferShaders": {
+            "type": "array",
+            "items": { "type": "string" },
+            "maxItems": 8
+        },
+        "bufferScale": {
+            "type": "number",
+            "minimum": 0.0078125,
+            "maximum": 1.0,
+            "description": "Render scale for the WHOLE buffer chain. Bounds track PhosphorShaders::kMinBufferScale and kMaxBufferScale."
+        },
+        "bufferWrap": { "type": "string", "enum": ["clamp", "repeat", "mirror"] },
+        "bufferWraps": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["clamp", "repeat", "mirror"] },
+            "maxItems": 8
+        },
+        "bufferFilter": { "type": "string", "enum": ["linear", "nearest", "mipmap"] },
+        "bufferFilters": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["linear", "nearest", "mipmap"] },
+            "maxItems": 8
+        },
+        "bufferFeedback": { "type": "boolean" },
+        "depthBuffer": { "type": "boolean" },
+        "wallpaper": { "type": "boolean" },
         "presets": {
             "type": "object",
             "maxProperties": 64,
-            "description": "Named parameter presets. Each value is a map of parameter id to value, naming a subset of the pack's declared parameters. A preset id is its key here, and it is also the label the picker shows, so it has to read as a name. That rules out control and bidi-formatting characters, and anything longer than a label can show. Unlike a user preset id it never becomes a filename, because duplicating a pack preset mints a fresh UUID. A null value is allowed and means the preset says nothing about that parameter, so it keeps the pack's default; the loader drops the entry. Those rules are checked by plasmazones-shader-validate rather than here, because the vendored JSON-schema validator rejects every name under a propertyNames rule, legitimate ones included.",
+            "description": "Named parameter presets. Each value is a map of parameter id to value, naming a subset of the pack's declared parameters. A preset id is its key here, and it is also the label the picker shows, so it has to read as a name. That rules out control and bidi-formatting characters, and anything longer than a label can show. Unlike a user preset id it never becomes a filename, because duplicating a pack preset mints a fresh UUID. A null value is allowed and means the preset says nothing about that parameter, so it keeps the pack's default, and the loader drops the entry. Those rules are checked by plasmazones-shader-validate rather than here, because the vendored JSON-schema validator rejects every name under a propertyNames rule, legitimate ones included.",
             "additionalProperties": {
                 "type": "object",
                 "maxProperties": 48,

@@ -15,6 +15,11 @@
 // like exp(-x²) profile that is brightest against the edge and gone well
 // before the margin ends.
 //
+// ONE of this pack's declared parameters is consumed HOST-SIDE and is never
+// read here: p_useThemeTint replaces the halo colour with the theme colour
+// before the shader runs, in SurfaceThemeResolve. So a reader looking for it
+// below will not find it, and that is not an omission.
+//
 // CAPTURE MARGIN: metadata declares `"paddingParam": "glowSize"`, so the
 // compositor host inflates the window's capture canvas by the resolved glow
 // size — the halo has real transparent margin to draw into even when the
@@ -39,16 +44,27 @@ vec4 pSurface(vec2 uv) {
 
     // Rounded-rect SDF over the frame rect (same construction as the border
     // pack). d > 0 outside the frame — the region the halo lives in.
+    //
+    // Split top/bottom so the halo hugs the SAME outline as the backdrop pack
+    // under it. A pane that squares its bottom corners against a panel edge
+    // used to get a glow still curving around a corner the pane no longer had.
     vec2 p = surfacePixel(uv);
-    FrameSDF fs = frameSdf(p, p_cornerRadius * uSurfaceScale);
+    float cornerPx = p_cornerRadius * uSurfaceScale;
+    float bottomPx = surfaceBottomRadius(cornerPx, p_roundBottomCorners);
+    FrameSDF fs = frameSdfSplit(p, cornerPx, bottomPx);
 
     // Gaussian-profile reach falloff (exp(-4t²), a soft shadow not a flood),
     // feathered to zero just inside the texture edge so a slim capture margin
     // yields a smaller glow instead of a hard-cut rectangle, confined to the
-    // transparent margin, and focus-dimmed like Oxygen's active-window cue —
+    // margin and the band within two reaches inside the frame, and focus-dimmed
+    // like Oxygen's cue —
     // the shared glow/shadow halo.
+    // The depth gate takes BOTH radii, the same pair fs is built from, so the gate
+    // and the visible outline follow one shape. They used to disagree at a squared
+    // bottom corner, where a rounded gate reads the corner as further outside than
+    // it is and so KEEPS halo there, which is the one thing the gate exists to stop.
     float reach = max(p_glowSize * uSurfaceScale, 1.0);
-    float halo = haloFalloff(fs.d, reach, p, base.a, p_glowStrength, 0.30);
+    float halo = haloFalloff(fs.d, reach, p, base.a, p_glowStrength, 0.30, cornerPx, bottomPx);
 
     // Premultiplied additive-over: the halo lights the margin under its own
     // alpha; the content term is untouched.

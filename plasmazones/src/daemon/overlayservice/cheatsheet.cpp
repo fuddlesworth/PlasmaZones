@@ -15,8 +15,10 @@
 #include "core/platform/logging.h"
 #include "phosphor_slot_keys.h"
 #include "phosphor_roles.h"
+#include "qml_property_names.h"
 
 #include <PhosphorOverlay/ShellHost.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorLayer/Surface.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -79,10 +81,11 @@ void OverlayService::showCheatsheet(const QString& screenId, const QVariantList&
         return;
     }
 
-    QRect screenGeom = resolveScreenGeometry(m_screenManager, resolvedId);
-    if (!screenGeom.isValid()) {
-        screenGeom = screen->geometry();
-    }
+    // ONE lookup, kept in both forms. trueGeom is the verdict assertWindowOnScreen needs, screenGeom
+    // is the rect the window is sized to. Asking twice cost a second virtual-geometry rebuild and,
+    // because that rebuild clears its own warn-once set, a second warning per show.
+    const QRect trueGeom = trueScreenGeometry(m_screenManager, resolvedId);
+    const QRect screenGeom = trueGeom.isValid() ? trueGeom : screen->geometry();
 
     auto* state = ensurePassiveShellFor(resolvedId, screen);
     if (!state || !state->shell || !state->shell->shellSurface() || !state->cheatsheetSlot()) {
@@ -140,10 +143,12 @@ void OverlayService::showCheatsheet(const QString& screenId, const QVariantList&
     // Same SurfaceDecoration host the picker uses, retargeted to the
     // cheatsheet's surface path. Empty resolution = no decoration (card
     // draws natively).
-    applyDecoration(slot, QStringLiteral("popup.cheatsheet"));
+    applyDecoration(slot, PhosphorSurfaceShaders::decorationPopupCheatsheetPath());
 
     if (shellWindow) {
-        assertWindowOnScreen(shellWindow, screen, screenGeom);
+        // trueGeom, not screenGeom: that one is substituted above when the id does not resolve, and
+        // a substituted rect makes assertWindowOnScreen's physical-screen test trivially true.
+        assertWindowOnScreen(shellWindow, screen, trueGeom);
         shellWindow->setWidth(screenGeom.width());
         shellWindow->setHeight(screenGeom.height());
     }
@@ -250,7 +255,7 @@ void OverlayService::onCheatsheetSlotHideCompleted(const QString& effectiveId)
     // Release the backdrop stand-in, matching onOsdSlotHideCompleted: a hidden
     // slot draws none of it, the image is wallpaper-sized, and every show runs
     // applyDecoration again, which rewrites it.
-    writeQmlProperty(it->cheatsheetSlot(), QStringLiteral("backdropTexture"), QVariant());
+    writeQmlProperty(it->cheatsheetSlot(), QString(OverlayQmlPropertyNames::BackdropTexture), QVariant());
     syncPassiveShellSurfaceState(effectiveId);
     // Symmetric with every other modal's hide completion (snap assist, the
     // picker, the OSD): the zone selector suppresses its restore while an

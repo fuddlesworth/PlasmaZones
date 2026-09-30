@@ -17,11 +17,19 @@ namespace PhosphorRendering {
 /// Static utility for GLSL → SPIR-V compilation with include resolution and caching.
 ///
 /// Compilation results are cached by source hash to avoid redundant QShaderBaker
-/// invocations. The cache is in-memory only — cleared on process restart.
+/// invocations. Those two caches (source-hash and filename+mtime) are in-memory, but
+/// they sit in front of a content-addressed ON-DISK cache of serialized QShaders under
+/// GenericCacheLocation, keyed by Qt version, which the disk read consults BEFORE
+/// taking the bake lock. So a compile result normally survives a process restart.
+/// The disk cache is pruned once per process, on the first write, when it exceeds 512
+/// entries and then down to about 90% of that, so a long-lived daemon is not capped
+/// within its own lifetime. Set
+/// PHOSPHOR_DISABLE_SHADER_DISK_CACHE to opt out.
 ///
 /// @par Thread-safety
-/// All methods are safe to call from any thread. Cache reads are lock-free for
-/// already-baked sources. Cache misses serialize on an internal bake mutex —
+/// All methods are safe to call from any thread. An in-memory cache read takes only a
+/// short cache mutex, never the bake mutex; the disk read takes neither. Cache misses
+/// serialize on an internal bake mutex —
 /// QShaderBaker (glslang) is not reentrant, and concurrent bake() calls crash
 /// inside QSpirvCompiler::compileToSpirv(), so the mutex is load-bearing and
 /// must not be removed. loadAndExpand() is pure I/O and runs concurrently.
@@ -78,9 +86,11 @@ public:
     /// Clear the in-memory compilation cache (e.g. on shader hot-reload).
     ///
     /// Clears both the source-hash BakeCache AND the filename+mtime cache in
-    /// the node core — after this call, the next prepare() will re-read and
-    /// re-compile shader files from disk. Both caches share clearCache() so
-    /// consumers can call one function to fully invalidate.
+    /// the node core, so the next prepare() re-reads the shader files from
+    /// disk. It does NOT clear the on-disk cache, so an UNEDITED file is
+    /// re-read and then served from the disk blob without running glslang
+    /// again; an edited one has a new digest and misses. Both in-memory caches
+    /// share clearCache() so consumers can call one function to invalidate.
     static void clearCache();
 
     /// Bake target list: SPIR-V 1.0, GLSL 330, GLSL ES 300/310/320.

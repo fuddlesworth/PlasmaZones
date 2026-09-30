@@ -5,7 +5,9 @@
 #include "daemon/overlayservice.h"
 #include "core/platform/logging.h"
 #include "phosphor_slot_keys.h"
+#include "qml_property_names.h"
 #include <PhosphorOverlay/ShellHost.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorSurfaces/SurfaceManager.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
@@ -183,10 +185,10 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
         }
     }
 
-    QRect screenGeom = resolveScreenGeometry(m_screenManager, resolvedId);
-    if (!screenGeom.isValid()) {
-        screenGeom = screen->geometry();
-    }
+    // ONE lookup in both forms, as the sibling show paths do: trueGeom is the verdict
+    // assertWindowOnScreen needs, screenGeom is what the window is sized to.
+    const QRect trueGeom = trueScreenGeometry(m_screenManager, resolvedId);
+    const QRect screenGeom = trueGeom.isValid() ? trueGeom : screen->geometry();
 
     // Resolve target shell - per-screen shell hosts the snap-assist slot.
     auto* state = ensurePassiveShellFor(resolvedId, screen);
@@ -200,6 +202,31 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
     // and enforces this invariant for itself; snap-assist and the picker
     // must uphold it against each other too, or two modal backdrops stack
     // on one surface with an order-dependent Escape-grab release.
+    //
+    // UNLATCHED, unlike the prev-screen hide below, which latches first and says why. It
+    // costs two different things, and they are NOT confined alike, so both are written down
+    // rather than left to be rediscovered.
+    //
+    // The GRAB RELEASE is unconditional. hideLayoutPicker emits layoutPickerDismissed BEFORE
+    // it calls hideSlot (deliberately, and it says so there), the connection is direct, and
+    // WindowDragAdaptor::releaseCancelOverlayShortcutIfIdle keeps the shared Escape grab only
+    // while isLayoutPickerVisible() || isSnapAssistVisible(). Neither is latched at this
+    // point, so the grab is dropped on EVERY cross-modal dismiss, live shell included, and
+    // snapAssistShown re-binds it at the tail of this function.
+    //
+    // The SELECTOR RE-SHOW is the conditional one, because it flows through the completion:
+    // only where hideSlot's completion runs INLINE does the picker's completion reach
+    // restoreZoneSelectorAfterHide while m_snapAssistVisible is still false, and only when the
+    // picker sat on THIS screen does the re-shown selector get hidden again below. Inline is
+    // NOT the same as a dead shell, which two rounds of this comment got wrong: it covers the
+    // lib's benign-no-op branches AND a fully live shell with overlay animations disabled,
+    // because SurfaceAnimator::beginHide fires onComplete synchronously when its gate is off.
+    // That gate is the global animationsEnabled setting (pushed from overlayservice/settings.cpp,
+    // and the same toggle that stops the effect's window animations), so this is not an exotic
+    // path. "Overlay animations disabled" describes the effect, not a setting by that name.
+    //
+    // Hoisting the latch would remove the grab churn, and it must not be done on reasoning
+    // alone: it changes when the shared Escape grab is held.
     if (m_layoutPickerVisible) {
         hideLayoutPicker();
     }
@@ -265,11 +292,11 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
 
     // Stage d: resolve + push the snap-assist surface-shader decoration (same
     // SurfaceDecoration host the OSD uses, retargeted to the "popup.snapAssist"
-    // surface path). Empty source = no decoration (card draws natively).
+    // surface path). Empty resolution = no decoration (card draws natively).
     // Runs on the in-place refresh path too, so a shader/rule edit made
     // while snap-assist is up takes effect on the next continuation rather
     // than only on the next full show.
-    applyDecoration(slot, QStringLiteral("popup.snapAssist"));
+    applyDecoration(slot, PhosphorSurfaceShaders::decorationPopupSnapAssistPath());
 
     if (sameScreenRefresh) {
         // In-place refresh: the overlay is already up on this screen (a
@@ -333,7 +360,9 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
     // coordinates, so the snap-assist path holds to the same per-VS
     // sizing the rest of the shell uses.
     if (shellWindow) {
-        assertWindowOnScreen(shellWindow, screen, screenGeom);
+        // trueGeom, not screenGeom: that one is substituted when the id does not resolve, and a
+        // substituted rect makes assertWindowOnScreen's physical-screen test trivially true.
+        assertWindowOnScreen(shellWindow, screen, trueGeom);
         shellWindow->setWidth(screenGeom.width());
         shellWindow->setHeight(screenGeom.height());
     }
@@ -690,7 +719,7 @@ void OverlayService::onSnapAssistSlotHideCompleted(const QString& effectiveId)
     // Release the backdrop stand-in, matching onOsdSlotHideCompleted: a hidden
     // slot draws none of it, the image is wallpaper-sized, and every show runs
     // applyDecoration again, which rewrites it.
-    writeQmlProperty(it->snapAssistSlot(), QStringLiteral("backdropTexture"), QVariant());
+    writeQmlProperty(it->snapAssistSlot(), QString(OverlayQmlPropertyNames::BackdropTexture), QVariant());
     // Symmetric restore: showSnapAssist hid the zone-selector slot on
     // this screen via hideZoneSelectorSlotOnScreen. Owns BOTH the
     // user-dismiss path (hideSnapAssist routes here) and the
@@ -745,10 +774,9 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         return;
     }
 
-    QRect screenGeom = resolveScreenGeometry(m_screenManager, resolvedId);
-    if (!screenGeom.isValid()) {
-        screenGeom = screen->geometry();
-    }
+    // ONE lookup in both forms — see the snap-assist path above.
+    const QRect trueGeom = trueScreenGeometry(m_screenManager, resolvedId);
+    const QRect screenGeom = trueGeom.isValid() ? trueGeom : screen->geometry();
 
     auto* state = ensurePassiveShellFor(resolvedId, screen);
     if (!state || !state->shell || !state->shell->shellSurface() || !state->layoutPickerSlot()) {
@@ -786,6 +814,14 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     // every bail above (shell + layouts validated), so a failed request can
     // never leave the drag-time zone selector stuck hidden — same
     // bails-first ordering contract as showSnapAssist.
+    //
+    // This ordering has the selector re-show churn showSnapAssist documents at
+    // length: the hideSnapAssist above can run its completion inline, which
+    // re-shows the selector while m_layoutPickerVisible is still false. The call
+    // below hides it again only WHEN SNAP ASSIST SAT ON THIS SCREEN, because it
+    // hides on resolvedId alone — a re-show on another screen stands. The Escape
+    // grab repairs itself the same way, through the re-register after this
+    // function returns.
     hideZoneSelectorSlotOnScreen(resolvedId);
 
     // The picker is a singleton across screens: with the new target fully
@@ -847,7 +883,12 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     bool locked = false;
     if (m_settings && m_layoutManager) {
         int curDesktop = currentVirtualDesktopForScreen(resolvedId);
-        QString curActivity = m_layoutManager->currentActivity();
+        // The MIRROR, not m_layoutManager->currentActivity(). refreshContextLockState's
+        // live re-push reads the mirror, and so does the zone selector on both its
+        // paths; this show path was the one site reading the registry, which is the
+        // two-sources split those three comments each warn against. Read from the
+        // registry, a picker's lock badge flips on the first rule edit that re-pushes.
+        QString curActivity = m_currentActivity;
         // Pass the LIVE mode lens (see pickerLockModeFor) — shared with the
         // live lock re-push in refreshContextLockState so the two cannot
         // disagree about which mode's lock the picker is showing.
@@ -860,11 +901,12 @@ void OverlayService::showLayoutPicker(const QString& screenId)
 
     // Stage d: resolve + push the layout-picker surface-shader decoration (same
     // SurfaceDecoration host the OSD uses, retargeted to the "popup.layoutPicker"
-    // surface path). Empty source = no decoration (card draws natively).
-    applyDecoration(slot, QStringLiteral("popup.layoutPicker"));
+    // surface path). Empty resolution = no decoration (card draws natively).
+    applyDecoration(slot, PhosphorSurfaceShaders::decorationPopupLayoutPickerPath());
 
     if (shellWindow) {
-        assertWindowOnScreen(shellWindow, screen, screenGeom);
+        // trueGeom, not screenGeom — see the snap-assist site above.
+        assertWindowOnScreen(shellWindow, screen, trueGeom);
         shellWindow->setWidth(screenGeom.width());
         shellWindow->setHeight(screenGeom.height());
     }
@@ -936,7 +978,7 @@ void OverlayService::onLayoutPickerSlotHideCompleted(const QString& effectiveId)
     // Release the backdrop stand-in, matching onOsdSlotHideCompleted: a hidden
     // slot draws none of it, the image is wallpaper-sized, and every show runs
     // applyDecoration again, which rewrites it.
-    writeQmlProperty(it->layoutPickerSlot(), QStringLiteral("backdropTexture"), QVariant());
+    writeQmlProperty(it->layoutPickerSlot(), QString(OverlayQmlPropertyNames::BackdropTexture), QVariant());
     // Symmetric restore - see onSnapAssistSlotHideCompleted /
     // onOsdSlotHideCompleted. The picker hid the zone-selector slot
     // on show; restore it once the picker has finished its hide.
@@ -966,7 +1008,7 @@ void OverlayService::pickerMoveSelection(int dx, int dy)
     if (!m_layoutPickerVisible || m_layoutPickerScreenId.isEmpty()) {
         return;
     }
-    // constFind, not value(): value() copies the whole ScreenState struct
+    // constFind, not value(): value() copies the whole PerScreenOverlayState struct
     // just to call a one-line accessor.
     auto it = m_screenStates.constFind(m_layoutPickerScreenId);
     auto* slot = (it != m_screenStates.constEnd()) ? it->layoutPickerSlot() : nullptr;

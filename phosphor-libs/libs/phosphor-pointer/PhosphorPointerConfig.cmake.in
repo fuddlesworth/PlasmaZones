@@ -9,7 +9,7 @@ include(CMakeFindDependencyMacro)
 # without the version guard a consumer on an older Qt resolves
 # find_package(PhosphorPointer) cleanly and then fails later with a cryptic
 # missing-symbol at link time.
-find_dependency(Qt6 6.10 COMPONENTS Core Gui)
+find_dependency(Qt6 @PHOSPHORPOINTER_QT_MIN@ COMPONENTS Core Gui)
 
 # PhosphorRegistry is a PUBLIC link dependency — PointerShaderRegistry's public
 # header exposes Registry<PointerPack> + MetadataPackLoader<PointerPack> — so the

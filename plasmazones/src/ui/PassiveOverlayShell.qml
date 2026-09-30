@@ -218,10 +218,11 @@ Window {
         // Overlay glyph for the disabled-style card. The card is
         // refusal-only (overlayservice.h documents the design), so the
         // daemon restates this same literal per show; the QML default only
-        // covers the never-shown pre-first-write state. One of four copies
+        // covers the never-shown pre-first-write state. One of five copies
         // of the literal: LayoutOsdContent.qml's default, the write in
-        // src/daemon/overlayservice/osd.cpp, and daemon/osd.cpp's text-OSD
-        // fallback for the same message — change one and change all four.
+        // src/daemon/overlayservice/osd.cpp, and the text-OSD fallbacks for
+        // the same message in daemon/osd.cpp and daemon/cheatsheet.cpp —
+        // change one and change all five.
         property string disabledIcon: "dialog-cancel"
         property bool success: true
         property string action: ""
@@ -233,7 +234,7 @@ Window {
 
         // Surface-shader decoration (Stage d). C++ OverlayService::applyDecoration
         // resolves the "osd" pack from DecorationProfileTree and writes these
-        // before each show; empty source = no decoration (card draws natively).
+        // before each show; empty resolution = no decoration (card draws natively).
         // Consumed by the SurfaceDecoration sibling below, which captures the
         // loaded card's PopupFrame shaderAnchor and re-renders it rounded.
         // Resolved decoration chain: ordered stage list ({source,
@@ -244,6 +245,7 @@ Window {
         // undeclared name silently becomes a dynamic property no binding
         // observes — the decoration would never update.
         property var decorationChain: []
+        property int decorationReloadGeneration: 0
         property real decorationOuterPadding: 0
         // The desktop wallpaper, standing in for the scene a daemon surface has
         // no way to capture. Under the SAME declare-and-forward contract as
@@ -388,11 +390,12 @@ Window {
         // card's PopupFrame shaderAnchor and re-renders it through the resolved
         // "osd" surface pack (rounded corners + border), suppressing the card's
         // own square-cornered direct draw via the snapshot's hideSource. Inert
-        // when decorationShaderSource is empty — the card then draws natively.
+        // when the decoration chain is empty, and the card then draws natively.
         PhosphorSurface.SurfaceDecoration {
             anchors.fill: parent
             contentItem: osdLoader.item
             decorationChain: osdSlot.decorationChain
+            decorationReloadGeneration: osdSlot.decorationReloadGeneration
             decorationOuterPadding: osdSlot.decorationOuterPadding
             backdropTexture: osdSlot.backdropTexture
             // The slot spans the screen, so its own rect is the area the
@@ -585,7 +588,7 @@ Window {
 
         // Surface-shader decoration (Stage d). C++ OverlayService::applyDecoration
         // resolves the "popup.zoneSelector" pack and writes these before each
-        // show; empty source = no decoration. Consumed by the SurfaceDecoration
+        // show; empty resolution = no decoration. Consumed by the SurfaceDecoration
         // sibling below.
         // Resolved decoration chain: ordered stage list ({source,
         // vertexSource, preamble, params, animated} per pack), plus the
@@ -595,6 +598,7 @@ Window {
         // undeclared name silently becomes a dynamic property no binding
         // observes — the decoration would never update.
         property var decorationChain: []
+        property int decorationReloadGeneration: 0
         property real decorationOuterPadding: 0
         // The desktop wallpaper, standing in for the scene a daemon surface has
         // no way to capture. Under the SAME declare-and-forward contract as
@@ -710,11 +714,12 @@ Window {
         // Surface-shader decoration (Stage d). SIBLING of zoneSelectorLoader.
         // Captures the loaded content's PopupFrame shaderAnchor and re-renders it
         // through the resolved "popup.zoneSelector" surface pack. Inert when the
-        // source is empty.
+        // decoration chain is empty.
         PhosphorSurface.SurfaceDecoration {
             anchors.fill: parent
             contentItem: zoneSelectorLoader.item
             decorationChain: zoneSelectorSlot.decorationChain
+            decorationReloadGeneration: zoneSelectorSlot.decorationReloadGeneration
             decorationOuterPadding: zoneSelectorSlot.decorationOuterPadding
             backdropTexture: zoneSelectorSlot.backdropTexture
             backdropSourceArea: Qt.rect(0, 0, width, height)

@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 # Generate the OBS Debian recipe (plasmazones.dsc) from packaging/debian/control.
 #
 # Usage:
@@ -8,16 +11,18 @@
 # and its dependency resolver reads Build-Depends out of that .dsc *before*
 # debtransform assembles the real source package. So the .dsc must carry an
 # accurate copy of the field. Deriving it here instead of hand-maintaining a
-# second copy keeps packaging/debian/control the single source of truth.
+# second copy keeps packaging/debian/control the single source of truth FOR
+# BUILD-DEPENDS, which is the only field derived. Source, Binary, Architecture,
+# Maintainer, Homepage and Standards-Version are still hardcoded in the heredoc
+# below and also live in control, so a Standards-Version bump there leaves this
+# .dsc stale and OBS says nothing. Only Build-Depends has a canary (the
+# kwin-dev check further down).
 #
 # The .dsc deliberately has no Files:/Checksums-Sha256: section. OBS runs
 # debtransform (obs-build), which discovers the tarball fetched by the
 # download_files source service, folds in the debian.* files, and regenerates
 # the source package with correct checksums. A hand-written checksum would be
 # both unknowable at commit time and immediately wrong.
-#
-# SPDX-FileCopyrightText: 2026 fuddlesworth
-# SPDX-License-Identifier: GPL-3.0-or-later
 
 set -euo pipefail
 

@@ -10,7 +10,7 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief Reusable button that opens a cascading category menu.
  *
- * Drives the editor/settings shader choosers and the rule editor's match-
+ * Drives the settings app's shader choosers and its rule editor's match-
  * field / action-type pickers. The host owns the data: pass in a flat
  * `items` list (each entry: `{ id, name, category? }`), bind `currentId`,
  * and react to `selected(id)`.
@@ -41,10 +41,21 @@ import org.kde.kirigami as Kirigami
  *
  * ## "None" entry
  *
- * For hosts where clearing the selection is a first-class action (animation
- * settings), set `includeNoneEntry: true` to prepend an explicit `noneText`
- * row. Selecting it emits `selected("")`. The editor leaves it off
- * because its dialog uses a separate "Enable effect" checkbox.
+ * ONE test, applied in both directions. Set `includeNoneEntry: true` wherever the
+ * EMPTY ID IS A MEANINGFUL WIRE VALUE, so the user can choose it: the animation
+ * profile editor, the rules layout and overlay-shader action params, and the overlay
+ * shader assignment card all do. Leave it off wherever it is not, which covers two
+ * different shapes rather than one. An add-picker whose list shrinks as you pick has
+ * no empty value to send, and a MANDATORY single choice showing a placeholder until
+ * one is made has none either — the event, action-type and match-field pickers are
+ * that second shape, and a reader applying the add-picker half literally would fit
+ * them with a "None" row that wires nothing. Selecting the row emits `selected("")`.
+ *
+ * Stated as the rule rather than as a host list on purpose: three earlier versions
+ * enumerated hosts and all three were wrong. One generalised two
+ * `includeNoneEntry: false` line numbers into "the rules action editors", which set
+ * it TRUE at two other sites in the same file; the next named add-pickers as the
+ * whole of the false half, which is three of the seven hosts that leave it off.
  *
  * ## Menu lifecycle (Qt 6 use-after-free workaround)
  *

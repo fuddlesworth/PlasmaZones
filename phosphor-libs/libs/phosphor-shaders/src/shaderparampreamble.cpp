@@ -41,6 +41,22 @@ bool isValidParamId(const QString& id)
     return true;
 }
 
+/// Ids the shared animation header already defines as `p_<id>`, which a pack must
+/// not shadow. VALIDATOR LINT ONLY: buildParamPreamble below does NOT skip these,
+/// and must not start to on its own. Its lane numbering has to stay byte-identical
+/// to the upload numbering in each family's translate*Params, and those skip on
+/// !isValidParamId alone, so skipping on one side desyncs every later lane, which
+/// is worse than the compile error it would prevent. Closing it properly means
+/// skipping in all four places at once.
+bool isReservedAnimationParamId(const QString& id)
+{
+    // Kept in step with the `#define p_...` lines in
+    // data/animations/shared/animation_uniforms.glsl by hand: that header is data,
+    // not a compiled input, so nothing can assert the pairing. A grep for
+    // "^#define p_" across plasmazones/data/*/shared is what enumerates it.
+    return id == QLatin1String("reversed");
+}
+
 QString buildParamPreamble(const QList<PreambleParam>& params)
 {
     if (params.isEmpty()) {

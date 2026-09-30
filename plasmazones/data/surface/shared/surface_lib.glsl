@@ -10,8 +10,17 @@
 // margin). Colour-space and noise helpers live in the opt-in modules
 // surface_color.glsl / surface_noise.glsl.
 //
-// Runtime-agnostic: every helper reads only the contract uniforms, which are
-// global in both the compositor (default-block) and daemon (UBO) branches.
+// Runtime-agnostic in its DECLARATIONS: every helper reads only contract
+// uniforms, which are global in both the compositor (default-block) and daemon
+// (UBO) branches, so every helper here COMPILES on both.
+//
+// That is not the same as behaving alike in a BUFFER PASS. The compositor hands
+// a buffer pass a subset of the contract, so a helper reading a uniform outside
+// that subset compiles and then reads whatever the default-block default is,
+// which is zero, while the same helper on the daemon reads the real value from
+// the UBO. A helper used from a buffer pass therefore needs checking against
+// what that pass is actually given; the main pass has the whole contract on
+// both runtimes and is unaffected.
 
 #ifndef PLASMAZONES_SURFACE_LIB_GLSL
 #define PLASMAZONES_SURFACE_LIB_GLSL
@@ -27,13 +36,86 @@ float sdRoundedBox(vec2 p, vec2 b, float r) {
     return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
 }
 
-// True before a host has wired a real frame rect (uSurfaceFrameSize == 0). The
-// SDF would otherwise collapse to "edge everywhere", so the border and glow
-// family test this and pass content through untouched. The backdrop-slab packs
-// do NOT: they fall through to a zero-extent frame, whose mask collapses to
-// nothing, so the pane simply does not draw.
+// True before a host has wired a real frame rect. The test is "either side
+// below one device px", not "exactly zero": a sub-pixel frame is degenerate
+// for the same reason and is treated the same. The SDF would otherwise collapse
+// to "edge everywhere" for the border and glow family. For the backdrop-slab
+// packs it collapses the other way: to a DOT at the frame corner when the rect
+// is exactly zero (sdRoundedBox with a zero half-size reduces to a distance
+// from one point), and to a sub-pixel sliver when it is merely under a pixel —
+// a band where ONE extent is sub-pixel, and where both are a sub-pixel blob
+// whose exact shape depends on the extents and the pack's radius (frameSdfSplit
+// clamps that radius to the smaller half-extent) and carries no consequence
+// here. Two rounds enumerated the shapes and both enumerations were right only
+// for an EQUAL-extent rect. Either way each pack multiplies its window sample by
+// that mask, so the SURFACE would vanish or be
+// thinned rather than pass through. So every pack that reads the frame rect
+// tests this and returns the content untouched. No host has been SHOWN to reach
+// the merely sub-pixel case; three audit rounds each named a candidate and each
+// was refuted, so the guard stands on its own and this no longer guesses.
 bool surfaceFrameDegenerate() {
     return uSurfaceFrameSize.x < 1.0 || uSurfaceFrameSize.y < 1.0;
+}
+
+// Frame geometry for a fragment at device-px `p`. FrameSDF is declared here because
+// every frame helper below returns one.
+struct FrameSDF {
+    vec2 center;
+    vec2 halfSize;
+    float radius;
+    float d;
+};
+// Rounded box with SEPARATE top and bottom corner radii, for a pane that only
+// rounds under a title bar (or only at the bottom). `p` is box-centred in the
+// TOP-DOWN px space surfacePixel yields on both runtimes, so the upper half is
+// y < 0. Within a quadrant the rounded-box distance depends only on that
+// quadrant's corner, so picking the radius by half and reusing sdRoundedBox is
+// exact (iq's per-corner variant does the same selection).
+//
+// BOTH RADII MUST ALREADY BE <= min(b.x, b.y). Past that cap the value stops being a
+// rounded-box distance whatever the radii are, and it additionally TEARS when the two
+// DIFFER with at least one past HALF THE PANE'S HEIGHT, which is the cap only when the
+// pane is at least as wide as it is tall: the halves then disagree at y = 0, jumping and
+// at a large enough radius flipping sign, so a level set built on it splits along the
+// pane's midline. The seam is y = 0, so b.y is what governs it, and on a PORTRAIT pane two
+// radii can both sit past the cap and still agree exactly. Equal radii never tear at any
+// radius, which is why the precondition is the cap and not the difference. frameSdfSplit
+// and haloFalloff each clamp both ends before calling, so no bundled pack reaches either.
+float sdRoundedBoxSplit(vec2 p, vec2 b, float rTop, float rBottom) {
+    return sdRoundedBox(p, b, p.y < 0.0 ? rTop : rBottom);
+}
+
+// The bottom radius a pack derives from its own declared roundBottomCorners switch.
+// Twenty packs had their own copy of this ternary, including twenty copies of the
+// `>= 0.5` convention for reading a bool out of the float lane the contract uploads
+// it in. The flag is a parameter for the same reason surfaceBendUv's is:
+// `p_roundBottomCorners` is a per-pack generated name a shared header cannot see.
+//
+// UNIT-NEUTRAL, deliberately, which is why the radius argument carries no `Px`
+// suffix like the rest of this header. It is a pure select: it neither scales nor
+// clamps, so it hands back whatever it was given and the caller passes the unit
+// its own consumer wants. The nine border-band packs pass LOGICAL px, because
+// standardBorderBandSplit scales internally; the ten slab and halo packs pass
+// DEVICE px, for frameSdfSplit / surfaceSlabOpen / haloFalloff; and border-double
+// passes a device-px radius it has already dilated by its own stack width. Reading
+// the name as a promise of device px and pre-scaling before
+// standardBorderBandSplit would double-scale the BOTTOM while the top stayed
+// right, which shows up only on a scaled display and only at one end.
+float surfaceBottomRadius(float roundedRadius, float roundBottomFlag) {
+    return roundBottomFlag >= 0.5 ? roundedRadius : 0.0;
+}
+
+// frameSdf with separate top / bottom radii (device px), each clamped to half
+// the smaller side. `radius` reports the TOP radius, which is the one the
+// glass lens builds its normal field from.
+FrameSDF frameSdfSplit(vec2 p, float topRadiusPx, float bottomRadiusPx) {
+    FrameSDF fs;
+    fs.halfSize = 0.5 * uSurfaceFrameSize;
+    fs.center = uSurfaceFrameTopLeft + fs.halfSize;
+    float cap = min(fs.halfSize.x, fs.halfSize.y);
+    fs.radius = clamp(topRadiusPx, 0.0, cap);
+    fs.d = sdRoundedBoxSplit(p - fs.center, fs.halfSize, fs.radius, clamp(bottomRadiusPx, 0.0, cap));
+    return fs;
 }
 
 // Frame geometry + signed distance for a fragment at device-px `p`, with corner
@@ -41,25 +123,39 @@ bool surfaceFrameDegenerate() {
 // replaces the centre / half-size / radius-clamp / SDF idiom every decoration
 // pack repeated. Always clamps the radius (blur previously did not — a
 // pathological radius on a tiny frame is now clamped like every sibling).
-struct FrameSDF {
-    vec2 center;
-    vec2 halfSize;
-    float radius;
-    float d;
-};
+//
+// No bundled pack calls this any more: they all take frameSdfSplit above, since
+// every outline pack now follows the chain's bottom-corner answer. Retained as a
+// third-party convenience overload, the way frameMask's one-arg form and
+// surfaceSlabOpen's two-arg form are.
+// FORWARDS rather than re-deriving, so there is one copy of the centre, the
+// half-size and the radius clamp. It used to carry its own, which is two places
+// for a clamp to drift in a header a third party compiles against.
+// sdRoundedBoxSplit(p, b, r, r) reduces exactly to sdRoundedBox(p, b, r): within a
+// quadrant the distance depends only on that quadrant's corner, and both ends here
+// name the same radius.
 FrameSDF frameSdf(vec2 p, float radiusPx) {
-    FrameSDF fs;
-    fs.halfSize = 0.5 * uSurfaceFrameSize;
-    fs.center = uSurfaceFrameTopLeft + fs.halfSize;
-    fs.radius = clamp(radiusPx, 0.0, min(fs.halfSize.x, fs.halfSize.y));
-    fs.d = sdRoundedBox(p - fs.center, fs.halfSize, fs.radius);
-    return fs;
+    return frameSdfSplit(p, radiusPx, radiusPx);
 }
 
-// Slab AA coverage from an SDF distance (±1 px feather). Border packs use a
-// tighter ±0.7 band and pass their own width, so this is the slab form only.
+// Slab AA coverage with a caller-chosen feather (device px, ± around the
+// edge). Floored at a hair so a zero feather cannot collapse smoothstep's two
+// edges together (undefined in GLSL), the same guard standardBorderBandSplit uses.
+float frameMask(float d, float aa) {
+    float feather = max(aa, 1e-3);
+    return 1.0 - smoothstep(-feather, feather, d);
+}
+
+// Slab AA coverage from an SDF distance, at a fixed ±1 px feather. Border packs pass
+// their own, defaulting to a tighter 0.7, so this is the slab form only.
+//
+// The one-arg form is the third-party convenience overload and is retained for
+// that reason, the way surfaceSlabOpen's two-arg form below is: no bundled
+// pack calls it (they all pass their own feather), but this is an LGPL library
+// header and removing it would be a source break whose failure mode is a
+// swallowed compile error and a flat grey decoration.
 float frameMask(float d) {
-    return 1.0 - smoothstep(-1.0, 1.0, d);
+    return frameMask(d, 1.0);
 }
 
 // Focus dim: `lo` when unfocused, ramping to 1.0 focused, cross-faded on the
@@ -69,15 +165,25 @@ float focusDim(float lo) {
     return mix(lo, 1.0, clamp(uSurfaceFocused, 0.0, 1.0));
 }
 
-// Border-band composite: lay a premultiplied `col` band (coverage
-// `edge * insideMask * col.a`) over `tex`, over transparency.
+// Border-band composite: lay a STRAIGHT-alpha `col` band over `tex`, over
+// transparency. The doc used to say premultiplied, and the body is what shows
+// it is not: it computes the coverage and then multiplies col.rgb by it, which
+// would double-apply the alpha on a premultiplied input.
+//
+// `edge` and `insideMask` are coverages in [0,1] and the product is clamped,
+// because above 1 the `1 - ba` term goes NEGATIVE and the composite starts
+// subtracting the content it is supposed to cover. marginComposite two helpers
+// down was hardened for exactly this and says so; this one stated no domain at
+// all, and a third-party pack passing a raw unclamped mask is legal input.
 vec4 borderComposite(vec4 tex, vec4 col, float edge, float insideMask) {
-    float ba = edge * insideMask * col.a;
+    float ba = clamp(edge * insideMask * col.a, 0.0, 1.0);
     vec4 contentPx = tex * (1.0 - edge);
     return vec4(col.rgb * ba, ba) + contentPx * (1.0 - ba);
 }
 
-// Slab-over-window composite: `pane` over the (already opacity-dimmed) window.
+// WINDOW-over-slab composite: the (already opacity-dimmed) window over `pane`.
+// The name and the old doc both said pane over window; the body is
+// `window + pane * (1 - window.a)`, which is the window on top.
 vec4 slabComposite(vec4 window, vec4 pane) {
     return window + pane * (1.0 - window.a);
 }
@@ -91,35 +197,78 @@ vec4 slabComposite(vec4 window, vec4 pane) {
 // shadow texel). With ca so bounded the alpha is an exact sum and needs no
 // clamp; at strength <= 1 the maths is unchanged.
 vec4 marginComposite(vec4 base, vec3 col, float a) {
-    float ca = min(a, 1.0 - clamp(base.a, 0.0, 1.0));
+    // Bounded BELOW as well as above. min() alone let a negative coverage
+    // through, and a negative ca subtracts from both rgb and alpha, so a base
+    // that was already near zero comes out with NEGATIVE alpha and every later
+    // composite in the chain inherits it.
+    float ca = clamp(a, 0.0, 1.0 - clamp(base.a, 0.0, 1.0));
     return vec4(base.rgb + col * ca, base.a + ca);
 }
 
-// The border family's shared band assembly: the OUTER-radius rounded-rect SDF
+// The border family's shared band assembly: the outer-radius rounded-rect SDF
 // (content radius + border width, both logical px scaled to device px by
-// uSurfaceScale), the content-clip mask, and the band edge. `p` is the
-// device-px fragment (surfacePixel); `borderWidth` / `cornerRadius` are the
+// uSurfaceScale, except at a zero end, which stays square and is not dilated at
+// all — see the level-set note below), the content-clip mask, and the band edge.
+// `p` is the device-px fragment (surfacePixel); `borderWidth` / `cornerRadius` are the
 // pack's logical-px params (pack macros the shared code can't name, so they are
 // passed in). Packs whose band geometry differs (border-double's three-width
 // stack) build their own.
 //
+// `bottomRadius` is the bottom pair's own logical-px radius, scaled internally
+// like `cornerRadius`. Zero means square, and a caller squaring the bottom
+// passes 0 there while leaving `cornerRadius` alone.
+//
 // The `aa` feather is the SDF edge softness in DEVICE px (kept unscaled so the
 // anti-alias width stays ~constant across output scales). The historical
-// family value is 0.7 px — a soft, sub-pixel band. The three-arg form keeps
-// that default so every existing caller (window border included) is unchanged;
-// the four-arg form lets a pack expose it as a parameter and pass a smaller
-// value (~0.5) for a crisper, more grid-hinted 1px hairline.
+// family value is 0.7 px, a soft sub-pixel band, and every bundled outline pack
+// now exposes it as its own `edgeSoftness` parameter defaulting to that. The
+// three-arg and four-arg forms below are third-party compatibility only.
 struct BorderBand {
     FrameSDF fs;
     float insideMask;
     float edge;
 };
-BorderBand standardBorderBand(vec2 p, float borderWidth, float cornerRadius, float aa) {
+// THE PANE'S SILHOUETTE IS A PROPERTY OF THE CHAIN, not of one pack. A backdrop
+// pack can square its bottom corners (surfaceSlabOpen takes a separate bottom
+// radius), and until this function existed no border pack could follow it: every
+// one resolved through frameSdf, which takes one radius for all four corners. A
+// chain holding both then drew a rounded border tracing empty space over a
+// square backdrop corner. The host now resolves one answer for the chain and
+// injects it into every pack that declares the control. Note it does NOT do the
+// same for cornerRadius: the daemon overlay path injects its card radius, and the
+// compositor's easy mode writes one into the built-in border pack, but a custom
+// window chain still carries whatever radius each pack was given.
+BorderBand standardBorderBandSplit(vec2 p, float borderWidth, float cornerRadius, float bottomRadius, float aa) {
     // A zero feather makes both smoothstep() edges equal, which is undefined in
     // GLSL (NaN / garbage on the boundary fragment). Floor it at a hair so an
     // aggressively crisp (or hand-edited) value degrades to a near-hard edge
     // rather than misrendering.
     float feather = max(aa, 1e-3);
+    // A width of ZERO is the declared minimum on eight controls across seven
+    // packs, and it has to mean NO LINE. Six of those eight come through this
+    // helper. The other two are border-double's, which builds its bands from
+    // frameSdfSplit directly and so carries its own copy of this test, added after the
+    // same phantom line was found live there. For the six, without this guard zero
+    // does not mean no line: width collapses to 0, the edge term becomes
+    // smoothstep(-feather, +feather, d),
+    // and that paints a band about two feathers wide straddling the frame edge
+    // at up to a quarter of the colour's alpha. The user turns the border off
+    // and still sees one. Same guard, same reason, as softBorder in the overlay
+    // family's common.glsl.
+    if (borderWidth <= 0.0) {
+        BorderBand off;
+        // `fs` IS live on this path: five packs read fs.center and fs.halfSize for
+        // framePerimeter even with no band. `insideMask` is not, and is left at zero
+        // rather than computed: borderComposite multiplies it by `edge`, which is 0
+        // here, so every consumer discards it and computing it cost one smoothstep per
+        // fragment. Note fs.radius carries the UNDILATED radius here where the banded
+        // path below reports the dilated OUTER one, so a third-party pack reading it
+        // gets two meanings from one field depending on a width the host may inject.
+        off.fs = frameSdfSplit(p, cornerRadius * uSurfaceScale, bottomRadius * uSurfaceScale);
+        off.insideMask = 0.0;
+        off.edge = 0.0;
+        return off;
+    }
     // Bound the band to most of the frame's half extent, the way frameSdf
     // already bounds the radius. Inside the frame the SDF never falls below
     // that half extent, so a wider band would leave every interior fragment on
@@ -130,36 +279,78 @@ BorderBand standardBorderBand(vec2 p, float borderWidth, float cornerRadius, flo
     float width = min(borderWidth * uSurfaceScale, max(0.9 * min(halfSize.x, halfSize.y), 0.1));
     // Radius derives from the CLAMPED width, so the content corner still ends
     // at the requested cornerRadius rather than drifting in the clamped case.
+    // A NON-ZERO end adds the width: the band lies `width` inside the outer
+    // boundary, so the outer radius leaving a content corner at radius r is
+    // r + width.
+    //
+    // A ZERO end adds NOTHING, and that asymmetry is the point. Dilating a
+    // square corner by width gives an outer quarter-circle of that radius, so
+    // "0 for square" used to come out arced by the border's own width, and at a
+    // zero end the silhouette's SHAPE therefore depended on the band's
+    // thickness, which no caller predicts and no other family does. The
+    // backdrop-slab packs pass their radius to surfaceSlabOpen undilated, so a
+    // squared slab under a squared border disagreed at every corner.
+    //
+    // This fixes the ZERO end only, and that is deliberate. At a non-zero end the
+    // outer radius is still r + width by design, because `cornerRadius` names the
+    // CONTENT corner, so a border in the chain still governs the composited
+    // silhouette: it erases a radius-r slab corner by about 0.41*width along the
+    // diagonal, in DEVICE px, so under a pixel at the default width 2 on an
+    // unscaled display and plainly visible at width 20. Leaving a zero radius alone makes the
+    // -width level set a sharp inset rect, i.e. a true mitre: `width` thick
+    // perpendicular to each edge and width*sqrt(2) across the corner diagonal,
+    // which is what a square pane wants and what CSS and QPen MiterJoin draw.
+    // The test is on the LOGICAL radius, like the zero-width guard above.
     BorderBand b;
-    b.fs = frameSdf(p, cornerRadius * uSurfaceScale + width);
+    float outerTop = cornerRadius > 0.0 ? cornerRadius * uSurfaceScale + width : 0.0;
+    float outerBottom = bottomRadius > 0.0 ? bottomRadius * uSurfaceScale + width : 0.0;
+    b.fs = frameSdfSplit(p, outerTop, outerBottom);
     b.insideMask = 1.0 - smoothstep(-feather, feather, b.fs.d);
     b.edge = smoothstep(-width - feather, -width + feather, b.fs.d);
     return b;
 }
+// Uniform-radius forms, kept so a third-party pack written against the old
+// signatures still compiles. Both ends take the same radius, which is what every
+// caller meant before the split existed. Rendering is unchanged except at a
+// cornerRadius of exactly 0, where the zero-radius guard in the Split
+// implementation above now yields the square corner the control has always
+// promised instead of an arc of the border's own width. The guard deliberately
+// lives in the one implementation: splitting it would let these two forms
+// disagree with standardBorderBandSplit(p, w, r, r, aa).
+BorderBand standardBorderBand(vec2 p, float borderWidth, float cornerRadius, float aa) {
+    return standardBorderBandSplit(p, borderWidth, cornerRadius, cornerRadius, aa);
+}
+
 BorderBand standardBorderBand(vec2 p, float borderWidth, float cornerRadius) {
     return standardBorderBand(p, borderWidth, cornerRadius, 0.7);
 }
 
 // Backdrop-slab family shared open (blur / duotone / frosted-glass / glass /
-// rain-glass / rippled-glass / mosaic): the raw window content sample, the
-// device-px fragment, the frame SDF at the pack's corner radius, and the AA
-// slab mask — the four lines every backdrop-slab pack repeats before its
-// pack-specific pane. Content dimming is a per-pack concern now: a pack that
-// wants a fadeable window sample declares its own parameter (frost/glass
-// `contentOpacity`) and multiplies `window` itself, so its knob lives in its
-// param editor instead of riding the retired SetOpacity rule feed.
-// `cornerRadiusPx` is the pack's p_cornerRadius already scaled to device px.
+// mosaic / phosphor-glass / rain-glass / rippled-glass): the raw window
+// sample, the device-px fragment, the frame SDF at the pack's corner radius,
+// and the AA slab mask — the four lines every backdrop-slab pack repeats
+// before its pack-specific pane. Content dimming is a per-pack concern now: a
+// pack that wants a fadeable window sample declares its own `contentOpacity`
+// parameter and multiplies `window` itself, so its knob lives in its param
+// editor instead of riding the retired SetOpacity rule feed. All eight of the
+// packs above declare it, so it reads as part of the family rather than a
+// frost/glass peculiarity.
 struct SurfaceSlab {
     vec4 window;
     vec2 px;
     FrameSDF fs;
     float mask;
 };
-SurfaceSlab surfaceSlabOpen(vec2 uv, float cornerRadiusPx) {
+
+// The four-arg form is what the bundled slab packs call: separate top / bottom
+// radii (a pack's `roundBottomCorners` switch hands 0 for the bottom) and the
+// edge feather in device px (a pack's `edgeSoftness`). The two-arg form keeps
+// the original symmetric, 1 px-feather behaviour for third-party packs.
+SurfaceSlab surfaceSlabOpen(vec2 uv, float topRadiusPx, float bottomRadiusPx, float aa) {
     SurfaceSlab s;
     s.px = surfacePixel(uv);
-    s.fs = frameSdf(s.px, cornerRadiusPx);
-    s.mask = frameMask(s.fs.d);
+    s.fs = frameSdfSplit(s.px, topRadiusPx, bottomRadiusPx);
+    s.mask = frameMask(s.fs.d, aa);
     // The window sample is clipped to the same rounded frame as the pane. The
     // capture is square-cornered (the pack owns the corner radius), so an
     // unmasked window pokes its square corners past the rounded slab at any
@@ -168,42 +359,210 @@ SurfaceSlab surfaceSlabOpen(vec2 uv, float cornerRadiusPx) {
     s.window = surfaceTexel(uv) * s.mask;
     return s;
 }
+// `cornerRadiusPx`, like the two radii above it, is the pack's p_cornerRadius
+// already scaled to device px.
+SurfaceSlab surfaceSlabOpen(vec2 uv, float cornerRadiusPx) {
+    return surfaceSlabOpen(uv, cornerRadiusPx, cornerRadiusPx, 1.0);
+}
 
 // The backdrop-slab family's shared no-backdrop fallback (any host where
-// uHasBackdrop is 0): a faint premultiplied tint slab at 0.35 * tintStrength,
-// clipped to the slab `mask`. Only packs that use exactly this constant (blur /
-// glass / rippled-glass) call it; siblings with a different fallback keep theirs.
+// uHasBackdrop is 0): a faint premultiplied tint slab clipped to the slab
+// `mask`. Only packs that use exactly this profile (blur / glass /
+// rippled-glass) call it; siblings with a different fallback keep theirs.
+//
+// The alpha carries a visibility FLOOR, which is the whole point of the
+// fallback. Its callers' headers say it exists "so previews still communicate
+// the pack's shape", and at 0.35 * tintStrength that was false at the one
+// setting where it matters most: tintStrength declares a minimum of 0 on all
+// three packs, where the slab drew NOTHING and the shape was not communicated
+// at all. Even at their shipped defaults (0.15, 0.1, 0.1) it reached only 5.25%
+// and 3.5%. The floor applies ONLY to this degraded no-backdrop path; on the
+// real path tintStrength 0 still means no tint, because that is a statement
+// about the tint rather than about whether the pane is visible.
 vec4 faintTintSlab(vec3 tint, float tintStrength, float mask) {
-    return vec4(tint, 1.0) * (0.35 * tintStrength) * mask;
+    // Clamped, because nothing bounds the inputs. The bundled packs declare
+    // tintStrength at most 1, where 0.35 * ts can never exceed 1, but a
+    // third-party pack may declare any range, and above about 2.86 the alpha
+    // passes 1 and the result stops satisfying rgb <= a — the premultiplied
+    // invariant every consumer of this library relies on. The mask multiplies
+    // AFTER the floor so the slab still respects the rounded corners.
+    float a = clamp(max(0.35 * tintStrength, 0.1) * mask, 0.0, 1.0);
+    return vec4(clamp(tint, 0.0, 1.0) * a, a);
+}
+
+// Fade to zero just inside the CANVAS edge, so a reach wider than the captured
+// margin tapers out instead of clipping in a hard rectangle. Returns the scalar; the
+// caller decides what it multiplies, which is why this is not folded into haloFalloff.
+//
+// Three sites carried this by hand — haloFalloff itself plus fireflies and
+// phosphor-motes, whose own comments each said they were replicating the shared
+// helper's profile "so all four fade alike". They now share it rather than assert it.
+//
+// The feather is FLOORED so edge0 != edge1: smoothstep is undefined when they are
+// equal, and a zero reach collapsed them. With the floor a zero reach is wholly safe
+// rather than half-guarded.
+float surfaceCanvasEdgeFade(vec2 edgePx, float reachPx) {
+    float edgeDist = min(min(edgePx.x, edgePx.y), min(uSurfaceSize.x - edgePx.x, uSurfaceSize.y - edgePx.y));
+    float feather = max(min(0.35 * reachPx, 12.0 * max(uSurfaceScale, 0.001)), 1e-3);
+    return smoothstep(0.0, feather, edgeDist);
 }
 
 // Glow/shadow outer-margin falloff (the ~12 lines glow and shadow shared): the
 // exp(-4t²) reach profile from SDF distance `d`, feathered to zero just inside
 // the texture edge so a thin capture margin fades out instead of clipping in a
-// hard rectangle, confined to the transparent margin (1 - baseAlpha), and
-// scaled by `strength` and the focus dim at floor `focusFloor`. `edgePx` is the
+// hard rectangle, held to where the surface is not opaque (1 - baseAlpha) AND to
+// within two reaches inside the frame at full value for the first, and scaled by
+// `strength` and the focus dim at floor `focusFloor`. `edgePx` is the
 // REAL (undisplaced) fragment position for the edge feather — the shadow pack
 // evaluates `d` against a displaced frame but feathers on the true position.
-float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float strength, float focusFloor) {
+// `gateCornerTopPx` / `gateCornerBottomPx` are the caller's own corner radii in
+// device px, 0 for a squared end, and the depth gate follows them so it holds the
+// same outline the caller's FrameSDF draws.
+float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float strength, float focusFloor,
+                  float gateCornerTopPx, float gateCornerBottomPx) {
     // reach is caller-supplied and a zero would make this inf, then NaN through
     // exp(), and a NaN propagates through the whole composite rather than
-    // showing up as one bad pixel. Defensive rather than live: both in-tree
-    // callers (glow, shadow) already floor it at 1.0, so this changes no
-    // output today. It does NOT make a zero reach wholly safe either — the
-    // smoothstep below still collapses to edge0 == edge1 there — so a caller
-    // that stops flooring needs both guarded, not just this one.
-    float t = max(d, 0.0) / max(reach, 1e-3);
+    // showing up as one bad pixel. Both in-tree callers (glow, shadow) floor it
+    // at 1.0, so this changes no output today; it is here so that a caller which
+    // stops flooring cannot poison the frame.
+    //
+    // Clamping d at 0 makes t zero for every fragment INSIDE the frame, so the
+    // profile there is exp(0) = 1, the full value rather than a falloff. That is
+    // deliberate and stays: the shadow pack evaluates d against a DISPLACED frame,
+    // so part of its band legitimately lies inside the real one, and a pack whose
+    // halo radius is smaller than the border pack's needs the transparent CORNER
+    // SLIVER just inside the edge.
+    //
+    // But it left (1 - baseAlpha) as the ONLY confinement, which is confinement to
+    // TRANSPARENCY and not to the margin, so a natively translucent client wore the
+    // halo across its whole body. Two earlier candidates were rejected for costing
+    // one of the two cases above. The depth gate below costs neither.
+    float r = max(reach, 1e-3);
+    float t = max(d, 0.0) / r;
     float halo = exp(-4.0 * t * t);
-    float edgeDist = min(min(edgePx.x, edgePx.y), min(uSurfaceSize.x - edgePx.x, uSurfaceSize.y - edgePx.y));
-    halo *= smoothstep(0.0, min(0.35 * reach, 12.0 * max(uSurfaceScale, 0.001)), edgeDist);
+    // DEPTH GATE, ON THE UNDISPLACED FRAME. A halo has no business reaching
+    // further INSIDE the window body than its reach carries it outside, so hold the
+    // profile at full value down to one reach inside and fade it out by two. That
+    // zeroes only the deep interior of a translucent client, which is the case this
+    // exists for. For an opaque window baseAlpha is 1 and the halo was already 0.
+    //
+    // It gates on `edgePx`, NOT on `d`, and that distinction is the whole point.
+    // The shadow pack evaluates d against a frame DISPLACED by its cast offset, so a
+    // fragment h px below the window reads as (offsetY - h) deep inside that
+    // displaced rect even though it sits OUTSIDE the real one: deepest right at the
+    // frame edge, back to zero by h = offsetY. Gating on d therefore cut into the
+    // band from the edge outwards, and zeroed a strip of it wherever the depth
+    // passed two reaches, which needs offsetY > 2 * shadowSize. Both are legal:
+    // shadowSize declares a minimum of 4 and offsetY a maximum of 12. How much the
+    // user sees depends on how wide the margin is — on a window carrying its own
+    // decoration-shadow margin the loss reads as the shadow detaching from the
+    // frame, and on a borderless one, whose canvas is the frame plus the pack's own
+    // padding, as the shadow going altogether.
+    //
+    // MAIN PASS ONLY, because of these two uniforms: the compositor gives a BUFFER
+    // pass uSurfaceSize and uSurfaceScale but not the frame rect, so a third-party
+    // pack calling this from a buffer pass reads a zero frame there and a real one
+    // on the daemon. focusDim, called below, has the same shape.
+    //
+    // ROUNDED to the caller's own corner radii, not square, and SPLIT top/bottom
+    // so the gate follows the same outline the caller's own FrameSDF does.
+    //
+    // A rounded rect is a subset of its bounding square, so the square SDF is <=
+    // the rounded one everywhere and EQUAL except in the corner zone. Walking h
+    // inward along a corner diagonal, the rounded distance is R*(sqrt(2)-1) -
+    // h*sqrt(2) while h < R and -h after, so rounded minus square is
+    // (R-h)*(sqrt(2)-1): zero exactly when h >= R, positive otherwise. Either
+    // mismatch therefore moves the gate's thresholds by that much, in whichever
+    // direction the gate is the rounder of the two:
+    //   gate SQUARE under a ROUNDED frame — reads the transparent corner sliver as
+    //     deeper inside than it is and thins halo there. The sliver's deepest point
+    //     sits 0.293R inside the square edge, and the gate below spans two reaches,
+    //     so attenuation begins once the reach falls under about 0.29 of the radius
+    //     and reaches zero only under about 0.146 of it. glowSize 4 with
+    //     cornerRadius 64 zeroes it (18.75 of depth against a 8 px span).
+    //   gate ROUNDED under a SQUARED end — reads a squared corner as further
+    //     outside than it is and KEEPS halo there, which is what the gate exists
+    //     to stop. Full-keep reaches [R*(sqrt(2)-1) + r]/sqrt(2) instead of r,
+    //     so it begins as soon as cornerRadius exceeds the reach, not at some
+    //     large multiple of it.
+    // The second case is why this takes two radii rather than one: a pane that
+    // squares its bottom corners against a panel edge would otherwise wear a
+    // halo around a corner it no longer has.
+    vec2 gateHalf = 0.5 * uSurfaceFrameSize;
+    float gateCap = min(gateHalf.x, gateHalf.y);
+    float dBody = sdRoundedBoxSplit(edgePx - (uSurfaceFrameTopLeft + gateHalf), gateHalf,
+                                    clamp(gateCornerTopPx, 0.0, gateCap),
+                                    clamp(gateCornerBottomPx, 0.0, gateCap));
+    halo *= smoothstep(-2.0 * r, -r, dBody);
+    halo *= surfaceCanvasEdgeFade(edgePx, reach);
     halo *= (1.0 - baseAlpha);
     halo *= strength * focusDim(focusFloor);
     return halo;
 }
 
-// Frame-normalized [0,1] UV for a device-px fragment.
+// The SEVEN-argument form, kept so a third-party pack calling it is byte-identical
+// to what it had. One radius for both ends, which is what this helper did before
+// it took two, and which costs the bottom corner on a pack that squares it. A pack
+// that follows the chain's bottom-corner answer should pass both radii above.
+float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float strength, float focusFloor,
+                  float gateCornerPx) {
+    return haloFalloff(d, reach, edgePx, baseAlpha, strength, focusFloor, gateCornerPx, gateCornerPx);
+}
+
+// The pre-existing SIX-argument form, kept so a third-party pack calling it is
+// byte-identical to what it had. A square gate, which is what this helper did
+// before it took a radius, and which costs the corner sliver on a pack whose halo
+// reach is small against its corner radius. A pack that rounds its frame should
+// pass its radii to the eight-argument form above.
+float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float strength, float focusFloor) {
+    return haloFalloff(d, reach, edgePx, baseAlpha, strength, focusFloor, 0.0, 0.0);
+}
+
+// Frame-normalised UV for a device-px fragment. In [0,1] only for a fragment
+// INSIDE the frame rect: the padded canvas extends beyond it, so a fragment in
+// the outer margin comes back negative or past 1, which is what the margin
+// packs rely on.
 vec2 frameUv(vec2 px) {
     return (px - uSurfaceFrameTopLeft) / max(uSurfaceFrameSize, vec2(1.0));
+}
+
+// Inverse of surfacePixel: a top-down device-px POSITION back to the canvas uv
+// that samples it, with the same per-runtime Y flip.
+vec2 surfaceUvFromPixel(vec2 px) {
+    vec2 n = px / max(uSurfaceSize, vec2(1.0));
+#ifdef PLASMAZONES_KWIN
+    return vec2(n.x, 1.0 - n.y);
+#else
+    return n;
+#endif
+}
+
+// A canvas uv that a refraction pushed past the FRAME rect, mirrored back
+// inside it (the way Better Blur's "texture repeat" mode reflects the blur at
+// the pane edge, so a strong bend shows the pane's own interior folding over
+// rather than a stretched edge pixel). Mirrors in frame-normalized space, so
+// the fold happens at the pane's edge and not at the padded canvas's.
+vec2 frameMirrorUv(vec2 uv) {
+    vec2 f = frameUv(surfacePixel(uv));
+    vec2 t = mod(f, 2.0);
+    f = mix(t, 2.0 - t, step(1.0, t));
+    return surfaceUvFromPixel(uSurfaceFrameTopLeft + f * uSurfaceFrameSize);
+}
+
+// Where a bent sample LANDS: folded back inside the frame when @p mirror, else
+// clamped to the canvas.
+//
+// The two-way choice was written out three times, once per refracting pack
+// (glass, rippled-glass, rain-glass). frameMirrorUv above was already shared,
+// but the POLICY around it was not, and the policy is the part that has to
+// agree: a pack that clamped where its siblings mirror shows a stretched edge
+// pixel where they show the pane folding over, on the same user setting.
+//
+// Takes the flag rather than reading a parameter, because `p_edgeMirror` is a
+// per-pack generated name that a shared header cannot see. The packs keep their
+// own one-line wrappers for readability and pass the flag through.
+vec2 surfaceBendUv(vec2 uv, bool mirror) {
+    return mirror ? frameMirrorUv(uv) : clamp(uv, 0.0, 1.0);
 }
 
 // px-space (top-down) vector -> canvas UV offset, used for backdrop
@@ -221,12 +580,39 @@ vec2 pxToUv(vec2 v) {
 #endif
 }
 
-// Normalized perimeter angle in [-0.5, 0.5) around the frame centre, aspect-
-// corrected (divided by the half-extents) so dashes / hues stay uniform
-// per-side on non-square frames.
+// Normalised perimeter angle in [-0.5, 0.5] around the frame centre,
+// aspect-corrected by dividing through the half-extents.
+//
+// That correction equalises the dash COUNT per side, not the dash SIZE, and
+// the doc used to claim the opposite. Normalising each axis independently
+// gives a wide frame the same number of dashes along its long side as its
+// short one, so they are correspondingly longer there. Uniform dashes would
+// need arc length, which this deliberately does not compute.
 float framePerimeter(vec2 p, vec2 center, vec2 halfSize) {
     vec2 rel = (p - center) / max(halfSize, vec2(1.0));
+    // atan(0, 0) is undefined in GLSL, and the exact frame centre reaches it on
+    // any frame whose centre lands on a fragment centre. Returning the start of
+    // the sweep is the only answer continuous with its neighbourhood, since
+    // every direction meets there.
+    if (dot(rel, rel) < 1e-8) {
+        return 0.0;
+    }
     return atan(rel.y, rel.x) / TAU;
+}
+
+// The Phosphor set's four-stop cyan → blue → purple → rose ramp, @p t in [0,1].
+//
+// The colours come in as ARGUMENTS for the reason surfaceBottomRadius and surfaceBendUv
+// do: `p_colorCyan` and friends are per-pack generated names a shared header cannot see.
+// Three packs (border-phosphor, phosphor-glass, phosphor-motes) each carried a
+// byte-identical copy of this body and had to be kept in step by hand; each now keeps a
+// one-line local wrapper under its own name so its call sites are unchanged.
+vec3 surfaceFluxGradient(vec3 cyan, vec3 blue, vec3 purple, vec3 rose, float t) {
+    t = clamp(t, 0.0, 1.0) * 3.0;
+    vec3 c = mix(cyan, blue, clamp(t, 0.0, 1.0));
+    c = mix(c, purple, clamp(t - 1.0, 0.0, 1.0));
+    c = mix(c, rose, clamp(t - 2.0, 0.0, 1.0));
+    return c;
 }
 
 #endif // PLASMAZONES_SURFACE_LIB_GLSL

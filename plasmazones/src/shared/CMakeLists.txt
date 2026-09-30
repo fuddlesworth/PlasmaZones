@@ -50,7 +50,7 @@ qt_add_qml_module(plasmazones_shared_qml
         CategoryBadge.qml
         LayoutCard.qml
         PopupFrame.qml
-        ShaderCompileErrorBanner.qml
+        ShaderErrorBanner.qml
         ShaderPreviewPlaceholder.qml
         StripEmptyState.qml
         ParameterEditor.qml

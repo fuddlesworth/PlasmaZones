@@ -26,6 +26,12 @@ tasks:
   # --affected` runs ctest against build/phosphor-libs, and the only tests that pin
   # those helpers never run. A workspace-relative input (leading `/`) closes
   # the gap; task inputs merge with the inherited set rather than replacing it.
+  #
+  # The QML sweep in test_shader_item_qml_bindings is here for the same reason:
+  # it reads phosphor-surface-quick's shipped QML (SurfaceDecoration.qml is the
+  # only library host that drives a guarded texture property), so an edit there
+  # changes what it asserts while marking only `phosphor-libs` affected.
   test:
     inputs:
       - '/phosphor-libs/libs/phosphor-tiles/src/pluau/pluau.luau'
+      - '/phosphor-libs/libs/phosphor-surface-quick/qml/**/*.qml'

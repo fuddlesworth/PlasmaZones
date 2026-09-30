@@ -174,7 +174,7 @@ SettingsFlickable {
         // The enable switch and the bar count (Shaders.Audio), the part of CAVA
         // simple mode keeps. Both rows are gated on the toggle plus cava
         // presence, and the values feed both runtimes (daemon overlays and the
-        // KWin effect) plus the editor's shader preview. The remaining analysis
+        // KWin effect) plus this app's own shader preview. The remaining analysis
         // knobs (smoothing, gain, cutoffs, channels, filters, backend/source)
         // are advanced depth and live in the Audio Analysis card below.
         SettingsCard {

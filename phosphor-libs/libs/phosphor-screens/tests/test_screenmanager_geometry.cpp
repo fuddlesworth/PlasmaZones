@@ -10,8 +10,10 @@
 
 #include "FakePhysicalScreenSource.h"
 
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/PhysicalScreen.h>
+#include <PhosphorScreens/VirtualScreen.h>
 
 #include <QSignalSpy>
 #include <QTest>
@@ -229,6 +231,60 @@ private Q_SLOTS:
 
         // Override gone — back to the heuristic's full-screen rect.
         QCOMPARE(mgr.actualAvailableGeometry(mgr.physicalScreenFor(QStringLiteral("DP-1"))), QRect(0, 0, 1920, 1080));
+    }
+
+    // screenGeometry's THREE answers, which nothing pinned before. Consumers lean on the
+    // distinction between them to decide whether a rect is a real answer or a substitution, and
+    // three separate attempts at a guard in the overlay service were built on assumptions about
+    // it that turned out false — one of them that a virtual index dropped by a reconfigure still
+    // resolves, another that an empty id resolves to nothing.
+    void testScreenGeometryDistinguishesResolvedFromUnresolvable()
+    {
+        FakePhysicalScreenSource fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
+
+        ScreenManager mgr(ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
+        mgr.start();
+
+        const auto makeConfig = [](int count) {
+            PhosphorScreens::VirtualScreenConfig cfg;
+            cfg.physicalScreenId = QStringLiteral("DP-1");
+            for (int i = 0; i < count; ++i) {
+                PhosphorScreens::VirtualScreenDef def;
+                def.physicalScreenId = QStringLiteral("DP-1");
+                def.index = i;
+                def.id = PhosphorIdentity::VirtualScreenId::make(QStringLiteral("DP-1"), i);
+                def.displayName = QStringLiteral("Slice %1").arg(i);
+                const qreal band = 1.0 / count;
+                def.region = QRectF(0.0, i * band, 1.0, band);
+                cfg.screens.append(def);
+            }
+            return cfg;
+        };
+
+        // A TRACKED BARE PHYSICAL id answers with its real rect. Callers treat an invalid answer as
+        // "this id does not resolve", so a physical screen must never look unresolvable.
+        QCOMPARE(mgr.screenGeometry(QStringLiteral("DP-1")), QRect(0, 0, 1920, 1080));
+
+        // A LIVE VIRTUAL index answers with its slice.
+        QVERIFY(mgr.setVirtualScreenConfig(QStringLiteral("DP-1"), makeConfig(3)));
+        const QString third = PhosphorIdentity::VirtualScreenId::make(QStringLiteral("DP-1"), 2);
+        QVERIFY(mgr.screenGeometry(third).isValid());
+
+        // AN INDEX DROPPED BY A RECONFIGURE DOES NOT. This is the case the overlay service's
+        // guards were written for and the one nothing covered: the physical screen is still
+        // tracked and still has a config, so the rebuild does not bail — index 2 is simply no
+        // longer in it. An invalid rect here is the only signal a consumer gets.
+        QVERIFY(mgr.setVirtualScreenConfig(QStringLiteral("DP-1"), makeConfig(2)));
+        QVERIFY(!mgr.screenGeometry(third).isValid());
+
+        // AN EMPTY id resolves to the PRIMARY output rather than to nothing, which is deliberate
+        // and was mis-stated in a consumer's comment. Pinned so the next reader does not have to
+        // take a comment's word for it.
+        QCOMPARE(mgr.screenGeometry(QString()), QRect(0, 0, 1920, 1080));
+
+        // AN UNTRACKED id does not resolve.
+        QVERIFY(!mgr.screenGeometry(QStringLiteral("HDMI-9")).isValid());
     }
 };
 

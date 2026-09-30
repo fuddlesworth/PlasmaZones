@@ -234,11 +234,16 @@ float PlasmaZonesEffect::advanceFocusFade(const QString& windowId, bool focused)
     // focus change fades rather than snaps. Called from pushBorderUniforms
     // only for a pack that reads focus, with @p windowId threaded from the
     // fold so getWindowId(w) is not recomputed per pack.
-    // Uses the PINNED per-frame clock: a second call within the same frame (a
-    // chain with several focus-reading packs) reads now == lastMs and is an
-    // exact no-op, so the ramp advances at most once per frame and the step
-    // can never partially double-advance (the live wall clock could straddle a
-    // millisecond boundary mid-frame).
+    // Uses the PINNED clock, which is pinned per OUTPUT PASS rather than per
+    // frame: a second call within the same pass (a chain with several
+    // focus-reading packs) reads now == lastMs and is an exact no-op, so the
+    // ramp cannot partially double-advance the way the live wall clock could by
+    // straddling a millisecond boundary mid-pass. On a multi-output desktop a
+    // window straddling two outputs reaches this twice per refresh with two
+    // pins microseconds apart; the clock is integer milliseconds, so they
+    // usually share a value and the second call is still a no-op, and when they
+    // straddle a millisecond the ramp advances by one extra millisecond out of
+    // the configured fade duration.
     FocusFadeState& fs = m_focusFade[windowId];
     const float target = focused ? 1.0f : 0.0f;
     qint64 now = m_shaderManager.currentFrameClockMs();
@@ -413,8 +418,11 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     // normalized by the canvas size (negative alongside the sentinel),
     // matching the daemon branch's convention. Uses the per-frame cached
     // cursor from prePaintScreen — same rationale as the animation path.
-    // Hover packs declare `animated: true` so the vsync repaint loop keeps
-    // this fresh; there is no per-cursor-move damage path.
+    // A hover pack needs no `animated: true`. There IS a per-cursor-move
+    // damage path and it is right here in this effect: the driver in
+    // surface_gating.cpp keys on `pack->iMouseLoc >= 0`, the INTROSPECTED
+    // uniform, never the metadata flag, and compares the cursor the fold keyed
+    // on so it self-terminates when the pointer stops.
     if (pack.iMouseLoc >= 0) {
         // The cursor the FOLD resolved, not a re-derivation from a live cache. This used to
         // be derived from an `animating` flag that a live transition WIDENS (the
@@ -536,7 +544,9 @@ bool PlasmaZonesEffect::drawWindowImpl(const KWin::RenderTarget& renderTarget, c
         // the maps. A miss yields an empty id, which no decoration key is expected
         // to be.
         const QString wid = m_idCaches.windowIdCache.value(w);
-        // Mutable: the foreign-transform branch below records what it painted.
+        // find(), not constFind(): a QHash const_iterator yields a CONST entry, and the
+        // foreign-transform branch below writes lastForeignBand / lastForeignOpacity
+        // through this one.
         const auto bit = m_windowDecorations.find(wid);
         if (bit != m_windowDecorations.end() && bit->shaderApplied) {
             // FOREIGN ANIMATION on a PADDED chain. The only animation of ours that
@@ -608,7 +618,10 @@ bool PlasmaZonesEffect::drawWindowImpl(const KWin::RenderTarget& renderTarget, c
             // uniform persists; the texture stays bound until the post-draw cleanup.
             KWin::GLShader* const present = surfacePresentShader();
             const auto stateIt = m_surfaceMultipass.find(wid);
-            if (present && stateIt != m_surfaceMultipass.end()
+            // compositeWritten gates this as well as the pointer: the texture is
+            // allocated before the first fold runs, so a pointer test alone binds
+            // undefined contents whenever that fold has not happened or has bailed.
+            if (present && stateIt != m_surfaceMultipass.end() && stateIt->second.compositeWritten
                 && stateIt->second.compositeTex[stateIt->second.finalSlot]) {
                 const int unit = kSurfaceChannelBaseUnit;
                 KWin::ShaderBinder binder(present);
@@ -669,7 +682,13 @@ bool PlasmaZonesEffect::drawWindowImpl(const KWin::RenderTarget& renderTarget, c
         // no-transition arm and this one requires a live transition, so the two
         // are mutually exclusive.
         const auto reIt = m_surfaceMultipass.find(m_idCaches.windowIdCache.value(w));
-        if (reIt != m_surfaceMultipass.end()) {
+        if (reIt != m_surfaceMultipass.end() && reIt->second.compositeWritten) {
+            // This runs later in the same frame whatever the fold returned, and the
+            // transition arm reaches the fold's capture-failure bail too, so without
+            // compositeWritten the transition path would rebind an unwritten
+            // composite even once the present bind above started refusing it. The
+            // existing else path already copes with no composite: reboundLayerUnit
+            // simply stays false.
             if (KWin::GLTexture* const comp = reIt->second.compositeTex[reIt->second.finalSlot].get()) {
                 constexpr int kSurfaceLayerUnitDraw = ShaderInternal::kSurfaceLayerUnit;
                 glActiveTexture(GL_TEXTURE0 + kSurfaceLayerUnitDraw);

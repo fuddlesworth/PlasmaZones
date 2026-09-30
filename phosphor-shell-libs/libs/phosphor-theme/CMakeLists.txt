@@ -13,6 +13,18 @@ cmake_minimum_required(VERSION 3.16)
 
 set(PHOSPHORTHEME_VERSION "0.1.0")
 
+# The Qt floor this library requires AND advertises in its generated
+# PhosphorThemeConfig.cmake. Taken from the top-level QT_MIN_VERSION when built in-tree so
+# the two cannot drift, with its own value for a STANDALONE build, where that
+# variable does not exist. The fallback is not optional: the Config template
+# substitutes this, and an undefined variable expands to nothing and ships a config
+# whose find_dependency(Qt6 ...) carries no version floor at all.
+if(DEFINED QT_MIN_VERSION)
+    set(PHOSPHORTHEME_QT_MIN ${QT_MIN_VERSION})
+else()
+    set(PHOSPHORTHEME_QT_MIN "6.10.0")
+endif()
+
 if(NOT PROJECT_VERSION)
     project(PhosphorTheme VERSION ${PHOSPHORTHEME_VERSION} LANGUAGES CXX)
     set(CMAKE_CXX_STANDARD 20)
@@ -26,7 +38,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick)
+find_package(Qt6 ${PHOSPHORTHEME_QT_MIN} REQUIRED COMPONENTS Core Gui Qml Quick)
 
 # Qt 6.5+ resource-prefix policy. NEW = use `:/qt/qml/` as the QML
 # module resource prefix. The `qt_policy` command is what we actually

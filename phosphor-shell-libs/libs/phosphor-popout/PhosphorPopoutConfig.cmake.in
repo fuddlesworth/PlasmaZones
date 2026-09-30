@@ -11,7 +11,7 @@ include(CMakeFindDependencyMacro)
 # README's Dependencies section); when its installed deployment lands
 # alongside the layer-shell transport, the find_dependency line below
 # will gain Quick.
-find_dependency(Qt6 6.6 COMPONENTS Core Gui Qml)
+find_dependency(Qt6 @PHOSPHORPOPOUT_QT_MIN@ COMPONENTS Core Gui Qml)
 
 include("${CMAKE_CURRENT_LIST_DIR}/PhosphorPopoutTargets.cmake")
 

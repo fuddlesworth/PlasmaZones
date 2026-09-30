@@ -4,30 +4,22 @@
 #include "plasmazoneseffect.h"
 #include "compositor/effectlogging.h"
 #include "desktopvisibility.h"
-
-#include <effect/effecthandler.h>
-#include <effect/effectwindow.h>
-#include <opengl/glshader.h>
-#include <opengl/glshadermanager.h>
-#include <opengl/gltexture.h>
-#include <window.h>
-
-#include <epoxy/gl.h>
-
-#include "tilinghandler/tilinghandler.h"
 #include "handlers/snaphandler.h"
 #include "shader_internal.h"
-#include "surface_fold.h"
 #include "shader_resolve.h"
+#include "surface_fold.h"
+#include "tilinghandler/tilinghandler.h"
 
 #include <PhosphorCompositor/DecorationDefaults.h>
 #include <PhosphorRules/RuleAction.h>
-
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 #include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorSurface/SurfaceChainCompose.h>
 #include <PhosphorSurface/SurfaceThemeResolve.h>
+
+#include <effect/effecthandler.h>
+#include <effect/effectwindow.h>
 
 #include <QColor>
 #include <QGuiApplication>
@@ -73,13 +65,34 @@ struct FoldInputs
     QString basePackId;
     int outerPadding = 0;
     bool needsBackdrop = false;
+    // These two were omitted, and the omission was defended by exactly the
+    // derivation the paragraph above warns against. The fold reads BOTH:
+    // isShellSurface gates the shell content-rect rescan (surfacelayers.cpp) and
+    // pins the focus uniform high (surface_capture.cpp, decoration_render.cpp),
+    // and chainBakesOpacity gates the folded-opacity comparison in the same two
+    // files. So a refresh that changed either while chain, params, basePackId,
+    // padding and needsBackdrop all stayed put compared EQUAL, kept the cached
+    // fold, and drew a composite baked for the other case.
+    bool isShellSurface = false;
+    bool chainBakesOpacity = false;
 
     bool operator==(const FoldInputs&) const = default;
 };
 
 inline FoldInputs foldInputsOf(const WindowDecoration& wb)
 {
-    return FoldInputs{wb.chain, wb.packParamValues, wb.basePackId, wb.outerPadding, wb.needsBackdrop};
+    // DESIGNATED initialisers, not positional. Three of these are adjacent bools, so a
+    // positional list lets any two of them be swapped with no compile error, and the
+    // result is precisely the stale-fold class the struct's own comment above records as
+    // having already shipped once. (The int/bool pair is protected only by accident,
+    // since that narrowing would fail to compile.)
+    return FoldInputs{.chain = wb.chain,
+                      .packParamValues = wb.packParamValues,
+                      .basePackId = wb.basePackId,
+                      .outerPadding = wb.outerPadding,
+                      .needsBackdrop = wb.needsBackdrop,
+                      .isShellSurface = wb.isShellSurface,
+                      .chainBakesOpacity = wb.chainBakesOpacity};
 }
 
 } // namespace
@@ -109,7 +122,12 @@ void PlasmaZonesEffect::setupDecorationManager()
                 // keyed under the dead id against the sibling would linger
                 // until the next full rebuild.
                 KWin::EffectWindow* w = findWindowById(windowId);
-                if (w && getWindowId(w) == windowId && w->isOnCurrentDesktop()) {
+                // Per-output reading, like every other gate that decides whether to
+                // DECORATE (see desktopvisibility.h). On the global one a window whose
+                // own output shows its desktop took the remove branch while plainly
+                // visible, and the updateAllDecorations rebuild this comment relies on
+                // skipped it for the same reason, so nothing brought it back.
+                if (w && getWindowId(w) == windowId && isOnOwnOutputCurrentDesktop(w)) {
                     updateWindowDecoration(windowId, w);
                 } else {
                     removeWindowDecoration(windowId);
@@ -157,6 +175,15 @@ void PlasmaZonesEffect::deferDecorationTeardownWhileAnimated(const QString& wind
     // ~250ms scaled by the user's global animation speed, so a handful of
     // ticks covers the common case.
     constexpr int kAnimatedTeardownPollMs = 120;
+    // NO RETRY BUDGET, deliberately, and worth stating because the loop is
+    // self-re-arming: each tick removes the id, calls updateWindowDecoration, and
+    // that re-enters here and arms again, so a window whose EffectWindowVisibleRef is
+    // never dropped polls for as long as it is held. That is the correct behaviour —
+    // the ref IS the signal that something is still animating, and capping it would
+    // tear down a decoration mid-animation, which is the defect the deferral exists
+    // to prevent. The cost per tick is one findWindowById walk, and no in-tree path
+    // leaks the ref; a foreign effect that did would show up as this poll, not as a
+    // stuck border.
     if (m_animatedDecoTeardownPending.contains(windowId)) {
         return; // a poll is already armed; decoration sweeps re-enter freely
     }
@@ -210,6 +237,30 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         return;
     }
 
+    // FIRST, before anything is read or removed. The first call emits
+    // effectsChanged INLINE, whose handler drops every compiled pack and runs a
+    // full updateAllDecorations(), which decorates this window too — and then
+    // this call resumes. The sweep's generation check does not cover that: the
+    // generation is read once at updateAllDecorations entry, so it protects that
+    // function's own loop and nothing else.
+    //
+    // IT USED TO SIT MID-FUNCTION, below the `prior*` reads and the remove-first,
+    // defended by a paragraph arguing the resumption was harmless because nothing
+    // was cached across it. Two connections leaked every session because of it.
+    // The nested call inserted a WindowDecoration carrying a damageConnection and
+    // a paddedGeoConnection; the outer call, already past its own remove-first,
+    // then made its own pair and OVERWROTE that entry at the insert below. An
+    // overwrite disconnects nothing, so the nested pair stayed live until the
+    // EffectWindow died.
+    //
+    // Running it here fixes that by ordering alone: the nested decorate completes
+    // before this call reads any prior state, so the remove-first below sees the
+    // nested entry and disconnects its pair the way it disconnects any other. The
+    // cost is the same duplicated work on one call per session, now without the
+    // leak, and the old "anything cached above this line must move below it"
+    // caveat is gone with the mid-function placement.
+    ensureSurfaceRegistryPaths();
+
     // Did this window already have a decoration? Read LIVE, and read BEFORE the
     // remove-first below, so the focus cross-fade can tell a genuine undecorated→decorated
     // transition (must SNAP to the current focus) from a plain refresh (focus change, snap
@@ -237,6 +288,21 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // below can tell a real change from an identical re-resolve. See the
     // invalidation just before the insert.
     const FoldInputs priorFold = priorIt != m_windowDecorations.constEnd() ? foldInputsOf(*priorIt) : FoldInputs{};
+    // The foreign-transform trail guard's two fields, carried across the refresh.
+    //
+    // decoration_render writes both on every drawWindow of a padded window with a
+    // live foreign transform, and uses the PREVIOUS band to damage the region the
+    // slide just left. A refresh threw them away: the remove erases the entry, the
+    // keepSurfaceState path preserves only the GL working set, and the fresh
+    // WindowDecoration below starts with a null band and an opacity of 1.0. So the
+    // next change frame had no outgoing band to damage and the slide left a trail
+    // behind it, and the opacity comparison read a stale 1.0 and reported a change
+    // that had not happened.
+    //
+    // A refresh is not rare next to this: updateAllDecorations funnels through here
+    // on every focus change, which is exactly when an opacity-scoped rule moves.
+    const QRectF priorForeignBand = priorIt != m_windowDecorations.constEnd() ? priorIt->lastForeignBand : QRectF();
+    const double priorForeignOpacity = priorIt != m_windowDecorations.constEnd() ? priorIt->lastForeignOpacity : 1.0;
 
     // Remove the existing decoration first, but KEEP its GL working set and its
     // redirect: this is a REFRESH of the same window, about to re-assert the very
@@ -251,7 +317,8 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // out to be undecoratable, the kept state is an orphan and the kept redirect is a
     // window left shaded with nothing to shade it with.
     const auto undecorate = [&] {
-        // The SAME resolver removeWindowDecoration uses, three lines above. Not the
+        // The SAME resolver removeWindowDecoration uses (decoration_teardown.cpp).
+        // Not the
         // caller's `w` handed straight through: releaseSurfaceState's live-transition
         // guard is `if (target && findTransition(target))`, so a null target sails past
         // it and erases the composite an animation is still sampling, while
@@ -423,6 +490,12 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         return;
     }
     const QString basePackId = chain.first();
+    // Debug-level, once per (re)resolve rather than per frame: the one place
+    // the chain a window will fold is known, so a live session can answer
+    // "did the tree reach this window, and with which packs" from the log
+    // instead of from a screenshot.
+    qCDebug(lcEffect) << "decoration chain resolved for" << windowId << ":" << chain << "(user packs" << userPacks
+                      << "shell" << isShellSurface << ")";
 
     // Store the resolved chain. pushBorderUniforms reads live frameGeometry()/
     // expandedGeometry() + viewport.scale() per frame so a resize/move/output-scale
@@ -443,21 +516,10 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // A pack the registry cannot resolve gets no entry; consumers fall back
     // to the compiled pack's baked baseline.
     //
-    // Kept here as well as at the top of updateAllDecorations, because this
-    // function has callers that do not come through the sweep. After the first call
-    // it is a bool test.
-    //
-    // The FIRST call emits effectsChanged inline, whose handler drops every compiled
-    // pack and runs a full updateAllDecorations() — which decorates this window too,
-    // and then this call resumes and re-does it. The sweep's generation check does
-    // NOT cover that: the generation is read once, at updateAllDecorations entry, so
-    // it protects that function's own loop and nothing else. What makes the
-    // resumption harmless here is that nothing is cached across this line except the
-    // `prior*` locals read below, and the re-compile is lazy, so the outer call
-    // simply re-inserts an identical WindowDecoration over the nested one's. It is
-    // duplicated work on one call per session, not a stale read. Anything this
-    // function starts caching above this line has to move below it.
-    ensureSurfaceRegistryPaths();
+    // The seeding this used to do HERE now happens at the top of this function.
+    // It is unconditionally reached before this point (only the minimized-defer
+    // returns earlier, and that skips this line too), so a second call would be a
+    // bool test and nothing more. The reason it moved is at the new call site.
     QVariantMap allPackParams = resolvedProfile.effectiveParameters();
     if (ruleChain) {
         // Per-pack REPLACE, not deep-merge: a rule that carries params for a
@@ -520,6 +582,14 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         // stale "border" entry the tree profile still carries from a time the
         // user had the pack picked. Pick it again and we are in custom mode,
         // this branch does not run, and the tree's params win instead.
+        // This REPLACES the whole "border" entry, so any stored roundBottomCorners on that
+        // pack is dropped before chainRoundBottomCorners runs below and the chain falls to
+        // the pack's declared default. That covers a rule's border params too, which the
+        // overlay above may have written even in easy mode. Deliberate and harmless here:
+        // easy mode's own UI exposes no per-pack parameter editor, its chain is at most
+        // {border, opacity-tint}, and opacity-tint does not declare the control, so there
+        // is nothing for the two to disagree about. The resolved appearance owns this
+        // layer's params outright.
         QVariantMap borderParams;
         borderParams.insert(QStringLiteral("borderWidth"),
                             appearance->borderWidth.value_or(PhosphorCompositor::DecorationDefaults::BorderWidth));
@@ -594,6 +664,17 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         m_borderInactiveColor.isValid() ? m_borderInactiveColor
                                         : QColor(QString(PhosphorCompositor::DecorationDefaults::FallbackInactiveHex)),
         pal.color(QPalette::Active, QPalette::Window), pal.color(QPalette::Active, QPalette::WindowText)};
+    // One bottom-corner answer for the whole chain, resolved before any pack's
+    // uniforms are built. This is the path a blur + border chain on a real window
+    // takes, and it is where the two used to disagree: the backdrop squared its
+    // bottom corners and the border went on tracing a rounded outline through the
+    // gap. Resolution order is in chainRoundBottomCorners.
+    //
+    // Resolved from allPackParams AFTER the rule overlay above, so a per-window
+    // rule that moves the silhouette moves it for every pack in that window's
+    // chain rather than for the one pack the rule happens to name.
+    const QVariant chainBottomCorners =
+        PhosphorSurfaceShaders::chainRoundBottomCorners(m_surfaceShaderRegistry, chain, allPackParams);
     for (const QString& packId : std::as_const(chain)) {
         const PhosphorSurfaceShaders::SurfaceShaderEffect eff = m_surfaceShaderRegistry.effect(packId);
         if (!eff.isValid()) {
@@ -609,6 +690,14 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         // useSystemAccent, glow/shadow useThemeTint) via the shared resolver, so
         // window decorations resolve them identically to the daemon overlay path.
         PhosphorSurfaceShaders::resolveThemeParamColors(eff, packOverrides, themeColors);
+        // The chain's silhouette, injected unconditionally: resolveSurfaceParamValues
+        // builds a value only for a parameter the pack declares, so the key is
+        // dropped for packs that draw no outline. Invalid means no pack STATED a usable
+        // answer, which is not the same as no pack declaring it: a lone declarer with a
+        // null default and nothing stored lands here and still draws an outline.
+        if (chainBottomCorners.isValid()) {
+            packOverrides.insert(PhosphorSurfaceShaders::roundBottomCornersParamId(), chainBottomCorners);
+        }
         wb.packParamValues.insert(packId, ShaderInternal::resolveSurfaceParamValues(eff, packOverrides));
 
         // Outer-margin request (e.g. the glow pack's glowSize): the resolved
@@ -726,6 +815,13 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         }
     }
 
+    // Carried over rather than restarted, so the next change frame still knows
+    // which band to damage. Only on a REFRESH: for a window that was not decorated
+    // the captured values are the defaults, which is what a fresh entry wants
+    // anyway, and writing them unconditionally says the same thing.
+    wb.lastForeignBand = priorForeignBand;
+    wb.lastForeignOpacity = priorForeignOpacity;
+
     m_windowDecorations.insert(windowId, wb);
 
     // A chain carrying an audio-reactive pack (SurfaceShaderEffect::audio) may
@@ -783,11 +879,11 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
 
 void PlasmaZonesEffect::updateAllDecorations()
 {
-    // Compositor teardown: KWin::effects can be null when a caller driven by a
-    // file watcher or a D-Bus reply fires during shutdown (the registry
-    // hot-reload handler documents exactly this case before its own guarded
-    // addRepaintFull). Nothing to reconcile against, and the stackingOrder()
-    // walk below would deref the null.
+    // Belt-and-braces. KWin::effects cannot be null while this effect object lives,
+    // so the shutdown case this used to describe — a file watcher or D-Bus reply
+    // firing during teardown — cannot reach here with a null global. See the
+    // invariant at PlasmaZonesEffect::windowOutput in screens.cpp. Kept because the
+    // stackingOrder() walk below would deref it and the test costs one comparison.
     if (!KWin::effects) {
         return;
     }
@@ -862,7 +958,13 @@ void PlasmaZonesEffect::updateAllDecorations()
         // reconcile it below for ALL windows the appearance may hide — otherwise
         // a hide (rule or config default) applying to a window on another
         // virtual desktop would not take effect until next activation.
-        if (w->isOnCurrentDesktop()) {
+        // Per-output, not global: desktopvisibility.h's rule is that a gate deciding
+        // whether to DECORATE belongs to the monitor the window is on. This one is
+        // also the rebuild that windowDecorationRestored and the two rule-invalidation
+        // gates lean on, so on the global reading a window whose own output showed its
+        // desktop was dropped by them and then skipped by this, losing its decoration
+        // until something incidental re-resolved it.
+        if (isOnOwnOutputCurrentDesktop(w)) {
             revisited.insert(wid);
             updateWindowDecoration(wid, w);
         }
@@ -965,12 +1067,12 @@ QString PlasmaZonesEffect::resolveSurfacePathFor(const QString& windowId, KWin::
     // gate. Autotile-first precedence; falls back to window.floating for an
     // unmanaged window.
     if (m_tilingHandler->isTiledWindow(windowId)) {
-        return QStringLiteral("window.tiled");
+        return PhosphorSurfaceShaders::decorationWindowTiledPath();
     }
     if (m_snapHandler->isTiledWindow(windowId)) {
-        return QStringLiteral("window.snapped");
+        return PhosphorSurfaceShaders::decorationWindowSnappedPath();
     }
-    return QStringLiteral("window.floating");
+    return PhosphorSurfaceShaders::decorationWindowFloatingPath();
 }
 
 void PlasmaZonesEffect::seedDecorationTreeBaseline()

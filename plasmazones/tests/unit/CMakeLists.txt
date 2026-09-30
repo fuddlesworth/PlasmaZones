@@ -3,8 +3,9 @@
 #
 # PlasmaZones Unit Tests
 #
-# FILE-SIZE EXCEPTION (sanctioned): this file is one flat list of test target
-# declarations, and the isolation block at the very bottom is what makes the
+# FILE SIZE (not an exception: .txt is outside CODE_SUFFIXES, so the size rule
+# never reads this file and it has no oversize-baseline entry): this file is one
+# flat list of test target declarations, and the isolation block at the bottom makes the
 # length structural rather than incidental. That block walks
 # `get_property(DIRECTORY . PROPERTY TESTS)`, which is DIRECTORY-scoped, so
 # every target it covers has to be declared in THIS file. Moving a group out
@@ -811,6 +812,31 @@ p_add_test(test_whatsnew_data data/test_whatsnew_data.cpp)
 target_link_libraries(test_whatsnew_data PRIVATE PhosphorFsLoader::PhosphorFsLoader)
 target_compile_definitions(test_whatsnew_data PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
 
+# The other direction of the same contract. validate-json-schemas.py checks DATA
+# against the shader schemas; nothing checked the schemas' own numeric bounds
+# against the C++ constants they are meant to track, so every pass-budget or
+# buffer-scale change was a hand edit across four files with no gate behind it.
+# This target reads the committed schemas and compares each published bound to
+# its constant. The contracts are header-only, but a header still needs its
+# INCLUDE DIRECTORY, and the only Phosphor dirs p_add_test brings are the ones
+# plasmazones_core exports: PhosphorAnimation, PhosphorShaders and PhosphorSurface
+# are PUBLIC deps of it, PhosphorPointer is not. So the fourth contract has to be
+# named here.
+#
+# Without this the file compiled on any machine with the libraries INSTALLED,
+# because <PhosphorPointer/...> then resolves from the system prefix, and failed
+# in every clean CI container. That is why a local pass proves nothing about a
+# target's include hygiene when the headers it includes also ship to /usr/include.
+p_add_test(test_shader_schema_bounds data/test_shader_schema_bounds.cpp)
+target_link_libraries(test_shader_schema_bounds PRIVATE PhosphorPointer::PhosphorPointer)
+# The four shader-family metadata schemas live in the phosphor-libs tier, not
+# beside the plasmazones ones: phosphor-animation and phosphor-shaders compile
+# them into Qt resources, so they sit with the libraries that consume them. Its
+# own define, not a hop off P_SOURCE_DIR, so a later move fails the configure
+# instead of emptying every QJsonObject this test reads.
+target_compile_definitions(test_shader_schema_bounds PRIVATE
+    "P_SHADER_SCHEMA_DIR=\"${CMAKE_SOURCE_DIR}/phosphor-libs/data/schemas\"")
+
 p_add_test(test_layoutmanager_assignment core/layout/test_layoutmanager_assignment.cpp)
 # The AssignmentEntry-shape half of the suite above, split off at its P6 banner
 # when the single file passed the 1150-line ceiling. Shares the same fixture.
@@ -1055,7 +1081,14 @@ add_test(NAME test_shader_node_teardown COMMAND test_shader_node_teardown)
 # binding, the only shape that reproduces the silent write failure.
 add_executable(test_shader_item_qml_bindings ui/zones/test_shader_item_qml_bindings.cpp)
 target_link_libraries(test_shader_item_qml_bindings PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::GuiPrivate plasmazones_rendering PhosphorSurfaceQuick::PhosphorSurfaceQuick)
-target_compile_definitions(test_shader_item_qml_bindings PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\"")
+# P_SURFACE_QUICK_QML_DIR as well as P_SOURCE_DIR: the guarded properties are
+# declared on ShaderEffect and their hosts are spread across tiers, so a sweep
+# scoped to plasmazones/src misses SurfaceDecoration.qml — which is the file the
+# silent-Binding regression this test exists for actually lived in. A read of
+# another tier's QML, recorded as a test input in plasmazones/moon.yml rather
+# than a dependency, which is what CLAUDE.md prescribes for a cross-tier read.
+target_compile_definitions(test_shader_item_qml_bindings PRIVATE "P_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/plasmazones\""
+                                                                 "P_SURFACE_QUICK_QML_DIR=\"${CMAKE_SOURCE_DIR}/phosphor-libs/libs/phosphor-surface-quick/qml\"")
 add_test(NAME test_shader_item_qml_bindings COMMAND test_shader_item_qml_bindings)
 
 # Pure-data byte-layout test for the zone UBO extension. No GPU / scene graph
@@ -1580,10 +1613,10 @@ add_test(NAME test_scrolling_behavior_controller COMMAND test_scrolling_behavior
 # Pure string helpers behind AlgorithmService::createNewAlgorithm. Compiled
 # directly because they live in the plasmazones-settings executable rather than
 # plasmazones_core. Split by surface: the template splice / metadata rewrite
-# here, the shapes it refuses in _rejects, the blank scaffold next door. They
-# share no fixture beyond a copyright line.
+# here, the shapes it refuses in _rejects, the blank scaffold next door, and the
+# copy-suffix naming in _copy_suffix. They share no fixture beyond a copyright line.
 #
-# All three targets compile algorithmscaffold.cpp, which reads AutotileConstants.h's
+# All four targets compile algorithmscaffold.cpp, which reads AutotileConstants.h's
 # ScriptedDefaultMaxWindows and DefaultSplitRatio so a generated algorithm
 # matches the engine's own fallbacks - header-only constants, no .so coupling
 # beyond the include path. Linking PhosphorTiles rather than hand-listing paths
@@ -2446,12 +2479,24 @@ add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # shadervalidate/ - Offline Pack Validator Tests
-#   test_pack_validators:      metadata lints for the animation and overlay
-#                              authoring models
+#   test_pack_validators:      pack, parameter, token and buffer lints for the
+#                              animation and overlay authoring models
+#   test_pack_validator_presets: the PRESET lints for those models, split out
+#                              when the file above passed the size ceiling, at
+#                              the concern seam it had already drawn
 #   test_pointer_pack_validator: the same for the pointer model, split out when
 #                              the shared file passed the size ceiling
 #   test_surface_pack_validator: the same for the surface model, which had NO
 #                              harness at all until this was added
+#   test_surface_pack_lints:   the surface metadata lints the file above does not
+#                              reach, one negative slot each, cut from it by
+#                              coverage gap rather than by subject
+#   test_surface_blur_chain_lints: the builtin blur family's lints — the Kawase
+#                              pyramid's positional and base-scale checks, the
+#                              gaussian pair's positional check, needsBackdrop
+#                              and the radius slot. Cut by FAMILY, which is the
+#                              seam this block recommends below, when the surface
+#                              file came within fifteen lines of the ceiling
 #   test_animation_pack_bakes: the animation stage bakes on both hosts, and the
 #                              multipass buffer passes
 #   test_pack_model_detection: the shared/ marker lookup and include roots
@@ -2471,20 +2516,24 @@ add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
 # in shadervalidate/packvalidatortesthelpers.h (header-only).
 #
 # glslang: the validator bakes EVERY animation pack's fragment for the
-# compositor through glslang, and the pointer arm does the same. Both QSKIP
-# without the tool (REQUIRE_ANIMATION_FIXTURE, REQUIRE_POINTER_FIXTURE), which
-# also link the bundled shared/ helpers into the fixture root, so the targets
-# stay runnable on a machine that has neither the tool nor an install. That is the opposite
-# of the shader_validate_animations and shader_validate_pointer gates, which
-# fail instead: the gates are what must never silently lose coverage, while
-# these targets are also a developer's inner-loop tests.
+# compositor through glslang, and the surface and pointer arms do the same. All
+# three QSKIP without the tool (REQUIRE_ANIMATION_FIXTURE,
+# REQUIRE_SURFACE_FIXTURE, REQUIRE_POINTER_FIXTURE), which also link the bundled
+# shared/ helpers into the fixture root, so the targets stay runnable on a
+# machine that has neither the tool nor an install. That is the opposite of the
+# shader_validate_animations, shader_validate_surface and shader_validate_pointer
+# gates, which fail instead: the gates are what must never silently lose
+# coverage, while these targets are also a developer's inner-loop tests.
 set(_pack_validator_arms
     ${CMAKE_SOURCE_DIR}/plasmazones/src/shadervalidate/packvalidator_overlay.cpp
     ${CMAKE_SOURCE_DIR}/plasmazones/src/shadervalidate/packvalidator_animation.cpp
     ${CMAKE_SOURCE_DIR}/plasmazones/src/shadervalidate/packvalidator_surface.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/shadervalidate/packvalidator_surface_lints.cpp
+    ${CMAKE_SOURCE_DIR}/plasmazones/src/shadervalidate/packvalidator_surface_buffer_lints.cpp
     ${CMAKE_SOURCE_DIR}/plasmazones/src/shadervalidate/packvalidator_pointer.cpp
     ${CMAKE_SOURCE_DIR}/plasmazones/src/shadervalidate/packvalidatorcommon.cpp)
-foreach(_pv_test IN ITEMS test_pack_validators test_pointer_pack_validator test_surface_pack_validator
+foreach(_pv_test IN ITEMS test_pack_validators test_pack_validator_presets test_pointer_pack_validator
+                          test_surface_pack_validator test_surface_pack_lints test_surface_blur_chain_lints
                           test_animation_pack_bakes test_pack_model_detection)
     add_executable(${_pv_test} shadervalidate/${_pv_test}.cpp
                    shadervalidate/packvalidatortesthelpers.h
@@ -2506,6 +2555,25 @@ foreach(_pv_test IN ITEMS test_pack_validators test_pointer_pack_validator test_
     # No isolation call here on purpose: the directory-wide loop at the bottom of
     # this file picks up every add_test registered above it, these included.
     add_test(NAME ${_pv_test} COMMAND ${_pv_test})
+    # Every stage-compile assertion in these targets can be answered from the
+    # PERSISTENT shader cache instead of a fresh bake: a hit deserializes a
+    # QShader from disk and skips QShaderBaker entirely. Its key is SHA-256 over
+    # the stage byte plus the expanded source and NOTHING ELSE, so the baker
+    # configuration (bakeTargets(), the generated variant set) is not in it.
+    # Change either without moving the cache directory's "-v1" tag and a warm
+    # tree validates the PREVIOUS bake while a cold one bakes fresh.
+    #
+    # The isolation helper below is not enough on its own, though it is closer
+    # than it looks: it DOES set XDG_CACHE_HOME, per target, so the developer's
+    # own ~/.cache copy is already out of reach. What it cannot do is make the
+    # cache cold, because that per-target directory lives under the build tree
+    # and survives every ctest run in it. So the stale-hit window is a rebuilt
+    # baker against a build tree that was not wiped, which is exactly the
+    # configuration a developer has and CI never does.
+    #
+    # APPEND, not PROPERTIES ENVIRONMENT: the helper's own contract, since a
+    # plain set anywhere around it replaces the whole sandbox list.
+    set_property(TEST ${_pv_test} APPEND PROPERTY ENVIRONMENT "PHOSPHOR_DISABLE_SHADER_DISK_CACHE=1")
 endforeach()
 unset(_pack_validator_arms)
 

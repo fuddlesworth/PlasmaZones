@@ -12,7 +12,7 @@ using PhosphorShaders::ShaderRegistry;
 // Unit tests for ShaderRegistry::computeWallpaperCropRect.
 //
 // This is the pure geometry of the per-VS wallpaper crop introduced in
-// PR #333 — it mirrors the "cover" placement used by shaders/wallpaper.glsl
+// PR #333 — it mirrors the "cover" placement used by data/overlays/shared/wallpaper.glsl
 // ::wallpaperUv so a virtual screen that is a sub-rect of its physical screen
 // samples its correct slice instead of the center-cropped whole wallpaper.
 //

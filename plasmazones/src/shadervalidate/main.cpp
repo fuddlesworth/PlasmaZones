@@ -27,9 +27,12 @@
 //     glslangValidator or glslang on PATH for the classic-GL compile. The
 //     default vertex and daemon multipass buffers also bake on Qt-RHI.
 //   • surface/decoration packs (--surface, data/surface/*):
-//     SurfaceShaderEffect + paramPreamble; validates effect.frag, buffer
-//     passes, and the shared vertex stage on the daemon Qt-RHI path — see
-//     validateSurfacePack.
+//     SurfaceShaderEffect + paramPreamble; validates effect.frag and the buffer
+//     passes on BOTH the daemon Qt-RHI path and, through glslang, the compositor
+//     PLASMAZONES_KWIN path every decoration ships on. A vertex the pack
+//     declares of its own bakes on both; the shared surface.vert fallback bakes
+//     on Qt-RHI only, because it reads qt_Matrix and the compositor branch does
+//     not declare it — see validateSurfacePack.
 //   • pointer packs (--pointer, data/pointer/*):
 //     PointerShaderEffect + the pPointer entry scaffold + paramPreamble;
 //     validates effect.frag and the buffer passes on BOTH the preview Qt-RHI
@@ -258,8 +261,8 @@ int main(int argc, char** argv)
                   << "  --pointer, -p        force pointer packs (data/pointer/*)\n"
                   << "  --quiet, -q          print only failing packs\n"
                   << "  --emit-preamble      write each pack's p_generated.glsl autocomplete sidecar (no validation)\n"
-                  << "Animation packs compile for Qt-RHI previews and the compositor. Install glslang for the "
-                     "compositor check.\n";
+                  << "Animation, surface and pointer packs compile for Qt-RHI previews and the compositor. "
+                     "Install glslang for the compositor check.\n";
         return 2;
     }
 
@@ -331,6 +334,48 @@ int main(int argc, char** argv)
         }
         errStream << "wrote p_generated.glsl for " << packs.size() << " pack(s).\n";
         return 0;
+    }
+
+    // CROSS-PACK, so it cannot live in a per-pack validator: two packs whose
+    // `category` differs only by case or surrounding whitespace land in TWO
+    // groups in the browser, because the grouping is on the exact string. The
+    // author sees "Decoration" and "decoration " as one category and the user
+    // sees two, one of them usually holding a single pack.
+    //
+    // A WARNING, not an error. Which spelling is the intended one is the author's
+    // call, a deliberate near-duplicate is conceivable, and this must not fail a
+    // release over presentation. It also runs for EVERY family rather than just
+    // the surface one it was reported against: the grouping is family-agnostic.
+    //
+    // Only meaningful with siblings to compare, so a single-pack run says nothing.
+    if (packs.size() > 1) {
+        // normalized spelling -> the distinct raw spellings seen for it.
+        QMap<QString, QStringList> categorySpellings;
+        for (const QString& pack : packs) {
+            QFile metaFile(QDir(pack).filePath(QStringLiteral("metadata.json")));
+            if (!metaFile.open(QIODevice::ReadOnly)) {
+                continue; // the per-pack validator reports an unreadable metadata.json
+            }
+            const QString category =
+                QJsonDocument::fromJson(metaFile.readAll()).object().value(QLatin1String("category")).toString();
+            if (category.isEmpty()) {
+                continue;
+            }
+            QStringList& seen = categorySpellings[category.trimmed().toCaseFolded()];
+            if (!seen.contains(category)) {
+                seen.append(category);
+            }
+        }
+        for (auto it = categorySpellings.constBegin(); it != categorySpellings.constEnd(); ++it) {
+            if (it.value().size() > 1) {
+                QStringList quoted;
+                for (const QString& s : it.value()) {
+                    quoted << QLatin1Char('"') + s + QLatin1Char('"');
+                }
+                errStream << "warning: these categories differ only by case or whitespace and group separately in "
+                          << "the browser: " << quoted.join(QLatin1String(", ")) << "\n";
+            }
+        }
     }
 
     int totalErrors = 0;

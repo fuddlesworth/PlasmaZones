@@ -66,8 +66,9 @@ struct ZoneLabelTexture
     }
 
     /// Composite the sparse tiles into one full screen-addressed image
-    /// (ARGB32-premultiplied). Returns a null image when empty. Used by the
-    /// render node for GPU upload and by QImage-consuming preview paths.
+    /// (ARGB32-premultiplied). Returns a null image when empty. Used by
+    /// QImage-consuming preview paths; the render node uploads the tiles
+    /// directly and never allocates a full-screen CPU image.
     PHOSPHORRENDERING_EXPORT QImage toImage() const;
 
     /// Wrap a full-size image as a single tile at (0,0). The inverse of

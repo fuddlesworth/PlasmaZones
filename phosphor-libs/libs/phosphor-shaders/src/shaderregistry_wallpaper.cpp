@@ -130,7 +130,34 @@ QImage ShaderRegistry::loadWallpaperImage()
     if (img.isNull()) {
         return {};
     }
-    QImage converted = img.convertToFormat(QImage::Format_RGBA8888);
+    // PREMULTIPLIED, because that is the convention both consumers of this
+    // texture assume, and it used to be STRAIGHT.
+    //
+    // On the compositor host, binding 15's backdrop is KWin's own capture, which
+    // is premultiplied. On the daemon host it is this wallpaper. The same GLSL
+    // runs on both, and two things in it are only correct for premultiplied
+    // input: the blur pack un-premultiplies with `blurred.rgb / blurred.a` and
+    // re-multiplies after, and the Kawase passes weight backdropTexel()
+    // linearly INCLUDING alpha, which is the textbook-wrong operation on
+    // straight alpha.
+    //
+    // Neither of those existed before the dual Kawase chain. The old blur pack
+    // composited with a MULTIPLY by alpha under the same stated assumption, and
+    // a multiply is a no-op while alpha is near one, so the wrong convention was
+    // harmless in practice. The divide is not, so the tag has to be right now.
+    //
+    // The two formats share a memory LAYOUT, so no upload plumbing changes, but
+    // convertToFormat re-encodes the VALUES rather than just moving the tag,
+    // which is the whole point: the sampler needs premultiplied bytes. For an
+    // opaque wallpaper that changes nothing at all. It matters only for a
+    // wallpaper carrying alpha, which sceneGround() already treats as legal.
+    //
+    // Every consumer was traced. All the shader ones bind this straight to a
+    // sampler and there is no QQuickImageProvider or Image among them. The one
+    // CPU consumer, the animation preview's ground, composites with QPainter,
+    // which reads the format tag, so a correctly-tagged premultiplied source
+    // composites to the same picture a correctly-tagged straight one did.
+    QImage converted = img.convertToFormat(QImage::Format_RGBA8888_Premultiplied);
 
     QMutexLocker lock(&s_wallpaperCacheMutex);
     // Recheck after re-acquiring: another thread may have decoded and stored
@@ -153,7 +180,7 @@ namespace {
 /// Factored out because two callers need the identical placement and only
 /// differ in what they do with it — one cuts an image out of it, the other maps
 /// it across a quad. Two copies of this would be two chances to disagree with
-/// shaders/wallpaper.glsl::wallpaperUv, which both of them mirror.
+/// data/overlays/shared/wallpaper.glsl::wallpaperUv, which both of them mirror.
 struct WallpaperCover
 {
     qreal x = 0.0;
@@ -231,7 +258,7 @@ QRect ShaderRegistry::computeWallpaperCropRect(QSize wpSize, const QRect& physGe
     }
 
     // "Cover" placement of the wallpaper on the physical screen: aspect-correct
-    // fill centered, overflow cropped. Mirrors shaders/wallpaper.glsl::wallpaperUv
+    // fill centered, overflow cropped. Mirrors data/overlays/shared/wallpaper.glsl::wallpaperUv
     // so the cropped image sampled with aspect == subGeom reproduces the same
     // portion of the wallpaper that would appear inside subGeom if the whole
     // physical screen were drawn with the full wallpaper.

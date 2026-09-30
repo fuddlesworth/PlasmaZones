@@ -13,6 +13,7 @@
 #include <QVariantMap>
 #include <QVector>
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 #include <QtPlugin>
@@ -113,7 +114,12 @@ private:
         initial[QStringLiteral("previewWidth")] = kPreviewWidth;
         initial[QStringLiteral("previewHeight")] = kPreviewHeight;
 
-        auto* card = qobject_cast<QQuickItem*>(component.createWithInitialProperties(initial));
+        // unique_ptr, not a bare pointer plus a delete at the tail: CLAUDE.md forbids the
+        // manual delete, and the two slots below returned the item through QVERIFY /
+        // QCOMPARE calls that abandon the slot on failure, so a FAILING test leaked the
+        // whole item tree. Same holder the sibling QML tests in this directory use.
+        const std::unique_ptr<QObject> holder(component.createWithInitialProperties(initial));
+        auto* card = qobject_cast<QQuickItem*>(holder.get());
         if (!card) {
             qWarning() << "create failed:" << component.errorString();
             return rects;
@@ -132,7 +138,6 @@ private:
             rects.insert(index, mapVisibleRectToItem(zoneItem, card));
         }
 
-        delete card;
         return rects;
     }
 
@@ -163,7 +168,8 @@ private Q_SLOTS:
             QUrl(QStringLiteral("qrc:/test_card_index.qml")));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
 
-        auto* grid = qobject_cast<QQuickItem*>(component.create());
+        const std::unique_ptr<QObject> holder(component.create());
+        auto* grid = qobject_cast<QQuickItem*>(holder.get());
         QVERIFY(grid);
 
         QList<int> indices;
@@ -182,7 +188,6 @@ private Q_SLOTS:
 
         QCOMPARE(indices, QList<int>({0, 1, 2}));
         QVERIFY2(childrenWithoutIndex >= 1, "expected the Repeater itself to expose no model index");
-        delete grid;
     }
 
     /// The zone selector's ScrollView clips once the layout list overflows. A
@@ -208,7 +213,8 @@ private Q_SLOTS:
             QUrl(QStringLiteral("qrc:/test_clip.qml")));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
 
-        auto* root = qobject_cast<QQuickItem*>(component.create());
+        const std::unique_ptr<QObject> holder(component.create());
+        auto* root = qobject_cast<QQuickItem*>(holder.get());
         QVERIFY(root);
 
         QVector<QQuickItem*> inside;
@@ -232,7 +238,6 @@ private Q_SLOTS:
         const QRectF clipped = mapVisibleRectToItem(scrolled.at(0), root);
         QVERIFY2(clipped.isEmpty(), "a fully clipped item must report no visible rect");
         QVERIFY2(!clipped.contains(QPointF(20, 30)), "clipped item must not hit-test");
-        delete root;
     }
 
     /// The delegates must be findable by objectName and expose their model

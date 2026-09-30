@@ -157,6 +157,60 @@ private Q_SLOTS:
         QCOMPARE(revised.count(), 1);
     }
 
+    /// The chain's bottom-corner answer has to reach the UPLOADED slot map of a pack
+    /// that never set it, not merely come out of the resolver. Stored on the FIRST pack
+    /// in chain order only, so anything the second pack draws at the bottom can only
+    /// have come from the chain.
+    void theChainsBottomCornerAnswerReachesEveryStage()
+    {
+        ShellChrome chrome({QStringLiteral(PZ_BUNDLED_SURFACE_DIR)}, nullptr);
+        const QStringList chain{QStringLiteral("blur"), QStringLiteral("border")};
+
+        // blur squares its bottom; border stores nothing and declares the opposite.
+        QVariantMap squaredTree;
+        QVariantMap blurParams;
+        blurParams.insert(QStringLiteral("roundBottomCorners"), false);
+        squaredTree.insert(QStringLiteral("blur"), blurParams);
+        QVERIFY(chrome.setTreeJson(treeJson(decorationShellPhosphorBarPath(), chain, squaredTree)));
+        const QVariantList squaredStages = chrome.chainFor(decorationShellPhosphorBarPath());
+        QCOMPARE(squaredStages.size(), 2);
+        const QVariantMap squaredBorder = squaredStages.at(1).toMap().value(QStringLiteral("params")).toMap();
+
+        // Same chain, nothing stored: step 2 hands both packs a declared true.
+        QVERIFY(chrome.setTreeJson(treeJson(decorationShellPhosphorBarPath(), chain)));
+        const QVariantList roundedStages = chrome.chainFor(decorationShellPhosphorBarPath());
+        QCOMPARE(roundedStages.size(), 2);
+        const QVariantMap roundedBorder = roundedStages.at(1).toMap().value(QStringLiteral("params")).toMap();
+
+        // Compared by DIFFERENCE, not by lane name: translateSurfaceParams numbers the
+        // lanes from the pack's OWN declaration order, so naming one would break on an
+        // unrelated reorder of border's parameters. Exactly one lane may move, and it
+        // must flip 1.0 -> 0.0. With the injection at chainFor removed both maps carry
+        // border's own default and NOTHING differs, so this fails rather than passing
+        // vacuously.
+        // Iterating the ROUNDED map's keys is sufficient only because both chains run the
+        // same two packs in the same order, so the lane sets are identical and a lane
+        // present in one is present in the other.
+        QStringList changed;
+        for (auto it = roundedBorder.constBegin(); it != roundedBorder.constEnd(); ++it) {
+            const QVariant squaredValue = squaredBorder.value(it.key());
+            if (squaredValue != it.value()) {
+                changed << it.key();
+                QCOMPARE(it.value().toDouble(), 1.0);
+                QCOMPARE(squaredValue.toDouble(), 0.0);
+            }
+        }
+        // Names the premise, because "Actual: 0 Expected: 1" on its own sends the reader
+        // looking at the injection when the likelier cause is the fixture: this needs the
+        // bundled blur and border packs to BOTH declare roundBottomCorners, and blur's
+        // default to be true so squaring it is a change.
+        QVERIFY2(changed.size() == 1,
+                 qPrintable(QStringLiteral("expected exactly one differing lane, got %1. Do bundled blur and "
+                                           "border both still declare roundBottomCorners, with blur defaulting "
+                                           "to true?")
+                                .arg(changed.size())));
+    }
+
     void outerPaddingFollowsTheChainsLargestRequest()
     {
         ShellChrome chrome({QStringLiteral(PZ_BUNDLED_SURFACE_DIR)}, nullptr);
@@ -327,6 +381,64 @@ private Q_SLOTS:
         QVERIFY(chrome.setTreeJson(treeJson(decorationShellPhosphorBarPath(), {QStringLiteral("border-phosphor")})));
         QVERIFY(!chrome.setTreeJson(QStringLiteral("[not an object")));
         QCOMPARE(chrome.chainFor(decorationShellPhosphorBarPath()).size(), 1);
+    }
+
+    /// decorationReloadGeneration is a SEPARATE tick from `revision`, and this pins
+    /// the separation in both directions.
+    ///
+    /// The counter exists because recomposing the chain does not cover an in-place
+    /// edit of a pack's shader SOURCE: the composition comes out byte-identical,
+    /// every stage rebinds the same URL, and nothing re-bakes. Folding it into
+    /// bump() would instead re-bake every stage on every tree and palette change.
+    ///
+    /// It also covers the wiring, which is what this slot was written chasing: both
+    /// registry connections used to live in subscribeToDaemon(), which only the
+    /// OTHER constructor calls, so a chrome built with explicit search paths had
+    /// neither and a live pack edit re-resolved nothing at all.
+    void aRegistryRescanRebakesButATreeEditDoesNot()
+    {
+        QTemporaryDir packs;
+        QVERIFY(packs.isValid());
+        // The pack exists BEFORE the chrome does, so the edit below is a change to a
+        // file the registry is already watching rather than a new subdirectory.
+        QVERIFY(writePackWithPreset(packs.path(), QStringLiteral("reload-glow"), QStringLiteral("Wide"), 24));
+        ShellChrome chrome({packs.path()}, nullptr);
+        QCOMPARE(chrome.decorationReloadGeneration(), 0);
+
+        QSignalSpy reloads(&chrome, &ShellChrome::decorationReloadGenerationChanged);
+        QSignalSpy revised(&chrome, &ShellChrome::revisionChanged);
+        QVERIFY(chrome.setTreeJson(treeJson(decorationShellPhosphorOsdPath(), {QStringLiteral("reload-glow")})));
+        QCOMPARE(chrome.chainFor(decorationShellPhosphorOsdPath()).size(), 1);
+
+        // The tree edit DID revise the chrome and did NOT ask for a re-bake. Both
+        // halves matter: without the first this passes on a chrome that noticed
+        // nothing, and without the second it passes with the two counters merged.
+        QVERIFY(revised.count() > 0);
+        QCOMPARE(chrome.decorationReloadGeneration(), 0);
+        QCOMPARE(reloads.count(), 0);
+
+        // A live edit of the pack's SHADER SOURCE does ask for one. Written as an
+        // atomic rename, which is how an editor saves and what the registry's
+        // per-entry watches are documented to cover, and at a DIFFERENT LENGTH:
+        // effectContentSignature mixes each watched file's size and its millisecond
+        // mtime, so a same-size rewrite inside the same millisecond hashes
+        // identically and the loader commits nothing.
+        const QString fragPath = packs.path() + QStringLiteral("/reload-glow/effect.frag");
+        {
+            QFile tmpFrag(fragPath + QStringLiteral(".new"));
+            QVERIFY(tmpFrag.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            QVERIFY(tmpFrag.write(QByteArrayLiteral("// edited in place by the test\n"
+                                                    "vec4 pSurface(vec2 uv)\n"
+                                                    "{\n"
+                                                    "    return vec4(0.0, float(p_glowSize), 0.0, 1.0);\n"
+                                                    "}\n"))
+                    > 0);
+            tmpFrag.close();
+            QVERIFY(QFile::remove(fragPath));
+            QVERIFY(QFile::rename(fragPath + QStringLiteral(".new"), fragPath));
+        }
+        QVERIFY2(reloads.wait(15000), "a live pack-source edit must bump the reload generation");
+        QVERIFY(chrome.decorationReloadGeneration() > 0);
     }
 
     void decorationComponentIsPlainStorage()

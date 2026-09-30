@@ -81,9 +81,14 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
     // otherwise be missed — the signal wouldn't have an attached slot
     // yet, and the loop would already have run. With the signals
     // connected first, the worst case is a duplicate `onScreenAdded`
-    // call (once via signal, once via loop). `onScreenAdded` is
-    // idempotent (re-insertion check against m_motionClocksByOutput)
-    // so the duplicate is a no-op.
+    // call (once via signal, once via loop), which is HARMLESS but no
+    // longer a no-op: the motion clock AND the scroll-tab indicator
+    // rebuild are what its re-insertion check skips. The duplicate still
+    // invalidates the EDID and screen-id caches, re-resolves every
+    // output's recorded spelling, rebuilds the connected-id set and
+    // prunes the desktop dedup map. All of those come out identical on a
+    // second run — the prune drops only keys whose spelling is already
+    // stale — so the ordering stands.
     if (KWin::effects) {
         connect(KWin::effects, &KWin::EffectsHandler::screenAdded, this, &PlasmaZonesEffect::onScreenAdded);
         connect(KWin::effects, &KWin::EffectsHandler::screenRemoved, this, &PlasmaZonesEffect::onScreenRemoved);
@@ -294,7 +299,7 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
     // Surface shader pack hot-reload: when a data/surface pack changes on disk,
     // drop EVERY compiled surface pack so the next paint recompiles each
     // referenced pack against the new source, and repaint so decorated windows
-    // pick it up. Also drop the per-window multipass FBO state: a recompiled pack
+    // pick it up. Also clear each window's chainKey and fold flags: a recompiled pack
     // whose buffer-pass COUNT changed would otherwise under-render, because the
     // composite path's chainBufferTex realloc keys on the chain pack-id list (and
     // size), not on each pack's buffer-pass count — only clearing it here forces
@@ -315,17 +320,36 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
         // and m_surfaceMultipass owns GLTextures, so their destruction issues
         // glDelete* calls that want a current context (the same discipline
         // compiledPack()/surfacePresentShader() apply for off-paint callers).
-        // ensureGlContextCurrent() is that one shared make-current; its only
-        // false case is compositor teardown (!KWin::effects), where GL is being
-        // torn down and the driver reclaims the objects regardless, so the
-        // clears are safe either way. The sibling animation-registry handler
-        // above uses the same helper.
+        // ensureGlContextCurrent() is that one shared make-current; it answers
+        // false for compositor teardown (!KWin::effects) and for a failed
+        // make-current, and in both there is no context to delete against while
+        // the driver reclaims the objects regardless, so the clears are safe
+        // either way. The sibling animation-registry handler above uses the same
+        // helper.
         ensureGlContextCurrent();
         m_compiledPacks.clear();
-        m_packBufferScaleCache.clear(); // caches the multiplier-folded product; rides the compile cache's lifetime
+        m_packBufferScaleCache.clear(); // metadata cache rides the compile cache's lifetime
         m_anyCompiledPackReadsCursor = false; // re-derived as packs recompile
         m_opacityTintFallbackWarned = false; // re-arm the capture-fallback warning with the fresh compiles
-        m_surfaceMultipass.clear();
+        m_backdropAllocWarned = false; // and the two allocation ones, for the same reason
+        m_surfaceTargetAllocWarned = false;
+        // INVALIDATED per entry, not erased, which is what the two sibling clear
+        // sites already do and for a reason this one shares. A DELETED window's
+        // entry is the intended frame for its close leg, and the composite
+        // renderer refuses to re-capture a corpse, so erasing the map left a
+        // window that was closing while a pack was edited undecorated for the
+        // rest of its close animation with no path back. A live window recovers
+        // on its next fold either way.
+        //
+        // chainKey goes with the fold flags: the per-pack buffer targets are
+        // allocated only when it differs from the chain, and their count and
+        // sizes come from the compile that was just dropped two lines up.
+        for (auto& [id, surfaceState] : m_surfaceMultipass) {
+            surfaceState.compositeValid = false;
+            surfaceState.prefixValid = false;
+            surfaceState.prefixChainEnd = -1;
+            surfaceState.chainKey.clear();
+        }
         // Repaint whenever there is a compositor, NOT only when the context went current: a
         // repaint is not GL work. Gating it on the make-current result meant a transient
         // failure dropped the caches but never asked the screen to redraw, so the reloaded
@@ -996,8 +1020,7 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     // (connector names may be reassigned, physical screen geometry changes invalidate
     // virtual screen absolute geometry)
     connect(KWin::effects, &KWin::EffectsHandler::virtualScreenGeometryChanged, this, [this]() {
-        m_idCaches.screenIdCache.clear();
-        m_idCaches.connectedPhysicalIdsValid = false;
+        clearScreenIdCache();
         m_lastEffectiveScreenId.clear();
         // A rotation or mode change keeps the same connector and EDID id, so
         // no per-window outputChanged fires — yet ScreenOrientation is a

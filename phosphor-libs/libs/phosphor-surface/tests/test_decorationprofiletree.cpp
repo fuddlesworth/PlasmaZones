@@ -5,11 +5,10 @@
 #include <PhosphorSurface/DecorationProfileTree.h>
 #include <PhosphorSurface/DecorationSupportedPaths.h>
 
-#include <PhosphorShaders/ShaderPresetRegistry.h>
-
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
+#include <QRegularExpression>
 #include <QtTest/QtTest>
 
 using namespace PhosphorSurfaceShaders;
@@ -106,6 +105,28 @@ private Q_SLOTS:
                           makeProfile(QStringList{QStringLiteral("frost")}, 1.0, QStringLiteral("#445566")));
         const DecorationProfileTree merged = user.withSeedDefaults(seeds);
         QCOMPARE(merged.resolve(QStringLiteral("shell.panel")).chain, QStringList{QStringLiteral("frost")});
+    }
+
+    /// The pointer's own isolation arm, in its own slot so a pointer regression is not
+    /// reported as a shell failure. It had NO coverage at all: deleting the whole `pointer`
+    /// branch of the predicate left every test green, although the header spends a paragraph
+    /// on why a surface baseline must not resolve onto the cursor.
+    void pointer_path_is_baseline_isolated()
+    {
+        // The same three shapes the shell arm above pins: the node, a dot-child (the
+        // prefix guard the header's comment exists for), and a prefix collision.
+        QVERIFY(decorationPathIsBaselineIsolated(decorationPointerPath()));
+        QVERIFY(decorationPathIsBaselineIsolated(decorationPointerPath() + QStringLiteral(".trail")));
+        QVERIFY(!decorationPathIsBaselineIsolated(decorationPointerPath() + QStringLiteral("ish")));
+
+        // And at the TREE level, which is what the predicate exists to produce: with the
+        // arm gone, resolve() starts from the baseline and the cursor inherits its chain.
+        DecorationProfileTree tree;
+        tree.setBaseline(makeProfile(QStringList{QStringLiteral("border")}, 2.0, QStringLiteral("#112233")));
+        QCOMPARE(tree.resolve(decorationPointerPath()).chain.value_or(QStringList{}), QStringList{});
+        // The control: a non-isolated surface does inherit it, so an empty answer above
+        // cannot be resolve() returning empty for everything.
+        QCOMPARE(tree.resolve(QStringLiteral("window.tiled")).chain, QStringList{QStringLiteral("border")});
     }
 
     void shell_isolation_covers_every_baseline_field()
@@ -220,6 +241,107 @@ private Q_SLOTS:
         // The engaged-but-empty chain on window.tiled survives as engaged.
         QVERIFY(restored.directOverride(QStringLiteral("window.tiled")).chain.has_value());
         QVERIFY(restored.directOverride(QStringLiteral("window.tiled")).chain->isEmpty());
+    }
+
+    /// An optional field that is ENGAGED but empty is a real statement ("no
+    /// parameters for any pack") and wipes whatever the layer below supplied.
+    /// A malformed object whose every entry the parser drops must therefore
+    /// leave the field ABSENT, not engaged-and-empty. disabledPacks already
+    /// guarded this; parameters and presetIds assigned unconditionally.
+    void fromJson_all_entries_dropped_leaves_the_field_absent()
+    {
+        // Every value dropped: the null skip empties parameters, the
+        // non-string skip empties presetIds.
+        QJsonObject obj;
+        obj.insert(QStringLiteral("chain"), QJsonArray{QStringLiteral("border")});
+        QJsonObject params;
+        params.insert(QStringLiteral("blur"), QJsonValue());
+        obj.insert(QStringLiteral("parameters"), params);
+        QJsonObject presets;
+        presets.insert(QStringLiteral("blur"), 42);
+        obj.insert(QStringLiteral("presetIds"), presets);
+
+        const DecorationProfile dropped = DecorationProfile::fromJson(obj);
+        QVERIFY2(!dropped.parameters.has_value(),
+                 "a parameters object whose every entry was dropped must stay absent, not engage empty");
+        QVERIFY2(!dropped.presetIds.has_value(),
+                 "a presetIds object whose every entry was dropped must stay absent, not engage empty");
+
+        // A GENUINELY empty object is an author statement and still engages,
+        // matching the disabledPacks rule for an empty array.
+        QJsonObject explicitEmpty;
+        explicitEmpty.insert(QStringLiteral("chain"), QJsonArray{QStringLiteral("border")});
+        explicitEmpty.insert(QStringLiteral("parameters"), QJsonObject{});
+        explicitEmpty.insert(QStringLiteral("presetIds"), QJsonObject{});
+        const DecorationProfile engaged = DecorationProfile::fromJson(explicitEmpty);
+        QVERIFY(engaged.parameters.has_value());
+        QVERIFY(engaged.parameters->isEmpty());
+        QVERIFY(engaged.presetIds.has_value());
+        QVERIFY(engaged.presetIds->isEmpty());
+
+        // A surviving sibling still engages, with only the bad entry gone.
+        QJsonObject mixed;
+        mixed.insert(QStringLiteral("chain"), QJsonArray{QStringLiteral("border")});
+        QJsonObject mixedParams;
+        mixedParams.insert(QStringLiteral("blur"), QJsonValue());
+        mixedParams.insert(QStringLiteral("glow"), QJsonObject{{QStringLiteral("size"), 4}});
+        mixed.insert(QStringLiteral("parameters"), mixedParams);
+        const DecorationProfile kept = DecorationProfile::fromJson(mixed);
+        QVERIFY(kept.parameters.has_value());
+        QCOMPARE(kept.parameters->size(), 1);
+        QVERIFY(kept.parameters->contains(QStringLiteral("glow")));
+    }
+
+    /// The null drop above operates on the OUTER map, which is pack-keyed
+    /// (packId -> { paramId -> value }), so it only ever dropped whole PACK
+    /// entries. A null one level down is the one that does the damage the
+    /// rationale describes: it survives the flatten as a Nullptr variant that
+    /// clampToBounds skips as non-numeric, and translateSurfaceParams prefers
+    /// any present entry over the declared default, so the uniform reads 0.
+    void fromJson_drops_a_null_inside_the_per_pack_parameter_object()
+    {
+        QJsonObject obj;
+        obj.insert(QStringLiteral("chain"), QJsonArray{QStringLiteral("blur")});
+        QJsonObject params;
+        params.insert(QStringLiteral("blur"),
+                      QJsonObject{{QStringLiteral("radius"), QJsonValue()}, {QStringLiteral("tint"), 0.5}});
+        obj.insert(QStringLiteral("parameters"), params);
+
+        const DecorationProfile p = DecorationProfile::fromJson(obj);
+        QVERIFY(p.parameters.has_value());
+        const QVariantMap blur = p.parameters->value(QStringLiteral("blur")).toMap();
+        QVERIFY2(!blur.contains(QStringLiteral("radius")),
+                 "a null parameter value must be dropped, not carried through as a Nullptr that reads as 0");
+        QCOMPARE(blur.value(QStringLiteral("tint")).toDouble(), 0.5);
+
+        // A pack object whose every entry is null still ENGAGES, empty. That
+        // is the pack-level statement "say nothing about any of this pack's
+        // parameters", and it is distinct from the outer null, which says
+        // nothing about the pack at all.
+        QJsonObject allNull;
+        allNull.insert(QStringLiteral("chain"), QJsonArray{QStringLiteral("blur")});
+        allNull.insert(QStringLiteral("parameters"),
+                       QJsonObject{{QStringLiteral("blur"), QJsonObject{{QStringLiteral("radius"), QJsonValue()}}}});
+        const DecorationProfile emptied = DecorationProfile::fromJson(allNull);
+        QVERIFY(emptied.parameters.has_value());
+        QVERIFY(emptied.parameters->contains(QStringLiteral("blur")));
+        QVERIFY(emptied.parameters->value(QStringLiteral("blur")).toMap().isEmpty());
+    }
+
+    /// A present-but-wrong-typed parameters field used to load as an engaged
+    /// EMPTY map, because toObject() answers one, and an engaged empty map is
+    /// the statement "no parameters for any pack" that wipes the layer beneath.
+    /// It must be ignored instead, and say so.
+    void fromJson_ignores_a_non_object_parameters_field()
+    {
+        QJsonObject obj;
+        obj.insert(QStringLiteral("chain"), QJsonArray{QStringLiteral("blur")});
+        obj.insert(QStringLiteral("parameters"), QStringLiteral("not an object"));
+
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("must be an object")));
+        const DecorationProfile p = DecorationProfile::fromJson(obj);
+        QVERIFY2(!p.parameters.has_value(),
+                 "a wrong-typed parameters field must leave the field absent, not engage an empty map");
     }
 
     void disabledPacks_roundTrip_filter_and_inheritance()
@@ -585,9 +707,6 @@ private Q_SLOTS:
         QVERIFY(!mergedCustom.directOverride(QStringLiteral("osd")).parameters.has_value());
     }
 
-    /// A parameters-only override at a seeded path is a RETUNE: the seed
-    /// chain injects into the unengaged chain slot while the user's engaged
-    /// parameters map wins wholesale.
     void withSeedDefaults_engagedPresetIdsBlocksTheSeedParameters()
     {
         // A seed carries hard-coded parameter values for the surfaces a decoration set
@@ -680,7 +799,11 @@ private Q_SLOTS:
         seed.parameters = QVariantMap{{QStringLiteral("border"), QVariantMap{{QStringLiteral("borderWidth"), 1}}}};
         seeds.setOverride(QStringLiteral("osd"), seed);
 
-        const auto seededWidth = [&seeds](const QVariantMap& presetIds) {
+        // Returns the pack's whole parameter MAP, not the width read out of it, so the
+        // blocked case below can assert absence. Reading an int out of an absent QVariant
+        // gives 0 either way, which cannot tell a blocked seed from a seed that landed
+        // carrying zero.
+        const auto seededParams = [&seeds](const QVariantMap& presetIds) {
             DecorationProfileTree user;
             DecorationProfile profile;
             profile.presetIds = presetIds;
@@ -689,14 +812,13 @@ private Q_SLOTS:
                 .resolve(QStringLiteral("osd"))
                 .effectiveParameters()
                 .value(QStringLiteral("border"))
-                .toMap()
-                .value(QStringLiteral("borderWidth"))
-                .toInt();
+                .toMap();
         };
-        QCOMPARE(seededWidth(QVariantMap{}), 1);
-        QCOMPARE(seededWidth(QVariantMap{{QStringLiteral("border"), QString()}}), 1);
+        const QString widthKey = QStringLiteral("borderWidth");
+        QCOMPARE(seededParams(QVariantMap{}).value(widthKey).toInt(), 1);
+        QCOMPARE(seededParams(QVariantMap{{QStringLiteral("border"), QString()}}).value(widthKey).toInt(), 1);
         // And a real id still blocks it, so the predicate is specific.
-        QCOMPARE(seededWidth(QVariantMap{{QStringLiteral("border"), QStringLiteral("Thick")}}), 0);
+        QVERIFY(!seededParams(QVariantMap{{QStringLiteral("border"), QStringLiteral("Thick")}}).contains(widthKey));
     }
 
     void withSeedDefaults_injectsTheSeedsOwnPresetIds()
@@ -731,6 +853,9 @@ private Q_SLOTS:
                  QStringLiteral("Mine"));
     }
 
+    /// A parameters-only override at a seeded path is a RETUNE: the seed
+    /// chain injects into the unengaged chain slot while the user's engaged
+    /// parameters map wins wholesale.
     void withSeedDefaults_parametersOnlyOverride_keepsSeedChain()
     {
         DecorationProfileTree seeds;

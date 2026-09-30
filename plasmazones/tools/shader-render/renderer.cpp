@@ -361,14 +361,13 @@ QStringList shaderIncludePaths()
     }
     // No explicit /usr/share entry: GenericDataLocation already ends with the
     // XDG_DATA_DIRS list, which includes it on a normal system.
-    // No libs/phosphor-*/shaders entry. There used to be one naming
-    // "libs/phosphor-rendering/shaders", which has never existed, so it
-    // resolved nothing in any invocation. Repointing it at the real
-    // libs/phosphor-shaders/shaders would be worse than deleting it: that
-    // directory holds the BASE common.glsl (a different file from the
-    // overlay one), and the daemon's expandShaderIncludePaths carries no
-    // such entry, so adding it here would make the preview search a path
-    // the runtime does not.
+    // No phosphor-libs/libs/phosphor-*/shaders entry. There used to be one naming
+    // "phosphor-rendering/shaders", which has never existed, so it resolved
+    // nothing in any invocation. phosphor-libs/libs/phosphor-shaders/shaders was
+    // the only real candidate and it is gone: nothing could #include it, and
+    // adding it here would have made the preview search a path the runtime
+    // does not, against a BASE common.glsl that is a different file from the
+    // overlay one.
     return paths;
 }
 
@@ -743,7 +742,7 @@ int Renderer::render(const RenderOptions& opts)
         pointerDriver = std::make_unique<PointerDriver>(opts.pointer, physicalSize, dpr);
         pointerDriver->applyPackContract(parsed);
         if (pointerDriver->needsCursor()) {
-            // SRB binding 7 is uTexture0 for the other families and
+            // SRB binding 11 is uTexture0 for the other families and
             // uCursorSprite for this one, so slot 0 is where the sprite goes.
             // Bound only for a pack that asked for it, because the contract ties
             // uPointerFlags.x to the sampler actually being bound.

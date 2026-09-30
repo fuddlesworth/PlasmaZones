@@ -187,6 +187,10 @@ Item {
             id: intSpinBox
 
             visible: paramDelegate.paramType === "int"
+            // Typeable, not arrow-repeat only. An int parameter's range can be
+            // wide (a blur radius runs 2 to 256), and stepping there one click
+            // at a time is not a control anyone would use.
+            editable: true
             Accessible.name: paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : ""
             Accessible.description: paramDelegate.overrideHint
             // SpinBox.from/to are integers — `_numberOr` validates as a

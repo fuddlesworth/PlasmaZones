@@ -127,7 +127,7 @@ if (!parkedNow && viewDelta != 0) {
 ```
 
 so its entire on-screen existence during a slide comes from two pieces of
-**retained** state combined in `scrollParkedOffscreen()` (`scroll_clip.cpp:140`):
+**retained** state combined in `scrollParkedOffscreen()` (`scroll_clip.cpp:150`):
 its `m_scrollVisualDelta` entry, and `StripViewAnimator::offsetFor(output)`.
 Both are strip-scoped in meaning and neither is strip-keyed in fact.
 
@@ -203,9 +203,10 @@ They are not mutually exclusive and A can mask the others.
 
 ## Gate before any code
 
-One `qCDebug` in `scrollParkedOffscreen` (`scroll_clip.cpp:140`) reporting, per
-parked window: whether the `m_scrollVisualDelta` lookup hit, the placement it
-returned, and what `offsetFor(managed)` gave. Plus one line at
+LANDED. `scrollParkedOffscreen` (`scroll_clip.cpp:150`) now reports through three
+`qCDebug(lcStripDiag)` sites rather than the one proposed here, splitting what the
+single line was meant to carry: the lookup MISS, a HIT with no managed output, and a
+HIT with its `stripPos`. Plus one line at
 `slotWindowsTileRequested` (`tiling.cpp:66`) recording that a batch arrived at
 all.
 

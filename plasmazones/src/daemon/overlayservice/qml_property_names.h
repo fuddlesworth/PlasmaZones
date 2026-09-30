@@ -21,16 +21,18 @@
  * Hosting them here gives both sides a single source of truth: a typo
  * in either the writer or a reader trips the build (or at least a
  * failing test) instead of producing a runtime no-op.
+ *
+ * SCOPE, and this set is AD HOC rather than principled. THREE earlier versions
+ * of this paragraph each stated a membership rule and each was false, so it no
+ * longer states one. What can be said: it is NOT every property the daemon
+ * pushes, and it is NOT every property the daemon reads back — roughly a dozen
+ * more, `useShader` and `stripVerticalAxis` among them, are read back in C++ and
+ * still spelled inline at every site. Adding a name here is an improvement; the
+ * absence of one is a gap rather than a decision. The DecorationReloadGeneration
+ * and BackdropTexture notes below record why those two are here.
  */
 namespace PlasmaZones {
 namespace OverlayQmlPropertyNames {
-
-/// Marks a window as a shader-effect overlay rather than a plain
-/// drawing overlay. Set on overlay creation; read by the shader-
-/// settings hot-reload path to know whether to apply shader-only
-/// settings, and by overlay teardown / shader-toggle to recreate the
-/// window when the user flips the shader-enabled global.
-inline constexpr QLatin1String IsShaderOverlay{"isShaderOverlay"};
 
 /// True when the overlay should be hidden during a drag-pause
 /// (autotile drag-from-floating sequence). The QML root toggles
@@ -81,6 +83,37 @@ inline constexpr QLatin1String LabelsTexture{"labelsTexture"};
 /// read by applyDecoration, which injects it into every decoration pack that
 /// declares a cornerRadius so border and shadow corners coincide.
 inline constexpr QLatin1String CardCornerRadius{"cardCornerRadius"};
+
+/// Monotonic tick the daemon bumps on every committed shader-registry rescan.
+/// Each decorated slot forwards it to its SurfaceDecoration, whose stages call
+/// reloadShader() when it moves. That re-bakes the main stage and every buffer
+/// pass, and is the only thing that does so after an
+/// IN-PLACE edit of a pack's shader source, because the recomposed chain is then
+/// byte-identical and the stage rebinds the same URL.
+///
+/// It first shipped written straight to the slot as a literal, which is exactly the
+/// failure this file exists to prevent: no slot declared the name, writeQmlProperty
+/// fell through to setProperty, and the dynamic property it created had no NOTIFY,
+/// so nothing ever observed it.
+inline constexpr QLatin1String DecorationReloadGeneration{"decorationReloadGeneration"};
+
+/// The composed surface-decoration stage list (QVariantList of stage maps, one per
+/// resolved pack). Writing it is the LOAD TRIGGER on the QML side, so everything a
+/// stage reads on its first bake has to be in place before it.
+inline constexpr QLatin1String DecorationChain{"decorationChain"};
+
+/// Outer margin in logical px that the chain's largest paddingParam asks for. The
+/// QML host inflates the capture and shader items by it so an outer effect has real
+/// transparent room; 0 keeps the classic 1:1 geometry.
+inline constexpr QLatin1String DecorationOuterPadding{"decorationOuterPadding"};
+
+/// Desktop wallpaper stand-in for a needsBackdrop pack, which has no scene to sample
+/// on the daemon. Cleared on hide so a stale image cannot outlive the slot.
+///
+/// This is the name that PROVED this file's point: it was written with setProperty
+/// while no slot declared it, so it became a dead dynamic property and every
+/// needsBackdrop pack silently took its uHasBackdrop = 0 fallback.
+inline constexpr QLatin1String BackdropTexture{"backdropTexture"};
 
 } // namespace OverlayQmlPropertyNames
 } // namespace PlasmaZones

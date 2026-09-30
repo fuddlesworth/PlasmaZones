@@ -24,7 +24,9 @@ vec4 pSurface(vec2 uv) {
         return tex;
     }
 
-    BorderBand bb = standardBorderBand(surfacePixel(uv), p_borderWidth, p_cornerRadius);
+    float bottomRadius = surfaceBottomRadius(p_cornerRadius, p_roundBottomCorners);
+    BorderBand bb =
+        standardBorderBandSplit(surfacePixel(uv), p_borderWidth, p_cornerRadius, bottomRadius, p_edgeSoftness);
 
     // Base focus-mixed border colour, then react to the bass. getBassSoft() is
     // 0 when the audio visualizer is off, so the reactive terms vanish and this
@@ -34,7 +36,11 @@ vec4 pSurface(vec2 uv) {
     vec4 band = mix(base, p_pulseColor, pulse);
     band.a = clamp(band.a * (1.0 + pulse * 0.6), 0.0, 1.0);
 
-    band.a *= focusDim(0.55);
-
+    // NO second focus cue. The mix above is already the focus cue, the same
+    // one the plain Border pack applies and never follows with an alpha dim.
+    // Applying focusDim here as well rendered an unfocused Audio Border at 55%
+    // of the alpha its own "Border colour when the window is unfocused"
+    // parameter asks for, so it read as materially more transparent than every
+    // other pack in the border family at identical colours.
     return borderComposite(tex, band, bb.edge, bb.insideMask);
 }

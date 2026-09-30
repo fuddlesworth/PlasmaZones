@@ -14,6 +14,18 @@ cmake_minimum_required(VERSION 3.16)
 
 set(PHOSPHORSERVICEPIPEWIRE_VERSION "0.1.0")
 
+# The Qt floor this library requires AND advertises in its generated
+# PhosphorServicePipeWireConfig.cmake. Taken from the top-level QT_MIN_VERSION when built in-tree so
+# the two cannot drift, with its own value for a STANDALONE build, where that
+# variable does not exist. The fallback is not optional: the Config template
+# substitutes this, and an undefined variable expands to nothing and ships a config
+# whose find_dependency(Qt6 ...) carries no version floor at all.
+if(DEFINED QT_MIN_VERSION)
+    set(PHOSPHORSERVICEPIPEWIRE_QT_MIN ${QT_MIN_VERSION})
+else()
+    set(PHOSPHORSERVICEPIPEWIRE_QT_MIN "6.10.0")
+endif()
+
 if(NOT PROJECT_VERSION)
     project(PhosphorServicePipeWire VERSION ${PHOSPHORSERVICEPIPEWIRE_VERSION} LANGUAGES CXX)
     set(CMAKE_CXX_STANDARD 20)
@@ -38,7 +50,7 @@ include(GenerateExportHeader)
 # baseline). All libpipewire types live in src/ behind the pimpl; the
 # public headers stay libpipewire-free so consumers don't need to find
 # it transitively.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml)
+find_package(Qt6 ${PHOSPHORSERVICEPIPEWIRE_QT_MIN} REQUIRED COMPONENTS Core Qml)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PIPEWIRE REQUIRED IMPORTED_TARGET libpipewire-0.3>=1.0.0)
 

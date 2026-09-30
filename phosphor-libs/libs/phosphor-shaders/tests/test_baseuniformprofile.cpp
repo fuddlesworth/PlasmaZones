@@ -7,6 +7,7 @@
 
 #include <QtTest/QtTest>
 
+#include <cstddef> // offsetof, for the golden slots' iDate exclusion
 #include <cstring>
 
 using namespace PhosphorShaders;
@@ -14,9 +15,10 @@ using namespace PhosphorShaders;
 namespace {
 
 /// Build a fixed, fully-populated frame state. Pins didFullUploadOnce=true +
-/// sceneDataDirty=false so the iDate wall-clock refresh path is skipped — that
-/// makes fill() fully deterministic (iDate stays zero) for a byte-exact golden
-/// comparison.
+/// sceneDataDirty=false, which USED to skip the iDate wall-clock refresh and make
+/// fill() fully deterministic. It no longer does (iDate is on its own throttle, by
+/// design), so the golden slots exclude those four floats and everything else
+/// stays byte-exact.
 UboFrameState makeFixedState()
 {
     UboFrameState s;
@@ -31,7 +33,7 @@ UboFrameState makeFixedState()
     s.mouseX = 480.0f;
     s.mouseY = 270.0f;
     s.isReversed = true;
-    s.didFullUploadOnce = true; // deterministic: skip iDate wall-clock path
+    s.didFullUploadOnce = true;
     s.sceneDataDirty = false;
     for (int i = 0; i < 8; ++i) {
         for (int c = 0; c < 4; ++c) {
@@ -79,7 +81,8 @@ BaseUniforms makeReference(const UboFrameState& s)
     u.iMouse[1] = s.mouseY;
     u.iMouse[2] = s.width > 0 ? s.mouseX / s.width : 0.0f;
     u.iMouse[3] = s.height > 0 ? s.mouseY / s.height : 0.0f;
-    // iDate left at 0 — deterministic state skips the wall-clock path.
+    // iDate left at 0: the golden slots overwrite it from the profile, since a
+    // clock cannot be byte-pinned.
 
     for (int i = 0; i < 8; ++i) {
         for (int c = 0; c < 4; ++c) {
@@ -133,7 +136,16 @@ private Q_SLOTS:
         BaseUniformProfile profile;
         profile.fill(state);
 
-        const BaseUniforms reference = makeReference(state);
+        BaseUniforms reference = makeReference(state);
+        // iDate IS A CLOCK and cannot be byte-pinned. fill() used to skip it
+        // whenever sceneDataDirty was false, which is what made this comparison
+        // fully deterministic — and was also the bug, since no per-frame path sets
+        // that flag and the field simply froze. It refreshes on its own 1 s
+        // throttle now, so the four floats are taken from the profile and the
+        // other 656 bytes stay byte-exact. What iDate does is pinned by
+        // self_refreshed_scene_header_is_requested_then_consumed instead.
+        std::memcpy(reference.iDate, static_cast<const char*>(profile.data()) + offsetof(BaseUniforms, iDate),
+                    sizeof(reference.iDate));
 
         QCOMPARE(static_cast<int>(sizeof(reference)), profile.baseSize());
         const int rc = std::memcmp(profile.data(), &reference, sizeof(BaseUniforms));
@@ -150,7 +162,16 @@ private Q_SLOTS:
         BaseUniformProfile profile;
         profile.fill(state);
 
-        const BaseUniforms reference = makeReference(state);
+        BaseUniforms reference = makeReference(state);
+        // iDate IS A CLOCK and cannot be byte-pinned. fill() used to skip it
+        // whenever sceneDataDirty was false, which is what made this comparison
+        // fully deterministic — and was also the bug, since no per-frame path sets
+        // that flag and the field simply froze. It refreshes on its own 1 s
+        // throttle now, so the four floats are taken from the profile and the
+        // other 656 bytes stay byte-exact. What iDate does is pinned by
+        // self_refreshed_scene_header_is_requested_then_consumed instead.
+        std::memcpy(reference.iDate, static_cast<const char*>(profile.data()) + offsetof(BaseUniforms, iDate),
+                    sizeof(reference.iDate));
 
         QCOMPARE(static_cast<int>(sizeof(reference)), profile.baseSize());
         const int rc = std::memcmp(profile.data(), &reference, sizeof(BaseUniforms));
@@ -217,6 +238,56 @@ private Q_SLOTS:
         QCOMPARE(static_cast<int>(r.size()), 1);
         QCOMPARE(r[0].offset, 0);
         QCOMPARE(r[0].size, profile.baseSize());
+    }
+
+    /// iDate advances on a clock of its own, which the caller has no event for,
+    /// so fill() has to be able to REQUEST the scene-header upload. Without that
+    /// request the refreshed value sits in the profile's buffer and is never
+    /// sent: the field held whatever the last mouse move left it at, and a
+    /// playing pack with a still cursor showed a frozen time of day.
+    ///
+    /// The flag is what the render node ORs into its own sceneData flag, so this
+    /// is the whole mechanism, not a proxy for it.
+    void self_refreshed_scene_header_is_requested_then_consumed()
+    {
+        // A FRESH profile has never stamped its throttle, so its first fill is
+        // due. That is what makes this deterministic without waiting a second:
+        // the "past the throttle" case is reachable on frame one.
+        UboFrameState state = makeFixedState();
+        state.didFullUploadOnce = true;
+        // FALSE on purpose. This flag is what used to gate the refresh, and no
+        // per-frame path sets it, which is the whole bug: a playing pack with a
+        // still cursor never re-read the time of day.
+        state.sceneDataDirty = false;
+
+        BaseUniformProfile profile;
+        profile.fill(state);
+        QVERIFY2(profile.consumeSelfRefreshedSceneHeader(),
+                 "a fill past the iDate throttle must request the scene-header upload even with sceneDataDirty false");
+
+        // CONSUMED: one upload requested, not a latch that leaves the region
+        // dirty on every later frame.
+        QVERIFY(!profile.consumeSelfRefreshedSceneHeader());
+
+        // An immediate second fill is inside the 1 s throttle, so it neither
+        // re-reads the clock nor asks again.
+        profile.fill(state);
+        QVERIFY2(!profile.consumeSelfRefreshedSceneHeader(),
+                 "a fill inside the throttle window must not request an upload");
+    }
+
+    /// The FULL-upload fill refreshes iDate too but must NOT request a region:
+    /// the full upload already sends the whole block, so the request would be
+    /// redundant. A separate profile, because the flag is per instance.
+    void first_fill_refreshes_without_requesting_a_region()
+    {
+        UboFrameState state = makeFixedState();
+        state.didFullUploadOnce = false;
+
+        BaseUniformProfile profile;
+        profile.fill(state);
+        QVERIFY2(!profile.consumeSelfRefreshedSceneHeader(),
+                 "the full-upload fill must not also request a scene-header region");
     }
 };
 

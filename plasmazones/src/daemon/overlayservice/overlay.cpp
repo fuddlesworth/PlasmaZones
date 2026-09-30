@@ -13,6 +13,7 @@
 #include <PhosphorZones/Zone.h>
 #include "core/utils/geometryutils.h"
 #include "core/utils/utils.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorScreens/Manager.h>
 #include "core/interfaces/shaderregistry.h"
@@ -30,9 +31,28 @@
 #include "phosphor_roles.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
+#include <utility> // std::as_const
+
 namespace PlasmaZones {
 
 namespace {
+
+// Does any zone in this list ask for the miniature layout preview? This is the ONE predicate
+// that decides whether `previewZones` carries the list or an empty one, and both writers now
+// answer it the same way, from the list they are about to write. The re-stamp path used to ask
+// the QML side instead, with `property("previewZones").toList().isEmpty()`, which is a `property
+// var`: every read rebuilds the whole QVariantList of QVariantMaps out of JS purely to test
+// emptiness, and that path runs per drag tick.
+bool anyZoneUsesLayoutPreview(const QVariantList& zones)
+{
+    for (const QVariant& z : zones) {
+        if (z.toMap().value(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode).toInt()
+            == static_cast<int>(OverlayDisplayMode::LayoutPreview)) {
+            return true;
+        }
+    }
+    return false;
+}
 
 // Collapse a dismissed overlay slot's labels texture to a 1x1 placeholder so
 // the labels payload (the sparse glyph-tile ZoneLabelTexture) is released while
@@ -76,23 +96,26 @@ void clearShaderSlotProperties(QQuickItem* slot)
     if (!slot) {
         return;
     }
+    // Parse-default spellings, not magic values: every buffer default that
+    // ShaderInfo DECLARES is read off a default-constructed one, the same value
+    // the parse path leaves when a pack declares no key, so a future default
+    // flip cannot silently diverge here. `bufferShaderPath` (singular) is not
+    // among them — ShaderInfo has no such field, only the list form.
+    const ShaderRegistry::ShaderInfo parseDefaults;
     writeQmlProperty(slot, QStringLiteral("shaderSource"), QUrl());
     writeQmlProperty(slot, QStringLiteral("bufferShaderPath"), QString());
-    writeQmlProperty(slot, QStringLiteral("bufferShaderPaths"), QVariant::fromValue(QStringList()));
-    writeQmlProperty(slot, QStringLiteral("bufferFeedback"), false);
-    writeQmlProperty(slot, QStringLiteral("bufferScale"), 1.0);
-    // Parse-default spelling, not a magic value: keep in lockstep with
-    // ShaderRegistry's absent-key default so a future default flip cannot
-    // silently diverge here.
-    writeQmlProperty(slot, QStringLiteral("halfFloatBuffers"), ShaderRegistry::ShaderInfo{}.halfFloatBuffers);
-    writeQmlProperty(slot, QStringLiteral("bufferWrap"), QStringLiteral("clamp"));
-    writeQmlProperty(slot, QStringLiteral("bufferWraps"), QStringList());
-    writeQmlProperty(slot, QStringLiteral("bufferFilter"), QStringLiteral("linear"));
-    writeQmlProperty(slot, QStringLiteral("bufferFilters"), QStringList());
-    writeQmlProperty(slot, QStringLiteral("useDepthBuffer"), false);
+    writeQmlProperty(slot, QStringLiteral("bufferShaderPaths"), QVariant::fromValue(parseDefaults.bufferShaderPaths));
+    writeQmlProperty(slot, QStringLiteral("bufferFeedback"), parseDefaults.bufferFeedback);
+    writeQmlProperty(slot, QStringLiteral("bufferScale"), parseDefaults.bufferScale);
+    writeQmlProperty(slot, QStringLiteral("halfFloatBuffers"), parseDefaults.halfFloatBuffers);
+    writeQmlProperty(slot, QStringLiteral("bufferWrap"), parseDefaults.bufferWrap);
+    writeQmlProperty(slot, QStringLiteral("bufferWraps"), parseDefaults.bufferWraps);
+    writeQmlProperty(slot, QStringLiteral("bufferFilter"), parseDefaults.bufferFilter);
+    writeQmlProperty(slot, QStringLiteral("bufferFilters"), parseDefaults.bufferFilters);
+    writeQmlProperty(slot, QStringLiteral("useDepthBuffer"), parseDefaults.useDepthBuffer);
     writeQmlProperty(slot, QStringLiteral("shaderParams"), QVariantMap());
     writeQmlProperty(slot, QStringLiteral("paramPreamble"), QString());
-    writeQmlProperty(slot, QStringLiteral("useWallpaper"), false);
+    writeQmlProperty(slot, QStringLiteral("useWallpaper"), parseDefaults.useWallpaper);
     QImage placeholder(1, 1, QImage::Format_ARGB32);
     placeholder.fill(Qt::transparent);
     writeQmlProperty(slot, QStringLiteral("wallpaperTexture"), QVariant::fromValue(placeholder));
@@ -119,6 +142,20 @@ void OverlayService::destroyIfTypeMismatch(const QString& screenId)
 
 void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& cursorPos)
 {
+    // Captured before anything can move it, because BOTH visibility arms below need it and
+    // this is the one SHOW path in the service that can be entered with m_visible already
+    // true and still leave it false. showAtPosition falls through to here when the cursor's
+    // virtual screen has no window or an invisible slot (lifecycle.cpp), so a transport
+    // failure on that path used to drop visible→hidden with no notification at all, leaving
+    // the `visible` Q_PROPERTY — and the org.plasmazones.Overlay.overlayVisibilityChanged
+    // signal the adaptor relays from it — permanently stale for every external client. The
+    // success arm had the mirror-image bug, emitting true on a fall-through where nothing
+    // changed. Same capture-into-a-local idiom as recreateOverlayWindowsOnTypeMismatch below, which uses it
+    // only to gate stopShaderAnimation and never writes m_visible at all. handleScreenAdded in
+    // screens.cpp is the one with a transient, false→true→false, and it needs no signal because
+    // it nets out.
+    const bool wasVisible = m_visible;
+
     // Determine if we should show on all monitors (cursorScreen == nullptr means all)
     const bool showOnAllMonitors = (cursorScreen == nullptr);
 
@@ -177,9 +214,23 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
             if (m_excludedScreens.contains(screenId)) {
                 continue;
             }
+            // NO INVALID-GEOMETRY GUARD HERE, DELIBERATELY, and two rounds of adding one is why
+            // this says so. effectiveScreenIds() is built from the manager's OWN tracked screens
+            // and its own live configs, and its cache is dirtied alongside every tracked-screen
+            // sync — so for every id it yields, the geometry rebuild finds the config, finds the
+            // tracked screen, and inserts that very id, and a virtual screen's absoluteGeometry
+            // clamps its width and height to at least 1. The lookup below therefore answers with a
+            // real rect for every id that reaches it, and a guard on it cannot fire.
+            //
+            // The substitution stays as pure defence: it costs one comparison, and it is what a
+            // bare physical id would want in the one window where the manager's snapshot lags a
+            // QScreen geometry change. Do not turn it into a skip — Phase 2 dismisses every
+            // non-target key, so dropping an id here would tear down a LIVE overlay, which is
+            // worse than the 0x0 first-create window a guard was reaching for.
+            const QRect resolvedGeom = mgr->screenGeometry(screenId);
             targetIds.append(screenId);
             targetPhysScreens.insert(screenId, physScreen);
-            targetGeometries.insert(screenId, mgr->screenGeometry(screenId));
+            targetGeometries.insert(screenId, resolvedGeom.isValid() ? resolvedGeom : physScreen->geometry());
         }
     } else {
         for (auto* screen : Utils::allScreens()) {
@@ -247,7 +298,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     // not in targetSet is either a different physical monitor we're switching
     // away from, or a leftover from a removed/excluded screen. Hide
     // non-shader overlays (cheap, no Vulkan churn - mirrors the 9e0cb05f
-    // "hide-not-destroy" policy that dismissOverlayWindow(QScreen*) uses)
+    // "hide-not-destroy" policy dismissOverlayWindow uses)
     // and destroy shader overlays (QSGRenderNode pipelines are bound to the
     // per-window QRhi context, so destroy-on-hide is mandatory there).
     const QStringList allKeys = m_screenStates.keys();
@@ -314,13 +365,67 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
 
     validateScreenStateInvariant(targetIds);
 
+    // A modal singleton's screen id is a key into m_screenStates, so an id naming a key that
+    // no longer exists is an invariant violation: the daemon believes a sheet is up on a
+    // screen it has no state for. The ways in are key migrations and teardowns, and those are
+    // the paths that have to remember to carry these three ids along.
+    //
+    // What it is NOT is unrecoverable, which an earlier version of this comment claimed in
+    // order to justify repairing it here. All three hide paths clear the flag and the id
+    // UNCONDITIONALLY before they touch a slot — hideCheatsheet, hideSnapAssist and
+    // hideLayoutPicker each emit their dismissed signal too, which is what drops the shared
+    // Escape grab — and only the hideSlot call sits behind the screen-state lookup. So the
+    // ordinary toggle already recovers this, and the honest value of repairing it here is
+    // narrower: the bookkeeping and the grab are corrected at the next overlay show rather
+    // than waiting for a keypress the user has no reason to make, and the snap-assist
+    // thumbnail caches get their trim armed at the same moment.
+    //
+    // The ASSERT is the part that matters in a debug build, and it is why this runs in both:
+    // the check used to live inside validateScreenStateInvariant's QT_NO_DEBUG block, where
+    // release could neither report nor repair, and a round that moved the repair out here
+    // dropped the assert in the same edit. Without it a future migration path that forgets
+    // the carry self-heals silently in debug too, which is the one build that should stop.
+    //
+    // Pointers rather than copies of the three ids: the repair clears every member matching
+    // the id it is given, so two modals sharing one dead key had the second iteration warn
+    // again off a stale snapshot. Reading through the member means the second sees it empty.
+    for (const auto& [modalIdPtr, modalName] :
+         {std::pair<const QString*, const char*>{&m_cheatsheetScreenId, "cheatsheet"},
+          {&m_layoutPickerScreenId, "layout picker"},
+          {&m_snapAssistScreenId, "snap assist"}}) {
+        if (modalIdPtr->isEmpty() || m_screenStates.contains(*modalIdPtr)) {
+            continue;
+        }
+        // A COPY to hand the repair, and that is not tidiness: it takes a const QString&
+        // and CLEARS the members it then goes on to compare against, so a reference bound
+        // to one of them would read as empty from its second arm onwards and could match
+        // another modal's id that is also empty, dismissing a sheet nobody asked about.
+        const QString deadKey = *modalIdPtr;
+        qCWarning(lcOverlay) << "modal singleton" << modalName << "named screen key" << deadKey
+                             << "which has no screen state; resetting it so the slot can be dismissed";
+        Q_ASSERT_X(false, "OverlayService::initializeOverlay", "modal singleton id names a dead screen key");
+        resetModalSingletonsForDestroyedId(deadKey);
+    }
+
     // Count how many overlay windows actually have a live shell surface.
     // If zero, the transport (phosphorwayland) is unavailable and we must
     // not mark ourselves visible - the caller (e.g. prepareHandlerContext)
     // will retry on the next drag tick, and handleScreenAdded will also
     // attempt recreation on screen reconnection.
     int liveOverlayCount = 0;
-    for (const auto& state : m_screenStates) {
+    // std::as_const, because a range-for over a non-const QHash takes the MUTABLE begin() and
+    // detaches. It costs nothing today (this map's refcount is always 1, so the detach finds
+    // nothing to copy) but the spelling is what stops that being load-bearing.
+    //
+    // The explicit begin()/end() loops elsewhere in this service are deliberately left alone, and
+    // the reason is stated by SHAPE rather than by a count, because the first version of this
+    // sentence gave a number, got it wrong, and attributed a property to files it had not read.
+    // Two of them must stay non-const: osd.cpp's dismiss resolver takes a mutable address into a
+    // value, and overlay_data.cpp's updateZonesForAllWindows feeds updateLabelsTextureForWindow,
+    // which does its OWN non-const find on this map — there the up-front detach is what stops that
+    // callee detaching mid-iteration, so converting it would be a regression. The rest are
+    // read-only with respect to the map and inert either way under the refcount-1 invariant.
+    for (const auto& state : std::as_const(m_screenStates)) {
         if (state.overlayPhysScreen && state.shell && state.shell->shellWindow()) {
             ++liveOverlayCount;
         }
@@ -331,6 +436,9 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
                                 "phosphorwayland transport unavailable "
                                 "(overlays disabled on this screen)";
         m_visible = false;
+        if (wasVisible) {
+            Q_EMIT visibilityChanged(false);
+        }
         return;
     }
 
@@ -353,7 +461,9 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     // overlays are un-idled simultaneously.
     applyIdleStateForCursor(cursorEffectiveId, showOnAllMonitors);
 
-    Q_EMIT visibilityChanged(true);
+    if (!wasVisible) {
+        Q_EMIT visibilityChanged(true);
+    }
 }
 
 void OverlayService::updateLayout(PhosphorZones::Layout* layout)
@@ -412,8 +522,13 @@ void OverlayService::updateGeometries()
     // shape allocated a QStringList copy on every geometry update; this
     // is a hot path during multi-monitor compositor signal storms (Plasma
     // emits screenAdded/screenRemoved/geometryChanged in tight bursts on
-    // hotplug and DPMS-wake). updateOverlayWindow does not mutate
-    // m_screenStates, so iterating in-place is safe.
+    // hotplug and DPMS-wake). updateOverlayWindow does not INSERT INTO or REMOVE FROM
+    // m_screenStates, so iterating in-place is safe. "Does not mutate" would be false: it
+    // reaches updateLabelsTextureForWindow, which writes labelsTextureHash through a
+    // NON-CONST find. That is the direction worth knowing about for a CONST-iterator loop
+    // like this one — a callee detaching under const iterators is the shape that would
+    // strand them on a stale copy, and it is safe here only because m_screenStates is never
+    // copied, so its refcount is always 1 and the detach never happens.
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
         QScreen* physScreen = it.value().overlayPhysScreen;
         if (physScreen) {
@@ -467,19 +582,30 @@ void OverlayService::restampZoneHighlights()
             // Nothing to re-stamp on this screen. A highlight write reaches
             // every live slot, but the zone that changed lives on one of them,
             // so on a multi-monitor setup most screens land here every time.
-            // The write matters: `zones` is a QML `property var` feeding the
-            // Repeater model, so re-pushing an identical list re-evaluates
-            // every ZoneItem's bindings (and the shaderConfig.zones chain) for
-            // no change in output, on the drag path. previewZones and
-            // highlightedCount are derived from this same list and are written
-            // with it, so an unchanged list leaves both already correct.
+            // previewZones and highlightedCount are derived from this same list
+            // and are written with it, so an unchanged list leaves both correct.
+            //
+            // WHAT THIS SAVES, and two earlier versions each named the wrong thing. It is NOT a
+            // binding re-evaluation: QQmlProperty::write on a `property var` compares first, so
+            // re-pushing an equal list activates no change signal and re-runs no dependent
+            // binding (measured with a QSignalSpy for this list's exact shape, a list of maps,
+            // through the same no-engine QQmlProperty ctor writeQmlProperty uses). The sibling
+            // claim in syncCavaState is the correct one. Nor is it the read-back, the patch or
+            // the compare: those are ABOVE the branch and paid unconditionally, so they are the
+            // price of the skip, not its saving. What the continue actually skips is the two
+            // full-list scans below (anyZoneUsesLayoutPreview, and the highlightedCount loop on a
+            // shader slot), the `useShader` property read that gates the second of them, the two
+            // writes they gate, and the unconditional zones write above them. Worth taking at
+            // cursor rate, which is why the branch is here at all.
             continue;
         }
         writeQmlProperty(slot, QString(OverlayQmlPropertyNames::Zones), patched);
         // previewZones mirrors the patched list whenever LayoutPreview mode is
         // active (updateOverlayWindow writes both from the same value); leaving
         // it behind would keep the miniature previews on the stale highlight.
-        if (!slot->property("previewZones").toList().isEmpty()) {
+        // Decided from `patched`, which is already in hand, rather than by reading the QML
+        // property back: same answer, on fresher data, without materialising the list.
+        if (anyZoneUsesLayoutPreview(patched)) {
             writeQmlProperty(slot, QStringLiteral("previewZones"), patched);
         }
         // highlightedCount gates RenderNodeOverlayContent's cursor-hover
@@ -487,7 +613,7 @@ void OverlayService::restampZoneHighlights()
         if (slot->property("useShader").toBool()) {
             int highlightedCount = 0;
             for (const QVariant& z : patched) {
-                if (z.toMap().value(QLatin1String("isHighlighted")).toBool()) {
+                if (z.toMap().value(::PhosphorZones::ZoneJsonKeys::IsHighlighted).toBool()) {
                     ++highlightedCount;
                 }
             }
@@ -572,19 +698,47 @@ void OverlayService::clearHighlight()
 
 void OverlayService::updateMousePosition(int cursorX, int cursorY)
 {
-    if (!m_visible) {
+    // Idle-quiesce gate. Two different sibling sets, and an earlier version ran them together: the
+    // highlight paths below carry m_overlayIdled as a gate on the DIRTY FLAG and never early-return,
+    // while the functions that early-return on isOverlayDisplaying() are elsewhere in this file.
+    // This one belongs with the second set, so it is spelled that way. drag.cpp keeps pushing the
+    // cursor through a trigger-release pause, and says so outright: while idled m_overlayShown
+    // stays true BY DESIGN. A mousePosition change reaches ShaderEffect::setIMouse, which calls
+    // QQuickItem::update(), so every cursor event requested a render on every live overlay window
+    // after scheduleIdleQuiesce had stopped the frame loop and released the layer FBOs.
+    // setIdleForDragPause never clears `loaded`, so the content Loader is still active and the
+    // binding chain is still live. The cost is one stale tick on resume, and it reaches THREE
+    // readers rather than the one an earlier version named: RenderNodeOverlayContent binds
+    // mousePosition to both hoveredZoneIndex and the iMouse uniform, and hoveredZoneIndex in turn
+    // feeds a second uniform as well as the pre-Ready rectangle fallback. So a pack reading either
+    // renders one frame with a stale cursor, which the next cursor event settles.
+    if (!isOverlayDisplaying()) {
         return;
     }
 
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+        // The sentinel gate every sibling per-frame loop carries (highlightZone, highlightZones,
+        // restampZoneHighlights, refreshVisibleWindows). Without it this loop reached a DISMISSED
+        // slot on every cursor push: initializeOverlay Phase 2 dismisses every non-target key, the
+        // shell prewarm has already made an entry for each effective screen, and a dismiss nulls
+        // overlayPhysScreen and clears overlayGeometry while leaving the slot object alive. So on a
+        // mixed multi-monitor setup the excluded screens hit the debug line below at ~30 Hz for the
+        // whole drag, and the comment called that a transient beat.
+        //
+        // Skipping them loses nothing: mousePosition's only reader lives inside the slot's content
+        // Loader, whose `active` binding follows `loaded`, and every dismiss path clears that, so
+        // the content item is destroyed and there is no reader at all. The first tick after a
+        // re-show refreshes it. Behaviour-neutral besides, because a null overlayPhysScreen always
+        // accompanies a cleared overlayGeometry, so these entries already took the continue below.
+        if (!it.value().overlayPhysScreen) {
+            continue;
+        }
         if (QQuickItem* slot = it.value().mainOverlaySlot()) {
             const QRect targetGeom = it.value().overlayGeometry;
             if (!targetGeom.isValid()) {
-                // Expected-transient: during a virtual-screen reconfigure an
-                // overlay slot can exist for a beat before its geometry is
-                // resolved. updateMousePosition runs once per cursor-move
-                // event (~30 Hz), so warning here floods the journal for a
-                // condition that self-heals on the next geometry update.
+                // What is left after the gate above is the genuinely transient case: a LIVE overlay
+                // context whose geometry has not resolved yet, which the geometry watcher's next
+                // write settles. Debug rather than warning because this runs per cursor event.
                 qCDebug(lcOverlay) << "updateMousePosition: no overlay geometry for screen" << it.key()
                                    << ": skipping mouse position update";
                 continue;
@@ -650,6 +804,29 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
         // and the slot would keep the last pack's shader payload for the whole
         // non-shader session.
         clearShaderSlotProperties(slot);
+        // And the LABELS payload, which clearShaderSlotProperties deliberately leaves alone
+        // because the shader branch above owns it. Nothing else releases it on this route:
+        // recreateOverlayWindowsOnTypeMismatch reaches createOverlayWindow directly, with no
+        // destroy or dismiss in between, and destroyOverlayWindow's release only covers the
+        // initializeOverlay route through destroyIfTypeMismatch. Without this the last
+        // shader-mode glyph-tile payload stayed pinned on the slot for the whole rectangle
+        // session, in a mode that can never sample it — and a drag-end does not collect it,
+        // because that goes to setIdleForDragPause, which keeps the property on purpose.
+        // Its wallpaperTexture half is a DUPLICATE on this route — clearShaderSlotProperties
+        // just above writes an equivalent 1x1 transparent placeholder — and is left alone rather
+        // than split out, because on every other caller (the dismiss and destroy paths, which
+        // do not call clearShaderSlotProperties) that half is the only wallpaper release there
+        // is. The second write has NO READER here: it lands on the slot's own `property var
+        // wallpaperTexture`, whose only consumer is the binding into RenderNodeOverlayContent,
+        // and the non-shader branch does not mount that content at all. (Not "the setter dedupes
+        // it", which an earlier version of this said: ShaderEffect::setWallpaperTexture guards on
+        // QImage::cacheKey equality, i.e. data-block identity rather than pixel value, so two
+        // separately constructed placeholders would NOT collapse even if one reached it.)
+        releaseOverlaySlotTextures(slot);
+        // Required by releaseOverlaySlotTextures' own contract: the hash compare in
+        // updateLabelsTextureForWindow would otherwise short-circuit a later rebuild and leave
+        // the 1x1 placeholder showing with no labels.
+        state->labelsTextureHash = 0;
     }
     writeQmlProperty(slot, QStringLiteral("useShader"), usingShader);
     writeQmlProperty(slot, QStringLiteral("loaded"), false);
@@ -737,12 +914,22 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
         stopShaderAnimation();
 
     for (const QString& screenId : screensToFlip) {
-        if (isSnappingContextInactive(screenId)) {
+        // Both gates, matching initializeOverlay and handleScreenAdded. Downstream rather than
+        // independent — this loop needs a screen that already HAS an overlay, so an excluded one
+        // can only reach it if something else built one first — but carrying the pair everywhere is
+        // what stops the next reader having to work out which sites are complete.
+        if (isSnappingContextInactive(screenId) || m_excludedScreens.contains(screenId)) {
             continue;
         }
         QScreen* physScreen = m_screenStates.value(screenId).overlayPhysScreen;
         if (!physScreen)
             continue;
+        // A non-null overlayPhysScreen ALWAYS accompanies a valid overlayGeometry: every writer
+        // that clears one clears the other in the same statement group, and every writer that sets
+        // the screen writes a validated rect with it. The `continue` above has already skipped a
+        // null screen, so this rect is valid by construction and the substitution below is dead
+        // defence rather than a live path. A re-resolve and a virtual skip were added here and are
+        // gone again: both were unreachable for the same reason.
         const QRect geom = m_screenStates.value(screenId).overlayGeometry;
         // createOverlayWindow now drives the slot - flips useShader,
         // toggles loaded, applies shader info - without recreating the
@@ -759,23 +946,6 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
     if (isOverlayDisplaying() && anyScreenUsesShader()) {
         updateZonesForAllWindows();
         startShaderAnimation();
-    }
-}
-
-void OverlayService::dismissOverlayWindow(QScreen* screen)
-{
-    const QString physId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
-
-    // Collect matching overlay keys - may be virtual screen IDs for this physical screen
-    QStringList matchingKeys;
-    for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-        if (PhosphorIdentity::VirtualScreenId::extractPhysicalId(it.key()) == physId) {
-            matchingKeys.append(it.key());
-        }
-    }
-
-    for (const QString& screenId : matchingKeys) {
-        dismissOverlayWindow(screenId);
     }
 }
 
@@ -852,13 +1022,6 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
     }
 }
 
-void OverlayService::destroyOverlayWindow(QScreen* screen)
-{
-    const QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
-    qCDebug(lcOverlay) << "destroyOverlayWindow:" << screenId;
-    destroyOverlayWindow(screenId);
-}
-
 void OverlayService::destroyOverlayWindow(const QString& screenId)
 {
     qCDebug(lcOverlay) << "destroyOverlayWindow:" << screenId;
@@ -875,12 +1038,17 @@ void OverlayService::destroyOverlayWindow(const QString& screenId)
     it->overlayPhysScreen = nullptr;
     it->overlayGeometry = QRect();
     it->overlayGeomConnection = {};
-    // Release the slot's labels payload too. A shader->non-shader
-    // type flip routes through here (destroyIfTypeMismatch) and the
-    // non-shader createOverlayWindow reload does NOT overwrite labelsTexture,
-    // so without this the slot would pin the last shader-mode labels payload for
-    // the screen's whole non-shader session. The screen-teardown callers
-    // immediately destroyPassiveShell, where this is a harmless no-op on an
+    // Release the slot's labels payload too. The shader->non-shader flip that comes through
+    // here is the initializeOverlay one, via destroyIfTypeMismatch, and the non-shader
+    // createOverlayWindow reload does NOT overwrite labelsTexture, so without this the slot
+    // would pin the last shader-mode labels payload for the screen's whole non-shader
+    // session. The recreateOverlayWindowsOnTypeMismatch flip off a live settings edit never
+    // reaches this function at all and carries the same release at its own site in
+    // createOverlayWindow's non-shader branch. No count here on purpose, and that has to include
+    // not counting the CALLERS either — an earlier version of this sentence argued against a
+    // number and then gave one, and got it wrong. Whether a given caller can flip a slot's type
+    // is a property of the caller rather than of this release. The screen-teardown callers
+    // immediately call destroyPassiveShell, where this is a harmless no-op on an
     // about-to-be-freed slot. Mirrors dismissOverlayWindow's release.
     releaseOverlaySlotTextures(it->mainOverlaySlot());
     it->labelsTextureHash = 0;
@@ -894,7 +1062,12 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
 
 void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physScreen)
 {
-    auto* slot = m_screenStates.value(screenId).mainOverlaySlot();
+    // constFind rather than value(), which copies the whole PerScreenOverlayState (three
+    // pointers, two QRects, a quint64 and a QMetaObject::Connection whose copy is an atomic
+    // refcount bump) to read one member, on the multi-monitor signal-storm path this
+    // function's own comment describes. Same fix buildZonesList already took.
+    const auto stateIt = m_screenStates.constFind(screenId);
+    auto* slot = stateIt != m_screenStates.constEnd() ? stateIt->mainOverlaySlot() : nullptr;
     if (!slot) {
         return;
     }
@@ -945,26 +1118,20 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
     QVariantList patched = patchZonesWithHighlight(zones, slot);
 
     // Pass previewZones (all zones with relative geometries) only when LayoutPreview mode is active
-    bool anyZoneUsesPreview = false;
-    for (const QVariant& z : std::as_const(patched)) {
-        if (z.toMap().value(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode).toInt() == 1) {
-            anyZoneUsesPreview = true;
-            break;
-        }
-    }
-    writeQmlProperty(slot, QStringLiteral("previewZones"), anyZoneUsesPreview ? patched : QVariantList{});
+    writeQmlProperty(slot, QStringLiteral("previewZones"),
+                     anyZoneUsesLayoutPreview(patched) ? patched : QVariantList{});
     writeQmlProperty(slot, QString(OverlayQmlPropertyNames::Zones), patched);
 
     if (windowIsShader && screenUsesShader) {
         int highlightedCount = 0;
         for (const QVariant& z : patched) {
-            if (z.toMap().value(QLatin1String("isHighlighted")).toBool()) {
+            if (z.toMap().value(::PhosphorZones::ZoneJsonKeys::IsHighlighted).toBool()) {
                 ++highlightedCount;
             }
         }
         writeQmlProperty(slot, QString(OverlayQmlPropertyNames::ZoneCount), patched.size());
         writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedCount), highlightedCount);
-        updateLabelsTextureForWindow(slot, patched, physScreen, screenLayout);
+        updateLabelsTextureForWindow(slot, patched, physScreen, screenLayout, screenId);
         // Note: zoneDataVersion is bumped and broadcast to all windows in
         // updateZonesForAllWindows() after all per-screen updates complete. Do not
         // write it here - updateOverlayWindow() is called per-screen, and

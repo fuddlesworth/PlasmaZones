@@ -4,7 +4,17 @@
 // Shared fullscreen-quad vertex stage for the SURFACE shader category. This is
 // the LGPL shared contract for data/surface (same license as the sibling
 // surface_uniforms.glsl) so it ships alongside the include and resolves from the
-// SurfaceShaderItem / kwin-effect include paths with no per-pack vertex shader.
+// SurfaceShaderItem include paths with no per-pack vertex shader.
+//
+// DAEMON ONLY. The kwin-effect never resolves this file: it carries its own
+// built-in default vertex source and assigns it unconditionally, replacing it
+// only when a pack declares `vertexShader` in its metadata. Do NOT point a
+// pack's `vertexShader` at this file to "share" the stage. It declares
+// qt_Matrix, which lives in the daemon UBO branch of surface_uniforms.glsl and
+// which the compositor's classic-GL branch does not supply, so the compositor
+// fails to link the pack and disables its decoration for the session. A pack
+// that needs a custom vertex stage on both runtimes has to write one that
+// compiles under both branches.
 //
 // DIRECT-TO-SCENE, like data/animations/shared/animation.vert (NOT layer-
 // composited like zone.vert). The daemon hosts a surface pack with a

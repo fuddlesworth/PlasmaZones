@@ -166,8 +166,9 @@ static int bakeCompositorStage(QTextStream& out, const QString& raw, const QStri
                                               AnimationShaderRegistry::animationEntryCandidates())
         : raw;
     QString err;
+    QStringList sourcePaths;
     QString src = PhosphorShaders::ShaderIncludeResolver::expandIncludes(assembled, QFileInfo(path).absolutePath(),
-                                                                         includePaths, &err);
+                                                                         includePaths, &err, nullptr, &sourcePaths);
     if (!err.isEmpty() || src.isEmpty()) {
         // Tagged like the compile outcome: the preview arm resolves includes
         // differently, so the report has to say which arm failed to expand.
@@ -179,7 +180,7 @@ static int bakeCompositorStage(QTextStream& out, const QString& raw, const QStri
         src = PhosphorShaders::spliceAfterVersion(src, finalizeColorStub());
     }
     src = PhosphorShaders::spliceAfterVersion(src, PhosphorShaders::kwinDefineBlock());
-    return reportCompositorCompile(out, label, stage, src, tool);
+    return reportCompositorCompile(out, label, stage, src, tool, sourcePaths);
 }
 
 // The Qt-RHI preview arm of one stage: the same scaffold, the preview's include
@@ -296,6 +297,18 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
         if (!PhosphorShaders::isValidParamId(p.id)) {
             lints
                 << QStringLiteral("invalid parameter id '%1' (not a GLSL identifier; skipped, no p_ define)").arg(p.id);
+        } else if (PhosphorShaders::isReservedAnimationParamId(p.id)) {
+            // A LEGAL identifier that collides with a define the shared header
+            // owns. The generated preamble would emit `#define p_<id> <slot>`
+            // over animation_uniforms.glsl's own `#define p_<id> ...`, and GLSL
+            // makes a redefinition with a different replacement list an error —
+            // so the pack fails to compile pointing at the shared header, which
+            // is the wrong place to send an author looking for their mistake.
+            lints << QStringLiteral(
+                         "parameter id '%1' collides with a define the shared animation header already owns "
+                         "(p_%1). The generated preamble would redefine it, which GLSL rejects. Rename the "
+                         "parameter")
+                         .arg(p.id);
         }
         // The same split translateAnimationParams makes: colour or scalar,
         // nothing else, so an unknown type still consumes a scalar lane.
@@ -672,12 +685,12 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
 
     // Preset lint: every preset key must name a declared parameter, and every
     // value must match that parameter's declared type and range.
-    errors += reportRawPresetProblems(out, doc.object());
     // The image-parameter gap: this arm parses presets before sourceDir is stamped, so an
     // image-typed preset value is refused fail-closed and vanishes before the shared lint
     // runs. Report the declaration instead.
-    errors += reportImageParamPresets(out, doc.object());
-    errors += reportPresetProblems(out, packDir, eff.presets, eff.parameters);
+    errors += reportPresetLints(out,
+                                rawPresetLints(doc.object()) + imageParamPresetLints(doc.object())
+                                    + presetLints(packDir, eff.presets, eff.parameters));
 
     // ── fragment stage ──
     // Read once for both arms; an unreadable or empty fragment is one error

@@ -98,8 +98,8 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     if (existing != m_screenStates.end()) {
         existing->shell = nullptr;
         m_screenStates.erase(existing);
-        // That erase destroyed a shell able to host a visible modal, so it is
-        // one of the teardown sites resetModalSingletonsForDestroyedId names.
+        // That erase destroyed a shell able to host a visible modal, so the
+        // modal singletons have to be reset for the key it took with it.
         // The clobber guard above only refuses on a non-null overlayPhysScreen,
         // and that field is written solely by the main-overlay path, never by
         // ensurePassiveShellFor - so a passive-only shell carrying a visible
@@ -364,29 +364,28 @@ void OverlayService::validateScreenStateInvariant(const QStringList& targetIds) 
             Q_ASSERT_X(false, "OverlayService", "orphaned overlay entry");
         }
     }
-    // A modal singleton's screen id is a key into m_screenStates, and every
-    // path that hides or tears one down looks it up by that key. An id naming
-    // a key that no longer exists is therefore unrecoverable by any normal
-    // route: the slot stays visible, its surface keeps the input grab, and the
-    // visible flag stays set so the toggle no-ops. Nothing in the ordinary
-    // show/hide cycle can produce it, which is exactly why it is worth
-    // asserting here - the ways in are key migrations and teardowns, and those
-    // are the paths that have to remember to carry these three along.
-    const std::pair<const QString&, const char*> modalIds[] = {
-        {m_cheatsheetScreenId, "cheatsheet"},
-        {m_layoutPickerScreenId, "layout picker"},
-        {m_snapAssistScreenId, "snap assist"},
-    };
-    for (const auto& [modalScreenId, modalName] : modalIds) {
-        if (!modalScreenId.isEmpty() && !m_screenStates.contains(modalScreenId)) {
-            qCWarning(lcOverlay) << "validateScreenStateInvariant:" << modalName << "screen id" << modalScreenId
-                                 << "names a key with no screen state";
-            Q_ASSERT_X(false, "OverlayService", "modal singleton id names a dead screen key");
-        }
-    }
 #else
     Q_UNUSED(targetIds);
 #endif
+    // The dead-modal-key check is deliberately NOT in the block above. Both arms up there
+    // are debug-only invariants about cross-side consistency: if one trips there is nothing
+    // to do but tell a developer. A modal id naming a missing key differs in that a repair
+    // function for it already exists in the tree, so the check sits at the one call site,
+    // which is a mutating context. It WARNS in both builds, repairs in release, and aborts
+    // in debug: the assert precedes the repair, so a debug build never reaches it. That is
+    // the intent rather than an oversight. The condition is unreachable through every route
+    // that exists today — every m_screenStates key removal is paired with the reset or with
+    // the rekey id remap — so the only thing that can trip it is a NEW migration path that
+    // forgot to carry the three ids, and self-healing that away in the one build a developer
+    // runs is how it would stay forgotten. The consequence to know: the repair arm therefore
+    // executes only in a release build.
+    //
+    // It is not the unrecoverable state an earlier version of this note called it. The three
+    // hide paths clear the visible flag and the screen id unconditionally and emit their
+    // dismissed signal, so the ordinary toggle recovers it; only the slot hide is behind the
+    // screen-state lookup, and on these paths the slot went with the shell. Repairing it at
+    // the refresh buys the correct bookkeeping and an earlier release of the shared Escape
+    // grab, not a rescue from a stuck sheet.
 }
 
 QMetaObject::Connection OverlayService::installOverlayGeometryWatcher(QScreen* physScreen, const QString& screenId,

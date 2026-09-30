@@ -147,7 +147,12 @@ struct StripMotionSampler
             return 0.0;
         }
         if (lastPaintTimeMs >= 0) {
-            timeAccumMs += qMin(nowMs - lastPaintTimeMs, kMaxVelocityDtMs);
+            // BOUNDED at both ends. The upper bound CLAMPS where sampleLive REFUSES: a long gap
+            // there drops the frame from timeAccumMs entirely, here it contributes the cap. The
+            // lower bound keeps a negative dt from REWINDING the accumulator, which would break
+            // this struct's monotonic-iTime contract. Not reachable today, since lastPaintTimeMs
+            // is always an earlier pin for this same output.
+            timeAccumMs += qBound<qint64>(0, nowMs - lastPaintTimeMs, kMaxVelocityDtMs);
         }
         lastPaintTimeMs = nowMs;
         const qreal faded = settleVelocity * std::exp(-qreal(elapsed) / kSettleFadeTauMs);

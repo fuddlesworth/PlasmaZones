@@ -14,6 +14,7 @@
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorShaders/ShaderEntryPoint.h>
 #include <PhosphorShaders/ShaderPresetStore.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 #include <PhosphorSurfaceQuick/SurfaceShaderItem.h>
@@ -82,12 +83,13 @@ void Daemon::setupSurfaceShaderEffects()
     // after the user dir is appended last. Surface packs install to
     // `plasmazones/surface` (singular), the third category beside
     // `plasmazones/overlays` and `plasmazones/animations`.
-    QStringList surfaceDirs = QStandardPaths::locateAll(
-        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/surface"), QStandardPaths::LocateDirectory);
+    const QString surfacePackSubdir = PhosphorSurfaceShaders::surfacePackDataSubdir();
+    QStringList surfaceDirs = QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, surfacePackSubdir,
+                                                        QStandardPaths::LocateDirectory);
     std::reverse(surfaceDirs.begin(), surfaceDirs.end());
 
     const QString userSurfaceDir =
-        QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/plasmazones/surface");
+        QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/') + surfacePackSubdir;
     if (!surfaceDirs.contains(userSurfaceDir))
         surfaceDirs.append(userSurfaceDir);
 
@@ -248,9 +250,16 @@ void Daemon::setupShaderWarmBakes()
 
     // Re-init guard: m_shaderRegistry is ctor-owned and survives stop(), so a
     // stop() → init() cycle would stack a second shadersChanged handler here
-    // and double-schedule every zone bake from then on. The animation and
-    // surface connections escape this only because their registries are
-    // recreated each init.
+    // and double-schedule every zone bake from then on.
+    //
+    // The animation and surface connections are NOT held, and the argument that
+    // their registries are recreated each init is the same one setupShaderPresets
+    // refuses a hundred lines above: it is true only because init() happens to
+    // call setupAnimationShaderEffects and setupSurfaceShaderEffects immediately
+    // before this, and nothing enforces that ordering. Left unheld deliberately
+    // rather than by oversight, because the cost of a double-connect here is
+    // bounded: shouldScheduleBake's fingerprint map absorbs the duplicate, so it
+    // buys one extra catalog walk per emit, not a second bake.
     if (m_zoneWarmBakeConnection) {
         disconnect(m_zoneWarmBakeConnection);
     }
@@ -447,11 +456,25 @@ void Daemon::setupShaderWarmBakes()
     // because stop() resets both (lifecycle.cpp), and a caller reaching this
     // function outside that ordering must skip rather than crash.
     if (m_animationShaderRegistry) {
+        // Through the registry's helper, so the warm bake compiles against the same
+        // headers and the same default vertex stage the compositor and the live daemon
+        // leg pick. A hand-rolled walk over searchPaths() gets the priority order
+        // backwards, and the include fingerprint is over the dir SET rather than the
+        // ordered list, so such a divergence would not even invalidate the entry.
+        //
+        // PER SWEEP, not per effect and not per daemon lifetime. It reverses the
+        // search paths and existence-checks each `/shared` subdirectory, so calling it
+        // inside this lambda put a filesystem walk on every effect; but capturing one
+        // answer for the lambda's lifetime is wrong the other way, because this lambda
+        // is connected to effectsChanged and outlives any sweep, and a user creating
+        // a `/shared` directory after startup changes the answer with no search-path
+        // change. So it arrives as a parameter, exactly as includeFp does.
         auto scheduleWarmForAnimEffect = [this, shouldScheduleBake, bakeFingerprint,
                                           registryPtr = QPointer<PhosphorAnimationShaders::AnimationShaderRegistry>(
                                               m_animationShaderRegistry.get())](
                                              const PhosphorAnimationShaders::AnimationShaderEffect& info,
-                                             const QString& includeFp) {
+                                             const QString& includeFp, const QStringList& animIncludePaths,
+                                             const QString& defaultVertPath) {
             if (!info.isValid() || info.fragmentShaderPath.isEmpty() || !QFile::exists(info.fragmentShaderPath)) {
                 return;
             }
@@ -468,19 +491,13 @@ void Daemon::setupShaderWarmBakes()
             if (!reg) {
                 return;
             }
+            // The resolved default arrives with the include list, from the same
+            // sweep: defaultVertexShaderPath calls sharedIncludePaths itself, so
+            // resolving it here against a live filesystem while the includes came
+            // from a captured list would let the two describe different trees.
             QString vertPath = info.vertexShaderPath;
-            QStringList includePaths;
-            for (const QString& sp : reg->searchPaths()) {
-                const QString sharedDir = sp + QStringLiteral("/shared");
-                if (QDir(sharedDir).exists()) {
-                    includePaths.append(sharedDir);
-                    if (vertPath.isEmpty()) {
-                        const QString sharedVert = sharedDir + QStringLiteral("/animation.vert");
-                        if (QFile::exists(sharedVert)) {
-                            vertPath = sharedVert;
-                        }
-                    }
-                }
+            if (vertPath.isEmpty()) {
+                vertPath = defaultVertPath;
             }
             if (vertPath.isEmpty() || !QFile::exists(vertPath)) {
                 return;
@@ -514,11 +531,11 @@ void Daemon::setupShaderWarmBakes()
                         watcher->deleteLater();
                     });
             watcher->setFuture(QtConcurrent::run(&m_shaderBakePool,
-                                                 [vertPath, fragPath = info.fragmentShaderPath, includePaths,
+                                                 [vertPath, fragPath = info.fragmentShaderPath, animIncludePaths,
                                                   paramPreamble, entryPrologue, entryCandidates]() {
                                                      return PhosphorRendering::warmShaderBakeCacheForPaths(
-                                                         vertPath, fragPath, includePaths, paramPreamble, entryPrologue,
-                                                         entryCandidates);
+                                                         vertPath, fragPath, animIncludePaths, paramPreamble,
+                                                         entryPrologue, entryCandidates);
                                                  }));
         };
         connect(m_animationShaderRegistry.get(), &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged,
@@ -527,17 +544,21 @@ void Daemon::setupShaderWarmBakes()
                         return;
                     }
                     const QString includeFp = includeDirsFingerprint(m_animationShaderRegistry->searchPaths());
+                    const QStringList incPaths = m_animationShaderRegistry->sharedIncludePaths();
+                    const QString defVert = m_animationShaderRegistry->defaultVertexShaderPath();
                     const QList<PhosphorAnimationShaders::AnimationShaderEffect> effects =
                         m_animationShaderRegistry->availableEffects();
                     for (const PhosphorAnimationShaders::AnimationShaderEffect& info : effects) {
-                        scheduleWarmForAnimEffect(info, includeFp);
+                        scheduleWarmForAnimEffect(info, includeFp, incPaths, defVert);
                     }
                 });
         {
             const QString includeFp = includeDirsFingerprint(m_animationShaderRegistry->searchPaths());
+            const QStringList incPaths = m_animationShaderRegistry->sharedIncludePaths();
+            const QString defVert = m_animationShaderRegistry->defaultVertexShaderPath();
             for (const PhosphorAnimationShaders::AnimationShaderEffect& info :
                  m_animationShaderRegistry->availableEffects()) {
-                scheduleWarmForAnimEffect(info, includeFp);
+                scheduleWarmForAnimEffect(info, includeFp, incPaths, defVert);
             }
         }
     }

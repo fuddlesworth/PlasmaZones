@@ -14,7 +14,7 @@
             "default": 0.7,
             "min": 0.0,
             "max": 1.0,
-            "description": "How much colour unfocused windows lose, where 1.0 is full grayscale"
+            "description": "How much colour unfocused windows lose, where 1.0 is full greyscale"
         },
         {
             "id": "dim",

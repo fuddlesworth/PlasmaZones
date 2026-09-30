@@ -25,6 +25,18 @@ cmake_minimum_required(VERSION 3.18)
 
 set(PHOSPHORSCRIPTING_VERSION "0.1.0")
 
+# The Qt floor this library requires AND advertises in its generated
+# PhosphorScriptingConfig.cmake. Taken from the top-level QT_MIN_VERSION when built in-tree so
+# the two cannot drift, with its own value for a STANDALONE build, where that
+# variable does not exist. The fallback is not optional: the Config template
+# substitutes this, and an undefined variable expands to nothing and ships a config
+# whose find_dependency(Qt6 ...) carries no version floor at all.
+if(DEFINED QT_MIN_VERSION)
+    set(PHOSPHORSCRIPTING_QT_MIN ${QT_MIN_VERSION})
+else()
+    set(PHOSPHORSCRIPTING_QT_MIN "6.10.0")
+endif()
+
 # Pinned vendored Luau. To bump: drop the new phosphor-libs/extern/luau-<ver>.tar.gz in,
 # update both lines, and delete the old tarball.
 set(PHOSPHORSCRIPTING_LUAU_VERSION "0.737")
@@ -38,7 +50,7 @@ endif()
 
 include(GenerateExportHeader)
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core)
+find_package(Qt6 ${PHOSPHORSCRIPTING_QT_MIN} REQUIRED COMPONENTS Core)
 find_package(Threads REQUIRED)
 
 # ═══════════════════════════════════════════════════════════════════════════════

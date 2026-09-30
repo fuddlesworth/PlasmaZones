@@ -139,6 +139,12 @@ void OverlayService::refreshStripSelector(const QString& screenId)
 
 void OverlayService::updateStripSelectorHit(QQuickItem* slot, int localX, int localY, const QString& screenId)
 {
+    // Guarded like every sibling helper in this file. The one caller reaches here
+    // behind a truthy zoneSelectorSlot(), but the writeQmlProperty calls further down
+    // are null-tolerant, which makes the function READ as guarded from the call site.
+    if (!slot) {
+        return;
+    }
     const QVariantList stripColumns = slot->property("stripColumns").toList();
     const QPointF pos(localX, localY);
 

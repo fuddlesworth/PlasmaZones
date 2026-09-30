@@ -5,7 +5,10 @@ import PlasmaZones 1.0
 import QtQuick
 
 /**
- * Shared ZoneShaderItem wrapper for overlay and editor preview.
+ * Shared ZoneShaderItem wrapper for the overlay and the settings preview.
+ * NOT the editor: plasmazones-editor ships this file (it links
+ * plasmazones_shared_qml) but registers no ZoneShaderItem, so instantiating it
+ * there fails at load. See zoneshaderitem.h for what wiring it up would take.
  * Accepts a config object and delegates to ZoneShaderItem with consistent bindings.
  * Single source of truth for bufferShaderPaths, shader params, and zone data.
  */
@@ -16,8 +19,8 @@ Item {
     // Default to empty object when config is null (callers may not always pass valid config)
     readonly property var safeConfig: config || ({})
     // Idle-quiesce park. Only the daemon overlay host binds this (to its
-    // idleParked latch); the settings/editor dialog consumers leave it false
-    // and reclaim by deactivating their Loader instead. While parked, the
+    // idleParked latch); the settings dialog consumer leaves it false
+    // and reclaims by deactivating its Loader instead. While parked, the
     // private layer FBO below is dropped along with the render node's
     // resources — for the overlay host that layer is a screen-sized RGBA8
     // texture which otherwise survives every releaseIdleGraphicsResources()
@@ -115,8 +118,8 @@ Item {
     // QVariant to the setter. The image does not survive the trip through
     // Binding's own `value` property, and nothing is logged. That silently
     // emptied the wallpaper for every pack that samples it, and emptied the
-    // labels for the settings and editor previews, which hand a full QImage to
-    // labelsTexture and rely on the registered converter. The daemon's own
+    // labels for the settings preview, which hands a full QImage to
+    // labelsTexture and relies on the registered converter. The daemon's own
     // labels were spared only because it passes the ZoneLabelTexture payload,
     // which does survive.
     //

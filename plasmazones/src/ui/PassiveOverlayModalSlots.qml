@@ -62,7 +62,7 @@ Item {
 
         // Surface-shader decoration (Stage d). C++ OverlayService::applyDecoration
         // resolves the "popup.snapAssist" pack and writes these before each show;
-        // empty source = no decoration (card draws natively). Consumed by the
+        // empty resolution = no decoration (card draws natively). Consumed by the
         // SurfaceDecoration sibling below.
         // Resolved decoration chain: ordered stage list ({source,
         // vertexSource, preamble, params, animated} per pack), plus the
@@ -72,6 +72,7 @@ Item {
         // undeclared name silently becomes a dynamic property no binding
         // observes — the decoration would never update.
         property var decorationChain: []
+        property int decorationReloadGeneration: 0
         property real decorationOuterPadding: 0
         // The desktop wallpaper, standing in for the scene a daemon surface has
         // no way to capture. Under the SAME declare-and-forward contract as
@@ -135,11 +136,12 @@ Item {
         // Surface-shader decoration (Stage d). SIBLING of snapAssistLoader.
         // Captures the loaded content's shaderAnchor (the SnapAssistContent root
         // itself carries `shaderAnchor: true`) and re-renders it through the
-        // resolved "popup.snapAssist" surface pack. Inert when the source is empty.
+        // resolved "popup.snapAssist" surface pack. Inert when the chain is empty.
         PhosphorSurface.SurfaceDecoration {
             anchors.fill: parent
             contentItem: snapAssistLoader.item
             decorationChain: snapAssistSlot.decorationChain
+            decorationReloadGeneration: snapAssistSlot.decorationReloadGeneration
             decorationOuterPadding: snapAssistSlot.decorationOuterPadding
             backdropTexture: snapAssistSlot.backdropTexture
             // Screen-spanning slot, so its rect is the area the wallpaper
@@ -178,14 +180,15 @@ Item {
         property bool fontItalic: false
         property bool fontUnderline: false
         property bool fontStrikeout: false
-        // No labelFontColor here: picker previews deliberately don't wire label color, consistent with the selector and OSD slots.
+        // No labelFontColor here: picker previews deliberately don't wire label color, consistent with every
+        // other slot. Only the main overlay slot declares it (see overlayservice/internal.h).
         // OSD-style content lifecycle gate. C++ toggles false→true around
         // each show so LayoutPickerContent is re-instantiated.
         property bool loaded: false
 
         // Surface-shader decoration (Stage d). C++ OverlayService::applyDecoration
         // resolves the "popup.layoutPicker" pack and writes these before each
-        // show; empty source = no decoration. Consumed by the SurfaceDecoration
+        // show; empty resolution = no decoration. Consumed by the SurfaceDecoration
         // sibling below.
         // Resolved decoration chain: ordered stage list ({source,
         // vertexSource, preamble, params, animated} per pack), plus the
@@ -195,6 +198,7 @@ Item {
         // undeclared name silently becomes a dynamic property no binding
         // observes — the decoration would never update.
         property var decorationChain: []
+        property int decorationReloadGeneration: 0
         property real decorationOuterPadding: 0
         // The desktop wallpaper, standing in for the scene a daemon surface has
         // no way to capture. Under the SAME declare-and-forward contract as
@@ -274,11 +278,12 @@ Item {
         // Surface-shader decoration (Stage d). SIBLING of layoutPickerLoader.
         // Captures the loaded content's PopupFrame shaderAnchor and re-renders it
         // through the resolved "popup.layoutPicker" surface pack. Inert when the
-        // source is empty.
+        // decoration chain is empty.
         PhosphorSurface.SurfaceDecoration {
             anchors.fill: parent
             contentItem: layoutPickerLoader.item
             decorationChain: layoutPickerSlot.decorationChain
+            decorationReloadGeneration: layoutPickerSlot.decorationReloadGeneration
             decorationOuterPadding: layoutPickerSlot.decorationOuterPadding
             backdropTexture: layoutPickerSlot.backdropTexture
             backdropSourceArea: Qt.rect(0, 0, width, height)
@@ -328,6 +333,7 @@ Item {
         // contract as the picker slot: C++ writes these with setProperty,
         // an undeclared name silently becomes a dead dynamic property.
         property var decorationChain: []
+        property int decorationReloadGeneration: 0
         property real decorationOuterPadding: 0
         // The desktop wallpaper, standing in for the scene a daemon surface has
         // no way to capture. Under the SAME declare-and-forward contract as
@@ -375,11 +381,12 @@ Item {
         // Surface-shader decoration (Stage d). SIBLING of cheatsheetLoader.
         // Captures the loaded content's PopupFrame shaderAnchor and
         // re-renders it through the resolved "popup.cheatsheet" surface
-        // pack. Inert when the source is empty.
+        // pack. Inert when the decoration chain is empty.
         PhosphorSurface.SurfaceDecoration {
             anchors.fill: parent
             contentItem: cheatsheetLoader.item
             decorationChain: cheatsheetSlot.decorationChain
+            decorationReloadGeneration: cheatsheetSlot.decorationReloadGeneration
             decorationOuterPadding: cheatsheetSlot.decorationOuterPadding
             backdropTexture: cheatsheetSlot.backdropTexture
             backdropSourceArea: Qt.rect(0, 0, width, height)

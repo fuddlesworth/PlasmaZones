@@ -1209,12 +1209,12 @@ public:
         return QStringLiteral("/plasmazones/overlaysets");
     }
 
-    /// Surface shader packs (the `data/surface/` family — border, etc.).
-    /// Mirrors the `userAnimationsSubdir()` convention so settings + daemon
-    /// + compositor code share one source of truth for the on-disk location.
+    /// Surface shader packs (the `data/surface/` family), derived from
+    /// `PhosphorSurfaceShaders::surfacePackDataSubdir()` plus the leading slash, so
+    /// settings cannot drift from the location daemon, compositor and shell scan.
     static QString userSurfaceSubdir()
     {
-        return QStringLiteral("/plasmazones/surface");
+        return QLatin1Char('/') + PhosphorSurfaceShaders::surfacePackDataSubdir();
     }
 
     /// Pointer shader packs (the `data/pointer/` family). Mirrors

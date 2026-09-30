@@ -14,6 +14,7 @@
 #include <QVector>
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 
 class QImage;
@@ -80,7 +81,34 @@ public:
     };
 
     explicit SnapAssistThumbnailCapture(QObject* parent = nullptr);
+
     ~SnapAssistThumbnailCapture() override;
+
+    /// Called immediately before each out-of-band capture draw, and its return
+    /// value invoked immediately after.
+    ///
+    /// WHY THIS EXISTS. Both draws below go through effects->drawWindow from a
+    /// TIMER, outside any paint pass, with m_capturingSnapshot deliberately false
+    /// so the thumbnail keeps its decorations. paintWindow is therefore never
+    /// entered and neither is the decoration fold, while drawWindowImpl IS. A
+    /// candidate can genuinely have no surface state: KWin declines to paint a
+    /// window fully occluded by an opaque one, so the fold never runs for it,
+    /// while the decoration redirect and the present shader are installed off the
+    /// paint cycle. Nothing in the candidate filter excludes an occluded window,
+    /// and this class holds a KWin::ItemEffect precisely so an obscured one still
+    /// has renderable content. Drawing one then presents a composite that does not
+    /// exist.
+    ///
+    /// A CALLBACK rather than a PlasmaZonesEffect pointer, because this class sits
+    /// under kwin-effect/compositor and the effect under
+    /// kwin-effect/plasmazoneseffect. The owner holds the effect and installs it.
+    /// Unset is a no-op, which is the right behaviour for any host that has no
+    /// decoration shaders to neutralise.
+    using CaptureDrawGuard = std::function<std::function<void()>(KWin::EffectWindow*)>;
+    void setCaptureDrawGuard(CaptureDrawGuard guard)
+    {
+        m_captureDrawGuard = std::move(guard);
+    }
 
     /// Default thumbnail bounding box. The captured window is fit within this
     /// box (aspect ratio preserved) by @ref grabWindowImage. Used as the
@@ -129,6 +157,19 @@ private Q_SLOTS:
     void processNext();
 
 private:
+    /// Runs the guard for @p w and returns its restore action. Always CALLABLE and
+    /// never an empty std::function, because both call sites hand it straight to
+    /// qScopeGuard and an empty one throws on invocation. The scope guard is what
+    /// keeps a throw out of the draw chain from leaving a window neutralised.
+    std::function<void()> enterCaptureDraw(KWin::EffectWindow* w) const
+    {
+        if (!m_captureDrawGuard || !w) {
+            return [] { };
+        }
+        std::function<void()> restore = m_captureDrawGuard(w);
+        return restore ? restore : std::function<void()>([] { });
+    }
+    CaptureDrawGuard m_captureDrawGuard;
     /// Single-plane DMA-BUF exported from a rendered thumbnail texture. @c ok
     /// is false when the compositor is not on an EGL/GL backend or the driver
     /// lacks EGL_MESA_image_dma_buf_export. Per-export failures and daemon

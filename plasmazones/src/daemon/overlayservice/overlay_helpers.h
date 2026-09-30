@@ -14,20 +14,27 @@
 #include <QElapsedTimer>
 #include <QMutex>
 #include <QMutexLocker>
-#include <QQuickWindow>
-#include <QJsonDocument>
-#include <QJsonArray>
-#include <QJsonObject>
-#include <QJsonValue>
-#include <QJsonParseError>
+// No QQuickWindow, no QJson* and no logging.h here. The first six were orphaned by the
+// removal of parseZonesJson and the shader-preview helpers; logging.h outlived them by one
+// round, because the edit that dropped the six moved the load-bearing copy into internal.h
+// (which does call qCWarning) and left this one standing. This header's own body uses no
+// qC macro and no category.
+//
+// Verified before removal, not after, and twice over: each pass scanned every TU that
+// reaches this header (directly or through internal.h) plus every TU in the two unity
+// targets, with comments AND string literals stripped, and resolved the provision graph —
+// exactly one TU uses a QJson type without its own include and it lands in a target that
+// compiles nothing reaching this header. A unity build cannot tell an orphan from a
+// load-bearing transitive include, so each removal was checked against a NON-UNITY build
+// with the shell both on and off.
 #include <QQuickItem>
 #include <QRectF>
 #include <QVector>
 #include <atomic>
 
 #include <PhosphorWayland/LayerSurface.h>
+#include <PhosphorZones/ZoneJsonKeys.h>
 #include "qml_property_names.h"
-#include "core/platform/logging.h"
 #include "core/types/enums.h"
 
 namespace PlasmaZones {
@@ -131,7 +138,7 @@ inline QVariantList patchZonesWithHighlight(const QVariantList& zones, QObject* 
     QVariantList out;
     for (const QVariant& z : zones) {
         QVariantMap m = z.toMap();
-        const QString id = m.value(QLatin1String("id")).toString();
+        const QString id = m.value(PhosphorZones::ZoneJsonKeys::Id).toString();
         bool hi = (!id.isEmpty() && id == hid);
         if (!hi) {
             for (const QVariant& v : hids) {
@@ -141,42 +148,14 @@ inline QVariantList patchZonesWithHighlight(const QVariantList& zones, QObject* 
                 }
             }
         }
-        m[QLatin1String("isHighlighted")] = hi;
+        m[PhosphorZones::ZoneJsonKeys::IsHighlighted] = hi;
         out.append(m);
     }
     return out;
 }
 
-// Parse zones from JSON array. Returns empty list on parse error or invalid format.
-// Shared by overlayservice_shader.cpp, overlayservice_snapassist.cpp, and tests.
-inline QVariantList parseZonesJson(const QString& json, const char* context)
-{
-    QVariantList zones;
-    if (json.isEmpty()) {
-        return zones;
-    }
-    QJsonParseError parseError;
-    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError) {
-        qCWarning(lcOverlay) << context << "invalid zones JSON:" << parseError.errorString();
-        return zones;
-    }
-    if (!doc.isArray()) {
-        qCWarning(lcOverlay) << context << "zones JSON is not an array";
-        return zones;
-    }
-    for (const QJsonValue& v : doc.array()) {
-        if (v.isObject()) {
-            QVariantMap m;
-            const QJsonObject o = v.toObject();
-            for (auto it = o.begin(); it != o.end(); ++it) {
-                m.insert(it.key(), it.value().toVariant());
-            }
-            zones.append(m);
-        }
-    }
-    return zones;
-}
+// parseZonesJson was removed: the zone payload travels as a QVariantList, not as a
+// JSON string, so it had no production caller left.
 
 // Initialize shader timer if not already running. Prevents large iTimeDelta jumps
 // by only starting if invalid. Replaces 3 occurrences of mutex-guarded timer init.

@@ -19,7 +19,13 @@
 // and the SPIR-V bake tests cover them. On the UBO branch the sampler
 // aliases user-texture slot 3 (fed per frame via
 // ShaderEffect::setUserTexture) and iOldWindowOpacity comes from the
-// AnimationUniforms block's transition tail. Include AFTER the
+// AnimationUniforms block's transition tail.
+//
+// SLOT COLLISION, same rule the desktop-transition module states for its own
+// slots: a pack that includes this and ALSO declares its own user textures
+// must avoid slot 3 (uTexture3) on the preview branch, because the alias above
+// takes it. The C++ that feeds the slot states the same thing; this module was
+// the one that did not. Include AFTER the
 // animation uniform block so iHasOldWindow / iAnchorRectInTexture / iWindowOpacity
 // and surfaceColor() are in scope.
 #ifndef PLASMAZONES_OLD_CONTENT_GLSL

@@ -4,6 +4,7 @@
 #include <PhosphorAnimation/QtQuickClock.h>
 
 #include <QCoreApplication>
+#include <QLoggingCategory>
 #include <QObject>
 #include <QQuickWindow>
 #include <QScreen>
@@ -14,6 +15,8 @@
 #include <thread>
 
 namespace PhosphorAnimation {
+
+Q_LOGGING_CATEGORY(lcQtQuickClock, "phosphoranimation.qtquickclock")
 
 /**
  * @brief Internal QObject that owns the beforeRendering → now() wire-up.
@@ -276,7 +279,16 @@ std::chrono::nanoseconds QtQuickClock::now() const
            && !m_nowCache.compare_exchange_weak(prev, reading, std::memory_order_release, std::memory_order_acquire)) {
         // CAS retry — `prev` updated with the latest seen value.
     }
-    return std::chrono::nanoseconds{reading};
+    // The MONOTONE value, not the raw reading. Returning `reading` closed the hole for the
+    // handoff and left it open between two fallback readers: if another thread has already
+    // published a LATER value, this reader's own earlier sample fails the `reading > prev`
+    // test, is never published, and was still handed back — so this call could observe less
+    // than a concurrent one already had. After the loop `prev` holds the latest value seen,
+    // so the larger of the two is the non-decreasing answer and costs one comparison.
+    // Consequence if it regressed was bounded rather than fatal (AnimatedValue::advance
+    // treats a negative dt as a zero-step, logs once and requests another frame), which is
+    // why it survived unnoticed.
+    return std::chrono::nanoseconds{reading > prev ? reading : prev};
 }
 
 qreal QtQuickClock::refreshRate() const
@@ -287,9 +299,24 @@ qreal QtQuickClock::refreshRate() const
     // Fail loudly in debug builds if a consumer routes it off the GUI
     // thread so the constraint in the header doc bites on contact
     // instead of manifesting as a subtle crash later.
-    Q_ASSERT_X(QCoreApplication::instance() == nullptr
-                   || QThread::currentThread() == QCoreApplication::instance()->thread(),
-               "QtQuickClock::refreshRate", "must be called on the GUI thread (touches QScreen)");
+    const bool onGuiThread =
+        QCoreApplication::instance() == nullptr || QThread::currentThread() == QCoreApplication::instance()->thread();
+    Q_ASSERT_X(onGuiThread, "QtQuickClock::refreshRate", "must be called on the GUI thread (touches QScreen)");
+    // And the release-build half, because this is exported API a third-party host can call:
+    // an abort in debug and an unsynchronised walk of the platform screen list in release is
+    // debug-only safety. 0.0 is the answer the header already documents for "unknown", so a
+    // caller that ignores the contract gets the same degraded value it gets before the window
+    // is shown. Latched, since a consumer that gets the thread wrong gets it wrong every
+    // frame.
+    if (!onGuiThread) {
+        // exchange, not test-then-set: the whole point of this arm is that the caller is on
+        // another thread, so two of them could otherwise both pass a plain load and print.
+        if (!m_refreshRateThreadWarned.exchange(true)) {
+            qCWarning(lcQtQuickClock) << "QtQuickClock::refreshRate called off the GUI thread; returning 0.0 "
+                                         "(unknown) rather than walking Qt's platform screen list";
+        }
+        return 0.0;
+    }
     if (!m_window) {
         return 0.0;
     }

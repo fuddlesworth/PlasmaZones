@@ -1,15 +1,16 @@
 #!/bin/bash
 # SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Generate packaging changelogs from CHANGELOG.md
 #
 # Usage:
-#   ./generate-changelog.sh debian   [version]  - Generate packaging/debian/changelog
-#   ./generate-changelog.sh rpm      [version]  - Update %changelog in RPM spec
-#   ./generate-changelog.sh notes    <version>  - Print GitHub release notes to stdout
-#   ./generate-changelog.sh all      [version]  - Generate both debian and rpm
+#   ./generate-changelog.sh debian   [version] [revision]  - Generate packaging/debian/changelog
+#   ./generate-changelog.sh rpm      [version] [revision]  - Update %changelog in RPM spec
+#   ./generate-changelog.sh notes    <version>             - Print GitHub release notes to stdout
+#   ./generate-changelog.sh all      [version] [revision]  - Generate both debian and rpm
 #
 # If version is omitted for debian/rpm/all, all versions are included.
-# SPDX-License-Identifier: GPL-3.0-or-later
+# Revision defaults to 1 and is the packaging revision (-r<N>) for a rebuild.
 
 set -euo pipefail
 
@@ -196,8 +197,9 @@ generate_rpm() {
     done < <(parse_changelog) > "$tmpfile"
 
     # Replace everything after %changelog in the spec. Without the
-    # marker `sed /%changelog/q` would copy the whole file then append,
-    # silently producing duplicate sections.
+    # marker `sed /^%changelog/q` would copy the whole file then append,
+    # silently adding the entries with no directive, and doubling them on
+    # the next run. The grep guard below makes both unreachable.
     if [[ -f "$specfile" ]]; then
         if ! grep -q '^%changelog' "$specfile"; then
             echo "Error: $specfile is missing a %changelog marker — refusing to splice" >&2
@@ -206,7 +208,7 @@ generate_rpm() {
         fi
         local headfile
         headfile=$(mktemp)
-        sed '/%changelog/q' "$specfile" > "$headfile"
+        sed '/^%changelog/q' "$specfile" > "$headfile"
         cat "$headfile" "$tmpfile" > "$specfile"
         rm -f "$headfile"
         echo "Updated %changelog in $specfile" >&2
@@ -258,22 +260,31 @@ generate_notes() {
 # Without a revision bump apt/dnf/zypper see the same NEVR and offer no
 # upgrade, so the rebuild never reaches anyone. Mirrors Arch's pkgrel.
 REVISION="${3:-1}"
-if [[ ! "$REVISION" =~ ^[1-9][0-9]*$ ]]; then
-    echo "Error: revision must be a positive integer, got: $REVISION" >&2
-    exit 1
-fi
+# Validated inside the arms that USE it, not before the case. `notes` documents itself
+# as taking no revision and ignores $3, so validating up front rejected
+# `generate-changelog.sh notes 3.3.8 x` with an error about a revision that command does
+# not have.
+require_revision() {
+    if [[ ! "$REVISION" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Error: revision must be a positive integer, got: $REVISION" >&2
+        exit 1
+    fi
+}
 
 case "${1:-}" in
     debian)
+        require_revision
         generate_debian "${2:-}" "$REVISION"
         ;;
     rpm)
+        require_revision
         generate_rpm "${2:-}" "$REVISION"
         ;;
     notes)
         generate_notes "${2:-}"
         ;;
     all)
+        require_revision
         generate_debian "${2:-}" "$REVISION"
         generate_rpm "${2:-}" "$REVISION"
         ;;

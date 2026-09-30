@@ -5,7 +5,9 @@
 #include "daemon/overlayservice.h"
 #include "core/platform/logging.h"
 #include "phosphor_slot_keys.h"
+#include "qml_property_names.h"
 #include <PhosphorOverlay/ShellHost.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorSurfaces/SurfaceManager.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -125,7 +127,11 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
         state->zoneSelectorPhysScreen = physScreen;
         state->zoneSelectorGeometry = targetGeom;
         if (state->shell->shellWindow()) {
-            assertWindowOnScreen(state->shell->shellWindow(), physScreen, targetGeom);
+            // The TRUE geometry, not targetGeom: the callers below substitute the physical rect
+            // when the id does not resolve, and a substituted rect makes assertWindowOnScreen's
+            // physical-screen test trivially true. targetGeom still sizes the window.
+            assertWindowOnScreen(state->shell->shellWindow(), physScreen,
+                                 trueScreenGeometry(m_screenManager, screenId));
             state->shell->shellWindow()->setWidth(targetGeom.width());
             state->shell->shellWindow()->setHeight(targetGeom.height());
         }
@@ -133,8 +139,8 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
         auto* slot = state->zoneSelectorSlot();
         // Stage d: resolve + push the zone-selector surface-shader decoration
         // (same SurfaceDecoration host the OSD uses, retargeted to the
-        // "popup.zoneSelector" surface path). Empty source = no decoration.
-        applyDecoration(slot, QStringLiteral("popup.zoneSelector"));
+        // "popup.zoneSelector" surface path). Empty resolution = no decoration.
+        applyDecoration(slot, PhosphorSurfaceShaders::decorationPopupZoneSelectorPath());
         // OSD-style content lifecycle: toggle `loaded` false→true so the
         // Loader re-instantiates ZoneSelectorContent fresh per show.
         writeQmlProperty(slot, QStringLiteral("loaded"), false);
@@ -203,9 +209,8 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
                     continue;
                 }
             }
-            auto* smgr = m_screenManager;
-            QRect geom = (smgr && smgr->screenGeometry(screenId).isValid()) ? smgr->screenGeometry(screenId)
-                                                                            : screen->geometry();
+            const QRect resolved = trueScreenGeometry(m_screenManager, screenId);
+            const QRect geom = resolved.isValid() ? resolved : screen->geometry();
             anyEligible = true;
             showOnScreen(screenId, screen, geom);
         }
@@ -306,6 +311,24 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
     // returning first would leave it (and the C++ STRIP mirror — the zone
     // triple is deliberately kept for the drag-end snap path) alive.
     for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
+        // No key snapshot here, unlike the sibling loop above, and the difference is real
+        // rather than an oversight: this body holds no reference to it.key() and hands the key
+        // to nothing that looks it up again, so the only hazard would be a QML binding
+        // inserting into m_screenStates during a writeQmlProperty. An audit enumerated QML's
+        // entire reach into this class — one context property, one read-only Q_PROPERTY, and
+        // the two public slots, which are ONE hide (hideLayoutPicker) and one shader-error
+        // reporter (onShaderError), the latter being the one QML actually calls; no
+        // Q_INVOKABLEs — and found no insertion route. Both slot bodies were read: one does
+        // find + hideSlot, the other only logs. Audited-safe, not structurally safe. The
+        // sibling loop further up this file snapshots for a DIFFERENT reason, and the reason is
+        // stated where that snapshot is taken: a synchronously-fired hideSlot completion COULD
+        // insert into m_screenStates and rehash, invalidating its iterators, if a future
+        // completion-path edit added a screen. Stated in that tense deliberately, matching the
+        // snapshot site: no such insert exists on that path today, which is what the enumeration
+        // just above concludes. Not because it
+        // keeps a key across a completion lambda, which an earlier version of this sentence
+        // claimed — that lambda captures the id by value, so it would hold a copy either way.
+        //
         // screensMatch, not raw !=, matching the mirror clear below and the
         // drop guard's convention. ASSUMPTION: one screen never coexists
         // under two key spellings in m_screenStates while the cursor id
@@ -464,8 +487,20 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
             const QRectF& cardRect = cardIt->rect;
 
             if (cardRect.contains(localX, localY)) {
-                QVariantMap layoutMap = layouts[i].toMap();
-                QString layoutId = layoutMap[QStringLiteral("id")].toString();
+                // .at(), not operator[]: the mutable overload detaches, which is a real cost at
+                // the `zones` read below. It is NOT one here, and this comment has now been
+                // wrong twice about why. The detach claim itself was false, and its first
+                // replacement argued from the temporary QVariant dying at the semicolon and
+                // called that engine-independent — which it is not: killing the temporary only
+                // leaves refcount 1 if nothing PERSISTENT shares the data, and a C++
+                // QVariantList property or a QObject dynamic property would.
+                //
+                // What makes it true here is the property's KIND. `layouts` is declared in QML
+                // as `property var` (PassiveOverlayShell.qml), a VME property held as a JS
+                // value, so each read materialises a fresh unshared QVariantList. This spelling
+                // is therefore consistency with the site that does pay, not a saving.
+                QVariantMap layoutMap = layouts.at(i).toMap();
+                QString layoutId = layoutMap.value(QLatin1String("id")).toString();
 
                 // Skip non-active layouts when screen is locked — a LockContext
                 // rule (checked first) or a manual lock on either mode.
@@ -497,7 +532,7 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                 // overlapping layouts. Reading the delegates keeps this in step
                 // with QML by construction — the same reason the card walk above
                 // reads back rendered geometry instead of predicting origins.
-                QVariantList zones = layoutMap[QStringLiteral("zones")].toList();
+                QVariantList zones = layoutMap.value(QLatin1String("zones")).toList();
 
                 // Keyed by each delegate's own `index`, for the same reason the
                 // card walk above is: collectQmlItemsByName descends the whole
@@ -527,7 +562,13 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                         continue;
                     }
 
-                    QVariantMap zoneMap = zones[z].toMap();
+                    // .at() and here it genuinely earns it: `zones` was taken out of
+                    // layoutMap, which is still alive, so the list's refcount is 2 and a
+                    // mutable subscript would reallocate the handle array and re-reference
+                    // every zone map, on every cursor tick. Not a deep copy — the inner maps
+                    // stay COW-shared — but plain COW, provable without knowing anything
+                    // about QML.
+                    QVariantMap zoneMap = zones.at(z).toMap();
                     // Relative geometry for m_selectedZoneRelGeo, which backs
                     // getSelectedZoneGeometry's fallback path at drop time.
                     //
@@ -539,7 +580,7 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                     // every rx/ry/rw/rh come out as 0 once LayoutPreview became
                     // the canonical wire format, handing the drop path a
                     // zero-sized zone rect.
-                    const QVariantMap relGeo = zoneMap.value(QStringLiteral("relativeGeometry")).toMap();
+                    const QVariantMap relGeo = zoneMap.value(QLatin1String("relativeGeometry")).toMap();
                     auto coord = [&](QLatin1String flatKey, QLatin1String nestedKey) {
                         const QVariant flat = zoneMap.value(flatKey);
                         if (flat.isValid() && !flat.isNull()) {
@@ -674,8 +715,16 @@ void OverlayService::hideZoneSelectorSlotOnScreen(const QString& effectiveId)
     });
 }
 
-void OverlayService::showZoneSelectorSlotOnScreen(const QString& effectiveId, QScreen* physScreen,
-                                                  const QRect& targetGeom)
+// targetGeom BY VALUE, deliberately, and this changes no behaviour. Its only caller passes it
+// straight out of the m_screenStates node this function then mutates, so as a reference the
+// parameter aliased storage updateZoneSelectorWindow overwrites further down. That was never
+// observable (the self-assignment is harmless, every read precedes the overwrite, and no
+// rehash is possible on a key the caller already found), so this is hardening, not a fix.
+// A copy also makes the comparison below stable rather than a compare against live storage —
+// though from the sole caller BOTH terms still compare equal by construction, so the
+// documented fall-through stays reachable only for a future caller supplying values from
+// elsewhere. A QRect is 16 bytes.
+void OverlayService::showZoneSelectorSlotOnScreen(const QString& effectiveId, QScreen* physScreen, QRect targetGeom)
 {
     if (!physScreen) {
         return;
@@ -686,6 +735,11 @@ void OverlayService::showZoneSelectorSlotOnScreen(const QString& effectiveId, QS
     // (mid-flight monitor hot-plug, geometry update), fall through
     // to refresh - silently dropping the new args would leave the
     // slot painted with stale geometry.
+    //
+    // WRITTEN FOR A HIDDEN SLOT. The refresh below re-toggles `loaded`, which destroys and
+    // rebuilds ZoneSelectorContent, and re-runs beginShow; on a slot the user is watching
+    // mid-drag that recycles its content rather than nudging it. A future caller that wants
+    // to move a VISIBLE selector needs a narrower path, not this one.
     {
         auto existing = m_screenStates.find(effectiveId);
         if (existing != m_screenStates.end() && existing->zoneSelectorSlot()
@@ -702,11 +756,23 @@ void OverlayService::showZoneSelectorSlotOnScreen(const QString& effectiveId, QS
     state->zoneSelectorPhysScreen = physScreen;
     state->zoneSelectorGeometry = targetGeom;
     if (state->shell->shellWindow()) {
-        assertWindowOnScreen(state->shell->shellWindow(), physScreen, targetGeom);
+        // The TRUE geometry, not targetGeom — see showZoneSelector's site. targetGeom here can
+        // also be a rect CACHED from an earlier show, which is stale rather than substituted, and
+        // the same argument applies: it is not evidence that the id resolves now.
+        assertWindowOnScreen(state->shell->shellWindow(), physScreen, trueScreenGeometry(m_screenManager, effectiveId));
         state->shell->shellWindow()->setWidth(targetGeom.width());
         state->shell->shellWindow()->setHeight(targetGeom.height());
     }
     updateZoneSelectorWindow(effectiveId);
+    // Re-apply the decoration, in the same slot in the sequence showZoneSelector uses.
+    // This path is the zone selector's SECOND re-show entry point, and the only one any
+    // slot has: the hide-completed handler releases the backdrop stand-in on the promise
+    // that "every show runs applyDecoration again", which was true of showZoneSelector
+    // and not of this. Without it a needsBackdrop pack (the glass and blur families) came
+    // back flat for the rest of the drag after any mid-drag OSD or modal, because
+    // SurfaceDecoration gates uHasBackdrop on the texture being non-null and nothing here
+    // rewrote it. updateZoneSelectorWindow touches no decoration property.
+    applyDecoration(slot, PhosphorSurfaceShaders::decorationPopupZoneSelectorPath());
     writeQmlProperty(slot, QStringLiteral("loaded"), false);
     writeQmlProperty(slot, QStringLiteral("loaded"), true);
     cancelSurfacePrime(state->shell->shellSurface());
@@ -757,10 +823,13 @@ void OverlayService::onZoneSelectorSlotHideCompleted(const QString& effectiveId)
     }
     it->zoneSelectorSlot()->setVisible(false);
     writeQmlProperty(it->zoneSelectorSlot(), QStringLiteral("loaded"), false);
-    // Release the backdrop stand-in, matching onOsdSlotHideCompleted: a hidden
-    // slot draws none of it, the image is wallpaper-sized, and every show runs
-    // applyDecoration again, which rewrites it.
-    writeQmlProperty(it->zoneSelectorSlot(), QStringLiteral("backdropTexture"), QVariant());
+    // Release the backdrop stand-in, matching onOsdSlotHideCompleted: a hidden slot draws
+    // none of it, the image is wallpaper-sized, and every show runs applyDecoration again,
+    // which rewrites it. "Every show" is load-bearing and was briefly untrue: this slot is
+    // the only one with a SECOND re-show entry point (showZoneSelectorSlotOnScreen, for the
+    // restore after a mid-drag OSD or modal), and that path did not re-apply, so the
+    // backdrop stayed released for the rest of the drag. It applies now.
+    writeQmlProperty(it->zoneSelectorSlot(), QString(OverlayQmlPropertyNames::BackdropTexture), QVariant());
     syncPassiveShellSurfaceState(effectiveId);
 }
 

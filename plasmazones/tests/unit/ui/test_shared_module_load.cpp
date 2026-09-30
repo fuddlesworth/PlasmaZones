@@ -66,7 +66,7 @@ private Q_SLOTS:
         // their deployed import path; the test binary lives in build/bin, so
         // ../qml is the build tree's QML module root.
         m_engine.addImportPath(QCoreApplication::applicationDirPath() + QStringLiteral("/../qml"));
-        // ZoneShaderRenderer wraps ZoneShaderItem, which the daemon/editor
+        // ZoneShaderRenderer wraps ZoneShaderItem, which the daemon and settings
         // composition roots register imperatively — mirror that here so the
         // shared component's `import PlasmaZones` resolves.
         qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
@@ -95,9 +95,9 @@ private Q_SLOTS:
     {
         loadType(QStringLiteral("CapabilityBadgeRow"));
     }
-    void loadsShaderCompileErrorBanner()
+    void loadsShaderErrorBanner()
     {
-        loadType(QStringLiteral("ShaderCompileErrorBanner"));
+        loadType(QStringLiteral("ShaderErrorBanner"));
     }
     void loadsShaderPreviewPlaceholder()
     {

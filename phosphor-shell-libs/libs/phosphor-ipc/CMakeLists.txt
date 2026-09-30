@@ -11,6 +11,18 @@
 cmake_minimum_required(VERSION 3.16)
 
 set(PHOSPHORIPC_VERSION "0.1.0")
+
+# The Qt floor this library requires AND advertises in its generated
+# PhosphorIpcConfig.cmake. Taken from the top-level QT_MIN_VERSION when built in-tree so
+# the two cannot drift, with its own value for a STANDALONE build, where that
+# variable does not exist. The fallback is not optional: the Config template
+# substitutes this, and an undefined variable expands to nothing and ships a config
+# whose find_dependency(Qt6 ...) carries no version floor at all.
+if(DEFINED QT_MIN_VERSION)
+    set(PHOSPHORIPC_QT_MIN ${QT_MIN_VERSION})
+else()
+    set(PHOSPHORIPC_QT_MIN "6.10.0")
+endif()
 # Wire-protocol version. Build-time invariant only: there is no
 # on-wire handshake and no version-negotiation message in the
 # protocol. The constant is exported as PHOSPHOR_IPC_PROTOCOL_VERSION
@@ -45,7 +57,7 @@ include(GenerateExportHeader)
 # transitively wants it). Keeping the find_package list aligned with
 # PhosphorIpcConfig.cmake.in's downstream find_dependency block so the
 # build-side dependency set doesn't drift from the install-side one.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml Network)
+find_package(Qt6 ${PHOSPHORIPC_QT_MIN} REQUIRED COMPONENTS Core Qml Network)
 
 # Qt 6.5+ resource-prefix policy. NEW = use `:/qt/qml/` as the QML
 # module resource prefix. Without this, qt_add_qml_module emits
@@ -145,7 +157,7 @@ set_target_properties(PhosphorIpc PROPERTIES
 # called find_package(Qt6 ... Gui) this is a no-op; when this lib
 # is consumed standalone via add_subdirectory, the call ensures
 # Qt6::Gui is found before the qt_add_qml_module below.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Gui)
+find_package(Qt6 ${PHOSPHORIPC_QT_MIN} REQUIRED COMPONENTS Gui)
 
 # Directory-scope suppression of -Wmissing-include-dirs for the targets
 # qt_add_qml_module generates here: Qt adds <target>_autogen/include to each

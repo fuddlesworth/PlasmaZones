@@ -23,6 +23,7 @@
 #include <opengl/glvertexbuffer.h>
 
 #include <QColor>
+#include <QScopeGuard>
 #include <QVector2D>
 
 #include <algorithm>
@@ -717,6 +718,14 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
     if (targetFb) {
         KWin::GLFramebuffer::pushFramebuffer(targetFb);
     }
+    // Guarded, not popped at the tail, matching the strip pass's identical tail. A throw
+    // between here and there would otherwise leave KWin's framebuffer stack pushed for the
+    // rest of the session, and ScopedGlState does not cover the framebuffer binding.
+    const auto popTargetFb = qScopeGuard([targetFb] {
+        if (targetFb) {
+            KWin::GLFramebuffer::popFramebuffer();
+        }
+    });
     const QSize targetSize = targetFb ? targetFb->size() : deviceSize;
     glViewport(0, 0, targetSize.width(), targetSize.height());
     glDisable(GL_BLEND); // the blend of two opaque desktops is itself opaque — replace the screen
@@ -793,9 +802,6 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
     }
     glActiveTexture(GL_TEXTURE0);
 
-    if (targetFb) {
-        KWin::GLFramebuffer::popFramebuffer();
-    }
     return true;
 }
 

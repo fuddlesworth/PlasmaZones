@@ -49,10 +49,13 @@ StripTransitionManager::StripTransitionManager(PlasmaZonesEffect* effect)
 
 StripTransitionManager::~StripTransitionManager()
 {
-    // GL resources are released by their unique_ptrs. Do NOT touch
-    // KWin::effects here — teardown ordering during plugin unload is not
-    // guaranteed. reset() is the explicit-cleanup path while the compositor
-    // is live.
+    // GL resources are released by their unique_ptrs, and this destructor
+    // deliberately touches nothing else. The reason is NOT that teardown ordering is
+    // unguaranteed, which is what this used to say: upstream destroys every effect
+    // before nulling KWin::effects, so the global is valid here (see the invariant at
+    // PlasmaZonesEffect::windowOutput in plasmazoneseffect/screens.cpp). The reason is
+    // that a destructor is the wrong place to drive compositor state at all. reset()
+    // is the explicit-cleanup path while the compositor is live.
 }
 
 void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QString& effectId, const QVariantMap& params,
@@ -83,16 +86,20 @@ void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QStrin
     auto it = m_active.find(output);
     if (!runnable) {
         if (it != m_active.end()) {
-            // Damage BEFORE the erase when the pass was still presenting:
+            // DECIDED before the erase, which destroys the evidence, for the case where the
+            // pass was still presenting (the damage call itself is below the erase, and its
+            // order relative to it does not matter since addRepaint only accumulates):
             // paintOutput replaces the whole output with the decorated
             // capture while a pass holds, and holdsAfterSettle keeps it
             // holding after the spring settles — an erase with no repaint
             // then leaves that capture on the un-damaged regions of the last
-            // presented frame until unrelated damage arrives. The immediate
-            // (heartbeat) path hits this arm on every tick with no live
-            // spring, which is exactly the settled-spring-open-fade shape.
+            // presented frame until unrelated damage arrives. This arm runs at
+            // most once per armed pass: the first non-runnable tick erases the
+            // entry and every later tick finds none. The spring can still be
+            // live at that moment, which is why isAnimatingOn is the first
+            // term rather than holdsAfterSettle on its own.
             const bool wasPresenting = m_effect->m_stripViewAnimator->isAnimatingOn(output)
-                || it->second.motion.holdsAfterSettle(ShaderInternal::shaderClockNowMs());
+                || it->second.motion.holdsAfterSettle(passClockMs());
             // notifyLeg fires from the D-Bus batch path, off the paint
             // thread; the erase frees the entry's capture texture.
             ensureGlContextCurrent();
@@ -135,7 +142,7 @@ void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QStrin
     // resuming seamlessly. The retarget arm's baseline compensation is right
     // for this case too: the batch steps the committed value with no time
     // passing either way.
-    const bool settleFadeOpen = pass.motion.holdsAfterSettle(ShaderInternal::shaderClockNowMs());
+    const bool settleFadeOpen = pass.motion.holdsAfterSettle(passClockMs());
     if ((!springLive && !settleFadeOpen) || axisFlipped || pass.effectId != effectId) {
         // Fresh leg on a stale armed entry (spring cleared outside the
         // paint bracket: animations toggled, teardown races), an AXIS FLIP,
@@ -158,9 +165,17 @@ void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QStrin
     TransitionPass::translatePackParams(eff, params, pass.customParams, pass.customColors);
 }
 
+qint64 StripTransitionManager::passClockMs() const
+{
+    const qint64 pinned = m_effect->m_shaderManager.currentFrameClockMs();
+    return pinned < 0 ? ShaderInternal::shaderClockNowMs() : pinned;
+}
+
 bool StripTransitionManager::isRunning() const
 {
-    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+    // blocksDirectScanout reads THIS form from inside the paint bracket, so it has to answer
+    // from the pass clock or it can permit scanout for a frame paintOutput then takes.
+    const qint64 nowMs = passClockMs();
     for (const auto& entry : m_active) {
         if (m_effect->m_stripViewAnimator->isAnimatingOn(entry.first) || entry.second.motion.holdsAfterSettle(nowMs)) {
             return true;
@@ -181,16 +196,29 @@ bool StripTransitionManager::isRunningForOutput(KWin::LogicalOutput* screen) con
     if (it == m_active.end()) {
         return false;
     }
-    return m_effect->m_stripViewAnimator->isAnimatingOn(screen)
-        || it->second.motion.holdsAfterSettle(ShaderInternal::shaderClockNowMs());
+    // The pass clock, so this gate and paintOutput cannot disagree inside one bracket.
+    // paintScreen's cursor-hide pre-release reads this gate, and a gate answering "settled" for
+    // a frame paintOutput then took would leave neither pass drawing the pointer. Reading the
+    // same value makes the gate a superset by construction. prePaintScreen's own call precedes
+    // this pass's pin and follows the last one being dropped, so it takes a live sample EARLIER
+    // than the pin, which by that monotonicity errs safe: the mask is set for a pass that may
+    // not paint.
+    const qint64 nowMs = passClockMs();
+    return m_effect->m_stripViewAnimator->isAnimatingOn(screen) || it->second.motion.holdsAfterSettle(nowMs);
 }
 
 bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                                          int mask, const KWin::Region& deviceRegion, KWin::LogicalOutput* screen)
 {
-    // As on the desktop pass: the damage region does not participate —
-    // prePaintScreen sets PAINT_SCREEN_TRANSFORMED for a running output and
-    // the spring's repaint callback damages the full output every frame.
+    // As on the desktop pass: the damage region does not participate, because
+    // prePaintScreen sets PAINT_SCREEN_TRANSFORMED for a running output, which makes
+    // KWin paint the whole output whatever the region says. No strip pump runs from
+    // postPaintScreen: StripViewAnimator::scheduleRepaints is never called from there,
+    // unlike the window, desktop and pointer passes. A LIVE leg pumps its own frames
+    // one level down, through its AnimatedValue's clock->requestFrame, which
+    // CompositorClock turns into a per-output addRepaint (see the scheduleRepaints
+    // docblock). The settle fade pumps through this function's own !springLive
+    // addRepaint below.
     Q_UNUSED(deviceRegion)
     if (!screen) {
         return false;
@@ -212,14 +240,11 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // out for the same reason, and an invalidation here would be a
     // use-after-free in the paint path.
     OutputStripPass* pass = &it->second;
-    // Pinned per-pass clock (one timestamp per output pass; re-sampling per
-    // call is the multi-pass ghosting trap the pin exists for). -1 means a
-    // caller outside any bracket, which cannot happen from paintScreen, but
-    // fall back rather than compare time against a sentinel.
-    qint64 nowMs = m_effect->m_shaderManager.currentFrameClockMs();
-    if (nowMs < 0) {
-        nowMs = ShaderInternal::shaderClockNowMs();
-    }
+    // The pass clock, through the one accessor, because THIS is the liveness decision the
+    // other readers exist to agree with. It used to hand-roll the same pinned-with-fallback
+    // read, which made passClockMs's own "every liveness decision in this class" untrue of
+    // the most consequential one.
+    const qint64 nowMs = passClockMs();
     const bool springLive = m_effect->m_stripViewAnimator->isAnimatingOn(screen);
     if (!springLive && !pass->motion.holdsAfterSettle(nowMs)) {
         // Settled with the fade closed (or killed while idle) — fall
@@ -311,11 +336,19 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // into uStrip is smeared by the pack and never redrawn sharp, since this
     // pass replaces the output's paint. Hidden here, blitted by
     // TransitionPass::drawSceneCursor at the tail. Placed AFTER the compile and
-    // allocation checks above so no reachable return-false path between the hide
-    // and the tail exists (the re-seat miss after the capture is structural and
-    // releases the hide itself): a pass that abandons this frame paints the
-    // normal scene with the cursor still shown, and a pass that abandons a LATER frame
-    // releases the hide it took (the abort arms above).
+    // allocation checks above so those two aborts cannot strand the hide. FOUR
+    // return-false paths remain below, and each releases the hide itself: the
+    // post-walk re-seat MISS through updateCursorHiding, because its entry is
+    // already gone; and the failed capture walk, the post-walk re-seat with the
+    // entry present but a texture missing, and the failed sharp composite through
+    // releaseCursorHideForForeignPaint, because their entry is still live and
+    // updateCursorHiding would therefore not release it WHILE THE POINTER IS ON
+    // THAT OUTPUT. When the pointer has left it, that helper delegates to
+    // updateCursorHiding rather than returning, so those three arms release
+    // either way — see its docblock. (Three, before the
+    // re-seat was split into those two arms — the count and the list both missed
+    // the split, while the header's own list was corrected for it.) A pass that
+    // abandons THIS frame paints the normal scene with the cursor still shown.
     hideCursorForPass(screen);
 
     // Render the live scene into the capture. This is the downstream chain
@@ -535,9 +568,8 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
                 // unconditional per-output release, which is what "the caller is
                 // about to paint this output without us" needs.
                 releaseCursorHideForForeignPaint(screen);
-                // A settling leg pumps its own remaining frames — the spring's
-                // repaint pump died with the spring — and that pump lives in the
-                // tail this return skips.
+                // A settling leg pumps its own remaining frames, and that self-pump
+                // lives in the tail this return skips.
                 //
                 // postPaintScreen DOES still run after a failed paint, but it
                 // deliberately skips reapSettled on such a pass, because freeing
@@ -569,15 +601,53 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // trusting the old address; the tail below reads the sampler, the frame
     // counter and the capture texture through it.
     it = m_active.find(screen);
+    // Both arms below are unreachable today (nothing inside the walk mutates
+    // m_active, and the allocation block above guarantees both textures), and
+    // both owe the same two things: the recorded list must not outlive the
+    // frame, because the unwind guard was dismissed on the assumption the tail
+    // consumes it and that tail is now skipped; and the hide taken at the top
+    // has to be released, because the normal scene paints this output instead.
+    // No framebuffer is pushed at this point — the capture scope closed with its
+    // popCaptureFbo guard — so there is nothing else to unwind.
+    //
+    // They differ in WHICH release is correct, which is the whole reason they
+    // are two arms. updateCursorHiding() declines to release while any live
+    // entry holds the cursor, so it is the right call only when this output's
+    // entry is gone.
     if (it == m_active.end()) {
-        // Unreachable today (nothing inside the walk mutates m_active), but if
-        // it ever happens the recorded list must not outlive the frame — the
-        // unwind guard was dismissed on the assumption the tail consumes it,
-        // and that tail is now skipped. No framebuffer has been pushed yet at
-        // this point, so there is nothing else to unwind. The hide taken
-        // above is released too: the normal scene paints this frame.
         m_effect->m_stripCaptureSkippedWindows.clear();
         updateCursorHiding();
+        return false;
+    }
+    // The TEXTURES are tested beside the key, not just the key: the tail below
+    // binds both of them, and re-finding the entry proves only that some entry
+    // exists. Same pair surface_capture.cpp adds before its own bind, for the
+    // same reason — a null texture reaching a bind is a null deref inside the
+    // compositor, and painting the normal scene degrades correctly.
+    //
+    // Here the entry IS present and still live (it passed the settle check at
+    // the top to get this far), so updateCursorHiding would walk m_active, find
+    // this very entry holding the cursor, and return without releasing — the
+    // pointer would stay hidden with nobody drawing it, for the rest of the leg.
+    // That is the trap the failed-capture-walk arm above documents, and it takes
+    // the same unconditional per-output release.
+    if (!it->second.captureTex || !it->second.belowTex) {
+        m_effect->m_stripCaptureSkippedWindows.clear();
+        releaseCursorHideForForeignPaint(screen);
+        // And the settle-fade self-pump, for the same reason the failed-capture-walk arm
+        // carries it: the tail's `!springLive` addRepaint is this leg's only scheduler once
+        // the spring has settled, and this return skips the tail. Without it a mid-fade abort
+        // leaves the entry resident with no frame scheduled, because postPaintScreen's
+        // reapSettled only erases once the fade has closed. Not "its two textures" — this arm
+        // is reached precisely when at least one of them is already gone, so what it retains
+        // is the entry, its sampler, its capture FBO (allocated and reset in lockstep with
+        // captureTex, so it survives whenever that does) and whichever texture survived. The
+        // FBO holds no output-sized memory, so naming it does not change the cost this
+        // paragraph states. Arm A above needs none:
+        // its entry is already gone, so there is no fade to pump and nothing held.
+        if (!springLive) {
+            KWin::effects->addRepaint(screen->geometry());
+        }
         return false;
     }
     pass = &it->second;
@@ -586,8 +656,8 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // this function. Live legs run the finite-difference estimator; a leg
     // whose spring has settled runs the settle fade instead — the frozen
     // last live velocity decaying to zero so velocity-driven packs land
-    // without a pop — and self-pumps its remaining frames (the spring's own
-    // repaint pump died with it).
+    // without a pop — and self-pumps its remaining frames, since the spring that
+    // was driving them is gone.
     // The shader pass stays ONE-DIMENSIONAL on purpose, so it takes the signed
     // scalar along the strip's own axis rather than the resolved point. Which
     // way that axis points reaches the shader as a separate uniform.
@@ -875,9 +945,9 @@ void StripTransitionManager::updateCursorHiding()
     // paint (paintOutput returns false), so the normal scene draws that
     // output and needs KWin's own cursor back. paintOutput calls this on
     // that settle frame BEFORE the entry is reaped, which is why the armed
-    // set alone cannot be the test. Live clock, same accepted skew as
-    // reapSettled.
-    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+    // set alone cannot be the test. On the pass clock, because the in-bracket
+    // callers that run this decided from that same value.
+    const qint64 nowMs = passClockMs();
     for (const auto& entry : m_active) {
         const bool live =
             m_effect->m_stripViewAnimator->isAnimatingOn(entry.first) || entry.second.motion.holdsAfterSettle(nowMs);
@@ -896,7 +966,22 @@ void StripTransitionManager::releaseCursorHideForForeignPaint(KWin::LogicalOutpu
     // Unconditional for THIS output, unlike updateCursorHiding: a live pass
     // on it does not keep the hide, because the caller is about to paint the
     // output without this pass, and nothing else would draw the cursor.
-    if (!m_cursorHidden || !cursorOnOutput(screen)) {
+    if (!m_cursorHidden) {
+        return;
+    }
+    if (!cursorOnOutput(screen)) {
+        // The pointer has LEFT this output since the hide was taken, and m_cursorHidden is
+        // one global flag rather than one per output. Returning here used to strand it: the
+        // frame that hid for output A can be followed by a frame where the pointer sits on
+        // B, and if A then takes a failed-paint arm, A neither draws the cursor nor releases
+        // it, while postPaintScreen deliberately skips reapSettled after a failed paint — so
+        // updateCursorHiding, the one thing that would have noticed, never runs and the
+        // compositor's cursor stays hidden on B. Delegating asks the question that actually
+        // decides it (is a live pass still painting the cursor on whichever output the
+        // pointer is on now) and releases when the answer is no. This is NOT the
+        // unconditional cross-output release the early return was protecting against: a
+        // live pass that holds the cursor still keeps the hide.
+        updateCursorHiding();
         return;
     }
     if (KWin::effects) {
@@ -908,13 +993,12 @@ void StripTransitionManager::releaseCursorHideForForeignPaint(KWin::LogicalOutpu
 void StripTransitionManager::reapSettled()
 {
     bool contextEnsured = false;
-    // LIVE clock, while paintOutput samples the frame-pinned one — a known,
-    // accepted skew (isRunning / isRunningForOutput read live too). The gap
-    // is sub-millisecond, and the worst it can do is reap a fade whose final
-    // frame the pinned clock would still have painted: one truncated fade
-    // frame, cosmetic. Pinning a clock here would need this postPaintScreen
-    // hook threaded into the paint bracket for no visible gain.
-    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+    // The pass clock, which reaches here with no plumbing: the pin is taken at the end of
+    // prePaintScreen and dropped at the end of postPaintScreen, and this hook runs between the
+    // two. It cannot strand an entry either: while the pin says the fade holds, paintOutput
+    // paints that frame and self-pumps the next one (the `!springLive` addRepaint), so the
+    // frame that does the reaping always arrives.
+    const qint64 nowMs = passClockMs();
     for (auto it = m_active.begin(); it != m_active.end();) {
         if (!m_effect->m_stripViewAnimator->isAnimatingOn(it->first) && !it->second.motion.holdsAfterSettle(nowMs)) {
             // The settle frame itself needed no repaint — paintOutput
@@ -973,6 +1057,16 @@ void StripTransitionManager::outputRemoved(KWin::LogicalOutput* screen)
 
 void StripTransitionManager::reset()
 {
+    // Nothing held, nothing to release. The animations-master-toggle reply in
+    // daemon_settings.cpp calls this, and that callback RE-DELIVERS on every
+    // settingsChanged, so without the early return a desktop with animations off made a
+    // GL context current from a D-Bus reply path once per delivery to clear two empty
+    // maps. m_cursorHidden is in the test because it is a manager-level latch rather
+    // than a per-entry one: m_active can be empty while a hide is still held, and
+    // updateCursorHiding below is the only thing that releases it.
+    if (m_active.empty() && m_shaderCache.empty() && !m_cursorHidden) {
+        return;
+    }
     // Teardown path (compositor reset / plugin unload). Clearing the shader
     // cache HERE — not leaving it for the destructor, which deliberately
     // can't make a context current — is what makes this the real "release GL

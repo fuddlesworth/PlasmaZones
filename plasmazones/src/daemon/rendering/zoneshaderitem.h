@@ -52,9 +52,8 @@ class PLASMAZONES_RENDERING_EXPORT ZoneShaderItem : public PhosphorRendering::Sh
     // test. QML_ELEMENT here would be inert (no qt_add_qml_module target
     // exists) and misleading.
     //
-    // NOT the editor, despite ZoneShaderRenderer.qml describing itself as
-    // shared by the overlay and the editor preview. plasmazones-editor links
-    // plasmazones_shared_qml, so it SHIPS that wrapper, but it does not link
+    // NOT the editor. plasmazones-editor links plasmazones_shared_qml, so it
+    // SHIPS ZoneShaderRenderer.qml, but it does not link
     // plasmazones_rendering and calls no qmlRegisterType, so an editor .qml
     // instantiating it would fail at load with "PlasmaZones is not installed".
     // Nothing in the editor does today. Wiring the preview up means linking
@@ -107,8 +106,8 @@ public:
     /// QVariant rather than the payload type.
     ///
     /// The payload itself survives a QML `Binding`, but a QImage does not, and
-    /// the settings and editor shader previews hand this property a full
-    /// QImage and lean on the registered QImage→ZoneLabelTexture converter
+    /// the settings shader preview hands this property a full
+    /// QImage and leans on the registered QImage→ZoneLabelTexture converter
     /// (see the converter's registration in the constructor). Through a
     /// Binding element that image arrived as an invalid QVariant and the
     /// labels silently vanished, so those previews drew their zones with no
@@ -152,6 +151,23 @@ public:
 
     // Note: reloadShader() is inherited from ShaderEffect (Q_INVOKABLE). Call
     // that directly from QML / C++ — no zone-specific alias needed.
+
+    // Note: setEntryScaffold is inherited and PUBLIC, but this override never delegates to
+    // ShaderEffect::updatePaintNode, the only site that pushes the item's own scaffold, so
+    // the scaffold a host sets is never read for rendering. A call that CHANGES the scaffold
+    // is not inert: the base setter raises shaderDirty and calls update() unconditionally,
+    // and sets Status::Loading when a shaderSource is set, so it forces a reload and a
+    // statusChanged round trip. A call passing the SAME scaffold early-returns and IS inert,
+    // which includes the identity call on a fresh item, since the default is the empty pair.
+    // No in-tree host makes either, and none can from QML: setEntryScaffold is not
+    // Q_INVOKABLE and both items are QML-instantiated. Its SurfaceShaderItem twin carries
+    // the same note.
+    //
+    // Note: the inherited vertexShaderUrl property is likewise ignored here. The zone runtime
+    // resolves its vertex stage only through resolveZoneVertexPath, which looks for a file
+    // named zone.vert, and the daemon warm bake and the pack validator both do the same. A
+    // custom-named declaration is deliberately inert for overlay packs, unlike the animation
+    // and surface runtimes, so do not "fix" this into a divergence from the warm bake.
 
     /**
      * @brief Refuse external uniform-extension replacement.

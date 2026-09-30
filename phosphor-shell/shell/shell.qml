@@ -77,6 +77,10 @@ Item {
             property bool focused: true
 
             decorationChain: ShellChrome.revision >= 0 && surfacePath !== "" ? ShellChrome.chainFor(surfacePath) : []
+            // Re-bake on a registry recommit. The recomposed chain above does not cover
+            // an in-place edit of a pack's shader source, because the composition is
+            // then byte-identical and every stage rebinds the same URL.
+            decorationReloadGeneration: ShellChrome.decorationReloadGeneration
             decorationOuterPadding: ShellChrome.revision >= 0 && surfacePath !== "" ? ShellChrome.outerPaddingFor(surfacePath) : 0
             surfaceFocused: focused
             // The chrome sits in transformed and clipped hosts (a settling

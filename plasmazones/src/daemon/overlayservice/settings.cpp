@@ -14,7 +14,6 @@
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include "core/interfaces/shaderregistry.h"
 #include "core/utils/utils.h"
-#include <QQuickWindow>
 #include <QScreen>
 #include <QTimer>
 
@@ -73,10 +72,40 @@ void OverlayService::setSettings(ISettings* settings)
             connect(m_settings, &ISettings::settingsChanged, this, refreshZoneSelectors);
 
             // Recreate overlay windows when the overlay display mode changes
-            // (e.g. compact mode can't use shader overlays). Connected to the
-            // specific signal instead of settingsChanged to avoid redundant work.
-            connect(m_settings, &ISettings::overlayDisplayModeChanged, this,
-                    &OverlayService::recreateOverlayWindowsOnTypeMismatch);
+            // (a zone resolving to LayoutPreview, which useShaderForScreen in shader.cpp
+            // refuses to render through a shader pack; there is no "compact mode", which an
+            // earlier version of this line named). Named rather than cited by line: the
+            // citation this replaces had already been shifted by an unrelated hunk in that
+            // file, which is why the two in zoneshaderitem/setters.cpp were named too.
+            // Connected to the specific signal instead of settingsChanged to avoid
+            // redundant work.
+            //
+            // BOTH steps, matching the layoutModified path that claims to mirror this one.
+            // The recreate alone is not enough: it early-returns when no screen needs a slot
+            // TYPE flip, which is every screen with no shader pack assigned, and nothing then
+            // re-pushes previewZones or the per-zone mode into a live slot —
+            // refreshFromIdle's updateZonesForAllWindows writes zones, zoneCount and
+            // highlightedCount but not previewZones. A warm overlay that was visible when the
+            // setting landed therefore kept the old rendering until the next full show.
+            //
+            // The m_visible guard as well, which the first version of this lambda dropped
+            // while its own comment claimed to mirror layoutModified. All four paths it
+            // mirrors spell it the same way, so matching them stops the next reader concluding
+            // that one of the five knows something the others do not — and it also closes a
+            // narrow real window, which is why the guard is not merely cosmetic. hide() clears
+            // m_visible and THEN calls dismissOverlayWindow, whose shell-surface path nulls
+            // overlayPhysScreen only in the animator's hide completion — so during the fade
+            // that field is still LIVE, which is exactly what lets an unguarded recreate
+            // through recreateOverlayWindowsOnTypeMismatch's `if (!physScreen) continue` gate.
+            // It would rebuild the slot, toggle `loaded` and re-apply the shader, and the
+            // pending completion would then null both fields and hide the fresh slot
+            // underneath it.
+            connect(m_settings, &ISettings::overlayDisplayModeChanged, this, [this]() {
+                if (m_visible) {
+                    recreateOverlayWindowsOnTypeMismatch();
+                }
+                refreshVisibleWindows();
+            });
 
             connect(m_settings, &ISettings::enableAudioVisualizerChanged, this, &OverlayService::syncCavaState);
 
@@ -132,9 +161,17 @@ void OverlayService::setSettings(ISettings* settings)
             // next show. Connected to the specific signal (not the settingsChanged
             // catch-all) so unrelated edits don't re-bake decoration; each
             // applyDecoration is null-safe per slot, so screens without a wired
-            // slot are skipped. OSDs are intentionally omitted — they auto-dismiss
-            // sub-second, so a live re-decorate has no observable effect.
+            // slot are skipped. The OSD is included: the sweep keys each popup arm on
+            // its service flag and the OSD arm on the item's own visibility, so a
+            // short-lived OSD is simply not up when this runs, and one that is gets
+            // re-decorated like any other slot.
             connect(m_settings, &ISettings::decorationProfileTreeChanged, this,
+                    &OverlayService::reapplyVisiblePopupDecorations);
+            // The blur-quality tier is folded into every composed stage map, so a live
+            // retune has to reach the slots already up for the same reason the tree
+            // edit above does. The compositor self-heals on this same key; without
+            // this the daemon was the one surface host that kept the old density.
+            connect(m_settings, &ISettings::decorationBlurScaleMultiplierChanged, this,
                     &OverlayService::reapplyVisiblePopupDecorations);
 
             // Zone-overlay shader tree: an assignment edit in the settings
@@ -251,7 +288,7 @@ void OverlayService::setLayoutManager(PhosphorZones::IZoneLayoutRegistry* layout
                 });
         // Observe newly-created layouts so edits reach the overlay before
         // the layout is ever activated/assigned (e.g. user creates a new
-        // layout in the editor and immediately tweaks its shader).
+        // layout in the editor and immediately changes its overlay display mode).
         connect(m_layoutManager, &PhosphorZones::IZoneLayoutRegistry::layoutAdded, this,
                 [this](PhosphorZones::Layout* layout) {
                     observeLayoutForLiveEdits(layout);
@@ -268,7 +305,7 @@ void OverlayService::setLayoutManager(PhosphorZones::IZoneLayoutRegistry* layout
         // A per-screen-assigned layout loaded from disk at startup never
         // triggers activeLayoutChanged / layoutAssigned, so its
         // layoutModified signal would otherwise be invisible to us:
-        // editor edits to its shader/zones required a daemon restart to
+        // editor edits to its zones required a daemon restart to
         // take effect. Observing the whole set is cheap (one signal
         // connection per layout) and idempotent thanks to the dedupe
         // pass in observeLayoutForLiveEdits.
@@ -327,8 +364,8 @@ void OverlayService::observeLayoutForLiveEdits(PhosphorZones::Layout* layout)
         // into one refresh.
         QTimer::singleShot(16, this, [this]() {
             m_refreshCoalescePending = false;
-            // A layout shaderId edit can flip a screen between rectangle and
-            // shader overlay modes (none↔shader). refreshVisibleWindows alone
+            // A layout overlayDisplayMode edit can flip a screen between rectangle
+            // and shader overlay modes. refreshVisibleWindows alone
             // can't apply that flip: updateOverlayWindow's shader-apply branch
             // is gated on the slot's CURRENT useShader mode, so a newly-enabled
             // shader is skipped and the overlay keeps drawing rectangles until
@@ -397,10 +434,10 @@ void OverlayService::syncCavaState()
     // CAVA is a continuous audio-capture + FFT child process feeding a per-frame
     // spectrum; running it while nothing is displayed burns CPU on capture AND
     // on per-frame overlay repaints. Run it only while audio-viz is enabled AND
-    // something that reacts to audio is on screen: the overlay (un-idled), the
-    // editor's shader preview, or a decoration surface (OSD / popup) carrying an
-    // audio-reactive pack. A plain decoration never starts audio (it declares no
-    // `audio` flag, so visibleAudioDecorationSlots() ignores it).
+    // something that reacts to audio is on screen: the overlay (un-idled), or a
+    // decoration surface (OSD / popup) carrying an audio-reactive pack. A plain
+    // decoration never starts audio (it declares no `audio` flag, so
+    // visibleAudioDecorationSlots() ignores it).
     const bool wantRun =
         m_settings->enableAudioVisualizer() && (isOverlayDisplaying() || !visibleAudioDecorationSlots().isEmpty());
 
@@ -427,22 +464,29 @@ void OverlayService::syncCavaState()
     if (!m_settings->enableAudioVisualizer()) {
         if (m_audioProvider->isRunning()) {
             m_audioProvider->stop();
-            for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
-                const auto& st = it_.value();
-                if (st.overlayPhysScreen) {
-                    if (auto* slot = st.mainOverlaySlot()) {
-                        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
-                    }
+        }
+        // The CLEAR runs whether or not the provider was still running. It used to be nested
+        // inside that test, so turning audio-viz off AFTER the idle quiesce had already stopped
+        // the provider skipped it entirely and left a decoration slot holding its last spectrum
+        // frame with nothing in the tree that would ever push silence — the only other writer of
+        // these properties is the live-frame path. The cost of running it unconditionally is a
+        // handful of equal-value writes, and writeQmlProperty goes through QQmlProperty::write, so
+        // an unchanged value re-evaluates no binding.
+        for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
+            const auto& st = it_.value();
+            if (st.overlayPhysScreen) {
+                if (auto* slot = st.mainOverlaySlot()) {
+                    writeQmlProperty(slot, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
                 }
-                // Decoration slots (OSD / popups) carry their own audioSpectrum,
-                // so an audio-reactive border must settle to silence too rather
-                // than freeze on the last pushed frame. Independent of the zone
-                // overlay, so cleared regardless of overlayPhysScreen.
-                for (QQuickItem* deco : {st.osdSlot(), st.snapAssistSlot(), st.layoutPickerSlot(),
-                                         st.zoneSelectorSlot(), st.cheatsheetSlot()}) {
-                    if (deco) {
-                        writeQmlProperty(deco, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
-                    }
+            }
+            // Decoration slots (OSD / popups) carry their own audioSpectrum,
+            // so an audio-reactive border must settle to silence too rather
+            // than freeze on the last pushed frame. Independent of the zone
+            // overlay, so cleared regardless of overlayPhysScreen.
+            for (QQuickItem* deco : {st.osdSlot(), st.snapAssistSlot(), st.layoutPickerSlot(), st.zoneSelectorSlot(),
+                                     st.cheatsheetSlot()}) {
+                if (deco) {
+                    writeQmlProperty(deco, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
                 }
             }
         }

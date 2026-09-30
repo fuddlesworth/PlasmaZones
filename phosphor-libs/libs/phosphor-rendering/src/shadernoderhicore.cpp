@@ -13,10 +13,8 @@
 #include <QMutex>
 #include <QMutexLocker>
 #include <QQuickWindow>
-#include <QStandardPaths>
 #include <QTextStream>
 #include <QtMath>
-#include <cstring>
 
 namespace PhosphorRendering {
 
@@ -191,22 +189,25 @@ ShaderNodeRhi::ShaderNodeRhi(QQuickItem* item, std::unique_ptr<PhosphorShaders::
     , m_uboProfile(profile ? std::move(profile) : std::make_unique<PhosphorShaders::BaseUniformProfile>())
 {
     Q_ASSERT(item != nullptr);
+    // Release-build pair for the assert. Without it a null item compiles the
+    // assert out and every dereference site bails through its own
+    // `m_itemValid && m_item` guard, so prepare() returns at qCDebug level and
+    // the node silently never paints — fail-safe, but voiceless at default log
+    // levels, which is the hardest shape to diagnose from a bug report.
+    if (item == nullptr) {
+        qCWarning(lcShaderNode) << "ShaderNodeRhi constructed with a null item; this node will never paint";
+    }
     // Arm the liveness block the tracking ShaderEffect reads. No lock needed
     // here: nothing else can hold a reference to the block until
     // registerRenderNode() publishes it, which happens after construction.
     m_liveness->node = this;
-    // The UBO profile's ctor seeds an identity qt_Matrix + qt_Opacity=1.0 (the
-    // init that used to live here, moved into BaseUniformProfile so the
-    // surface profile gets the same lead-in for free).
-    // Initialize all customParams to -1.0 (the "unset" sentinel).
-    // Shaders use `>= 0.0` checks to distinguish set values from defaults.
-    for (int i = 0; i < kMaxCustomParams; ++i) {
-        m_customParams[i] = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
-    }
-    // Initialize all customColors to white
-    for (int i = 0; i < kMaxCustomColors; ++i) {
-        m_customColors[i] = Qt::white;
-    }
+    // The UBO profile's ctor seeds an identity qt_Matrix + qt_Opacity=1.0 (the init
+    // that used to live here, moved into BaseUniformProfile; SurfaceUniformProfile
+    // seeds it too, the two being siblings under IUboProfile rather than one
+    // inheriting from the other, so they agree by duplication).
+    // customParams and customColors are seeded at their declarations, beside
+    // m_userTextureWraps, so this constructor is not the only thing standing
+    // between them and a default-constructed value.
 
     // 1x1 transparent fallback for when textures are disabled
     m_transparentFallbackImage = QImage(1, 1, QImage::Format_RGBA8888);
@@ -417,38 +418,47 @@ void ShaderNodeRhi::prepare()
         // Create VBO (fullscreen quad)
         m_vbo.reset(
             rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(RhiConstants::QuadVertices)));
+        // Every failure arm in this block tears down through releaseRhiResources()
+        // rather than its own list of resets. The lists were hand-rolled, one per
+        // failure arm, and had to be kept in step as resources were added. The
+        // helper is a superset of all of them. It does NOT clear
+        // m_shaderError, so the message each arm sets just above survives to the
+        // item's status block.
+        //
+        // It costs more than the lists did, and the cost is real rather than
+        // theoretical: the helper also drops the baked shaders and re-arms every
+        // bake flag, so a transient init failure throws away a valid bake. The
+        // main pair re-bakes from retained sources, but a MULTI-buffer pack
+        // re-READS every buffer pass from disk on the render thread, because
+        // bakeBufferShaders has no per-pass source cache. Bounded, and only on an
+        // already-degraded path. Do NOT justify this by "a stale baked shader":
+        // there is no reachable state where an init failure was exposed to one.
         if (!m_vbo->create()) {
             m_shaderError = QStringLiteral("Failed to create vertex buffer");
-            m_vbo.reset();
+            releaseRhiResources();
             return;
         }
         m_ubo.reset(rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, uboSize));
         if (!m_ubo->create()) {
             m_shaderError = QStringLiteral("Failed to create uniform buffer");
-            m_vbo.reset();
-            m_ubo.reset();
+            releaseRhiResources();
             return;
         }
-        // Audio spectrum texture (binding 6): 1x1 dummy when disabled
+        // Audio spectrum texture (binding 10): 1x1 dummy when disabled
         m_audioSpectrumTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
         if (!m_audioSpectrumTexture->create()) {
             m_shaderError = QStringLiteral("Failed to create audio spectrum texture");
-            m_vbo.reset();
-            m_ubo.reset();
-            m_audioSpectrumTexture.reset();
+            releaseRhiResources();
             return;
         }
         m_audioSpectrumSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
                                                      QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
         if (!m_audioSpectrumSampler->create()) {
             m_shaderError = QStringLiteral("Failed to create audio spectrum sampler");
-            m_vbo.reset();
-            m_ubo.reset();
-            m_audioSpectrumTexture.reset();
-            m_audioSpectrumSampler.reset();
+            releaseRhiResources();
             return;
         }
-        // User texture slots (bindings 7-10): 1x1 dummy textures
+        // User texture slots (bindings 11-14): 1x1 dummy textures
         bool userTexturesOk = true;
         for (int i = 0; i < kMaxUserTextures; ++i) {
             m_userTextures[i].reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
@@ -467,17 +477,10 @@ void ShaderNodeRhi::prepare()
             m_userTextureDirty[i] = true;
         }
         if (!userTexturesOk) {
-            m_vbo.reset();
-            m_ubo.reset();
-            m_audioSpectrumTexture.reset();
-            m_audioSpectrumSampler.reset();
-            for (int i = 0; i < kMaxUserTextures; ++i) {
-                m_userTextures[i].reset();
-                m_userTextureSamplers[i].reset();
-            }
+            releaseRhiResources();
             return;
         }
-        // Desktop wallpaper texture (binding 11): 1x1 dummy
+        // Desktop wallpaper texture (binding 15): 1x1 dummy
         m_wallpaperTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
         if (!m_wallpaperTexture->create()) {
             m_shaderError = QStringLiteral("Failed to create wallpaper texture");
@@ -589,7 +592,7 @@ void ShaderNodeRhi::prepare()
 
     // Image-pass grid mesh (setGridSubdivisions). Built lazily here — after
     // the shader-ready gate, so a node whose shader never compiles does not
-    // hold ~1 MB of grid buffers it can never draw — rather than in the init
+    // hold grid buffers it can never draw, which grow with the square of the density — rather than in the init
     // block, because the density can change over the node's life (a metadata
     // hot-reload, a pack switch on a reused item); the setter drops the
     // buffers and the pipeline, and this block rebuilds both lazily.
@@ -620,7 +623,18 @@ void ShaderNodeRhi::prepare()
             m_gridUploaded = false;
         }
     }
-    if (gridActive() && m_gridVbo && !m_gridUploaded) {
+    const bool gridNeedsUpload = gridActive() && m_gridVbo && !m_gridUploaded;
+    // Batch first: the mesh is ~1.83 MB at max density and a pool-exhausted frame built then dropped it.
+    QRhiResourceUpdateBatch* gridBatch = gridNeedsUpload ? rhi->nextResourceUpdateBatch() : nullptr;
+    if (gridNeedsUpload && !gridBatch) {
+        // Batch pool exhausted mid-record (the 64-batch limit has been
+        // hit in this codebase before). render() skips the frame while
+        // the grid is pending, and a STATIC item gets no further
+        // prepare() on its own — request one so the upload retries next
+        // frame instead of leaving the item blank indefinitely.
+        requestAnotherFrame();
+    }
+    if (gridBatch) {
         const int n = m_gridSubdivisions;
         // Same layout and corner values as RhiConstants::QuadVertices:
         // clip-space position, then a texCoord that runs 0..1 with v = 0 at
@@ -653,19 +667,10 @@ void ShaderNodeRhi::prepare()
                 indexData.append(bl);
             }
         }
-        if (QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch()) {
-            batch->uploadStaticBuffer(m_gridVbo.get(), vertexData.constData());
-            batch->uploadStaticBuffer(m_gridIbo.get(), indexData.constData());
-            cb->resourceUpdate(batch);
-            m_gridUploaded = true;
-        } else {
-            // Batch pool exhausted mid-record (the 64-batch limit has been
-            // hit in this codebase before). render() skips the frame while
-            // the grid is pending, and a STATIC item gets no further
-            // prepare() on its own — request one so the upload retries next
-            // frame instead of leaving the item blank indefinitely.
-            requestAnotherFrame();
-        }
+        gridBatch->uploadStaticBuffer(m_gridVbo.get(), vertexData.constData());
+        gridBatch->uploadStaticBuffer(m_gridIbo.get(), indexData.constData());
+        cb->resourceUpdate(gridBatch);
+        m_gridUploaded = true;
     }
 
     // Upload textures FIRST — before any SRB or pipeline creation.
@@ -674,12 +679,14 @@ void ShaderNodeRhi::prepare()
     // Create buffer targets before the image pass SRB
     const bool multiBufferMode = m_bufferPaths.size() > 1;
     const bool bufferReady = multiBufferMode ? m_multiBufferShadersReady : m_bufferShaderReady;
-    if (!m_bufferPath.isEmpty() && bufferReady && !ensureBufferTarget()) {
-        return;
-    }
-
+    // m_bufferPaths, not m_bufferPath: a leading empty entry leaves the latter
+    // empty while the list is multi-entry. See bakeBufferShaders for the whole
+    // failure this gate was half of.
+    // ensureBufferTarget is called ONCE, at the tail of the block below. A guarded call under this
+    // IDENTICAL gate used to sit here; only the DEFENSIVE arms below can differ, and no reachable
+    // state for either was found, so the unconditional tail call is what carries this.
     // Late pipeline recovery
-    if (!m_bufferPath.isEmpty() && bufferReady) {
+    if (!m_bufferPaths.isEmpty() && bufferReady) {
         if (!multiBufferMode && m_bufferRenderTarget && !m_bufferRenderPassDescriptor
             && !m_bufferRenderTarget->renderPassDescriptor()) {
             m_bufferPipeline.reset();
@@ -706,22 +713,39 @@ void ShaderNodeRhi::prepare()
         if (!ensureBufferTarget() || !ensureBufferPipeline()) {
             return;
         }
-        if (!m_srb || (!multiBufferMode && m_bufferFeedback && !m_srbB)) {
-            ensurePipeline();
-        }
     }
-    if (m_shaderReady && (!m_pipeline || !m_srb || (m_bufferFeedback && !m_srbB))) {
-        ensurePipeline();
-    }
-
+    // ONE unconditional call, no guarded one in front of it, and ensureBufferTarget above is the
+    // same shape for the same reason. Two guarded `ensurePipeline()` calls used to sit here, one in
+    // the buffer branch above and one just below it, nothing in between — so neither could
+    // achieve anything this line does not. ensurePipeline creates only what is null and has no
+    // early return on the success path, so a second call rebuilt nothing while still paying
+    // rpDesc->serializedFormat() (a QVector allocation), the m_renderPassFormat assignment and an
+    // ensureDummyChannelResources walk, on the render thread, in prepare().
+    //
+    // Their conditions were also wrong, in a way that outlived being narrowed once. Each tested
+    // `m_bufferFeedback && !m_srbB` while ensurePipeline's own test is `!multiBufferMode &&
+    // m_bufferFeedback && m_bufferTextureB && !m_srbB`. A round that added the !multiBufferMode
+    // term closed one route to a condition that can never become false and left a second: with
+    // m_bufferPaths non-empty, bufferReady false (bakeBufferShaders gave up after three attempts)
+    // and single-pass feedback, ensureBufferTarget never runs, m_bufferTextureB stays null,
+    // ensurePipeline therefore never builds m_srbB, and the guard fired on every prepare() for the
+    // node's life. Matching a condition to a callee's internals is how that happens twice; not
+    // duplicating the condition at all is why it cannot happen again. Do not re-add a guard here.
     if (!ensurePipeline()) {
         return;
     }
 
+    // ensurePipeline is where the 1x1 dummy channel texture is created, and the
+    // uploadDirtyTextures call above already ran. Without this second attempt
+    // the SRBs ensurePipeline just built bind a texture whose transparent-black
+    // texel does not reach the GPU until the next frame. Still ahead of every
+    // beginPass below, so the ordering is valid.
+    uploadDummyChannelTexture(rhi, cb);
+
     // ========================================================================
     // Multipass buffer passes recorded in prepare()
     // ========================================================================
-    const bool multipassSingle = !multiBufferMode && !m_bufferPath.isEmpty() && m_bufferShaderReady && m_bufferPipeline
+    const bool multipassSingle = !multiBufferMode && !m_bufferPaths.isEmpty() && m_bufferShaderReady && m_bufferPipeline
         && m_bufferSrb && m_bufferRenderTarget && m_bufferTexture;
     const bool multipassMulti =
         multiBufferMode && m_multiBufferShadersReady && m_multiBufferTextures[0] && m_multiBufferPipelines[0];
@@ -744,10 +768,18 @@ void ShaderNodeRhi::prepare()
             if (identityBatch) {
                 identityBatch->updateDynamicBuffer(m_ubo.get(), 0, sizeof(kIdentity4x4), kIdentity4x4);
                 cb->resourceUpdate(identityBatch);
+            } else {
+                // Pool exhausted: the passes below would run against the FLIP-CARRYING matrix and
+                // write their geometry inverted, and the image pass would double-flip the sampled
+                // result. No flag can re-drive this — the pin is unconditional per-frame code — so
+                // only another prepare() re-pins, and the argument that makes the RESTORE below
+                // merely latent does NOT apply: a profile pushing the matrix region on a dirty flag
+                // pushes the very value this pin overwrites.
+                requestAnotherFrame();
             }
         }
         if (multiBufferMode) {
-            const int n = qMin(m_bufferPaths.size(), kMaxBufferPasses);
+            const int n = static_cast<int>(qMin(m_bufferPaths.size(), static_cast<qsizetype>(kMaxBufferPasses)));
             for (int i = 0; i < n; ++i) {
                 if (!m_multiBufferTextures[i] || !m_multiBufferRenderTargets[i] || !m_multiBufferPipelines[i]
                     || !m_multiBufferSrbs[i]) {
@@ -764,14 +796,29 @@ void ShaderNodeRhi::prepare()
                 cb->draw(4);
                 cb->endPass();
 
+                // A pass declared "mipmap" samples through a mip chain, and the
+                // chain only exists if something fills it. The sampler's mip
+                // filter alone selected between levels that were never written.
+                // Guarded on the texture actually having been allocated with the
+                // flags, since ensureBufferTarget falls back to a single level
+                // when a backend refuses a mipmapped target for this format.
+                if (m_bufferFilters[static_cast<size_t>(i)] == QLatin1String("mipmap")
+                    && m_multiBufferTextures[i]->flags().testFlag(QRhiTexture::UsedWithGenerateMips)) {
+                    if (QRhiResourceUpdateBatch* mips = rhi->nextResourceUpdateBatch()) {
+                        mips->generateMips(m_multiBufferTextures[i].get());
+                        cb->resourceUpdate(mips);
+                    }
+                }
+
                 if (i + 1 < n && m_ubo) {
                     // Inter-pass write→read barrier only: re-uploading 4 bytes at
                     // offset 0 (the first float of qt_Matrix) forces the backend to
                     // serialize pass i's writes before pass i+1 samples its output.
-                    // The value is immediately re-pinned by the next pass / final
-                    // restore, so this is a sync hint, not a meaningful data update.
-                    QRhiResourceUpdateBatch* barrier = rhi->nextResourceUpdateBatch();
-                    if (barrier) {
+                    // qt_Matrix[0] is 1.0 in every profile (the flip lives at index 5),
+                    // so this writes what the pin already put there: a sync hint, not a
+                    // data update. Nothing re-pins between passes; the restore after the
+                    // loop is the only other write to offset 0.
+                    if (QRhiResourceUpdateBatch* barrier = rhi->nextResourceUpdateBatch()) {
                         barrier->updateDynamicBuffer(m_ubo.get(), 0, 4, m_uboProfile->mutableData());
                         cb->resourceUpdate(barrier);
                     }
@@ -787,11 +834,13 @@ void ShaderNodeRhi::prepare()
                 // iFrame is computed as `cleared ? m_frame : 0` in syncBaseUniforms()
                 // and lives in K_TIME_BLOCK (offsets 68-79). The transition we just
                 // made invalidates whatever iFrame was uploaded at the top of this
-                // prepare() pass, so force a time-block re-upload on the next
-                // frame. Without this, the first post-clear frame would render
-                // with iFrame stuck at 0 on the GPU.
+                // prepare() pass, so force a time-block re-upload on the next frame
+                // AND ask for that frame, since a flag raised in prepare() schedules
+                // nothing by itself (the rule the re-arm site below and the uniforms
+                // grow arm both follow). Without both, iFrame stays 0 for one frame.
                 m_timeDirty = true;
                 m_uniformsDirty = true;
+                requestAnotherFrame();
             }
             const int writeIndex = m_bufferFeedback ? (m_frame % 2) : 0;
             QRhiTextureRenderTarget* bufferRT = (m_bufferFeedback && writeIndex == 1 && m_bufferRenderTargetB)
@@ -813,6 +862,17 @@ void ShaderNodeRhi::prepare()
             cb->setVertexInput(0, 1, &vbufBinding);
             cb->draw(4);
             cb->endPass();
+
+            // The single-pass twin of the mip generation in the multi-buffer
+            // loop above. The texture written this frame is the ping-pong slot,
+            // not always slot A, so mip the one that was actually drawn into.
+            if (m_bufferFilters[0] == QLatin1String("mipmap") && writtenTexture
+                && writtenTexture->flags().testFlag(QRhiTexture::UsedWithGenerateMips)) {
+                if (QRhiResourceUpdateBatch* mips = rhi->nextResourceUpdateBatch()) {
+                    mips->generateMips(writtenTexture);
+                    cb->resourceUpdate(mips);
+                }
+            }
         }
 
         // Resource flush after buffer passes (Vulkan barrier hint). Doubles as
@@ -827,6 +887,20 @@ void ShaderNodeRhi::prepare()
                 // so mutableData() points directly at it.
                 barrier->updateDynamicBuffer(m_ubo.get(), 0, 16 * sizeof(float), m_uboProfile->mutableData());
                 cb->resourceUpdate(barrier);
+            } else {
+                // Pool exhausted, and this one cannot just wait for the flag it left set, because
+                // there is no flag: K_MATRIX_OPACITY is REFERENCE ONLY, so dirtyRegions() never
+                // emits it and the matrix bytes reach the GPU through fullUploadRegions() alone.
+                // Without this the identity the buffer passes pinned would stay on the GPU
+                // INDEFINITELY rather than for one frame, drawing the image pass upside down on a
+                // Y-up-in-NDC backend. Re-arming the full upload is what covers offset 0 again.
+                // Latent today rather than live: no bundled animation pack is multipass, overlay
+                // packs render into a texture so the pinned identity is what they want anyway, and
+                // SurfaceUniformProfile pushes the matrix region on any dirty flag. The first
+                // multipass animation pack is what would have found it.
+                m_didFullUploadOnce = false;
+                m_uniformsDirty = true;
+                requestAnotherFrame();
             }
         }
     }
@@ -946,7 +1020,7 @@ void ShaderNodeRhi::render(const RenderState* state)
     cb->setGraphicsPipeline(m_pipeline.get());
 
     const bool multiBufferMode = m_bufferPaths.size() > 1;
-    const bool multipassSingle = !multiBufferMode && !m_bufferPath.isEmpty() && m_bufferShaderReady && m_bufferPipeline
+    const bool multipassSingle = !multiBufferMode && !m_bufferPaths.isEmpty() && m_bufferShaderReady && m_bufferPipeline
         && m_bufferRenderTarget && m_bufferTexture;
     const int imageWriteIndex = multipassSingle && m_bufferFeedback ? (m_frame % 2) : 0;
     QRhiShaderResourceBindings* imageSrb =

@@ -12,6 +12,18 @@ cmake_minimum_required(VERSION 3.16)
 
 set(PHOSPHORSERVICEPOLKIT_VERSION "0.1.0")
 
+# The Qt floor this library requires AND advertises in its generated
+# PhosphorServicePolkitConfig.cmake. Taken from the top-level QT_MIN_VERSION when built in-tree so
+# the two cannot drift, with its own value for a STANDALONE build, where that
+# variable does not exist. The fallback is not optional: the Config template
+# substitutes this, and an undefined variable expands to nothing and ships a config
+# whose find_dependency(Qt6 ...) carries no version floor at all.
+if(DEFINED QT_MIN_VERSION)
+    set(PHOSPHORSERVICEPOLKIT_QT_MIN ${QT_MIN_VERSION})
+else()
+    set(PHOSPHORSERVICEPOLKIT_QT_MIN "6.10.0")
+endif()
+
 if(NOT PROJECT_VERSION)
     project(PhosphorServicePolkit VERSION ${PHOSPHORSERVICEPOLKIT_VERSION} LANGUAGES CXX)
     set(CMAKE_CXX_STANDARD 20)
@@ -33,7 +45,7 @@ include(GenerateExportHeader)
 # PolkitQt6-1::Agent does not pull Qt6::Gui transitively, so Gui is not a
 # dependency. The polkit-qt6 GUI action-button widgets (PolkitQt6-1::Gui) are a
 # Phase 3/4 UI concern and are NOT linked.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml)
+find_package(Qt6 ${PHOSPHORSERVICEPOLKIT_QT_MIN} REQUIRED COMPONENTS Core Qml)
 find_package(PolkitQt6-1 REQUIRED)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
