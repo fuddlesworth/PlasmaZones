@@ -47,7 +47,9 @@
  * 13. reapplyWindowGeometry refuses an empty and an unknown id silently,
  *     and its evict makes a rect-stable relayout re-emit — with a control
  *     first proving that same relayout is silent WITHOUT the evict. Its
- *     null-engine arm rides the item 10 sweep too.
+ *     null-engine arm rides the item 10 sweep too, as does
+ *     reportCommittedSize's, which refuses a malformed size pair and widens
+ *     the column for a well-formed wider commit.
  * 14. (moved to test_scrolling_adaptor_verbs.cpp: the four absolute
  *     setters' gates, range refusals and intent kinds.)
  * 15. blueprintProgressJson carries the same ownership gates, answers zeroes
@@ -541,6 +543,7 @@ private Q_SLOTS:
         m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 300);
         m_adaptor->clearWindowedFullscreen(QStringLiteral("app|a")); // must not crash
         m_adaptor->reapplyWindowGeometry(QStringLiteral("app|a")); // must not crash
+        m_adaptor->reportCommittedSize(QStringLiteral("app|a"), 600, 800, 700, 800); // must not crash
         // Same `!m_engine` conjunct, and the verb most likely to be called on
         // the shutdown path: the KWin effect dispatches it from a user's
         // maximize click, which can land while the daemon is going down.
@@ -910,6 +913,41 @@ private Q_SLOTS:
             }
         }
         QVERIFY2(sawA, "the re-emitted batch must carry the re-applied window");
+    }
+
+    // reportCommittedSize shares the same wire-boundary policy and adds a
+    // size check: a non-positive dimension on either pair is malformed and
+    // must be refused before the engine sees it. The positive case is a
+    // genuine widening, so a refusal is told apart from an accepted report
+    // by whether the window's committed rect moved.
+    void testReportCommittedSize_gatesAndWidens()
+    {
+        m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
+        m_engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("DP-1"), 0, 0);
+        // Focused, so the widened column stays wholly on screen and its
+        // committed rect is the column rather than a clamp at the edge.
+        m_engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("DP-1"));
+        m_engine->retile(QStringLiteral("DP-1"));
+        QCoreApplication::processEvents();
+        const QRect offered = m_engine->lastManagedRect(QStringLiteral("app|a"));
+        QVERIFY2(offered.isValid(), "precondition: a is committed before the report");
+        const int ow = offered.width();
+        const int oh = offered.height();
+        const int wider = ow + 150;
+
+        m_adaptor->reportCommittedSize(QString(), ow, oh, wider, oh); // empty id
+        m_adaptor->reportCommittedSize(QStringLiteral("nobody|9"), ow, oh, wider, oh); // unknown window
+        m_adaptor->reportCommittedSize(QStringLiteral("app|a"), 0, oh, wider, oh); // empty offer
+        m_adaptor->reportCommittedSize(QStringLiteral("app|a"), ow, oh, -1, oh); // negative commit
+        m_adaptor->reportCommittedSize(QStringLiteral("app|a"), ow, oh, wider, 0); // empty commit
+        QCoreApplication::processEvents();
+        QCOMPARE(m_engine->lastManagedRect(QStringLiteral("app|a")), offered);
+
+        // Positive control: a well-formed report of a wider commit widens the
+        // column (this fixture's strip runs horizontally).
+        m_adaptor->reportCommittedSize(QStringLiteral("app|a"), ow, oh, wider, oh);
+        QCoreApplication::processEvents();
+        QCOMPARE(m_engine->lastManagedRect(QStringLiteral("app|a")).width(), wider);
     }
 
 public Q_SLOTS:

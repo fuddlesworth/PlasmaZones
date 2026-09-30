@@ -163,6 +163,8 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // once the geometry has actually been applied.
     const bool anchorMoved = state->strip().viewAnchor() != anchorBefore;
     const ResolvedStrip resolved = state->strip().relayout(params);
+    // Layout-neutral by construction, so the strip just resolved stays valid.
+    state->strip().dropSatisfiedCommittedFloors(resolved, params);
     if (resolved.columns.isEmpty()) {
         // The strip just emptied (last window closed / floated / released),
         // or every column is minimized away. The tab-strip clear must still
@@ -451,11 +453,21 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // plus an indexOfWindow per window, which is quadratic in the strip's
     // window count; walking the columns directly is linear. Only built when
     // the park actually consumes it.
+    //
+    // A client that committed wider than its column along the strip holds
+    // that extent as a floor exactly like a declared minimum, so the peek
+    // floor rises to it too. Clamping such a column at the screen edge would
+    // otherwise hand the client a sliver it answers at full width, straight
+    // across the boundary onto the neighbouring output.
     QHash<QString, QSize> tileMinSizes;
     if (params.respectMinimumSize) {
+        const bool horizontal = params.axis.isHorizontal();
         for (const Column& column : state->strip().columns()) {
             for (const Tile& tile : column.tiles) {
-                tileMinSizes.insert(tile.windowId, QSize(tile.minWidth, tile.minHeight));
+                const int committedMain = state->strip().committedMainFloorPx(tile.windowId);
+                tileMinSizes.insert(tile.windowId,
+                                    horizontal ? QSize(qMax(tile.minWidth, committedMain), tile.minHeight)
+                                               : QSize(tile.minWidth, qMax(tile.minHeight, committedMain)));
             }
         }
     }

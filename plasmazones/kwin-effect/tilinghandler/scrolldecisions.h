@@ -231,6 +231,42 @@ inline bool mayCarryCommittedSize(bool declaredRect, bool columnAnswered, const 
     return committed.width() <= column.width() && committed.height() <= column.height();
 }
 
+/// Whether a strip window's commit goes to the engine as the client's answer
+/// to the column it was offered (Scrolling.reportCommittedSize).
+///
+/// The engine lays a column out at the extent it asked for, so a client that
+/// commits WIDER along the strip sits across the next column until the engine
+/// hears about it, and one that later commits narrower than a column the
+/// engine widened for it leaves that width standing empty.
+///
+/// @p settled    KWin has no configure in flight for the window: its
+///               move-resize geometry equals its frame. KWin brings the two
+///               back in line only once the last configure that places the
+///               window is acknowledged, so a client acking an OLDER configure
+///               late (a frame from the wider column it is being moved out of)
+///               reads unsettled, and its frame is never passed off as the
+///               answer to the newest offer.
+/// @p offered    the column size the strip offered.
+/// @p committed  the frame size the client committed.
+/// @p vertical   the strip runs vertically, so its main axis is the height.
+///
+/// Only the MAIN axis is compared. Across the strip the commit path already
+/// centres a smaller answer, and a client holding an aspect ratio answers a
+/// full-height column a little short on every placement, which would
+/// otherwise send the engine a no-op each time.
+///
+/// Deliberately stateless. A repeat the engine cannot act on (minimum sizes
+/// not respected, a floor already recorded) is refused cheaply there, while a
+/// "sent already" memory here could only drift from the engine's own record
+/// and then withhold the one report the engine was missing.
+inline bool shouldReportCommittedSize(bool settled, const QSize& offered, const QSize& committed, bool vertical)
+{
+    if (!settled || offered.isEmpty() || committed.isEmpty()) {
+        return false;
+    }
+    return vertical ? committed.height() != offered.height() : committed.width() != offered.width();
+}
+
 // ── Compositor-state claims ────────────────────────────────────────────────
 //
 // The effect imposes three kinds of compositor state that only it can hand

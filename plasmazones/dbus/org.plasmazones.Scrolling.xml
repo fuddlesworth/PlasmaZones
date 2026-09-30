@@ -153,6 +153,25 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
 
+        <method name="reportCommittedSize">
+            <annotation name="org.gtk.GDBus.DocString" value="Reports the frame size a strip window's client settled on when it differs from the column rect the strip offered it. Called by the KWin effect once per distinct pair, and only when the compositor has no configure in flight for the window, so the commit is the answer to that offer rather than to an older one. A client that commits wider than its column along the strip makes the column that wide, so the next column is laid out beside the window instead of under it. A later answer narrower than such a widened column gives the extra width back. The widening follows the respect-minimum-size setting like a declared minimum does, and it is runtime state that is never saved. Refused silently when the offered size is not the tile's whole current rect (a newer batch has replaced it, or the column was clamped at the screen edge), and for an unknown, floating or maximized-to-edges window. Same wire-boundary policy as clearWindowedFullscreen: a reconciliation call, neither ownership- nor context-gated."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window whose commit to report. An empty string is ignored."/>
+            </arg>
+            <arg name="offeredWidth" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Width of the column rect the strip offered, in logical pixels."/>
+            </arg>
+            <arg name="offeredHeight" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Height of the column rect the strip offered, in logical pixels."/>
+            </arg>
+            <arg name="committedWidth" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Width of the frame the client committed, in logical pixels."/>
+            </arg>
+            <arg name="committedHeight" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Height of the frame the client committed, in logical pixels."/>
+            </arg>
+        </method>
+
         <method name="setWindowFullscreenFloat">
             <annotation name="org.gtk.GDBus.DocString" value="Holds a strip tile out of the strip for its OWN fullscreen, or returns it. Called by the KWin effect with floating=true when a tiled window goes fullscreen by itself (a client F11, a video going fullscreen, NOT the windowed-fullscreen feature) and with floating=false when it leaves fullscreen. The engine floats the window with the same slot memory a user float keeps, so the return lands in the same column at the same width, but announces the change on its passive channel: no float notification is shown and no free geometry is restored. A hold of a window that already floats under another owner, and a return of a window this call did not hold, both answer false, so a user float is never taken over or undone. A repeat hold of this call's own float answers true. Same wire-boundary policy as clearWindowedFullscreen: a reconciliation call, neither ownership- nor context-gated."/>
             <arg name="windowId" type="s" direction="in">
