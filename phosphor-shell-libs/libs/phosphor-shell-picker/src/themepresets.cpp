@@ -13,7 +13,10 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
+#include <QRegularExpression>
 #include <QStandardPaths>
+
+#include <algorithm>
 
 Q_LOGGING_CATEGORY(lcPresets, "phosphorshellpicker.presets")
 
@@ -30,12 +33,13 @@ QVariantMap buildPalette(std::initializer_list<std::pair<const char*, const char
     return map;
 }
 
-QVariantMap presetEntry(const QString& name, const QVariantMap& tokens)
+QVariantMap presetEntry(const QString& name, const QVariantMap& tokens, bool builtIn)
 {
     return {
         {QStringLiteral("name"), name},
         {QStringLiteral("tokens"), tokens},
         {QStringLiteral("swatches"), ThemePresets::swatchesFor(tokens)},
+        {QStringLiteral("builtIn"), builtIn},
     };
 }
 
@@ -168,8 +172,9 @@ QVariantMap ThemePresets::readPaletteFile(const QString& path)
         object = object.value(QLatin1String("tokens")).toObject();
     }
     QVariantMap tokens;
+    static const QRegularExpression tokenName(QStringLiteral("^[a-z][a-z0-9_]{0,63}$"));
     for (auto it = object.constBegin(); it != object.constEnd(); ++it) {
-        if (!it.value().isString()) {
+        if (!tokenName.match(it.key()).hasMatch() || !it.value().isString()) {
             continue;
         }
         const QColor color(it.value().toString());
@@ -177,14 +182,18 @@ QVariantMap ThemePresets::readPaletteFile(const QString& path)
             tokens.insert(it.key(), color);
         }
     }
+    if (tokens.size() > 48 || !tokens.contains(QString::fromLatin1(PhosphorTheme::TokenNames::Surface))
+        || !tokens.contains(QString::fromLatin1(PhosphorTheme::TokenNames::Primary))) {
+        return {};
+    }
     return tokens;
 }
 
 void ThemePresets::rescan()
 {
     QVariantList scanned;
-    scanned.append(presetEntry(QStringLiteral("Dark"), darkPalette()));
-    scanned.append(presetEntry(QStringLiteral("Light"), lightPalette()));
+    scanned.append(presetEntry(tr("Dark"), darkPalette(), true));
+    scanned.append(presetEntry(tr("Light"), lightPalette(), true));
 
     const QDir dir(m_directory);
     if (dir.exists()) {
@@ -194,11 +203,17 @@ void ThemePresets::rescan()
             if (file.fileName() == QLatin1String("current.json")) {
                 continue;
             }
+            const QString name = file.completeBaseName();
+            if (name.size() > 80 || name.trimmed().isEmpty() || std::any_of(name.cbegin(), name.cend(), [](QChar c) {
+                    return !c.isPrint();
+                })) {
+                continue;
+            }
             const QVariantMap tokens = readPaletteFile(file.absoluteFilePath());
             if (tokens.isEmpty()) {
                 continue;
             }
-            scanned.append(presetEntry(file.completeBaseName(), tokens));
+            scanned.append(presetEntry(name, tokens, false));
         }
     }
 

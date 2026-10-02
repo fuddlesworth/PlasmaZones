@@ -10,6 +10,7 @@
 // once the incoming image is Ready and dropping a request that fails.
 
 #include <PhosphorShell/PanelWindow.h>
+#include <PhosphorShellPicker/ThemePresets.h>
 
 #include <QDir>
 #include <QGuiApplication>
@@ -148,6 +149,22 @@ class TestPickerWallpaper : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void paletteBrowserLoadsFixtureLibrary()
+    {
+        QQmlEngine engine;
+        QSignalSpy warnings(&engine, &QQmlEngine::warnings);
+        std::unique_ptr<QObject> browser(build(engine, "AppearancePalettes { width: 900 }"));
+        QVERIFY(browser);
+        auto* presets = browser->findChild<PhosphorShellPicker::ThemePresets*>();
+        QVERIFY(presets);
+        presets->setDirectory(QDir(QStringLiteral(PHOSPHOR_PICKER_FIXTURES)).filePath(QStringLiteral("palettes")));
+        presets->rescan();
+        QCOMPARE(presets->count(), 4);
+        QVERIFY(presets->presets().first().toMap().value(QStringLiteral("builtIn")).toBool());
+        QVERIFY(!presets->presets().last().toMap().value(QStringLiteral("builtIn")).toBool());
+        QVERIFY2(warnings.isEmpty(), "palette browser emitted QML warnings");
+    }
+
     void initTestCase()
     {
         // ShellEngine registers PanelWindow into Phosphor.Shell at

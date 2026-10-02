@@ -284,6 +284,13 @@ Item {
                             progressRing.requestPaint();
                     }
                 }
+                Connections {
+                    target: AppearanceStore
+                    function onChanged() {
+                        if (root.visible)
+                            progressRing.requestPaint();
+                    }
+                }
                 onPaint: {
                     let ctx = getContext("2d");
                     let cx = width / 2, cy = height / 2;

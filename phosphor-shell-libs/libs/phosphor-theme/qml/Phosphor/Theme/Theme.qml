@@ -8,11 +8,10 @@
 // https://phosphor-works.github.io/palette/).
 // Binding-tracking note. Every named accessor below indexes into the
 // `palette` QVariantMap rather than calling PaletteStore.token(). The
-// QML engine tracks property reads, not method calls. `palette` is a
-// Q_PROPERTY with NOTIFY paletteChanged, so bindings on `Theme.primary`
-// re-evaluate every time the store reloads. Calling token() would NOT
-// retint live. Swatches would update because they read palette directly.
-// The surrounding chrome would not. Keep the index form.
+// QML engine tracks property reads, not method calls. This binding reads
+// PaletteStore.palette and AppearanceStore.values, so Theme.primary follows
+// either source's changes. Calling token() would not retint live. Keep the
+// index form.
 // Missing-token defense: `_t(name)` returns a sentinel magenta when a
 // token isn't in the active palette. A bare `palette[name]` would yield
 // an invalid QColor that renders as transparent black, silently hiding
@@ -26,17 +25,24 @@ import QtQuick
 QtObject {
     id: theme
 
-    // Direct handle on the underlying store so consumers that need the
-    // full token map can iterate. Examples are theme editors, palette
-    // inspectors, and the swatch demo. Day-to-day QML should prefer
-    // the named accessors below. Iterating via .palette retains
-    // binding tracking. Calling .token() does NOT. See the file-level
-    // comment for the binding-tracking rationale.
+    // Direct handle on the underlying legacy store for consumers that
+    // edit it. The effective colors, including Appearance selections,
+    // are available through palette and the named accessors below.
     readonly property var paletteStore: PaletteStore
-    // The active token map. Token name maps to QColor. Every accessor
-    // below routes through this property, which is how change-tracking
-    // works. See the file-level comment above for the rationale.
-    readonly property var palette: PaletteStore.palette
+    // Appearance's selected library palette overlays the legacy token
+    // store, so controls still using Theme follow the same preview and
+    // Apply/Revert transaction as the rest of the shell.
+    readonly property var palette: {
+        const base = PaletteStore.palette;
+        const settings = AppearanceStore.values;
+        if (settings.palette !== "library")
+            return base;
+        const selected = settings.libraryPalette;
+        const merged = Object.assign({}, base, selected);
+        if (selected.background === undefined)
+            merged.background = selected.surface;
+        return merged;
+    }
     // Sentinel for a missing token. Bright magenta is impossible to
     // miss in a normally-themed surface. Exposed as a property so tests
     // and tooling can detect missing-token fallback without scraping the

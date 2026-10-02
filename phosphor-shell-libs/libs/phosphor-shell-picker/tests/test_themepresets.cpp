@@ -10,7 +10,9 @@
 
 #include <QColor>
 #include <QDir>
+#include <QFile>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QTest>
 
 using PhosphorShellPicker::ThemePresets;
@@ -88,6 +90,21 @@ private Q_SLOTS:
         presets.setDirectory(QStringLiteral("/nonexistent/phosphor/palettes"));
         presets.rescan();
         QCOMPARE(presets.count(), 2);
+    }
+
+    void incompletePaletteIsNotOffered()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QFile file(QDir(directory.path()).filePath(QStringLiteral("Incomplete.json")));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QVERIFY(file.write(R"({"primary":"#22ff55"})") > 0);
+        file.close();
+
+        ThemePresets presets;
+        presets.setDirectory(directory.path());
+        presets.rescan();
+        QCOMPARE(names(presets), (QStringList{QStringLiteral("Dark"), QStringLiteral("Light")}));
     }
 };
 

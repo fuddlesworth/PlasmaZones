@@ -66,6 +66,8 @@ QVariantMap AppearanceStore::defaults()
             {QStringLiteral("barInset"), 16},
             {QStringLiteral("surfaceEffect"), QStringLiteral("none")},
             {QStringLiteral("palette"), QStringLiteral("spectrum")},
+            {QStringLiteral("libraryPaletteName"), QString()},
+            {QStringLiteral("libraryPalette"), QVariantMap{}},
             {QStringLiteral("material"), QStringLiteral("glass")},
             {QStringLiteral("followSystemColorScheme"), false},
             {QStringLiteral("darkMaterial"), QStringLiteral("glass")},
@@ -182,7 +184,8 @@ bool AppearanceStore::validate(const QVariantMap& values, QVariantMap& result)
         {QStringLiteral("statsMemoryUnit"), {QStringLiteral("percent"), QStringLiteral("used")}},
         {QStringLiteral("surfaceEffect"), {QStringLiteral("none"), QStringLiteral("glass"), QStringLiteral("motes")}},
         {QStringLiteral("presentation"), {QStringLiteral("navigator"), QStringLiteral("stage")}},
-        {QStringLiteral("palette"), {QStringLiteral("spectrum"), QStringLiteral("wallpaper"), QStringLiteral("ember")}},
+        {QStringLiteral("palette"),
+         {QStringLiteral("spectrum"), QStringLiteral("wallpaper"), QStringLiteral("ember"), QStringLiteral("library")}},
         {QStringLiteral("material"), {QStringLiteral("glass"), QStringLiteral("solid"), QStringLiteral("light")}},
         {QStringLiteral("darkMaterial"), {QStringLiteral("glass"), QStringLiteral("solid")}},
         {QStringLiteral("edge"), {QStringLiteral("top"), QStringLiteral("bottom")}},
@@ -200,6 +203,23 @@ bool AppearanceStore::validate(const QVariantMap& values, QVariantMap& result)
             if (it.value().metaType().id() != QMetaType::QString
                 || !enums.value(it.key()).contains(it.value().toString()))
                 return false;
+        } else if (it.key() == QLatin1String("libraryPaletteName")) {
+            if (it.value().metaType().id() != QMetaType::QString || it.value().toString().size() > 80)
+                return false;
+            for (const auto c : it.value().toString()) {
+                if (!c.isPrint())
+                    return false;
+            }
+        } else if (it.key() == QLatin1String("libraryPalette")) {
+            if (it.value().metaType().id() != QMetaType::QVariantMap || it.value().toMap().size() > 48)
+                return false;
+            const auto tokens = it.value().toMap();
+            static const QRegularExpression tokenName(QStringLiteral("^[a-z][a-z0-9_]{0,63}$"));
+            for (auto token = tokens.cbegin(); token != tokens.cend(); ++token) {
+                if (!tokenName.match(token.key()).hasMatch() || token.value().metaType().id() != QMetaType::QString
+                    || !QColor(token.value().toString()).isValid())
+                    return false;
+            }
         } else if (it.key() == QLatin1String("statusOrder")) {
             if (it.value().metaType().id() != QMetaType::QVariantList || it.value().toList().size() != statusIds.size())
                 return false;
@@ -365,6 +385,12 @@ bool AppearanceStore::validate(const QVariantMap& values, QVariantMap& result)
     }
     if (trayKeys.size() > 256)
         return false;
+    if (result.value(QStringLiteral("palette")).toString() == QLatin1String("library")) {
+        const auto tokens = result.value(QStringLiteral("libraryPalette")).toMap();
+        if (result.value(QStringLiteral("libraryPaletteName")).toString().trimmed().isEmpty()
+            || !tokens.contains(QStringLiteral("surface")) || !tokens.contains(QStringLiteral("primary")))
+            return false;
+    }
     // Keep every accepted setting document within the reader's size limit.
     return QJsonDocument(QJsonObject{{QStringLiteral("version"), 1},
                                      {QStringLiteral("settings"), QJsonObject::fromVariantMap(result)}})
@@ -489,6 +515,33 @@ bool AppearanceStore::setValue(const QString& key, const QVariant& value)
     next[key] = value.metaType().id() == qMetaTypeId<QJSValue>() ? value.value<QJSValue>().toVariant() : value;
     if (key == QLatin1String("material"))
         next[QStringLiteral("followSystemColorScheme")] = false;
+    return commit(next);
+}
+bool AppearanceStore::setLibraryPalette(const QString& name, const QVariantMap& tokens)
+{
+    static const QRegularExpression tokenName(QStringLiteral("^[a-z][a-z0-9_]{0,63}$"));
+    if (tokens.size() > 48)
+        return fail(tr("This palette has too many colors."));
+    QVariantMap colors;
+    for (auto token = tokens.cbegin(); token != tokens.cend(); ++token) {
+        if (!tokenName.match(token.key()).hasMatch())
+            return fail(tr("This palette contains an invalid color name."));
+        const QColor color =
+            token.value().value<QColor>().isValid() ? token.value().value<QColor>() : QColor(token.value().toString());
+        if (!color.isValid())
+            return fail(tr("This palette contains an invalid color."));
+        colors.insert(token.key(), color.name(QColor::HexRgb));
+    }
+    const QColor surface(colors.value(QStringLiteral("surface")).toString());
+    if (name.trimmed().isEmpty() || !colors.contains(QStringLiteral("primary")) || !surface.isValid())
+        return fail(tr("This palette needs a surface and a primary color."));
+    auto next = m_values;
+    next[QStringLiteral("palette")] = QStringLiteral("library");
+    next[QStringLiteral("libraryPaletteName")] = name.trimmed();
+    next[QStringLiteral("libraryPalette")] = colors;
+    next[QStringLiteral("followSystemColorScheme")] = false;
+    next[QStringLiteral("material")] =
+        surface.lightnessF() > .55 ? QStringLiteral("light") : next.value(QStringLiteral("darkMaterial"));
     return commit(next);
 }
 bool AppearanceStore::setColorMode(const QString& mode, bool systemDark)

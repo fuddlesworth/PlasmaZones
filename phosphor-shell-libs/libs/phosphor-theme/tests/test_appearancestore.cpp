@@ -14,6 +14,40 @@ class TestAppearanceStore : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void libraryPalettePreviewsPersistsAndValidates()
+    {
+        QTemporaryDir dir;
+        const auto path = dir.filePath(QStringLiteral("appearance.json"));
+        AppearanceStore store(path);
+        const auto original = store.values();
+        const QVariantMap colors{{QStringLiteral("surface"), QColor(QStringLiteral("#f5f1e8"))},
+                                 {QStringLiteral("surface_container_high"), QColor(QStringLiteral("#e5dccd"))},
+                                 {QStringLiteral("on_surface"), QColor(QStringLiteral("#252015"))},
+                                 {QStringLiteral("primary"), QColor(QStringLiteral("#765432"))},
+                                 {QStringLiteral("secondary"), QColor(QStringLiteral("#674d8c"))}};
+        QVERIFY(store.beginPreview());
+        QVERIFY(store.setLibraryPalette(QStringLiteral("Sand"), colors));
+        QCOMPARE(store.values().value(QStringLiteral("palette")).toString(), QStringLiteral("library"));
+        QCOMPARE(store.values().value(QStringLiteral("material")).toString(), QStringLiteral("light"));
+        QCOMPARE(store.palette().value(QStringLiteral("surface")).value<QColor>(), QColor(QStringLiteral("#f5f1e8")));
+        QCOMPARE(store.palette().value(QStringLiteral("card")).value<QColor>(), QColor(QStringLiteral("#e5dccd")));
+        QVERIFY(store.dirty());
+        QCOMPARE(AppearanceStore(path).values(), original);
+        store.revertPreview();
+        QCOMPARE(store.values(), original);
+        QVERIFY(store.setLibraryPalette(QStringLiteral("Sand"), colors));
+        QVERIFY(store.applyPreview());
+        store.endPreview();
+        QCOMPARE(AppearanceStore(path).values(), store.values());
+        const auto saved = store.values();
+        QVERIFY(!store.setLibraryPalette(QStringLiteral("Broken"),
+                                         {{QStringLiteral("surface"), QStringLiteral("#ffffff")}}));
+        QCOMPARE(store.values(), saved);
+        QVERIFY(!store.setValue(QStringLiteral("libraryPalette"),
+                                QVariantMap{{QStringLiteral("bad key"), QStringLiteral("#ffffff")}}));
+        QCOMPARE(store.values(), saved);
+    }
+
     void statusPreferencesDefaultsAndPartialVisibility()
     {
         const auto defaults = AppearanceStore::defaults();

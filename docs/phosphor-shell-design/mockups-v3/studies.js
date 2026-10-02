@@ -17,7 +17,7 @@ try {
   if (saved) for (const key of Object.keys(defaults)) {
     if(key.startsWith('tray')) { settings[key]=PhosphorTray.preferences(saved)[key]; continue; }
     if(key.startsWith('status')) { settings[key]=PhosphorStatusIcons.preferences(saved)[key]; continue; }
-    const choices = {statsStyle:['traces','meters','numbers'],statsMemoryUnit:['percent','used'],statsInterval:[1,2,5],palette:['spectrum','wallpaper','ember'],material:['glass','solid','light'],edge:['top','bottom'],density:['comfortable','compact'],visualizer:['ribbon','bars','halo','off'],lockLayout:['split','centered'],notificationGrouping:['app','time']};
+    const choices = {statsStyle:['traces','meters','numbers'],statsMemoryUnit:['percent','used'],statsInterval:[1,2,5],palette:['spectrum','wallpaper','ember','library'],material:['glass','solid','light'],edge:['top','bottom'],density:['comfortable','compact'],visualizer:['ribbon','bars','halo','off'],lockLayout:['split','centered'],notificationGrouping:['app','time']};
     if (choices[key]?.includes(saved[key])) settings[key] = saved[key];
     else if (typeof defaults[key] === 'boolean' && typeof saved[key] === 'boolean') settings[key] = saved[key];
     else if (key === 'radius' && Number.isFinite(saved[key])) settings[key] = Math.min(30,Math.max(4,saved[key]));

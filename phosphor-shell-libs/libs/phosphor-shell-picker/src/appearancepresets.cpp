@@ -32,6 +32,8 @@ bool saveJson(const QString& path, const QJsonObject& object, qsizetype maximum 
 QVariantMap AppearanceLibrary::scopedSettings(const QVariantMap& values, bool wallpaper, bool bar)
 {
     QStringList keys{QStringLiteral("palette"),
+                     QStringLiteral("libraryPaletteName"),
+                     QStringLiteral("libraryPalette"),
                      QStringLiteral("material"),
                      QStringLiteral("followSystemColorScheme"),
                      QStringLiteral("darkMaterial"),
@@ -92,10 +94,11 @@ QVariantList AppearanceLibrary::presets() const
         // Built-in styles preserve app visibility choices as well as user fonts, effects and wallpaper colors.
         for (const auto& key :
              {QStringLiteral("uiFont"), QStringLiteral("monoFont"), QStringLiteral("textScale"),
-              QStringLiteral("wallpaperColors"), QStringLiteral("surfacePacks"), QStringLiteral("surfaceEffect"),
-              QStringLiteral("desktopStyle"), QStringLiteral("trayIcons"), QStringLiteral("trayLimit"),
-              QStringLiteral("trayAttention"), QStringLiteral("trayOrder"), QStringLiteral("trayVisibility"),
-              QStringLiteral("statusOrder"), QStringLiteral("statusVisibility"), QStringLiteral("statusLimit"),
+              QStringLiteral("libraryPaletteName"), QStringLiteral("libraryPalette"), QStringLiteral("wallpaperColors"),
+              QStringLiteral("surfacePacks"), QStringLiteral("surfaceEffect"), QStringLiteral("desktopStyle"),
+              QStringLiteral("trayIcons"), QStringLiteral("trayLimit"), QStringLiteral("trayAttention"),
+              QStringLiteral("trayOrder"), QStringLiteral("trayVisibility"), QStringLiteral("statusOrder"),
+              QStringLiteral("statusVisibility"), QStringLiteral("statusLimit"),
               QStringLiteral("statusBatteryPercent")})
             scoped.remove(key);
         result.append(QVariantMap{{Id, id},

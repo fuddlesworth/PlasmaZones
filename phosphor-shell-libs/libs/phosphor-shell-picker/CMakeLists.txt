@@ -67,6 +67,7 @@ set(_phosphor_picker_qml_files
     qml/Phosphor/Picker/AppearanceWorkspace.qml
     qml/Phosphor/Picker/AppearanceWallpaper.qml
     qml/Phosphor/Picker/AppearanceStyle.qml
+    qml/Phosphor/Picker/AppearancePalettes.qml
     qml/Phosphor/Picker/AppearanceBar.qml
     qml/Phosphor/Picker/AppearancePresets.qml
     qml/Phosphor/Picker/AppearanceDialogs.qml

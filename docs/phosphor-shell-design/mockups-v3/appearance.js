@@ -15,10 +15,14 @@ window.PhosphorAppearance = (() => {
     {id:'graphite',name:'Fold',collection:'Abstract',description:'Light on a folded surface.',colors:['#a6b8c4','#a9abc0','#bba9bf','#ccb8b1'],size:'Scalable artwork'},
     {id:'linen',name:'First light',collection:'Abstract',description:'A pale canvas for your day.',colors:['#96afa9','#9eaec4','#c2a6b0','#d4bb98'],size:'Scalable artwork'}
   ];
+  const includedPalettes = [
+    {name:'Dark',builtIn:true,tokens:{surface:'#111d32',surface_container_high:'#263650',background:'#0c1729',on_surface:'#e8eef9',on_surface_variant:'#a4b4cc',outline:'#7185a1',primary:'#41d4e8',secondary:'#6e9cfd',tertiary:'#b68aee',brand_stop_3:'#f390b3'}},
+    {name:'Light',builtIn:true,tokens:{surface:'#eef3ff',surface_container_high:'#dce5fb',background:'#f6f9ff',on_surface:'#0b1730',on_surface_variant:'#475569',outline:'#94a3b8',primary:'#3b82f6',secondary:'#7c3aed',tertiary:'#0ea5e9',brand_stop_3:'#d6538b'}}
+  ];
   const widgets = {launcher:['Launcher','grid'],focus:['Focused app','terminal'],media:['Media','music'],workspaces:['Workspaces','grid'],stats:['System stats','cpu'],tray:['System tray','tray-icon'],clock:['Date & time','sun'],notifications:['Notifications','bell'],status:['Quick settings','wifi'],appearance:['Appearance','picture'],power:['Power','power']};
-  const initial = {display:'main',linked:false,displays:{main:{wall:'spectrum',fit:'fill'},secondary:{wall:'iris',fit:'fill'}},colorSource:'spectrum',accent:1,inset:16,font:'Noto Sans',numberFont:'monospace',interfaceScale:100,desktopStyle:true,surfaceEffect:'none',regions:{left:['launcher','focus','media'],center:['workspaces'],right:['tray','stats','notifications','status','clock','power']}};
+  const initial = {display:'main',linked:false,displays:{main:{wall:'spectrum',fit:'fill'},secondary:{wall:'iris',fit:'fill'}},colorSource:'spectrum',libraryPaletteName:'',libraryPalette:{},accent:1,inset:16,font:'Noto Sans',numberFont:'monospace',interfaceScale:100,desktopStyle:true,surfaceEffect:'none',regions:{left:['launcher','focus','media'],center:['workspaces'],right:['tray','stats','notifications','status','clock','power']}};
   const styleKeys = ['palette','material','density','radius','gap','glow'];
-  const options = {palette:['spectrum','wallpaper','ember'],material:['glass','solid','light'],density:['comfortable','compact'],edge:['top','bottom'],visualizer:['ribbon','bars','halo','off'],lockLayout:['split','centered'],notificationGrouping:['app','time']};
+  const options = {palette:['spectrum','wallpaper','ember','library'],material:['glass','solid','light'],density:['comfortable','compact'],edge:['top','bottom'],visualizer:['ribbon','bars','halo','off'],lockLayout:['split','centered'],notificationGrouping:['app','time']};
 
   const paletteRoles = ['c1','c2','c3','c4','bg','card','recess','text','muted','outline','shadow','glow','stage-shade','modal-shade'];
   const rgb = color => [1,3,5].map(at=>parseInt(color.slice(at,at+2),16)/255);
@@ -67,12 +71,13 @@ window.PhosphorAppearance = (() => {
   }
 
   function create({root,desktop,icon,getSettings,setSettings,presets,onClose,onStatusIcons,notify}) {
-    let data=copy(initial),applied,baseline,active=false,peek=false,page='wallpaper',filter='All',query='',dialog=null,pendingExit=null,skipGuard=false,chosenWidget='workspaces',dragged='',message='',saved=[],uploads=[];
+    let data=copy(initial),applied,baseline,active=false,peek=false,page='wallpaper',filter='All',query='',paletteFilter='all',paletteQuery='',dialog=null,pendingExit=null,skipGuard=false,chosenWidget='workspaces',dragged='',message='',saved=[],uploads=[],addedPalettes=[];
     const key='phosphor-appearance-study-v1';
     try {
       const stored=JSON.parse(localStorage.getItem(key)||'null');
       if(stored) {
         data=validateData(stored.data);saved=(stored.saved||[]).map(validatePreset);
+        addedPalettes=(stored.palettes||[]).map(validatePalette).map(p=>({...p,builtIn:false}));
         if(stored.widgetsVersion!==2&&!Object.values(data.regions).flat().includes('stats'))data.regions.right.unshift('stats');
       }
     } catch { /* Malformed or unavailable storage starts with the defaults. */ }
@@ -89,6 +94,14 @@ window.PhosphorAppearance = (() => {
     const range=(id,label,min,max,value,unit)=>`<label class="ap-field ap-range"><span>${label}<output data-ap-output="${id}">${value}${unit}</output></span><input type="range" data-ap-setting="${id}" aria-label="${label}" min="${min}" max="${max}" value="${value}"></label>`;
     const sectionTitle=(name,description='')=>`<div class="ap-section-title"><h3>${name}</h3>${description?`<p>${description}</p>`:''}</div>`;
 
+    function validatePalette(value) {
+      const tokens=value?.tokens;
+      if(typeof value?.name!=='string'||!value.name.trim()||value.name.length>80||/[\x00-\x1f\x7f]/.test(value.name)||!tokens||typeof tokens!=='object'||Array.isArray(tokens)||Object.keys(tokens).length>48)throw Error('Choose a palette with a name and valid colors.');
+      for(const [name,color] of Object.entries(tokens))if(!/^[a-z][a-z0-9_]{0,63}$/.test(name)||typeof color!=='string'||!/^#[0-9a-f]{6}$/i.test(color))throw Error('Palette colors must use six-digit hex values.');
+      if(!tokens.surface||!tokens.primary)throw Error('A palette needs surface and primary colors.');
+      return {name:value.name.trim(),tokens:copy(tokens)};
+    }
+
     function validateData(value) {
       if(!value||typeof value!=='object')throw Error('Missing appearance settings.');
       const v=copy(initial);
@@ -101,8 +114,12 @@ window.PhosphorAppearance = (() => {
         if(!d||!walls.some(w=>w.id===d.wall)||!['fill','fit','stretch','center'].includes(d.fit))throw Error('This preset needs a wallpaper from the bundled collection.');
         v.displays[id]=copy(d);
       }
-      if(!['spectrum','wallpaper','ember'].includes(value.colorSource))throw Error('Unknown color source.');
+      if(!options.palette.includes(value.colorSource))throw Error('Unknown color source.');
       v.colorSource=value.colorSource;
+      if(value.colorSource==='library') {
+        const selected=validatePalette({name:value.libraryPaletteName,tokens:value.libraryPalette});
+        v.libraryPaletteName=selected.name;v.libraryPalette=selected.tokens;
+      }
       for(const [id,min,max] of [['accent',0,3],['inset',6,30],['interfaceScale',90,115]]) {
         if(!Number.isInteger(value[id])||value[id]<min||value[id]>max)throw Error('An appearance value is outside its allowed range.');
         v[id]=value[id];
@@ -138,7 +155,7 @@ window.PhosphorAppearance = (() => {
       // Imported image files are session previews, never silently copied into a preset.
       const storable=copy(applied);
       for(const id of ['main','secondary'])if(!walls.some(w=>w.id===storable.displays[id].wall))storable.displays[id]=copy(initial.displays[id]);
-      try { localStorage.setItem(key,JSON.stringify({data:storable,saved,widgetsVersion:2})); }
+      try { localStorage.setItem(key,JSON.stringify({data:storable,saved,palettes:addedPalettes,widgetsVersion:2})); }
       catch { notify('Browser storage is full. Your changes remain in this tab.'); }
     }
 
@@ -149,6 +166,11 @@ window.PhosphorAppearance = (() => {
       desktop.dataset.apDesktopStyle=data.desktopStyle;desktop.dataset.apEffect=data.surfaceEffect;
       for(const role of paletteRoles)desktop.style.removeProperty(`--${role}`);
       if(data.colorSource==='wallpaper')for(const [role,color] of Object.entries(wallpaperPalette(wall.colors,s)))desktop.style.setProperty(`--${role}`,color);
+      if(data.colorSource==='library') {
+        const t=data.libraryPalette;
+        const roles={c1:t.brand_stop_0||t.primary,c2:t.brand_stop_1||t.secondary||t.primary,c3:t.brand_stop_2||t.tertiary||t.primary,c4:t.brand_stop_3||t.primary,bg:t.surface,card:t.surface_container_high||t.surface_container||t.surface,recess:t.background||t.surface,text:t.on_surface||'#ffffff',muted:t.on_surface_variant||t.on_surface||'#ffffff',outline:t.outline||t.on_surface_variant||t.on_surface};
+        for(const [role,color] of Object.entries(roles))desktop.style.setProperty(`--${role}`,color);
+      }
       desktop.style.setProperty('--ap-accent',`var(--c${data.accent+1})`);
       desktop.style.setProperty('--ap-inset',`${data.inset}px`);
       desktop.style.setProperty('--ap-font',data.font);
@@ -202,6 +224,7 @@ window.PhosphorAppearance = (() => {
       return `<div class="ap-style-grid"><section class="ap-style-demo"><div><span class="ap-kicker">BUILT AROUND YOUR WINDOWS</span><h3>Find your balance.</h3><p>Color, texture and a little breathing room.</p></div><div class="ap-demo-stack"><div class="ap-demo-window"><div>${icon('terminal')} <span>Shell.qml</span><i></i><b>×</b></div><p>Light defines the edges.</p><span>Everything else gets room to breathe.</span><div class="ap-demo-controls"><span>Comfortable</span><span>Focused</span></div></div><div class="ap-demo-osd">${icon('volume')}<i></i><b>64</b></div></div></section>
       <section class="ap-setting-card">${sectionTitle('Color field','Four related colors carry through the shell.')}
         <div class="ap-color-options">${[['spectrum','Phosphor','The original spectrum'],['wallpaper','Wallpaper','Drawn from your background'],['ember','Warm','Honey, clay and rose']].map(([id,name,desc])=>button(`source:${id}`,`<span class="ap-color-strip ap-color-${id}">${id==='wallpaper'?swatches():''}</span><b>${name}</b><small>${desc}</small>`,`class="ap-color-option" aria-pressed="${data.colorSource===id}"`)).join('')}</div>
+        ${button('page:palettes',`Browse palettes ${icon('arrow-right')}`,'class="ap-text-link"')}
         <div class="ap-accent-row"><span>Focus accent</span><div>${[0,1,2,3].map(i=>button(`accent:${i}`,data.accent===i?icon('check'):'',`style="--swatch:var(--c${i+1})" aria-label="Use color ${i+1} for focus" aria-pressed="${data.accent===i}"`)).join('')}</div></div>
       </section>
       <section class="ap-setting-card">${sectionTitle('Material','Give each surface its own weight.')}<div class="ap-material-options">${[['glass','Glass','Tinted and translucent'],['solid','Solid','Quiet and opaque'],['light','Paper','Light and softly shaded']].map(([id,name,desc])=>button(`setting:material:${id}`,`<div class="ap-material-art ap-material-${id}"><i></i><i></i></div><b>${name}</b><small>${desc}</small>`,`aria-pressed="${s.material===id}"`)).join('')}</div>${toggle('glow','Edge glow','A soft halo around focused surfaces.',s.glow)}</section>
@@ -209,6 +232,16 @@ window.PhosphorAppearance = (() => {
       <section class="ap-setting-card">${sectionTitle('Type & motion')}${select('font','Interface font',[['Noto Sans','Noto Sans'],['sans-serif','System sans'],['serif','System serif']],data.font)}${select('numberFont','Numbers & time',[['monospace','System monospace'],['Noto Sans','Noto Sans']],data.numberFont)}${range('interfaceScale','Text size',90,115,data.interfaceScale,'%')}${toggle('motion','Animations','Gentle transitions between states.',s.motion)}</section>
       <section class="ap-setting-card ap-wide">${sectionTitle('Other surfaces','Keep the same character throughout your desktop.')}<div class="ap-surface-options"><div>${select('visualizer','Media visualizer',[['ribbon','Ribbon'],['bars','Bars'],['halo','Halo'],['off','Off']],s.visualizer)}${select('notificationGrouping','Notification organization',[['app','Group by application'],['time','Chronological']],s.notificationGrouping)}${select('lockLayout','Lock screen layout',[['split','Clock beside unlock card'],['centered','Centered']],s.lockLayout)}</div><div>${toggle('lockMedia','Media on lock screen','Show track information while locked.',s.lockMedia)}${toggle('notificationPreviews','Notification previews','Show message text and pictures.',s.notificationPreviews)}${toggle('lockNotifications','Lock screen notification count','Keep message content private.',s.lockNotifications)}</div></div></section>
       <section class="ap-setting-card ap-wide">${sectionTitle('Surface effects','Optional details for a more expressive desktop.')}<div class="ap-surface-options"><div>${select('surfaceEffect','Effect pack',[['none','None · clean surfaces'],['phosphor-glass','Phosphor Glass · soft sweep'],['phosphor-motes','Phosphor Motes · drifting light']],data.surfaceEffect)}<p class="ap-hint">Effects follow your palette. Turning them off keeps your colors and material.</p></div><div>${toggle('desktopStyle','Match desktop windows','Use the shell’s frame colors and corners.',data.desktopStyle)}<div class="ap-effect-sample"><i></i><i></i><span>Surface preview</span></div></div></div></section></div>`;
+    }
+
+    function palettesPage() {
+      const entries=includedPalettes.concat(addedPalettes).map((p,index)=>({...p,index})).filter(p=>(paletteFilter==='all'||(paletteFilter==='included')===p.builtIn)&&p.name.toLocaleLowerCase().includes(paletteQuery.toLocaleLowerCase()));
+      const strips=tokens=>[tokens.surface,tokens.surface_container_high||tokens.surface,tokens.primary,tokens.secondary||tokens.primary,tokens.tertiary||tokens.primary].map(color=>`<i style="background:${esc(color)}"></i>`).join('');
+      return `<div class="ap-palette-page"><div class="ap-palette-intro"><div>${sectionTitle('Color palettes','Choose a palette to preview it across the shell. Apply changes when you are ready.')}</div>${button('add-palette',`${icon('folder')} Add palette`,'class="ap-secondary"')}</div>
+        <div class="ap-library-toolbar"><nav aria-label="Palette collection">${[['all','All'],['included','Included'],['added','Added']].map(([id,label])=>button(`palette-filter:${id}`,label,`aria-pressed="${paletteFilter===id}"`)).join('')}</nav><label class="ap-search">${icon('search')}<input id="ap-palette-search" aria-label="Search palettes" placeholder="Search palettes" value="${esc(paletteQuery)}"></label></div>
+        ${data.colorSource==='library'?`<div class="ap-palette-current"><span>Current palette <b>${esc(data.libraryPaletteName)}</b></span><span class="ap-palette-swatches">${strips(data.libraryPalette)}</span></div>`:''}
+        <div class="ap-palette-grid">${entries.map(p=>`<button class="ap-palette-card" data-ap="palette:${p.index}" aria-label="Preview ${esc(p.name)} palette" aria-pressed="${data.colorSource==='library'&&data.libraryPaletteName===p.name}"><span class="ap-palette-swatches">${strips(p.tokens)}</span><span class="ap-palette-card-label"><b>${esc(p.name)}</b><small>${p.builtIn?'Included':'Added'}</small></span><span class="ap-palette-card-status">${data.colorSource==='library'&&data.libraryPaletteName===p.name?'Previewing':icon('arrow-right')}</span></button>`).join('')||'<div class="ap-palette-empty">No palettes match your search.</div>'}</div>
+        <div class="ap-import-card"><span class="ap-import-icon">${icon('folder')}</span><div><h3>Add your own palettes</h3><p>Select a palette JSON file to preview it here. This browser mock keeps added palettes in local storage.</p></div>${button('add-palette','Choose JSON','class="ap-secondary"')}</div></div>`;
     }
 
     function barPage() {
@@ -256,16 +289,16 @@ window.PhosphorAppearance = (() => {
       const focusId=document.activeElement?.id;
       const focusAction=focusKey||document.activeElement?.dataset?.ap;
       const field=document.activeElement?.dataset?.apSetting;
-      const selection=focusId==='ap-search'?[document.activeElement.selectionStart,document.activeElement.selectionEnd]:null;
-      const headings={wallpaper:['Wallpaper','A different view. The same place to work.'],style:['Style','Give your shell a character of its own.'],bar:['Bar','Your everyday controls, where you want them.'],presets:['Presets','Good starting points. Space for your own.']};
+      const selection=['ap-search','ap-palette-search'].includes(focusId)?[document.activeElement.selectionStart,document.activeElement.selectionEnd]:null;
+      const headings={wallpaper:['Wallpaper','A different view. The same place to work.'],style:['Style','Give your shell a character of its own.'],palettes:['Palettes','Browse colors for your shell.'],bar:['Bar','Your everyday controls, where you want them.'],presets:['Presets','Good starting points. Space for your own.']};
       root.className=peek?'ap-root ap-peeking':'ap-root';
       desktop.classList.toggle('ap-peek',peek);
       desktop.classList.toggle('ap-open',!peek);
       root.innerHTML=peek?`<div class="ap-peek-panel material"><span class="ap-peek-dot"></span><div><b>Previewing ${esc(current().name)}</b><small>${data.linked?'Both displays':data.display==='main'?'Main display':'Secondary display'} · ${dirty()?'Not applied yet':'Current appearance'}</small></div>${button('back',`Back to Appearance`,'class="ap-secondary"')}${button('apply',`Apply look`,'class="ap-primary"')}</div>`:
-        `<div class="ap-window material" role="dialog" aria-modal="true" aria-label="Appearance"><aside class="ap-sidebar"><div class="ap-brand"><span class="phosphor-mark" aria-hidden="true"></span><div>PHOSPHOR<small>Make it yours.</small></div></div><nav aria-label="Appearance section">${[['wallpaper','Wallpaper','picture'],['style','Style','sun'],['bar','Bar','grid'],['presets','Presets','folder']].map(([id,label,symbol])=>button(`page:${id}`,`${icon(symbol)}${label}`,`aria-current="${page===id?'page':'false'}"`)).join('')}</nav><div class="ap-sidebar-bottom"><div class="ap-signature" aria-hidden="true"><i></i><i></i><i></i></div><p>Same Phosphor.<br>Your expression.</p><span class="ap-kicker">PREVIEW IT. MAKE IT YOURS.</span></div></aside>
-        <main class="ap-main"><header class="ap-heading"><div><h2>${headings[page][0]}</h2><p>${headings[page][1]}</p></div><div>${page==='wallpaper'?button('add-images',`${icon('picture')} Add images`,'class="ap-secondary"'):''}${button('close',icon('close-icon'),'class="ap-icon-button" aria-label="Close Appearance"')}</div></header><div class="ap-content">${page==='wallpaper'?wallpaperPage():page==='style'?stylePage():page==='bar'?barPage():presetsPage()}</div></main>
+        `<div class="ap-window material" role="dialog" aria-modal="true" aria-label="Appearance"><aside class="ap-sidebar"><div class="ap-brand"><span class="phosphor-mark" aria-hidden="true"></span><div>PHOSPHOR<small>Make it yours.</small></div></div><nav aria-label="Appearance section">${[['wallpaper','Wallpaper','picture'],['style','Style','sun'],['palettes','Palettes','tune'],['bar','Bar','grid'],['presets','Presets','folder']].map(([id,label,symbol])=>button(`page:${id}`,`${icon(symbol)}${label}`,`aria-current="${page===id?'page':'false'}"`)).join('')}</nav><div class="ap-sidebar-bottom"><div class="ap-signature" aria-hidden="true"><i></i><i></i><i></i></div><p>Same Phosphor.<br>Your expression.</p><span class="ap-kicker">PREVIEW IT. MAKE IT YOURS.</span></div></aside>
+        <main class="ap-main"><header class="ap-heading"><div><h2>${headings[page][0]}</h2><p>${headings[page][1]}</p></div><div>${page==='wallpaper'?button('add-images',`${icon('picture')} Add images`,'class="ap-secondary"'):''}${button('close',icon('close-icon'),'class="ap-icon-button" aria-label="Close Appearance"')}</div></header><div class="ap-content">${page==='wallpaper'?wallpaperPage():page==='style'?stylePage():page==='palettes'?palettesPage():page==='bar'?barPage():presetsPage()}</div></main>
         <footer class="ap-footer"><div class="ap-status" role="status"><i class="${dirty()?'pending':''}"></i><span><b>${esc(message)||(dirty()?'Previewing changes':'Your current look')}</b><small>${dirty()?'Apply when it feels right.':'Changes preview here before you apply them.'}</small></span></div><div>${button('peek',`${icon('grid')} View desktop`,'class="ap-text-link"')}${button('revert','Revert',`class="ap-secondary" ${dirty()?'':'disabled'}`)}${button('apply','Apply changes',`class="ap-primary" ${dirty()?'':'disabled'}`)}</div></footer></div>`;
-      root.insertAdjacentHTML('beforeend',`<input class="hidden" id="ap-image-input" type="file" accept="image/png,image/jpeg,image/webp" multiple><input class="hidden" id="ap-import-input" type="file" accept="application/json,.json">${modal()}`);
+      root.insertAdjacentHTML('beforeend',`<input class="hidden" id="ap-image-input" type="file" accept="image/png,image/jpeg,image/webp" multiple><input class="hidden" id="ap-import-input" type="file" accept="application/json,.json"><input class="hidden" id="ap-palette-input" type="file" accept="application/json,.json">${modal()}`);
       const content=root.querySelector('.ap-content');if(content)content.scrollTop=scroll;
       const candidate=focusAction?root.querySelector(`[data-ap="${focusAction}"]`):focusId?root.querySelector(`#${focusId}`):field?root.querySelector(`[data-ap-setting="${field}"]`):null;
       if(candidate){candidate.focus({preventScroll:true});if(selection)candidate.setSelectionRange(...selection);}
@@ -284,7 +317,7 @@ window.PhosphorAppearance = (() => {
     function usePreset() {
       const p=copy(dialog.preset),s={...getSettings(),...p.settings};
       if(dialog.imported){const name=root.querySelector('#ap-import-name').value.trim();if(!name||saved.some(item=>item.name.toLowerCase()===name.toLowerCase())){root.querySelector('#ap-import-error').textContent='Choose a unique name for this preset.';root.querySelector('#ap-import-name').focus();return;}p.name=name;}
-      for(const k of ['colorSource','accent','font','numberFont','interfaceScale','desktopStyle','surfaceEffect'])data[k]=p.appearance[k];
+      for(const k of ['colorSource','libraryPaletteName','libraryPalette','accent','font','numberFont','interfaceScale','desktopStyle','surfaceEffect'])data[k]=copy(p.appearance[k]);
       if(root.querySelector('#ap-load-wall')?.checked){data.displays=copy(p.appearance.displays);data.linked=p.appearance.linked;}
       if(root.querySelector('#ap-load-bar')?.checked){data.regions=copy(p.appearance.regions);data.inset=p.appearance.inset;s.edge=p.bar.edge;s.media=p.bar.media;Object.assign(s,PhosphorStats.preferences(p.bar.stats),PhosphorTray.preferences(p.bar.tray));}
       if(dialog.imported){saved.push(copy(p));persist();}
@@ -297,6 +330,7 @@ window.PhosphorAppearance = (() => {
       const [action,...parts]=b.dataset.ap.split(':'),value=parts.join(':');
       if(action==='page'){page=value;query='';message='';const content=root.querySelector('.ap-content');if(content)content.scrollTop=0;draw(`page:${value}`);}
       if(action==='filter'){filter=value;draw(`filter:${value}`);}
+      if(action==='palette-filter'){paletteFilter=value;draw(`palette-filter:${value}`);}
       if(action==='clear-search'){query='';filter='All';draw();}
       if(action==='wall')chooseWall(value);
       if(action==='close')onClose();
@@ -305,6 +339,13 @@ window.PhosphorAppearance = (() => {
       if(action==='apply'){apply();if(peek){peek=false;draw();focus();}}
       if(action==='revert')revert();
       if(action==='source'){data.colorSource=value;const s={...getSettings(),palette:value};setSettings(s,false);}
+      if(action==='palette') {
+        const selected=includedPalettes.concat(addedPalettes)[Number(value)];
+        if(selected) {
+          data.colorSource='library';data.libraryPaletteName=selected.name;data.libraryPalette=copy(selected.tokens);
+          setSettings({...getSettings(),palette:'library',material:luminance(selected.tokens.surface)>.35?'light':'glass'},false);
+        }
+      }
       if(action==='accent'){data.accent=Number(value);refresh(b.dataset.ap);}
       if(action==='setting'){const [key,val]=parts;setSettings({...getSettings(),[key]:val},false);}
       if(action==='toggle') {
@@ -327,6 +368,7 @@ window.PhosphorAppearance = (() => {
       if(action==='delete')showDialog({type:'delete',preset:library().find(p=>p.id===value),index:Number(value.slice(6))});
       if(action==='confirm-delete'){saved.splice(dialog.index,1);persist();closeDialog();}
       if(action==='import')root.querySelector('#ap-import-input').click();
+      if(action==='add-palette')root.querySelector('#ap-palette-input').click();
       if(action==='add-images')root.querySelector('#ap-image-input').click();
       if(action==='cancel-dialog'||action==='keep-editing'){pendingExit=null;closeDialog();}
       if(action==='discard'||action==='apply-close'){const next=pendingExit;dialog=null;pendingExit=null;if(action==='discard')revert();else apply();skipGuard=true;if(next)next();else onClose();}
@@ -366,6 +408,16 @@ window.PhosphorAppearance = (() => {
         try {if(input.files[0].size>1000000)throw Error('This preset is too large. Choose a JSON file smaller than 1 MB.');showDialog({type:'preset',preset:validatePreset(JSON.parse(await input.files[0].text())),imported:true});}
         catch(error){showDialog({type:'error',error:error instanceof SyntaxError?'The file is not valid JSON. Choose an exported appearance preset.':error.message});}
       }
+      if(input.id==='ap-palette-input'&&input.files[0]) {
+        try {
+          const file=input.files[0];
+          if(file.size>1000000)throw Error('Choose a palette JSON file smaller than 1 MB.');
+          const value=JSON.parse(await file.text());
+          const selected=validatePalette({name:file.name.replace(/\.json$/i,''),tokens:value?.tokens||value});
+          if(includedPalettes.concat(addedPalettes).some(p=>p.name.toLocaleLowerCase()===selected.name.toLocaleLowerCase()))throw Error('Choose a palette with a different name.');
+          addedPalettes.push({...selected,builtIn:false});persist();paletteFilter='added';paletteQuery='';message='Palette added to your collection';draw();
+        } catch(error){showDialog({type:'error',error:error instanceof SyntaxError?'The file is not valid JSON. Choose a palette JSON file.':error.message});}
+      }
       if(input.id==='ap-image-input') {
         try {
           for(const file of [...input.files].slice(0,20)) {
@@ -381,6 +433,7 @@ window.PhosphorAppearance = (() => {
     root.addEventListener('input',event=>{
       event.stopPropagation();const input=event.target;
       if(input.id==='ap-search'){query=input.value;draw();}
+      if(input.id==='ap-palette-search'){paletteQuery=input.value;draw();}
       // Update the live scene without replacing the slider under the pointer.
       if(input.type==='range'&&input.dataset.apSetting){
         const id=input.dataset.apSetting,value=Number(input.value);
@@ -402,8 +455,8 @@ window.PhosphorAppearance = (() => {
     return {
       focus,
       wallpaperSummary(){return {name:current().name,display:data.display==='main'?'Main display':'Secondary display',art:artwork(current())};},
-      openPage(value){if(!['wallpaper','style','bar','presets'].includes(value))return;page=value;if(active){draw();focus();}},
-      syncSettings(value){data.colorSource=value.palette;},
+      openPage(value){if(!['wallpaper','style','palettes','bar','presets'].includes(value))return;page=value;if(active){draw();focus();}},
+      syncSettings(value){data.colorSource=value.palette;if(value.palette==='library'&&!data.libraryPaletteName){data.libraryPaletteName=includedPalettes[0].name;data.libraryPalette=copy(includedPalettes[0].tokens);}},
       render(open) {
         if(open&&!active){active=true;baseline=snapshot();peek=false;message='';}
         else if(!open&&active){active=false;peek=false;dialog=null;baseline=null;desktop.classList.remove('ap-open','ap-peek');root.className='hidden';root.replaceChildren();}

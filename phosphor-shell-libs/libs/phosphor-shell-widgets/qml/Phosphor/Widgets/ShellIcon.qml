@@ -38,6 +38,8 @@ Item {
             return '<path d="M6 3 H18 L22 14 V21 H2 V14 Z M2 14 H22 M17 18 H18"/>';
         if (source === "preferences-system")
             return '<path d="M3 7 H21 M3 17 H21"/><circle cx="8" cy="7" r="3" fill="none"/><circle cx="16" cy="17" r="3" fill="none"/>';
+        if (source === "color-palette")
+            return '<path d="M12 3 C7 3 3 7 3 12 C3 17 7 21 12 21 C14.3 21 15.5 19.8 15.5 18.3 C15.5 17.3 14.8 16.6 14.8 15.9 C14.8 15.1 15.5 14.5 16.4 14.5 H18 C19.8 14.5 21 13.3 21 11.5 C21 6.7 17.2 3 12 3 Z"/><circle cx="8" cy="10" r="1"/><circle cx="12" cy="7" r="1"/><circle cx="16" cy="9" r="1"/><circle cx="9" cy="15" r="1"/>';
         if (source === "utilities-system-monitor")
             return '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21 H16 M12 17 V21 M5 12 L8 9 L11 13 L15 7 L19 10"/>';
         if (source === "preferences-desktop-wallpaper" || source === "image-x-generic")

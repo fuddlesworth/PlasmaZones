@@ -74,4 +74,30 @@ TestCase {
         for (let i = 0; i < stops.length; ++i)
             verify(Spectrum.focus !== stops[i], "focus is not a hue on the axis");
     }
+
+    function test_library_palette_updates_named_theme_colors() {
+        const original = Theme.primary;
+        verify(AppearanceStore.beginPreview());
+        try {
+            verify(AppearanceStore.setLibraryPalette("Theme test", {
+                surface: "#202028",
+                primary: "#ff6633",
+                secondary: "#88bbcc"
+            }));
+            compare(Theme.primary, "#ff6633");
+            compare(Theme.secondary, "#88bbcc");
+            compare(Theme.background, "#202028");
+            compare(Appearance.light, false);
+            verify(AppearanceStore.setLibraryPalette("Light test", {
+                surface: "#f6f7f8",
+                primary: "#335577"
+            }));
+            compare(Theme.background, "#f6f7f8");
+            compare(Appearance.light, true);
+            AppearanceStore.revertPreview();
+            compare(Theme.primary, original);
+        } finally {
+            AppearanceStore.endPreview();
+        }
+    }
 }

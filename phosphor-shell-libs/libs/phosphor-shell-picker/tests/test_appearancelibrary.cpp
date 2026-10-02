@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 #include <PhosphorShellPicker/AppearanceLibrary.h>
 #include <PhosphorTheme/AppearanceStore.h>
+#include <QColor>
 #include <QFile>
 #include <QQmlEngine>
 #include <QImage>
@@ -15,6 +16,27 @@ class TestAppearanceLibrary : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void libraryPaletteTravelsWithLookWithoutItsSourceFile()
+    {
+        QTemporaryDir dir;
+        const auto path = dir.filePath(QStringLiteral("appearance.json"));
+        AppearanceStore store(path);
+        AppearanceLibrary library(&store, dir.filePath(QStringLiteral("library")));
+        const QVariantMap tokens{{QStringLiteral("surface"), QStringLiteral("#181b29")},
+                                 {QStringLiteral("primary"), QStringLiteral("#e6a361")}};
+        QVERIFY(store.setLibraryPalette(QStringLiteral("Evening"), tokens));
+        QVERIFY(library.savePreset(QStringLiteral("Evening look"), false, false));
+        const auto id = library.presets().last().toMap().value(QStringLiteral("id")).toString();
+        const auto exported = QUrl::fromLocalFile(dir.filePath(QStringLiteral("evening.json")));
+        QVERIFY(library.exportPreset(id, exported));
+        QVERIFY(store.setValue(QStringLiteral("palette"), QStringLiteral("spectrum")));
+        QVERIFY(library.inspectImport(exported));
+        QVERIFY(library.previewPreset(QStringLiteral("imported"), false, false));
+        QCOMPARE(store.values().value(QStringLiteral("palette")).toString(), QStringLiteral("library"));
+        QCOMPARE(store.values().value(QStringLiteral("libraryPaletteName")).toString(), QStringLiteral("Evening"));
+        QCOMPARE(store.palette().value(QStringLiteral("surface")).value<QColor>(), QColor(QStringLiteral("#181b29")));
+    }
+
     void statusPreferencesTravelOnlyWithTheBarPreset()
     {
         QTemporaryDir dir;

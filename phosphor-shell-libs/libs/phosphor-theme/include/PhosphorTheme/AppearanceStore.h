@@ -62,6 +62,7 @@ public:
     QVariantMap palette() const;
     Q_INVOKABLE QVariantMap paletteFor(const QVariantMap& settings) const;
     Q_INVOKABLE bool setValue(const QString& key, const QVariant& value);
+    Q_INVOKABLE bool setLibraryPalette(const QString& name, const QVariantMap& tokens);
     bool setColorMode(const QString& mode, bool systemDark);
     bool updateSystemColorScheme(bool dark);
     Q_INVOKABLE bool moveWidget(const QString& id, const QString& region, int index = -1);

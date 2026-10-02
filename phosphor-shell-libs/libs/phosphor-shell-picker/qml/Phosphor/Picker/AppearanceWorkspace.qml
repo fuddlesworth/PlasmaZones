@@ -29,6 +29,12 @@ FocusScope {
             icon: "preferences-desktop-theme"
         },
         {
+            id: "palettes",
+            title: qsTr("Palettes"),
+            description: qsTr("Browse colors for your shell."),
+            icon: "color-palette"
+        },
+        {
             id: "bar",
             title: qsTr("Bar"),
             description: qsTr("The things you reach for, right where you want them."),
@@ -349,7 +355,7 @@ FocusScope {
             id: pageLoader
             width: viewport.width
             height: item ? item.implicitHeight : 0
-            sourceComponent: root.controller.page === "style" ? stylePage : root.controller.page === "bar" ? barPage : root.controller.page === "presets" ? presetsPage : wallpaperPage
+            sourceComponent: root.controller.page === "style" ? stylePage : root.controller.page === "palettes" ? palettesPage : root.controller.page === "bar" ? barPage : root.controller.page === "presets" ? presetsPage : wallpaperPage
             onLoaded: root.restoreScroll()
         }
     }
@@ -364,6 +370,10 @@ FocusScope {
         AppearanceStyle {
             controller: root.controller
         }
+    }
+    Component {
+        id: palettesPage
+        AppearancePalettes {}
     }
     Component {
         id: barPage

@@ -60,6 +60,27 @@ void tintWallpaper(ShellPalette& p, const QVariantMap& settings)
     for (const auto& color : colors)
         p.stops.append(readable(QColor(color.toString()), backgrounds, light));
 }
+void applyLibraryPalette(ShellPalette& p, const QVariantMap& settings)
+{
+    const auto tokens = settings.value(QStringLiteral("libraryPalette")).toMap();
+    const auto color = [&tokens](const char* key, const QColor& fallback) {
+        const QColor value(tokens.value(QString::fromLatin1(key)).toString());
+        return value.isValid() ? value : fallback;
+    };
+    p.surface = color("surface", p.surface);
+    p.card = color("surface_container_high", color("surface_container", p.card));
+    p.recess = color("background", p.recess);
+    const bool light = luminance(p.surface) > .35;
+    const QList<QColor> backgrounds{p.surface, p.card, p.recess};
+    p.text = readable(color("on_surface", p.text), backgrounds, light);
+    p.muted = readable(color("on_surface_variant", p.muted), backgrounds, light);
+    p.outline = color("outline", p.outline);
+    p.outline.setAlphaF(light ? .24 : .2);
+    const std::array<const char*, 4> brand{"brand_stop_0", "brand_stop_1", "brand_stop_2", "brand_stop_3"};
+    const std::array<const char*, 4> accents{"primary", "secondary", "tertiary", "primary"};
+    for (int i = 0; i < 4; ++i)
+        p.stops[i] = readable(color(brand[i], color(accents[i], p.stops[i])), backgrounds, light);
+}
 }
 
 ShellPalette ShellPalette::fromSettings(const QVariantMap& settings)
@@ -104,6 +125,8 @@ ShellPalette ShellPalette::fromSettings(const QVariantMap& settings)
         p.stops.append(QColor(color));
     if (wallpaper)
         tintWallpaper(p, settings);
+    else if (palette == QLatin1String("library"))
+        applyLibraryPalette(p, settings);
     return p;
 }
 QVariantMap ShellPalette::toVariant() const

@@ -242,11 +242,19 @@ GridLayout {
         RowLayout {
             Layout.fillWidth: true
             spacing: 7
+            ShellButton {
+                text: qsTr("Browse palettes")
+                iconName: "color-palette"
+                flat: true
+                onClicked: root.controller.page = "palettes"
+            }
+            Item {
+                Layout.fillWidth: true
+            }
             LookText {
                 text: qsTr("Focus accent")
                 size: 9
                 muted: true
-                Layout.fillWidth: true
             }
             Repeater {
                 model: 4
