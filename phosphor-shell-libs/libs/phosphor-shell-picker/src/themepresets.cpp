@@ -140,6 +140,19 @@ QVariantList ThemePresets::swatchesFor(const QVariantMap& tokens)
     return swatches;
 }
 
+bool ThemePresets::isCompletePalette(const QVariantMap& tokens) const
+{
+    // The light palette contains every standard token. Brand stops are
+    // optional because the shell can derive them from the accent colors.
+    static const QVariantMap required = lightPalette();
+    for (auto it = required.cbegin(); it != required.cend(); ++it) {
+        if (!tokens.value(it.key()).value<QColor>().isValid()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 QVariantMap ThemePresets::readPaletteFile(const QString& path)
 {
     // A palette is a small flat map of token names to colours; a megabyte is

@@ -57,6 +57,9 @@ public:
     /// The five swatches a tile shows for `tokens`.
     [[nodiscard]] static QVariantList swatchesFor(const QVariantMap& tokens);
 
+    /// Whether a palette supplies every standard color used by Appearance.
+    [[nodiscard]] Q_INVOKABLE bool isCompletePalette(const QVariantMap& tokens) const;
+
     /// Parse one palette file into a token map (empty on failure).
     [[nodiscard]] static QVariantMap readPaletteFile(const QString& path);
 

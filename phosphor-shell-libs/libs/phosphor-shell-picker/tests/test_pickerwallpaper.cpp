@@ -18,6 +18,7 @@
 #include <QImage>
 #include <QQmlComponent>
 #include <QQmlEngine>
+#include <QQmlExpression>
 #include <QQuickItem>
 #include <QScreen>
 #include <QSignalSpy>
@@ -160,6 +161,8 @@ private Q_SLOTS:
         presets->setDirectory(QDir(QStringLiteral(PHOSPHOR_PICKER_FIXTURES)).filePath(QStringLiteral("palettes")));
         presets->rescan();
         QCOMPARE(presets->count(), 4);
+        QQmlExpression visible(engine.rootContext(), browser.get(), QStringLiteral("entries.length"));
+        QCOMPARE(visible.evaluate().toInt(), 2);
         QVERIFY(presets->presets().first().toMap().value(QStringLiteral("builtIn")).toBool());
         QVERIFY(!presets->presets().last().toMap().value(QStringLiteral("builtIn")).toBool());
         QVERIFY2(warnings.isEmpty(), "palette browser emitted QML warnings");

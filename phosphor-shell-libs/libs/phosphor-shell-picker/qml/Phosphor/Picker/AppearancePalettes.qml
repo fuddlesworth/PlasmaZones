@@ -11,7 +11,7 @@ Item {
     id: root
     property string query: ""
     property string filter: "all"
-    readonly property var entries: presets.presets.filter(entry => (filter === "all" || (filter === "included") === entry.builtIn) && entry.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
+    readonly property var entries: presets.presets.filter(entry => presets.isCompletePalette(entry.tokens) && (filter === "all" || (filter === "included") === entry.builtIn) && entry.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
     implicitHeight: content.implicitHeight
 
     ThemePresets {

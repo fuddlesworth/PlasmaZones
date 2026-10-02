@@ -84,6 +84,16 @@ private Q_SLOTS:
         QVERIFY(ThemePresets::darkPalette().contains(QString::fromLatin1(TokenNames::BrandStop0)));
     }
 
+    void appearanceRequiresCompleteStandardColors()
+    {
+        ThemePresets presets;
+        presets.setDirectory(fixtures());
+        presets.rescan();
+        QVERIFY(presets.isCompletePalette(ThemePresets::darkPalette()));
+        QVERIFY(presets.isCompletePalette(ThemePresets::lightPalette()));
+        QVERIFY(!presets.isCompletePalette(presets.tokensFor(QStringLiteral("Ember"))));
+    }
+
     void missingDirectoryGivesTheBuiltInsOnly()
     {
         ThemePresets presets;
