@@ -11,11 +11,13 @@
 // (generations, seeded sets, the residual-origin gates) straight down the
 // function. Over the 1150 ceiling before PR #891 and accepted as such;
 // a future split should carve at the batch-parse / apply boundary, not
-// mid-pipeline.
+// mid-pipeline. Grew with the cross-output bounce fix (#1124) and its audit:
+// the instance-first tile resolve and its scoped fuzzy candidates.
 
 #include "tilinghandler.h"
 #include "scrolldecisions.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
+#include "plasmazoneseffect/desktopvisibility.h"
 #include "compositor/stripviewanimator.h"
 #include "compositor/windowanimator.h"
 #include "transitions/striptransitionmanager.h"
@@ -25,6 +27,7 @@
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/AutotileMarshalling.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorIdentity/WindowId.h>
 
 #include <effect/effecthandler.h>
@@ -272,8 +275,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // returns null, so the pre-autotile geometry restore is skipped
             // with nothing logged on that arm. Falls back to the daemon id when
             // unresolved, which is correct for the ordinary same-session case.
+            // By INSTANCE, never the app-id fallback: a float entry for an
+            // overflow window that has since closed would otherwise float and
+            // move the one live same-app sibling the daemon still tiles.
             QString floatWindowId = windowId;
-            if (KWin::EffectWindow* const live = m_effect->findWindowById(windowId)) {
+            if (KWin::EffectWindow* const live = m_effect->findWindowByInstanceId(windowId)) {
                 floatWindowId = m_effect->getWindowId(live);
             }
             qCInfo(lcEffect) << "Autotile batch float:" << floatWindowId << "screen:" << screenId;
@@ -284,9 +290,10 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // config change can re-key the window's screen without moving its
             // geometry bucket, and that rect is still applicable — while
             // degrading a rect from ANOTHER output to size-only, which would
-            // otherwise move the window to that monitor. Exact resolve,
-            // matching the tile lambda's deliberate policy: a fuzzy hit would
-            // teleport a same-app SIBLING onto this window's restored rect.
+            // otherwise move the window to that monitor. Exact resolve of the
+            // re-keyed id, matching the tile lambda's deliberate policy: a
+            // fuzzy hit would teleport a same-app SIBLING onto this window's
+            // restored rect.
             KWin::EffectWindow* floatWin = m_effect->findWindowByIdExact(floatWindowId);
             if (!floatWin) {
                 // Both misses below are LOGGED. applyFloatCleanup above has
@@ -347,14 +354,23 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             continue;
         }
 
-        QVector<KWin::EffectWindow*> candidates = m_effect->findAllWindowsById(windowId);
-        if (candidates.isEmpty()) {
-            qCDebug(lcEffect) << "Autotile: window not found:" << windowId;
-            continue;
-        }
-        KWin::EffectWindow* w = nullptr;
-        if (candidates.size() == 1) {
-            w = candidates.first();
+        // The window the entry names, by instance: the engines address it by
+        // the daemon's first-seen composite, which drifts from the effect's
+        // own after a class mutation, so the exact id alone can miss it.
+        // Only an entry naming no live window becomes a FUZZY entry, whose
+        // candidates are the same-app windows it could stand for (a stale
+        // UUID after a KWin restart). Fuzzy entries are resolved below, after
+        // every instance entry has claimed its window, and that holds even
+        // for a single candidate: treating it as exact let a stale entry
+        // reserve the live window another entry names.
+        KWin::EffectWindow* w = m_effect->findWindowByInstanceId(windowId);
+        QVector<KWin::EffectWindow*> candidates;
+        if (!w) {
+            candidates = fuzzyTileCandidates(windowId, req.screenId);
+            if (candidates.isEmpty()) {
+                qCDebug(lcEffect) << "Autotile: window not found:" << windowId;
+                continue;
+            }
         }
         Entry entry;
         entry.windowId = windowId;
@@ -380,30 +396,33 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         entry.visualPos = req.hasVisualPos ? QPoint(req.visualX, req.visualY) : QPoint();
         entry.hasVisualPos = req.hasVisualPos;
         entry.tabFrom = req.tabFrom;
-        if (candidates.size() > 1) {
-            entry.candidates = candidates;
-        }
+        entry.candidates = candidates;
         entries.append(entry);
     }
 
-    // Disambiguate entries with multiple candidates (same appId). An entry
-    // that matched EXACTLY (one candidate, resolved above) must RESERVE its
-    // window against the fuzzy entries: exact matches are not in the index
-    // below, and without the claimed-set a same-appId fuzzy entry (the
-    // stale-pre-restore-UUID case this file guards in several other places)
-    // could resolve to the SAME window — every per-window map then written
-    // twice for one id, the second apply overwriting the first, and the
-    // window the fuzzy entry was meant for silently never tiled.
+    // Disambiguate the fuzzy entries (same appId, no live instance). An
+    // entry that resolved by INSTANCE (above) must RESERVE its window against
+    // the fuzzy entries: instance entries are not in the index below, and
+    // without the claimed-set a same-appId fuzzy entry (the stale UUID case
+    // this file guards in several other places) could resolve to the SAME
+    // window — every per-window map then written twice for one id, the
+    // second apply overwriting the first, and the window the fuzzy entry was
+    // meant for silently never tiled.
     QSet<KWin::EffectWindow*> claimedByExact;
     for (const Entry& e : std::as_const(entries)) {
         if (e.window && e.candidates.isEmpty()) {
             claimedByExact.insert(e.window);
         }
     }
+    // Bucketed by app AND target output: fuzzyTileCandidates scopes each
+    // entry's candidates to its target output, so only entries sharing both
+    // share one candidate list, which the zip below relies on.
     QHash<QString, QVector<int>> appIdToEntryIndices;
     for (int i = 0; i < entries.size(); ++i) {
         if (!entries[i].candidates.isEmpty()) {
-            appIdToEntryIndices[::PhosphorIdentity::WindowId::extractAppId(entries[i].windowId)].append(i);
+            const QString bucket = ::PhosphorIdentity::WindowId::extractAppId(entries[i].windowId) + QLatin1Char('\n')
+                + ::PhosphorIdentity::VirtualScreenId::extractPhysicalId(entries[i].screenId);
+            appIdToEntryIndices[bucket].append(i);
         }
     }
     for (const QVector<int>& indices : std::as_const(appIdToEntryIndices)) {
@@ -412,15 +431,13 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         // written as a <= 1 outer with an == 1 inner, which read as if an empty
         // bucket were reachable.
         if (indices.size() == 1) {
-            // No candidates.size() > 1 term: the map only admits entries with
-            // a non-empty candidate vector, and Entry::candidates is only ever
-            // assigned when that vector already has more than one element, so
-            // the test could never be false here.
+            // Own-fullscreen windows were already dropped from the candidates
+            // (fuzzyTileCandidates), so a held game is never picked for its
+            // launcher's stale entry.
             Entry& e = entries[indices[0]];
             QPoint targetCenter = e.geometry.center();
             KWin::EffectWindow* best = nullptr;
             qreal bestDist = 1e9;
-            // No fullscreen exclusion: a held game may be picked for its launcher's stale entry (unconfirmed).
             for (KWin::EffectWindow* c : std::as_const(e.candidates)) {
                 if (claimedByExact.contains(c)) {
                     continue;
@@ -1009,20 +1026,23 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             }
             const QSet<QString>& newSet = screenIt.value();
             const QSet<QString> previous = TilingStateHelpers::tiledOnScreen(m_border, screenId);
-            // No resolution-failure exclusion is needed here, which is worth
-            // recording because it is not obvious. The three disambiguation
-            // drops above never leave a tracked window out of newSet: the
-            // all-claimed drop fires precisely because every candidate was
-            // taken by an exact entry, the trailing-entry drop assigns every
-            // candidate it has (n = qMin(entries, candidates)), and the
-            // double-resolve drop discards the SECOND entry for a window the
-            // first already claimed. In each case the WINDOWS are all in
-            // newSet and only surplus ENTRIES are dropped, so an id in
-            // `untiled` is a window the daemon genuinely stopped tiling.
-            // That holds globally; newSet here is one SCREEN's bucket, so a
-            // window whose claiming entry landed on a different screen does
-            // appear in the old screen's `untiled`. It has moved, and untiling
-            // it on the screen it left is the right answer.
+            // What can land in `untiled`. The three disambiguation drops above
+            // never leave a window out of newSet: the all-claimed drop fires
+            // precisely because every candidate was taken by an instance
+            // entry, the trailing-entry drop assigns every candidate it has
+            // (n = qMin(entries, candidates)), and the double-resolve drop
+            // discards the SECOND entry for a window the first already
+            // claimed. Mostly, then, an id here is a window the daemon
+            // genuinely stopped tiling. newSet is one SCREEN's bucket, so a
+            // window whose claiming entry landed on a different screen appears
+            // in the old screen's `untiled` too: it has moved, and untiling it
+            // on the screen it left is the right answer. Two shapes are NOT
+            // that, and nothing here excludes them: a tracked window whose own
+            // entry failed the validator at the top of this function (it needs
+            // a producer that emits a degenerate or over-cap rect), and a
+            // window left unpicked in a fuzzy bucket with more candidates than
+            // entries (a stale id after a KWin restart, on the entry's own
+            // output).
             const QSet<QString> untiled = previous - newSet;
             for (const QString& wid : untiled) {
                 // Exact resolve only: findWindowById's appId fuzzy fallback
@@ -3087,6 +3107,35 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         onComplete, startedViewLegs || anyTabSwap || !immediateViewScreens.isEmpty());
 }
 
+QVector<KWin::EffectWindow*> TilingHandler::fuzzyTileCandidates(const QString& windowId,
+                                                                const QString& targetScreenId) const
+{
+    // Every same-app window could stand for a stale entry, so the walk is
+    // scoped to where the entry can plausibly be: its target output, on the
+    // desktop and activity that output is showing. Unscoped, the zip paired
+    // windows by a global top-left order across monitors and desktops, and
+    // the nearest-centre pick tied across desktops. A window in its OWN
+    // fullscreen hold is never a candidate either: re-keying a launcher's
+    // stale entry to the held game left the game's apply inert and the
+    // launcher out of the batch, so it lost its tiled tracking.
+    QVector<KWin::EffectWindow*> out;
+    const QString targetOutput = ::PhosphorIdentity::VirtualScreenId::extractPhysicalId(targetScreenId);
+    const QVector<KWin::EffectWindow*> all = m_effect->findAllWindowsById(windowId);
+    for (KWin::EffectWindow* c : all) {
+        if (!c || !isOnOwnOutputCurrentDesktop(c) || !c->isOnCurrentActivity()) {
+            continue;
+        }
+        if (::PhosphorIdentity::VirtualScreenId::extractPhysicalId(m_effect->getWindowScreenId(c)) != targetOutput) {
+            continue;
+        }
+        if (isInOwnFullscreen(c, m_effect->getWindowId(c), false)) {
+            continue;
+        }
+        out.append(c);
+    }
+    return out;
+}
+
 void TilingHandler::slotFocusWindowRequested(const QString& windowId)
 {
     // Showing-desktop guard (see isShowingDesktop's doc): the tile engine
@@ -3096,7 +3145,10 @@ void TilingHandler::slotFocusWindowRequested(const QString& windowId)
         qCDebug(lcEffect) << "Autotile: focus request dropped during show desktop:" << windowId;
         return;
     }
-    KWin::EffectWindow* w = m_effect->findWindowById(windowId);
+    // By instance: the engine names the window it focused, and the app-id
+    // fallback would activate a same-app sibling when that window's id has
+    // drifted or it closed inside the round trip.
+    KWin::EffectWindow* w = m_effect->findWindowByInstanceId(windowId);
     if (!w) {
         qCDebug(lcEffect) << "Autotile: window not found for focus request:" << windowId;
         return;
@@ -3110,11 +3162,11 @@ void TilingHandler::slotFocusWindowRequested(const QString& windowId)
         suppressFfmUntilCursorMoves();
     }
     // Re-key to the EFFECT's id for the window we actually resolved, not the
-    // daemon's spelling. findWindowById carries a fuzzy same-app fallback, so
-    // for a stale pre-restore UUID the two can differ — and the only consumer
-    // (the restack arm of a later batch) resolves with findWindowByIdExact,
-    // which would then miss and silently skip the raise. Every other resolve
-    // site in this file re-keys for the same reason.
+    // daemon's spelling. The instance resolve matches across an app-prefix
+    // drift, so the two can differ — and the only consumer (the restack arm
+    // of a later batch) resolves with findWindowByIdExact, which would then
+    // miss and silently skip the raise. Every other resolve site in this file
+    // re-keys for the same reason.
     m_pendingAutotileFocusWindowId = m_effect->getWindowId(w);
     if (KWin::effects) {
         KWin::effects->activateWindow(w);

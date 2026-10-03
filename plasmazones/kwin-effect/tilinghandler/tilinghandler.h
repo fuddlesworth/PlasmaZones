@@ -1321,6 +1321,11 @@ private:
     /// fullscreen. The enter branch's float-out is primary; the batch's read is the residual guard.
     bool isInOwnFullscreen(KWin::EffectWindow* w, const QString& windowId, bool flaggedWindowed) const;
 
+    /// The windows a tile entry naming no live window could stand for: the
+    /// same-app windows on @p targetScreenId's output, on the desktop and
+    /// activity that output shows, and not in their own fullscreen hold.
+    QVector<KWin::EffectWindow*> fuzzyTileCandidates(const QString& windowId, const QString& targetScreenId) const;
+
     /**
      * @brief Claim a window that was already minimized at batch-announce time
      *        as minimize-floated.

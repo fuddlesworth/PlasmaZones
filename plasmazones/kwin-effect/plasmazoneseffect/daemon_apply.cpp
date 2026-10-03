@@ -62,7 +62,11 @@ void PlasmaZonesEffect::slotActivateWindowRequested(const QString& windowId)
         qCDebug(lcEffect) << "slotActivateWindowRequested: dropped during show desktop" << windowId;
         return;
     }
-    KWin::EffectWindow* w = findWindowById(windowId);
+    // Instance-exact, like the desktop-move slot below: activation is about
+    // one window, and the app-id fallback would activate a same-app SIBLING,
+    // possibly on another desktop or activity, when the named window closed
+    // inside the round trip.
+    KWin::EffectWindow* w = findWindowByInstanceId(windowId);
     if (w) {
         KWin::effects->activateWindow(w);
     } else {
@@ -479,8 +483,6 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
         return;
     }
 
-    QHash<QString, KWin::EffectWindow*> windowMap = buildWindowMap();
-
     struct PendingApply
     {
         QPointer<KWin::EffectWindow> window;
@@ -489,23 +491,16 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
     };
     QVector<PendingApply> pending;
 
-    // Two-pass resolution with a claim set. Exact uuid matches claim their
-    // window first; the appId fallback then resolves only entries whose
-    // window no exact entry claimed, and skips already-claimed windows.
-    // Without the claim set, a batch carrying BOTH a stale-uuid entry and
-    // the live-uuid entry for the same app resolved both onto the one live
-    // window — a double apply where the losing entry's (often empty)
-    // screenId then wiped the snap tracking the winner just marked.
-    QSet<KWin::EffectWindow*> claimedWindows;
-    QVector<const PhosphorProtocol::WindowGeometryEntry*> needFallback;
-    const auto appendPending = [&pending, &claimedWindows](const auto& entry, KWin::EffectWindow* window) {
-        claimedWindows.insert(window);
-        PendingApply p;
-        p.window = QPointer<KWin::EffectWindow>(window);
-        p.geometry = entry.toRect();
-        p.screenId = entry.screenId;
-        pending.append(p);
-    };
+    // Resolution goes through resolveDaemonWindowIds: an entry naming a live
+    // window gets that window (or nothing, when this effect does not handle
+    // it), and only an entry naming no live window falls back to its app,
+    // counting unclaimed windows only. Without the claim set, a batch
+    // carrying BOTH a stale-uuid entry and the live-uuid entry for the same
+    // app resolved both onto the one live window — a double apply where the
+    // losing entry's (often empty) screenId then wiped the snap tracking the
+    // winner just marked.
+    QVector<const PhosphorProtocol::WindowGeometryEntry*> valid;
+    QStringList validIds;
     for (const auto& entry : geometries) {
         // validationError() BEFORE the size test and before any toRect(): it
         // bounds the magnitudes, and the QRect construction inside toRect()
@@ -521,33 +516,17 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
                                 << entry.width << "x" << entry.height;
             continue;
         }
-        if (KWin::EffectWindow* window = windowMap.value(entry.windowId)) {
-            appendPending(entry, window);
-        } else {
-            needFallback.append(&entry);
-        }
+        valid.append(&entry);
+        validIds.append(entry.windowId);
     }
-    for (const auto* entryPtr : needFallback) {
-        const auto& entry = *entryPtr;
-        // appId fallback for single-instance apps (uuid drift across a KWin
-        // restart), counting only UNCLAIMED windows so a stale sibling entry
-        // can neither double-apply onto a claimed window nor trip the
-        // ambiguity bail against it.
-        const QString appId = ::PhosphorIdentity::WindowId::extractAppId(entry.windowId);
-        KWin::EffectWindow* candidate = nullptr;
-        int matchCount = 0;
-        for (auto it = windowMap.constBegin(); it != windowMap.constEnd(); ++it) {
-            if (claimedWindows.contains(it.value())) {
-                continue;
-            }
-            if (::PhosphorIdentity::WindowId::extractAppId(it.key()) == appId) {
-                candidate = it.value();
-                if (++matchCount > 1)
-                    break;
-            }
-        }
-        if (matchCount == 1) {
-            appendPending(entry, candidate);
+    const QVector<KWin::EffectWindow*> resolved = resolveDaemonWindowIds(validIds);
+    for (int i = 0; i < valid.size(); ++i) {
+        if (KWin::EffectWindow* const window = resolved.at(i)) {
+            PendingApply p;
+            p.window = QPointer<KWin::EffectWindow>(window);
+            p.geometry = valid.at(i)->toRect();
+            p.screenId = valid.at(i)->screenId;
+            pending.append(p);
         }
     }
 

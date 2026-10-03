@@ -971,8 +971,14 @@ KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) c
         return exact;
     }
 
-    // Fallback: appId-based fuzzy match (for cross-session restore where
-    // the UUID portion changed but the appId is the same)
+    // The same INSTANCE under another app prefix comes next, and wins over
+    // any app match: the daemon addresses a window by its first-seen
+    // composite, which drifts from the effect's own after a class mutation
+    // (Electron/CEF) or an effect reload, and the app-id fallback would then
+    // miss the window or hand its request to a same-app sibling.
+    //
+    // Only then the app-id match (for cross-session restore where the UUID
+    // portion changed but the appId is the same).
     const QString targetAppId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
     KWin::EffectWindow* appMatch = nullptr;
     int matchCount = 0;
@@ -988,6 +994,9 @@ KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) c
             continue;
         }
         const QString wId = getWindowId(w);
+        if (::PhosphorIdentity::WindowId::sameWindowInstance(wId, windowId)) {
+            return w;
+        }
         if (::PhosphorIdentity::WindowId::extractAppId(wId) == targetAppId) {
             appMatch = w;
             ++matchCount;
@@ -1002,14 +1011,15 @@ KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) c
 QVector<KWin::EffectWindow*> PlasmaZonesEffect::findAllWindowsById(const QString& windowId) const
 {
     // Two cases:
-    //   1. Exact-instance match (`wId == windowId`): returns a single-
-    //      element vector with just that window — discards any appId
-    //      matches accumulated earlier in the stacking-order walk
-    //      because the instance id is the strictly stronger identifier.
-    //   2. Fuzzy appId match (no exact instance found): accumulates
-    //      every window that shares the composite's appId. Used by
-    //      autotile to disambiguate when multiple windows share an
-    //      appId (e.g. two Firefox instances) — see the header doc on
+    //   1. Instance match (the exact id, or the same instance under another
+    //      app prefix after a class drift): returns a single-element vector
+    //      with just that window — discards any appId matches accumulated
+    //      earlier in the stacking-order walk because the instance id is the
+    //      strictly stronger identifier.
+    //   2. Fuzzy appId match (no instance found): accumulates every window
+    //      that shares the composite's appId. Used by autotile to
+    //      disambiguate when multiple windows share an appId (e.g. two
+    //      Firefox instances) — see the header doc on
     //      `plasmazoneseffect.h::findAllWindowsById`.
     QVector<KWin::EffectWindow*> out;
     if (windowId.isEmpty()) {
@@ -1025,8 +1035,8 @@ QVector<KWin::EffectWindow*> PlasmaZonesEffect::findAllWindowsById(const QString
             continue;
         }
         const QString wId = getWindowId(w);
-        if (wId == windowId) {
-            // Exact match — discard any appId matches accumulated from earlier
+        if (::PhosphorIdentity::WindowId::sameWindowInstance(wId, windowId)) {
+            // Instance match — discard any appId matches accumulated from earlier
             // windows in the stacking order. Without this clear, a second instance
             // of the same app (same appId) triggers the disambiguation path in
             // slotWindowsTileRequested, which can assign the wrong EffectWindow to

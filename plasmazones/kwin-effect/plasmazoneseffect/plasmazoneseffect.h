@@ -853,6 +853,8 @@ private:
     /// re-seed uses this to fall back to the stacking walk when the raw
     /// active window is internally rejected; ordinary callers may ignore it.
     bool notifyWindowActivated(KWin::EffectWindow* w);
+    /// The exact id, else the same instance under another app prefix, else
+    /// the one live window of the id's app when exactly one exists.
     KWin::EffectWindow* findWindowById(const QString& windowId) const;
 
     /// The O(1) reverse-cache half of findWindowById, WITHOUT the fuzzy appId fallback.
@@ -875,10 +877,18 @@ private:
                               const QSize& size, bool freshOpen);
 
     /**
-     * @brief All windows matching windowId (exact or same appId).
+     * @brief The window with windowId's instance, else every window of its app.
      * Used by autotile to disambiguate when multiple windows share an appId (e.g. two Firefox).
      */
     QVector<KWin::EffectWindow*> findAllWindowsById(const QString& windowId) const;
+
+    /// Resolve a daemon batch's window ids to live windows, index-aligned with
+    /// @p windowIds. An id naming a live window (exactly, or by instance) gets
+    /// that window, or nullptr when shouldHandleWindow refuses it: it is never
+    /// handed to a sibling. Only an id naming no live window falls back to its
+    /// app, and only when exactly one unclaimed handled window of that app
+    /// exists.
+    QVector<KWin::EffectWindow*> resolveDaemonWindowIds(const QStringList& windowIds) const;
 
     // Navigation helpers
     KWin::EffectWindow* getActiveWindow() const;
