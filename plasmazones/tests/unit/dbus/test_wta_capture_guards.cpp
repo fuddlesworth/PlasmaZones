@@ -808,6 +808,86 @@ private Q_SLOTS:
         wta->service()->setSnapEngine(nullptr);
         snap.reset();
     }
+
+    // F654: the first prune per daemon releases the engine slots of a live
+    // window whose own record names another screen than its frame is on. A
+    // window on its recorded screen keeps its slot, a window that fills its
+    // output is compared at output level, and a later prune releases nothing.
+    void testStartupLeaveSweep_releasesMovedWindowsSlots()
+    {
+        PhosphorScreens::FakePhysicalScreenSource fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080), QStringLiteral("DP-1"));
+        fake.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080), QStringLiteral("DP-2"));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.physicalScreenSource = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+        PhosphorEngine::WindowRegistry registry;
+        // Engine before parent, for the destruction order the tests above give.
+        std::unique_ptr<SnapEngine> snap;
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        wta->setWindowRegistry(&registry);
+        snap = std::make_unique<SnapEngine>(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        wta->service()->setSnapState(snap->snapState());
+        wta->service()->setSnapEngine(snap.get());
+        wta->setEngines(snap.get(), nullptr, nullptr);
+        auto& store = wta->service()->placementStore();
+        const auto recordSnapped = [&](const QString& windowId, const QString& screenId) {
+            PhosphorEngine::WindowPlacement p;
+            p.windowId = windowId;
+            p.appId = QStringLiteral("app");
+            p.screenId = screenId;
+            PhosphorEngine::EngineSlot slot;
+            slot.state = QString(PhosphorEngine::WindowPlacement::stateSnapped());
+            slot.zoneIds = QStringList{QUuid::createUuid().toString()};
+            p.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+            return store.record(p);
+        };
+        const auto snapState = [&](const QString& windowId) {
+            const auto rec = store.peekExact(windowId);
+            return rec ? rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).state : QString();
+        };
+        const QString snapped = QString(PhosphorEngine::WindowPlacement::stateSnapped());
+        const QString released = QString(PhosphorEngine::WindowPlacement::stateReleased());
+
+        // Moved to DP-2 while no daemon ran.
+        QVERIFY(recordSnapped(QStringLiteral("app|left"), QStringLiteral("DP-1")));
+        wta->setFrameGeometry(QStringLiteral("app|left"), 2000, 100, 800, 600);
+        // Still where it was recorded.
+        QVERIFY(recordSnapped(QStringLiteral("app|stay"), QStringLiteral("DP-1")));
+        wta->setFrameGeometry(QStringLiteral("app|stay"), 100, 100, 800, 600);
+        // Recorded on another virtual screen of the same output, maximized:
+        // its frame centre says nothing about which half it belongs to.
+        QVERIFY(recordSnapped(QStringLiteral("app|full"), QStringLiteral("DP-1/vs:1")));
+        wta->setFrameGeometry(QStringLiteral("app|full"), 0, 0, 1920, 1080);
+        PhosphorEngine::WindowMetadata maximized;
+        maximized.appId = QStringLiteral("app");
+        maximized.isMaximized = true;
+        registry.upsert(QStringLiteral("full"), maximized);
+        // The same record shape for a window that does not fill its output.
+        QVERIFY(recordSnapped(QStringLiteral("app|half"), QStringLiteral("DP-1/vs:1")));
+        wta->setFrameGeometry(QStringLiteral("app|half"), 100, 100, 800, 600);
+
+        const QStringList alive{QStringLiteral("app|left"), QStringLiteral("app|stay"), QStringLiteral("app|full"),
+                                QStringLiteral("app|half")};
+        wta->pruneStaleWindows(alive);
+        QCOMPARE(snapState(QStringLiteral("app|left")), released);
+        QCOMPARE(snapState(QStringLiteral("app|stay")), snapped);
+        QCOMPARE(snapState(QStringLiteral("app|full")), snapped);
+        QCOMPARE(snapState(QStringLiteral("app|half")), released);
+
+        // Once per daemon: a window that moves later is the live handlers'.
+        wta->setFrameGeometry(QStringLiteral("app|stay"), 2000, 100, 800, 600);
+        wta->pruneStaleWindows(alive);
+        QCOMPARE(snapState(QStringLiteral("app|stay")), snapped);
+
+        wta->setEngines(nullptr, nullptr, nullptr);
+        wta->service()->setSnapState(nullptr);
+        wta->service()->setSnapEngine(nullptr);
+        snap.reset();
+        wta->setWindowRegistry(nullptr);
+    }
 };
 
 QTEST_MAIN(TestWtaCaptureGuards)

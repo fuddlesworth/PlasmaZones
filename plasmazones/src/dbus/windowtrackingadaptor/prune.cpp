@@ -10,7 +10,10 @@
 #include "core/platform/logging.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorEngine/WindowRegistry.h>
+#include <PhosphorEngine/WindowPlacement.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorIdentity/WindowId.h>
+#include <PhosphorScreens/Manager.h>
 #include <PhosphorRules/RuleEvaluator.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
@@ -75,6 +78,44 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     // the shadow keys above, so a claimer that never had a frame shadow is
     // reached too.
     m_service->placementStore().releaseOpenClaimsExcept(aliveInstances);
+    // The reopen contract at daemon start: a live window whose OWN record
+    // names another screen than the one its frame is on left that screen
+    // while no daemon was watching, and stays where it is. Its engine slots
+    // are released silently, once per daemon. The restore sweeps release the
+    // windows they reach, but a minimized or excluded window reaches neither,
+    // and a later layout change on the screen it left would resnap it there.
+    // The effect seeds the frame shadow before this first prune, on the same
+    // connection. Two records stay: one on an output that is absent now
+    // (parked for its return), and one of a window that fills its output,
+    // compared at output level, because that frame's centre lands in whichever
+    // virtual screen holds the output's centre.
+    if (!m_startupLeaveSweepDone) {
+        m_startupLeaveSweepDone = true;
+        PhosphorScreens::ScreenManager* screens = m_service->screenManager();
+        for (auto it = m_frameGeometry.constBegin(); it != m_frameGeometry.constEnd(); ++it) {
+            if (!it.value().isValid()
+                || !aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(it.key()))) {
+                continue;
+            }
+            const QString frameScreen = Utils::effectiveScreenIdAt(screens, it.value().center());
+            const auto own = m_service->placementStore().peekExact(it.key());
+            if (!own || !PhosphorEngine::ownRecordLeftScreen(*own, frameScreen)) {
+                continue;
+            }
+            if (screens && !screens->physicalScreenFor(own->screenId).isValid()) {
+                continue;
+            }
+            if (m_windowRegistry && m_windowRegistry->fillsOutputState(it.key()).value_or(false)
+                && PhosphorIdentity::VirtualScreenId::samePhysical(own->screenId, frameScreen)) {
+                continue;
+            }
+            for (auto slot = own->engines.constBegin(); slot != own->engines.constEnd(); ++slot) {
+                m_service->releaseEngineSlot(it.key(), slot.key());
+            }
+            qCInfo(lcDbusWindow) << "pruneStaleWindows:" << it.key() << "left its recorded screen" << own->screenId
+                                 << "for" << frameScreen << "while no daemon ran — its slots are released";
+        }
+    }
     int persistedPruned = m_service->pruneStaleAssignments(alive);
     if (m_autotileEngine || m_scrollEngine) {
         // The engines key every internal map (m_states reverse maps,

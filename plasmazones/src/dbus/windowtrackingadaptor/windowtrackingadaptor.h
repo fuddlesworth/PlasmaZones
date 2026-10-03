@@ -541,10 +541,10 @@ public Q_SLOTS:
     /// themselves via their pruneStaleWindows overrides — TilingState / strip
     /// membership, pending orders, min-size and last-rect caches. On top of
     /// that: the registry's metadata + canonical entries, the tab-colour memo,
-    /// the rule evaluator's memo, and the adaptor's own frame-geometry /
-    /// broadcast / pending-open shadow maps.
-    /// Called by the KWin effect after daemon ready to clean up stale entries
-    /// from windows that no longer exist (closed between save and daemon restart).
+    /// the rule evaluator's memo, and the adaptor's own shadow maps. Called by
+    /// the effect after daemon ready. The first call per daemon also releases
+    /// the engine slots of every live window that left its recorded screen
+    /// while no daemon was watching.
     void pruneStaleWindows(const QStringList& aliveWindowIds);
 
     /// Re-drive compositor-side per-window appearance (snap border / hidden
@@ -1288,10 +1288,9 @@ Q_SIGNALS:
     /**
      * @brief Qt signal emitted during pruneStaleWindows with the INSTANCE-id
      * view of the alive set, so sibling adaptors can sweep their own
-     * per-window caches in the same key space (TilingAdaptor's
-     * float-broadcast and tab-colour-relay dedup maps are the current
-     * consumers). Same in-process,
-     * not-part-of-the-wire-contract stance as windowClosedNotification —
+     * per-window caches in the same key space (TilingAdaptor's float-broadcast
+     * and tab-colour-relay dedup maps are the current consumers). Same
+     * in-process, not-part-of-the-wire-contract stance as windowClosedNotification —
      * and like every adaptor signal it IS auto-relayed onto the bus, which
      * is why the payload is a marshallable QStringList rather than QSet.
      */
@@ -1916,6 +1915,7 @@ private:
     bool m_hasPendingRestores = false; // True once the placement store held records at load or a layout change
     bool m_pendingRestoresEmitted = false; // True if we already emitted pendingRestoresAvailable
     bool m_shutdownSaveGuard = false; // True after saveStateOnShutdown() to prevent destruction-phase saves
+    bool m_startupLeaveSweepDone = false; // True once pruneStaleWindows ran its once-per-daemon leave release
 };
 
 } // namespace PlasmaZones
