@@ -156,8 +156,9 @@ void TilingAdaptor::applyMembershipResult(PhosphorEngine::IPlacementEngine* engi
             qCInfo(lcDbusTiling) << "reconcileWindowMembership: window" << windowId
                                  << "holds no context in its engine any more — releasing it from the pipeline";
             // Released through the engine that ANSWERED, not by re-resolving
-            // the id: engineOwningWindow decides on isWindowTracked, which is
-            // not the same predicate across engines.
+            // the id: enginesTrackingWindow decides on isWindowTracked, which
+            // is not the same predicate across engines, and the other engine
+            // may legitimately still hold the window on another desktop.
             releaseWindowTrackingVia(windowId, engine);
         }
     }
@@ -180,9 +181,11 @@ void TilingAdaptor::reconcileWindowMembership(const QString& windowId, const Pho
     // when the span covers it, and releases the contexts the span no longer
     // covers — desktop AND activity, the two axes of the key a window moves
     // along. The screen is the third component and deliberately not part of
-    // it: a window does not leave a screen the way it leaves a desktop, and
-    // the effect relays an output transfer with its own release. Memberships
-    // under a screen's sticky pin are left to the engine's unpin migration.
+    // it: an output move is released elsewhere, by the effect's relay for an
+    // in-view hold and by IPlacementEngine::releaseWindowOffScreen (the snap
+    // commit, a free window's screen change, the drop) for a background one.
+    // Memberships under a screen's sticky pin are left to the engine's unpin
+    // migration.
     for (PhosphorEngine::IPlacementEngine* engine : std::as_const(m_lifecycleEngines)) {
         applyMembershipResult(engine, /*lifecycleEngine=*/true, engine->reconcileWindowMemberships(windowId, spanOf));
     }

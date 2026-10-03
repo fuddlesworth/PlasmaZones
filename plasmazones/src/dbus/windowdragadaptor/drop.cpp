@@ -241,6 +241,17 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                 sourceEngine->handoffRelease(windowId);
             }
         }
+        // The handoff above runs for ONE source, snap first. A tiling engine
+        // that also holds the window on another screen (a background-desktop
+        // tile or column of a multi-desktop window) keeps stale memory that
+        // would pull the window back on that desktop's return, so every other
+        // tiling engine releases what it holds off the release screen. Silent
+        // toward snap, whose memory the commit below restates.
+        for (PhosphorEngine::IPlacementEngine* engine : {m_autotileEngine, m_scrollEngine}) {
+            if (engine && engine != sourceEngine) {
+                engine->releaseWindowOffScreen(windowId, releaseScreenId);
+            }
+        }
     }
 
     // Check if a zone was selected via the zone selector (takes priority)

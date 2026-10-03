@@ -690,10 +690,12 @@ private:
     /// The pipeline engine whose live set claims @p screenId, else the
     /// primary (first) engine — screen-keyed dispatch for open/focus.
     PhosphorEngine::IPlacementEngine* engineOwningScreen(const QString& screenId) const;
-    /// The pipeline engine tracking @p windowId, else the primary —
-    /// window-keyed dispatch for close/min-size (the window may have left
-    /// its opening screen).
-    PhosphorEngine::IPlacementEngine* engineOwningWindow(const QString& windowId) const;
+    /// EVERY pipeline engine tracking @p windowId, in any context, primary
+    /// first: window-keyed dispatch for close, release and min-size. With
+    /// per-desktop modes a multi-desktop window is held by autotile on one
+    /// desktop and by scrolling on another at once, and a close or release
+    /// through only the first left the other's tile or column behind.
+    QVector<PhosphorEngine::IPlacementEngine*> enginesTrackingWindow(const QString& windowId) const;
 
     /// Engines sharing the lifecycle pipeline, primary first (see
     /// setLifecycleEngines). Interface-only borrows.
@@ -815,15 +817,15 @@ private:
     /// Shared body of releaseWindowTracking, with the two engine-dependent
     /// steps parameterised.
     ///
-    /// @param owner The engine to release from, or nullptr to resolve it by
-    ///        window id. Naming it matters when the CALLER already knows: the
-    ///        id-based resolution runs isWindowTracked, whose contract is
-    ///        per-engine (ScrollEngine answers off the raw reverse-map key, so
-    ///        a phantom entry can win), and falls back to the first lifecycle
-    ///        engine when nothing answers. A caller that identified the holder
-    ///        through the membership-grade heldKeyForWindow must not have that
-    ///        answer re-derived by a weaker predicate. The screen read for the
-    ///        focus refresh is taken from the same engine for the same reason.
+    /// @param owner The engine to release from, or nullptr to release from
+    ///        every engine tracking the window (enginesTrackingWindow). Naming
+    ///        it matters when the CALLER already knows: the id-based
+    ///        resolution runs isWindowTracked, whose contract is per-engine
+    ///        (ScrollEngine answers off the raw reverse-map key, so a phantom
+    ///        entry can win). A caller that identified the holder through the
+    ///        membership-grade heldKeyForWindow must not have that answer
+    ///        re-derived by a weaker predicate. The screen read for the focus
+    ///        refresh is taken from the same engine for the same reason.
     void releaseWindowTrackingVia(const QString& windowId, PhosphorEngine::IPlacementEngine* owner);
     /// Per-screen map state that follows the managed set: every screen the
     /// coalesced announce dropped loses its retained batch and, if it had a
@@ -872,7 +874,10 @@ public:
      * whose screen later left the managed set never reaches windowClosed here
      * and its m_lastFloatBroadcast and m_lastScrollTabColorsRelay entries
      * (and any parked open) leaked for the process — suppressing the first
-     * genuine float broadcast or tab-colour relay of a reused id.
+     * genuine float broadcast or tab-colour relay of a reused id. The same
+     * gate skips the relay for a window that closes while its tiling
+     * desktop is out of view, so this also closes it in every engine that
+     * still tracks it (a no-op after a relay).
      * Plain method, NOT a slot: it must not become a D-Bus surface. It runs
      * AFTER the WTS teardown (the signal's contract), so it uses only the raw
      * id — shadowWindowId may no longer resolve a mutated-class canonical

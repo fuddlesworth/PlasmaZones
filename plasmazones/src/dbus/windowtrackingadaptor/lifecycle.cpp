@@ -469,6 +469,15 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
     QString currentZoneId = m_service->zoneForWindow(windowId);
     if (currentZoneId.isEmpty()) {
         if (!m_service->isWindowFloating(windowId)) {
+            // A free window moved to another screen. A tiling hold it keeps on
+            // the screen it left (a background-desktop tile or column of a
+            // multi-desktop window) is stale memory, and returning to that
+            // desktop would pull the window back across monitors.
+            for (PhosphorEngine::PlacementEngineBase* engine : {m_autotileEngine.data(), m_scrollEngine.data()}) {
+                if (engine) {
+                    engine->releaseWindowOffScreen(windowId, newScreenId);
+                }
+            }
             return;
         }
         const QString trackedSnap = m_snapEngine ? m_snapEngine->screenForTrackedWindow(windowId) : QString();

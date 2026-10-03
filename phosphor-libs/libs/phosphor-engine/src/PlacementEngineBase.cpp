@@ -33,6 +33,22 @@ PlacementEngineBase::PlacementEngineBase(QObject* parent)
 
 PlacementEngineBase::~PlacementEngineBase() = default;
 
+void PlacementEngineBase::releaseWindowOffScreen(const QString& windowId, const QString& keepScreenId)
+{
+    if (windowId.isEmpty()) {
+        return;
+    }
+    // Compared at the virtual-screen level: a window that moved to the other
+    // half of a split monitor left the half it was held on, too.
+    const QString heldScreen = screenForTrackedWindow(windowId);
+    if (heldScreen.isEmpty() || heldScreen == keepScreenId) {
+        return;
+    }
+    qCInfo(lcPlacementEngineBase) << "releaseWindowOffScreen:" << engineId() << "releases" << windowId << "held on"
+                                  << heldScreen << "— it was placed on" << keepScreenId;
+    handoffRelease(windowId);
+}
+
 bool PlacementEngineBase::isManagedSize(const QList<QSize>& managedSizes, const QSize& size)
 {
     // A false match only skips the resize, which is the harmless direction.

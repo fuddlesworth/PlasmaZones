@@ -1052,6 +1052,21 @@ private Q_SLOTS:
                  "an engine with no tracker or layout manager must never claim");
     }
 
+    // F377: another engine placed the window on another screen, so this
+    // engine's hold elsewhere is stale and goes whole, durable slot included.
+    // A hold on the screen it was placed on stays.
+    void testReleaseWindowOffScreen_releasesOnlyOffTheKeptScreen()
+    {
+        std::unique_ptr<AutotileEngine> engine(
+            PlasmaZones::TestHelpers::createEngineWithWindows(QStringLiteral("DP-1"), 2));
+        engine->releaseWindowOffScreen(QStringLiteral("win1"), QStringLiteral("DP-1"));
+        QVERIFY(engine->isWindowTracked(QStringLiteral("win1")));
+        engine->releaseWindowOffScreen(QStringLiteral("win1"), QStringLiteral("DP-2"));
+        QVERIFY(!engine->isWindowTracked(QStringLiteral("win1")));
+        QVERIFY(!engine->tilingStateForScreen(QStringLiteral("DP-1"))->containsWindow(QStringLiteral("win1")));
+        QVERIFY(engine->isWindowTracked(QStringLiteral("win2")));
+    }
+
     void testWindowOpened_adoptsDespiteAnotherOutputsScrollingRecord()
     {
         PlasmaZones::TestHelpers::IsolatedConfigGuard guard;

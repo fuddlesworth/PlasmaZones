@@ -14,6 +14,7 @@
 #include <QTest>
 #include <QCoreApplication>
 #include <QRegularExpression>
+#include <QSet>
 #include <QSignalSpy>
 #include <QObject>
 
@@ -95,6 +96,14 @@ public:
     {
         return claimsScreens;
     }
+    /// Windows this engine answers as tracked, and the ones the adaptor closed
+    /// or released through it, in order.
+    QSet<QString> tracked;
+    QStringList closed;
+    bool isWindowTracked(const QString& windowId) const override
+    {
+        return tracked.contains(windowId);
+    }
     /// Windows the adaptor OFFERED to the reopen claim, in order. Recorded
     /// rather than acted on: the property under test is whether the adaptor
     /// runs the claim round at all, and answering the claim would
@@ -138,8 +147,10 @@ public:
     {
         --burstDepth;
     }
-    void windowClosed(const QString&) override
+    void windowClosed(const QString& windowId) override
     {
+        closed.append(windowId);
+        tracked.remove(windowId);
     }
     void windowFocused(const QString&, const QString&) override
     {
@@ -297,6 +308,41 @@ private Q_SLOTS:
         QCOMPARE(engine.focusIntentAtOpen, immediate);
         QCOMPARE(engine.focusIntentAtClaim, immediate);
         QVERIFY2(engine.openFocusEligible, "the default must be restored after every dispatch");
+    }
+
+    // F424 / F425: with per-desktop modes a multi-desktop window is held by
+    // autotile on one desktop and by scrolling on another at once. A close, a
+    // release or the destroyed-window backstop must reach EVERY engine that
+    // tracks it, or the other keeps a dead tile or column on its desktop.
+    void testCloseAndReleaseReachEveryTrackingEngine()
+    {
+        RecordingEngine autotile;
+        RecordingEngine scroll;
+        QObject adaptorParent;
+        TilingAdaptor adaptor(nullptr, &adaptorParent);
+        adaptor.setLifecycleEngines({&autotile, &scroll});
+
+        const QString closing = QStringLiteral("app|close");
+        autotile.tracked.insert(closing);
+        scroll.tracked.insert(closing);
+        adaptor.windowClosed(closing);
+        QCOMPARE(autotile.closed, QStringList{closing});
+        QCOMPARE(scroll.closed, QStringList{closing});
+
+        const QString released = QStringLiteral("app|release");
+        autotile.tracked.insert(released);
+        scroll.tracked.insert(released);
+        adaptor.releaseWindowTracking(released);
+        QCOMPARE(autotile.closed.last(), released);
+        QCOMPARE(scroll.closed.last(), released);
+
+        // No relay reached the adaptor (the window closed while its tiling
+        // desktop was out of view): the destroyed-window backstop closes it.
+        const QString unrelayed = QStringLiteral("app|unrelayed");
+        scroll.tracked.insert(unrelayed);
+        adaptor.onTrackedWindowDestroyed(unrelayed);
+        QCOMPARE(scroll.closed.last(), unrelayed);
+        QVERIFY2(!autotile.closed.contains(unrelayed), "an engine that never held the window is not told");
     }
 
     void testLiveReleaseDoesNotSuppressTheNextClaimRound()

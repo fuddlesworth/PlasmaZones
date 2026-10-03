@@ -894,29 +894,28 @@ void Daemon::initEnginesAndWiring()
             });
     }
 
-    // Wire SnapEngine's back-reference to the window tracking adaptor.
-    // SnapEngine's navigation methods (focusInDirection, moveFocusedInDirection, …)
-    // were moved out of WindowTrackingAdaptor and need to reach back into the
-    // adaptor for shared state that hasn't been migrated yet: the target
-    // resolver, the last-active window/screen shadow, and the snap-
-    // bookkeeping helpers (windowSnapped, windowUnsnapped, recordSnapIntent,
-    // clearPreTileGeometry). A future refactor should move that state onto
-    // SnapEngine or PhosphorPlacement::WindowTrackingService and retire the back-reference.
+    // Wire SnapEngine's back-reference to the window tracking adaptor: its
+    // navigation methods reach back into the adaptor for state that hasn't
+    // moved yet (the target resolver, the last-active window/screen shadow,
+    // the snap-bookkeeping helpers). Moving that state onto SnapEngine or
+    // WindowTrackingService would retire the back-reference.
     snapEngine->setNavigationStateProvider(m_windowTrackingAdaptor);
 
-    // Clear the stale mode-specific float marker of EVERY tiling engine when
-    // a window is snapped. A window dragged from a tiling VS to a snap VS
-    // retains that engine's float marker; without this, a subsequent mode
-    // change on the tiling VS incorrectly processes the already-snapped
-    // window as engine-managed. Both engines implement the marker in their
-    // own address space and both are reachable by such a drag, so both are
-    // swept — like every other cross-engine site here.
-    // Wired here (daemon) because engines must not know about each other.
+    // A SNAPPED window's tiling memory elsewhere is stale: the float marker (a
+    // later mode change on the tiling VS would treat the window as its own)
+    // and a hold on any other screen (a background-desktop tile of a
+    // multi-desktop window, which would pull it back across monitors on that
+    // desktop's return). An unsnap says nothing about other engines. Wired
+    // here because engines must not know about each other.
     connect(snapEngine, &PhosphorSnapEngine::SnapEngine::windowSnapStateChanged, this,
-            [this](const QString& windowId, const PhosphorProtocol::WindowStateEntry&) {
+            [this](const QString& windowId, const PhosphorProtocol::WindowStateEntry& entry) {
+                if (entry.changeType != QLatin1String("snapped")) {
+                    return;
+                }
                 for (PhosphorEngine::PlacementEngineBase* engine : {m_autotileEngine.get(), m_scrollEngine.get()}) {
                     if (engine) {
                         engine->clearModeSpecificFloatMarker(windowId);
+                        engine->releaseWindowOffScreen(windowId, entry.screenId);
                     }
                 }
             });

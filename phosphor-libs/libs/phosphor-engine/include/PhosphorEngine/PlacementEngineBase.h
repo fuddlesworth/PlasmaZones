@@ -85,6 +85,11 @@ public:
         m_openFocusEligible = eligible;
     }
 
+    /// A window is held on one output, so a hold on any screen but
+    /// @p keepScreenId is released whole through handoffRelease (every
+    /// context plus the durable slot), which never reaches the snap engine.
+    void releaseWindowOffScreen(const QString& windowId, const QString& keepScreenId) override;
+
 protected:
     explicit PlacementEngineBase(QObject* parent = nullptr);
 

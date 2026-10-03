@@ -161,15 +161,10 @@ public:
     /// cannot either: both exclude engine-floating windows, which a claim
     /// can produce.
     ///
-    /// CURRENT-context only, and that restriction is what keeps the check
-    /// from suppressing repair. A claim's adoption always keys by the home
-    /// screen's current context, so a fresh claim is always visible here;
-    /// a hold in a BACKGROUND context (a mode flip preserves other-desktop
-    /// states and their keys) is never a fresh claim, and the announce
-    /// that would heal such a stale hold — the engines' own cross-screen
-    /// migration in windowOpened — must not be refused. A stale hold in the
-    /// CURRENT context is still indistinguishable from a fresh one here and
-    /// remains healed by windowFocused instead.
+    /// CURRENT-context only, so the check never suppresses repair: a claim's
+    /// adoption keys by the home screen's current context, while a stale
+    /// hold in a BACKGROUND context is healed by the very announce this
+    /// check would otherwise refuse.
     virtual QString heldScreenForWindow(const QString& windowId) const
     {
         Q_UNUSED(windowId)
@@ -824,16 +819,11 @@ public:
         return false;
     }
 
-    /// Return the screen this engine considers the window to be on, or empty
-    /// if the window isn't tracked by this engine.
-    ///
-    /// The daemon-side shortcut router consults this across engines to resolve
-    /// the active window's current screen for routing decisions (float, focus,
-    /// move). Without it, a cross-engine handoff (e.g. drag-insert from snap
-    /// into autotile) leaves the daemon's screenAssignments lookup empty
-    /// because the source engine has released its tracking, and the next
-    /// shortcut routes to whichever engine the cached focus screen pointed at
-    /// rather than the engine that now owns the window.
+    /// Return the screen this engine considers the window to be on (any
+    /// context), or empty if the window isn't tracked by this engine. The
+    /// daemon's shortcut router consults it across engines, so a cross-engine
+    /// handoff that emptied the source's tracking still routes the next
+    /// shortcut to the engine that now owns the window.
     virtual QString screenForTrackedWindow(const QString& windowId) const
     {
         Q_UNUSED(windowId)
@@ -1319,6 +1309,16 @@ public:
     virtual void setOpenFocusEligible(bool eligible)
     {
         Q_UNUSED(eligible)
+    }
+
+    /// OPTIONAL: another engine just placed @p windowId on @p keepScreenId,
+    /// so a hold this engine keeps on any other screen (a background-desktop
+    /// tile or column) is stale memory: release it silently, durable slot
+    /// included. An empty @p keepScreenId releases every hold. Appended for ABI.
+    virtual void releaseWindowOffScreen(const QString& windowId, const QString& keepScreenId)
+    {
+        Q_UNUSED(windowId)
+        Q_UNUSED(keepScreenId)
     }
 };
 

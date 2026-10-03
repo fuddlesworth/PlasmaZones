@@ -122,14 +122,15 @@ PhosphorEngine::IPlacementEngine* TilingAdaptor::engineOwningScreen(const QStrin
     return m_lifecycleEngines.isEmpty() ? nullptr : m_lifecycleEngines.first();
 }
 
-PhosphorEngine::IPlacementEngine* TilingAdaptor::engineOwningWindow(const QString& windowId) const
+QVector<PhosphorEngine::IPlacementEngine*> TilingAdaptor::enginesTrackingWindow(const QString& windowId) const
 {
+    QVector<PhosphorEngine::IPlacementEngine*> engines;
     for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
         if (engine->isWindowTracked(windowId)) {
-            return engine;
+            engines.append(engine);
         }
     }
-    return m_lifecycleEngines.isEmpty() ? nullptr : m_lifecycleEngines.first();
+    return engines;
 }
 
 void TilingAdaptor::setActiveLayouts(const QVariantMap& activeLayouts)
@@ -757,7 +758,7 @@ void TilingAdaptor::windowMinSizeUpdated(const QString& windowId, int minWidth, 
     }
     qCDebug(lcDbusTiling) << "windowMinSizeUpdated: windowId=" << windowId << "minSize=" << minWidth << "x"
                           << minHeight;
-    if (PhosphorEngine::IPlacementEngine* engine = engineOwningWindow(windowId)) {
+    for (PhosphorEngine::IPlacementEngine* engine : enginesTrackingWindow(windowId)) {
         engine->windowMinSizeUpdated(windowId, qMax(0, minWidth), qMax(0, minHeight));
     }
 }
@@ -807,15 +808,15 @@ void TilingAdaptor::windowClosed(const QString& windowId)
     // deliberately skips the close-only branches (minimize preserve, orphan
     // float-back fallback, sibling collapse), which stay with the
     // WindowTracking close where the authoritative screen is known. Hoisted
-    // ABOVE the ownership lookup on purpose: the funnel self-guards for
-    // untracked windows, and engineOwningWindow's first-engine fallback must
-    // stay free to change without silently disabling this capture. This
+    // ABOVE the engine closes on purpose: the funnel self-guards for
+    // untracked windows and must run while every engine still answers. This
     // method is a genuine close only — the drag-bypass tracking drop goes
-    // through releaseWindowTracking, which captures nothing.
+    // through releaseWindowTracking, which captures nothing. EVERY engine
+    // tracking the window closes it (see enginesTrackingWindow).
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->captureWindowPlacement(windowId);
     }
-    if (PhosphorEngine::IPlacementEngine* engine = engineOwningWindow(windowId)) {
+    for (PhosphorEngine::IPlacementEngine* engine : enginesTrackingWindow(windowId)) {
         engine->windowClosed(windowId);
     }
     if (!closingScreen.isEmpty()) {
@@ -833,6 +834,20 @@ void TilingAdaptor::onTrackedWindowDestroyed(const QString& windowId)
     forgetTileEntriesForWindow(windowId);
     removeUnclaimedOpen(windowId);
     removePendingOpen(windowId);
+    // A window whose tiling desktop was out of view when it closed got no
+    // Tiling.windowClosed relay (the effect gates it on the close screen being
+    // managed NOW), so the background context would keep its tile or column
+    // until a daemon restart. Close it in every engine still tracking it; the
+    // WindowTracking close has already captured its placement.
+    if (!m_lifecycleEngines.isEmpty()) {
+        const QString closingScreen = trackedScreenForWindow(windowId);
+        for (PhosphorEngine::IPlacementEngine* engine : enginesTrackingWindow(windowId)) {
+            engine->windowClosed(windowId);
+        }
+        if (!closingScreen.isEmpty()) {
+            refreshFocusedWindow(closingScreen);
+        }
+    }
 }
 
 void TilingAdaptor::pruneStaleFloatBroadcasts(const QStringList& aliveInstances)
@@ -920,7 +935,9 @@ void TilingAdaptor::releaseWindowTrackingVia(const QString& windowId, PhosphorEn
     // here; a current-context release relays placementChanged → tilingChanged
     // → refreshFocusedWindow on its own, and a background one moves no focus.
     const QString releasingScreen = owner ? owner->screenForTrackedWindow(windowId) : trackedScreenForWindow(windowId);
-    if (PhosphorEngine::IPlacementEngine* engine = owner ? owner : engineOwningWindow(windowId)) {
+    const QVector<PhosphorEngine::IPlacementEngine*> releasing =
+        owner ? QVector<PhosphorEngine::IPlacementEngine*>{owner} : enginesTrackingWindow(windowId);
+    for (PhosphorEngine::IPlacementEngine* engine : releasing) {
         engine->windowClosed(windowId);
     }
     // A LIVE window released here gets no WindowTracking.windowClosed, so the
